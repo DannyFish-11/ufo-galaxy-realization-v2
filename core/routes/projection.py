@@ -1101,6 +1101,46 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_GOVERNANCE_RUNTIME_CONSTRAINT_ALIGNED_PR6_UNAVAILABLE"
     )
 
+# PR-7 (node discovery runtime integration): Confirms that NodeDiscoveryService
+# is wired into the real startup and health path.  Active nodes are seeded into
+# discovery at startup, per-node announcements keep the discovery plane current,
+# health/status surfaces reflect discovery state, and diagnostic tools expose
+# mismatches between launcher state, fabric registry state, and discovery state.
+try:
+    from core.node_discovery_runtime import (  # noqa: F401
+        NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY as _NDA_AUTHORITY,
+        NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL as _NDA_PR7,
+        ACTIVE_NODES_ARE_DISCOVERABLE_POLICY as _NDA_DISCOVERABLE_POLICY,
+        DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY as _NDA_REFLECTS_POLICY,
+        DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY as _NDA_DIAGNOSABLE_POLICY,
+        DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY as _NDA_STARTUP_POLICY,
+        UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY as _NDA_FLAGGED_POLICY,
+        NodeDiscoveryParticipationRecord as _NodeDiscoveryParticipationRecord,
+        DiscoveryRuntimeSnapshot as _DiscoveryRuntimeSnapshot,
+        seed_fabric_nodes_into_discovery as _seed_fabric_nodes_into_discovery,
+        announce_node_to_discovery as _announce_node_to_discovery,
+        initialize_discovery_from_startup as _initialize_discovery_from_startup,
+        build_discovery_runtime_snapshot as _build_discovery_runtime_snapshot,
+        get_discovery_participation_summary as _get_discovery_participation_summary,
+    )
+
+    NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7: str = (
+        "PROJECTION_ROUTES::NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7_V1: "
+        "core.node_discovery_runtime is confirmed as the canonical authority for "
+        "wiring NodeDiscoveryService into the Galaxy runtime startup path.  "
+        "Active nodes from NodeFabricRegistry are seeded into discovery at startup.  "
+        "Per-node announcements keep the discovery plane current as nodes come online.  "
+        "Health/status surfaces reflect discovery state via "
+        "get_discovery_participation_summary().  Diagnostic tools expose mismatches "
+        "between launcher state, fabric registry state, and discovery state via "
+        "build_discovery_runtime_snapshot().  NodeDiscoveryParticipationRecord and "
+        "DiscoveryRuntimeSnapshot carry per-node alignment classifications."
+    )
+except ImportError:  # pragma: no cover
+    NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

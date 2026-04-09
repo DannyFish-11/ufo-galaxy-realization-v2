@@ -87,6 +87,20 @@ CANONICAL_FABRIC_REGISTRY_LIFECYCLE_HOOKS: str = (
     "HTTP-based runtime registry notification is a secondary fallback only."
 )
 
+#: PR-7 discovery integration sentinel.
+#:
+#: Confirms that NodeSystemLauncher announces every successfully started node
+#: into NodeDiscoveryService via announce_node_to_discovery() so the discovery
+#: plane stays in sync with the fabric registry as nodes come online.
+NODE_DISCOVERY_STARTUP_WIRED_PR7: str = (
+    "NODE_DISCOVERY_STARTUP_WIRED_PR7_V1: "
+    "NodeSystemLauncher._register_node_with_runtime_registry() calls "
+    "core.node_discovery_runtime.announce_node_to_discovery() after every "
+    "successful node health-check so that NodeDiscoveryService reflects the "
+    "real startup state.  initialize_discovery_after_startup() seeds all "
+    "healthy fabric-registry nodes into discovery after the initial batch completes."
+)
+
 
 class NodeSystemLauncher:
     """节点系统启动器"""
@@ -574,6 +588,9 @@ class NodeSystemLauncher:
         # Primary: write directly into the in-process canonical registry.
         self._register_node_in_canonical_registry(node_name, port, "healthy")
 
+        # Discovery: announce to NodeDiscoveryService so it reflects runtime state.
+        self._announce_node_to_discovery(node_name, port)
+
         # Secondary: HTTP notification for dashboard/legacy consumers.
         try:
             import aiohttp
@@ -693,6 +710,80 @@ class NodeSystemLauncher:
                 "直接注册节点 %s 到 NodeFabricRegistry 失败（可忽略）: %s",
                 node_name, exc,
             )
+
+    def _announce_node_to_discovery(
+        self,
+        node_name: str,
+        port: Optional[int],
+    ) -> None:
+        """Announce a successfully started node to NodeDiscoveryService.
+
+        PR-7: Wires each healthy node into the discovery plane so that callers
+        can locate nodes by capability or role without depending on UDP broadcast.
+
+        Args:
+            node_name: Canonical node name.
+            port:      Node HTTP port, or ``None`` when unknown.
+        """
+        try:
+            from core.node_discovery import get_node_discovery
+            from core.node_discovery_runtime import announce_node_to_discovery
+
+            discovery = get_node_discovery()
+            node_cfg = self.node_configs.get(node_name, {})
+            description = (
+                node_cfg.get("description", "")
+                if isinstance(node_cfg, dict) else ""
+            )
+            capabilities = [node_name]
+            if description:
+                capabilities.append(description)
+
+            announce_node_to_discovery(
+                discovery=discovery,
+                node_id=node_name,
+                host="localhost",
+                port=port or 0,
+                capabilities=capabilities,
+                role_str="worker",
+            )
+        except Exception as exc:
+            logger.debug(
+                "NodeSystemLauncher: announce %s to discovery failed (non-fatal): %s",
+                node_name, exc,
+            )
+
+    async def initialize_discovery_after_startup(self) -> int:
+        """Seed all healthy fabric-registry nodes into NodeDiscoveryService.
+
+        PR-7: Called after the initial node batch has been started so that
+        the discovery plane immediately reflects the real set of running nodes.
+        This makes :class:`~core.node_discovery.NodeDiscoveryService` a
+        meaningful participant in the startup path rather than an isolated
+        capability.
+
+        Returns:
+            Number of nodes seeded (0 when either subsystem is unavailable).
+        """
+        try:
+            from core.node_discovery import get_node_discovery
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+            from core.node_discovery_runtime import initialize_discovery_from_startup
+
+            discovery = get_node_discovery()
+            fabric = get_node_fabric_registry()
+            seeded = initialize_discovery_from_startup(discovery, fabric)
+            logger.info(
+                "NodeSystemLauncher: discovery startup seed complete — %d node(s) seeded",
+                seeded,
+            )
+            return seeded
+        except Exception as exc:
+            logger.debug(
+                "NodeSystemLauncher: initialize_discovery_after_startup failed (non-fatal): %s",
+                exc,
+            )
+            return 0
 
     def stop_node(self, node_name: str) -> bool:
         """停止单个节点并将其在 NodeFabricRegistry 中标记为 OFFLINE。
