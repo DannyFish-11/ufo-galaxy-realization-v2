@@ -1349,6 +1349,44 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR-13 (node track): Node final boundary enforcement aligned.
+# Every remaining node-related surface has an explicit boundary category
+# (CANONICAL / COMPAT_ONLY / INTERNAL_ONLY / DEPRECATED).  node_status_cache
+# is confirmed as COMPAT_ONLY and must not be the primary source of node
+# counts in dashboards.  GET /api/v1/system/status now derives nodes.total
+# and nodes.active from NodeFabricRegistry with an explicit node_count_source
+# key.  get_node_count_from_canonical_source() is available for all callers
+# that need canonical node-count truth.
+try:
+    from core.node_final_boundary_enforcement import (  # noqa: F401
+        NODE_FINAL_BOUNDARY_ENFORCEMENT_IS_AUTHORITY as _NFBE_AUTHORITY,
+        NODE_FINAL_BOUNDARY_ENFORCEMENT_PR13_SENTINEL as _NFBE_PR13,
+        NODE_STATUS_CACHE_IS_COMPAT_NOT_CANONICAL_POLICY as _NFBE_CACHE_POLICY,
+        SYSTEM_STATUS_NODES_COUNT_MUST_PREFER_CANONICAL_REGISTRY_POLICY as _NFBE_COUNT_POLICY,
+        COMPAT_SURFACES_ARE_NOT_PEER_AUTHORITIES_POLICY as _NFBE_COMPAT_POLICY,
+        DASHBOARD_SURFACES_MUST_USE_CANONICAL_SOURCES_POLICY as _NFBE_DASH_POLICY,
+        build_node_surface_classification_registry as _build_node_surface_classification_registry,
+        get_final_boundary_summary as _get_final_boundary_summary,
+    )
+
+    NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13: str = (
+        "PROJECTION_ROUTES::NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_V1: "
+        "core.node_final_boundary_enforcement is confirmed as the canonical "
+        "authority for finalizing node surface boundary classification (PR-13 "
+        "node track).  Every remaining node route, helper, adapter, and store "
+        "is explicitly categorized as CANONICAL, COMPAT_ONLY, INTERNAL_ONLY, "
+        "or DEPRECATED.  node_status_cache is COMPAT_ONLY and is no longer "
+        "the primary source of node counts in GET /api/v1/system/status.  "
+        "NodeFabricRegistry is the canonical source for node counts and node "
+        "presence.  build_node_surface_classification_registry() and "
+        "get_final_boundary_summary() are available for dashboards and diagnostics."
+    )
+except ImportError:  # pragma: no cover
+    NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 

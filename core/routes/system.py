@@ -52,6 +52,19 @@ from core.routes._shared import (
 
 logger = logging.getLogger("Galaxy.API")
 
+# PR-13 (node track): Import canonical node-count helper so that
+# /api/v1/system/status derives node counts from NodeFabricRegistry
+# rather than the legacy node_status_cache compat store.
+try:
+    from core.node_final_boundary_enforcement import (  # noqa: F401
+        get_node_count_from_canonical_source as _get_node_count_from_canonical_source,
+        SYSTEM_STATUS_NODES_COUNT_MUST_PREFER_CANONICAL_REGISTRY_POLICY as _NODE_COUNT_POLICY,
+    )
+    _CANONICAL_NODE_COUNT_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _CANONICAL_NODE_COUNT_AVAILABLE = False
+    _get_node_count_from_canonical_source = None  # type: ignore[assignment]
+
 # 支持的 API Key 白名单
 ALLOWED_CONFIG_KEYS = {
     "OPENAI_API_KEY", "OPENAI_API_BASE",
@@ -77,6 +90,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def system_status():
         """获取系统完整状态"""
         services = service_manager.get_status() if service_manager else {}
+
+        # PR-13 (node track): Derive node counts from the canonical
+        # NodeFabricRegistry rather than the legacy node_status_cache
+        # compat store.  The response includes a node_count_source key
+        # so operators can see which authority was used.
+        if _CANONICAL_NODE_COUNT_AVAILABLE:
+            _node_counts = _get_node_count_from_canonical_source()
+        else:
+            _node_counts = {
+                "total": len(node_status_cache),
+                "active": sum(1 for n in node_status_cache.values() if n.get("status") == "running"),
+                "node_count_source": "compat_fallback:node_status_cache",
+            }
+
         return JSONResponse({
             "status": "running",
             "version": "2.0.0",
@@ -97,8 +124,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 ]
             },
             "nodes": {
-                "total": len(node_status_cache),
-                "active": sum(1 for n in node_status_cache.values() if n.get("status") == "running")
+                "total": _node_counts["total"],
+                "active": _node_counts["active"],
+                "node_count_source": _node_counts.get("node_count_source", "unknown"),
             },
             "tasks": {
                 "total": len(task_queue),
