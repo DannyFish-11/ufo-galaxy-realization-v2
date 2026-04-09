@@ -1032,6 +1032,39 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::UNIFIED_NODE_INVOCATION_ALIGNED_PR4_UNAVAILABLE"
     )
 
+# PR-5 (fusion_entry canonical adapter): Confirms that fusion_entry.py has
+# been formally repositioned as the canonical local execution adapter, with
+# a standardised adapter contract (FusionNode class, async execute method,
+# get_node_instance factory), explicit policy sentinels ruling out registry/
+# discovery authority roles, and all direct helper call sites in routes
+# redirected through the unified executor (invoke_node).
+try:
+    from core.fusion_entry_adapter import (  # noqa: F401
+        FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY as _FEA_AUTHORITY,
+        FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL as _FEA_PR5,
+        FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY as _FEA_NOT_REGISTRY,
+        FUSION_ENTRY_NOT_A_DISCOVERY_AUTHORITY_POLICY as _FEA_NOT_DISCOVERY,
+        ADAPTER_CONTRACT_IS_STANDARDISED_POLICY as _FEA_CONTRACT,
+        UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY as _FEA_LOADER,
+        FusionEntryAdapterContract as _FusionEntryAdapterContract,
+        validate_fusion_entry_adapter as _validate_fusion_entry_adapter,
+    )
+
+    FUSION_ENTRY_ADAPTER_ALIGNED_PR5: str = (
+        "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_V1: "
+        "fusion_entry.py is confirmed as the canonical local execution adapter "
+        "only.  core.fusion_entry_adapter defines FusionEntryAdapterContract "
+        "(FusionNode class, async execute, get_node_instance), policy sentinels "
+        "ruling out registry/discovery authority roles, and a validator used by "
+        "the unified executor.  Direct _load_node/_execute_node call sites in "
+        "routes have been redirected through invoke_node() (PR-4 unified "
+        "executor).  Templates and contributor docs reflect the narrowed role."
+    )
+except ImportError:  # pragma: no cover
+    FUSION_ENTRY_ADAPTER_ALIGNED_PR5: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::FUSION_ENTRY_ADAPTER_ALIGNED_PR5_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
