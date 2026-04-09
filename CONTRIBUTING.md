@@ -55,6 +55,22 @@ Active nodes must additionally satisfy:
 
 ### `fusion_entry.py` contract
 
+`fusion_entry.py` is the **canonical local execution adapter** for each node.
+Its sole responsibility is to load the node's core logic (`main.py`) in an
+isolated namespace and expose a uniform execution interface to the unified
+executor layer (`core.node_invocation`).
+
+It is explicitly **NOT**:
+- a node registry or discovery authority
+- a source of truth for node membership in the active system
+- a governance eligibility oracle
+
+Node membership in the active system is determined exclusively by
+`node_dependencies.json` and the canonical runtime registry
+(`NodeFabricRegistry` in `core/nodes/node_fabric_registry.py`).  The presence
+or absence of `fusion_entry.py` on disk carries no registry or governance
+meaning.
+
 Every `fusion_entry.py` must:
 
 1. Use `importlib.util.spec_from_file_location` to load `main.py` — **never
@@ -63,6 +79,14 @@ Every `fusion_entry.py` must:
    method that returns `{"success": bool, ...}`.
 3. Expose a module-level `get_node_instance()` function that returns a
    `FusionNode`.
+
+These requirements are validated programmatically by
+`core.fusion_entry_adapter.validate_fusion_entry_adapter()`.
+
+All node execution goes through `core.node_invocation.invoke_node()` (the
+unified executor from PR-4).  Do not call `core.routes._helpers._load_node`
+or `_execute_node` directly from new code; those are implementation details
+of the unified executor, not a public API.
 
 ### Port and registry fields
 
@@ -100,7 +124,10 @@ copied files.
    your actual node ID and port.
 3. Each node directory must contain at minimum:
    - `main.py` – entry point with the node's core logic
-   - `fusion_entry.py` – integration shim used by the fusion layer
+   - `fusion_entry.py` – **execution adapter** that loads `main.py` in an
+     isolated namespace and exposes the canonical adapter interface (`FusionNode`,
+     `execute`, `get_node_instance`).  This file is an execution adapter only —
+     it does not register the node or determine governance eligibility.
    - `README.md` – purpose, port, endpoints, env vars, dependencies
 4. **Register the node in `node_dependencies.json`.**  This file is the
    machine-readable source of truth for the node registry and startup policy.

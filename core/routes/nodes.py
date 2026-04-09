@@ -29,7 +29,7 @@ from core.routes._shared import (
     node_status_cache,
     task_queue,
 )
-from core.routes._helpers import nodes_root, _load_node, _execute_node
+from core.routes._helpers import nodes_root
 from core.routes._models import NodeCallRequest
 from core.node_invocation import invoke_node, InvocationSource
 
@@ -176,31 +176,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """自主调度接口：接收自然语言指令，自动规划并执行节点任务 (ReAct Loop)"""
         try:
             async def node_executor(node_id: str, action: str, params: dict):
-                target_node_dir = os.path.join(nodes_root, node_id)
-                if not os.path.isdir(target_node_dir):
-                    for name in os.listdir(nodes_root):
-                        if name.startswith(node_id) or node_id in name:
-                            target_node_dir = os.path.join(nodes_root, name)
-                            node_id = name
-                            break
-
-                if not os.path.isdir(target_node_dir):
-                    return {"error": f"Node {node_id} not found"}
-
-                fusion_entry = os.path.join(target_node_dir, "fusion_entry.py")
-                if not os.path.exists(fusion_entry):
-                    return {"error": f"Node {node_id} has no fusion_entry.py"}
-
-                node_instance = _load_node(node_id, target_node_dir, fusion_entry)
-                if not node_instance:
-                    return {"error": f"Failed to load node {node_id}"}
-
-                try:
-                    result = await _execute_node(node_instance, action, params)
-                    return result
-                except Exception as e:
-                    logger.error(f"Node execution error: {e}")
-                    return {"error": str(e)}
+                # Route through the unified executor (PR-4 / PR-5) instead of
+                # calling _load_node / _execute_node directly.
+                result = await invoke_node(
+                    node_id,
+                    action,
+                    params,
+                    invocation_source=InvocationSource.CAPABILITY,
+                )
+                if result.success:
+                    return result.result if result.result is not None else {"success": True}
+                return {"error": result.error or "Node execution failed"}
 
             execution_context = req.context.copy()
             execution_context["devices"] = registered_devices

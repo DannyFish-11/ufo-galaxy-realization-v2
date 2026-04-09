@@ -1,12 +1,28 @@
-# Fusion layer integration shim — Node_XXX_YourNodeName
+# Canonical local execution adapter — Node_XXX_YourNodeName
 #
-# This file is the entry point used by the fusion layer to load and interact
-# with the node without polluting sys.path.  The pattern must stay consistent
-# across all nodes so that the launcher and audit engine can discover nodes
-# reliably.
+# Role: EXECUTION ADAPTER ONLY.
+#   This file is the per-node shim used by the unified executor
+#   (core.node_invocation.UnifiedNodeExecutor) to load and invoke the node's
+#   core logic in an isolated namespace.
+#
+# This file is explicitly NOT:
+#   - a node registry or discovery authority
+#   - a source of truth for node membership in the active system
+#   - a governance eligibility oracle
+#
+# Node membership in the active system is determined by node_dependencies.json
+# and the canonical runtime registry (NodeFabricRegistry).
+#
+# Adapter contract (enforced by core.fusion_entry_adapter):
+#   1. Load main.py via importlib — never mutate sys.path.
+#   2. Expose FusionNode with async execute(command, **params) -> dict.
+#   3. Expose module-level get_node_instance() -> FusionNode.
 #
 # Replace:
 #   Node_XXX_YourNodeName  → actual node ID  (e.g. Node_042_Scheduler)
+
+# Adapter role marker — machine-checkable by core.fusion_entry_adapter.
+FUSION_ENTRY_IS_EXECUTION_ADAPTER: str = "FUSION_ENTRY_ADAPTER::EXECUTION_ADAPTER_V1"
 
 import asyncio
 import importlib.util
