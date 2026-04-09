@@ -1141,6 +1141,53 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_DISCOVERY_RUNTIME_INTEGRATION_ALIGNED_PR7_UNAVAILABLE"
     )
 
+# PR-8 (node boundary runtime): Confirms that the canonical node boundary is
+# explicitly defined and enforced.  Nodes are capability providers / local
+# executor backends only — not a competing execution authority.  Legacy
+# surfaces (NodeRegistry compat facade, direct fs-scan, compat HTTP endpoint,
+# fusion_entry misuse, LEGACY_ORCHESTRATOR_NODE on canonical path) are
+# catalogued and explicitly demoted.  NodeFabricRegistry remains the single
+# runtime truth for node existence and health; invoke_node() via
+# UnifiedNodeExecutor is the canonical invocation pathway.
+try:
+    from core.node_boundary_runtime import (  # noqa: F401
+        NODE_BOUNDARY_IS_CANONICAL_AUTHORITY as _NBR_AUTHORITY,
+        NODE_BOUNDARY_RUNTIME_PR8_SENTINEL as _NBR_PR8,
+        NODES_ARE_CAPABILITY_BACKENDS_ONLY_POLICY as _NBR_CAPABILITY_POLICY,
+        CANONICAL_INVOCATION_PATH_IS_INVOKE_NODE_POLICY as _NBR_INVOCATION_POLICY,
+        LEGACY_REGISTRY_IS_COMPAT_FACADE_POLICY as _NBR_REGISTRY_POLICY,
+        DIRECT_SCAN_IS_LEGACY_COMPAT_POLICY as _NBR_SCAN_POLICY,
+        LEGACY_ORCHESTRATOR_NODES_DEMOTED_FROM_CANONICAL_PATH_POLICY as _NBR_DEMOTE_POLICY,
+        NodePathwayKind as _NodePathwayKind,
+        LegacyNodeSurfaceStatus as _LegacyNodeSurfaceStatus,
+        NodeBoundaryDecision as _NodeBoundaryDecision,
+        LegacyNodeSurfaceEntry as _LegacyNodeSurfaceEntry,
+        NodeBoundarySnapshot as _NodeBoundarySnapshot,
+        classify_invocation_pathway as _classify_invocation_pathway,
+        build_legacy_surface_registry as _build_legacy_surface_registry,
+        evaluate_node_boundary_compliance as _evaluate_node_boundary_compliance,
+        get_canonical_nodes as _get_canonical_nodes,
+        build_node_boundary_snapshot as _build_node_boundary_snapshot,
+        get_boundary_summary as _get_boundary_summary,
+    )
+
+    NODE_BOUNDARY_RUNTIME_ALIGNED_PR8: str = (
+        "PROJECTION_ROUTES::NODE_BOUNDARY_RUNTIME_ALIGNED_PR8_V1: "
+        "core.node_boundary_runtime is confirmed as the canonical authority for "
+        "Galaxy node system boundary enforcement.  Nodes are capability providers "
+        "/ local executor backends only.  Canonical invocation path is invoke_node() "
+        "via UnifiedNodeExecutor (PR-4).  Legacy surfaces (NodeRegistry compat "
+        "facade, direct filesystem scan in GET /api/v1/nodes, POST /api/v1/nodes/call "
+        "compat endpoint, fusion_entry as registry authority, LEGACY_ORCHESTRATOR_NODE "
+        "on canonical path) are catalogued and explicitly demoted.  "
+        "NodeBoundaryDecision, LegacyNodeSurfaceEntry, and NodeBoundarySnapshot "
+        "carry per-node and per-surface boundary compliance records."
+    )
+except ImportError:  # pragma: no cover
+    NODE_BOUNDARY_RUNTIME_ALIGNED_PR8: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_BOUNDARY_RUNTIME_ALIGNED_PR8_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
