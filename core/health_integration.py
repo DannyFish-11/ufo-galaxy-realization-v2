@@ -233,18 +233,42 @@ class UnifiedHealthManager:
             return {"status": "unhealthy", "error": str(e)}
 
     def _check_discovery(self) -> Dict:
-        """节点发现状态检查"""
+        """节点发现状态检查 (PR-12: uses canonical discovery participation summary)."""
         try:
-            status = self._discovery.get_status()
-            healthy = status.get("healthy_nodes", 0)
-            total = status.get("total_nodes", 0)
+            from core.node_discovery_startup_health_closure import (
+                build_discovery_health_surface,
+            )
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+
+            fabric = get_node_fabric_registry()
+            surface = build_discovery_health_surface(self._discovery, fabric)
             return {
-                "status": "healthy",
-                "total_nodes": total,
-                "healthy_nodes": healthy,
+                "status": surface.get("health_status", "unavailable"),
+                "discovery_total": surface.get("discovery_total", 0),
+                "discovery_healthy": surface.get("discovery_healthy", 0),
+                "fabric_total": surface.get("fabric_total", 0),
+                "fabric_healthy": surface.get("fabric_healthy", 0),
+                "undiscovered_active": surface.get("undiscovered_active", 0),
+                "discovery_participation": surface.get("discovery_participation", "none"),
             }
-        except Exception as e:
-            return {"status": "unhealthy", "error": str(e)}
+        except Exception as outer_exc:
+            # Graceful fallback: use basic discovery service status.
+            logger.debug(
+                "UnifiedHealthManager._check_discovery: canonical surface failed, "
+                "falling back to basic get_status(): %s",
+                outer_exc,
+            )
+            try:
+                status = self._discovery.get_status()
+                healthy = status.get("healthy_nodes", 0)
+                total = status.get("total_nodes", 0)
+                return {
+                    "status": "healthy",
+                    "total_nodes": total,
+                    "healthy_nodes": healthy,
+                }
+            except Exception as inner_exc:
+                return {"status": "unhealthy", "error": str(inner_exc)}
 
     def _check_channel_plugins(self) -> Dict:
         """渠道插件检查"""
@@ -291,12 +315,28 @@ class UnifiedHealthManager:
             except Exception:
                 dashboard["concurrency"] = {"error": "unavailable"}
 
-        # 节点发现
+        # 节点发现 (PR-12: expose canonical discovery participation summary)
         if self._discovery:
             try:
-                dashboard["node_discovery"] = self._discovery.get_status()
-            except Exception:
-                dashboard["node_discovery"] = {"error": "unavailable"}
+                from core.node_discovery_startup_health_closure import (
+                    build_discovery_health_surface,
+                )
+                from core.nodes.node_fabric_registry import get_node_fabric_registry
+
+                fabric = get_node_fabric_registry()
+                dashboard["node_discovery"] = build_discovery_health_surface(
+                    self._discovery, fabric
+                )
+            except Exception as exc:
+                logger.debug(
+                    "UnifiedHealthManager.get_dashboard: discovery health surface "
+                    "failed, falling back to basic get_status(): %s",
+                    exc,
+                )
+                try:
+                    dashboard["node_discovery"] = self._discovery.get_status()
+                except Exception:
+                    dashboard["node_discovery"] = {"error": "unavailable"}
 
         return dashboard
 
