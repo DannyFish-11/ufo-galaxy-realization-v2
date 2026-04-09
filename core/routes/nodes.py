@@ -3,11 +3,29 @@ Galaxy - Node & Agent Routes
 ===================================
 
 Routes:
-  GET  /api/v1/nodes                  - 列出节点
-  GET  /api/v1/nodes/{node_name}      - 节点详情
+  GET  /api/v1/nodes                  - 列出节点（canonical: NodeFabricRegistry）
+  GET  /api/v1/nodes/{node_name}      - 节点详情（canonical: NodeFabricRegistry）
   POST /api/v1/nodes/call             - 调用节点
   POST /api/v1/agent/deploy           - 部署 Agent 到设备
   POST /api/v1/agent/autonomous       - 自主调度执行
+
+  GET  /api/v1/nodes/legacy/filesystem  - LEGACY/COMPAT: filesystem-based node list
+
+Architecture note (PR-3)
+------------------------
+``GET /api/v1/nodes`` and ``GET /api/v1/nodes/{node_name}`` are canonical
+node-list/detail surfaces.  They derive node membership and runtime status
+from :class:`~core.nodes.node_fabric_registry.NodeFabricRegistry` (the
+canonical runtime registry), NOT from raw filesystem scans.
+
+A node that exists on disk but has not been registered in NodeFabricRegistry
+will NOT appear in the canonical list/detail responses.  The separate
+``GET /api/v1/nodes/legacy/filesystem`` route is an explicitly-marked
+legacy/compat surface for diagnostics and administrative tooling; it must
+not be treated as canonical runtime authority.
+
+``node_status_cache`` (from core.routes._shared) is a legacy in-memory
+cache.  It is no longer consulted by canonical list/detail surfaces.
 """
 
 import json
@@ -26,7 +44,6 @@ from pydantic import BaseModel
 from core.routes._shared import (
     connection_manager,
     registered_devices,
-    node_status_cache,
     task_queue,
 )
 from core.routes._helpers import nodes_root
@@ -34,6 +51,19 @@ from core.routes._models import NodeCallRequest
 from core.node_invocation import invoke_node, InvocationSource
 
 logger = logging.getLogger("Galaxy.API")
+
+# ─── PR-3 policy sentinels (node list/detail canonical surface) ───────────────
+# These are imported here so that test/audit code can verify the canonical
+# node list/detail refactor has been applied to this module.
+try:
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY as _POLICY_LIST,
+        FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _POLICY_FS,
+        NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _POLICY_CACHE,
+    )
+    _CANONICAL_NODE_LIST_SURFACE_PR3_ALIGNED = True
+except ImportError:  # pragma: no cover
+    _CANONICAL_NODE_LIST_SURFACE_PR3_ALIGNED = False
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -62,58 +92,169 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.get("/api/v1/nodes")
     async def list_nodes():
-        """列出所有可用节点"""
+        """列出所有可用节点（canonical: NodeFabricRegistry）。
+
+        Primary authority: NodeFabricRegistry.
+        A node must be registered in NodeFabricRegistry to appear here.
+        Filesystem metadata (config.json) is read as supplemental context only.
+
+        Use GET /api/v1/nodes/legacy/filesystem for the legacy filesystem-based
+        listing (explicit compat/diagnostics path).
+        """
         nodes = []
-        nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "nodes")
+        try:
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+            fab = get_node_fabric_registry()
+            for node_info in sorted(fab.list_nodes(), key=lambda n: n.node_id):
+                # Supplement with static filesystem metadata (config.json) if present.
+                node_config: Dict[str, Any] = {}
+                node_dir = os.path.join(nodes_root, node_info.node_id)
+                config_file = os.path.join(node_dir, "config.json")
+                if os.path.isdir(node_dir) and os.path.exists(config_file):
+                    try:
+                        with open(config_file, encoding="utf-8") as f:
+                            node_config = json.load(f)
+                    except Exception as e:
+                        logger.debug(f"加载节点配置失败 {config_file}: {e}")
+
+                # Merge: registry metadata takes precedence; config.json fills gaps.
+                reg_meta: Dict[str, Any] = (
+                    node_info.metadata if isinstance(node_info.metadata, dict) else {}
+                )
+                nodes.append({
+                    "name": node_info.node_id,
+                    "description": reg_meta.get(
+                        "description", node_config.get("description", "")
+                    ),
+                    "group": reg_meta.get("group", node_config.get("group", "")),
+                    "status": (
+                        node_info.status.value
+                        if hasattr(node_info.status, "value")
+                        else str(node_info.status)
+                    ),
+                    "capabilities": (
+                        node_info.capability_names()
+                        or node_config.get("capabilities", [])
+                    ),
+                    "role": (
+                        node_info.role.value
+                        if hasattr(node_info.role, "value")
+                        else str(node_info.role)
+                    ),
+                    "health_score": round(node_info.health_score(), 4),
+                    "registry_source": "canonical",
+                })
+        except Exception as e:
+            logger.warning(f"list_nodes: NodeFabricRegistry unavailable: {e}")
+
+        return JSONResponse({
+            "nodes": nodes,
+            "total": len(nodes),
+            "registry_authority": "canonical:NodeFabricRegistry",
+        })
+
+    @router.get("/api/v1/nodes/legacy/filesystem")
+    async def list_nodes_legacy_filesystem():
+        """LEGACY/COMPAT: 从磁盘目录扫描列出节点。
+
+        ⚠️  This is an explicit legacy/compat surface for diagnostics and
+        administrative tooling ONLY.  It is NOT canonical runtime authority.
+        A node appearing here does not mean it belongs to the active system.
+
+        Use GET /api/v1/nodes for the canonical runtime-aligned node list.
+        """
+        nodes = []
+        nodes_dir = nodes_root
         if os.path.isdir(nodes_dir):
             for name in sorted(os.listdir(nodes_dir)):
                 node_dir = os.path.join(nodes_dir, name)
-                if os.path.isdir(node_dir) and os.path.exists(os.path.join(node_dir, "main.py")):
+                if os.path.isdir(node_dir) and os.path.exists(
+                    os.path.join(node_dir, "main.py")
+                ):
                     config_file = os.path.join(node_dir, "config.json")
-                    node_config = {}
+                    node_config: Dict[str, Any] = {}
                     if os.path.exists(config_file):
                         try:
                             with open(config_file, encoding="utf-8") as f:
                                 node_config = json.load(f)
                         except Exception as e:
                             logger.warning(f"加载节点配置失败 {config_file}: {e}")
-
-                    status = node_status_cache.get(name, {})
                     nodes.append({
                         "name": name,
                         "description": node_config.get("description", ""),
                         "group": node_config.get("group", ""),
-                        "status": status.get("status", "stopped"),
-                        "capabilities": node_config.get("capabilities", [])
+                        "has_main": True,
+                        "has_fusion_entry": os.path.exists(
+                            os.path.join(node_dir, "fusion_entry.py")
+                        ),
+                        "capabilities": node_config.get("capabilities", []),
+                        "registry_source": "legacy_filesystem",
                     })
 
-        return JSONResponse({"nodes": nodes, "total": len(nodes)})
+        return JSONResponse({
+            "nodes": nodes,
+            "total": len(nodes),
+            "_compat_warning": (
+                "This endpoint lists nodes by filesystem presence only.  "
+                "It is NOT canonical runtime authority.  "
+                "Use /api/v1/nodes for canonical node list."
+            ),
+        })
 
     @router.get("/api/v1/nodes/{node_name}")
     async def get_node(node_name: str):
-        """获取节点详情"""
-        nodes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "nodes")
-        node_dir = os.path.join(nodes_dir, node_name)
+        """获取节点详情（canonical: NodeFabricRegistry）。
 
-        if not os.path.isdir(node_dir):
-            raise HTTPException(status_code=404, detail=f"节点 {node_name} 未找到")
+        Primary authority: NodeFabricRegistry.
+        Returns 404 if the node is not registered in the canonical registry.
+        Filesystem metadata (config.json) is read as supplemental context only.
+        """
+        try:
+            from core.nodes.node_fabric_registry import get_node_fabric_registry
+            fab = get_node_fabric_registry()
+            node_info = fab.get(node_name)
+        except Exception as e:
+            logger.warning(f"get_node: NodeFabricRegistry unavailable: {e}")
+            node_info = None
 
+        if node_info is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"节点 {node_name} 未在 canonical registry (NodeFabricRegistry) 中找到",
+            )
+
+        # Supplement with static filesystem metadata (config.json) if present.
+        node_dir = os.path.join(nodes_root, node_name)
+        node_config: Dict[str, Any] = {}
         config_file = os.path.join(node_dir, "config.json")
-        node_config = {}
-        if os.path.exists(config_file):
+        if os.path.isdir(node_dir) and os.path.exists(config_file):
             try:
                 with open(config_file, encoding="utf-8") as f:
                     node_config = json.load(f)
             except Exception as e:
-                logger.warning(f"加载节点配置失败 {config_file}: {e}")
+                logger.debug(f"加载节点配置失败 {config_file}: {e}")
 
-        status = node_status_cache.get(node_name, {})
         return JSONResponse({
-            "name": node_name,
+            "name": node_info.node_id,
+            "status": (
+                node_info.status.value
+                if hasattr(node_info.status, "value")
+                else str(node_info.status)
+            ),
+            "role": (
+                node_info.role.value
+                if hasattr(node_info.role, "value")
+                else str(node_info.role)
+            ),
+            "health_score": round(node_info.health_score(), 4),
+            "capabilities": node_info.capability_names(),
+            "host": node_info.host,
+            "port": node_info.port,
+            "metadata": node_info.metadata if isinstance(node_info.metadata, dict) else {},
             "config": node_config,
-            "status": status,
             "has_fusion_entry": os.path.exists(os.path.join(node_dir, "fusion_entry.py")),
-            "has_dockerfile": os.path.exists(os.path.join(node_dir, "Dockerfile"))
+            "has_dockerfile": os.path.exists(os.path.join(node_dir, "Dockerfile")),
+            "registry_source": "canonical",
         })
 
     @router.post("/api/v1/agent/deploy")

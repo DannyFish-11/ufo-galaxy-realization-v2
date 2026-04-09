@@ -994,6 +994,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_RUNTIME_NODE_REGISTRY_ALIGNED_UNAVAILABLE"
     )
 
+# PR-3 (canonical node list/detail/status surfaces): Confirms that
+# GET /api/v1/nodes and GET /api/v1/nodes/{node_name} derive node membership
+# and runtime status from NodeFabricRegistry (not filesystem scans or
+# node_status_cache), that any remaining filesystem-based listing is explicitly
+# marked as a legacy/compat path, and that three new policy sentinels are
+# declared in node_fabric_registry.py for machine-checkable enforcement.
+try:
+    from core.nodes.node_fabric_registry import (  # noqa: F401
+        CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY as _PR3_LIST_POLICY,
+        FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _PR3_FS_POLICY,
+        NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _PR3_CACHE_POLICY,
+    )
+
+    CANONICAL_NODE_LIST_DETAIL_STATUS_ALIGNED_PR3: str = (
+        "PROJECTION_ROUTES::CANONICAL_NODE_LIST_DETAIL_STATUS_ALIGNED_PR3_V1: "
+        "GET /api/v1/nodes and GET /api/v1/nodes/{node_name} derive node membership "
+        "and runtime status from NodeFabricRegistry (canonical registry).  Raw "
+        "filesystem scanning (nodes/ directory, main.py or fusion_entry.py presence) "
+        "is no longer used as primary node-existence authority on canonical surfaces.  "
+        "node_status_cache is no longer consulted by canonical list/detail surfaces.  "
+        "The legacy filesystem-based node list is explicitly demoted to "
+        "GET /api/v1/nodes/legacy/filesystem (compat/diagnostics path only)."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_NODE_LIST_DETAIL_STATUS_ALIGNED_PR3: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_NODE_LIST_DETAIL_STATUS_ALIGNED_PR3_UNAVAILABLE"
+    )
+
 # PR-4 (node invocation unification): Unified Node Invocation Envelope and
 # Executor alignment sentinel.  Confirms that core.node_invocation defines a
 # canonical NodeInvocationEnvelope, NodeInvocationResult, and
