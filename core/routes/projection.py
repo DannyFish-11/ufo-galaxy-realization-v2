@@ -1415,6 +1415,37 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_COGNITION_ACTIVATION_ALIGNED_PR14_UNAVAILABLE"
     )
 
+# PR-15 (node track): Node Activation Context Layer
+try:
+    from core.node_activation_context import (  # noqa: F401
+        NODE_ACTIVATION_CONTEXT_IS_AUTHORITY as _NAC_AUTHORITY,
+        NODE_ACTIVATION_CONTEXT_PR15_SENTINEL as _NAC_PR15,
+        ACTIVATION_CONTEXT_ENRICHES_INVOCATION_GOVERNANCE_POLICY as _NAC_ENRICH_POLICY,
+        DORMANT_NODES_CANNOT_BE_CANONICALLY_INVOKED_POLICY as _NAC_DORMANT_POLICY,
+        TOPOLOGY_CONDITIONAL_REQUIRES_CONNECTIVITY_POLICY as _NAC_TOPO_POLICY,
+        DEMAND_ACTIVATED_REQUIRES_EXPLICIT_REQUEST_POLICY as _NAC_DEMAND_POLICY,
+        ACTIVATION_POLICY_CLASSIFICATION_IS_RUNTIME_METADATA_POLICY as _NAC_META_POLICY,
+        evaluate_node_activation_context as _evaluate_node_activation_context,
+        get_activation_policy_kind_for_node as _get_activation_policy_kind_for_node,
+    )
+
+    NODE_ACTIVATION_CONTEXT_ALIGNED_PR15: str = (
+        "PROJECTION_ROUTES::NODE_ACTIVATION_CONTEXT_ALIGNED_PR15_V1: "
+        "core.node_activation_context is confirmed as the canonical authority "
+        "for node activation-context evaluation (PR-15 node track).  "
+        "NodeActivationPolicyKind (ALWAYS_ACTIVE / TOPOLOGY_CONDITIONAL / "
+        "DEMAND_ACTIVATED / DORMANT) classifies node runtime readiness and is "
+        "evaluated inside evaluate_invocation_governance() as a secondary "
+        "enrichment layer after governance eligibility is confirmed.  "
+        "NodeFabricRegistry remains the canonical source of node existence and "
+        "base eligibility.  NetworkTopologyRuntime is consulted as optional "
+        "secondary input only for TOPOLOGY_CONDITIONAL nodes."
+    )
+except ImportError:  # pragma: no cover
+    NODE_ACTIVATION_CONTEXT_ALIGNED_PR15: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_ACTIVATION_CONTEXT_ALIGNED_PR15_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

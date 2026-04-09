@@ -159,6 +159,27 @@ UNREGISTERED_NODES_PROCEED_WITH_UNMANAGED_WARNING_POLICY: str = (
     "have not yet been enrolled in managed runtime governance."
 )
 
+# PR-15 (node track) — Activation context enrichment sentinels
+
+ACTIVATION_CONTEXT_EVALUATED_WITHIN_GOVERNANCE_GATE_SENTINEL: str = (
+    "NODE_INVOCATION_GOVERNANCE::ACTIVATION_CONTEXT_WITHIN_GATE_PR15_V1: "
+    "evaluate_invocation_governance() now includes node activation-context "
+    "evaluation (PR-15 node track) as a secondary enrichment layer *inside* "
+    "the canonical invocation gate.  Activation-context evaluation is invoked "
+    "after governance eligibility is confirmed.  DORMANT nodes and "
+    "TOPOLOGY_CONDITIONAL nodes without topology connectivity are denied with "
+    "governance_status='activation_context_blocked' and a structured "
+    "activation_context_denial payload in diagnostic_context."
+)
+
+ACTIVATION_CONTEXT_DENIAL_IS_DISTINCT_FROM_GOVERNANCE_DENIAL_SENTINEL: str = (
+    "NODE_INVOCATION_GOVERNANCE::ACTIVATION_CONTEXT_DENIAL_DISTINCT_PR15_V1: "
+    "Invocation denials caused by the activation-context layer carry "
+    "governance_status='activation_context_blocked' (not 'ineligible_denied') "
+    "so that operators and callers can distinguish governance/lifecycle "
+    "ineligibility from activation-context readiness blocks."
+)
+
 
 # ===========================================================================
 # Override enum
@@ -207,10 +228,28 @@ class NodeInvocationGovernanceDecision:
         - ``"ineligible_denied"`` — node is governance-ineligible, invocation denied.
         - ``"unregistered_unmanaged"`` — node not in registry, proceeds with warning.
         - ``"override_compat_internal"`` — override path; governance gate bypassed.
+        - ``"activation_context_blocked"`` — governance-eligible but blocked by
+          activation-context layer (DORMANT, topology-unreachable, or missing
+          demand context).  See ``diagnostic_context["activation_context_denial"]``
+          for details.
     registry_consulted:
         Whether NodeFabricRegistry was consulted during the check.
     governor_consulted:
         Whether NodeLifecycleGovernor was consulted during the check.
+    activation_context_status:
+        Short summary of the activation-context evaluation outcome.
+        - ``"not_evaluated"`` — activation context was not evaluated (override /
+          unregistered / governance failure paths).
+        - ``"ready"`` — activation-context check passed.
+        - ``"blocked_dormant"`` — blocked because policy is DORMANT.
+        - ``"blocked_topology_unreachable"`` — blocked because TOPOLOGY_CONDITIONAL
+          and node is unreachable.
+        - ``"blocked_demand_context_missing"`` — blocked because DEMAND_ACTIVATED
+          without demand context.
+        - ``"evaluation_error_skipped"`` — activation-context evaluation failed;
+          governance decision is based on governance eligibility only.
+    activation_context_evaluated:
+        Whether the activation-context layer was evaluated for this decision.
     evaluated_at:
         Unix epoch timestamp when this decision was made.
     """
@@ -222,6 +261,8 @@ class NodeInvocationGovernanceDecision:
     governance_status: str = "eligible"
     registry_consulted: bool = False
     governor_consulted: bool = False
+    activation_context_status: str = "not_evaluated"
+    activation_context_evaluated: bool = False
     evaluated_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -234,6 +275,8 @@ class NodeInvocationGovernanceDecision:
             "governance_status": self.governance_status,
             "registry_consulted": self.registry_consulted,
             "governor_consulted": self.governor_consulted,
+            "activation_context_status": self.activation_context_status,
+            "activation_context_evaluated": self.activation_context_evaluated,
             "evaluated_at": self.evaluated_at,
             "authority": NODE_INVOCATION_GOVERNANCE_IS_AUTHORITY,
         }
@@ -250,6 +293,8 @@ def evaluate_invocation_governance(
     governor: Optional[Any] = None,
     heartbeat_ttl: float = 60.0,
     override: NodeInvocationGovernanceOverride = NodeInvocationGovernanceOverride.NONE,
+    demand_context: Optional[str] = None,
+    topology_runtime: Optional[Any] = None,
 ) -> NodeInvocationGovernanceDecision:
     """Evaluate whether *node_id* may be invoked on the canonical path.
 
@@ -271,6 +316,13 @@ def evaluate_invocation_governance(
     override:
         When :attr:`NodeInvocationGovernanceOverride.COMPAT_INTERNAL`, the gate
         is bypassed entirely and an auditable override decision is returned.
+    demand_context:
+        Optional demand context token for ``DEMAND_ACTIVATED`` nodes (PR-15).
+        When ``None``, demand-activated nodes will be blocked.
+    topology_runtime:
+        Optional :class:`~core.network_topology_runtime.NetworkTopologyRuntime`
+        instance.  Consulted *only* for ``TOPOLOGY_CONDITIONAL`` nodes (PR-15).
+        Has no effect on any other activation policy kind.
 
     Returns
     -------
@@ -414,19 +466,96 @@ def evaluate_invocation_governance(
     # Apply eligibility decision
     # ------------------------------------------------------------------
     if eligibility.eligible:
+        # ------------------------------------------------------------------
+        # PR-15: Activation-context enrichment layer
+        # Evaluate activation-context readiness *inside* the governance gate
+        # after governance eligibility is confirmed.
+        # ------------------------------------------------------------------
+        activation_context_status = "not_evaluated"
+        activation_context_evaluated = False
+        activation_context_denial: Optional[dict] = None
+
+        try:
+            from core.node_activation_context import (  # noqa: PLC0415
+                evaluate_node_activation_context,
+                get_activation_policy_kind_for_node,
+                build_activation_context_denial_diagnostics,
+            )
+            policy_kind = get_activation_policy_kind_for_node(node_info)
+            ac_decision = evaluate_node_activation_context(
+                node_id,
+                policy_kind,
+                demand_context=demand_context,
+                topology_runtime=topology_runtime,
+            )
+            activation_context_evaluated = True
+
+            if not ac_decision.ready:
+                # Map denial_reason to activation_context_status
+                reason = ac_decision.denial_reason
+                if reason == "dormant":
+                    activation_context_status = "blocked_dormant"
+                elif reason == "topology_unreachable":
+                    activation_context_status = "blocked_topology_unreachable"
+                elif reason == "demand_context_missing":
+                    activation_context_status = "blocked_demand_context_missing"
+                else:
+                    activation_context_status = f"blocked_{reason}" if reason else "blocked"
+
+                activation_context_denial = build_activation_context_denial_diagnostics(
+                    ac_decision
+                )
+                denial_diag = dict(eligibility.diagnostic_context)
+                denial_diag["activation_context_denial"] = activation_context_denial
+                denial_diag["activation_context_status"] = activation_context_status
+
+                logger.warning(
+                    "governance gate: BLOCKED by activation context | node_id=%s status=%s",
+                    node_id,
+                    activation_context_status,
+                )
+                return NodeInvocationGovernanceDecision(
+                    node_id=node_id,
+                    invocation_allowed=False,
+                    denial_reasons=[f"activation_context:{reason}"],
+                    diagnostic_context=denial_diag,
+                    governance_status="activation_context_blocked",
+                    registry_consulted=registry_consulted,
+                    governor_consulted=eligibility.governor_consulted,
+                    activation_context_status=activation_context_status,
+                    activation_context_evaluated=True,
+                )
+            else:
+                activation_context_status = "ready"
+        except Exception as exc:  # noqa: BLE001
+            # Activation-context evaluation failure must never silently block
+            # invocation.  Fall through with a diagnostic note.
+            logger.debug(
+                "governance gate: activation-context evaluation failed for node_id=%s: %s; "
+                "skipping (governance eligibility used)",
+                node_id,
+                exc,
+            )
+            activation_context_status = "evaluation_error_skipped"
+
         logger.debug(
-            "governance gate: ALLOWED | node_id=%s governor_consulted=%s",
+            "governance gate: ALLOWED | node_id=%s governor_consulted=%s activation_context=%s",
             node_id,
             eligibility.governor_consulted,
+            activation_context_status,
         )
+        gov_diag = dict(eligibility.diagnostic_context)
+        gov_diag["activation_context_status"] = activation_context_status
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
             denial_reasons=[],
-            diagnostic_context=dict(eligibility.diagnostic_context),
+            diagnostic_context=gov_diag,
             governance_status="eligible",
             registry_consulted=registry_consulted,
             governor_consulted=eligibility.governor_consulted,
+            activation_context_status=activation_context_status,
+            activation_context_evaluated=activation_context_evaluated,
         )
     else:
         logger.warning(
@@ -442,6 +571,8 @@ def evaluate_invocation_governance(
             governance_status="ineligible_denied",
             registry_consulted=registry_consulted,
             governor_consulted=eligibility.governor_consulted,
+            activation_context_status="not_evaluated",
+            activation_context_evaluated=False,
         )
 
 
