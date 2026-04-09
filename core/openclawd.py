@@ -4801,14 +4801,20 @@ class OpenClawd:
                 LEGACY_ORCHESTRATOR / EXPERIMENTAL / ARCHIVED nodes are excluded.
           2. CapabilityRegistry direct read (compatibility fallback when resolver cache is empty)
           3. Direct scan: mcp_loader / skill_loader (legacy compatibility fallback only)
-          4. Node direct scan: node_registry.json + fusion_entry discovery (legacy fallback,
-             deduplicates against canonical node tools already collected in step 1b)
+
+        PR-10: Legacy Layer 3 node-discovery path (config/node_registry.json reads +
+        fusion_entry.py direct filesystem scan) has been removed from the canonical
+        tool-collection path.  Node tools are sourced ONLY from the canonical runtime
+        path (step 1b above).  The legacy scan is available behind the explicit compat
+        flag OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true but is non-canonical by
+        design and will not act as a peer tool-exposure authority.
 
         MCP/Skill 工具优先通过 CapabilityResolver 取，这是规范的消费者接口；
         Resolver 在返回前对所有 CapabilityContract 做 schema 校验，确保只有合法条目
         进入 LLM 工具列表。仅当 Resolver 和 Registry 均无结果时才回退直接加载路径。
-        Node 工具通过 NodeFabricRegistry 规范同步路径纳入能力总线，传统直接扫描路径
-        作为兜底回退（对规范路径未覆盖的节点补充）。
+        Node 工具通过 NodeFabricRegistry 规范同步路径纳入能力总线。传统直接扫描路径
+        (config/node_registry.json + fusion_entry.py 扫描) 已在 PR-10 中从规范路径
+        移除，仅可通过显式兼容标志重新启用。
         """
         tools: List[Dict] = []
 
@@ -4987,95 +4993,133 @@ class OpenClawd:
         except Exception as e:
             logger.debug(f"收集 MCP Gateway 工具失败: {e}")
 
-        # ── 层 3: Node 节点操作 (静态 action 目录 + 动态发现全量节点) ──
+        # ── PR-10: Legacy Layer 3 node discovery — COMPAT-ONLY, disabled by default ──
+        # The legacy Layer 3 path (config/node_registry.json reads + fusion_entry.py
+        # direct filesystem scan) has been removed from the canonical tool-collection
+        # path per PR-10 (OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_PR10_SENTINEL).
+        #
+        # Node tools are now sourced EXCLUSIVELY from the canonical runtime path
+        # (Layer 2 above): NodeFabricRegistry → sync_capabilities_to_registry()
+        # → CapabilityRegistry → CapabilityResolver(CapabilitySource.NODE).
+        #
+        # This compat block may be re-enabled by setting:
+        #   OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true
+        # in the environment.  Even when enabled, it is explicitly non-canonical
+        # and will not override tools already collected from the canonical path.
         try:
-            import json as _json
-            import os as _os
-
-            registry_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "config", "node_registry.json")
-            # 加载注册表获取节点名称和 node_key 映射
-            registry_names: Dict[str, str] = {}  # node_id → node_name
-            if _os.path.exists(registry_path):
-                with open(registry_path, "r", encoding="utf-8") as f:
-                    registry = _json.load(f)
-                for node_key, node_info in registry.get("nodes", {}).items():
-                    nid = node_info.get("id", "")
-                    if nid and node_info.get("status") == "active" and node_info.get("has_main"):
-                        registry_names[nid] = node_info.get("name", nid)
-                        self._node_id_to_key[nid] = node_key
-
-            # 已注册的工具名集合，避免重复添加
-            # 预置规范路径已收集的节点工具名，防止与 Layer 2 规范路径重复
-            _registered_tool_names: set = set(_node_catalog_tool_names)
-
-            # 从静态目录生成工具列表（_CORE_NODE_ACTIONS 作为高优先级回退）
-            for node_id, actions_map in self._CORE_NODE_ACTIONS.items():
-                node_name = registry_names.get(node_id, f"Node_{node_id}")
-                for action_name, action_desc in actions_map.items():
-                    tool_name_key = f"node__{node_id}__{action_name}"
-                    if tool_name_key not in _registered_tool_names:
-                        _registered_tool_names.add(tool_name_key)
-                        tools.append(
-                            {
-                                "type": "function",
-                                "function": {
-                                    "name": tool_name_key,
-                                    "description": f"Node {node_name}: {action_desc}",
-                                    "parameters": {
-                                        "type": "object",
-                                        "properties": {"params": {"type": "object", "description": "操作参数"}},
-                                    },
-                                },
-                            }
-                        )
-
-            # 动态发现：遍历注册表中所有节点，尝试从 fusion_entry.py 获取 actions
-            # 已在 _CORE_NODE_ACTIONS 中覆盖的节点仍可通过动态发现补充额外 action
-            _DYNAMIC_SCAN_LIMIT = self.NODE_DYNAMIC_TOOL_LIMIT  # LLM function calling 建议上限
-            _dynamic_added = 0
-            for node_id, node_key in list(self._node_id_to_key.items()):
-                if _dynamic_added >= _DYNAMIC_SCAN_LIMIT:
-                    break
-                # 先检查缓存
-                if node_id in self._node_actions_cache:
-                    discovered = self._node_actions_cache[node_id]
-                else:
-                    try:
-                        discovered = self._discover_node_actions(node_id, node_key)
-                        self._node_actions_cache[node_id] = discovered
-                    except Exception as _e:
-                        logger.debug(f"动态发现节点 {node_id} actions 失败: {_e}")
-                        self._node_actions_cache[node_id] = {}
-                        discovered = {}
-
-                node_name = registry_names.get(node_id, f"Node_{node_id}")
-                for action_name, action_desc in discovered.items():
-                    tool_name_key = f"node__{node_id}__{action_name}"
-                    if tool_name_key not in _registered_tool_names:
-                        _registered_tool_names.add(tool_name_key)
-                        _dynamic_added += 1
-                        tools.append(
-                            {
-                                "type": "function",
-                                "function": {
-                                    "name": tool_name_key,
-                                    "description": f"Node {node_name}: {action_desc}",
-                                    "parameters": {
-                                        "type": "object",
-                                        "properties": {"params": {"type": "object", "description": "操作参数"}},
-                                    },
-                                },
-                            }
-                        )
-
-            logger.debug(
-                "Node 工具收集: 静态 %d + 动态发现 %d，注册表节点 %d 个",
-                len(self._CORE_NODE_ACTIONS),
-                _dynamic_added,
-                len(self._node_id_to_key),
+            from core.openclawd_canonical_node_tool_exposure import (
+                is_legacy_node_scan_compat_enabled as _is_compat_enabled,
             )
-        except Exception as e:
-            logger.debug(f"收集 Node 工具失败: {e}")
+            _compat_active = _is_compat_enabled()
+        except Exception:
+            _compat_active = False
+
+        if _compat_active:
+            # COMPAT-ONLY — non-canonical, deduplicates against canonical path.
+            logger.warning(
+                "_collect_tools: Legacy Layer 3 node-discovery compat path is "
+                "ACTIVE (OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true).  "
+                "This path reads config/node_registry.json and scans "
+                "fusion_entry.py directly.  It is non-canonical and should not "
+                "be used in production.  Per PR-10, canonical node tools come "
+                "only from NodeFabricRegistry → CapabilityRegistry → "
+                "CapabilityResolver(CapabilitySource.NODE)."
+            )
+            try:
+                import json as _json
+                import os as _os
+
+                registry_path = _os.path.join(
+                    _os.path.dirname(_os.path.dirname(__file__)), "config", "node_registry.json"
+                )
+                # COMPAT: Load node_registry.json for node_id→key/name mapping.
+                # This file is a deprecated static metadata source (see
+                # NODE_REGISTRY_JSON_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY).
+                registry_names: Dict[str, str] = {}  # node_id → node_name
+                if _os.path.exists(registry_path):
+                    with open(registry_path, "r", encoding="utf-8") as f:
+                        registry = _json.load(f)
+                    for node_key, node_info in registry.get("nodes", {}).items():
+                        nid = node_info.get("id", "")
+                        if nid and node_info.get("status") == "active" and node_info.get("has_main"):
+                            registry_names[nid] = node_info.get("name", nid)
+                            self._node_id_to_key[nid] = node_key
+
+                # Deduplicate against canonical path — canonical tools are never overridden.
+                _registered_tool_names: set = set(_node_catalog_tool_names)
+
+                # COMPAT: Static dict fallback (_CORE_NODE_ACTIONS).
+                # See LEGACY_LAYER3_IS_COMPAT_ONLY_POLICY.
+                for node_id, actions_map in self._CORE_NODE_ACTIONS.items():
+                    node_name = registry_names.get(node_id, f"Node_{node_id}")
+                    for action_name, action_desc in actions_map.items():
+                        tool_name_key = f"node__{node_id}__{action_name}"
+                        if tool_name_key not in _registered_tool_names:
+                            _registered_tool_names.add(tool_name_key)
+                            tools.append(
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_name_key,
+                                        "description": f"Node {node_name}: {action_desc}",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "params": {"type": "object", "description": "操作参数"}
+                                            },
+                                        },
+                                    },
+                                }
+                            )
+
+                # COMPAT: Dynamic fusion_entry.py scan.
+                # See FUSION_ENTRY_SCAN_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY.
+                _DYNAMIC_SCAN_LIMIT = self.NODE_DYNAMIC_TOOL_LIMIT
+                _dynamic_added = 0
+                for node_id, node_key in list(self._node_id_to_key.items()):
+                    if _dynamic_added >= _DYNAMIC_SCAN_LIMIT:
+                        break
+                    if node_id in self._node_actions_cache:
+                        discovered = self._node_actions_cache[node_id]
+                    else:
+                        try:
+                            discovered = self._discover_node_actions(node_id, node_key)
+                            self._node_actions_cache[node_id] = discovered
+                        except Exception as _e:
+                            logger.debug(f"[compat] 动态发现节点 {node_id} actions 失败: {_e}")
+                            self._node_actions_cache[node_id] = {}
+                            discovered = {}
+
+                    node_name = registry_names.get(node_id, f"Node_{node_id}")
+                    for action_name, action_desc in discovered.items():
+                        tool_name_key = f"node__{node_id}__{action_name}"
+                        if tool_name_key not in _registered_tool_names:
+                            _registered_tool_names.add(tool_name_key)
+                            _dynamic_added += 1
+                            tools.append(
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_name_key,
+                                        "description": f"Node {node_name}: {action_desc}",
+                                        "parameters": {
+                                            "type": "object",
+                                            "properties": {
+                                                "params": {"type": "object", "description": "操作参数"}
+                                            },
+                                        },
+                                    },
+                                }
+                            )
+
+                logger.debug(
+                    "[compat] Node 工具收集(compat): 静态 %d + 动态发现 %d，注册表节点 %d 个",
+                    len(self._CORE_NODE_ACTIONS),
+                    _dynamic_added,
+                    len(self._node_id_to_key),
+                )
+            except Exception as e:
+                logger.debug(f"[compat] 收集 Node 工具失败: {e}")
 
         logger.info(f"工具总线收集完成: {len(tools)} 个工具")
 
@@ -5778,11 +5822,25 @@ class OpenClawd:
     # ========================================================================
 
     def _find_node_key(self, node_id: str) -> Optional[str]:
-        """根据 node_id 在注册表/缓存中查找 node_key (如 'Node_06_Filesystem')"""
+        """根据 node_id 在注册表/缓存中查找 node_key (如 'Node_06_Filesystem')
+
+        PR-10: The fallback read of config/node_registry.json is now compat-only.
+        It is only consulted when OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED=true.
+        The canonical source of node_id→key mapping is NodeFabricRegistry.
+        """
         # 先查内存缓存
         if node_id in self._node_id_to_key:
             return self._node_id_to_key[node_id]
-        # 回退到文件读取
+        # COMPAT-ONLY: fallback to node_registry.json file read.
+        # Guarded by the PR-10 compat flag; disabled by default.
+        try:
+            from core.openclawd_canonical_node_tool_exposure import (
+                is_legacy_node_scan_compat_enabled as _is_compat_enabled,
+            )
+            if not _is_compat_enabled():
+                return None
+        except Exception:
+            return None
         try:
             import json, os
 

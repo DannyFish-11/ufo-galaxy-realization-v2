@@ -1217,6 +1217,52 @@ except ImportError:  # pragma: no cover
     )
 
 
+# PR-10 (OpenClawd canonical node tool exposure): Confirms that legacy Layer 3
+# node discovery (config/node_registry.json reads + direct fusion_entry.py
+# filesystem scans) has been removed from the canonical OpenClawd
+# _collect_tools() path.  Node tools now flow exclusively through
+# NodeFabricRegistry → sync_capabilities_to_registry() → CapabilityRegistry
+# → CapabilityResolver(CapabilitySource.NODE).  The legacy scan is relegated
+# to an explicit compat-only path (OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED,
+# default False) and does not act as a peer tool-exposure authority.
+try:
+    from core.openclawd_canonical_node_tool_exposure import (  # noqa: F401
+        OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_IS_AUTHORITY as _OCNTE_AUTHORITY,
+        OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_PR10_SENTINEL as _OCNTE_PR10,
+        CANONICAL_NODE_TOOLS_COME_FROM_RUNTIME_REGISTRY_ONLY_POLICY as _OCNTE_REGISTRY_POLICY,
+        NODE_REGISTRY_JSON_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY as _OCNTE_JSON_POLICY,
+        FUSION_ENTRY_SCAN_IS_NOT_TOOL_EXPOSURE_AUTHORITY_POLICY as _OCNTE_SCAN_POLICY,
+        LEGACY_LAYER3_IS_COMPAT_ONLY_POLICY as _OCNTE_COMPAT_POLICY,
+        CANONICAL_TOOL_EXPOSURE_REQUIRES_GOVERNANCE_FILTER_POLICY as _OCNTE_GOV_POLICY,
+        LegacyNodeDiscoveryStatus as _LegacyNodeDiscoveryStatus,
+        LegacyNodeDiscoverySurface as _LegacyNodeDiscoverySurface,
+        CanonicalNodeToolExposureSnapshot as _CanonicalNodeToolExposureSnapshot,
+        build_legacy_discovery_surface_registry as _build_legacy_discovery_surface_registry,
+        get_legacy_discovery_summary as _get_legacy_discovery_summary,
+        is_legacy_node_scan_compat_enabled as _is_legacy_node_scan_compat_enabled,
+        build_canonical_tool_exposure_snapshot as _build_canonical_tool_exposure_snapshot,
+    )
+
+    OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10: str = (
+        "PROJECTION_ROUTES::OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10_V1: "
+        "core.openclawd_canonical_node_tool_exposure is confirmed as the authority for "
+        "OpenClawd canonical node tool exposure after PR-10.  Legacy Layer 3 node "
+        "discovery (config/node_registry.json reads and direct fusion_entry.py "
+        "filesystem scans) has been removed from the canonical _collect_tools() path.  "
+        "Node tools are sourced exclusively from: NodeFabricRegistry "
+        "→ sync_capabilities_to_registry() → CapabilityRegistry "
+        "→ CapabilityResolver(CapabilitySource.NODE).  The legacy scan is isolated "
+        "behind OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED (default False) and is "
+        "non-canonical by design.  Only healthy CAPABILITY_NODE nodes are surfaced; "
+        "SERVICE_NODE, LEGACY_ORCHESTRATOR_NODE, EXPERIMENTAL_NODE, and ARCHIVED_NODE "
+        "are excluded by the governance eligibility filter."
+    )
+except ImportError:  # pragma: no cover
+    OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10_UNAVAILABLE"
+    )
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
 
