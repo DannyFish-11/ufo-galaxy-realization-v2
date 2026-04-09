@@ -37,7 +37,9 @@ Every ``fusion_entry.py`` MUST satisfy the following contract so that
    ``fusion_entry.py``.
 2. **``FusionNode`` class** — expose a class named ``FusionNode`` with an
    async ``execute(command: str, **params) -> dict`` method.  The method MUST
-   return ``{"success": bool, ...}``.
+   return ``{"success": bool, ...}``.  Async is strongly recommended; the
+   unified executor also accepts sync ``execute`` methods for backward
+   compatibility with existing nodes.
 3. **``get_node_instance()``** — expose a module-level factory function that
    returns a ``FusionNode`` instance.  This is the primary entry point used by
    the loader.
@@ -138,7 +140,15 @@ class FusionEntryAdapterContract:
 
     @property
     def is_compliant(self) -> bool:
-        """Return ``True`` iff the module fully satisfies the adapter contract."""
+        """Return ``True`` iff the module fully satisfies the adapter contract.
+
+        Note: ``execute_is_async`` is recorded for diagnostics but is not
+        required for basic compliance.  The unified executor handles both sync
+        and async ``execute`` methods via ``asyncio.run_in_executor``, so
+        existing nodes with synchronous ``execute`` remain compatible.  New
+        nodes SHOULD use async execute per the template, but the compliance
+        gate does not block sync adapters to preserve backward compatibility.
+        """
         return (
             self.has_fusion_node_class
             and self.fusion_node_has_execute

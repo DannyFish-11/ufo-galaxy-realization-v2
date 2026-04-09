@@ -183,9 +183,10 @@ class TestValidateFusionEntryAdapter:
         contract = validate_fusion_entry_adapter(mod)
         assert contract.has_fusion_node_class is True
         assert contract.fusion_node_has_execute is True
-        # sync execute => not async but the class IS compliant in other ways
+        # sync execute => execute_is_async is False (informational, not blocking)
         assert contract.execute_is_async is False
-        # is_compliant should still be True since execute exists (async is preferred but not strictly required by is_compliant)
+        # is_compliant is True because async is not required for basic compliance
+        # (the unified executor handles both sync and async execute via run_in_executor)
         assert contract.is_compliant is True
 
     def test_empty_module(self):
@@ -342,9 +343,9 @@ class TestNodesRouteAdapterRefactor:
             import core.routes.nodes as m
             src = inspect.getsource(m)
             # _load_node and _execute_node are internal helpers; the route
-            # module should no longer import or call them in the executor closure.
-            # We check the import line has been cleaned up.
-            assert "_load_node" not in src or "_execute_node" not in src
+            # module should no longer import or call them for the executor
+            # closure — both should be absent from the source.
+            assert "_load_node" not in src and "_execute_node" not in src
         except ImportError:
             pytest.skip("fastapi not available")
 
