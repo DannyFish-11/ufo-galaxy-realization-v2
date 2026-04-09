@@ -1348,6 +1348,51 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12_UNAVAILABLE"
     )
 
+# PR-13 (node remaining boundary enforcement): Confirms that all remaining
+# node-related surfaces have been explicitly classified as canonical,
+# compat-only, internal-only, or deprecated.  Compat-only surfaces are no
+# longer ambiguous peer authorities to canonical runtime paths.  Internal
+# surfaces are explicitly marked as implementation details not for external
+# use.  System status endpoints carry explicit compat-supplement annotations.
+# Operator dashboards can call build_boundary_enforcement_summary() to verify
+# boundary compliance at runtime.
+try:
+    from core.node_remaining_boundary_enforcement import (  # noqa: F401
+        NODE_REMAINING_BOUNDARY_ENFORCEMENT_IS_AUTHORITY as _NRBE_AUTHORITY,
+        NODE_REMAINING_BOUNDARY_ENFORCEMENT_PR13_SENTINEL as _NRBE_PR13,
+        COMPAT_SURFACES_MUST_NOT_BE_SOLE_CANONICAL_SOURCE_POLICY as _NRBE_COMPAT_POLICY,
+        INTERNAL_SURFACES_MUST_NOT_BE_USED_BY_EXTERNAL_CONSUMERS_POLICY as _NRBE_INTERNAL_POLICY,
+        DEPRECATED_SURFACES_MUST_NOT_APPEAR_ON_ACTIVE_CANONICAL_PATHS_POLICY as _NRBE_DEPRECATED_POLICY,
+        SYSTEM_STATUS_COMPAT_SUPPLEMENT_MUST_BE_EXPLICITLY_LABELLED_POLICY as _NRBE_SYSTEM_POLICY,
+        build_remaining_surface_boundary_catalog as _build_remaining_surface_boundary_catalog,
+        get_compat_only_surfaces as _get_compat_only_surfaces,
+        get_internal_only_surfaces as _get_internal_only_surfaces,
+        validate_no_compat_as_primary_canonical_authority as _validate_no_compat_as_primary,
+        build_boundary_enforcement_summary as _build_boundary_enforcement_summary,
+    )
+    from core.routes.system import (  # noqa: F401
+        SYSTEM_ROUTES_NODE_REGISTRY_COMPAT_SUPPLEMENT_PR13_SENTINEL as _NRBE_SYSTEM_PR13,
+    )
+
+    NODE_REMAINING_BOUNDARY_ENFORCEMENT_ALIGNED_PR13: str = (
+        "PROJECTION_ROUTES::NODE_REMAINING_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_V1: "
+        "core.node_remaining_boundary_enforcement is confirmed as the canonical "
+        "authority for classifying all remaining node-related surfaces (PR-13).  "
+        "Compat-only surfaces (NodeRegistry compat facade, node_registry.json "
+        "scan, legacy HTTP supplements) are no longer ambiguous peer authorities. "
+        "Internal-only surfaces (node_discovery UDP service, node_communication, "
+        "node_protocol, node_factory_engine) are explicitly marked as internal "
+        "implementation details not for use by external consumers.  Deprecated "
+        "surfaces (nodes/ filesystem scan, node_status_cache as canonical source) "
+        "are explicitly demoted.  System status endpoints carry compat_source_note "
+        "and compat_supplement_note fields when legacy NodeRegistry data is active.  "
+        "build_boundary_enforcement_summary() is available for operator dashboards."
+    )
+except ImportError:  # pragma: no cover
+    NODE_REMAINING_BOUNDARY_ENFORCEMENT_ALIGNED_PR13: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_REMAINING_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

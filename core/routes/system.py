@@ -52,6 +52,38 @@ from core.routes._shared import (
 
 logger = logging.getLogger("Galaxy.API")
 
+# ---------------------------------------------------------------------------
+# PR-13 boundary enforcement sentinel
+# ---------------------------------------------------------------------------
+# Confirms that this module's NodeRegistry fallback paths are explicitly
+# labelled as compat-only bridges, not canonical sources.  The sentinel is
+# imported from the PR-13 authority module; if the authority module is
+# unavailable the fallback string still declares the compat contract so
+# operators can locate it in source.
+try:
+    from core.node_remaining_boundary_enforcement import (  # noqa: F401
+        NODE_REMAINING_BOUNDARY_ENFORCEMENT_IS_AUTHORITY as _NRBE_AUTHORITY,
+        NODE_REMAINING_BOUNDARY_ENFORCEMENT_PR13_SENTINEL as _NRBE_PR13,
+        SYSTEM_STATUS_COMPAT_SUPPLEMENT_MUST_BE_EXPLICITLY_LABELLED_POLICY as _NRBE_POLICY,
+    )
+    SYSTEM_ROUTES_NODE_REGISTRY_COMPAT_SUPPLEMENT_PR13_SENTINEL: str = (
+        "SYSTEM_ROUTES::NODE_REGISTRY_COMPAT_SUPPLEMENT_PR13_V1: "
+        "When NodeFabricRegistry is unavailable, /api/v1/system/subsystems "
+        "falls back to core.node_registry.NodeRegistry (compat-only bridge) "
+        "and labels the response with registry_authority='legacy:NodeRegistry' "
+        "plus a compat_source_note field.  "
+        "When /api/v1/nodes/status supplements canonical NodeFabricRegistry "
+        "nodes with legacy NodeRegistry metadata, each supplementary entry "
+        "carries source='legacy'.  The top-level registry_authority always "
+        "names NodeFabricRegistry as the authoritative surface, even when the "
+        "compat supplement is active.  These paths are compat-only and must "
+        "not be treated as canonical node runtime truth."
+    )
+except ImportError:  # pragma: no cover
+    SYSTEM_ROUTES_NODE_REGISTRY_COMPAT_SUPPLEMENT_PR13_SENTINEL: str = (  # type: ignore[assignment]
+        "SYSTEM_ROUTES::NODE_REGISTRY_COMPAT_SUPPLEMENT_PR13_UNAVAILABLE"
+    )
+
 # 支持的 API Key 白名单
 ALLOWED_CONFIG_KEYS = {
     "OPENAI_API_KEY", "OPENAI_API_BASE",
@@ -158,6 +190,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "status": "running",
                     "registered_nodes": len(meta),
                     "registry_authority": "legacy:NodeRegistry",
+                    "compat_source_note": (
+                        "NodeFabricRegistry unavailable; falling back to "
+                        "legacy NodeRegistry (compat-only bridge, PR-13).  "
+                        "This data is NOT canonical node runtime truth."
+                    ),
                 }
             except Exception as e:
                 subsystems["node_registry"] = {"status": "error", "error": str(e)}
@@ -249,12 +286,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 canonical_ids = set()
 
             # Supplement: legacy NodeRegistry metadata for nodes not in canonical registry
+            # PR-13: this is a compat-only bridge.  Each supplementary entry carries
+            # source='legacy' and the top-level registry_authority remains canonical.
+            legacy_supplement_active = False
             try:
                 from core.node_registry import get_node_registry
                 legacy_registry = get_node_registry()
                 meta = legacy_registry.metadata if hasattr(legacy_registry, 'metadata') else {}
                 for node_id, m in meta.items():
                     if node_id not in canonical_ids:
+                        legacy_supplement_active = True
                         node_list.append({
                             "node_id": node_id,
                             "name": getattr(m, 'name', node_id),
@@ -274,13 +315,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             # Sort: ERROR nodes first, then by node_id
             node_list.sort(key=lambda n: (0 if str(n["status"]).lower() == "error" else 1, n["node_id"]))
-            return JSONResponse({
+            response_body: dict = {
                 "timestamp": datetime.now().isoformat(),
                 "total": len(node_list),
                 "by_status": _count_by_status(node_list),
                 "nodes": node_list,
                 "registry_authority": "canonical:NodeFabricRegistry",
-            })
+            }
+            if legacy_supplement_active:
+                response_body["compat_supplement_note"] = (
+                    "Some node entries above carry source='legacy' and originate "
+                    "from the legacy NodeRegistry (compat-only bridge, PR-13).  "
+                    "They are not present in NodeFabricRegistry.  "
+                    "registry_authority remains 'canonical:NodeFabricRegistry'."
+                )
+            return JSONResponse(response_body)
         except Exception as e:
             return JSONResponse({
                 "timestamp": datetime.now().isoformat(),
