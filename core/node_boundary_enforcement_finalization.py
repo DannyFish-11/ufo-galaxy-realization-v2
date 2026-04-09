@@ -109,7 +109,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger("Galaxy.Nodes.NodeBoundaryEnforcementFinalization")
 
@@ -684,14 +684,14 @@ def get_surface_boundary_catalogue() -> List[NodeSurfaceBoundaryRecord]:
     return list(_SURFACE_BOUNDARY_CATALOGUE)
 
 
-# Lookup index: surface_id → record (built once on first access).
-_CATALOGUE_INDEX: Optional[Dict[str, NodeSurfaceBoundaryRecord]] = None
+# Lookup index: surface_id → record, built eagerly at module load time for
+# thread-safe access.
+_CATALOGUE_INDEX: Dict[str, NodeSurfaceBoundaryRecord] = {
+    r.surface_id: r for r in _SURFACE_BOUNDARY_CATALOGUE
+}
 
 
 def _get_catalogue_index() -> Dict[str, NodeSurfaceBoundaryRecord]:
-    global _CATALOGUE_INDEX
-    if _CATALOGUE_INDEX is None:
-        _CATALOGUE_INDEX = {r.surface_id: r for r in _SURFACE_BOUNDARY_CATALOGUE}
     return _CATALOGUE_INDEX
 
 

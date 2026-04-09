@@ -773,7 +773,7 @@ class TestProjectionSentinel:
     """The projection.py alignment sentinel must be importable and correct."""
 
     @pytest.mark.skipif(
-        "fastapi" not in sys.modules and True,
+        "fastapi" not in sys.modules,
         reason="Skip if projection imports require fastapi",
     )
     def test_projection_sentinel_importable(self):
