@@ -748,6 +748,45 @@ LEGACY_NODE_REGISTRY_IS_COMPAT_FACADE_ONLY_POLICY: str = (
     "New code must use NodeFabricRegistry for node runtime presence and status."
 )
 
+#: Policy: canonical node list and detail surfaces (GET /api/v1/nodes and
+#: GET /api/v1/nodes/{node_name}) must derive node membership from
+#: NodeFabricRegistry, not from raw filesystem scans of the nodes/ directory.
+CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY: str = (
+    "NODE_FABRIC_REGISTRY::CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY: "
+    "The canonical GET /api/v1/nodes and GET /api/v1/nodes/{node_name} endpoints "
+    "must derive node membership and status from NodeFabricRegistry.  Filesystem "
+    "layout (nodes/ directory, main.py presence) must not be used as the primary "
+    "authority for node existence on canonical list/detail surfaces.  Filesystem "
+    "metadata may be read as supplemental context (e.g. config.json) only after "
+    "canonical registry membership is confirmed."
+)
+
+#: Policy: raw filesystem scanning of the nodes/ directory (checking for
+#: main.py or fusion_entry.py) is NOT authoritative for node existence on
+#: canonical runtime-facing surfaces.  Such scanning is only permitted on
+#: explicitly-marked legacy/compat paths.
+FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY: str = (
+    "NODE_FABRIC_REGISTRY::FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY: "
+    "Raw filesystem scanning (nodes/ directory, main.py or fusion_entry.py presence) "
+    "must not be used as the primary authority for node existence on canonical "
+    "runtime-facing surfaces.  Any route that still performs filesystem-based "
+    "enumeration must be explicitly marked as a legacy/compat path and must not "
+    "claim canonical node runtime authority."
+)
+
+#: Policy: node_status_cache (from core.routes._shared) is a legacy in-memory
+#: cache and must NOT be used as the canonical source of node runtime status on
+#: list/detail/status surfaces.  Runtime status must be read from
+#: NodeFabricRegistry (node.status, node.health_score()).
+NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY: str = (
+    "NODE_FABRIC_REGISTRY::NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY: "
+    "core.routes._shared.node_status_cache is a legacy in-memory cache and is NOT "
+    "the canonical source of node runtime status.  Canonical list/detail/status "
+    "surfaces must read node runtime status from NodeFabricRegistry (node.status, "
+    "node.health_score()).  node_status_cache may be retained for legacy/compat "
+    "consumers only, and must not be consulted on canonical surfaces."
+)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 模块级便捷函数
