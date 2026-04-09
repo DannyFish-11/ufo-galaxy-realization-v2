@@ -1386,6 +1386,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13_UNAVAILABLE"
     )
 
+try:
+    from core.node_cognition_activation import (  # noqa: F401
+        NODE_COGNITION_ACTIVATION_IS_AUTHORITY as _NCA_AUTHORITY,
+        NODE_COGNITION_ACTIVATION_PR14_SENTINEL as _NCA_PR14,
+        ACTIVATION_LAYER_SITS_ABOVE_INVOCATION_SUBSTRATE_POLICY as _NCA_SUBSTRATE_POLICY,
+        ACTIVATION_ELIGIBILITY_REQUIRES_GOVERNANCE_CLEARANCE_POLICY as _NCA_GOV_POLICY,
+        ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY as _NCA_TRANS_POLICY,
+        COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY as _NCA_ROLE_POLICY,
+        ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY as _NCA_ORCH_POLICY,
+        build_activation_context_snapshot as _build_activation_context_snapshot,
+        get_activation_summary as _get_activation_summary,
+    )
+
+    NODE_COGNITION_ACTIVATION_ALIGNED_PR14: str = (
+        "PROJECTION_ROUTES::NODE_COGNITION_ACTIVATION_ALIGNED_PR14_V1: "
+        "core.node_cognition_activation is confirmed as the canonical authority "
+        "for the cognition-oriented node activation layer (PR-14 node track).  "
+        "NodeActivationState, NodeCognitionRole, NodeActivationContext, "
+        "NodeActivationPolicy, evaluate_activation_eligibility(), and "
+        "transition_activation_state() define the formal activation vocabulary "
+        "above the canonical invocation substrate.  Higher-level orchestration "
+        "paths interact with nodes through the activation layer rather than "
+        "through bare NodeInvocationEnvelope construction."
+    )
+except ImportError:  # pragma: no cover
+    NODE_COGNITION_ACTIVATION_ALIGNED_PR14: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::NODE_COGNITION_ACTIVATION_ALIGNED_PR14_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
