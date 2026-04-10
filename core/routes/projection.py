@@ -1510,6 +1510,41 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_UNAVAILABLE"
     )
 
+# PR-19: Memory-Informed Runtime Bias alignment sentinel.
+# Asserts that the memory-bias layer is available and wired, enabling
+# projection endpoints to surface memory-bias influence diagnostics
+# (posture, continuity_score, retrieval_relevance, novelty_factor) alongside
+# existing cognitive and activation-budget projections.
+try:
+    from core.cognitive.memory_bias_layer import (  # noqa: F401
+        MEMORY_BIAS_LAYER_IS_AUTHORITY as _MBL_AUTHORITY,
+        MEMORY_BIAS_LAYER_PR19_SENTINEL as _MBL_PR19,
+        HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY as _MBL_POLICY1,
+        MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY as _MBL_POLICY2,
+        MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY as _MBL_POLICY3,
+        MEMORY_BIAS_SUBORDINATE_TO_TASK_SEMANTICS_POLICY as _MBL_POLICY4,
+        derive_memory_bias as _derive_memory_bias,
+        get_memory_planner_guidance as _get_memory_planner_guidance,
+        MemoryBias as _MemoryBias,
+        MemoryPlannerGuidance as _MemoryPlannerGuidance,
+    )
+
+    MEMORY_BIAS_LAYER_ALIGNED_PR19: str = (
+        "PROJECTION_ROUTES::MEMORY_BIAS_LAYER_ALIGNED_PR19_V1: "
+        "core.cognitive.memory_bias_layer is confirmed as the canonical "
+        "memory-informed runtime bias layer for PR-19.  MemoryBias and "
+        "MemoryPlannerGuidance derive bounded continuity/retrieval/novelty "
+        "posture signals from already-live WorkingMemory, LongTermMemory, and "
+        "TaskMemory singletons without introducing a second memory pipeline.  "
+        "Hard gates (invocation governance, activation-context readiness, "
+        "activation budgets, explicit user intent) remain authoritative; "
+        "memory bias is a soft advisory influence only."
+    )
+except ImportError:  # pragma: no cover
+    MEMORY_BIAS_LAYER_ALIGNED_PR19: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::MEMORY_BIAS_LAYER_ALIGNED_PR19_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
