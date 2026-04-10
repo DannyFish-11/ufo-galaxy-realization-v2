@@ -256,6 +256,19 @@ ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18: str = (
     "Hard gates (governance, activation context) are unaffected."
 )
 
+# PR-19: sentinel confirming memory runtime bias is wired into ExecutionPlanner.
+MEMORY_BIAS_PLANNER_CONTINUITY_WIRED_PR19: str = (
+    "MEMORY_BIAS_PLANNER_CONTINUITY_WIRED_PR19: "
+    "ExecutionPlanner.execute() accepts an optional memory_bias parameter "
+    "(MemoryRuntimeBias from core.cognitive.memory_runtime_bias).  "
+    "When present and influenced_by_memory=True, _pick_strategy() applies "
+    "PlannerContinuityGuidance to softly bias strategy selection based on "
+    "memory posture (continuity_seeking / retrieval_seeking / novelty).  "
+    "Hard gates (governance, activation context) and explicit user intent "
+    "(task_type mapping table) remain authoritative.  Memory bias adjusts "
+    "complexity thresholds only after the task_type and keyword checks."
+)
+
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
@@ -299,7 +312,7 @@ class ExecutionPlanner:
         # Default: coordinator handles general/complex tasks
         return "coordinator"
 
-    async def execute(self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None) -> ExecutionResult:
+    async def execute(self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None, memory_bias: Optional[Any] = None) -> ExecutionResult:
         """
         执行计划入口。（PR86）
 
@@ -318,6 +331,13 @@ class ExecutionPlanner:
                                 When provided, planner breadth guidance is
                                 derived and used to bias strategy selection.
                                 Hard governance gates are unaffected.
+            memory_bias:        PR-19 — optional MemoryRuntimeBias from
+                                core.cognitive.memory_runtime_bias.
+                                When provided, planner continuity guidance is
+                                derived and used to softly bias strategy
+                                selection based on memory posture.  Explicit
+                                user intent (task_type table) and hard
+                                governance gates are unaffected.
         """
         t0 = time.monotonic()
         steps: List[StepRecord] = []
@@ -348,21 +368,47 @@ class ExecutionPlanner:
                 _budget_guidance_err,
             )
 
+        # PR-19: derive planner continuity guidance from memory bias (advisory only)
+        _continuity_guidance = None
+        _memory_influenced_strategy = False
+        try:
+            if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
+                from core.cognitive.memory_runtime_bias import (  # noqa: PLC0415
+                    get_planner_continuity_guidance as _get_continuity,
+                )
+                _continuity_guidance = _get_continuity(memory_bias)
+                logger.debug(
+                    "PR-19 ExecutionPlanner: continuity_guidance=%s strategy_bias=%s adj=%.2f",
+                    _continuity_guidance.posture,
+                    _continuity_guidance.strategy_bias,
+                    _continuity_guidance.complexity_threshold_adjustment,
+                )
+        except Exception as _memory_guidance_err:
+            logger.debug(
+                "PR-19 ExecutionPlanner: continuity_guidance derivation skipped — %s",
+                _memory_guidance_err,
+            )
+
         strategy = self._pick_strategy(
             plan.message,
             complexity,
             task_type=intent_task_type,
             breadth_guidance=_breadth_guidance,
+            continuity_guidance=_continuity_guidance,
         )
         if _breadth_guidance is not None and _breadth_guidance.influenced_by_budget:
             _budget_influenced_strategy = True
+        if _continuity_guidance is not None and _continuity_guidance.influenced_by_memory:
+            _memory_influenced_strategy = True
 
         logger.info(
-            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s budget_influenced=%s",
+            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
+            "budget_influenced=%s memory_influenced=%s",
             strategy,
             complexity,
             plan.intent.mode,
             _budget_influenced_strategy,
+            _memory_influenced_strategy,
         )
 
         # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
@@ -502,22 +548,30 @@ class ExecutionPlanner:
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
 
-    def _pick_strategy(self, message: str, complexity: float, task_type: str = "", breadth_guidance: Optional[Any] = None) -> str:
+    def _pick_strategy(self, message: str, complexity: float, task_type: str = "", breadth_guidance: Optional[Any] = None, continuity_guidance: Optional[Any] = None) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
-        优先级（C阶段 3B + PR-18 后）：
+        优先级（C阶段 3B + PR-18 + PR-19 后）：
           0. 任务类型映射表（TASK_TYPE_STRATEGY_MAP）— 最高优先级
           1. Swarm   — 关键词明确请求高并发
           2. Fractal — 复杂度极高 (>= 0.75) 或关键词指示多层递归分解
           3. Specialized (Team) — 复杂度中高 (>= 0.65) 或关键词指示并行/团队
           4. Single  — 默认单 Agent
 
-        PR-18 activation budget influence (advisory, lowest priority):
+        PR-18 activation budget influence (advisory):
           - narrow  (passive):   strategy_preference="single"; raises complexity
                                  thresholds to prefer simpler strategies.
           - moderate (liminal):  no strategy preference; no threshold adjustment.
           - broad   (manifest):  no strategy preference; lowers complexity
                                  thresholds slightly (more strategies eligible).
+
+        PR-19 memory continuity influence (advisory, subordinate to PR-18):
+          - continuity_seeking:  strategy_bias from prior memory; raises
+                                 complexity thresholds (+0.10) to prefer the
+                                 already-proven strategy.
+          - retrieval_seeking:   strategy_bias="team"; slightly lowers thresholds
+                                 (-0.05) to enable retrieval-capable strategies.
+          - novelty:             no strategy bias; no threshold adjustment.
 
         约束（硬编码）:
           - Swarm 并发上限: 20
@@ -547,6 +601,22 @@ class ExecutionPlanner:
                     _strategy_pref,
                 )
 
+        # PR-19: apply complexity threshold adjustment from continuity guidance
+        # (subordinate to PR-18 breadth guidance — added on top)
+        _memory_strategy_bias = None
+        if continuity_guidance is not None and getattr(continuity_guidance, "influenced_by_memory", False):
+            _mem_adj = float(getattr(continuity_guidance, "complexity_threshold_adjustment", 0.0))
+            _memory_strategy_bias = getattr(continuity_guidance, "strategy_bias", None)
+            if _mem_adj != 0.0 or _memory_strategy_bias:
+                adj += _mem_adj  # stack on top of PR-18 adjustment
+                logger.debug(
+                    "PR-19 _pick_strategy: posture=%s mem_adj=%.2f strategy_bias=%s total_adj=%.2f",
+                    getattr(continuity_guidance, "posture", "?"),
+                    _mem_adj,
+                    _memory_strategy_bias,
+                    adj,
+                )
+
         fractal_threshold = 0.75 + adj
         specialized_threshold = 0.65 + adj
 
@@ -562,6 +632,10 @@ class ExecutionPlanner:
         if _strategy_pref == "single":
             logger.debug("PR-18 _pick_strategy: passive posture — returning 'single' per budget guidance")
             return "single"
+        # PR-19: if memory bias suggests team strategy (retrieval_seeking), return team
+        if _memory_strategy_bias == "team":
+            logger.debug("PR-19 _pick_strategy: retrieval_seeking — returning 'specialized' per memory bias")
+            return "specialized"
         return "single"
 
     # ──────────────────────────────────────────────────────────────────

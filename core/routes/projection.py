@@ -1510,8 +1510,40 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_UNAVAILABLE"
     )
 
+# PR-19: Memory Runtime Bias layer alignment sentinel.
+# Asserts that the memory-bias layer is available and wired, enabling
+# projection endpoints to surface memory posture influence diagnostics.
+try:
+    from core.cognitive.memory_runtime_bias import (  # noqa: F401
+        MEMORY_RUNTIME_BIAS_IS_AUTHORITY as _MRB_AUTHORITY,
+        MEMORY_RUNTIME_BIAS_PR19_SENTINEL as _MRB_PR19,
+        HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY as _MRB_POLICY1,
+        MEMORY_BIAS_IS_ADVISORY_NOT_HARD_GATE_POLICY as _MRB_POLICY2,
+        derive_memory_runtime_bias as _derive_memory_runtime_bias,
+        get_planner_continuity_guidance as _get_planner_continuity_guidance,
+        MemoryRuntimeBias as _MemoryRuntimeBias,
+        PlannerContinuityGuidance as _PlannerContinuityGuidance,
+        MemoryPosture as _MemoryPosture,
+    )
 
-def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
+    MEMORY_RUNTIME_BIAS_ALIGNED_PR19: str = (
+        "PROJECTION_ROUTES::MEMORY_RUNTIME_BIAS_ALIGNED_PR19_V1: "
+        "core.cognitive.memory_runtime_bias is confirmed as the canonical "
+        "memory-bias layer for PR-19.  MemoryRuntimeBias and "
+        "PlannerContinuityGuidance translate TaskMemory continuity/retrieval/"
+        "novelty signals into bounded advisory runtime guidance for planner "
+        "strategy selection and node candidate preference.  Hard gates "
+        "(lifecycle governance, invocation governance, node activation context), "
+        "explicit user intent, and current-turn task semantics remain "
+        "authoritative; memory bias is a soft advisory influence layer only."
+    )
+except ImportError:  # pragma: no cover
+    MEMORY_RUNTIME_BIAS_ALIGNED_PR19: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::MEMORY_RUNTIME_BIAS_ALIGNED_PR19_UNAVAILABLE"
+    )
+
+
+
     """Create and return the projection router.
 
     The ``service_manager`` and ``config`` parameters follow the same

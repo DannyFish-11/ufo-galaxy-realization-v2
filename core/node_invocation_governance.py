@@ -191,6 +191,17 @@ ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18: str = (
     "gates remain the sole authority for invocation_allowed."
 )
 
+# PR-19: Memory bias is advisory in governance diagnostics.
+MEMORY_BIAS_GOVERNANCE_ADVISORY_PR19: str = (
+    "NODE_INVOCATION_GOVERNANCE::MEMORY_BIAS_ADVISORY_PR19_V1: "
+    "evaluate_invocation_governance() accepts an optional memory_bias parameter "
+    "(MemoryRuntimeBias from core.cognitive.memory_runtime_bias).  "
+    "When present, the bias posture and scores are recorded in "
+    "diagnostic_context as 'memory_bias_context'.  The bias is ADVISORY only — "
+    "it does not alter the hard-gate allow/deny decision.  Hard governance "
+    "gates remain the sole authority for invocation_allowed."
+)
+
 
 # ===========================================================================
 # Override enum
@@ -307,6 +318,7 @@ def evaluate_invocation_governance(
     demand_context: Optional[str] = None,
     topology_runtime: Optional[Any] = None,
     activation_budget: Optional[Any] = None,
+    memory_bias: Optional[Any] = None,
 ) -> NodeInvocationGovernanceDecision:
     """Evaluate whether *node_id* may be invoked on the canonical path.
 
@@ -341,6 +353,12 @@ def evaluate_invocation_governance(
         recorded in ``diagnostic_context["activation_budget_context"]`` for
         observability.  The budget is **advisory only** and does NOT change the
         hard-gate allow/deny decision.
+    memory_bias:
+        PR-19 — Optional :class:`~core.cognitive.memory_runtime_bias.MemoryRuntimeBias`.
+        When provided, the bias posture and scores are recorded in
+        ``diagnostic_context["memory_bias_context"]`` for observability.
+        The bias is **advisory only** and does NOT change the hard-gate
+        allow/deny decision.
 
     Returns
     -------
@@ -365,6 +383,25 @@ def evaluate_invocation_governance(
         except Exception as _be:
             logger.debug("governance gate: activation_budget context extraction failed: %s", _be)
             _budget_context = {"error": str(_be), "note": "budget_context_extraction_failed"}
+    # ------------------------------------------------------------------
+    # PR-19: Extract memory bias context for diagnostics (advisory only)
+    # ------------------------------------------------------------------
+    _memory_bias_context: Optional[dict] = None
+    if memory_bias is not None:
+        try:
+            _memory_bias_context = {
+                "posture": getattr(memory_bias, "posture", "unknown"),
+                "continuity_score": float(getattr(memory_bias, "continuity_score", 0.0)),
+                "retrieval_score": float(getattr(memory_bias, "retrieval_score", 0.0)),
+                "novelty_score": float(getattr(memory_bias, "novelty_score", 1.0)),
+                "recent_entry_count": int(getattr(memory_bias, "recent_entry_count", 0)),
+                "success_rate": float(getattr(memory_bias, "success_rate", 0.0)),
+                "influenced_by_memory": bool(getattr(memory_bias, "influenced_by_memory", False)),
+                "note": "advisory_only: memory_bias does not alter hard governance decision",
+            }
+        except Exception as _mbe:
+            logger.debug("governance gate: memory_bias context extraction failed: %s", _mbe)
+            _memory_bias_context = {"error": str(_mbe), "note": "memory_bias_context_extraction_failed"}
     # ------------------------------------------------------------------
     # Override path: compat/internal bypass
     # ------------------------------------------------------------------
@@ -447,6 +484,9 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context even on unregistered path
         if _budget_context is not None:
             _unrg_diag["activation_budget_context"] = _budget_context
+        # PR-19: embed memory bias context (advisory only)
+        if _memory_bias_context is not None:
+            _unrg_diag["memory_bias_context"] = _memory_bias_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -588,6 +628,9 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context in diagnostics (advisory, does not alter decision)
         if _budget_context is not None:
             gov_diag["activation_budget_context"] = _budget_context
+        # PR-19: embed memory bias context in diagnostics (advisory, does not alter decision)
+        if _memory_bias_context is not None:
+            gov_diag["memory_bias_context"] = _memory_bias_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -609,6 +652,9 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context in denied decision diagnostics (advisory)
         if _budget_context is not None:
             _denied_diag["activation_budget_context"] = _budget_context
+        # PR-19: embed memory bias context in denied decision diagnostics (advisory)
+        if _memory_bias_context is not None:
+            _denied_diag["memory_bias_context"] = _memory_bias_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=False,
