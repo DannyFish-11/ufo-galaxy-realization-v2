@@ -128,9 +128,18 @@ def _make_task_memory_with_summaries(summaries: list) -> Any:
 def _make_bias(posture: str, n: int = 5, success_rate: float = 0.8) -> Any:
     """Build a MemoryRuntimeBias for testing."""
     from core.cognitive.memory_runtime_bias import MemoryRuntimeBias, MemoryPosture
-    cont = 1.0 - success_rate if posture == MemoryPosture.NOVELTY else (success_rate if posture == MemoryPosture.CONTINUITY_SEEKING else 0.0)
-    retr = 0.0 if posture != MemoryPosture.RETRIEVAL_SEEKING else 0.5
-    nov = 1.0 - cont - retr
+    if posture == MemoryPosture.CONTINUITY_SEEKING:
+        cont = min(1.0, success_rate)
+        retr = 0.0
+        nov = 1.0 - cont
+    elif posture == MemoryPosture.RETRIEVAL_SEEKING:
+        cont = 0.0
+        retr = 0.5
+        nov = 0.5
+    else:  # NOVELTY
+        cont = 0.0
+        retr = 0.0
+        nov = 1.0
     return MemoryRuntimeBias(
         posture=posture,
         recent_entry_count=n,
@@ -140,7 +149,7 @@ def _make_bias(posture: str, n: int = 5, success_rate: float = 0.8) -> Any:
         source="task_memory",
         continuity_score=round(cont, 4),
         retrieval_score=round(retr, 4),
-        novelty_score=max(0.0, round(nov, 4)),
+        novelty_score=round(nov, 4),
         diagnostic_note=f"test posture={posture}",
     )
 

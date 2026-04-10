@@ -329,6 +329,9 @@ FALLBACK_PLANNER_CONTINUITY_GUIDANCE: PlannerContinuityGuidance = PlannerContinu
 
 
 # ---------------------------------------------------------------------------
+# Valid planner strategy names — used in continuity guidance to validate prior_strategy
+VALID_PLANNER_STRATEGIES: frozenset = frozenset({"single", "specialized", "fractal", "swarm"})
+
 # Derivation constants
 # ---------------------------------------------------------------------------
 
@@ -590,9 +593,9 @@ def _get_continuity_guidance_impl(
     if posture == MemoryPosture.CONTINUITY_SEEKING:
         # Prefer prior strategy; raise complexity bar slightly so the proven
         # approach is favoured over more complex alternatives.
-        strategy_bias: Optional[str] = prior_strategy if prior_strategy in (
-            "single", "specialized", "fractal", "swarm"
-        ) else "single"
+        strategy_bias: Optional[str] = (
+            prior_strategy if prior_strategy in VALID_PLANNER_STRATEGIES else "single"
+        )
         adj = _COMPLEXITY_ADJ_CONTINUITY
         note = (
             f"CONTINUITY_SEEKING: strategy_bias={strategy_bias!r}, "
