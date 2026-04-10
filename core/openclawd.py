@@ -2385,6 +2385,18 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
+            # PR-20: enrich with task-semantic observability even on text-only path
+            try:
+                from core.runtime_decision_observability import (
+                    enrich_multimodal_route_with_observability as _enrich_obs,
+                )
+                _enrich_obs(
+                    result,
+                    task_hint=task_type,
+                    task_semantic_influenced=False,
+                )
+            except Exception:
+                pass
             return result
 
         # ── PR-27: Eligibility gate — degrade if confidence is too low ───────
@@ -2427,9 +2439,12 @@ class OpenClawd:
             # PR-17: resolve effective task type — use caller-supplied hint
             # when available, otherwise fall back to GENERAL for backward compat.
             _effective_task_type = _TaskType.GENERAL
+            _pr20_task_semantic_influenced = False
             if task_type:
                 try:
                     _effective_task_type = _TaskType(task_type)
+                    # PR-20: task hint changed the routing from GENERAL default
+                    _pr20_task_semantic_influenced = (_effective_task_type != _TaskType.GENERAL)
                     logger.debug(
                         "PR-17 _select_multimodal_route: using task_type=%r for routing",
                         task_type,
@@ -2490,6 +2505,18 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
+            # PR-20: enrich with task-semantic observability
+            try:
+                from core.runtime_decision_observability import (
+                    enrich_multimodal_route_with_observability as _enrich_obs,
+                )
+                _enrich_obs(
+                    result,
+                    task_hint=task_type,
+                    task_semantic_influenced=_pr20_task_semantic_influenced,
+                )
+            except Exception:
+                pass
             return result
 
         # Tier 2 — native multimodal unavailable; degrade to text-capable provider
@@ -2509,6 +2536,18 @@ class OpenClawd:
         }
         if _readiness is not None:
             result["perception_routing_readiness"] = _readiness
+        # PR-20: enrich with task-semantic observability
+        try:
+            from core.runtime_decision_observability import (
+                enrich_multimodal_route_with_observability as _enrich_obs,
+            )
+            _enrich_obs(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=_pr20_task_semantic_influenced,
+            )
+        except Exception:
+            pass
         return result
 
     def _build_unified_control_plan(
