@@ -155,7 +155,7 @@ _COMPLEXITY_ADJ_BROAD: float = -0.10    # manifest: easier to unlock complex str
 
 # Budget thresholds for intensity classification
 _THRESHOLD_LOW_MAX: float = 0.40     # budget <= 0.40 → low intensity
-_THRESHOLD_MODERATE_MAX: float = 0.75  # budget <= 0.75 → moderate intensity
+_THRESHOLD_MODERATE_MAX: float = 0.75  # 0.40 < budget <= 0.75 → moderate intensity
 # budget > 0.75 → high intensity
 
 

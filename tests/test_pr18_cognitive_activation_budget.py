@@ -732,11 +732,11 @@ class TestBackwardCompatibility:
         from core.cognitive.cognitive_activation_budget import (
             derive_activation_budget, FALLBACK_ACTIVATION_BUDGET,
         )
-        # Pass various invalid inputs
+        # Pass various invalid inputs — should return FALLBACK_ACTIVATION_BUDGET
         for bad_input in [42, "string", object(), {"key": "value"}, []]:
             result = derive_activation_budget(bad_input)
-            # Should return FALLBACK or a reasonable budget — never raise
-            assert isinstance(result.budget_value, float)
+            # Contract: returns FALLBACK_ACTIVATION_BUDGET on invalid input, never raises
+            assert result is FALLBACK_ACTIVATION_BUDGET
 
     def test_h04_get_planner_breadth_guidance_never_raises(self):
         """H04. get_planner_breadth_guidance never raises — returns fallback on invalid input."""
