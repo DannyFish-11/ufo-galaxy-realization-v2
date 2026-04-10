@@ -110,6 +110,19 @@ MEMORY_BIAS_WIRED_INTO_KERNEL_PR19: str = (
     "remain authoritative; memory bias is the lowest-priority advisory influence."
 )
 
+# PR-20: AgentKernel now assembles a RuntimeDecisionExplanation at the end of
+# _process(), consolidating task-semantic (PR-17), activation-budget (PR-18),
+# memory-bias (PR-19), cognitive-hint, and planner-strategy layers into a single
+# unified diagnostics surface.  KernelResponse.runtime_decision_explanation
+# carries the assembled explanation for downstream observability consumers.
+RUNTIME_DECISION_OBSERVABILITY_WIRED_INTO_KERNEL_PR20: str = (
+    "RUNTIME_DECISION_OBSERVABILITY_WIRED_INTO_KERNEL_PR20: core/agent/kernel.py "
+    "_process() calls build_runtime_decision_explanation() after planner execution "
+    "to consolidate task_hint, activation_budget_hint, memory_bias_hint, "
+    "cognitive_hint, and planner_strategy into a unified RuntimeDecisionExplanation. "
+    "KernelResponse carries runtime_decision_explanation for downstream observability."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -201,6 +214,10 @@ class KernelResponse(BaseModel):
     # PR-19: memory bias hint derived from live memory sources (advisory only).
     # None when memory signals are unavailable.
     memory_bias_hint: Optional[Dict[str, Any]] = None
+    # PR-20: unified runtime decision explanation (advisory, may be None).
+    # Assembles task-semantic, budget, memory-bias, cognitive, and governance
+    # influence layers into a single coherent observability surface.
+    runtime_decision_explanation: Optional[Dict[str, Any]] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -230,6 +247,8 @@ class KernelResponse(BaseModel):
             "activation_budget_hint": self.activation_budget_hint,
             # PR-19: memory bias hint (advisory, may be None)
             "memory_bias_hint": self.memory_bias_hint,
+            # PR-20: unified runtime decision explanation (advisory, may be None)
+            "runtime_decision_explanation": self.runtime_decision_explanation,
         }
 
 
@@ -537,6 +556,34 @@ class AgentKernel:
         if intent.mode == IntentMode.HYBRID and exec_result.success:
             reply = self._format_hybrid_reply(message, exec_result)
 
+        # PR-20: assemble unified runtime decision explanation from all influence layers.
+        _runtime_decision_explanation: Optional[Dict[str, Any]] = None
+        try:
+            from core.runtime_decision_observability import (
+                build_runtime_decision_explanation as _build_rde,
+                build_runtime_decision_diagnostics as _build_rdd,
+            )
+            _task_hint_val = getattr(intent, "task_hint", None) or ""
+            _planner_strategy = getattr(exec_result, "chosen_strategy", None)
+            _rde = _build_rde(
+                execution_path=intent.mode.value if hasattr(intent.mode, "value") else str(intent.mode),
+                model_selected=exec_result.model,
+                task_hint=_task_hint_val if _task_hint_val else None,
+                task_semantic_influenced_routing=bool(_task_hint_val),
+                task_semantic_influenced_planner=bool(
+                    _task_hint_val and _planner_strategy is not None
+                ),
+                activation_budget_hint=_activation_budget_hint_dict,
+                memory_bias_hint=_memory_bias_hint_dict,
+                planner_strategy=_planner_strategy,
+            )
+            _runtime_decision_explanation = _build_rdd(_rde)
+        except Exception as _rde_err:
+            logger.debug(
+                "PR-20 AgentKernel._process: runtime_decision_explanation assembly skipped — %s",
+                _rde_err,
+            )
+
         resp = KernelResponse(
             success=exec_result.success,
             mode=intent.mode,
@@ -555,6 +602,8 @@ class AgentKernel:
             activation_budget_hint=_activation_budget_hint_dict,
             # PR-19: memory bias hint for diagnostics
             memory_bias_hint=_memory_bias_hint_dict,
+            # PR-20: unified runtime decision explanation
+            runtime_decision_explanation=_runtime_decision_explanation,
         )
 
         # ── 步骤 4: 记录会话 ──

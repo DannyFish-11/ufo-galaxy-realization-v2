@@ -1545,6 +1545,31 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::MEMORY_BIAS_LAYER_ALIGNED_PR19_UNAVAILABLE"
     )
 
+# PR-20: Unified Runtime Decision Observability alignment sentinel.
+try:
+    from core.runtime_decision_observability import (  # noqa: F401
+        RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY as _RDO_IS_AUTHORITY,
+        RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL as _RDO_PR20,
+        RuntimeDecisionExplanation as _RuntimeDecisionExplanation,
+        build_runtime_decision_explanation as _build_rde,
+        build_runtime_decision_diagnostics as _build_rdd,
+    )
+
+    RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20: str = (
+        "PROJECTION_ROUTES::RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20_V1: "
+        "core.runtime_decision_observability is confirmed as the canonical "
+        "unified runtime decision observability layer for PR-20.  "
+        "RuntimeDecisionExplanation consolidates PR-17 task-semantic, PR-18 "
+        "activation-budget, PR-19 memory-bias, governance, and cognitive-posture "
+        "influence layers into a single coherent diagnostics surface.  "
+        "Hard gates remain primary; soft influences are represented as advisory "
+        "layers with explicit influence_class labels."
+    )
+except ImportError:  # pragma: no cover
+    RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

@@ -191,6 +191,17 @@ ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18: str = (
     "gates remain the sole authority for invocation_allowed."
 )
 
+# PR-20: Unified runtime decision observability context is embedded in
+# governance diagnostic_context so operators can see task-semantic, budget,
+# and memory influence layers alongside the governance allow/deny decision.
+RUNTIME_DECISION_OBSERVABILITY_ALIGNED_GOVERNANCE_PR20: str = (
+    "NODE_INVOCATION_GOVERNANCE::RUNTIME_DECISION_OBSERVABILITY_PR20_V1: "
+    "evaluate_invocation_governance() embeds a compact PR-20 observability "
+    "context dict under diagnostic_context['pr20_observability_context'] when "
+    "activation_budget, memory_bias, or task_hint parameters are present.  "
+    "This context is advisory and does not alter the hard-gate decision."
+)
+
 
 # ===========================================================================
 # Override enum
@@ -307,6 +318,8 @@ def evaluate_invocation_governance(
     demand_context: Optional[str] = None,
     topology_runtime: Optional[Any] = None,
     activation_budget: Optional[Any] = None,
+    memory_bias: Optional[Any] = None,
+    task_hint: Optional[str] = None,
 ) -> NodeInvocationGovernanceDecision:
     """Evaluate whether *node_id* may be invoked on the canonical path.
 
@@ -341,6 +354,15 @@ def evaluate_invocation_governance(
         recorded in ``diagnostic_context["activation_budget_context"]`` for
         observability.  The budget is **advisory only** and does NOT change the
         hard-gate allow/deny decision.
+    memory_bias:
+        PR-20 — Optional :class:`~core.cognitive.memory_bias_layer.MemoryBias`.
+        When provided, the bias posture is recorded in the PR-20 observability
+        context embedded in ``diagnostic_context["pr20_observability_context"]``.
+        Advisory only; does not alter the hard-gate decision.
+    task_hint:
+        PR-20 — Optional task-semantic hint string (from PR-17 classify_task).
+        When provided, recorded in the PR-20 observability context.
+        Advisory only; does not alter the hard-gate decision.
 
     Returns
     -------
@@ -365,8 +387,23 @@ def evaluate_invocation_governance(
         except Exception as _be:
             logger.debug("governance gate: activation_budget context extraction failed: %s", _be)
             _budget_context = {"error": str(_be), "note": "budget_context_extraction_failed"}
+
     # ------------------------------------------------------------------
-    # Override path: compat/internal bypass
+    # PR-20: Extract memory_bias and task_hint for observability context
+    # ------------------------------------------------------------------
+    _memory_bias_hint: Optional[dict] = None
+    if memory_bias is not None:
+        try:
+            from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics as _build_mbd
+            _memory_bias_hint = _build_mbd(memory_bias)
+        except Exception as _mbe:
+            try:
+                _memory_bias_hint = {
+                    "posture": getattr(memory_bias, "posture", "unknown"),
+                    "influenced_by_memory": bool(getattr(memory_bias, "influenced_by_memory", False)),
+                }
+            except Exception:
+                _memory_bias_hint = None
     # ------------------------------------------------------------------
     if override == NodeInvocationGovernanceOverride.COMPAT_INTERNAL:
         logger.warning(
@@ -447,6 +484,19 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context even on unregistered path
         if _budget_context is not None:
             _unrg_diag["activation_budget_context"] = _budget_context
+        # PR-20: embed observability context on unregistered path
+        try:
+            from core.runtime_decision_observability import (
+                enrich_governance_decision_with_observability as _enrich_gov_obs,
+            )
+            _enrich_gov_obs(
+                _unrg_diag,
+                activation_budget_hint=_budget_context,
+                memory_bias_hint=_memory_bias_hint,
+                task_hint=task_hint,
+            )
+        except Exception:
+            pass
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -588,6 +638,19 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context in diagnostics (advisory, does not alter decision)
         if _budget_context is not None:
             gov_diag["activation_budget_context"] = _budget_context
+        # PR-20: embed observability context in allowed decision
+        try:
+            from core.runtime_decision_observability import (
+                enrich_governance_decision_with_observability as _enrich_gov_obs,
+            )
+            _enrich_gov_obs(
+                gov_diag,
+                activation_budget_hint=_budget_context,
+                memory_bias_hint=_memory_bias_hint,
+                task_hint=task_hint,
+            )
+        except Exception:
+            pass
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -609,6 +672,19 @@ def evaluate_invocation_governance(
         # PR-18: embed activation budget context in denied decision diagnostics (advisory)
         if _budget_context is not None:
             _denied_diag["activation_budget_context"] = _budget_context
+        # PR-20: embed observability context in denied decision
+        try:
+            from core.runtime_decision_observability import (
+                enrich_governance_decision_with_observability as _enrich_gov_obs,
+            )
+            _enrich_gov_obs(
+                _denied_diag,
+                activation_budget_hint=_budget_context,
+                memory_bias_hint=_memory_bias_hint,
+                task_hint=task_hint,
+            )
+        except Exception:
+            pass
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=False,
