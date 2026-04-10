@@ -246,6 +246,16 @@ TASK_TYPE_STRATEGY_MAP: Dict[str, str] = {
     "agent_control":  "single",
 }
 
+# PR-18: sentinel confirming activation budget is wired into ExecutionPlanner.
+ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18: str = (
+    "ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18: "
+    "ExecutionPlanner.execute() accepts an optional activation_budget parameter "
+    "(ActivationBudget from core.cognitive.cognitive_activation_budget).  "
+    "When present and influenced_by_budget=True, _pick_strategy() applies "
+    "PlannerBreadthGuidance to bias strategy selection based on cognitive posture.  "
+    "Hard gates (governance, activation context) are unaffected."
+)
+
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
@@ -289,7 +299,7 @@ class ExecutionPlanner:
         # Default: coordinator handles general/complex tasks
         return "coordinator"
 
-    async def execute(self, plan: ExecutionPlan) -> ExecutionResult:
+    async def execute(self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None) -> ExecutionResult:
         """
         执行计划入口。（PR86）
 
@@ -300,6 +310,14 @@ class ExecutionPlanner:
             - 低复杂度任务 → 单 Agent
             - 高复杂度任务 → Team (SPECIALIZED) 或 Swarm
             - 涉及多设备 → Team + Gateway
+
+        Args:
+            plan:               The execution plan.
+            activation_budget:  PR-18 — optional ActivationBudget from
+                                core.cognitive.cognitive_activation_budget.
+                                When provided, planner breadth guidance is
+                                derived and used to bias strategy selection.
+                                Hard governance gates are unaffected.
         """
         t0 = time.monotonic()
         steps: List[StepRecord] = []
@@ -308,13 +326,43 @@ class ExecutionPlanner:
         complexity = _estimate_complexity(plan.message)
         # C阶段 3B: 从意图中提取 task_type 传给策略选择器
         intent_task_type = getattr(plan.intent, "task_hint", "") or ""
-        strategy = self._pick_strategy(plan.message, complexity, task_type=intent_task_type)
+
+        # PR-18: derive planner breadth guidance from activation budget (advisory only)
+        _breadth_guidance = None
+        _budget_influenced_strategy = False
+        try:
+            if activation_budget is not None and getattr(activation_budget, "influenced_by_budget", False):
+                from core.cognitive.cognitive_activation_budget import (
+                    get_planner_breadth_guidance as _get_breadth,
+                )
+                _breadth_guidance = _get_breadth(activation_budget)
+                logger.debug(
+                    "PR-18 ExecutionPlanner: breadth_guidance=%s max_agents=%d adj=%.2f",
+                    _breadth_guidance.breadth_mode,
+                    _breadth_guidance.max_concurrent_agents,
+                    _breadth_guidance.complexity_threshold_adjustment,
+                )
+        except Exception as _budget_guidance_err:
+            logger.debug(
+                "PR-18 ExecutionPlanner: breadth_guidance derivation skipped — %s",
+                _budget_guidance_err,
+            )
+
+        strategy = self._pick_strategy(
+            plan.message,
+            complexity,
+            task_type=intent_task_type,
+            breadth_guidance=_breadth_guidance,
+        )
+        if _breadth_guidance is not None and _breadth_guidance.influenced_by_budget:
+            _budget_influenced_strategy = True
 
         logger.info(
-            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s",
+            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s budget_influenced=%s",
             strategy,
             complexity,
             plan.intent.mode,
+            _budget_influenced_strategy,
         )
 
         # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
@@ -454,15 +502,22 @@ class ExecutionPlanner:
     # 策略选择
     # ──────────────────────────────────────────────────────────────────
 
-    def _pick_strategy(self, message: str, complexity: float, task_type: str = "") -> str:
+    def _pick_strategy(self, message: str, complexity: float, task_type: str = "", breadth_guidance: Optional[Any] = None) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
-        优先级（C阶段 3B 后）：
+        优先级（C阶段 3B + PR-18 后）：
           0. 任务类型映射表（TASK_TYPE_STRATEGY_MAP）— 最高优先级
           1. Swarm   — 关键词明确请求高并发
           2. Fractal — 复杂度极高 (>= 0.75) 或关键词指示多层递归分解
           3. Specialized (Team) — 复杂度中高 (>= 0.65) 或关键词指示并行/团队
           4. Single  — 默认单 Agent
+
+        PR-18 activation budget influence (advisory, lowest priority):
+          - narrow  (passive):   strategy_preference="single"; raises complexity
+                                 thresholds to prefer simpler strategies.
+          - moderate (liminal):  no strategy preference; no threshold adjustment.
+          - broad   (manifest):  no strategy preference; lowers complexity
+                                 thresholds slightly (more strategies eligible).
 
         约束（硬编码）:
           - Swarm 并发上限: 20
@@ -477,14 +532,36 @@ class ExecutionPlanner:
         m = message.lower()
         if any(k in m for k in ["swarm", "群体", "大量", "批量", "高并发"]):
             return "swarm"
-        if complexity >= 0.75 or any(k in m for k in [
+
+        # PR-18: apply complexity threshold adjustment from breadth guidance
+        adj = 0.0
+        _strategy_pref = None
+        if breadth_guidance is not None and getattr(breadth_guidance, "influenced_by_budget", False):
+            adj = float(getattr(breadth_guidance, "complexity_threshold_adjustment", 0.0))
+            _strategy_pref = getattr(breadth_guidance, "strategy_preference", None)
+            if adj != 0.0 or _strategy_pref:
+                logger.debug(
+                    "PR-18 _pick_strategy: breadth=%s adj=%.2f strategy_pref=%s",
+                    getattr(breadth_guidance, "breadth_mode", "?"),
+                    adj,
+                    _strategy_pref,
+                )
+
+        fractal_threshold = 0.75 + adj
+        specialized_threshold = 0.65 + adj
+
+        if complexity >= fractal_threshold or any(k in m for k in [
             "fractal", "分型", "递归", "分形", "多层", "深度拆解",
         ]):
             return "fractal"
-        if complexity >= 0.65 or any(k in m for k in [
+        if complexity >= specialized_threshold or any(k in m for k in [
             "team", "团队", "并行", "多个", "分工", "异构",
         ]):
             return "specialized"
+        # PR-18: if budget is narrow (passive), prefer single even if near threshold
+        if _strategy_pref == "single":
+            logger.debug("PR-18 _pick_strategy: passive posture — returning 'single' per budget guidance")
+            return "single"
         return "single"
 
     # ──────────────────────────────────────────────────────────────────
