@@ -445,9 +445,8 @@ class TestProcessTaskDerivation:
         into the _select_multimodal_route call site.
         """
         import pathlib
-        src = pathlib.Path(
-            "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2/"
-            "core/openclawd.py"
+        src = (
+            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
         ).read_text()
 
         # The PR-17 derivation block must be present
@@ -465,9 +464,8 @@ class TestProcessTaskDerivation:
         using the canonical pattern established by PR-17.
         """
         import pathlib
-        src = pathlib.Path(
-            "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2/"
-            "core/openclawd.py"
+        src = (
+            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
         ).read_text()
 
         # classify_task result .value is captured as _pr17_task_type
@@ -481,9 +479,8 @@ class TestProcessTaskDerivation:
         # This is a structural test ensuring the call from process() includes task_type.
         import pathlib
 
-        src = pathlib.Path(
-            "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2/"
-            "core/openclawd.py"
+        src = (
+            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
         ).read_text()
 
         # Verify that the call to _select_multimodal_route in process() now
