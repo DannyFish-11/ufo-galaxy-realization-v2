@@ -85,6 +85,18 @@ AGENT_KERNEL_TASK_HINT_THREADED_PR17: str = (
     "so model selection uses intent signal rather than generic fallback."
 )
 
+# PR-18: AgentKernel now derives a CognitiveExecutionHint and ActivationBudget
+# at the start of _process() and threads the budget into ExecutionPlanner so
+# that planner breadth and strategy selection are influenced by the current
+# cognitive posture.  Hard gates remain authoritative; the budget is advisory.
+ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18: str = (
+    "ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18: core/agent/kernel.py "
+    "_process() calls derive_cognitive_execution_hint() and derive_activation_budget() "
+    "at message-handling time and passes the resulting ActivationBudget to "
+    "ExecutionPlanner.execute() via the activation_budget parameter.  "
+    "KernelResponse carries activation_budget_hint for downstream diagnostics."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -170,6 +182,9 @@ class KernelResponse(BaseModel):
     # PR-9: cognition/planning layer authority annotation (additive, non-breaking).
     # AgentKernel is the embedded cognition/planning sub-layer of OpenClawd.
     authority_role: str = "cognition_planning_layer"
+    # PR-18: activation budget hint derived from cognitive posture (advisory only).
+    # None when cognitive signals are unavailable or path is chat_only.
+    activation_budget_hint: Optional[Dict[str, Any]] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -195,6 +210,8 @@ class KernelResponse(BaseModel):
             "authority_role": self.authority_role,
             # PR-10: architecture diagnostics layer identifier (additive)
             "arch_layer_id": "cognition_layer",
+            # PR-18: activation budget hint (advisory, may be None)
+            "activation_budget_hint": self.activation_budget_hint,
         }
 
 
@@ -350,6 +367,39 @@ class AgentKernel:
         agents_policy = _safe_load(get_agents, "AGENTS")
         user_policy = _safe_load(get_user, "USER")
 
+        # ── PR-18: Derive cognitive execution hint and activation budget ──
+        # This is a non-blocking best-effort derivation.  If it fails, execution
+        # proceeds without budget influence (hard gates remain authoritative).
+        _activation_budget = None
+        _activation_budget_hint_dict: Optional[Dict[str, Any]] = None
+        try:
+            from core.cognitive.cognitive_execution_policy import (
+                derive_cognitive_execution_hint as _derive_hint,
+            )
+            from core.cognitive.cognitive_activation_budget import (
+                derive_activation_budget as _derive_budget,
+                build_budget_diagnostics as _build_budget_diag,
+            )
+            _cog_hint = _derive_hint()
+            _activation_budget = _derive_budget(_cog_hint)
+            _activation_budget_hint_dict = _build_budget_diag(
+                _activation_budget,
+                influenced=False,
+                influence_source="kernel_process",
+            )
+            logger.debug(
+                "PR-18 AgentKernel._process: activation_budget derived — "
+                "region=%s budget=%.3f breadth=%s",
+                _activation_budget.cognitive_region,
+                _activation_budget.budget_value,
+                _activation_budget.breadth_mode,
+            )
+        except Exception as _budget_err:
+            logger.debug(
+                "PR-18 AgentKernel._process: activation_budget derivation skipped — %s",
+                _budget_err,
+            )
+
         # ── 步骤 2: 意图路由 ──
         intent = await self._intent_router.route(message, context)
         logger.info(
@@ -427,7 +477,8 @@ class AgentKernel:
             device_id=device_id,
             context=context,
         )
-        exec_result = await self._planner.execute(plan)
+        # PR-18: pass activation budget to planner for breadth guidance.
+        exec_result = await self._planner.execute(plan, activation_budget=_activation_budget)
 
         # hybrid 模式：在执行结果前添加自然语言回复
         reply = exec_result.reply
@@ -448,6 +499,8 @@ class AgentKernel:
             latency_ms=(time.monotonic() - t0) * 1000,
             # PR-006: record which execution phase injected SOUL
             soul_injection_phase=soul_injection_phase,
+            # PR-18: activation budget hint for diagnostics
+            activation_budget_hint=_activation_budget_hint_dict,
         )
 
         # ── 步骤 4: 记录会话 ──

@@ -180,6 +180,17 @@ ACTIVATION_CONTEXT_DENIAL_IS_DISTINCT_FROM_GOVERNANCE_DENIAL_SENTINEL: str = (
     "ineligibility from activation-context readiness blocks."
 )
 
+# PR-18: Activation budget narrowing is compatible with hard governance gates.
+ACTIVATION_BUDGET_NARROWING_COMPATIBLE_WITH_GOVERNANCE_PR18: str = (
+    "NODE_INVOCATION_GOVERNANCE::ACTIVATION_BUDGET_NARROWING_PR18_V1: "
+    "evaluate_invocation_governance() accepts an optional activation_budget "
+    "parameter (ActivationBudget from core.cognitive.cognitive_activation_budget).  "
+    "When present, the budget's breadth_mode and budget_value are recorded in "
+    "diagnostic_context as 'activation_budget_context'.  The budget is ADVISORY "
+    "only — it does not alter the hard-gate allow/deny decision.  Hard governance "
+    "gates remain the sole authority for invocation_allowed."
+)
+
 
 # ===========================================================================
 # Override enum
@@ -295,6 +306,7 @@ def evaluate_invocation_governance(
     override: NodeInvocationGovernanceOverride = NodeInvocationGovernanceOverride.NONE,
     demand_context: Optional[str] = None,
     topology_runtime: Optional[Any] = None,
+    activation_budget: Optional[Any] = None,
 ) -> NodeInvocationGovernanceDecision:
     """Evaluate whether *node_id* may be invoked on the canonical path.
 
@@ -323,6 +335,12 @@ def evaluate_invocation_governance(
         Optional :class:`~core.network_topology_runtime.NetworkTopologyRuntime`
         instance.  Consulted *only* for ``TOPOLOGY_CONDITIONAL`` nodes (PR-15).
         Has no effect on any other activation policy kind.
+    activation_budget:
+        PR-18 — Optional :class:`~core.cognitive.cognitive_activation_budget.ActivationBudget`.
+        When provided, the budget's ``breadth_mode`` and ``budget_value`` are
+        recorded in ``diagnostic_context["activation_budget_context"]`` for
+        observability.  The budget is **advisory only** and does NOT change the
+        hard-gate allow/deny decision.
 
     Returns
     -------
@@ -330,6 +348,23 @@ def evaluate_invocation_governance(
         Decision record.  ``invocation_allowed=True`` means the node may
         proceed to canonical execution.
     """
+    # ------------------------------------------------------------------
+    # PR-18: Extract budget context for diagnostics (advisory only)
+    # ------------------------------------------------------------------
+    _budget_context: Optional[dict] = None
+    if activation_budget is not None:
+        try:
+            _budget_context = {
+                "breadth_mode": getattr(activation_budget, "breadth_mode", "unknown"),
+                "budget_value": float(getattr(activation_budget, "budget_value", 0.0)),
+                "intensity": getattr(activation_budget, "intensity", "unknown"),
+                "cognitive_region": getattr(activation_budget, "cognitive_region", "unknown"),
+                "influenced_by_budget": bool(getattr(activation_budget, "influenced_by_budget", False)),
+                "note": "advisory_only: budget does not alter hard governance decision",
+            }
+        except Exception as _be:
+            logger.debug("governance gate: activation_budget context extraction failed: %s", _be)
+            _budget_context = {"error": str(_be), "note": "budget_context_extraction_failed"}
     # ------------------------------------------------------------------
     # Override path: compat/internal bypass
     # ------------------------------------------------------------------
@@ -400,19 +435,23 @@ def evaluate_invocation_governance(
             "proceeding as unregistered/unmanaged (governance not enforced)",
             node_id,
         )
+        _unrg_diag: dict = {
+            "node_id": node_id,
+            "registry_consulted": registry_consulted,
+            "checked_at": time.time(),
+            "note": (
+                "Node not found in NodeFabricRegistry.  Proceeding as "
+                "unregistered/unmanaged.  Governance eligibility not enforced."
+            ),
+        }
+        # PR-18: embed activation budget context even on unregistered path
+        if _budget_context is not None:
+            _unrg_diag["activation_budget_context"] = _budget_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
             denial_reasons=[],
-            diagnostic_context={
-                "node_id": node_id,
-                "registry_consulted": registry_consulted,
-                "checked_at": time.time(),
-                "note": (
-                    "Node not found in NodeFabricRegistry.  Proceeding as "
-                    "unregistered/unmanaged.  Governance eligibility not enforced."
-                ),
-            },
+            diagnostic_context=_unrg_diag,
             governance_status="unregistered_unmanaged",
             registry_consulted=registry_consulted,
             governor_consulted=False,
@@ -546,6 +585,9 @@ def evaluate_invocation_governance(
         )
         gov_diag = dict(eligibility.diagnostic_context)
         gov_diag["activation_context_status"] = activation_context_status
+        # PR-18: embed activation budget context in diagnostics (advisory, does not alter decision)
+        if _budget_context is not None:
+            gov_diag["activation_budget_context"] = _budget_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=True,
@@ -563,11 +605,15 @@ def evaluate_invocation_governance(
             node_id,
             eligibility.exclusion_reasons,
         )
+        _denied_diag = dict(eligibility.diagnostic_context)
+        # PR-18: embed activation budget context in denied decision diagnostics (advisory)
+        if _budget_context is not None:
+            _denied_diag["activation_budget_context"] = _budget_context
         return NodeInvocationGovernanceDecision(
             node_id=node_id,
             invocation_allowed=False,
             denial_reasons=list(eligibility.exclusion_reasons),
-            diagnostic_context=dict(eligibility.diagnostic_context),
+            diagnostic_context=_denied_diag,
             governance_status="ineligible_denied",
             registry_consulted=registry_consulted,
             governor_consulted=eligibility.governor_consulted,

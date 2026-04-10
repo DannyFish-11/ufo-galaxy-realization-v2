@@ -1481,6 +1481,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::COGNITIVE_EXECUTION_POLICY_ALIGNED_PR18_UNAVAILABLE"
     )
 
+# PR-18: Cognitive Activation Budgeting layer alignment sentinel.
+# Asserts that the activation-budget layer is available and wired, enabling
+# projection endpoints to surface activation budget influence diagnostics.
+try:
+    from core.cognitive.cognitive_activation_budget import (  # noqa: F401
+        COGNITIVE_ACTIVATION_BUDGET_IS_AUTHORITY as _CAB_AUTHORITY,
+        COGNITIVE_ACTIVATION_BUDGET_PR18_SENTINEL as _CAB_PR18,
+        HARD_GATES_REMAIN_AUTHORITATIVE_POLICY as _CAB_POLICY1,
+        BUDGET_IS_SOFT_INFLUENCE_NOT_HARD_GATE_POLICY as _CAB_POLICY2,
+        derive_activation_budget as _derive_activation_budget,
+        get_planner_breadth_guidance as _get_planner_breadth_guidance,
+        ActivationBudget as _ActivationBudget,
+        PlannerBreadthGuidance as _PlannerBreadthGuidance,
+    )
+
+    COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18: str = (
+        "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_V1: "
+        "core.cognitive.cognitive_activation_budget is confirmed as the canonical "
+        "activation-budget layer for PR-18.  ActivationBudget and "
+        "PlannerBreadthGuidance translate CognitiveExecutionHint signals into "
+        "bounded runtime guidance for node activation intensity and planner breadth.  "
+        "Hard gates (lifecycle governance, invocation governance, node activation "
+        "context) remain authoritative; the budget is a soft influence layer only."
+    )
+except ImportError:  # pragma: no cover
+    COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
