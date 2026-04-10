@@ -97,6 +97,19 @@ ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18: str = (
     "KernelResponse carries activation_budget_hint for downstream diagnostics."
 )
 
+# PR-19: AgentKernel now derives a MemoryBias from TaskMemory signals at the
+# start of _process() and threads it into ExecutionPlanner so that planner
+# continuity guidance is softly influenced by available memory posture.
+# Hard gates, invocation governance, and explicit user intent remain
+# authoritative; the memory bias is advisory only.
+MEMORY_BIAS_WIRED_INTO_KERNEL_PR19: str = (
+    "MEMORY_BIAS_WIRED_INTO_KERNEL_PR19: core/agent/kernel.py "
+    "_process() calls derive_memory_bias() at message-handling time and passes "
+    "the resulting MemoryBias to ExecutionPlanner.execute() via the memory_bias "
+    "parameter.  KernelResponse carries memory_bias_hint for downstream diagnostics.  "
+    "Hard gates (governance, activation readiness, explicit user intent) are unaffected."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -185,6 +198,9 @@ class KernelResponse(BaseModel):
     # PR-18: activation budget hint derived from cognitive posture (advisory only).
     # None when cognitive signals are unavailable or path is chat_only.
     activation_budget_hint: Optional[Dict[str, Any]] = None
+    # PR-19: memory bias hint derived from TaskMemory signals (advisory only).
+    # None when TaskMemory is unavailable or path is chat_only.
+    memory_bias_hint: Optional[Dict[str, Any]] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -212,6 +228,8 @@ class KernelResponse(BaseModel):
             "arch_layer_id": "cognition_layer",
             # PR-18: activation budget hint (advisory, may be None)
             "activation_budget_hint": self.activation_budget_hint,
+            # PR-19: memory bias hint (advisory, may be None)
+            "memory_bias_hint": self.memory_bias_hint,
         }
 
 
@@ -400,6 +418,38 @@ class AgentKernel:
                 _budget_err,
             )
 
+        # ── PR-19: Derive memory bias from TaskMemory signals ──
+        # This is a non-blocking best-effort derivation.  If it fails, execution
+        # proceeds without memory influence (hard gates and user intent remain
+        # authoritative; memory bias is advisory only).
+        _memory_bias = None
+        _memory_bias_hint_dict: Optional[Dict[str, Any]] = None
+        try:
+            from core.cognitive.memory_decision_bias import (
+                derive_memory_bias as _derive_memory_bias,
+                build_memory_bias_diagnostics as _build_memory_bias_diag,
+            )
+            _memory_bias = _derive_memory_bias(trace_id=session_id)
+            _memory_bias_hint_dict = _build_memory_bias_diag(
+                _memory_bias,
+                influenced=False,
+                influence_surface="kernel_process",
+            )
+            logger.debug(
+                "PR-19 AgentKernel._process: memory_bias derived — "
+                "posture=%s continuity=%.3f retrieval=%.3f novelty=%.3f tasks=%d",
+                _memory_bias.memory_posture,
+                _memory_bias.continuity_score,
+                _memory_bias.retrieval_relevance,
+                _memory_bias.novelty_score,
+                _memory_bias.recent_task_count,
+            )
+        except Exception as _memory_bias_err:
+            logger.debug(
+                "PR-19 AgentKernel._process: memory_bias derivation skipped — %s",
+                _memory_bias_err,
+            )
+
         # ── 步骤 2: 意图路由 ──
         intent = await self._intent_router.route(message, context)
         logger.info(
@@ -478,7 +528,12 @@ class AgentKernel:
             context=context,
         )
         # PR-18: pass activation budget to planner for breadth guidance.
-        exec_result = await self._planner.execute(plan, activation_budget=_activation_budget)
+        # PR-19: pass memory bias to planner for continuity guidance.
+        exec_result = await self._planner.execute(
+            plan,
+            activation_budget=_activation_budget,
+            memory_bias=_memory_bias,
+        )
 
         # hybrid 模式：在执行结果前添加自然语言回复
         reply = exec_result.reply
@@ -501,6 +556,8 @@ class AgentKernel:
             soul_injection_phase=soul_injection_phase,
             # PR-18: activation budget hint for diagnostics
             activation_budget_hint=_activation_budget_hint_dict,
+            # PR-19: memory bias hint for diagnostics
+            memory_bias_hint=_memory_bias_hint_dict,
         )
 
         # ── 步骤 4: 记录会话 ──

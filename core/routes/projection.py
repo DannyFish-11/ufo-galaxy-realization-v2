@@ -1510,6 +1510,32 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::COGNITIVE_ACTIVATION_BUDGET_ALIGNED_PR18_UNAVAILABLE"
     )
 
+try:
+    from core.cognitive.memory_decision_bias import (  # noqa: E402
+        MEMORY_DECISION_BIAS_PR19_SENTINEL as _MDB_PR19,
+        HARD_GATES_UNAFFECTED_BY_MEMORY_BIAS_POLICY as _MDB_POLICY1,
+        MEMORY_BIAS_IS_ADVISORY_ONLY_POLICY as _MDB_POLICY2,
+        derive_memory_bias as _derive_memory_bias,
+        get_planner_continuity_guidance as _get_planner_continuity_guidance,
+        MemoryBias as _MemoryBias,
+        PlannerContinuityGuidance as _PlannerContinuityGuidance,
+    )
+
+    MEMORY_DECISION_BIAS_ALIGNED_PR19: str = (
+        "PROJECTION_ROUTES::MEMORY_DECISION_BIAS_ALIGNED_PR19_V1: "
+        "core.cognitive.memory_decision_bias is confirmed as the canonical "
+        "memory-decision-bias layer for PR-19.  MemoryBias and "
+        "PlannerContinuityGuidance translate TaskMemory signals into bounded "
+        "runtime guidance for continuity-aware, retrieval-supported, or fresh "
+        "planner decomposition.  Hard gates (lifecycle governance, invocation "
+        "governance, activation readiness, explicit user intent) remain "
+        "authoritative; memory bias is a soft, advisory influence layer only."
+    )
+except ImportError:  # pragma: no cover
+    MEMORY_DECISION_BIAS_ALIGNED_PR19: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::MEMORY_DECISION_BIAS_ALIGNED_PR19_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
