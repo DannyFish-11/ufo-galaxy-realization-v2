@@ -97,6 +97,21 @@ ACTIVATION_BUDGET_WIRED_INTO_KERNEL_PR18: str = (
     "KernelResponse carries activation_budget_hint for downstream diagnostics."
 )
 
+# PR-19: AgentKernel now derives a MemoryDecisionBias at the start of _process()
+# and threads it into ExecutionPlanner so that planner strategy selection can be
+# softly influenced by memory-derived continuity / retrieval / novelty signals.
+# Memory bias is advisory and subordinate to hard governance, explicit user
+# intent, and live task semantics.  KernelResponse carries memory_bias_hint for
+# downstream diagnostics.
+MEMORY_DECISION_BIAS_WIRED_INTO_KERNEL_PR19: str = (
+    "MEMORY_DECISION_BIAS_WIRED_INTO_KERNEL_PR19: core/agent/kernel.py "
+    "_process() calls derive_memory_decision_bias() at message-handling time "
+    "and passes the resulting MemoryDecisionBias to ExecutionPlanner.execute() "
+    "via the memory_bias parameter.  KernelResponse carries memory_bias_hint "
+    "for downstream diagnostics.  Memory bias is advisory and cannot override "
+    "hard governance, activation readiness, or explicit user intent."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -185,6 +200,9 @@ class KernelResponse(BaseModel):
     # PR-18: activation budget hint derived from cognitive posture (advisory only).
     # None when cognitive signals are unavailable or path is chat_only.
     activation_budget_hint: Optional[Dict[str, Any]] = None
+    # PR-19: memory decision bias hint derived from memory signals (advisory only).
+    # None when memory signals are unavailable.
+    memory_bias_hint: Optional[Dict[str, Any]] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -212,6 +230,8 @@ class KernelResponse(BaseModel):
             "arch_layer_id": "cognition_layer",
             # PR-18: activation budget hint (advisory, may be None)
             "activation_budget_hint": self.activation_budget_hint,
+            # PR-19: memory decision bias hint (advisory, may be None)
+            "memory_bias_hint": self.memory_bias_hint,
         }
 
 
@@ -400,6 +420,36 @@ class AgentKernel:
                 _budget_err,
             )
 
+        # ── PR-19: Derive memory decision bias ──
+        # Non-blocking best-effort derivation from available memory signals.
+        # Memory bias is advisory and subordinate to hard governance and explicit
+        # user intent.  If derivation fails, execution proceeds without bias.
+        _memory_bias = None
+        _memory_bias_hint_dict: Optional[Dict[str, Any]] = None
+        try:
+            from core.cognitive.memory_decision_bias import (
+                derive_memory_decision_bias as _derive_mem_bias,
+                build_memory_bias_diagnostics as _build_mem_diag,
+            )
+            _memory_bias = _derive_mem_bias(session_id=session_id)
+            _memory_bias_hint_dict = _build_mem_diag(
+                _memory_bias,
+                influenced=False,
+                influence_source="kernel_process",
+            )
+            logger.debug(
+                "PR-19 AgentKernel._process: memory_bias derived — "
+                "posture=%s continuity=%.3f retrieval=%.3f",
+                _memory_bias.posture,
+                _memory_bias.continuity_score,
+                _memory_bias.retrieval_relevance,
+            )
+        except Exception as _mem_bias_err:
+            logger.debug(
+                "PR-19 AgentKernel._process: memory_bias derivation skipped — %s",
+                _mem_bias_err,
+            )
+
         # ── 步骤 2: 意图路由 ──
         intent = await self._intent_router.route(message, context)
         logger.info(
@@ -411,13 +461,19 @@ class AgentKernel:
         if intent.mode == IntentMode.CHAT_ONLY:
             # PR-17: thread task_hint into the chat path so model selection
             # receives the intent signal rather than using generic fallback.
+            # PR-19: pass memory_bias so the chat path can surface continuity
+            # posture in its response diagnostics.
             result = await self._handle_chat(
                 message, session_id, context, user_policy,
                 task_hint=intent.task_hint,
+                memory_bias=_memory_bias,
             )
             result.intent = intent
             result.latency_ms = (time.monotonic() - t0) * 1000
             result.session_id = session_id
+            # PR-19: surface memory bias diagnostics on chat path as well
+            if _memory_bias_hint_dict is not None:
+                result.memory_bias_hint = _memory_bias_hint_dict
             return result
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
@@ -478,7 +534,12 @@ class AgentKernel:
             context=context,
         )
         # PR-18: pass activation budget to planner for breadth guidance.
-        exec_result = await self._planner.execute(plan, activation_budget=_activation_budget)
+        # PR-19: pass memory bias to planner for continuity/retrieval hints.
+        exec_result = await self._planner.execute(
+            plan,
+            activation_budget=_activation_budget,
+            memory_bias=_memory_bias,
+        )
 
         # hybrid 模式：在执行结果前添加自然语言回复
         reply = exec_result.reply
@@ -501,6 +562,8 @@ class AgentKernel:
             soul_injection_phase=soul_injection_phase,
             # PR-18: activation budget hint for diagnostics
             activation_budget_hint=_activation_budget_hint_dict,
+            # PR-19: memory decision bias hint for diagnostics
+            memory_bias_hint=_memory_bias_hint_dict,
         )
 
         # ── 步骤 4: 记录会话 ──
@@ -519,6 +582,7 @@ class AgentKernel:
         context: List[Dict[str, str]],
         user_policy: str,
         task_hint: str = "",
+        memory_bias: Optional[Any] = None,
     ) -> KernelResponse:
         """纯聊天处理路径——完全不加载 SOUL。
 
@@ -531,9 +595,16 @@ class AgentKernel:
                 When non-empty, forwarded to MultiLLMRouter.chat() so that
                 model selection is influenced by the actual task semantics
                 rather than defaulting to generic keyword classification.
+            memory_bias: PR-19 — optional MemoryDecisionBias.  When provided
+                and posture is continuity_seeking, the full context window is
+                used (not trimmed) to preserve continuity.  Advisory only.
         """
         # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
-        return await self._fallback_chat(message, session_id, context, user_policy, task_hint=task_hint)
+        return await self._fallback_chat(
+            message, session_id, context, user_policy,
+            task_hint=task_hint,
+            memory_bias=memory_bias,
+        )
 
     async def _fallback_chat(
         self,
@@ -542,6 +613,7 @@ class AgentKernel:
         context: List[Dict[str, str]],
         user_policy: str,
         task_hint: str = "",
+        memory_bias: Optional[Any] = None,
     ) -> KernelResponse:
         """直接通过 LLM Router 处理聊天（最终降级路径）。
 
@@ -550,6 +622,10 @@ class AgentKernel:
                 ``task_type`` parameter so model selection uses the intent
                 signal rather than defaulting to generic classification.
                 Falls back gracefully when empty or unrecognised.
+            memory_bias: PR-19 — optional MemoryDecisionBias.  When posture is
+                continuity_seeking, a broader context window is kept so that
+                prior conversation context is preserved.  Advisory only;
+                hard routing and model selection remain unchanged.
         """
         if self._llm_router is None:
             return KernelResponse(
@@ -564,10 +640,26 @@ class AgentKernel:
             if user_policy:
                 system_content += f"\n\n用户偏好：\n{user_policy}"
 
+            # PR-19: when memory posture is continuity_seeking, extend the
+            # context window to preserve prior conversation continuity.
+            # The default cap is 8 turns; continuity_seeking expands to 12.
+            _ctx_cap = 8
+            _memory_influenced_chat = False
+            if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
+                _posture = getattr(memory_bias, "posture", "novelty")
+                if _posture == "continuity_seeking":
+                    _ctx_cap = 12
+                    _memory_influenced_chat = True
+                    logger.debug(
+                        "PR-19 AgentKernel._fallback_chat: continuity_seeking — "
+                        "extending context window to %d turns",
+                        _ctx_cap,
+                    )
+
             messages: List[Dict[str, str]] = [
                 {"role": "system", "content": system_content},
             ]
-            for turn in context[-8:]:
+            for turn in context[-_ctx_cap:]:
                 messages.append(turn)
             messages.append({"role": "user", "content": message})
 
