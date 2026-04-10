@@ -14,6 +14,7 @@ Modules
 - :mod:`~core.cognitive.decay_controller`   — Post-manifest decay & reabsorption.
 - :mod:`~core.cognitive.working_memory`     — Short-lived per-task working memory.
 - :mod:`~core.cognitive.long_term_memory`   — Persistent cross-session long-term memory.
+- :mod:`~core.cognitive.memory_bias_layer`  — PR-19: bounded memory-informed runtime bias.
 
 All modules are **additive** and do not break existing functionality.
 """
@@ -28,6 +29,13 @@ from core.cognitive.liminal_dynamics import LiminalDynamics, get_liminal_dynamic
 from core.cognitive.decay_controller import DecayController, get_decay_controller
 from core.cognitive.working_memory import WorkingMemory, get_working_memory
 from core.cognitive.long_term_memory import LongTermMemory, get_long_term_memory
+from core.cognitive.memory_bias_layer import (
+    MemoryBias,
+    MemoryPlannerGuidance,
+    derive_memory_bias,
+    get_memory_planner_guidance,
+    build_memory_bias_diagnostics,
+)
 
 __all__ = [
     "CognitiveState",
@@ -44,4 +52,10 @@ __all__ = [
     "get_working_memory",
     "LongTermMemory",
     "get_long_term_memory",
+    # PR-19: memory-informed runtime bias
+    "MemoryBias",
+    "MemoryPlannerGuidance",
+    "derive_memory_bias",
+    "get_memory_planner_guidance",
+    "build_memory_bias_diagnostics",
 ]
