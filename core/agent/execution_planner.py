@@ -256,6 +256,17 @@ ACTIVATION_BUDGET_PLANNER_BREADTH_WIRED_PR18: str = (
     "Hard gates (governance, activation context) are unaffected."
 )
 
+# PR-19: sentinel confirming memory decision bias is wired into ExecutionPlanner.
+MEMORY_BIAS_PLANNER_WIRED_PR19: str = (
+    "MEMORY_BIAS_PLANNER_WIRED_PR19: "
+    "ExecutionPlanner.execute() accepts an optional memory_bias parameter "
+    "(MemoryDecisionBias from core.cognitive.memory_decision_bias).  "
+    "When present and influenced_by_memory=True, context injection depth is "
+    "increased for continuity-seeking posture, and _pick_strategy() receives "
+    "a strategy_continuity_hint for retrieval-seeking posture.  "
+    "Memory bias is advisory; hard gates and explicit task semantics remain primary."
+)
+
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
@@ -299,7 +310,13 @@ class ExecutionPlanner:
         # Default: coordinator handles general/complex tasks
         return "coordinator"
 
-    async def execute(self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None) -> ExecutionResult:
+    async def execute(
+        self,
+        plan: ExecutionPlan,
+        *,
+        activation_budget: Optional[Any] = None,
+        memory_bias: Optional[Any] = None,
+    ) -> ExecutionResult:
         """
         执行计划入口。（PR86）
 
@@ -318,6 +335,15 @@ class ExecutionPlanner:
                                 When provided, planner breadth guidance is
                                 derived and used to bias strategy selection.
                                 Hard governance gates are unaffected.
+            memory_bias:        PR-19 — optional MemoryDecisionBias from
+                                core.cognitive.memory_decision_bias.
+                                When provided and influenced_by_memory=True,
+                                context injection depth is increased for
+                                continuity-seeking posture, and strategy
+                                selection receives a continuity hint for
+                                retrieval-seeking posture.  Advisory only;
+                                hard gates and explicit task semantics remain
+                                primary.
         """
         t0 = time.monotonic()
         steps: List[StepRecord] = []
@@ -348,21 +374,49 @@ class ExecutionPlanner:
                 _budget_guidance_err,
             )
 
+        # PR-19: derive memory bias guidance for context injection and strategy
+        # continuity hints (advisory only).
+        _memory_bias_guidance = None
+        _memory_bias_influenced = False
+        try:
+            if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
+                from core.cognitive.memory_decision_bias import (
+                    get_memory_bias_guidance as _get_mb_guidance,
+                )
+                _memory_bias_guidance = _get_mb_guidance(memory_bias)
+                logger.debug(
+                    "PR-19 ExecutionPlanner: memory_bias_guidance posture=%s "
+                    "prefer_continuity=%s context_n=%d",
+                    _memory_bias_guidance.posture_label,
+                    _memory_bias_guidance.prefer_continuity,
+                    _memory_bias_guidance.context_injection_n,
+                )
+        except Exception as _mb_guidance_err:
+            logger.debug(
+                "PR-19 ExecutionPlanner: memory_bias_guidance derivation skipped — %s",
+                _mb_guidance_err,
+            )
+
         strategy = self._pick_strategy(
             plan.message,
             complexity,
             task_type=intent_task_type,
             breadth_guidance=_breadth_guidance,
+            memory_bias_guidance=_memory_bias_guidance,
         )
         if _breadth_guidance is not None and _breadth_guidance.influenced_by_budget:
             _budget_influenced_strategy = True
+        if _memory_bias_guidance is not None and _memory_bias_guidance.influenced_by_memory:
+            _memory_bias_influenced = True
 
         logger.info(
-            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s budget_influenced=%s",
+            "ExecutionPlanner: 开始执行 | strategy=%s complexity=%.2f intent=%s "
+            "budget_influenced=%s memory_bias_influenced=%s",
             strategy,
             complexity,
             plan.intent.mode,
             _budget_influenced_strategy,
+            _memory_bias_influenced,
         )
 
         # PR86 强制要求：从 CapabilityRegistry 拉取工具（禁止旁路）
