@@ -75,6 +75,16 @@ AGENT_KERNEL_AUDIT_ADMITTED_INTEGRATED: str = (
     "front-load in task_execute/hybrid path (GAP-512-007)."
 )
 
+# PR-17: AgentKernel now threads IntentResult.task_hint into the text-only
+# chat path so MultiLLMRouter.chat() receives real task semantics instead of
+# falling back to generic keyword classification.
+AGENT_KERNEL_TASK_HINT_THREADED_PR17: str = (
+    "AGENT_KERNEL_TASK_HINT_THREADED_PR17: core/agent/kernel.py "
+    "_process() passes intent.task_hint to _handle_chat() / _fallback_chat(); "
+    "_fallback_chat() forwards it as task_type to llm_router.chat() "
+    "so model selection uses intent signal rather than generic fallback."
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 响应模型
 # ──────────────────────────────────────────────────────────────────────────────
@@ -349,7 +359,12 @@ class AgentKernel:
 
         # ── 步骤 3: 根据意图分流处理 ──
         if intent.mode == IntentMode.CHAT_ONLY:
-            result = await self._handle_chat(message, session_id, context, user_policy)
+            # PR-17: thread task_hint into the chat path so model selection
+            # receives the intent signal rather than using generic fallback.
+            result = await self._handle_chat(
+                message, session_id, context, user_policy,
+                task_hint=intent.task_hint,
+            )
             result.intent = intent
             result.latency_ms = (time.monotonic() - t0) * 1000
             result.session_id = session_id
@@ -450,15 +465,22 @@ class AgentKernel:
         session_id: str,
         context: List[Dict[str, str]],
         user_policy: str,
+        task_hint: str = "",
     ) -> KernelResponse:
         """纯聊天处理路径——完全不加载 SOUL。
 
         设计约束：
           此方法不回调 OpenClawd，以保持单向依赖关系（OpenClawd → AgentKernel）。
           聊天响应通过 LLM Router 直接生成，OpenClawd 持有最终解释权。
+
+        Args:
+            task_hint: PR-17 — task semantic hint from IntentResult.task_hint.
+                When non-empty, forwarded to MultiLLMRouter.chat() so that
+                model selection is influenced by the actual task semantics
+                rather than defaulting to generic keyword classification.
         """
         # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
-        return await self._fallback_chat(message, session_id, context, user_policy)
+        return await self._fallback_chat(message, session_id, context, user_policy, task_hint=task_hint)
 
     async def _fallback_chat(
         self,
@@ -466,8 +488,16 @@ class AgentKernel:
         session_id: str,
         context: List[Dict[str, str]],
         user_policy: str,
+        task_hint: str = "",
     ) -> KernelResponse:
-        """直接通过 LLM Router 处理聊天（最终降级路径）。"""
+        """直接通过 LLM Router 处理聊天（最终降级路径）。
+
+        Args:
+            task_hint: PR-17 — task semantic hint forwarded to the router's
+                ``task_type`` parameter so model selection uses the intent
+                signal rather than defaulting to generic classification.
+                Falls back gracefully when empty or unrecognised.
+        """
         if self._llm_router is None:
             return KernelResponse(
                 success=False,
@@ -488,8 +518,18 @@ class AgentKernel:
                 messages.append(turn)
             messages.append({"role": "user", "content": message})
 
+            # PR-17: pass task_hint as task_type when available so the router
+            # uses real task semantics instead of generic keyword fallback.
+            _chat_kwargs: Dict[str, Any] = {"temperature": 0.7, "max_tokens": 2048}
+            if task_hint:
+                _chat_kwargs["task_type"] = task_hint
+                logger.debug(
+                    "PR-17 AgentKernel._fallback_chat: passing task_hint=%r to llm_router.chat",
+                    task_hint,
+                )
+
             if hasattr(self._llm_router, "chat"):
-                raw = await self._llm_router.chat(messages, temperature=0.7, max_tokens=2048)
+                raw = await self._llm_router.chat(messages, **_chat_kwargs)
                 if hasattr(raw, "content"):
                     reply = raw.content
                 elif isinstance(raw, dict):

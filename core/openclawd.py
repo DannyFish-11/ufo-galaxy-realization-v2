@@ -622,6 +622,18 @@ OPENCLAWD_SPINE_OBSERVABILITY_HARDENED: str = (
     "full OpenClawd → CanonicalDispatcher → result spine correlation."
 )
 
+#: PR-17: Confirms that OpenClawd._select_multimodal_route() now accepts an
+#: optional task_type parameter (instead of hardcoding TaskType.GENERAL), and
+#: that process() derives a best-effort task type via classify_task() before
+#: the multimodal routing call.  Fallback to GENERAL is preserved.
+TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17: str = (
+    "OPENCLAWD::TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17: "
+    "_select_multimodal_route() accepts task_type; "
+    "process() derives task type from message via classify_task() "
+    "and passes it into the multimodal routing call; "
+    "falls back to TaskType.GENERAL when unavailable."
+)
+
 
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
@@ -2254,8 +2266,9 @@ class OpenClawd:
         self,
         canonical_perception: Optional[Dict[str, Any]],
         source_registry_snapshot: Optional[Dict[str, Any]] = None,
+        task_type: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """PR-20 / PR-27: Determine the native-multimodal-first routing decision.
+        """PR-20 / PR-27 / PR-17: Determine the native-multimodal-first routing decision.
 
         OpenClawd is the **routing authority**.  This method inspects
         ``canonical_perception`` (built by :meth:`_build_canonical_perception_state`)
@@ -2277,6 +2290,12 @@ class OpenClawd:
         route degrades gracefully rather than blindly using the best-available
         native MM provider.
 
+        PR-17 adds an optional ``task_type`` parameter so the multimodal
+        routing path receives real task semantics instead of always
+        hardcoding ``TaskType.GENERAL``.  When ``task_type`` is ``None`` or
+        empty, the method falls back to ``TaskType.GENERAL`` for full
+        backward compatibility.
+
         The returned dict is embedded in :attr:`metadata` under the key
         ``"multimodal_route_decision"`` so that later PRs can project it to
         the diagnostics / status board.
@@ -2292,6 +2311,13 @@ class OpenClawd:
             :class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`.
             When provided, source health and quality facts calibrate the
             modality confidence assessment (PR-27).
+        task_type:
+            PR-17 — Optional task-type string (a ``TaskType`` enum value such
+            as ``"CODING"`` or ``"REASONING"``).  When provided and
+            recognised, overrides the hardcoded ``TaskType.GENERAL`` default
+            so that ``route_multimodal_first`` can use real task semantics.
+            Falls back silently to ``TaskType.GENERAL`` when ``None``,
+            empty, or unrecognised.
 
         Returns
         -------
@@ -2398,9 +2424,26 @@ class OpenClawd:
         try:
             from core.multi_llm_router import TaskType as _TaskType
 
+            # PR-17: resolve effective task type — use caller-supplied hint
+            # when available, otherwise fall back to GENERAL for backward compat.
+            _effective_task_type = _TaskType.GENERAL
+            if task_type:
+                try:
+                    _effective_task_type = _TaskType(task_type)
+                    logger.debug(
+                        "PR-17 _select_multimodal_route: using task_type=%r for routing",
+                        task_type,
+                    )
+                except (ValueError, KeyError):
+                    logger.debug(
+                        "PR-17 _select_multimodal_route: unrecognised task_type=%r, "
+                        "falling back to GENERAL",
+                        task_type,
+                    )
+
             decision = router.route_multimodal_first(
                 active_modalities=active_modalities,
-                task_type=_TaskType.GENERAL,
+                task_type=_effective_task_type,
                 complexity_score=0.5,
             )
         except Exception as _rt_err:
@@ -2849,13 +2892,34 @@ class OpenClawd:
         # Gracefully returns None when the router is unavailable.
         _canonical_model_supply: Optional[Dict[str, Any]] = self._build_canonical_model_supply_state()
 
-        # ── PR-20: Native Multimodal-First Routing Decision ───────────────────
+        # ── PR-20 / PR-17: Native Multimodal-First Routing Decision ─────────────
         # OpenClawd is the routing authority.  Determine the preferred route
         # tier (native_multimodal → partial_multimodal → advisory) based on
         # the canonical perception state.  This decision is recorded in every
         # response for diagnostics and future projection.
+        #
+        # PR-17: derive a best-effort task type from the message so that
+        # _select_multimodal_route no longer always hardcodes TaskType.GENERAL.
+        # Falls back gracefully to GENERAL when the router is unavailable.
+        _pr17_task_type: Optional[str] = None
+        try:
+            _pr17_router = self._get_router()
+            if _pr17_router is not None and hasattr(_pr17_router, "classify_task"):
+                _pr17_classified = _pr17_router.classify_task(
+                    [{"role": "user", "content": message}]
+                )
+                _pr17_task_type = _pr17_classified.value
+                logger.debug(
+                    "PR-17 task-type derivation: classified=%r trace_id=%s",
+                    _pr17_task_type,
+                    trace_id,
+                )
+        except Exception as _pr17_err:
+            logger.debug("PR-17 task-type derivation skipped: %s", _pr17_err)
+
         _multimodal_route: Dict[str, Any] = self._select_multimodal_route(
             canonical_perception=_canonical_perception,
+            task_type=_pr17_task_type,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
 
