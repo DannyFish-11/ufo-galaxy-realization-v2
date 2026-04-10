@@ -30,8 +30,8 @@ import pytest
 # Sentinel — marks this module as aligned with the PR-17 wiring work
 # ─────────────────────────────────────────────────────────────────────────────
 
-TASK_SEMANTIC_ROUTING_WIRING_SENTINEL = (
-    "TASK_SEMANTIC_ROUTING_WIRING::TEXT_AND_MULTIMODAL_TASK_HINT_THREADED_PR17_V1"
+TASK_ROUTING_WIRING_SENTINEL = (
+    "TASK_ROUTING_WIRING::TEXT_AND_MULTIMODAL_TASK_HINT_THREADED_PR17_V1"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -255,8 +255,9 @@ class TestMultimodalRouteTaskTypeWiring:
             )
 
         assert mock_router.route_multimodal_first.called
-        call_kwargs = mock_router.route_multimodal_first.call_args
-        used_task_type = call_kwargs.kwargs.get("task_type") or call_kwargs.args[1] if call_kwargs.args and len(call_kwargs.args) > 1 else call_kwargs.kwargs.get("task_type")
+        call_args = mock_router.route_multimodal_first.call_args
+        # route_multimodal_first is always called with keyword args in the implementation
+        used_task_type = call_args.kwargs.get("task_type")
         assert used_task_type == TaskType.CODING, (
             "explicit task_type='coding' must map to TaskType.CODING"
         )
@@ -475,6 +476,6 @@ class TestBackwardCompatibility:
 
 def test_sentinel_importable():
     """Module-level sentinel is importable and non-empty."""
-    from tests.test_task_semantic_routing_wiring import TASK_SEMANTIC_ROUTING_WIRING_SENTINEL
-    assert TASK_SEMANTIC_ROUTING_WIRING_SENTINEL
-    assert "PR17" in TASK_SEMANTIC_ROUTING_WIRING_SENTINEL
+    from tests.test_task_semantic_routing_wiring import TASK_ROUTING_WIRING_SENTINEL
+    assert TASK_ROUTING_WIRING_SENTINEL
+    assert "PR17" in TASK_ROUTING_WIRING_SENTINEL
