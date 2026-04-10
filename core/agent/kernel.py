@@ -349,7 +349,12 @@ class AgentKernel:
 
         # ── 步骤 3: 根据意图分流处理 ──
         if intent.mode == IntentMode.CHAT_ONLY:
-            result = await self._handle_chat(message, session_id, context, user_policy)
+            # PR-17: thread task_hint into the chat path so MultiLLMRouter can
+            # use task-aware model selection instead of falling back to GENERAL.
+            result = await self._handle_chat(
+                message, session_id, context, user_policy,
+                task_hint=intent.task_hint,
+            )
             result.intent = intent
             result.latency_ms = (time.monotonic() - t0) * 1000
             result.session_id = session_id
@@ -450,6 +455,7 @@ class AgentKernel:
         session_id: str,
         context: List[Dict[str, str]],
         user_policy: str,
+        task_hint: str = "",
     ) -> KernelResponse:
         """纯聊天处理路径——完全不加载 SOUL。
 
@@ -458,7 +464,7 @@ class AgentKernel:
           聊天响应通过 LLM Router 直接生成，OpenClawd 持有最终解释权。
         """
         # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
-        return await self._fallback_chat(message, session_id, context, user_policy)
+        return await self._fallback_chat(message, session_id, context, user_policy, task_hint=task_hint)
 
     async def _fallback_chat(
         self,
@@ -466,6 +472,7 @@ class AgentKernel:
         session_id: str,
         context: List[Dict[str, str]],
         user_policy: str,
+        task_hint: str = "",
     ) -> KernelResponse:
         """直接通过 LLM Router 处理聊天（最终降级路径）。"""
         if self._llm_router is None:
@@ -489,7 +496,18 @@ class AgentKernel:
             messages.append({"role": "user", "content": message})
 
             if hasattr(self._llm_router, "chat"):
-                raw = await self._llm_router.chat(messages, temperature=0.7, max_tokens=2048)
+                # PR-17: pass task_hint so MultiLLMRouter uses task-aware model
+                # selection.  Falls back to generic classification when empty.
+                logger.debug(
+                    "PR-17: text-path chat with task_hint=%r",
+                    task_hint or "<none>",
+                )
+                raw = await self._llm_router.chat(
+                    messages,
+                    task_type=task_hint or None,
+                    temperature=0.7,
+                    max_tokens=2048,
+                )
                 if hasattr(raw, "content"):
                     reply = raw.content
                 elif isinstance(raw, dict):

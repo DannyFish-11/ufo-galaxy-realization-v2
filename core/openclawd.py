@@ -2254,8 +2254,9 @@ class OpenClawd:
         self,
         canonical_perception: Optional[Dict[str, Any]],
         source_registry_snapshot: Optional[Dict[str, Any]] = None,
+        task_type: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """PR-20 / PR-27: Determine the native-multimodal-first routing decision.
+        """PR-20 / PR-27 / PR-17: Determine the native-multimodal-first routing decision.
 
         OpenClawd is the **routing authority**.  This method inspects
         ``canonical_perception`` (built by :meth:`_build_canonical_perception_state`)
@@ -2277,6 +2278,13 @@ class OpenClawd:
         route degrades gracefully rather than blindly using the best-available
         native MM provider.
 
+        PR-17 adds an optional ``task_type`` parameter.  When provided, it is
+        forwarded to ``route_multimodal_first`` so that task semantics influence
+        model selection beyond modality alone.  When absent, task type is
+        derived via :meth:`~core.multi_llm_router.MultiLLMRouter.classify_task`
+        using the available perception/context signals, or falls back to
+        ``TaskType.GENERAL`` for full backward compatibility.
+
         The returned dict is embedded in :attr:`metadata` under the key
         ``"multimodal_route_decision"`` so that later PRs can project it to
         the diagnostics / status board.
@@ -2292,6 +2300,12 @@ class OpenClawd:
             :class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`.
             When provided, source health and quality facts calibrate the
             modality confidence assessment (PR-27).
+        task_type:
+            Optional task-type string (e.g. ``"coding"``, ``"reasoning"``).
+            When provided, it is forwarded directly to the router.  When
+            absent, a best-effort classification is derived from available
+            signals.  Falls back to ``TaskType.GENERAL`` when classification
+            fails or returns an unrecognised value.  (PR-17)
 
         Returns
         -------
@@ -2397,10 +2411,69 @@ class OpenClawd:
 
         try:
             from core.multi_llm_router import TaskType as _TaskType
+        except Exception as _tt_import_err:
+            logger.debug("TaskType import failed: %s", _tt_import_err)
+            result = {
+                "route_type": "advisory",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": f"routing_error={_tt_import_err} degraded_to=advisory",
+                "fallback_reason": str(_tt_import_err),
+                "active_modalities": active_modalities,
+            }
+            if _readiness is not None:
+                result["perception_routing_readiness"] = _readiness
+            return result
 
+        # PR-17: Derive effective task type — use explicit input when
+        # available, otherwise attempt best-effort classify_task on any
+        # available perception/context hint, then fall back to GENERAL.
+        _effective_task_type = _TaskType.GENERAL
+        if task_type:
+            try:
+                _effective_task_type = _TaskType(task_type)
+                logger.debug(
+                    "PR-17: multimodal route using explicit task_type=%r",
+                    task_type,
+                )
+            except ValueError:
+                logger.debug(
+                    "PR-17: unrecognised task_type=%r, falling back to GENERAL",
+                    task_type,
+                )
+        else:
+            # Derive from perception context when no explicit hint given.
+            try:
+                _ctx_hint: Optional[str] = (
+                    canonical_perception.get("task_hint")
+                    if canonical_perception
+                    else None
+                )
+                if _ctx_hint:
+                    _derived = router.classify_task([], hint=_ctx_hint)
+                    _effective_task_type = _derived
+                    logger.debug(
+                        "PR-17: multimodal route derived task_type=%r "
+                        "from perception task_hint=%r",
+                        _effective_task_type.value,
+                        _ctx_hint,
+                    )
+                else:
+                    logger.debug(
+                        "PR-17: no task hint available; "
+                        "multimodal route defaulting to GENERAL"
+                    )
+            except Exception as _cls_err:
+                logger.debug(
+                    "PR-17: classify_task failed (%s); defaulting to GENERAL",
+                    _cls_err,
+                )
+
+        try:
             decision = router.route_multimodal_first(
                 active_modalities=active_modalities,
-                task_type=_TaskType.GENERAL,
+                task_type=_effective_task_type,
                 complexity_score=0.5,
             )
         except Exception as _rt_err:
@@ -2419,6 +2492,7 @@ class OpenClawd:
             return result
 
         # Determine the tier from the decision reason prefix
+        _task_type_used_str = _effective_task_type.value if hasattr(_effective_task_type, "value") else str(_effective_task_type)
         reason = decision.reason or ""
         if decision.provider == "none":
             result = {
@@ -2429,6 +2503,7 @@ class OpenClawd:
                 "route_reason": reason,
                 "fallback_reason": "no_providers_available",
                 "active_modalities": active_modalities,
+                "task_type_used": _task_type_used_str,
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
@@ -2444,6 +2519,7 @@ class OpenClawd:
                 "route_reason": reason,
                 "fallback_reason": "",
                 "active_modalities": active_modalities,
+                "task_type_used": _task_type_used_str,
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
@@ -2463,6 +2539,7 @@ class OpenClawd:
                 f"degraded_to=text_capable_provider"
             ),
             "active_modalities": active_modalities,
+            "task_type_used": _task_type_used_str,
         }
         if _readiness is not None:
             result["perception_routing_readiness"] = _readiness
@@ -2854,8 +2931,31 @@ class OpenClawd:
         # tier (native_multimodal → partial_multimodal → advisory) based on
         # the canonical perception state.  This decision is recorded in every
         # response for diagnostics and future projection.
+        #
+        # PR-17: Derive best-effort task type from the message so that
+        # multimodal routing uses task semantics rather than always defaulting
+        # to TaskType.GENERAL.  classify_task() is called here (one allocation,
+        # once per request) so the result can be passed into
+        # _select_multimodal_route without that method needing to re-build a
+        # messages list.  Falls back to None (which triggers GENERAL inside the
+        # method) when the router is unavailable or classification fails.
+        _derived_task_type_str: Optional[str] = None
+        try:
+            _router_for_cls = self._get_router()
+            if _router_for_cls is not None and hasattr(_router_for_cls, "classify_task"):
+                _cls_msgs = [{"role": "user", "content": message}]
+                _derived_tt = _router_for_cls.classify_task(_cls_msgs, hint=None)
+                _derived_task_type_str = _derived_tt.value if hasattr(_derived_tt, "value") else str(_derived_tt)
+                logger.debug(
+                    "PR-17: derived task_type=%r for multimodal route selection",
+                    _derived_task_type_str,
+                )
+        except Exception as _cls_exc:
+            logger.debug("PR-17: task_type derivation skipped: %s", _cls_exc)
+
         _multimodal_route: Dict[str, Any] = self._select_multimodal_route(
             canonical_perception=_canonical_perception,
+            task_type=_derived_task_type_str,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
 
