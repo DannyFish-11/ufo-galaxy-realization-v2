@@ -306,7 +306,7 @@ class TestAgentKernel:
         kernel = kernel_mod.get_kernel()
 
         # Mock _handle_chat 以避免需要真实 LLM
-        async def fake_handle_chat(message, session_id, context, user_policy):
+        async def fake_handle_chat(message, session_id, context, user_policy, task_hint=""):
             from core.agent.kernel import KernelResponse
             from core.agent.intent_router import IntentMode
             return KernelResponse(
@@ -370,7 +370,7 @@ class TestAgentKernel:
         kernel_mod.AgentKernel._instance = None
         kernel = kernel_mod.get_kernel()
 
-        async def fake_handle_chat(message, session_id, context, user_policy):
+        async def fake_handle_chat(message, session_id, context, user_policy, task_hint=""):
             return KernelResponse(
                 success=True, mode=IntentMode.CHAT_ONLY, reply="测试回复"
             )
@@ -465,7 +465,7 @@ class TestSoulInjectionConstraint:
             soul_loaded.append(True)
             return original_get_soul()
 
-        async def fake_chat(message, session_id, context, user_policy):
+        async def fake_chat(message, session_id, context, user_policy, task_hint=""):
             from core.agent.kernel import KernelResponse
             return KernelResponse(success=True, mode="chat_only", reply="ok")
 
