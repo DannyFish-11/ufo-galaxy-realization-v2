@@ -563,12 +563,12 @@ class AgentKernel:
                 build_runtime_decision_explanation as _build_rde,
                 build_runtime_decision_diagnostics as _build_rdd,
             )
-            _task_hint_val = getattr(intent, "task_hint", None) or ""
+            _task_hint_val = getattr(intent, "task_hint", None) or None
             _planner_strategy = getattr(exec_result, "chosen_strategy", None)
             _rde = _build_rde(
                 execution_path=intent.mode.value if hasattr(intent.mode, "value") else str(intent.mode),
                 model_selected=exec_result.model,
-                task_hint=_task_hint_val if _task_hint_val else None,
+                task_hint=_task_hint_val,
                 task_semantic_influenced_routing=bool(_task_hint_val),
                 task_semantic_influenced_planner=bool(
                     _task_hint_val and _planner_strategy is not None
