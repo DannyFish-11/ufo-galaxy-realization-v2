@@ -42,7 +42,7 @@ Authority Chain Consistency
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -61,8 +61,8 @@ def _make_kernel_response(
     delegation_hint: Optional[str] = None,
     soul_injection_phase: Optional[str] = None,
 ):
-    from core.agent.kernel import KernelResponse
     from core.agent.intent_router import IntentResult
+    from core.agent.kernel import KernelResponse
 
     return KernelResponse(
         success=True,
@@ -114,26 +114,18 @@ async def _run_process(
 
     Returns the result dict from process().
     """
-    with patch.object(oc, "_get_kernel", return_value=mock_kernel), patch.object(
-        oc, "_get_router", return_value=None
-    ), patch.object(
-        oc, "_parse_intent", new_callable=AsyncMock
-    ), patch.object(
-        oc, "_run_continuum", return_value=continuum_state
-    ), patch.object(
-        oc, "_run_execution", return_value=execution_result or {}
-    ), patch.object(
-        oc, "_determine_execution_path", return_value=execution_path
-    ), patch.object(
-        oc, "_build_execution_plan", return_value=None
-    ), patch.object(
-        oc, "_finalise_plan_lifecycle", return_value=None
-    ), patch.object(
-        oc, "_build_unified_control_plan", return_value=None
-    ), patch.object(
-        oc, "_record_turn", new_callable=AsyncMock
-    ), patch.object(
-        oc, "sync_device_capabilities", return_value=None
+    with (
+        patch.object(oc, "_get_kernel", return_value=mock_kernel),
+        patch.object(oc, "_get_router", return_value=None),
+        patch.object(oc, "_parse_intent", new_callable=AsyncMock),
+        patch.object(oc, "_run_continuum", return_value=continuum_state),
+        patch.object(oc, "_run_execution", return_value=execution_result or {}),
+        patch.object(oc, "_determine_execution_path", return_value=execution_path),
+        patch.object(oc, "_build_execution_plan", return_value=None),
+        patch.object(oc, "_finalise_plan_lifecycle", return_value=None),
+        patch.object(oc, "_build_unified_control_plan", return_value=None),
+        patch.object(oc, "_record_turn", new_callable=AsyncMock),
+        patch.object(oc, "sync_device_capabilities", return_value=None),
     ):
         return await oc.process(message=message, session_id=session_id, **process_kwargs)
 
@@ -145,8 +137,8 @@ def _make_kernel_mock(
     mode: str = "chat_only",
 ):
     """Build an AsyncMock that returns a realistic KernelResponse."""
-    from core.agent.kernel import KernelResponse
     from core.agent.intent_router import IntentResult
+    from core.agent.kernel import KernelResponse
 
     kr = KernelResponse(
         success=True,
@@ -176,34 +168,26 @@ class TestKernelResponseContractFields:
         from core.agent.kernel import KernelResponse
 
         fields = KernelResponse.model_fields
-        assert "soul_injection_phase" in fields, (
-            "KernelResponse must have 'soul_injection_phase' field (PR-006)."
-        )
+        assert "soul_injection_phase" in fields, "KernelResponse must have 'soul_injection_phase' field (PR-006)."
 
     def test_routing_authority_field_exists(self):
         """KernelResponse must have a routing_authority field."""
         from core.agent.kernel import KernelResponse
 
         fields = KernelResponse.model_fields
-        assert "routing_authority" in fields, (
-            "KernelResponse must have 'routing_authority' field (PR-006)."
-        )
+        assert "routing_authority" in fields, "KernelResponse must have 'routing_authority' field (PR-006)."
 
     def test_soul_injection_phase_in_api_dict(self):
         """soul_injection_phase must appear in to_api_dict() output."""
         kr = _make_kernel_response()
         api = kr.to_api_dict()
-        assert "soul_injection_phase" in api, (
-            "KernelResponse.to_api_dict() must include 'soul_injection_phase'."
-        )
+        assert "soul_injection_phase" in api, "KernelResponse.to_api_dict() must include 'soul_injection_phase'."
 
     def test_routing_authority_in_api_dict(self):
         """routing_authority must appear in to_api_dict() output."""
         kr = _make_kernel_response()
         api = kr.to_api_dict()
-        assert "routing_authority" in api, (
-            "KernelResponse.to_api_dict() must include 'routing_authority'."
-        )
+        assert "routing_authority" in api, "KernelResponse.to_api_dict() must include 'routing_authority'."
 
     def test_routing_authority_is_advisory_to_openclawd(self):
         """routing_authority must always be 'advisory_to_openclawd'."""
@@ -234,9 +218,7 @@ class TestSoulInjectionBoundary:
 
     def test_task_execute_soul_injection_phase(self):
         """task_execute KernelResponse must carry soul_injection_phase='task_execute'."""
-        kr = _make_kernel_response(
-            mode="task_execute", soul_injection_phase="task_execute"
-        )
+        kr = _make_kernel_response(mode="task_execute", soul_injection_phase="task_execute")
         assert kr.soul_injection_phase == "task_execute"
 
     def test_hybrid_soul_injection_phase(self):
@@ -249,12 +231,9 @@ class TestSoulInjectionBoundary:
         from core.agent.kernel import AgentKernel
 
         doc = AgentKernel.__doc__ or ""
-        assert "SOUL" in doc, (
-            "AgentKernel class docstring must mention SOUL injection boundary."
-        )
+        assert "SOUL" in doc, "AgentKernel class docstring must mention SOUL injection boundary."
         assert "task_execute" in doc or "hybrid" in doc, (
-            "AgentKernel class docstring must mention task_execute or hybrid "
-            "as the phases where SOUL is injected."
+            "AgentKernel class docstring must mention task_execute or hybrid " "as the phases where SOUL is injected."
         )
 
     def test_module_docstring_states_soul_boundary(self):
@@ -262,12 +241,9 @@ class TestSoulInjectionBoundary:
         import core.agent.kernel as kernel_mod
 
         doc = kernel_mod.__doc__ or ""
-        assert "SOUL" in doc, (
-            "core/agent/kernel.py module docstring must mention SOUL."
-        )
+        assert "SOUL" in doc, "core/agent/kernel.py module docstring must mention SOUL."
         assert "task_execute" in doc or "hybrid" in doc, (
-            "Module docstring must describe the execution phases where SOUL "
-            "is injected."
+            "Module docstring must describe the execution phases where SOUL " "is injected."
         )
 
 
@@ -306,8 +282,7 @@ class TestDelegationHintAdvisory:
 
         meta = result.get("metadata", {})
         assert meta.get("delegation_hint_decision") == "advisory_none", (
-            "When delegation_hint is None, metadata.delegation_hint_decision "
-            "must be 'advisory_none'."
+            "When delegation_hint is None, metadata.delegation_hint_decision " "must be 'advisory_none'."
         )
 
     @pytest.mark.asyncio
@@ -330,8 +305,7 @@ class TestDelegationHintAdvisory:
         doc = AgentKernel.__doc__ or ""
         lower = doc.lower()
         assert "advisory" in lower or "建议" in doc, (
-            "AgentKernel class docstring must state that delegation_hint is "
-            "advisory only (PR-006)."
+            "AgentKernel class docstring must state that delegation_hint is " "advisory only (PR-006)."
         )
 
     @pytest.mark.asyncio
@@ -390,6 +364,163 @@ class TestDelegationHintAdvisory:
 
 
 # ---------------------------------------------------------------------------
+# PR-24  Canonical runtime composition coverage
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalRuntimeComposition:
+    """Integration-style coverage for canonical runtime joins."""
+
+    @pytest.mark.asyncio
+    async def test_activation_budget_and_memory_bias_reach_planner_via_kernel_path(self):
+        """Derived runtime hints must flow through AgentKernel -> ExecutionPlanner.execute()."""
+        from types import SimpleNamespace
+
+        from core.agent.execution_planner import ExecutionResult
+        from core.agent.intent_router import IntentResult
+        from core.agent.kernel import AgentKernel
+
+        kernel = AgentKernel()
+        kernel._intent_router = MagicMock()
+        kernel._intent_router.route = AsyncMock(
+            return_value=IntentResult(mode="task_execute", raw_intent="task_execute", confidence=0.9)
+        )
+        kernel._llm_router = MagicMock()
+        kernel._planner = MagicMock()
+        kernel._planner.execute = AsyncMock(
+            return_value=ExecutionResult(
+                success=True,
+                mode="task_execute",
+                reply="ok",
+                chosen_strategy="single_agent",
+            )
+        )
+
+        budget_obj = SimpleNamespace(
+            influenced_by_budget=True,
+            cognitive_region="liminal",
+            budget_value=0.25,
+            breadth_mode="narrow",
+        )
+        memory_obj = SimpleNamespace(
+            influenced_by_memory=True,
+            posture="novelty",
+            continuity_score=0.2,
+            retrieval_relevance=0.3,
+        )
+
+        with (
+            patch(
+                "core.cognitive.cognitive_execution_policy.derive_cognitive_execution_hint",
+                return_value=object(),
+            ),
+            patch(
+                "core.cognitive.cognitive_activation_budget.derive_activation_budget",
+                return_value=budget_obj,
+            ),
+            patch(
+                "core.cognitive.cognitive_activation_budget.build_budget_diagnostics",
+                return_value={"budget_value": 0.25, "influenced_runtime_decision": True},
+            ),
+            patch(
+                "core.cognitive.memory_bias_layer.derive_memory_bias",
+                return_value=memory_obj,
+            ),
+            patch(
+                "core.cognitive.memory_bias_layer.build_memory_bias_diagnostics",
+                return_value={"posture": "novelty", "influenced_runtime_decision": True},
+            ),
+        ):
+            resp = await kernel.handle_message("请执行这个任务", session_id="s-pr24")
+
+        call_kwargs = kernel._planner.execute.call_args.kwargs
+        assert call_kwargs["activation_budget"] is budget_obj
+        assert call_kwargs["memory_bias"] is memory_obj
+        assert resp.activation_budget_hint == {"budget_value": 0.25, "influenced_runtime_decision": True}
+        assert resp.memory_bias_hint == {"posture": "novelty", "influenced_runtime_decision": True}
+        assert (resp.runtime_decision_explanation or {}).get("planner_strategy") == "single_agent"
+
+    @pytest.mark.asyncio
+    async def test_task_hint_parity_between_unified_and_multi_router_paths(self):
+        """Task-type hint 'coding' must map consistently in unified and multi router paths."""
+        from core.multi_llm_router import MultiLLMRouter, TaskType
+        from core.unified.llm_router import UnifiedLLMRouter, get_routing_telemetry
+
+        multi_router = MultiLLMRouter.__new__(MultiLLMRouter)
+        classified = multi_router.classify_task(
+            [{"role": "user", "content": "please help me write code"}],
+            hint="coding",
+        )
+
+        captured: Dict[str, Any] = {}
+
+        class _MockBackend:
+            async def chat(self, messages, task_type, max_tokens, temperature, preferred_provider):
+                captured["task_type"] = task_type
+                return {
+                    "content": "ok",
+                    "provider": "mock",
+                    "model": "mock-model",
+                    "usage": {"total_tokens": 1},
+                }
+
+        unified_router = object.__new__(UnifiedLLMRouter)
+        unified_router._backend = _MockBackend()
+        unified_router._policy = {}
+        unified_router._telemetry = get_routing_telemetry()
+        unified_router._initialized = True
+
+        await unified_router.chat_raw(
+            messages=[{"role": "user", "content": "please help me write code"}],
+            task_type="coding",
+        )
+
+        assert classified == TaskType.CODING
+        assert captured.get("task_type") == "coding"
+
+    @pytest.mark.asyncio
+    async def test_governance_activation_block_returns_structured_denial_payload(self):
+        """Canonical invoke_node() denial must carry structured governance/activation diagnostics."""
+        from types import SimpleNamespace
+
+        from core.node_invocation import InvocationSource, invoke_node
+
+        blocked_decision = SimpleNamespace(
+            invocation_allowed=False,
+            denial_reasons=["activation_context_blocked"],
+        )
+        denial_payload = {
+            "governance_status": "activation_context_blocked",
+            "activation_context_status": "blocked_dormant",
+            "denial_reasons": ["activation_context_blocked"],
+            "diagnostic_context": {"activation_context_denial": {"status": "blocked_dormant"}},
+        }
+
+        with (
+            patch(
+                "core.node_invocation_governance.evaluate_invocation_governance",
+                return_value=blocked_decision,
+            ),
+            patch(
+                "core.node_invocation_governance.build_invocation_denial_diagnostics",
+                return_value=denial_payload,
+            ),
+        ):
+            result = await invoke_node(
+                "Node_99",
+                "execute",
+                {"x": 1},
+                invocation_source=InvocationSource.OPENCLAWD,
+            )
+
+        assert result.success is False
+        assert result.eligibility_denial == denial_payload
+        legacy = result.to_legacy_dict()
+        assert legacy["eligibility_denial"]["governance_status"] == "activation_context_blocked"
+        assert legacy["eligibility_denial"]["activation_context_status"] == "blocked_dormant"
+
+
+# ---------------------------------------------------------------------------
 # 16-19  Multi-model Routing Authority
 # ---------------------------------------------------------------------------
 
@@ -426,22 +557,19 @@ class TestMultiModelRoutingAuthority:
         result = await _run_process(oc, mock_kernel)
 
         meta = result.get("metadata", {})
-        assert meta.get("kernel_routing_authority") == "advisory_to_openclawd", (
-            "metadata.kernel_routing_authority must be 'advisory_to_openclawd'."
-        )
+        assert (
+            meta.get("kernel_routing_authority") == "advisory_to_openclawd"
+        ), "metadata.kernel_routing_authority must be 'advisory_to_openclawd'."
 
     def test_agent_kernel_docstring_states_routing_authority_belongs_to_openclawd(self):
         """AgentKernel docstring must state routing authority belongs to OpenClawd."""
         from core.agent.kernel import AgentKernel
 
         doc = AgentKernel.__doc__ or ""
-        assert "路由" in doc or "routing" in doc.lower(), (
-            "AgentKernel class docstring must reference routing authority (PR-006)."
-        )
-        assert "OpenClawd" in doc, (
-            "AgentKernel class docstring must state that OpenClawd owns routing "
-            "authority."
-        )
+        assert (
+            "路由" in doc or "routing" in doc.lower()
+        ), "AgentKernel class docstring must reference routing authority (PR-006)."
+        assert "OpenClawd" in doc, "AgentKernel class docstring must state that OpenClawd owns routing " "authority."
 
 
 # ---------------------------------------------------------------------------
@@ -501,28 +629,19 @@ class TestExecutionSemanticsDiagnostics:
             },
         }
 
-        with patch.object(oc, "_get_kernel", return_value=None), patch.object(
-            oc, "_get_router", return_value=None
-        ), patch.object(
-            oc, "_parse_intent", new_callable=AsyncMock, return_value=parsed_intent
-        ), patch.object(
-            oc, "_dispatch_chat", new_callable=AsyncMock, return_value=handler_result
-        ), patch.object(
-            oc, "_run_continuum", return_value={"decision": {"action_level": "observe"}}
-        ), patch.object(
-            oc, "_run_execution", return_value={"action_taken": "none"}
-        ), patch.object(
-            oc, "_determine_execution_path", return_value="none"
-        ), patch.object(
-            oc, "_build_execution_plan", return_value=None
-        ), patch.object(
-            oc, "_finalise_plan_lifecycle", return_value=None
-        ), patch.object(
-            oc, "_build_unified_control_plan", return_value=None
-        ), patch.object(
-            oc, "_record_turn", new_callable=AsyncMock
-        ), patch.object(
-            oc, "sync_device_capabilities", return_value=None
+        with (
+            patch.object(oc, "_get_kernel", return_value=None),
+            patch.object(oc, "_get_router", return_value=None),
+            patch.object(oc, "_parse_intent", new_callable=AsyncMock, return_value=parsed_intent),
+            patch.object(oc, "_dispatch_chat", new_callable=AsyncMock, return_value=handler_result),
+            patch.object(oc, "_run_continuum", return_value={"decision": {"action_level": "observe"}}),
+            patch.object(oc, "_run_execution", return_value={"action_taken": "none"}),
+            patch.object(oc, "_determine_execution_path", return_value="none"),
+            patch.object(oc, "_build_execution_plan", return_value=None),
+            patch.object(oc, "_finalise_plan_lifecycle", return_value=None),
+            patch.object(oc, "_build_unified_control_plan", return_value=None),
+            patch.object(oc, "_record_turn", new_callable=AsyncMock),
+            patch.object(oc, "sync_device_capabilities", return_value=None),
         ):
             result = await oc.process(message="hello", session_id="s1")
 
@@ -533,6 +652,7 @@ class TestExecutionSemanticsDiagnostics:
             "OpenClawd._determine_execution_path"
         )
         assert meta.get("pr14_activation_runtime_status", {}).get("dispatch_time_enforced") is False
+
 
 # ---------------------------------------------------------------------------
 # 20-22  Authority Chain Consistency
@@ -561,13 +681,12 @@ class TestAuthorityChainConsistency:
 
     def test_execution_authority_schema_cognition_layer_references_pr006(self):
         """ExecutionLayerRole.COGNITION_PLANNING_LAYER doc must reference PR-006."""
-        from core.schemas.execution_authority import ExecutionLayerRole
-
         # Get the docstring for the enum member
         import inspect
 
+        from core.schemas.execution_authority import ExecutionLayerRole
+
         source = inspect.getsource(ExecutionLayerRole)
         assert "PR-006" in source, (
-            "ExecutionLayerRole source must reference PR-006 in the "
-            "COGNITION_PLANNING_LAYER documentation."
+            "ExecutionLayerRole source must reference PR-006 in the " "COGNITION_PLANNING_LAYER documentation."
         )
