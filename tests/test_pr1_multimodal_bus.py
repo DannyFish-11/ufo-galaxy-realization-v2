@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -370,3 +370,91 @@ async def test_openclawd_process_multimodal_injects_summary():
     # The handler received the augmented message that includes the fusion summary
     assert "[Multimodal context:" in received_messages[0]
     assert "webcam" in received_messages[0]
+
+
+@pytest.mark.asyncio
+async def test_openclawd_process_multimodal_injects_summary_into_kernel_path():
+    """Multimodal fusion summary must reach the primary AgentKernel path."""
+    from core.agent.intent_router import IntentResult
+    from core.agent.kernel import KernelResponse
+    from core.openclawd import OpenClawd
+    from core.schemas.multimodal import MultiModalContext, MultiModalImage
+
+    oc = OpenClawd()
+    ctx = MultiModalContext(
+        images=[MultiModalImage(mime="image/jpeg", data="X", source="webcam")]
+    )
+
+    captured_messages: list[str] = []
+
+    async def _mock_kernel_handle_message(message, session_id=None, device_id=None, context=None):
+        captured_messages.append(message)
+        return KernelResponse(
+            success=True,
+            mode="chat_only",
+            reply="kernel-ok",
+            model="test-model",
+            session_id=session_id or "s1",
+            intent=IntentResult(mode="chat_only", raw_intent="chat", confidence=0.9),
+        )
+
+    fake_kernel = MagicMock()
+    fake_kernel.handle_message = AsyncMock(side_effect=_mock_kernel_handle_message)
+
+    with patch.object(oc, "_get_kernel", return_value=fake_kernel):
+        with patch.object(oc, "sync_device_capabilities", return_value=0):
+            with patch.object(oc, "_get_router", return_value=None):
+                with patch.object(
+                    oc,
+                    "_run_continuum",
+                    return_value={"decision": {"action_level": "observe"}, "metadata": {}},
+                ):
+                    with patch.object(
+                        oc,
+                        "_run_execution",
+                        return_value={"action_taken": "noop", "success": True, "metadata": {}},
+                    ):
+                        with patch.object(oc, "_build_execution_plan", return_value=None):
+                            with patch.object(oc, "_finalise_plan_lifecycle", return_value=None):
+                                with patch.object(oc, "_build_unified_control_plan", return_value=None):
+                                    with patch.object(oc, "_record_turn", new_callable=AsyncMock):
+                                        result = await oc.process(
+                                            message="describe",
+                                            session_id="s1",
+                                            multimodal_context=ctx,
+                                        )
+
+    assert result["success"] is True
+    assert len(captured_messages) == 1
+    assert "[Multimodal context:" in captured_messages[0]
+    assert "webcam" in captured_messages[0]
+    assert result["metadata"]["multimodal_fusion_delivery"]["target"] == "agent_kernel_primary_path"
+
+
+@pytest.mark.asyncio
+async def test_openclawd_cognitive_execution_hint_is_explicitly_advisory_only():
+    """execution_path_preference is surfaced as advisory-only, not a binding override."""
+    from core.cognitive.cognitive_execution_policy import CognitiveExecutionHint
+    from core.openclawd import OpenClawd
+
+    oc = OpenClawd()
+    hint = CognitiveExecutionHint(execution_path_preference="planning")
+
+    with patch.object(oc, "_get_kernel", return_value=None):
+        with patch.object(oc, "sync_device_capabilities", return_value=0):
+            with patch.object(oc, "_parse_intent", return_value=None):
+                with patch.object(
+                    oc,
+                    "_dispatch_chat",
+                    return_value={"success": True, "response": "ok"},
+                ):
+                    result = await oc.process(
+                        message="hello",
+                        entry_mode="cross_device",
+                        cognitive_execution_hint=hint,
+                    )
+
+    assert result["metadata"]["entry_mode"] == "cross_device"
+    assert result["metadata"]["cognitive_execution_hint"]["execution_path_preference"] == "planning"
+    contract = result["metadata"]["cognitive_execution_hint_contract"]
+    assert contract["authority"] == "advisory_only"

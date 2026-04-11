@@ -2859,6 +2859,11 @@ class OpenClawd:
         # It is logged here so that the cognitive-wiring influence is observable in
         # the execution-path log entry (see manifest observability blocks below).
         self._current_cognitive_execution_hint = cognitive_execution_hint
+        _cognitive_hint_contract: Dict[str, Any] = {
+            "authority": "advisory_only",
+            "execution_path_preference_semantics": "non_binding_signal",
+            "consumed_by": ["execution_path_logging", "runtime_diagnostics"],
+        }
         if cognitive_execution_hint is not None:
             try:
                 _ceh_region = getattr(cognitive_execution_hint, "cognitive_region", "unknown")
@@ -2909,6 +2914,13 @@ class OpenClawd:
                     _mm_context_dict = multimodal_context.model_dump()
                 except Exception:  # model_dump may raise AttributeError / ValidationError
                     pass
+
+        # Canonical primary-message payload for reasoning paths (kernel + fallback).
+        # If multimodal fusion produced a summary, thread it into the message that
+        # reaches the actual LLM/kernel reasoning entrypoint.
+        _message_for_reasoning: str = (
+            f"{message}\n{_fusion_suffix}" if _fusion_suffix else message
+        )
 
         # ── PR-16: Canonical Perception State ─────────────────────────────────
         # Build the unified canonical perception truth that OpenClawd uses as
@@ -2961,6 +2973,11 @@ class OpenClawd:
             task_type=_pr17_task_type,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
+        _multimodal_fusion_delivery_base: Dict[str, Any] = {
+            "fusion_applied": bool(_fusion_suffix),
+            "route_type": _multimodal_route.get("route_type"),
+            "is_native_multimodal": _is_native_multimodal,
+        }
 
         # ── PR-515 / GAP-512-009: Critical Path Harness — route-selection record ──
         # Record the routing decision in the canonical CriticalPathHarness layer
@@ -3075,6 +3092,8 @@ class OpenClawd:
         )
         # Re-read is_native_multimodal after potential override mutation
         _is_native_multimodal = _multimodal_route.get("is_native_multimodal", False)
+        _multimodal_fusion_delivery_base["is_native_multimodal"] = _is_native_multimodal
+        _multimodal_fusion_delivery_base["route_type"] = _multimodal_route.get("route_type")
 
         # ── PR-34: Decision Timeline and Explainability Traces ────────────────
         # Record canonical decision events from the routing, override, and
@@ -3187,7 +3206,7 @@ class OpenClawd:
             if kernel is not None:
                 try:
                     kernel_result = await kernel.handle_message(
-                        message=message,
+                        message=_message_for_reasoning,
                         session_id=session_id,
                         device_id=device_id or "",
                         context=context or [],
@@ -3474,6 +3493,11 @@ class OpenClawd:
                             "cognitive_execution_hint": (
                                 _cog_hint_k.to_dict() if _cog_hint_k is not None and hasattr(_cog_hint_k, "to_dict") else None
                             ),
+                            "cognitive_execution_hint_contract": _cognitive_hint_contract,
+                            "multimodal_fusion_delivery": {
+                                **_multimodal_fusion_delivery_base,
+                                "target": "agent_kernel_primary_path",
+                            },
                             # PR-36: production baseline status — confirms that the unified
                             # canonical control loop is active as the production baseline
                             # and reports coverage of canonical primary artifacts.
@@ -3544,7 +3568,7 @@ class OpenClawd:
                     effective_device_id = selected
 
             result = await handler(
-                message=f"{message}\n{_fusion_suffix}" if _fusion_suffix else message,
+                message=_message_for_reasoning,
                 intent=parsed_intent,
                 device_id=effective_device_id,
                 session_id=session_id,
@@ -3801,6 +3825,11 @@ class OpenClawd:
                     "cognitive_execution_hint": (
                         _cog_hint_d.to_dict() if _cog_hint_d is not None and hasattr(_cog_hint_d, "to_dict") else None
                     ),
+                    "cognitive_execution_hint_contract": _cognitive_hint_contract,
+                    "multimodal_fusion_delivery": {
+                        **_multimodal_fusion_delivery_base,
+                        "target": "intent_handler_path",
+                    },
                     # PR-36: production baseline status — confirms that the unified
                     # canonical control loop is active as the production baseline
                     # and reports coverage of canonical primary artifacts.
