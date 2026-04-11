@@ -35,6 +35,7 @@ from core.cognitive.memory_bias_layer import (
     derive_memory_bias,
     get_memory_planner_guidance,
     build_memory_bias_diagnostics,
+    build_memory_bias_active_scope_diagnostics,
 )
 
 __all__ = [
@@ -58,4 +59,5 @@ __all__ = [
     "derive_memory_bias",
     "get_memory_planner_guidance",
     "build_memory_bias_diagnostics",
+    "build_memory_bias_active_scope_diagnostics",
 ]

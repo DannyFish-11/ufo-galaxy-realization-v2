@@ -99,6 +99,33 @@ from typing import Any, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# PR-23 sentinels — memory/dispatch signal-boundary alignment
+# ---------------------------------------------------------------------------
+
+MEMORY_DISPATCH_SIGNAL_BOUNDARY_ALIGNED_PR23_SENTINEL: str = (
+    "MEMORY_DISPATCH_SIGNAL_BOUNDARY_ALIGNED_PR23::source-dispatch-orchestrator::"
+    "runtime-signal-boundary-is-explicit-and-truthful::"
+    "package=23::dispatch-scope-clarified"
+)
+
+DISPATCH_RUNTIME_SIGNALS_ARE_ADVISORY_ONLY_PR23_POLICY: str = (
+    "POLICY::DISPATCH_RUNTIME_SIGNALS_ARE_ADVISORY_ONLY_PR23: "
+    "task_hint, activation_budget, memory_bias, and cognitive_execution_hint "
+    "may be attached to dispatch metadata for observability, but they are not "
+    "authoritative dispatch gates in SourceDispatchOrchestrator mode/target "
+    "selection. Dispatch selection remains governed by policy_alignment, "
+    "governance_snapshot, mesh/session topology, explicit target/force flags, "
+    "and source posture/coordination-role gating."
+)
+
+MEMORY_BIAS_SCOPE_IS_PLANNER_NOT_DISPATCH_PR23_POLICY: str = (
+    "POLICY::MEMORY_BIAS_SCOPE_IS_PLANNER_NOT_DISPATCH_PR23: "
+    "Memory bias is behaviorally active in planner strategy shaping and "
+    "diagnostics surfaces, not as a direct SourceDispatchOrchestrator "
+    "mode/target-selection authority."
+)
+
+# ---------------------------------------------------------------------------
 # PR-24 sentinels — dispatch selection truth consolidation
 # ---------------------------------------------------------------------------
 
@@ -1437,6 +1464,10 @@ def build_source_dispatch_plan(
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
     coordination_role: Optional[str] = None,
+    task_hint: Optional[str] = None,
+    activation_budget: Optional[Dict[str, Any]] = None,
+    memory_bias: Optional[Dict[str, Any]] = None,
+    cognitive_execution_hint: Optional[Dict[str, Any]] = None,
     # PR-24: consolidated truth inputs for target selection
     registry: Any = None,
     readiness_inputs: Optional[Dict[str, Any]] = None,
@@ -1511,12 +1542,18 @@ def build_source_dispatch_plan(
     """
     from contracts.source_dispatch import (
         SourceDispatchMode,
-        SourceDispatchPlan,
         build_source_dispatch_plan as _contract_build_plan,
         build_source_dispatch_decision,
     )
 
     try:
+        _metadata_with_boundary = _build_runtime_signal_boundary_metadata(
+            metadata=metadata,
+            task_hint=task_hint,
+            activation_budget=activation_budget,
+            memory_bias=memory_bias,
+            cognitive_execution_hint=cognitive_execution_hint,
+        )
         # Auto-fetch context signals when not supplied
         if policy_alignment is None:
             policy_alignment = _try_policy_alignment()
@@ -1620,7 +1657,7 @@ def build_source_dispatch_plan(
             mesh_session=mesh_session,
             handoff_envelope=handoff_envelope_dict,
             source_runtime_posture=source_runtime_posture,
-            metadata=metadata,
+            metadata=_metadata_with_boundary,
         )
 
         return _contract_build_plan(
@@ -1629,7 +1666,7 @@ def build_source_dispatch_plan(
             mesh_session=mesh_session,
             ready=ready,
             readiness_notes=readiness_notes,
-            metadata=metadata,
+            metadata=_metadata_with_boundary,
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -1645,7 +1682,13 @@ def build_source_dispatch_plan(
             mode=_Mode.unknown,
             ready=False,
             readiness_notes=[f"build_error:{exc}"],
-            metadata=metadata or {},
+            metadata=_build_runtime_signal_boundary_metadata(
+                metadata=metadata,
+                task_hint=task_hint,
+                activation_budget=activation_budget,
+                memory_bias=memory_bias,
+                cognitive_execution_hint=cognitive_execution_hint,
+            ),
         )
 
 
@@ -1672,6 +1715,10 @@ def orchestrate_source_runtime_dispatch(
     force_remote: bool = False,
     source_runtime_posture: Optional[str] = None,
     coordination_role: Optional[str] = None,
+    task_hint: Optional[str] = None,
+    activation_budget: Optional[Dict[str, Any]] = None,
+    memory_bias: Optional[Dict[str, Any]] = None,
+    cognitive_execution_hint: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Any:  # SourceDispatchResult
     """End-to-end source dispatch orchestration.
@@ -1744,7 +1791,6 @@ def orchestrate_source_runtime_dispatch(
     """
     from contracts.source_dispatch import (
         SourceDispatchMode,
-        SourceDispatchResult,
         build_source_dispatch_result,
         failure_dispatch_result,
     )
@@ -1770,6 +1816,10 @@ def orchestrate_source_runtime_dispatch(
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
+            task_hint=task_hint,
+            activation_budget=activation_budget,
+            memory_bias=memory_bias,
+            cognitive_execution_hint=cognitive_execution_hint,
             metadata=metadata,
         )
 
@@ -1814,7 +1864,7 @@ def orchestrate_source_runtime_dispatch(
                 policy_alignment=plan.policy_alignment,
                 mesh_session=plan.mesh_session,
                 source_runtime_posture=source_runtime_posture,
-                metadata=metadata,
+                metadata=plan.metadata,
             )
 
         elif mode == SourceDispatchMode.remote_handoff:
@@ -1878,7 +1928,7 @@ def orchestrate_source_runtime_dispatch(
                     ),
                 )
                 coordinator_summary = get_coordinator_summary(coordinator_state)
-            except Exception as exc:  # noqa: BLE001 — coordinator errors must not surface as crashes; PR-32 graceful degradation policy
+            except Exception as exc:  # noqa: BLE001 - PR-32 graceful degradation
                 errors.append(f"staged_mesh_coordinator_error:{exc}")
                 logger.warning(
                     "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
@@ -1935,7 +1985,7 @@ def orchestrate_source_runtime_dispatch(
                 errors=errors,
                 decision_reason=decision_reason,
                 source_runtime_posture=source_runtime_posture,
-                metadata=metadata,
+                metadata=plan.metadata,
             )
 
         # Local execution (local / fallback_local / unknown)
@@ -1981,7 +2031,7 @@ def orchestrate_source_runtime_dispatch(
             errors=errors,
             decision_reason=decision_reason,
             source_runtime_posture=source_runtime_posture,
-            metadata=metadata,
+            metadata=plan.metadata,
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -1994,7 +2044,13 @@ def orchestrate_source_runtime_dispatch(
             session_id=session_id,
             mode=SourceDispatchMode.unknown,
             reason=f"orchestration_error:{exc}",
-            metadata=metadata,
+            metadata=_build_runtime_signal_boundary_metadata(
+                metadata=metadata,
+                task_hint=task_hint,
+                activation_budget=activation_budget,
+                memory_bias=memory_bias,
+                cognitive_execution_hint=cognitive_execution_hint,
+            ),
         )
 
 
@@ -2032,6 +2088,37 @@ def _extract_decision_reason(plan: Any) -> Optional[str]:
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+def _build_runtime_signal_boundary_metadata(
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    task_hint: Optional[str] = None,
+    activation_budget: Optional[Dict[str, Any]] = None,
+    memory_bias: Optional[Dict[str, Any]] = None,
+    cognitive_execution_hint: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Attach explicit dispatch signal-boundary diagnostics to metadata."""
+    merged: Dict[str, Any] = dict(metadata or {})
+    merged["runtime_signal_boundary"] = {
+        "dispatch_boundary_version": "pr23_v1",
+        "memory_bias_behavioral_scope": "planner_strategy_and_runtime_diagnostics",
+        "dispatch_mode_selection_consumes_runtime_signals": False,
+        "dispatch_target_selection_consumes_runtime_signals": False,
+        "received_runtime_signals": {
+            "task_hint": task_hint is not None,
+            "activation_budget": activation_budget is not None,
+            "memory_bias": memory_bias is not None,
+            "cognitive_execution_hint": cognitive_execution_hint is not None,
+        },
+        "advisory_runtime_signals": [
+            "task_hint",
+            "activation_budget",
+            "memory_bias",
+            "cognitive_execution_hint",
+        ],
+    }
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -2078,6 +2165,10 @@ class SourceDispatchOrchestrator:
         force_remote: bool = False,
         source_runtime_posture: Optional[str] = None,
         coordination_role: Optional[str] = None,
+        task_hint: Optional[str] = None,
+        activation_budget: Optional[Dict[str, Any]] = None,
+        memory_bias: Optional[Dict[str, Any]] = None,
+        cognitive_execution_hint: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchResult
         """Execute the end-to-end source dispatch orchestration.
@@ -2115,6 +2206,10 @@ class SourceDispatchOrchestrator:
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
+            task_hint=task_hint,
+            activation_budget=activation_budget,
+            memory_bias=memory_bias,
+            cognitive_execution_hint=cognitive_execution_hint,
             metadata=metadata,
         )
 
@@ -2137,6 +2232,10 @@ class SourceDispatchOrchestrator:
         force_remote: bool = False,
         source_runtime_posture: Optional[str] = None,
         coordination_role: Optional[str] = None,
+        task_hint: Optional[str] = None,
+        activation_budget: Optional[Dict[str, Any]] = None,
+        memory_bias: Optional[Dict[str, Any]] = None,
+        cognitive_execution_hint: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:  # SourceDispatchPlan
         """Build a dispatch plan without executing.
@@ -2165,5 +2264,9 @@ class SourceDispatchOrchestrator:
             force_remote=force_remote,
             source_runtime_posture=source_runtime_posture,
             coordination_role=coordination_role,
+            task_hint=task_hint,
+            activation_budget=activation_budget,
+            memory_bias=memory_bias,
+            cognitive_execution_hint=cognitive_execution_hint,
             metadata=metadata,
         )

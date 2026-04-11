@@ -71,7 +71,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.Cognitive.MemoryBias")
 
@@ -93,6 +93,13 @@ MEMORY_BIAS_LAYER_PR19_SENTINEL: str = (
     "Memory-informed runtime bias (PR-19) is present and active.  "
     "MemoryBias is derived from live memory signals and wired into "
     "ExecutionPlanner strategy selection and AgentKernel response diagnostics."
+)
+
+MEMORY_BIAS_ACTIVE_SCOPE_BOUNDARY_PR23_SENTINEL: str = (
+    "MEMORY_BIAS_LAYER::PR23_SCOPE_BOUNDARY: "
+    "Memory bias is behaviorally active in planner strategy selection and "
+    "runtime diagnostics surfaces. It is not a direct authority for "
+    "SourceDispatchOrchestrator dispatch mode/target selection."
 )
 
 # Policy sentinels
@@ -436,6 +443,27 @@ def build_memory_bias_diagnostics(
             "source": "diagnostics_error",
             "error": str(exc),
         }
+
+
+def build_memory_bias_active_scope_diagnostics() -> Dict[str, Any]:
+    """Return structured diagnostics for the real active scope of memory bias."""
+    return {
+        "scope_version": "pr23_v1",
+        "memory_bias_behavioral_scope": {
+            "planner_strategy_selection": True,
+            "kernel_runtime_diagnostics": True,
+            "node_dispatch_selection": False,
+            "source_dispatch_mode_selection": False,
+            "source_dispatch_target_selection": False,
+            "multimodal_route_selection": False,
+        },
+        "notes": (
+            "Memory bias remains bounded and advisory. It actively shapes planner "
+            "strategy and runtime diagnostics, while dispatch-level selection "
+            "authorities remain policy/governance/topology-driven."
+        ),
+        "authority_module": "core.cognitive.memory_bias_layer",
+    }
 
 
 # ---------------------------------------------------------------------------

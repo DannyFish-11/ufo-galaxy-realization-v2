@@ -1524,6 +1524,7 @@ try:
     from core.cognitive.memory_bias_layer import (  # noqa: F401
         MEMORY_BIAS_LAYER_IS_AUTHORITY as _MBL_AUTHORITY,
         MEMORY_BIAS_LAYER_PR19_SENTINEL as _MBL_PR19,
+        MEMORY_BIAS_ACTIVE_SCOPE_BOUNDARY_PR23_SENTINEL as _MBL_PR23_SCOPE,
         HARD_GATES_OVERRIDE_MEMORY_BIAS_POLICY as _MBL_POLICY1,
         MEMORY_BIAS_IS_ADVISORY_NOT_AUTHORITATIVE_POLICY as _MBL_POLICY2,
         MEMORY_BIAS_CONSUMES_EXISTING_SIGNALS_POLICY as _MBL_POLICY3,
@@ -1543,7 +1544,10 @@ try:
         "TaskMemory singletons without introducing a second memory pipeline.  "
         "Hard gates (invocation governance, activation-context readiness, "
         "activation budgets, explicit user intent) remain authoritative; "
-        "memory bias is a soft advisory influence only."
+        "memory bias is a soft advisory influence only.  PR-23 scope boundary "
+        "is explicit: memory bias is active for planner strategy shaping and "
+        "runtime diagnostics, not as a direct source-dispatch mode/target "
+        "selection authority."
     )
 except ImportError:  # pragma: no cover
     MEMORY_BIAS_LAYER_ALIGNED_PR19: str = (  # type: ignore[no-redef]
