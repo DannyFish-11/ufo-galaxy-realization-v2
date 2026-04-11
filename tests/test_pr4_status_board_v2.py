@@ -530,3 +530,6 @@ class TestProjectionEndpoint:
         for key in _REQUIRED_FIELDS:
             assert key in payload, f"Fallback missing key: {key!r}"
         assert payload["tri_state_phase"] == "silent"
+        assert payload["projection_state"] == "fallback_minimal"
+        assert payload["canonical_runtime_state_available"] is False
+        assert payload["observability_scope"] == "metadata_only_fallback"

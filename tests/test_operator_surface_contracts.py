@@ -90,10 +90,14 @@ import core.operator_surface as _mod
 def reset_surface():
     reset_operator_surface()
     from core.canonical_task import reset_canonical_task_runtime
+    from core.critical_path_harness import reset_critical_path_harness
     reset_canonical_task_runtime()
+    # Isolate singleton ring-buffer state used by critical-path route/fallback observability.
+    reset_critical_path_harness()
     yield
     reset_operator_surface()
     reset_canonical_task_runtime()
+    reset_critical_path_harness()
 
 
 def _build_task(goal: str = "test goal", lifecycle: str = "completed"):
@@ -351,3 +355,26 @@ class TestLiveTaskInspection:
         surface = get_operator_surface()
         snap = surface.operator_snapshot()
         assert snap.authority == OPERATOR_SURFACE_AUTHORITY
+
+    def test_36_operator_snapshot_surfaces_critical_path_harness(self):
+        from core.critical_path_harness import record_route_selection
+
+        record_route_selection(
+            trace_id="trace_operator_surface_01",
+            route_type="advisory",
+            provider="none",
+            model="none",
+            route_reason="router_unavailable degraded_to=advisory",
+            fallback_reason="router_unavailable",
+            active_modalities=["image"],
+            source="tests.test_operator_surface_contracts",
+        )
+
+        surface = get_operator_surface()
+        snapshot_dict = surface.operator_snapshot().to_dict()
+        assert snapshot_dict["critical_path_surface_status"] == "live"
+        assert snapshot_dict["critical_path_surface_classification"] == "observational_metadata"
+        cps = snapshot_dict["critical_path_snapshot"]
+        assert isinstance(cps, dict)
+        assert cps.get("route_selection_count", 0) >= 1
+        assert cps.get("authority")

@@ -2385,19 +2385,11 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
-            # PR-20: enrich with task-semantic observability even on text-only path
-            try:
-                from core.runtime_decision_observability import (
-                    enrich_multimodal_route_with_observability as _enrich_obs,
-                )
-                _enrich_obs(
-                    result,
-                    task_hint=task_type,
-                    task_semantic_influenced=False,
-                )
-            except Exception:
-                pass
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=False,
+            )
 
         # ── PR-27: Eligibility gate — degrade if confidence is too low ───────
         if not _eligibility_eligible and _readiness is not None:
@@ -2415,7 +2407,11 @@ class OpenClawd:
                 "active_modalities": active_modalities,
                 "perception_routing_readiness": _readiness,
             }
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=False,
+            )
 
         # ── Multimodal routing hierarchy ─────────────────────────────────────
         router = self._get_router()
@@ -2431,7 +2427,11 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=False,
+            )
 
         try:
             from core.multi_llm_router import TaskType as _TaskType
@@ -2474,7 +2474,11 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=False,
+            )
 
         # Determine the tier from the decision reason prefix
         reason = decision.reason or ""
@@ -2490,7 +2494,11 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=_pr20_task_semantic_influenced,
+            )
 
         is_tier1 = "tier=1" in reason
         if is_tier1:
@@ -2505,19 +2513,11 @@ class OpenClawd:
             }
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
-            # PR-20: enrich with task-semantic observability
-            try:
-                from core.runtime_decision_observability import (
-                    enrich_multimodal_route_with_observability as _enrich_obs,
-                )
-                _enrich_obs(
-                    result,
-                    task_hint=task_type,
-                    task_semantic_influenced=_pr20_task_semantic_influenced,
-                )
-            except Exception:
-                pass
-            return result
+            return self._attach_multimodal_route_observability(
+                result,
+                task_hint=task_type,
+                task_semantic_influenced=_pr20_task_semantic_influenced,
+            )
 
         # Tier 2 — native multimodal unavailable; degrade to text-capable provider
         modality_str = "+".join(active_modalities) if active_modalities else "unknown"
@@ -2536,19 +2536,11 @@ class OpenClawd:
         }
         if _readiness is not None:
             result["perception_routing_readiness"] = _readiness
-        # PR-20: enrich with task-semantic observability
-        try:
-            from core.runtime_decision_observability import (
-                enrich_multimodal_route_with_observability as _enrich_obs,
-            )
-            _enrich_obs(
-                result,
-                task_hint=task_type,
-                task_semantic_influenced=_pr20_task_semantic_influenced,
-            )
-        except Exception:
-            pass
-        return result
+        return self._attach_multimodal_route_observability(
+            result,
+            task_hint=task_type,
+            task_semantic_influenced=_pr20_task_semantic_influenced,
+        )
 
     def _build_unified_control_plan(
         self,
@@ -2828,6 +2820,32 @@ class OpenClawd:
                 "execution_path_preference_binding": "advisory_only_non_binding",
                 "influences_execution_path_routing": False,
             }
+
+    @staticmethod
+    def _attach_multimodal_route_observability(
+        route: Dict[str, Any],
+        *,
+        task_hint: Optional[str] = None,
+        task_semantic_influenced: bool = False,
+    ) -> Dict[str, Any]:
+        """Attach PR-20 observability context to a multimodal route payload.
+
+        The route dict is enriched in-place with task-semantic context
+        (``task_hint``) and whether task semantics influenced the selected
+        route outcome (``task_semantic_influenced``).
+        """
+        try:
+            from core.runtime_decision_observability import (
+                enrich_multimodal_route_with_observability as _enrich_obs,
+            )
+            _enrich_obs(
+                route,
+                task_hint=task_hint,
+                task_semantic_influenced=task_semantic_influenced,
+            )
+        except Exception:
+            pass
+        return route
 
     # ========================================================================
     # 主入口

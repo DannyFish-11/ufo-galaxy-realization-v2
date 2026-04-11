@@ -3650,6 +3650,10 @@ def _minimal_fallback_payload() -> Dict[str, Any]:
         "active_device_ids": [],
         "execution_stage": None,
         "current_task_summary": None,
+        "projection_state": "fallback_minimal",
+        "canonical_runtime_state_available": False,
+        "fallback_reason": "runtime_unavailable_or_not_initialized",
+        "observability_scope": "metadata_only_fallback",
         "timestamp": time.time(),
     }
 

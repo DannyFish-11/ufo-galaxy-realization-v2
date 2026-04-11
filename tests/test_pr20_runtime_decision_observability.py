@@ -553,6 +553,7 @@ class TestGroupF_BuildDiagnostics:
         "planner_strategy",
         "active_soft_influence_count",
         "influence_layers",
+        "decision_scope",
         "assembled_at",
         "observability_authority",
     )
@@ -671,6 +672,25 @@ class TestGroupF_BuildDiagnostics:
         for bad in (None, "string", 42, {}, []):
             d = build_runtime_decision_diagnostics(bad)  # type: ignore
             assert isinstance(d, dict)
+
+    def test_F12_decision_scope_distinguishes_hard_vs_soft_vs_metadata(self):
+        from core.runtime_decision_observability import (
+            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+        )
+        e = build_runtime_decision_explanation(
+            governance_decision=_make_governance_dict(eligible=False),
+            activation_budget_hint=_make_budget_hint(influenced=True),
+            memory_bias_hint=_make_memory_hint(influenced=True),
+            task_hint="CODING",
+            task_semantic_influenced_routing=True,
+        )
+        d = build_runtime_decision_diagnostics(e)
+        scope = d["decision_scope"]
+        assert scope["hard_authority"]["governance_or_readiness_gate_active"] is True
+        assert scope["soft_influence"]["activation_budget"] is True
+        assert scope["soft_influence"]["memory_bias"] is True
+        assert "assembled_at" in scope["metadata_only_fields"]
+        assert "observability_authority" in scope["metadata_only_fields"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

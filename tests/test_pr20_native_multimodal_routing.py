@@ -382,6 +382,9 @@ class TestSelectMultimodalRouteNoRouter:
             result = oc._select_multimodal_route(canonical_perception=perception)
         assert result["route_type"] == "advisory"
         assert result["is_native_multimodal"] is False
+        assert "pr20_task_hint" in result
+        assert "pr20_task_semantic_influenced_routing" in result
+        assert "pr20_observability_source" in result
 
 
 class TestSelectMultimodalRouteAdvisory:
@@ -397,6 +400,9 @@ class TestSelectMultimodalRouteAdvisory:
         result = oc._select_multimodal_route(canonical_perception=perception)
         assert result["route_type"] == "advisory"
         assert result["is_native_multimodal"] is False
+        assert "pr20_task_hint" in result
+        assert "pr20_task_semantic_influenced_routing" in result
+        assert "pr20_observability_source" in result
 
 
 # ---------------------------------------------------------------------------

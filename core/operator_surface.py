@@ -159,6 +159,9 @@ STATUS_BOARD_ROLE: str = "STATUS_BOARD"
 TOPOLOGY_VIEWER_ROLE: str = "TOPOLOGY_VIEWER"
 """Role: graph structure display — consumes graph/topology projections from snapshot."""
 
+CRITICAL_PATH_SURFACE_CLASSIFICATION_OBSERVATIONAL_METADATA: str = "observational_metadata"
+"""Classification label used when surfacing critical-path harness as observation-only metadata."""
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -471,6 +474,11 @@ class OperatorSnapshot:
     source_runtime_posture_counts: Dict[str, int] = field(default_factory=dict)
     recent_source_runtime_postures: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Critical-path harness observability snapshot (read-only, non-authoritative)
+    critical_path_snapshot: Optional[Dict[str, Any]] = None
+    critical_path_surface_status: str = "unavailable"
+    critical_path_surface_classification: str = CRITICAL_PATH_SURFACE_CLASSIFICATION_OBSERVATIONAL_METADATA
+
     # Authority declaration
     authority: str = OPERATOR_SURFACE_AUTHORITY
     contract_version: str = OPERATOR_SURFACE_CONTRACT_VERSION
@@ -490,6 +498,9 @@ class OperatorSnapshot:
             "online_provider_count": self.online_provider_count,
             "source_runtime_posture_counts": dict(self.source_runtime_posture_counts),
             "recent_source_runtime_postures": list(self.recent_source_runtime_postures),
+            "critical_path_snapshot": self.critical_path_snapshot,
+            "critical_path_surface_status": self.critical_path_surface_status,
+            "critical_path_surface_classification": self.critical_path_surface_classification,
             "authority": self.authority,
             "contract_version": self.contract_version,
             "projection_policy": self.projection_policy,
@@ -887,6 +898,19 @@ class OperatorSurface:
             snap.recent_source_runtime_postures = [record.to_dict() for record in posture_snap.recent_records[-10:]]
         except Exception as exc:
             logger.debug("operator_snapshot: source runtime posture unavailable: %s", exc)
+
+        # Critical path harness (observational surface for route/fallback records)
+        try:
+            from core.critical_path_harness import snapshot_critical_path
+
+            snap.critical_path_snapshot = snapshot_critical_path()
+            snap.critical_path_surface_status = (
+                "live"
+                if isinstance(snap.critical_path_snapshot, dict)
+                else "unavailable"
+            )
+        except Exception as exc:
+            logger.debug("operator_snapshot: critical-path harness unavailable: %s", exc)
 
         return snap
 

@@ -837,6 +837,32 @@ def build_runtime_decision_diagnostics(
             "planner_strategy": explanation.planner_strategy,
             "active_soft_influence_count": explanation.active_influence_count,
             "influence_layers": all_records,
+            "decision_scope": {
+                "hard_authority": {
+                    "governance_or_readiness_gate_active": explanation.has_hard_gate,
+                    "node_allowed": explanation.node_allowed,
+                },
+                "soft_influence": {
+                    "task_semantic": bool(
+                        explanation.task_semantic_influenced_routing
+                        or explanation.task_semantic_influenced_planner
+                    ),
+                    "activation_budget": explanation.activation_budget_active,
+                    "memory_bias": explanation.memory_influenced_planner,
+                    "cognitive_hint": bool(explanation.execution_path_preference),
+                    "planner_strategy_observed": bool(explanation.planner_strategy),
+                },
+                "routing_metadata_fields": [
+                    "execution_path",
+                    "model_selected",
+                    "provider_selected",
+                    "model_selection_reason",
+                ],
+                "metadata_only_fields": [
+                    "assembled_at",
+                    "observability_authority",
+                ],
+            },
             "assembled_at": explanation.assembled_at,
             "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
         }
@@ -869,6 +895,29 @@ def _minimal_diagnostics_fallback() -> Dict[str, Any]:
         "planner_strategy": None,
         "active_soft_influence_count": 0,
         "influence_layers": [],
+        "decision_scope": {
+            "hard_authority": {
+                "governance_or_readiness_gate_active": False,
+                "node_allowed": None,
+            },
+            "soft_influence": {
+                "task_semantic": False,
+                "activation_budget": False,
+                "memory_bias": False,
+                "cognitive_hint": False,
+                "planner_strategy_observed": False,
+            },
+            "routing_metadata_fields": [
+                "execution_path",
+                "model_selected",
+                "provider_selected",
+                "model_selection_reason",
+            ],
+            "metadata_only_fields": [
+                "assembled_at",
+                "observability_authority",
+            ],
+        },
         "assembled_at": time.time(),
         "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
     }
