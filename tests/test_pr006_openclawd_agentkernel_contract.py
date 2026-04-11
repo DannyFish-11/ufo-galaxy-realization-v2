@@ -42,7 +42,6 @@ Authority Chain Consistency
 from __future__ import annotations
 
 import pathlib
-from types import SimpleNamespace
 from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -375,6 +374,8 @@ class TestCanonicalRuntimeComposition:
     @pytest.mark.asyncio
     async def test_activation_budget_and_memory_bias_reach_planner_via_kernel_path(self):
         """Derived runtime hints must flow through AgentKernel -> ExecutionPlanner.execute()."""
+        from types import SimpleNamespace
+
         from core.agent.execution_planner import ExecutionResult
         from core.agent.intent_router import IntentResult
         from core.agent.kernel import AgentKernel
@@ -480,6 +481,8 @@ class TestCanonicalRuntimeComposition:
     @pytest.mark.asyncio
     async def test_governance_activation_block_returns_structured_denial_payload(self):
         """Canonical invoke_node() denial must carry structured governance/activation diagnostics."""
+        from types import SimpleNamespace
+
         from core.node_invocation import InvocationSource, invoke_node
 
         blocked_decision = SimpleNamespace(
