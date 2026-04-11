@@ -12,6 +12,7 @@ def test_minimal_fallback_payload_marks_metadata_only_scope():
     assert ctx["authority_scope"] == "metadata_only_fallback"
     assert ctx["reflects_live_continuum_state"] is False
     assert ctx["fallback_reason"] == "unit_test_fallback"
+    assert ctx["hard_authority_fields"] == ["tri_state_phase", "runtime_domain"]
 
 
 def test_assemble_projection_surfaces_continuum_source_for_fallback(monkeypatch):
@@ -24,8 +25,8 @@ def test_assemble_projection_surfaces_continuum_source_for_fallback(monkeypatch)
     )
     payload = projection_route._assemble_projection()
     ctx = payload["projection_truth_context"]
-    assert ctx["continuum_source"] in {"unavailable", "unknown"}
-    assert ctx["fallback_reason"] in {
-        "continuum_unavailable",
-        "projection_imports_unavailable",
-    }
+    if ctx["fallback_reason"] == "continuum_unavailable":
+        assert ctx["continuum_source"] == "unavailable"
+    else:
+        assert ctx["fallback_reason"] == "projection_imports_unavailable"
+        assert ctx["continuum_source"] == "unknown"

@@ -673,7 +673,7 @@ class TestGroupF_BuildDiagnostics:
             d = build_runtime_decision_diagnostics(bad)  # type: ignore
             assert isinstance(d, dict)
 
-    def test_F12_signal_breakdown_distinguishes_hard_soft_and_metadata(self):
+    def test_decision_signal_breakdown_categorizes_layers_correctly(self):
         from core.runtime_decision_observability import (
             build_runtime_decision_explanation, build_runtime_decision_diagnostics
         )
@@ -684,9 +684,15 @@ class TestGroupF_BuildDiagnostics:
         )
         d = build_runtime_decision_diagnostics(e)
         breakdown = d["decision_signal_breakdown"]
+        hard_layers = set(breakdown["hard_authority_layers"])
+        soft_layers = set(breakdown["soft_influence_layers"])
+        metadata_fields = set(breakdown["metadata_only_fields"])
         assert "invocation_governance" in breakdown["hard_authority_layers"]
         assert "activation_budget" in breakdown["soft_influence_layers"]
         assert "execution_path" in breakdown["metadata_only_fields"]
+        assert hard_layers.isdisjoint(soft_layers)
+        assert "invocation_governance" not in metadata_fields
+        assert "activation_budget" not in metadata_fields
 
 
 # ─────────────────────────────────────────────────────────────────────────────

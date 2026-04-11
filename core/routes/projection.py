@@ -38,6 +38,18 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.Routes.Projection")
 
+_LIVE_CONTINUUM_SOURCES = {
+    "core.cognitive.cognitive_field_engine",
+    "core.desktop_presence_runtime",
+}
+
+_PROJECTION_HARD_AUTHORITY_FIELDS = ["tri_state_phase", "runtime_domain"]
+_PROJECTION_SOFT_OR_METADATA_FIELDS = [
+    "route_reason",
+    "current_task_summary",
+    "execution_stage",
+]
+
 # PR-511: Projection Surface Bridge integration sentinel.
 # The bridge module is imported lazily inside endpoints to preserve graceful
 # degradation if the bridge layer is unavailable.  This sentinel asserts the
@@ -3567,23 +3579,16 @@ def _assemble_projection() -> Dict[str, Any]:
 
     payload["projection_truth_context"] = {
         "continuum_source": continuum_source,
-        "reflects_live_continuum_state": continuum_source in (
-            "core.cognitive.cognitive_field_engine",
-            "core.desktop_presence_runtime",
-        ),
+        "reflects_live_continuum_state": continuum_source in _LIVE_CONTINUUM_SOURCES,
         "authority_scope": "observational_runtime_projection",
-        "hard_authority_fields": ["tri_state_phase", "runtime_domain"],
-        "soft_or_metadata_fields": [
-            "route_reason",
-            "current_task_summary",
-            "execution_stage",
-        ],
+        "hard_authority_fields": list(_PROJECTION_HARD_AUTHORITY_FIELDS),
+        "soft_or_metadata_fields": list(_PROJECTION_SOFT_OR_METADATA_FIELDS),
     }
     return payload
 
 
 def _get_continuum_state_with_source():
-    """Return ContinuumState and source authority, with explicit fallback provenance."""
+    """Return ``(ContinuumState | None, source: str)`` with fallback provenance."""
     try:
         # Try the cognitive field engine first (Block-3 integration).
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
@@ -3612,13 +3617,22 @@ def _get_continuum_state_with_source():
         # Final fallback: minimal silent state so the board always renders.
         from core.continuum.types import ContinuumPhase, ContinuumState
 
-        return ContinuumState(phase=ContinuumPhase.FORMLESS), "core.routes.projection.synthetic_fallback"
+        return ContinuumState(phase=ContinuumPhase.FORMLESS), "synthetic_fallback.projection_route"
     except Exception:
         return None, "unavailable"
 
 
 def _get_continuum_state():
-    """Return the best-effort ContinuumState object for existing call sites."""
+    """Return a best-effort ContinuumState for legacy callers.
+
+    Resolution order:
+      1) cognitive field engine state (live)
+      2) desktop presence runtime state (live)
+      3) synthetic FORMLESS fallback state
+
+    Returns ``ContinuumState | None``.  ``None`` is returned only if even
+    fallback state construction is unavailable.
+    """
     state, _source = _get_continuum_state_with_source()
     return state
 
@@ -3662,7 +3676,13 @@ def _minimal_fallback_payload(
     reason: str = "projection_unavailable",
     continuum_source: str = "unknown",
 ) -> Dict[str, Any]:
-    """Return a minimal valid projection payload for failure cases."""
+    """Return a minimal valid projection payload for failure cases.
+
+    Known ``reason`` values currently emitted by this module:
+    - ``projection_unavailable`` (default)
+    - ``projection_imports_unavailable``
+    - ``continuum_unavailable``
+    """
     return {
         "tri_state_phase": "silent",
         "runtime_domain": None,
@@ -3682,13 +3702,8 @@ def _minimal_fallback_payload(
             "continuum_source": continuum_source,
             "reflects_live_continuum_state": False,
             "authority_scope": "metadata_only_fallback",
-            "hard_authority_fields": [],
-            "soft_or_metadata_fields": [
-                "tri_state_phase",
-                "runtime_domain",
-                "route_reason",
-                "current_task_summary",
-            ],
+            "hard_authority_fields": list(_PROJECTION_HARD_AUTHORITY_FIELDS),
+            "soft_or_metadata_fields": list(_PROJECTION_SOFT_OR_METADATA_FIELDS),
             "fallback_reason": reason,
         },
     }
