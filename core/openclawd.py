@@ -2735,12 +2735,18 @@ class OpenClawd:
         execution_path: str,
     ) -> Dict[str, Any]:
         """Build explicit diagnostics for kernel-intent vs continuum-action tracks."""
-        _decision = (continuum_state or {}).get("decision", {}) if isinstance(continuum_state, dict) else {}
+        _decision = (continuum_state or {}).get("decision", {})
         _continuum_action = _decision.get("action_level")
-        _action_taken = (execution_result or {}).get("action_taken") if isinstance(execution_result, dict) else None
+        _action_taken = (execution_result or {}).get("action_taken")
 
-        _kernel_mode = (kernel_intent_mode or "").strip() or None
+        _kernel_mode = (
+            str(kernel_intent_mode).strip() or None
+            if kernel_intent_mode is not None
+            else None
+        )
         _alignment = "not_applicable"
+        # chat_only aligns when execution_path is "none", while task/hybrid
+        # aligns when execution_path is not "none".
         if _kernel_mode == "chat_only":
             _alignment = "aligned" if execution_path == "none" else "divergent"
         elif _kernel_mode in ("task_execute", "hybrid"):
@@ -2748,19 +2754,16 @@ class OpenClawd:
 
         return {
             "decision_tracks": (
-                "dual_track_kernel_intent_and_continuum_action"
+                "dual_track"
                 if _kernel_mode
-                else "continuum_action_only"
+                else "continuum_only"
             ),
             "tracks_are_intentionally_separate": True,
             "kernel_intent_mode": _kernel_mode,
             "continuum_action_level": _continuum_action,
             "execution_action_taken": _action_taken,
             "execution_path": execution_path,
-            "execution_path_source": (
-                "openclawd._determine_execution_path("
-                "entry_mode, execution_result, cross_device_dispatched)"
-            ),
+            "execution_path_source": "OpenClawd._determine_execution_path",
             "intent_action_alignment": _alignment,
         }
 
@@ -2772,7 +2775,7 @@ class OpenClawd:
 
             return get_pr14_activation_runtime_status()
         except Exception as _err:
-            logger.debug("PR-14 runtime status unavailable: %s", _err)
+            logger.debug("Failed to retrieve PR-14 runtime status diagnostics: %s", _err)
             return None
 
     @staticmethod
@@ -3401,7 +3404,7 @@ class OpenClawd:
                         execution_result=_exec_result_k,
                     )
                     _execution_semantics_k = self._build_execution_semantics(
-                        kernel_intent_mode=str(getattr(kernel_result, "mode", "") or ""),
+                        kernel_intent_mode=str(getattr(kernel_result, "mode", "")),
                         continuum_state=_continuum_state_dict,
                         execution_result=_exec_result_k,
                         execution_path=_exec_path_k,

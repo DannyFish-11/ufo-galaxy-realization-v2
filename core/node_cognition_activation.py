@@ -212,8 +212,11 @@ ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY: str = (
     "Canonical dispatch-time enforcement remains the invocation governance + "
     "activation-context path (core.node_invocation / "
     "core.node_invocation_governance / core.node_activation_context).  "
+    "Use PR-14 activation explicitly when orchestration needs role/state "
+    "tracking across a cognition session.  "
     "Do not assume evaluate_activation_eligibility() or "
-    "transition_activation_state() are automatically enforced by invoke_node()."
+    "transition_activation_state() are automatically enforced by invoke_node() "
+    "or UnifiedNodeExecutor.execute()."
 )
 
 PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY: str = (

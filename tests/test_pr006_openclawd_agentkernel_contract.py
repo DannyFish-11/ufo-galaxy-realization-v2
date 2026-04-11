@@ -463,13 +463,17 @@ class TestExecutionSemanticsDiagnostics:
         )
 
         semantics = result.get("metadata", {}).get("execution_semantics") or {}
-        assert semantics.get("decision_tracks") == "dual_track_kernel_intent_and_continuum_action"
+        assert semantics.get("decision_tracks") == "dual_track"
         assert semantics.get("kernel_intent_mode") == "task_execute"
         assert semantics.get("continuum_action_level") == "observe"
         assert semantics.get("execution_path") == "none"
         assert semantics.get("intent_action_alignment") == "divergent"
-        pr14_status = result.get("metadata", {}).get("pr14_activation_runtime_status") or {}
+        assert semantics.get("execution_path_source") == "OpenClawd._determine_execution_path"
+        pr14_status = result.get("metadata", {}).get("pr14_activation_runtime_status")
+        assert isinstance(pr14_status, dict)
+        assert pr14_status.get("pr14_activation_model_available") is True
         assert pr14_status.get("dispatch_time_enforced") is False
+        assert isinstance(pr14_status.get("dispatch_authority_layers"), list)
 
 # ---------------------------------------------------------------------------
 # 20-22  Authority Chain Consistency
