@@ -803,12 +803,19 @@ def build_runtime_decision_diagnostics(
 
         all_records: List[Dict[str, Any]] = []
         for rec in (explanation.hard_gates + explanation.soft_influences):
+            _decision_role = (
+                "hard_authority"
+                if rec.influence_class == InfluenceClass.HARD_GATE
+                else "soft_influence"
+            )
             entry: Dict[str, Any] = {
                 "layer_name": rec.layer_name,
                 "influence_class": rec.influence_class.value,
                 "active": rec.active,
                 "authority_module": rec.authority_module,
                 "summary": rec.summary,
+                "decision_role": _decision_role,
+                "is_metadata_only": False,
             }
             if include_detail:
                 entry["detail"] = rec.detail
@@ -837,6 +844,40 @@ def build_runtime_decision_diagnostics(
             "planner_strategy": explanation.planner_strategy,
             "active_soft_influence_count": explanation.active_influence_count,
             "influence_layers": all_records,
+            "diagnostic_semantics": {
+                "hard_authority_fields": [
+                    "has_hard_gate",
+                    "hard_gate_count",
+                    "node_allowed",
+                    "node_denial_reasons",
+                ],
+                "soft_influence_fields": [
+                    "task_semantic_influenced_routing",
+                    "task_semantic_influenced_planner",
+                    "activation_budget_active",
+                    "activation_budget_mode",
+                    "memory_bias_posture",
+                    "memory_influenced_planner",
+                    "cognitive_region",
+                    "execution_path_preference",
+                    "execution_path_preference_binding",
+                    "execution_path_preference_authority",
+                    "planner_strategy",
+                    "active_soft_influence_count",
+                    "influence_layers",
+                ],
+                "routing_metadata_fields": [
+                    "execution_path",
+                    "model_selected",
+                    "provider_selected",
+                    "model_selection_reason",
+                    "task_hint",
+                ],
+                "metadata_only_fields": [
+                    "assembled_at",
+                    "observability_authority",
+                ],
+            },
             "assembled_at": explanation.assembled_at,
             "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
         }
@@ -869,6 +910,40 @@ def _minimal_diagnostics_fallback() -> Dict[str, Any]:
         "planner_strategy": None,
         "active_soft_influence_count": 0,
         "influence_layers": [],
+        "diagnostic_semantics": {
+            "hard_authority_fields": [
+                "has_hard_gate",
+                "hard_gate_count",
+                "node_allowed",
+                "node_denial_reasons",
+            ],
+            "soft_influence_fields": [
+                "task_semantic_influenced_routing",
+                "task_semantic_influenced_planner",
+                "activation_budget_active",
+                "activation_budget_mode",
+                "memory_bias_posture",
+                "memory_influenced_planner",
+                "cognitive_region",
+                "execution_path_preference",
+                "execution_path_preference_binding",
+                "execution_path_preference_authority",
+                "planner_strategy",
+                "active_soft_influence_count",
+                "influence_layers",
+            ],
+            "routing_metadata_fields": [
+                "execution_path",
+                "model_selected",
+                "provider_selected",
+                "model_selection_reason",
+                "task_hint",
+            ],
+            "metadata_only_fields": [
+                "assembled_at",
+                "observability_authority",
+            ],
+        },
         "assembled_at": time.time(),
         "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
     }

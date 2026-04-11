@@ -932,3 +932,44 @@ class TestGroupL_InfluenceHierarchy:
         assert "activation_budget" in names
         assert "memory_bias" in names
         assert "cognitive_execution_policy" in names
+
+
+class TestGroupM_DiagnosticSemantics:
+    def test_M01_diagnostics_explicitly_classifies_field_semantics(self):
+        from core.runtime_decision_observability import (
+            build_runtime_decision_explanation,
+            build_runtime_decision_diagnostics,
+        )
+
+        explanation = build_runtime_decision_explanation(
+            governance_decision=_make_governance_dict(eligible=False, denial_reasons=["blocked"]),
+            memory_bias_hint=_make_memory_hint(influenced=True),
+            task_hint="CODING",
+            task_semantic_influenced_routing=True,
+        )
+        diagnostics = build_runtime_decision_diagnostics(explanation)
+
+        semantics = diagnostics["diagnostic_semantics"]
+        assert "hard_authority_fields" in semantics
+        assert "soft_influence_fields" in semantics
+        assert "routing_metadata_fields" in semantics
+        assert "metadata_only_fields" in semantics
+        assert "has_hard_gate" in semantics["hard_authority_fields"]
+        assert "memory_bias_posture" in semantics["soft_influence_fields"]
+        assert "execution_path" in semantics["routing_metadata_fields"]
+        assert "observability_authority" in semantics["metadata_only_fields"]
+
+    def test_M02_influence_layers_mark_decision_role(self):
+        from core.runtime_decision_observability import (
+            build_runtime_decision_explanation,
+            build_runtime_decision_diagnostics,
+        )
+
+        explanation = build_runtime_decision_explanation(
+            governance_decision=_make_governance_dict(eligible=False, denial_reasons=["archived"]),
+            activation_budget_hint=_make_budget_hint(influenced=True),
+        )
+        diagnostics = build_runtime_decision_diagnostics(explanation)
+        roles = {layer["layer_name"]: layer["decision_role"] for layer in diagnostics["influence_layers"]}
+        assert roles["invocation_governance"] == "hard_authority"
+        assert roles["activation_budget"] == "soft_influence"

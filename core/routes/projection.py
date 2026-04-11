@@ -3525,7 +3525,15 @@ def _assemble_projection() -> Dict[str, Any]:
         return _minimal_fallback_payload()
 
     # --- 1. Continuum state ------------------------------------------------
-    continuum_state = _get_continuum_state()
+    continuum_state, continuum_source, continuum_is_live_runtime = _get_continuum_state_with_source()
+    if not continuum_is_live_runtime:
+        payload = _minimal_fallback_payload()
+        payload["projection_authority_context"] = {
+            "continuum_source": continuum_source,
+            "continuum_is_live_runtime": False,
+            "runtime_state_anchor": "not_live_runtime",
+        }
+        return payload
 
     # --- 2. Optional topology route plan -----------------------------------
     route_plan = _get_route_plan(continuum_state)
@@ -3562,11 +3570,22 @@ def _assemble_projection() -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("_assemble_projection: runtime enrichment failed: %s", exc)
 
+    payload["projection_authority_context"] = {
+        "continuum_source": continuum_source,
+        "continuum_is_live_runtime": True,
+        "runtime_state_anchor": "live_runtime",
+    }
     return payload
 
 
 def _get_continuum_state():
-    """Return the live ContinuumState, or a minimal silent state on failure."""
+    """Return the current ContinuumState for backward-compatible callers."""
+    state, _, _ = _get_continuum_state_with_source()
+    return state
+
+
+def _get_continuum_state_with_source():
+    """Return ``(state, source, is_live_runtime)`` for projection assembly."""
     try:
         # Try the cognitive field engine first (Block-3 integration).
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
@@ -3575,7 +3594,7 @@ def _get_continuum_state():
         if engine is not None and hasattr(engine, "get_continuum_state"):
             state = engine.get_continuum_state()
             if state is not None:
-                return state
+                return state, "cognitive_field_engine", True
     except Exception:
         pass
 
@@ -3587,7 +3606,7 @@ def _get_continuum_state():
         if runtime is not None and hasattr(runtime, "get_continuum_state"):
             state = runtime.get_continuum_state()
             if state is not None:
-                return state
+                return state, "desktop_presence_runtime", True
     except Exception:
         pass
 
@@ -3595,9 +3614,9 @@ def _get_continuum_state():
         # Final fallback: minimal silent state so the board always renders.
         from core.continuum.types import ContinuumPhase, ContinuumState
 
-        return ContinuumState(phase=ContinuumPhase.FORMLESS)
+        return ContinuumState(phase=ContinuumPhase.FORMLESS), "synthetic_formless_fallback", False
     except Exception:
-        return None
+        return None, "unavailable", False
 
 
 def _get_route_plan(continuum_state):
@@ -3651,6 +3670,11 @@ def _minimal_fallback_payload() -> Dict[str, Any]:
         "execution_stage": None,
         "current_task_summary": None,
         "timestamp": time.time(),
+        "projection_authority_context": {
+            "continuum_source": "fallback_payload",
+            "continuum_is_live_runtime": False,
+            "runtime_state_anchor": "not_live_runtime",
+        },
     }
 
 
