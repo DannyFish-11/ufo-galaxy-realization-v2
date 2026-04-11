@@ -13,6 +13,7 @@ def test_memory_bias_active_scope_diagnostics_are_truthful():
     assert scope["kernel_runtime_diagnostics"] is True
     assert scope["source_dispatch_mode_selection"] is False
     assert scope["source_dispatch_target_selection"] is False
+    assert scope["multimodal_route_selection"] is False
 
 
 def test_source_dispatch_plan_surfaces_runtime_signal_boundary():

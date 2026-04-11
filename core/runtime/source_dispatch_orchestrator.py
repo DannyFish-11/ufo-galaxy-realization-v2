@@ -1928,7 +1928,7 @@ def orchestrate_source_runtime_dispatch(
                     ),
                 )
                 coordinator_summary = get_coordinator_summary(coordinator_state)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - PR-32 graceful degradation
                 errors.append(f"staged_mesh_coordinator_error:{exc}")
                 logger.warning(
                     "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
@@ -2106,7 +2106,7 @@ def _build_runtime_signal_boundary_metadata(
         "dispatch_mode_selection_consumes_runtime_signals": False,
         "dispatch_target_selection_consumes_runtime_signals": False,
         "received_runtime_signals": {
-            "task_hint": task_hint is not None and str(task_hint).strip() != "",
+            "task_hint": task_hint is not None,
             "activation_budget": activation_budget is not None,
             "memory_bias": memory_bias is not None,
             "cognitive_execution_hint": cognitive_execution_hint is not None,

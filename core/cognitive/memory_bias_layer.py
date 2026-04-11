@@ -452,7 +452,7 @@ def build_memory_bias_active_scope_diagnostics() -> Dict[str, Any]:
         "memory_bias_behavioral_scope": {
             "planner_strategy_selection": True,
             "kernel_runtime_diagnostics": True,
-            "node_dispatch_target_selection": False,
+            "node_dispatch_selection": False,
             "source_dispatch_mode_selection": False,
             "source_dispatch_target_selection": False,
             "multimodal_route_selection": False,
