@@ -1395,7 +1395,9 @@ try:
         ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY as _NCA_TRANS_POLICY,
         COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY as _NCA_ROLE_POLICY,
         ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY as _NCA_ORCH_POLICY,
+        PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY as _NCA_RUNTIME_STATUS_POLICY,
         build_activation_context_snapshot as _build_activation_context_snapshot,
+        get_pr14_activation_runtime_status as _get_pr14_activation_runtime_status,
         get_activation_summary as _get_activation_summary,
     )
 
@@ -1406,9 +1408,12 @@ try:
         "NodeActivationState, NodeCognitionRole, NodeActivationContext, "
         "NodeActivationPolicy, evaluate_activation_eligibility(), and "
         "transition_activation_state() define the formal activation vocabulary "
-        "above the canonical invocation substrate.  Higher-level orchestration "
-        "paths interact with nodes through the activation layer rather than "
-        "through bare NodeInvocationEnvelope construction."
+        "above the canonical invocation substrate.  Dispatch-time enforcement "
+        "authority remains core.node_invocation_governance + "
+        "core.node_activation_context; PR-14 activation-state functions are "
+        "available as explicit orchestration-layer modeling and are surfaced via "
+        "get_pr14_activation_runtime_status() to avoid implying mandatory "
+        "invoke_node() enforcement where it is not wired."
     )
 except ImportError:  # pragma: no cover
     NODE_COGNITION_ACTIVATION_ALIGNED_PR14: str = (  # type: ignore[no-redef]

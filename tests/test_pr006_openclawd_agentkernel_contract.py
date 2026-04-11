@@ -105,6 +105,9 @@ async def _run_process(
     *,
     message: str = "hello",
     session_id: str = "s1",
+    continuum_state: Optional[Dict[str, Any]] = None,
+    execution_result: Optional[Dict[str, Any]] = None,
+    execution_path: str = "none",
     **process_kwargs: Any,
 ) -> dict:
     """Run oc.process() with all heavy side-effects patched out.
@@ -116,11 +119,11 @@ async def _run_process(
     ), patch.object(
         oc, "_parse_intent", new_callable=AsyncMock
     ), patch.object(
-        oc, "_run_continuum", return_value=None
+        oc, "_run_continuum", return_value=continuum_state
     ), patch.object(
-        oc, "_run_execution", return_value={}
+        oc, "_run_execution", return_value=execution_result or {}
     ), patch.object(
-        oc, "_determine_execution_path", return_value="none"
+        oc, "_determine_execution_path", return_value=execution_path
     ), patch.object(
         oc, "_build_execution_plan", return_value=None
     ), patch.object(
@@ -440,6 +443,37 @@ class TestMultiModelRoutingAuthority:
             "authority."
         )
 
+
+# ---------------------------------------------------------------------------
+# 19b  Kernel intent vs continuum action semantics
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionSemanticsDiagnostics:
+    @pytest.mark.asyncio
+    async def test_metadata_exposes_divergence_between_kernel_intent_and_execution_path(self):
+        oc = _make_openclawd()
+        mock_kernel = _make_kernel_mock(mode="task_execute")
+        result = await _run_process(
+            oc,
+            mock_kernel,
+            continuum_state={"decision": {"action_level": "observe"}},
+            execution_result={"action_taken": "none"},
+            execution_path="none",
+        )
+
+        semantics = result.get("metadata", {}).get("execution_semantics") or {}
+        assert semantics.get("decision_tracks") == "dual_track"
+        assert semantics.get("kernel_intent_mode") == "task_execute"
+        assert semantics.get("continuum_action_level") == "observe"
+        assert semantics.get("execution_path") == "none"
+        assert semantics.get("intent_action_alignment") == "divergent"
+        assert semantics.get("execution_path_source") == "OpenClawd._determine_execution_path"
+        pr14_status = result.get("metadata", {}).get("pr14_activation_runtime_status")
+        assert isinstance(pr14_status, dict)
+        assert pr14_status.get("pr14_activation_model_available") is True
+        assert pr14_status.get("dispatch_time_enforced") is False
+        assert isinstance(pr14_status.get("dispatch_authority_layers"), list)
 
 # ---------------------------------------------------------------------------
 # 20-22  Authority Chain Consistency

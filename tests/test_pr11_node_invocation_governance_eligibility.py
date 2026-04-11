@@ -468,7 +468,6 @@ class TestUnifiedNodeExecutorGovernanceGate:
     @pytest.mark.asyncio
     async def test_ineligible_node_denied_by_executor(self) -> None:
         from core.node_invocation import NodeInvocationEnvelope, UnifiedNodeExecutor
-        from core.node_invocation_governance import NodeInvocationGovernanceOverride
 
         # Build a registry with an archived node
         arc_node = _make_node_info("arc-exec-1", arch_class_value="ARCHIVED_NODE", healthy=True)
@@ -564,6 +563,33 @@ class TestUnifiedNodeExecutorGovernanceGate:
             result = await executor.execute(envelope)
 
         # Must NOT be denied for governance reasons
+        assert result.eligibility_denial is None
+
+    @pytest.mark.asyncio
+    async def test_executor_does_not_require_pr14_activation_state_layer(self) -> None:
+        """Canonical invoke path stays authoritative without PR-14 activation calls."""
+        from core.node_invocation import NodeInvocationEnvelope, UnifiedNodeExecutor
+
+        cap_node = _make_node_info("cap-no-pr14", arch_class_value="CAPABILITY_NODE", healthy=True)
+        registry = _make_registry(node_info=cap_node)
+        executor = UnifiedNodeExecutor()
+
+        with patch(
+            "core.node_invocation_governance.get_node_fabric_registry",
+            return_value=registry,
+        ), patch(
+            "core.node_cognition_activation.evaluate_activation_eligibility",
+            side_effect=AssertionError("PR-14 eligibility must not run in invoke_node dispatch"),
+        ), patch(
+            "core.node_cognition_activation.transition_activation_state",
+            side_effect=AssertionError("PR-14 transition must not run in invoke_node dispatch"),
+        ):
+            envelope = NodeInvocationEnvelope(
+                node_id="cap-no-pr14",
+                action="test_action",
+            )
+            result = await executor.execute(envelope)
+
         assert result.eligibility_denial is None
 
 

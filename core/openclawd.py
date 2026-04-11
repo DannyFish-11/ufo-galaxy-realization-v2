@@ -2727,6 +2727,58 @@ class OpenClawd:
         return "none"
 
     @staticmethod
+    def _build_execution_semantics(
+        *,
+        kernel_intent_mode: Optional[str],
+        continuum_state: Optional[Dict[str, Any]],
+        execution_result: Optional[Dict[str, Any]],
+        execution_path: str,
+    ) -> Dict[str, Any]:
+        """Build explicit diagnostics for kernel-intent vs continuum-action tracks."""
+        _decision = (continuum_state or {}).get("decision", {})
+        _continuum_action = _decision.get("action_level")
+        _action_taken = (execution_result or {}).get("action_taken")
+
+        _kernel_mode = (
+            str(kernel_intent_mode).strip() or None
+            if kernel_intent_mode is not None
+            else None
+        )
+        _alignment = "not_applicable"
+        # chat_only aligns when execution_path is "none", while task/hybrid
+        # aligns when execution_path is not "none".
+        if _kernel_mode == "chat_only":
+            _alignment = "aligned" if execution_path == "none" else "divergent"
+        elif _kernel_mode in ("task_execute", "hybrid"):
+            _alignment = "aligned" if execution_path != "none" else "divergent"
+
+        return {
+            "decision_tracks": (
+                "dual_track"
+                if _kernel_mode
+                else "continuum_only"
+            ),
+            "tracks_are_intentionally_separate": True,
+            "kernel_intent_mode": _kernel_mode,
+            "continuum_action_level": _continuum_action,
+            "execution_action_taken": _action_taken,
+            "execution_path": execution_path,
+            "execution_path_source": "OpenClawd._determine_execution_path",
+            "intent_action_alignment": _alignment,
+        }
+
+    @staticmethod
+    def _get_pr14_activation_runtime_status() -> Optional[Dict[str, Any]]:
+        """Return explicit PR-14 dispatch status diagnostics when available."""
+        try:
+            from core.node_cognition_activation import get_pr14_activation_runtime_status
+
+            return get_pr14_activation_runtime_status()
+        except Exception as _err:
+            logger.debug("Failed to retrieve PR-14 runtime status diagnostics: %s", _err)
+            return None
+
+    @staticmethod
     def _serialize_cognitive_execution_hint(
         cognitive_execution_hint: Optional[Any],
         *,
@@ -3351,6 +3403,12 @@ class OpenClawd:
                         entry_mode=_entry_mode,
                         execution_result=_exec_result_k,
                     )
+                    _execution_semantics_k = self._build_execution_semantics(
+                        kernel_intent_mode=str(getattr(kernel_result, "mode", "")),
+                        continuum_state=_continuum_state_dict,
+                        execution_result=_exec_result_k,
+                        execution_path=_exec_path_k,
+                    )
                     # PR-4: structured observability log whenever execution_path is set.
                     # PR-18: include cognitive hint region in the manifest log entry so
                     # cognitive-state wiring influence is visible in execution-path logs.
@@ -3457,6 +3515,11 @@ class OpenClawd:
                             # kernel suggest a delegation path; OpenClawd decides
                             # whether to adopt it.
                             "kernel_delegation_hint": kernel_result.delegation_hint,
+                            # PR-42: explicit dual-track semantics snapshot
+                            # (kernel intent vs continuum action vs execution path).
+                            "execution_semantics": _execution_semantics_k,
+                            # PR-42: explicit PR-14 activation dispatch status.
+                            "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
                             # PR-006: delegation_hint_decision records how OpenClawd
                             # treated the kernel's advisory hint.  The hint is NEVER
                             # automatically promoted to a binding directive; OpenClawd
@@ -3723,6 +3786,12 @@ class OpenClawd:
                 execution_result=_exec_result2,
                 cross_device_dispatched=_cross_device2,
             )
+            _execution_semantics2 = self._build_execution_semantics(
+                kernel_intent_mode=None,
+                continuum_state=_continuum_state_dict2,
+                execution_result=_exec_result2,
+                execution_path=_exec_path2,
+            )
             # PR-4: structured observability log whenever execution_path is set.
             # PR-18: include cognitive hint region/preference in the manifest log
             # entry so cognitive-state wiring influence is visible in execution logs.
@@ -3807,6 +3876,10 @@ class OpenClawd:
                     "handler": handler_name,
                     "entry_mode": _entry_mode,
                     "execution_path": _exec_path2,
+                    # PR-42: explicit execution semantics snapshot for direct path.
+                    "execution_semantics": _execution_semantics2,
+                    # PR-42: explicit PR-14 activation dispatch status.
+                    "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
                     # PR-9: subject decision authority annotation (additive)
                     "authority_role": "subject_decision_authority",
                     # PR-11: compact execution plan summary for diagnostics

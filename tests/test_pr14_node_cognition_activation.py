@@ -52,6 +52,7 @@ from core.node_cognition_activation import (
     NODE_COGNITION_ACTIVATION_IS_AUTHORITY,
     NODE_COGNITION_ACTIVATION_PR14_SENTINEL,
     ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY,
+    PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY,
     VALID_ACTIVATION_TRANSITIONS,
     ActivationEligibilityOutcome,
     ActivationTransitionReason,
@@ -66,6 +67,7 @@ from core.node_cognition_activation import (
     build_default_activation_policy,
     evaluate_activation_eligibility,
     get_activation_summary,
+    get_pr14_activation_runtime_status,
     transition_activation_state,
 )
 
@@ -1221,6 +1223,21 @@ class TestNoParallelAuthority:
 
     def test_orchestration_policy_references_activation_layer(self):
         assert "activation" in ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY.lower()
+
+    def test_dispatch_runtime_status_policy_is_explicitly_non_dispatch(self):
+        lower = PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY.lower()
+        assert "not currently invoked" in lower
+        assert "unifiednodeexecutor.execute" in lower
+
+
+class TestPR14RuntimeStatus:
+    def test_runtime_status_explicitly_marks_dispatch_as_not_enforced(self):
+        status = get_pr14_activation_runtime_status()
+        assert status["pr14_activation_model_available"] is True
+        assert status["dispatch_time_enforced"] is False
+        assert isinstance(status["dispatch_authority_layers"], list)
+        assert len(status["dispatch_authority_layers"]) >= 1
+        assert status["status_policy"] == PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY
 
 
 # ===========================================================================
