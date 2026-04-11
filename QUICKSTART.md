@@ -1,5 +1,10 @@
 # Galaxy - 快速上手指南
 
+> ⚠️ **先看真实运行路径**：请先阅读
+> [`docs/CLONE_TO_USE_REALITY.md`](docs/CLONE_TO_USE_REALITY.md)。
+> 该文档定义了当前仓库的 canonical clone-to-use 路径、
+> 桌面状态板唤醒方式、交互入口与跨设备边界。
+
 ## 🎯 系统概览 (Round 2 - R-4)
 
 Galaxy 是一个 **L4 级自主性智能系统**，集成了：

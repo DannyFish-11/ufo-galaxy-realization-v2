@@ -48,7 +48,7 @@ Usage
     python -m windows_client.status_board_v2
 
     # Specify a different server:
-    python -m windows_client.status_board_v2 --host 10.0.0.5 --port 8000
+    python -m windows_client.status_board_v2 --host 10.0.0.5 --port 8299
 
     # Read from a JSON file instead of the server:
     python -m windows_client.status_board_v2 --file /tmp/projection.json
@@ -88,7 +88,7 @@ from .metrics_surface import MetricsSurface
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
-from .config_control import ConfigControlSurface, ControlOperation, ControlApplyResult
+from .config_control import ConfigControlSurface, ControlApplyResult
 
 _RESET = _ansi.RESET
 _BOLD = _ansi.BOLD
@@ -110,7 +110,7 @@ class StatusBoardV2App:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 8000,
+        port: int = 8299,
         interval: float = 1.0,
         file_path: Optional[str] = None,
         from_stdin: bool = False,
@@ -274,7 +274,7 @@ def _format_control_result(result) -> str:
 
 def run(
     host: str = "127.0.0.1",
-    port: int = 8000,
+    port: int = 8299,
     interval: float = 1.0,
     file_path: Optional[str] = None,
     from_stdin: bool = False,
@@ -340,8 +340,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--port",
         type=int,
-        default=8000,
-        help="Galaxy server port (default: 8000)",
+        default=8299,
+        help="Galaxy server port (default: 8299)",
     )
     p.add_argument(
         "--interval",

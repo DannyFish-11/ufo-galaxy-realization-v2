@@ -12,8 +12,23 @@
 | [tests/README.md](tests/README.md) | Running tests — quick reference |
 | [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
 | [docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md) | Maintainer reference |
+| [docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md) | Canonical clone-to-use runtime truth |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
 | [QUICKSTART.md](QUICKSTART.md) | Five-minute local setup |
+
+---
+
+## 🧭 Clone-to-use reality (authoritative quick path)
+
+If you only need the truthful runtime path, start here:
+**[docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md)**.
+
+Minimum canonical commands:
+
+```bash
+python main.py --host 127.0.0.1 --port 8299
+python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
+```
 
 ---
 

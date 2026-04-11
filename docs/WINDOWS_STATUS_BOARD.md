@@ -1,134 +1,86 @@
 # Windows Desktop Status Board
 
-> The Windows desktop status board is a **read-only** tri-state + runtime domain
-> panel.  It does NOT accept chat input or send commands.
+> Canonical desktop status surface: `windows_client/status_board_v2/`  
+> Launch command: `python -m windows_client.status_board_v2`
 
 ---
 
 ## Purpose
 
-The Windows desktop status board provides a lightweight, read-only view of the
-current OpenClawd two-dimensional system posture:
+The Windows desktop status board is a **read-only** runtime projection panel.
+It shows the operator what the system is doing now; it is **not** a chat input
+surface and does not own execution authority.
 
-1. **`tri_state_phase`** — what the system is doing (`silent` / `liminal` / `manifest`)
-2. **`runtime_domain`** — where execution is happening (`local` / `cross_device` / `transition`)
+Primary fields:
 
-Operators can observe the system at a glance without interacting with it
-directly.
-
----
-
-## Tri-State Mapping
-
-| `TriStatePhase` | Visual Indicator | Meaning |
-|---|---|---|
-| `silent` | ○ Dim / minimal | Native multimodal ingress; system is sensing but not acting |
-| `liminal` | ◑ Transitioning | Intent forming; may be routing to local or cross-device execution |
-| `manifest` | ● Active | Structure formed; execution in progress |
-
-> **`receding` is an internal mechanism and is never shown on the status board.**
-> When the internal phase is `receding`, the board shows `silent` (same as `formless`).
+1. `tri_state_phase` — `silent` / `liminal` / `manifest`
+2. `runtime_domain` — `local` / `cross_device` / `transition`
 
 ---
 
-## Runtime Domain Mapping
+## Wake-up / Launch (clone → run)
 
-| `RuntimeDomain` | Meaning |
-|---|---|
-| `local` | Execution is confined to this single device / process |
-| `cross_device` | Execution spans multiple devices or remote nodes |
-| `transition` | Actively deciding between local and cross-device routing |
-| `null` / unknown | Domain not yet determined |
-
----
-
-## What the Status Board Is NOT
-
-- It is **not** a chat window or conversational input surface.
-- It does **not** send commands to OpenClawd directly.
-- It does **not** replace or duplicate the AIP ingress pipeline.
-
-All input to OpenClawd goes through the AIP ingress pipeline:
-`windows_aip_client.py → WindowsExecutionArbiter`.
-
----
-
-## How to Run
-
-The status board is implemented as a self-contained CLI tool at
-`windows_client/status_board.py`.
-
-### Requirements
-
-- Python 3.9+ (standard library only — no extra dependencies needed)
-- A running Galaxy / OpenClawd server
-
-### Launch
+1. Start Galaxy backend (canonical startup):
 
 ```bash
-# Poll the default server (http://127.0.0.1:8000)
-python windows_client/status_board.py
-
-# Specify server address
-python windows_client/status_board.py --host 10.0.0.5 --port 8000
-
-# Change poll interval (seconds, default: 1.0)
-python windows_client/status_board.py --interval 2.0
-
-# Disable ANSI colour (plain terminals / log redirection)
-python windows_client/status_board.py --no-color
-
-# Full help
-python windows_client/status_board.py --help
+python main.py --host 127.0.0.1 --port 8299
 ```
 
-Press **Ctrl-C** to stop.
+2. In another terminal, wake the desktop status board:
+
+```bash
+python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
+```
+
+The board then polls every interval and renders runtime projection snapshots.
 
 ---
 
-## Data Source
+## Data source
 
-The board polls the Galaxy REST endpoint::
+Status Board V2 polls the canonical projection endpoint:
 
-    GET http://<host>:<port>/api/v1/continuum/state
-
-Expected response schema (relevant subset):
-
-```json
-{
-  "tri_state_phase": "silent" | "liminal" | "manifest",
-  "runtime_domain":  "local" | "cross_device" | "transition" | null,
-  "presence_intensity": 0.0,
-  "coherence": 0.0
-}
+```text
+GET http://<host>:<port>/api/v1/projection/runtime
 ```
 
-If the endpoint is unreachable the board displays `OFFLINE` and retries at
-the configured poll interval.
+If the endpoint is unreachable, the board shows `OFFLINE` and keeps retrying.
 
 ---
 
-## Reading State in Code
+## Tri-state mapping
 
-```python
-from core.continuum import TriStatePhase, RuntimeDomain
+| `tri_state_phase` | Meaning |
+|---|---|
+| `silent` | sensing / idle shell posture |
+| `liminal` | intent formation / transition posture |
+| `manifest` | active execution posture |
 
-# Both dimensions from a ContinuumState object
-phase  = state.tri_state_phase   # TriStatePhase.SILENT | LIMINAL | MANIFEST
-domain = state.runtime_domain    # RuntimeDomain.LOCAL | CROSS_DEVICE | TRANSITION | None
-
-# From a raw dict (e.g. from an API response)
-phase_str  = continuum_state_dict.get("tri_state_phase", "silent")
-domain_str = continuum_state_dict.get("runtime_domain")  # may be None
-
-phase  = TriStatePhase(phase_str)
-domain = RuntimeDomain(domain_str) if domain_str else None
-```
+The lifecycle authority remains `DesktopPresenceRuntime` (`silent → liminal → manifest → silent`).
 
 ---
 
-## Related Documents
+## Interaction boundary (truthful)
 
-- [OPENCLAWD_STATE_CONTINUUM.md](OPENCLAWD_STATE_CONTINUUM.md) — full two-dimensional protocol overview
-- [windows_mcp_server.md](windows_mcp_server.md) — active Windows execution architecture
-- [PHASE_TRANSITION_TABLE.md](PHASE_TRANSITION_TABLE.md) — internal transition rules
+- ✅ Status board: projection display / operator observability
+- ❌ Status board: chat input, command dispatch, execution control
+
+Canonical user interaction path is API/adapter ingress (for example `POST /api/v1/chat`)
+which then enters:
+
+`DesktopPresenceRuntime.handle_request(...) → OpenClawd`
+
+---
+
+## Legacy status board note
+
+`windows_client/status_board.py` is a retired legacy module and intentionally
+raises at runtime. Do not use it for new runs.
+
+---
+
+## Related documents
+
+- `docs/STATUS_BOARD_V2.md`
+- `docs/DESKTOP_SEMANTIC_CLOSURE.md`
+- `docs/architecture/CANONICAL_ENTRYPOINTS.md`
