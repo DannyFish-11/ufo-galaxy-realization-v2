@@ -3522,10 +3522,10 @@ def _assemble_projection() -> Dict[str, Any]:
         from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
     except Exception as exc:
         logger.warning("Projection imports unavailable, returning minimal payload: %s", exc)
-        return _minimal_fallback_payload()
+        return _minimal_fallback_payload(reason="projection_imports_unavailable")
 
     # --- 1. Continuum state ------------------------------------------------
-    continuum_state = _get_continuum_state()
+    continuum_state, continuum_source = _get_continuum_state_with_source()
 
     # --- 2. Optional topology route plan -----------------------------------
     route_plan = _get_route_plan(continuum_state)
@@ -3536,7 +3536,10 @@ def _assemble_projection() -> Dict[str, Any]:
     # --- 4. Build and serialise -------------------------------------------
     try:
         if continuum_state is None:
-            return _minimal_fallback_payload()
+            return _minimal_fallback_payload(
+                reason="continuum_unavailable",
+                continuum_source=continuum_source,
+            )
         projection = build_runtime_projection(
             continuum_state=continuum_state,
             route_plan=route_plan,
@@ -3562,11 +3565,25 @@ def _assemble_projection() -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("_assemble_projection: runtime enrichment failed: %s", exc)
 
+    payload["projection_truth_context"] = {
+        "continuum_source": continuum_source,
+        "reflects_live_continuum_state": continuum_source in (
+            "core.cognitive.cognitive_field_engine",
+            "core.desktop_presence_runtime",
+        ),
+        "authority_scope": "observational_runtime_projection",
+        "hard_authority_fields": ["tri_state_phase", "runtime_domain"],
+        "soft_or_metadata_fields": [
+            "route_reason",
+            "current_task_summary",
+            "execution_stage",
+        ],
+    }
     return payload
 
 
-def _get_continuum_state():
-    """Return the live ContinuumState, or a minimal silent state on failure."""
+def _get_continuum_state_with_source():
+    """Return ContinuumState and source authority, with explicit fallback provenance."""
     try:
         # Try the cognitive field engine first (Block-3 integration).
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
@@ -3575,7 +3592,7 @@ def _get_continuum_state():
         if engine is not None and hasattr(engine, "get_continuum_state"):
             state = engine.get_continuum_state()
             if state is not None:
-                return state
+                return state, "core.cognitive.cognitive_field_engine"
     except Exception:
         pass
 
@@ -3587,7 +3604,7 @@ def _get_continuum_state():
         if runtime is not None and hasattr(runtime, "get_continuum_state"):
             state = runtime.get_continuum_state()
             if state is not None:
-                return state
+                return state, "core.desktop_presence_runtime"
     except Exception:
         pass
 
@@ -3595,9 +3612,15 @@ def _get_continuum_state():
         # Final fallback: minimal silent state so the board always renders.
         from core.continuum.types import ContinuumPhase, ContinuumState
 
-        return ContinuumState(phase=ContinuumPhase.FORMLESS)
+        return ContinuumState(phase=ContinuumPhase.FORMLESS), "core.routes.projection.synthetic_fallback"
     except Exception:
-        return None
+        return None, "unavailable"
+
+
+def _get_continuum_state():
+    """Return the best-effort ContinuumState object for existing call sites."""
+    state, _source = _get_continuum_state_with_source()
+    return state
 
 
 def _get_route_plan(continuum_state):
@@ -3634,7 +3657,11 @@ def _get_execution_summary() -> Optional[Any]:
         return None
 
 
-def _minimal_fallback_payload() -> Dict[str, Any]:
+def _minimal_fallback_payload(
+    *,
+    reason: str = "projection_unavailable",
+    continuum_source: str = "unknown",
+) -> Dict[str, Any]:
     """Return a minimal valid projection payload for failure cases."""
     return {
         "tri_state_phase": "silent",
@@ -3651,6 +3678,19 @@ def _minimal_fallback_payload() -> Dict[str, Any]:
         "execution_stage": None,
         "current_task_summary": None,
         "timestamp": time.time(),
+        "projection_truth_context": {
+            "continuum_source": continuum_source,
+            "reflects_live_continuum_state": False,
+            "authority_scope": "metadata_only_fallback",
+            "hard_authority_fields": [],
+            "soft_or_metadata_fields": [
+                "tri_state_phase",
+                "runtime_domain",
+                "route_reason",
+                "current_task_summary",
+            ],
+            "fallback_reason": reason,
+        },
     }
 
 

@@ -814,6 +814,20 @@ def build_runtime_decision_diagnostics(
                 entry["detail"] = rec.detail
             all_records.append(entry)
 
+        hard_layers = [r.layer_name for r in explanation.hard_gates]
+        active_soft_layers = [
+            r.layer_name for r in explanation.soft_influences if r.active
+        ]
+        soft_layers = [r.layer_name for r in explanation.soft_influences]
+        metadata_only_fields = [
+            "execution_path",
+            "model_selected",
+            "provider_selected",
+            "model_selection_reason",
+            "assembled_at",
+            "observability_authority",
+        ]
+
         return {
             "execution_path": explanation.execution_path,
             "model_selected": explanation.model_selected,
@@ -837,6 +851,12 @@ def build_runtime_decision_diagnostics(
             "planner_strategy": explanation.planner_strategy,
             "active_soft_influence_count": explanation.active_influence_count,
             "influence_layers": all_records,
+            "decision_signal_breakdown": {
+                "hard_authority_layers": hard_layers,
+                "soft_influence_layers": soft_layers,
+                "active_soft_influence_layers": active_soft_layers,
+                "metadata_only_fields": metadata_only_fields,
+            },
             "assembled_at": explanation.assembled_at,
             "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
         }
@@ -869,6 +889,19 @@ def _minimal_diagnostics_fallback() -> Dict[str, Any]:
         "planner_strategy": None,
         "active_soft_influence_count": 0,
         "influence_layers": [],
+        "decision_signal_breakdown": {
+            "hard_authority_layers": [],
+            "soft_influence_layers": [],
+            "active_soft_influence_layers": [],
+            "metadata_only_fields": [
+                "execution_path",
+                "model_selected",
+                "provider_selected",
+                "model_selection_reason",
+                "assembled_at",
+                "observability_authority",
+            ],
+        },
         "assembled_at": time.time(),
         "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
     }

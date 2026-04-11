@@ -553,6 +553,7 @@ class TestGroupF_BuildDiagnostics:
         "planner_strategy",
         "active_soft_influence_count",
         "influence_layers",
+        "decision_signal_breakdown",
         "assembled_at",
         "observability_authority",
     )
@@ -671,6 +672,21 @@ class TestGroupF_BuildDiagnostics:
         for bad in (None, "string", 42, {}, []):
             d = build_runtime_decision_diagnostics(bad)  # type: ignore
             assert isinstance(d, dict)
+
+    def test_F12_signal_breakdown_distinguishes_hard_soft_and_metadata(self):
+        from core.runtime_decision_observability import (
+            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+        )
+
+        e = build_runtime_decision_explanation(
+            governance_decision=_make_governance_dict(eligible=False, denial_reasons=["blocked"]),
+            activation_budget_hint=_make_budget_hint(influenced=True),
+        )
+        d = build_runtime_decision_diagnostics(e)
+        breakdown = d["decision_signal_breakdown"]
+        assert "invocation_governance" in breakdown["hard_authority_layers"]
+        assert "activation_budget" in breakdown["soft_influence_layers"]
+        assert "execution_path" in breakdown["metadata_only_fields"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
