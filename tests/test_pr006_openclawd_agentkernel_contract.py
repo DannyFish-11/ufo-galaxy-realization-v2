@@ -42,7 +42,6 @@ Authority Chain Consistency
 from __future__ import annotations
 
 import pathlib
-from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -477,9 +476,20 @@ class TestExecutionSemanticsDiagnostics:
         assert isinstance(pr14_status.get("dispatch_authority_layers"), list)
 
     @pytest.mark.asyncio
-    async def test_direct_path_handler_metadata_cannot_override_execution_semantics_authority(self):
+    async def test_handler_metadata_cannot_override_openclawd_authority(self):
+        from core.ai_intent import ParsedIntent
+
         oc = _make_openclawd()
-        parsed_intent = SimpleNamespace(intent="chat", confidence=0.9, suggestions=[])
+        parsed_intent = ParsedIntent(
+            intent="chat",
+            command="chat",
+            targets=[],
+            params={},
+            confidence=0.9,
+            raw_text="hello",
+            context_used=False,
+            suggestions=[],
+        )
         handler_result = {
             "success": True,
             "response": "ok",

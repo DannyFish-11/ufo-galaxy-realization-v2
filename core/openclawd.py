@@ -3848,9 +3848,11 @@ class OpenClawd:
                 # PR-24: embed canonical routing decision in the plan
                 multimodal_route_decision=_multimodal_route,
             )
-            _handler_metadata = result.get("metadata", {})
-            if not isinstance(_handler_metadata, dict):
-                _handler_metadata = {}
+            # Handler metadata is additive-only here. We guard type strictly so
+            # malformed values (e.g. string/list) cannot break dict expansion.
+            _handler_metadata = (
+                result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
+            )
 
             return {
                 "success": result.get("success", True),
