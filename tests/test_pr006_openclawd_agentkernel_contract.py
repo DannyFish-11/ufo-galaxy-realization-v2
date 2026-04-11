@@ -99,7 +99,14 @@ def _make_openclawd():
     return oc
 
 
-async def _run_process(oc, mock_kernel, *, message: str = "hello", session_id: str = "s1") -> dict:
+async def _run_process(
+    oc,
+    mock_kernel,
+    *,
+    message: str = "hello",
+    session_id: str = "s1",
+    **process_kwargs: Any,
+) -> dict:
     """Run oc.process() with all heavy side-effects patched out.
 
     Returns the result dict from process().
@@ -125,7 +132,7 @@ async def _run_process(oc, mock_kernel, *, message: str = "hello", session_id: s
     ), patch.object(
         oc, "sync_device_capabilities", return_value=None
     ):
-        return await oc.process(message=message, session_id=session_id)
+        return await oc.process(message=message, session_id=session_id, **process_kwargs)
 
 
 def _make_kernel_mock(
@@ -323,6 +330,60 @@ class TestDelegationHintAdvisory:
             "AgentKernel class docstring must state that delegation_hint is "
             "advisory only (PR-006)."
         )
+
+    @pytest.mark.asyncio
+    async def test_kernel_path_receives_fused_multimodal_message(self):
+        """Multimodal fusion suffix must be threaded into kernel.handle_message()."""
+        oc = _make_openclawd()
+        mock_kernel = _make_kernel_mock(delegation_hint=None)
+        fused = "[multimodal_fusion_summary] image=present"
+
+        with patch(
+            "core.perception.multimodal_bus.MultimodalBus.ingest",
+            return_value={"fusion_summary": fused},
+        ):
+            result = await _run_process(
+                oc,
+                mock_kernel,
+                message="hello",
+                multimodal_context=object(),
+            )
+
+        call_kwargs = mock_kernel.handle_message.call_args.kwargs
+        assert call_kwargs["message"] == f"hello\n\n{fused}", (
+            "OpenClawd must pass fused multimodal content to AgentKernel.handle_message() "
+            "instead of silently sending bare text."
+        )
+        assert result.get("metadata", {}).get("kernel_received_fused_multimodal_content") is True
+
+    @pytest.mark.asyncio
+    async def test_cognitive_execution_hint_metadata_explicitly_non_binding(self):
+        """Cognitive execution-path preference must be surfaced as advisory-only metadata."""
+        oc = _make_openclawd()
+        mock_kernel = _make_kernel_mock(delegation_hint=None)
+
+        class _Hint:
+            cognitive_region = "liminal"
+            execution_path_preference = "planning"
+            activation_budget = 0.6
+
+            def to_dict(self):
+                return {
+                    "cognitive_region": self.cognitive_region,
+                    "execution_path_preference": self.execution_path_preference,
+                    "activation_budget": self.activation_budget,
+                }
+
+        result = await _run_process(
+            oc,
+            mock_kernel,
+            cognitive_execution_hint=_Hint(),
+        )
+
+        cog_hint = result.get("metadata", {}).get("cognitive_execution_hint") or {}
+        assert cog_hint.get("hint_authority") == "advisory_only"
+        assert cog_hint.get("execution_path_preference_binding") == "advisory_only_non_binding"
+        assert cog_hint.get("influences_execution_path_routing") is False
 
 
 # ---------------------------------------------------------------------------

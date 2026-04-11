@@ -513,8 +513,14 @@ def build_cognitive_hint_metadata(
             return {
                 "cognitive_wiring_active": False,
                 "source": "unavailable",
+                "hint_authority": "advisory_only",
+                "execution_path_preference_binding": "advisory_only_non_binding",
+                "influences_execution_path_routing": False,
             }
         d = hint.to_dict()
+        d.setdefault("hint_authority", "advisory_only")
+        d.setdefault("execution_path_preference_binding", "advisory_only_non_binding")
+        d.setdefault("influences_execution_path_routing", False)
         if trace_id:
             d["trace_id"] = trace_id
         return d
