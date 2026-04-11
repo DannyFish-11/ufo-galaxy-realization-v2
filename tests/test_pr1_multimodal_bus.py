@@ -387,7 +387,7 @@ async def test_openclawd_process_multimodal_injects_summary_into_kernel_path():
 
     captured_messages: list[str] = []
 
-    async def _mock_kernel_handle_message(message, session_id=None, device_id=None, context=None):
+    async def mock_kernel_handle_message(message, session_id=None, device_id=None, context=None):
         captured_messages.append(message)
         return KernelResponse(
             success=True,
@@ -399,7 +399,7 @@ async def test_openclawd_process_multimodal_injects_summary_into_kernel_path():
         )
 
     fake_kernel = MagicMock()
-    fake_kernel.handle_message = AsyncMock(side_effect=_mock_kernel_handle_message)
+    fake_kernel.handle_message = AsyncMock(side_effect=mock_kernel_handle_message)
 
     with patch.object(oc, "_get_kernel", return_value=fake_kernel):
         with patch.object(oc, "sync_device_capabilities", return_value=0):
