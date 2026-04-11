@@ -96,6 +96,7 @@ Policy sentinels::
     ACTIVATION_STATE_TRANSITIONS_ARE_VALIDATED_POLICY
     COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY
     ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY
+    PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY
 
 Public API
 ----------
@@ -206,12 +207,22 @@ COGNITION_ROLE_IS_ASSIGNED_AT_ACTIVATION_NOT_REGISTRATION_POLICY: str = (
 
 ORCHESTRATION_MUST_USE_ACTIVATION_LAYER_NOT_BARE_INVOCATION_POLICY: str = (
     "NODE_COGNITION_ACTIVATION::ORCHESTRATION_PATH_POLICY_V1: "
-    "Higher-level orchestration and planning layers that interact with nodes "
-    "in a cognition-aware context MUST go through the activation layer "
-    "(evaluate_activation_eligibility + transition_activation_state) rather "
-    "than directly constructing NodeInvocationEnvelopes.  Direct bare "
-    "invocation bypasses activation-state tracking, role assignment, and "
-    "policy-aware selection and must not be used from orchestration paths."
+    "The PR-14 activation state model is available for cognition-aware "
+    "orchestration flows that explicitly opt into activation contexts.  "
+    "Canonical dispatch-time enforcement remains the invocation governance + "
+    "activation-context path (core.node_invocation / "
+    "core.node_invocation_governance / core.node_activation_context).  "
+    "Do not assume evaluate_activation_eligibility() or "
+    "transition_activation_state() are automatically enforced by invoke_node()."
+)
+
+PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY: str = (
+    "NODE_COGNITION_ACTIVATION::DISPATCH_RUNTIME_STATUS_POLICY_V1: "
+    "PR-14 activation state functions define a canonical cognition model, but "
+    "they are not currently invoked as mandatory dispatch-time enforcement in "
+    "core.node_invocation.UnifiedNodeExecutor.execute().  Runtime authority for "
+    "dispatch-time admission remains invocation governance and activation-context "
+    "checks; PR-14 remains an explicit orchestration-layer model."
 )
 
 # ===========================================================================
@@ -1125,6 +1136,23 @@ def get_activation_summary(
         "excluded_count": snapshot.excluded_count,
         "participating_count": snapshot.selected_count + snapshot.active_count,
         "authority": NODE_COGNITION_ACTIVATION_IS_AUTHORITY,
+    }
+
+
+def get_pr14_activation_runtime_status() -> Dict[str, Any]:
+    """Return explicit runtime status for PR-14 activation in canonical dispatch.
+
+    This intentionally distinguishes the richer PR-14 activation model from the
+    currently authoritative dispatch-time path.
+    """
+    return {
+        "pr14_activation_model_available": True,
+        "dispatch_time_enforced": False,
+        "dispatch_authority_layers": [
+            "core.node_invocation_governance.evaluate_invocation_governance",
+            "core.node_activation_context.evaluate_node_activation_context",
+        ],
+        "status_policy": PR14_ACTIVATION_DISPATCH_RUNTIME_STATUS_POLICY,
     }
 
 
