@@ -343,6 +343,7 @@ class TestGroupD_RuntimeDecisionExplanation:
             "activation_budget_active", "activation_budget_mode",
             "memory_bias_posture", "memory_influenced_planner",
             "cognitive_region", "execution_path_preference",
+            "execution_path_preference_binding", "execution_path_preference_authority",
             "planner_strategy", "source_authority", "assembled_at",
         ):
             assert key in d, f"Missing key: {key}"
@@ -548,6 +549,7 @@ class TestGroupF_BuildDiagnostics:
         "activation_budget_active", "activation_budget_mode",
         "memory_bias_posture", "memory_influenced_planner",
         "cognitive_region", "execution_path_preference",
+        "execution_path_preference_binding", "execution_path_preference_authority",
         "planner_strategy",
         "active_soft_influence_count",
         "influence_layers",
@@ -600,6 +602,17 @@ class TestGroupF_BuildDiagnostics:
         )
         d = build_runtime_decision_diagnostics(e)
         assert d["hard_gate_count"] >= 1
+
+    def test_F05b_execution_path_preference_marked_non_binding(self):
+        from core.runtime_decision_observability import (
+            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+        )
+        e = build_runtime_decision_explanation(
+            cognitive_hint_dict=_make_cognitive_hint_dict(region="LIMINAL", path_pref="planning")
+        )
+        d = build_runtime_decision_diagnostics(e)
+        assert d["execution_path_preference_binding"] == "advisory_only_non_binding"
+        assert d["execution_path_preference_authority"] == "soft_hint_non_binding"
 
     def test_F06_active_soft_influence_count(self):
         from core.runtime_decision_observability import (

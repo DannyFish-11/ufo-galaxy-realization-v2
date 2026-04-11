@@ -2726,6 +2726,56 @@ class OpenClawd:
             return "local"
         return "none"
 
+    @staticmethod
+    def _serialize_cognitive_execution_hint(
+        cognitive_execution_hint: Optional[Any],
+        *,
+        trace_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Serialize the cognitive execution hint with explicit advisory semantics."""
+        if cognitive_execution_hint is None:
+            return None
+        try:
+            from core.cognitive.cognitive_execution_policy import (
+                build_cognitive_hint_metadata as _build_cognitive_hint_metadata,
+            )
+
+            return _build_cognitive_hint_metadata(
+                cognitive_execution_hint,
+                trace_id=trace_id,
+            )
+        except Exception:
+            pass
+
+        try:
+            if hasattr(cognitive_execution_hint, "to_dict"):
+                _hint_dict = cognitive_execution_hint.to_dict()
+            elif isinstance(cognitive_execution_hint, dict):
+                _hint_dict = dict(cognitive_execution_hint)
+            else:
+                return {
+                    "cognitive_wiring_active": True,
+                    "source": "openclawd_fallback",
+                    "hint_authority": "advisory_only",
+                    "execution_path_preference_binding": "advisory_only_non_binding",
+                    "influences_execution_path_routing": False,
+                }
+
+            _hint_dict.setdefault("hint_authority", "advisory_only")
+            _hint_dict.setdefault("execution_path_preference_binding", "advisory_only_non_binding")
+            _hint_dict.setdefault("influences_execution_path_routing", False)
+            if trace_id:
+                _hint_dict.setdefault("trace_id", trace_id)
+            return _hint_dict
+        except Exception:
+            return {
+                "cognitive_wiring_active": True,
+                "source": "openclawd_error_fallback",
+                "hint_authority": "advisory_only",
+                "execution_path_preference_binding": "advisory_only_non_binding",
+                "influences_execution_path_routing": False,
+            }
+
     # ========================================================================
     # 主入口
     # ========================================================================
@@ -2909,6 +2959,7 @@ class OpenClawd:
                     _mm_context_dict = multimodal_context.model_dump()
                 except Exception:  # model_dump may raise AttributeError / ValidationError
                     pass
+        _kernel_message: str = f"{message}\n{_fusion_suffix}" if _fusion_suffix else message
 
         # ── PR-16: Canonical Perception State ─────────────────────────────────
         # Build the unified canonical perception truth that OpenClawd uses as
@@ -3187,7 +3238,7 @@ class OpenClawd:
             if kernel is not None:
                 try:
                     kernel_result = await kernel.handle_message(
-                        message=message,
+                        message=_kernel_message,
                         session_id=session_id,
                         device_id=device_id or "",
                         context=context or [],
@@ -3471,9 +3522,11 @@ class OpenClawd:
                             # cognitive_region / execution_path_preference / activation_budget
                             # influence the execution-path log entry but never override
                             # OpenClawd's final authority.
-                            "cognitive_execution_hint": (
-                                _cog_hint_k.to_dict() if _cog_hint_k is not None and hasattr(_cog_hint_k, "to_dict") else None
+                            "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
+                                _cog_hint_k,
+                                trace_id=trace_id,
                             ),
+                            "kernel_received_fused_multimodal_content": bool(_fusion_suffix),
                             # PR-36: production baseline status — confirms that the unified
                             # canonical control loop is active as the production baseline
                             # and reports coverage of canonical primary artifacts.
@@ -3798,8 +3851,9 @@ class OpenClawd:
                     "decision_timeline_snapshot": _decision_timeline_snapshot,
                     # PR-18: cognitive execution hint forwarded from the runtime shell.
                     # Advisory only — documents what cognitive-state wiring advised.
-                    "cognitive_execution_hint": (
-                        _cog_hint_d.to_dict() if _cog_hint_d is not None and hasattr(_cog_hint_d, "to_dict") else None
+                    "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
+                        _cog_hint_d,
+                        trace_id=trace_id,
                     ),
                     # PR-36: production baseline status — confirms that the unified
                     # canonical control loop is active as the production baseline

@@ -328,6 +328,13 @@ class RuntimeDecisionExplanation:
     execution_path_preference:
         Execution-path preference from the cognitive execution hint (e.g.
         ``"direct"`` / ``"planning"`` / ``"deferred"``), or ``None``.
+    execution_path_preference_binding:
+        Explicit authority qualifier for ``execution_path_preference``.
+        ``"advisory_only_non_binding"`` means this preference is surfaced as
+        a soft signal and does not directly override canonical routing.
+    execution_path_preference_authority:
+        Stable label describing the authority class for execution-path
+        preference (``"soft_hint_non_binding"``).
     planner_strategy:
         Execution strategy chosen by the planner (e.g. ``"single_agent"`` /
         ``"team_specialized"`` / ``"team_swarm"`` / ``"fractal"``), or ``None``.
@@ -354,6 +361,8 @@ class RuntimeDecisionExplanation:
     memory_influenced_planner: bool = False
     cognitive_region: Optional[str] = None
     execution_path_preference: Optional[str] = None
+    execution_path_preference_binding: str = "advisory_only_non_binding"
+    execution_path_preference_authority: str = "soft_hint_non_binding"
     planner_strategy: Optional[str] = None
     source_authority: str = "core.runtime_decision_observability"
     assembled_at: float = field(default_factory=time.time)
@@ -391,6 +400,8 @@ class RuntimeDecisionExplanation:
             "memory_influenced_planner": self.memory_influenced_planner,
             "cognitive_region": self.cognitive_region,
             "execution_path_preference": self.execution_path_preference,
+            "execution_path_preference_binding": self.execution_path_preference_binding,
+            "execution_path_preference_authority": self.execution_path_preference_authority,
             "planner_strategy": self.planner_strategy,
             "source_authority": self.source_authority,
             "assembled_at": self.assembled_at,
@@ -424,6 +435,12 @@ class RuntimeDecisionExplanation:
             memory_influenced_planner=bool(d.get("memory_influenced_planner", False)),
             cognitive_region=d.get("cognitive_region"),
             execution_path_preference=d.get("execution_path_preference"),
+            execution_path_preference_binding=d.get(
+                "execution_path_preference_binding", "advisory_only_non_binding"
+            ),
+            execution_path_preference_authority=d.get(
+                "execution_path_preference_authority", "soft_hint_non_binding"
+            ),
             planner_strategy=d.get("planner_strategy"),
             source_authority=d.get("source_authority", "core.runtime_decision_observability"),
             assembled_at=float(d.get("assembled_at", 0.0)),
@@ -721,6 +738,8 @@ def _build_explanation_impl(
         memory_influenced_planner=memory_influenced_planner,
         cognitive_region=cognitive_region,
         execution_path_preference=execution_path_preference,
+        execution_path_preference_binding="advisory_only_non_binding",
+        execution_path_preference_authority="soft_hint_non_binding",
         planner_strategy=planner_strategy,
     )
 
@@ -770,6 +789,8 @@ def build_runtime_decision_diagnostics(
         - ``memory_influenced_planner``
         - ``cognitive_region``
         - ``execution_path_preference``
+        - ``execution_path_preference_binding``
+        - ``execution_path_preference_authority``
         - ``planner_strategy``
         - ``active_soft_influence_count``
         - ``influence_layers``
@@ -811,6 +832,8 @@ def build_runtime_decision_diagnostics(
             "memory_influenced_planner": explanation.memory_influenced_planner,
             "cognitive_region": explanation.cognitive_region,
             "execution_path_preference": explanation.execution_path_preference,
+            "execution_path_preference_binding": "advisory_only_non_binding",
+            "execution_path_preference_authority": "soft_hint_non_binding",
             "planner_strategy": explanation.planner_strategy,
             "active_soft_influence_count": explanation.active_influence_count,
             "influence_layers": all_records,
@@ -841,6 +864,8 @@ def _minimal_diagnostics_fallback() -> Dict[str, Any]:
         "memory_influenced_planner": False,
         "cognitive_region": None,
         "execution_path_preference": None,
+        "execution_path_preference_binding": "advisory_only_non_binding",
+        "execution_path_preference_authority": "soft_hint_non_binding",
         "planner_strategy": None,
         "active_soft_influence_count": 0,
         "influence_layers": [],
