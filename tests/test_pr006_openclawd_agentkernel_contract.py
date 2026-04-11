@@ -350,7 +350,7 @@ class TestDelegationHintAdvisory:
             )
 
         call_kwargs = mock_kernel.handle_message.call_args.kwargs
-        assert call_kwargs["message"] == f"hello\n{fused}", (
+        assert call_kwargs["message"] == f"hello\n\n{fused}", (
             "OpenClawd must pass fused multimodal content to AgentKernel.handle_message() "
             "instead of silently sending bare text."
         )

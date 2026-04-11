@@ -2744,9 +2744,8 @@ class OpenClawd:
                 cognitive_execution_hint,
                 trace_id=trace_id,
             )
-        except Exception as _cog_meta_err:
-            logger.debug("cognitive hint metadata helper unavailable: %s", _cog_meta_err)
-            pass
+        except Exception as _err:
+            logger.debug("cognitive hint metadata helper unavailable: %s", _err)
 
         try:
             if hasattr(cognitive_execution_hint, "to_dict"):
@@ -2768,8 +2767,8 @@ class OpenClawd:
             if trace_id:
                 _hint_dict.setdefault("trace_id", trace_id)
             return _hint_dict
-        except Exception as _cog_ser_err:
-            logger.debug("cognitive hint serialization fallback failed: %s", _cog_ser_err)
+        except Exception as _err:
+            logger.debug("cognitive hint serialization fallback failed: %s", _err)
             return {
                 "cognitive_wiring_active": True,
                 "source": "openclawd_error_fallback",
@@ -2961,9 +2960,9 @@ class OpenClawd:
                     _mm_context_dict = multimodal_context.model_dump()
                 except Exception:  # model_dump may raise AttributeError / ValidationError
                     pass
-        _kernel_message: str = (
-            f"{message.rstrip()}\n{_fusion_suffix.lstrip()}" if _fusion_suffix else message
-        )
+        # Keep the original message/fusion text byte-for-byte and use an explicit
+        # separator so fused context is readable in the canonical kernel path.
+        _kernel_message: str = f"{message}\n\n{_fusion_suffix}" if _fusion_suffix else message
 
         # ── PR-16: Canonical Perception State ─────────────────────────────────
         # Build the unified canonical perception truth that OpenClawd uses as
