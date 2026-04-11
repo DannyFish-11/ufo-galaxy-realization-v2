@@ -31,7 +31,10 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+
+if TYPE_CHECKING:  # pragma: no cover
+    from core.continuum.types import ContinuumState
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -3579,13 +3582,29 @@ def _assemble_projection() -> Dict[str, Any]:
 
 
 def _get_continuum_state():
-    """Return the current ContinuumState for backward-compatible callers."""
+    """Return current continuum state for backward-compatible callers.
+
+    Returns a synthetic formless state when no live runtime source is available.
+    """
     state, _, _ = _get_continuum_state_with_source()
     return state
 
 
-def _get_continuum_state_with_source():
-    """Return ``(state, source, is_live_runtime)`` for projection assembly."""
+def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str, bool]:
+    """Return ``(state, source, is_live_runtime)`` for projection assembly.
+
+    ``state`` is a live/synthetic ContinuumState when available, otherwise ``None``.
+
+    ``source`` is one of:
+    - ``"cognitive_field_engine"``
+    - ``"desktop_presence_runtime"``
+    - ``"synthetic_formless_fallback"``
+    - ``"unavailable"``
+
+    ``is_live_runtime`` is ``True`` only when state is read from active runtime
+    producers (cognitive field engine or desktop presence runtime); synthetic or
+    unavailable fallbacks are always ``False``.
+    """
     try:
         # Try the cognitive field engine first (Block-3 integration).
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine

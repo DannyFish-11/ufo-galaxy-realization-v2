@@ -968,8 +968,11 @@ class TestGroupM_DiagnosticSemantics:
         explanation = build_runtime_decision_explanation(
             governance_decision=_make_governance_dict(eligible=False, denial_reasons=["archived"]),
             activation_budget_hint=_make_budget_hint(influenced=True),
+            task_hint="CODING",
+            task_semantic_influenced_routing=True,
         )
         diagnostics = build_runtime_decision_diagnostics(explanation)
         roles = {layer["layer_name"]: layer["decision_role"] for layer in diagnostics["influence_layers"]}
         assert roles["invocation_governance"] == "hard_authority"
         assert roles["activation_budget"] == "soft_influence"
+        assert roles["task_semantic"] == "soft_influence"

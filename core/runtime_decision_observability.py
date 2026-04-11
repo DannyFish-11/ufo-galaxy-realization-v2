@@ -114,6 +114,61 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.RuntimeDecisionObservability")
 
+# Diagnostics field-class semantics used by projection/observability consumers.
+# - hard_authority_fields: values produced by hard governance/readiness gates.
+# - soft_influence_fields: non-binding influences that can shape strategy.
+# - routing_metadata_fields: descriptive route/context metadata, not gate logic.
+# - metadata_only_fields: observational envelope fields only.
+DIAGNOSTIC_SEMANTICS_TEMPLATE: Dict[str, List[str]] = {
+    "hard_authority_fields": [
+        "has_hard_gate",
+        "hard_gate_count",
+        "node_allowed",
+        "node_denial_reasons",
+    ],
+    "soft_influence_fields": [
+        "task_semantic_influenced_routing",
+        "task_semantic_influenced_planner",
+        "activation_budget_active",
+        "activation_budget_mode",
+        "memory_bias_posture",
+        "memory_influenced_planner",
+        "cognitive_region",
+        "execution_path_preference",
+        "execution_path_preference_binding",
+        "execution_path_preference_authority",
+        "planner_strategy",
+        "active_soft_influence_count",
+        "influence_layers",
+    ],
+    "routing_metadata_fields": [
+        "execution_path",
+        "model_selected",
+        "provider_selected",
+        "model_selection_reason",
+        "task_hint",
+    ],
+    "metadata_only_fields": [
+        "assembled_at",
+        "observability_authority",
+    ],
+}
+
+
+def _diagnostic_semantics() -> Dict[str, List[str]]:
+    """Return a detached copy of diagnostic field-class semantics.
+
+    The returned object is copied so downstream consumers/tests cannot mutate
+    DIAGNOSTIC_SEMANTICS_TEMPLATE.
+
+    Categories:
+    - ``hard_authority_fields``: hard enforcement/gate outputs.
+    - ``soft_influence_fields``: advisory influences and posture shaping.
+    - ``routing_metadata_fields``: route/context descriptors.
+    - ``metadata_only_fields``: observational envelope metadata.
+    """
+    return {k: list(v) for k, v in DIAGNOSTIC_SEMANTICS_TEMPLATE.items()}
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -815,7 +870,6 @@ def build_runtime_decision_diagnostics(
                 "authority_module": rec.authority_module,
                 "summary": rec.summary,
                 "decision_role": _decision_role,
-                "is_metadata_only": False,
             }
             if include_detail:
                 entry["detail"] = rec.detail
@@ -844,40 +898,7 @@ def build_runtime_decision_diagnostics(
             "planner_strategy": explanation.planner_strategy,
             "active_soft_influence_count": explanation.active_influence_count,
             "influence_layers": all_records,
-            "diagnostic_semantics": {
-                "hard_authority_fields": [
-                    "has_hard_gate",
-                    "hard_gate_count",
-                    "node_allowed",
-                    "node_denial_reasons",
-                ],
-                "soft_influence_fields": [
-                    "task_semantic_influenced_routing",
-                    "task_semantic_influenced_planner",
-                    "activation_budget_active",
-                    "activation_budget_mode",
-                    "memory_bias_posture",
-                    "memory_influenced_planner",
-                    "cognitive_region",
-                    "execution_path_preference",
-                    "execution_path_preference_binding",
-                    "execution_path_preference_authority",
-                    "planner_strategy",
-                    "active_soft_influence_count",
-                    "influence_layers",
-                ],
-                "routing_metadata_fields": [
-                    "execution_path",
-                    "model_selected",
-                    "provider_selected",
-                    "model_selection_reason",
-                    "task_hint",
-                ],
-                "metadata_only_fields": [
-                    "assembled_at",
-                    "observability_authority",
-                ],
-            },
+            "diagnostic_semantics": _diagnostic_semantics(),
             "assembled_at": explanation.assembled_at,
             "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
         }
@@ -910,40 +931,7 @@ def _minimal_diagnostics_fallback() -> Dict[str, Any]:
         "planner_strategy": None,
         "active_soft_influence_count": 0,
         "influence_layers": [],
-        "diagnostic_semantics": {
-            "hard_authority_fields": [
-                "has_hard_gate",
-                "hard_gate_count",
-                "node_allowed",
-                "node_denial_reasons",
-            ],
-            "soft_influence_fields": [
-                "task_semantic_influenced_routing",
-                "task_semantic_influenced_planner",
-                "activation_budget_active",
-                "activation_budget_mode",
-                "memory_bias_posture",
-                "memory_influenced_planner",
-                "cognitive_region",
-                "execution_path_preference",
-                "execution_path_preference_binding",
-                "execution_path_preference_authority",
-                "planner_strategy",
-                "active_soft_influence_count",
-                "influence_layers",
-            ],
-            "routing_metadata_fields": [
-                "execution_path",
-                "model_selected",
-                "provider_selected",
-                "model_selection_reason",
-                "task_hint",
-            ],
-            "metadata_only_fields": [
-                "assembled_at",
-                "observability_authority",
-            ],
-        },
+        "diagnostic_semantics": _diagnostic_semantics(),
         "assembled_at": time.time(),
         "observability_authority": RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY,
     }
