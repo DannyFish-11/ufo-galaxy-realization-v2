@@ -3848,6 +3848,9 @@ class OpenClawd:
                 # PR-24: embed canonical routing decision in the plan
                 multimodal_route_decision=_multimodal_route,
             )
+            _handler_metadata = result.get("metadata", {})
+            if not isinstance(_handler_metadata, dict):
+                _handler_metadata = {}
 
             return {
                 "success": result.get("success", True),
@@ -3874,6 +3877,9 @@ class OpenClawd:
                     "confidence": parsed_intent.confidence if parsed_intent else 0.0,
                     "suggestions": parsed_intent.suggestions if parsed_intent else [],
                     "handler": handler_name,
+                    # Preserve handler-provided additive metadata, but do not
+                    # let it override canonical execution/authority fields.
+                    **_handler_metadata,
                     "entry_mode": _entry_mode,
                     "execution_path": _exec_path2,
                     # PR-42: explicit execution semantics snapshot for direct path.
@@ -3887,7 +3893,6 @@ class OpenClawd:
                     # PR-12: plan-level lifecycle state for observability
                     "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
                     **provider_info,
-                    **(result.get("metadata", {})),
                     # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
                     # from MultimodalBus.ingest().  New consumers should prefer
                     # ``canonical_perception_state`` (PR-16) as the authoritative

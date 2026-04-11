@@ -42,6 +42,7 @@ Authority Chain Consistency
 from __future__ import annotations
 
 import pathlib
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -474,6 +475,54 @@ class TestExecutionSemanticsDiagnostics:
         assert pr14_status.get("pr14_activation_model_available") is True
         assert pr14_status.get("dispatch_time_enforced") is False
         assert isinstance(pr14_status.get("dispatch_authority_layers"), list)
+
+    @pytest.mark.asyncio
+    async def test_direct_path_handler_metadata_cannot_override_execution_semantics_authority(self):
+        oc = _make_openclawd()
+        parsed_intent = SimpleNamespace(intent="chat", confidence=0.9, suggestions=[])
+        handler_result = {
+            "success": True,
+            "response": "ok",
+            "metadata": {
+                "remote_dispatch": True,
+                "execution_path": "cross_device",
+                "execution_semantics": {"execution_path_source": "handler_override"},
+                "pr14_activation_runtime_status": {"dispatch_time_enforced": True},
+            },
+        }
+
+        with patch.object(oc, "_get_kernel", return_value=None), patch.object(
+            oc, "_get_router", return_value=None
+        ), patch.object(
+            oc, "_parse_intent", new_callable=AsyncMock, return_value=parsed_intent
+        ), patch.object(
+            oc, "_dispatch_chat", new_callable=AsyncMock, return_value=handler_result
+        ), patch.object(
+            oc, "_run_continuum", return_value={"decision": {"action_level": "observe"}}
+        ), patch.object(
+            oc, "_run_execution", return_value={"action_taken": "none"}
+        ), patch.object(
+            oc, "_determine_execution_path", return_value="none"
+        ), patch.object(
+            oc, "_build_execution_plan", return_value=None
+        ), patch.object(
+            oc, "_finalise_plan_lifecycle", return_value=None
+        ), patch.object(
+            oc, "_build_unified_control_plan", return_value=None
+        ), patch.object(
+            oc, "_record_turn", new_callable=AsyncMock
+        ), patch.object(
+            oc, "sync_device_capabilities", return_value=None
+        ):
+            result = await oc.process(message="hello", session_id="s1")
+
+        meta = result.get("metadata", {})
+        assert meta.get("remote_dispatch") is True
+        assert meta.get("execution_path") == "none"
+        assert meta.get("execution_semantics", {}).get("execution_path_source") == (
+            "OpenClawd._determine_execution_path"
+        )
+        assert meta.get("pr14_activation_runtime_status", {}).get("dispatch_time_enforced") is False
 
 # ---------------------------------------------------------------------------
 # 20-22  Authority Chain Consistency
