@@ -34,7 +34,7 @@ def test_status_board_v2_default_port_aligned_with_main_runtime() -> None:
     assert "http://127.0.0.1:8299" in reader_content
 
 
-def test_cross_device_runtime_audit_doc_exists_with_required_sections() -> None:
+def test_cross_device_audit_doc_required_sections() -> None:
     content = _read("docs/CROSS_DEVICE_RUNTIME_AUDIT.md").lower()
     assert "cross-device runtime & status board readiness audit" in content
     assert "completeness matrix" in content
