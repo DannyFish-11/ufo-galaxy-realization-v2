@@ -13,6 +13,7 @@
 | [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
 | [docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md) | Maintainer reference |
 | [docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md) | Canonical clone-to-use runtime truth |
+| [docs/CROSS_DEVICE_RUNTIME_AUDIT.md](docs/CROSS_DEVICE_RUNTIME_AUDIT.md) | Evidence-based runtime completeness and operator-readiness audit |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
 | [QUICKSTART.md](QUICKSTART.md) | Five-minute local setup |
 
