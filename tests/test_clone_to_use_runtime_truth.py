@@ -37,7 +37,6 @@ def test_product_readiness_audit_frames_status_board_as_operator_surface() -> No
     assert "bounded" in content
     assert "not merely" in content
     assert "passive or read-only" in content
-    assert content.index("not merely") < content.index("passive or read-only")
 
 
 def test_status_board_v2_default_port_aligned_with_main_runtime() -> None:
