@@ -2,6 +2,9 @@
 
 > ⚠️ 此文档包含历史场景说明。当前仓库的真实 clone-to-use 路径请优先以
 > [`docs/CLONE_TO_USE_REALITY.md`](docs/CLONE_TO_USE_REALITY.md) 为准。
+>
+> 关于桌面状态板是否已达到可展示的运维控制面成熟度，请参考：
+> [`docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md`](docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md)。
 
 ## 🚀 5 分钟快速启动
 

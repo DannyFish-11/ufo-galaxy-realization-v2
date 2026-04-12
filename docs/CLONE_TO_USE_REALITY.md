@@ -10,6 +10,17 @@ This document is the shortest truthful answer to:
 
 ---
 
+## Readiness verdict (important)
+
+Before presenting the desktop board as an operator product surface, read:
+`docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md`.
+
+Current verdict: the board is a **partial operator surface** (read-mostly
+observability with bounded config controls), **not yet** a fully presentable
+desktop control plane.
+
+---
+
 ## 1) Fresh clone → first run
 
 ```bash
@@ -69,8 +80,10 @@ python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
 
 Truthful boundary:
 
-- It is **read-only** (projection display / observability).
+- It is primarily **read-only** (projection display / observability).
 - It does **not** accept chat input and does **not** dispatch commands.
+- It includes **bounded optional config controls** (`--apply-toggle`,
+  `--apply-routing-policy`) but this does not make it a full operator control plane.
 - Tri-state displayed is `silent / liminal / manifest`, owned by `DesktopPresenceRuntime`.
 
 ---

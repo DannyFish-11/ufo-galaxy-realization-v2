@@ -4,6 +4,9 @@
 > [`docs/CLONE_TO_USE_REALITY.md`](docs/CLONE_TO_USE_REALITY.md)。
 > 该文档定义了当前仓库的 canonical clone-to-use 路径、
 > 桌面状态板唤醒方式、交互入口与跨设备边界。
+>
+> 桌面状态板是否已可对外“产品化展示”，请再阅读：
+> [`docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md`](docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md)。
 
 ## 🎯 系统概览 (Round 2 - R-4)
 

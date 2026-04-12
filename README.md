@@ -13,6 +13,7 @@
 | [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
 | [docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md) | Maintainer reference |
 | [docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md) | Canonical clone-to-use runtime truth |
+| [docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md](docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md) | Truthful desktop/control-surface readiness verdict |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
 | [QUICKSTART.md](QUICKSTART.md) | Five-minute local setup |
 
@@ -22,6 +23,9 @@
 
 If you only need the truthful runtime path, start here:
 **[docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md)**.
+
+If you need product-readiness truth for desktop presentation, read:
+**[docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md](docs/DESKTOP_STATUS_BOARD_READINESS_AUDIT.md)**.
 
 Minimum canonical commands:
 
