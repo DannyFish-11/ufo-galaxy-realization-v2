@@ -13,6 +13,7 @@
 | [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
 | [docs/MAINTAINER_RUNBOOK.md](docs/MAINTAINER_RUNBOOK.md) | Maintainer reference |
 | [docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md) | Canonical clone-to-use runtime truth |
+| [docs/PRODUCT_READINESS_AUDIT.md](docs/PRODUCT_READINESS_AUDIT.md) | Product-readiness positioning for desktop status board role |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines |
 | [QUICKSTART.md](QUICKSTART.md) | Five-minute local setup |
 
@@ -22,6 +23,9 @@
 
 If you only need the truthful runtime path, start here:
 **[docs/CLONE_TO_USE_REALITY.md](docs/CLONE_TO_USE_REALITY.md)**.
+
+Desktop status board positioning: it is an **operator-facing runtime surface**
+with bounded operational controls, not merely a passive dashboard.
 
 Minimum canonical commands:
 

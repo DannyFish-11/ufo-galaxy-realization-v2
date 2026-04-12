@@ -39,7 +39,7 @@ for the Windows desktop runtime.
 
 | Directory | Role | Description |
 |-----------|------|-------------|
-| `windows_client/status_board_v2/` | **ACTIVE_DESKTOP_STATUS** | Canonical read-only desktop status board. Consumes `GET /api/v1/projection/runtime` (contract: `contracts.desktop_status_projection.DesktopStatusProjection`). Renders tri-state phase surfaces: silent / liminal / manifest. |
+| `windows_client/status_board_v2/` | **ACTIVE_DESKTOP_STATUS** | Canonical operator-facing desktop runtime status surface. Consumes `GET /api/v1/projection/runtime` (contract: `contracts.desktop_status_projection.DesktopStatusProjection`) and renders tri-state phase surfaces: silent / liminal / manifest with bounded operational controls. |
 | `windows_client/autonomy/` | **ACTIVE_DESKTOP_SHELL** | Active Windows automation and input-simulation layer (UI automation, comtypes bootstrap, input simulator). |
 
 ### Canonical status projection contract
@@ -49,8 +49,9 @@ GET /api/v1/projection/runtime
 contract: contracts.desktop_status_projection.DesktopStatusProjection
 ```
 
-The `status_board_v2/` surface is the **only** canonical outward-facing status
-display.  It is projection-driven and read-only with respect to system truth.
+The `status_board_v2/` surface is the **only** canonical outward-facing desktop
+runtime status surface. It is projection-driven and operationally meaningful,
+with bounded control scope rather than passive-display-only identity.
 
 ---
 

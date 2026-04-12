@@ -12,19 +12,23 @@ def _read(rel: str) -> str:
 
 def test_clone_to_use_reality_doc_exists_and_covers_core_questions() -> None:
     content = _read("docs/CLONE_TO_USE_REALITY.md")
+    lowered = content.lower()
     assert "python main.py" in content
     assert "python -m windows_client.status_board_v2" in content
     assert "/api/v1/chat" in content
     assert "/api/v1/projection/runtime" in content
-    assert "cross-device" in content.lower()
-    assert "read-only" in content.lower()
+    assert "cross-device" in lowered
+    assert "operator-facing runtime surface" in lowered
+    assert "bounded operational control surfaces" in lowered
 
 
 def test_windows_status_board_doc_matches_v2_runtime_path() -> None:
     content = _read("docs/WINDOWS_STATUS_BOARD.md")
+    lowered = content.lower()
     assert "python -m windows_client.status_board_v2" in content
     assert "/api/v1/projection/runtime" in content
-    assert "read-only" in content.lower()
+    assert "operator-facing runtime surface" in lowered
+    assert "merely a passive display" in lowered
 
 
 def test_status_board_v2_default_port_aligned_with_main_runtime() -> None:

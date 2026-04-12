@@ -95,7 +95,7 @@ CommandRouter                   (core/command_router.py)
 
 | Directory | Role | Description |
 |-----------|------|-------------|
-| `windows_client/status_board_v2/` | ACTIVE_DESKTOP_STATUS | Canonical read-only desktop status board; projection-driven |
+| `windows_client/status_board_v2/` | ACTIVE_DESKTOP_STATUS | Canonical operator-facing runtime status surface; projection-driven with bounded controls |
 | `windows_client/autonomy/` | ACTIVE_DESKTOP_SHELL | Windows automation and input simulation layer |
 
 ### Outward-facing status truth
@@ -106,8 +106,9 @@ GET /api/v1/projection/runtime
     consumer: windows_client/status_board_v2/
 ```
 
-`status_board_v2/` is the **only** canonical outward-facing status display.  
-It is projection-driven and read-only with respect to system truth.
+`status_board_v2/` is the **only** canonical outward-facing desktop runtime
+status surface. It is projection-driven with bounded operational controls; it is
+not merely passive observation.
 
 ---
 
