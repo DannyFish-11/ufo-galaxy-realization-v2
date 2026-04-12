@@ -1,5 +1,8 @@
 # Galaxy L4 级自主性智能系统 - 快速启动指南
 
+> ⚠️ 此文档包含历史场景说明。当前仓库的真实 clone-to-use 路径请优先以
+> [`docs/CLONE_TO_USE_REALITY.md`](docs/CLONE_TO_USE_REALITY.md) 为准。
+
 ## 🚀 5 分钟快速启动
 
 ### 前置条件
