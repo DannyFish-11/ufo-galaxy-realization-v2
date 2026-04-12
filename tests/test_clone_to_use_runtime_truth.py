@@ -22,10 +22,11 @@ def test_clone_to_use_reality_doc_exists_and_covers_core_questions() -> None:
 
 def test_windows_status_board_doc_matches_v2_runtime_path() -> None:
     content = _read("docs/WINDOWS_STATUS_BOARD.md")
+    normalized = content.lower().replace("*", "")
     assert "python -m windows_client.status_board_v2" in content
     assert "/api/v1/projection/runtime" in content
-    assert "bounded config-control" in content.lower()
-    assert "complete operator/control plane ui" in content.lower()
+    assert "bounded config-control" in normalized
+    assert "not a complete operator/control plane ui" in normalized
 
 
 def test_status_board_v2_default_port_aligned_with_main_runtime() -> None:
