@@ -69,8 +69,10 @@ python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
 
 Truthful boundary:
 
-- It is **read-only** (projection display / observability).
-- It does **not** accept chat input and does **not** dispatch commands.
+- It is **observability-first** (projection display / observability).
+- It includes **bounded config controls** (`--apply-toggle`, `--apply-routing-policy`)
+  through canonical config authority.
+- It does **not** accept chat input and does **not** provide general dispatch control.
 - Tri-state displayed is `silent / liminal / manifest`, owned by `DesktopPresenceRuntime`.
 
 ---
@@ -117,3 +119,6 @@ bash scripts/quick_verify.sh
 ```
 
 If both pass, you have a confirmed local baseline for supported clone-to-use flow.
+
+For product presentability/readiness boundaries (not just runnable setup), see:
+`docs/PRODUCT_READINESS_AUDIT.md`.

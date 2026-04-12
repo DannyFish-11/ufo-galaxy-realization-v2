@@ -1,5 +1,10 @@
 # Status Board V2 — Design & Usage Guide
 
+> ⚠️ Historical design document: for current runtime/product-readiness truth, use
+> [`docs/WINDOWS_STATUS_BOARD.md`](WINDOWS_STATUS_BOARD.md),
+> [`docs/CLONE_TO_USE_REALITY.md`](CLONE_TO_USE_REALITY.md), and
+> [`docs/PRODUCT_READINESS_AUDIT.md`](PRODUCT_READINESS_AUDIT.md) first.
+>
 > **PR-0 architecture freeze:**  `windows_client/status_board_v2/` is the
 > **sole canonical desktop operator-facing surface** for the Galaxy system.
 > Legacy desktop surfaces are retired.  Dashboard frontend is retired.
@@ -93,12 +98,12 @@ windows_client/status_board_v2/
 python -m windows_client.status_board_v2
 ```
 
-Polls `http://127.0.0.1:8000/api/v1/projection/runtime` every second.
+Polls `http://127.0.0.1:8299/api/v1/projection/runtime` every second.
 
 ### 2. Specify a different server
 
 ```bash
-python -m windows_client.status_board_v2 --host 10.0.0.5 --port 8000
+python -m windows_client.status_board_v2 --host 10.0.0.5 --port 8299
 ```
 
 ### 3. Adjust the poll interval
