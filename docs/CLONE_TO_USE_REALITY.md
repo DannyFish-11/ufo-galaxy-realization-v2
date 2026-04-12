@@ -69,8 +69,11 @@ python -m windows_client.status_board_v2 --host 127.0.0.1 --port 8299
 
 Truthful boundary:
 
-- It is **read-only** (projection display / observability).
-- It does **not** accept chat input and does **not** dispatch commands.
+- It is an **operator-facing runtime surface** with real operational relevance.
+- It combines runtime-state projection with **bounded operational control
+  surfaces**.
+- It does **not** replace canonical chat ingress and does **not** expose
+  unbounded command authority.
 - Tri-state displayed is `silent / liminal / manifest`, owned by `DesktopPresenceRuntime`.
 
 ---

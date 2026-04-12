@@ -19,9 +19,10 @@
 > authority (`runtime/config.json` / `runtime/secrets.env`) via
 > `core/config_service.ConfigService` and have system-wide effect.
 >
-> **Current state — READ-ONLY.**  The Status Board V2 currently never accepts
-> system configuration input, never sends commands, and never triggers any
-> actions.  It is a pure display surface until the config entry phase lands.
+> **Current state — operator-facing runtime surface with bounded authority.**
+> Status Board V2 has real operational relevance, but it does not currently
+> replace canonical chat ingress or expose unbounded command authority.
+> Configuration-entry and broader control scope remain staged.
 >
 > See [`docs/DASHBOARD_RETIREMENT_AND_MIGRATION.md`](DASHBOARD_RETIREMENT_AND_MIGRATION.md)
 > and [`docs/ADR_STATUS_BOARD_CONFIG_AUTHORITY.md`](ADR_STATUS_BOARD_CONFIG_AUTHORITY.md).

@@ -7,9 +7,10 @@
 
 ## Purpose
 
-The Windows desktop status board is a **read-only** runtime projection panel.
-It shows the operator what the system is doing now; it is **not** a chat input
-surface and does not own execution authority.
+The Windows desktop status board is an **operator-facing runtime surface** with
+real operational attributes. It projects live runtime state and includes
+bounded operational control surfaces, even though it is **not** the canonical
+chat ingress and does not own full execution authority.
 
 Primary fields:
 
@@ -62,8 +63,10 @@ The lifecycle authority remains `DesktopPresenceRuntime` (`silent → liminal �
 
 ## Interaction boundary (truthful)
 
-- ✅ Status board: projection display / operator observability
-- ❌ Status board: chat input, command dispatch, execution control
+- ✅ Status board: operator-facing runtime surface with operationally relevant
+  projection + bounded control scope
+- ❌ Status board: canonical chat ingress, unbounded command dispatch, full
+  execution control authority
 
 Canonical user interaction path is API/adapter ingress (for example `POST /api/v1/chat`)
 which then enters:

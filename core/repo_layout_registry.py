@@ -35,9 +35,10 @@ Layout zones::
     └── worker/            — background task worker pool
 
     ACTIVE_DESKTOP_STATUS
-    └── windows_client/status_board_v2/ — canonical read-only desktop status board
-                                          (projection-driven; consumes
-                                           GET /api/v1/projection/runtime)
+    └── windows_client/status_board_v2/ — canonical operator-facing desktop
+                                          runtime surface (projection-driven;
+                                          consumes GET /api/v1/projection/runtime;
+                                          bounded exposed authority)
 
     ACTIVE_DESKTOP_SHELL
     └── windows_client/autonomy/ — Windows automation / input simulation layer
@@ -70,7 +71,7 @@ Authority model::
     │    consumes  ──►  GET /api/v1/projection/runtime             │
     │    contract  ──►  contracts.desktop_status_projection        │
     └──────────────────────────────────────────────────────────────┘
-              ▲ derived-only / READ-ONLY projection downstream
+              ▲ projection-derived downstream runtime surface
     ┌──────────────────────────────────────────────────────────────┐
     │  CANONICAL RUNTIME SOURCE OF TRUTH                           │
     │  ─────────────────────────────────                           │
@@ -139,7 +140,8 @@ class DirectoryRole(str, Enum):
 
     ``ACTIVE_DESKTOP_STATUS``
         Active, canonical desktop status surface.
-        Consumes projection output; read-only with respect to system truth.
+        Consumes projection output; operator-facing with bounded exposed
+        authority relative to canonical runtime truth.
 
     ``ACTIVE_DESKTOP_SHELL``
         Active Windows automation / input simulation layer.
@@ -486,7 +488,7 @@ _REGISTRY._register(
         role=DirectoryRole.ACTIVE_DESKTOP_STATUS,
         zone=LayoutZone.DESKTOP_STATUS,
         description=(
-            "Canonical read-only desktop status board (PR-8).  "
+            "Canonical operator-facing desktop status runtime surface (PR-8).  "
             "Consumes GET /api/v1/projection/runtime "
             "(contract: contracts.desktop_status_projection.DesktopStatusProjection).  "
             "Tri-state phase surfaces: silent / liminal / manifest."
@@ -494,7 +496,8 @@ _REGISTRY._register(
         pr_classified="PR-8-layout",
         notes=(
             "status_board_v2/ is the ONLY canonical outward-facing status "
-            "display.  It is projection-driven (read-only derived surface).  "
+            "runtime surface.  It is projection-driven with bounded exposed "
+            "authority.  "
             "Do NOT extend legacy status_board.py; extend this instead."
         ),
     )
