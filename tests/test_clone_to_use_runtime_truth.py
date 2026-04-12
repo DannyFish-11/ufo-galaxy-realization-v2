@@ -32,3 +32,11 @@ def test_status_board_v2_default_port_aligned_with_main_runtime() -> None:
     reader_content = _read("windows_client/status_board_v2/projection_reader.py")
     assert "default=8299" in app_content
     assert "http://127.0.0.1:8299" in reader_content
+
+
+def test_cross_device_runtime_audit_doc_exists_with_required_sections() -> None:
+    content = _read("docs/CROSS_DEVICE_RUNTIME_AUDIT.md").lower()
+    assert "cross-device runtime & status board readiness audit" in content
+    assert "completeness matrix" in content
+    assert "future-readiness checklist" in content
+    assert "not yet suitable as the real operator interface for the full system" in content

@@ -63,6 +63,7 @@ The lifecycle authority remains `DesktopPresenceRuntime` (`silent → liminal �
 ## Interaction boundary (truthful)
 
 - ✅ Status board: projection display / operator observability
+- ✅ Status board (bounded): optional config toggles (`--apply-toggle`, `--apply-routing-policy`) written through canonical config service
 - ❌ Status board: chat input, command dispatch, execution control
 
 Canonical user interaction path is API/adapter ingress (for example `POST /api/v1/chat`)
