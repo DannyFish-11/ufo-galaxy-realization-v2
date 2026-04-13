@@ -288,6 +288,16 @@ class TestRuntimeTruthSnapshotSerialisation:
         d = snap.to_dict()
         assert "has_canonical_topology" in d
 
+    def test_59b_to_dict_has_dispatch_semantics_block(self):
+        snap = self._make_snapshot()
+        d = snap.to_dict()
+        assert "dispatch_semantics" in d
+
+    def test_59c_to_dict_has_execution_path_observability_block(self):
+        snap = self._make_snapshot()
+        d = snap.to_dict()
+        assert "execution_path_observability" in d
+
     def test_60_to_dict_has_tri_state_phase(self):
         snap = self._make_snapshot()
         d = snap.to_dict()
@@ -390,6 +400,16 @@ class TestCompileRuntimeTruth:
         _, _, compile_runtime_truth = _import_runtime_truth_compiler()
         snapshot = compile_runtime_truth()
         assert "online" in snapshot.device_presence
+
+    def test_80b_snapshot_has_dispatch_semantics_attribute(self):
+        _, _, compile_runtime_truth = _import_runtime_truth_compiler()
+        snapshot = compile_runtime_truth()
+        assert hasattr(snapshot, "dispatch_semantics")
+
+    def test_80c_snapshot_has_execution_path_observability_attribute(self):
+        _, _, compile_runtime_truth = _import_runtime_truth_compiler()
+        snapshot = compile_runtime_truth()
+        assert hasattr(snapshot, "execution_path_observability")
 
     def test_81_snapshot_to_dict_is_json_serialisable(self):
         import json

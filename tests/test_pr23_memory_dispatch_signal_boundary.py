@@ -29,6 +29,9 @@ def test_source_dispatch_plan_surfaces_runtime_signal_boundary():
 
     boundary = plan.metadata.get("runtime_signal_boundary", {})
     received = boundary.get("received_runtime_signals", {})
+    dispatch_semantics = boundary.get("dispatch_semantics", {})
+    execution_obs = boundary.get("execution_path_observability", {})
+    truth_model = boundary.get("truth_model", {})
 
     assert boundary.get("dispatch_mode_selection_consumes_runtime_signals") is False
     assert boundary.get("dispatch_target_selection_consumes_runtime_signals") is False
@@ -38,6 +41,10 @@ def test_source_dispatch_plan_surfaces_runtime_signal_boundary():
         "memory_bias": True,
         "cognitive_execution_hint": True,
     }
+    assert dispatch_semantics.get("mode_selection_consumes_runtime_signals") is False
+    assert dispatch_semantics.get("target_selection_consumes_runtime_signals") is False
+    assert execution_obs.get("received_runtime_signals") == received
+    assert truth_model.get("runtime_truth_scope") == "dispatch_semantics_only"
 
 
 def test_source_dispatch_result_preserves_runtime_signal_boundary():
@@ -53,3 +60,5 @@ def test_source_dispatch_result_preserves_runtime_signal_boundary():
 
     boundary = result.metadata.get("runtime_signal_boundary", {})
     assert boundary.get("memory_bias_behavioral_scope") == "planner_strategy_and_runtime_diagnostics"
+    assert "dispatch_semantics" in boundary
+    assert "execution_path_observability" in boundary

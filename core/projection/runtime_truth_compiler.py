@@ -46,12 +46,16 @@ call :func:`compile_runtime_truth` and read from the resulting snapshot.
 
 - :attr:`~RuntimeTruthSnapshot.continuum` — continuum state dict (or ``None``)
 - :attr:`~RuntimeTruthSnapshot.topology` — route-plan summary dict (or ``None``)
-- :attr:`~RuntimeTruthSnapshot.oneapi` — OneAPI lower-horizon dict
-- :attr:`~RuntimeTruthSnapshot.system_resource` — resource health dict
-- :attr:`~RuntimeTruthSnapshot.device_presence` — device counts dict
-- :attr:`~RuntimeTruthSnapshot.compiled_at` — Unix epoch float
-- :attr:`~RuntimeTruthSnapshot.compiler_authority` — always equals
-  :data:`RUNTIME_TRUTH_COMPILER_AUTHORITY`
+    - :attr:`~RuntimeTruthSnapshot.oneapi` — OneAPI lower-horizon dict
+    - :attr:`~RuntimeTruthSnapshot.system_resource` — resource health dict
+    - :attr:`~RuntimeTruthSnapshot.device_presence` — device counts dict
+    - :attr:`~RuntimeTruthSnapshot.dispatch_semantics` — dispatch-mode semantics
+      summary (how work is routed)
+    - :attr:`~RuntimeTruthSnapshot.execution_path_observability` — execution-path
+      observability summary (how execution is observed)
+    - :attr:`~RuntimeTruthSnapshot.compiled_at` — Unix epoch float
+    - :attr:`~RuntimeTruthSnapshot.compiler_authority` — always equals
+      :data:`RUNTIME_TRUTH_COMPILER_AUTHORITY`
 
 Usage::
 
@@ -148,6 +152,12 @@ class RuntimeTruthSnapshot:
     device_presence:
         Dict with ``registered`` (int) and ``online`` (int) device counts.
         Always present; defaults to zeros when device state is unavailable.
+    dispatch_semantics:
+        Dict summary of dispatch-mode semantics (selected mode/reason/target),
+        or ``None`` when dispatch planning data is unavailable.
+    execution_path_observability:
+        Dict summary of execution-path observability signals describing how
+        execution happened/is observed, or ``None`` when unavailable.
     compiled_at:
         Unix epoch float at which this snapshot was compiled.
     compiler_authority:
@@ -161,6 +171,8 @@ class RuntimeTruthSnapshot:
         "oneapi",
         "system_resource",
         "device_presence",
+        "dispatch_semantics",
+        "execution_path_observability",
         "compiled_at",
         "compiler_authority",
     )
@@ -174,12 +186,16 @@ class RuntimeTruthSnapshot:
         system_resource: Optional[Dict[str, Any]],
         device_presence: Dict[str, Any],
         compiled_at: float,
+        dispatch_semantics: Optional[Dict[str, Any]] = None,
+        execution_path_observability: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.continuum = continuum
         self.topology = topology
         self.oneapi = oneapi
         self.system_resource = system_resource
         self.device_presence = device_presence
+        self.dispatch_semantics = dispatch_semantics
+        self.execution_path_observability = execution_path_observability
         self.compiled_at = compiled_at
         self.compiler_authority: str = RUNTIME_TRUTH_COMPILER_AUTHORITY
 
@@ -235,6 +251,8 @@ class RuntimeTruthSnapshot:
             "oneapi": self.oneapi,
             "system_resource": self.system_resource,
             "device_presence": self.device_presence,
+            "dispatch_semantics": self.dispatch_semantics,
+            "execution_path_observability": self.execution_path_observability,
             # Derived convenience flags
             "has_canonical_topology": self.has_canonical_topology,
             "tri_state_phase": self.tri_state_phase,
@@ -281,6 +299,8 @@ def compile_runtime_truth() -> RuntimeTruthSnapshot:
     oneapi = _compile_oneapi()
     system_resource = _compile_system_resource()
     device_presence = _compile_device_presence()
+    dispatch_semantics = _compile_dispatch_semantics()
+    execution_path_observability = _compile_execution_path_observability(dispatch_semantics)
 
     return RuntimeTruthSnapshot(
         continuum=continuum,
@@ -288,6 +308,8 @@ def compile_runtime_truth() -> RuntimeTruthSnapshot:
         oneapi=oneapi,
         system_resource=system_resource,
         device_presence=device_presence,
+        dispatch_semantics=dispatch_semantics,
+        execution_path_observability=execution_path_observability,
         compiled_at=compiled_at,
     )
 
@@ -471,3 +493,57 @@ def _compile_device_presence() -> Dict[str, Any]:
     except Exception as exc:
         _logger.debug("_compile_device_presence: unavailable: %s", exc)
         return {"registered": 0, "online": 0}
+
+
+def _compile_dispatch_semantics() -> Optional[Dict[str, Any]]:
+    """Compile dispatch-mode semantics (routing/dispatch meaning only)."""
+    try:
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
+
+        plan = build_source_dispatch_plan()
+        mode_val = getattr(plan, "mode", None)
+        selected_target = getattr(plan, "selected_target", None)
+        target_device_id = (
+            getattr(selected_target, "target_device_id", None)
+            if selected_target is not None
+            else None
+        )
+        selection_reason = (
+            getattr(selected_target, "selection_reason", None)
+            if selected_target is not None
+            else None
+        )
+        readiness_notes = list(getattr(plan, "readiness_notes", []) or [])
+        decision_reason = None
+        metadata = getattr(plan, "metadata", None)
+        if isinstance(metadata, dict):
+            decision_reason = metadata.get("decision_reason")
+        if decision_reason is None and readiness_notes:
+            decision_reason = readiness_notes[0]
+
+        return {
+            "mode": mode_val.value if hasattr(mode_val, "value") else str(mode_val) if mode_val else "unknown",
+            "decision_reason": decision_reason,
+            "target_device_id": target_device_id,
+            "target_selection_reason": selection_reason,
+            "ready": bool(getattr(plan, "ready", False)),
+            "source_runtime_posture": getattr(plan, "source_runtime_posture", None),
+        }
+    except Exception as exc:
+        _logger.debug("_compile_dispatch_semantics: unavailable: %s", exc)
+        return None
+
+
+def _compile_execution_path_observability(
+    dispatch_semantics: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Compile execution-path observability (observation, not dispatch meaning)."""
+    if dispatch_semantics is None:
+        return None
+    return {
+        "observed_execution_path": dispatch_semantics.get("mode"),
+        "observation_source": "source_dispatch_plan",
+        "observation_reason": dispatch_semantics.get("decision_reason"),
+        "is_fallback_path": dispatch_semantics.get("mode") == "fallback_local",
+        "has_remote_target": bool(dispatch_semantics.get("target_device_id")),
+    }
