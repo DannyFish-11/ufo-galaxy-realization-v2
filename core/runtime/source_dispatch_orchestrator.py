@@ -2100,23 +2100,56 @@ def _build_runtime_signal_boundary_metadata(
 ) -> Dict[str, Any]:
     """Attach explicit dispatch signal-boundary diagnostics to metadata."""
     merged: Dict[str, Any] = dict(metadata or {})
+    received_runtime_signals = {
+        "task_hint": task_hint is not None,
+        "activation_budget": activation_budget is not None,
+        "memory_bias": memory_bias is not None,
+        "cognitive_execution_hint": cognitive_execution_hint is not None,
+    }
+    advisory_runtime_signals = [
+        "task_hint",
+        "activation_budget",
+        "memory_bias",
+        "cognitive_execution_hint",
+    ]
+    dispatch_semantics = {
+        "mode_selection_consumes_runtime_signals": False,
+        "target_selection_consumes_runtime_signals": False,
+        "semantic_sources": [
+            "policy_alignment",
+            "governance_snapshot",
+            "mesh_session",
+            "explicit_target",
+            "source_runtime_posture",
+            "coordination_role",
+        ],
+    }
+    execution_path_observability = {
+        "received_runtime_signals": received_runtime_signals,
+        "advisory_runtime_signals": advisory_runtime_signals,
+        "observation_scope": "planner_strategy_and_runtime_diagnostics",
+    }
+    truth_model = {
+        "runtime_truth_scope": "dispatch_semantics_only",
+        "task_truth_scope": "advisory_runtime_signals_only",
+        "compatibility_truth_scope": "legacy_flat_boundary_fields_retained",
+    }
     merged["runtime_signal_boundary"] = {
         "dispatch_boundary_version": "pr23_v1",
         "memory_bias_behavioral_scope": "planner_strategy_and_runtime_diagnostics",
-        "dispatch_mode_selection_consumes_runtime_signals": False,
-        "dispatch_target_selection_consumes_runtime_signals": False,
-        "received_runtime_signals": {
-            "task_hint": task_hint is not None,
-            "activation_budget": activation_budget is not None,
-            "memory_bias": memory_bias is not None,
-            "cognitive_execution_hint": cognitive_execution_hint is not None,
-        },
-        "advisory_runtime_signals": [
-            "task_hint",
-            "activation_budget",
-            "memory_bias",
-            "cognitive_execution_hint",
+        # Primary explicit boundary blocks (PR-535): semantics vs observability
+        "dispatch_semantics": dispatch_semantics,
+        "execution_path_observability": execution_path_observability,
+        "truth_model": truth_model,
+        # Backward-compatible aliases retained from PR-23
+        "dispatch_mode_selection_consumes_runtime_signals": dispatch_semantics[
+            "mode_selection_consumes_runtime_signals"
         ],
+        "dispatch_target_selection_consumes_runtime_signals": dispatch_semantics[
+            "target_selection_consumes_runtime_signals"
+        ],
+        "received_runtime_signals": received_runtime_signals,
+        "advisory_runtime_signals": advisory_runtime_signals,
     }
     return merged
 

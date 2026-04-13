@@ -3454,6 +3454,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
               },
               "system_resource": { ... },
               "device_presence": {"registered": 0, "online": 0},
+              "dispatch_semantics": {
+                "mode": "local",
+                "decision_reason": "default_local",
+                ...
+              },
+              "execution_path_observability": {
+                "observed_execution_path": "local",
+                "observation_source": "source_dispatch_plan",
+                ...
+              },
               "has_canonical_topology": true,
               "tri_state_phase": "silent",
               "primary_model_id": "gpt-4o",
@@ -3501,6 +3511,8 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "oneapi": {"system_layer": "aggregator_integration", "configured": False},
             "system_resource": None,
             "device_presence": {"registered": 0, "online": 0},
+            "dispatch_semantics": None,
+            "execution_path_observability": None,
             "has_canonical_topology": False,
             "tri_state_phase": None,
             "primary_model_id": None,
