@@ -576,8 +576,10 @@ class TestModuleDocstrings:
 
 
 class TestStatusBoardV2ProjectionDriven:
-    def test_57_projection_reader_uses_projection_endpoint(self):
+    def test_57_projection_reader_prefers_board_facing_truth_endpoints(self):
         m = _import_projection_reader()
+        assert m.DEFAULT_HTTP_PROJECTION_ENDPOINTS[0] == "/api/v1/projection/runtime-truth"
+        assert m.DEFAULT_HTTP_PROJECTION_ENDPOINTS[1] == "/api/v1/projection/desktop-status-board"
         assert m.PROJECTION_ENDPOINT == "/api/v1/projection/runtime"
 
     def test_58_projection_reader_does_not_use_continuum_state(self):

@@ -1606,7 +1606,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         the model topology layer has been initialised) and returns a
         stable JSON payload.
 
-        The Status Board V2 polls this endpoint to render all its surfaces.
+        This is the lightweight runtime projection surface. Status Board V2
+        should prefer richer board-facing truth surfaces
+        (``/api/v1/projection/runtime-truth`` or
+        ``/api/v1/projection/desktop-status-board``) and use this endpoint as
+        a compatibility fallback.
 
         Response schema
         ---------------
@@ -1626,6 +1630,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         - ``retreat_tendency``       → MetricsSurface
         """
         payload = _assemble_projection()
+        payload.setdefault("projection_surface_role", "runtime_lightweight")
+        payload.setdefault("board_facing_default", False)
         return JSONResponse(content=payload)
 
     # ------------------------------------------------------------------
@@ -3488,7 +3494,10 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         from core.projection.runtime_truth_compiler import compile_runtime_truth
 
         snapshot = compile_runtime_truth()
-        return snapshot.to_dict()
+        payload = snapshot.to_dict()
+        payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
+        payload.setdefault("board_facing_default", True)
+        return payload
     except Exception as exc:
         logger.warning("_assemble_runtime_truth_payload: failed: %s", exc)
         from core.projection.runtime_truth_compiler import RUNTIME_TRUTH_COMPILER_AUTHORITY
@@ -3506,6 +3515,8 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "primary_model_id": None,
             "primary_provider_id": None,
             "oneapi_is_lower_horizon_only": True,
+            "projection_surface_role": "runtime_truth_board_facing",
+            "board_facing_default": True,
             "_fallback": True,
         }
 
@@ -4596,7 +4607,8 @@ def _assemble_server_canonicalization_status() -> Dict[str, Any]:
             "avoid_legacy_ucp_keys": True,
             "legacy_routing_fallback_active_field": ("model_routing.legacy_routing_fallback_active"),
             "canonical_endpoint": "/api/v1/projection/canonical-routing",
-            "desktop_status_endpoint": "/api/v1/projection/runtime",
+            "desktop_status_endpoint": "/api/v1/projection/runtime-truth",
+            "desktop_status_fallback_endpoint": "/api/v1/projection/runtime",
         },
         "timestamp": time.time(),
     }
@@ -4740,6 +4752,8 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
             exc,
         )
 
+    result.setdefault("projection_surface_role", "desktop_status_board_truth")
+    result.setdefault("board_facing_default", True)
     return result
 
 
@@ -4786,5 +4800,7 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         },
         "integration_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
         "integration_health": "unknown",
+        "projection_surface_role": "desktop_status_board_truth",
+        "board_facing_default": True,
         "_assembled_at": time.time(),
     }

@@ -160,7 +160,8 @@ class StatusBoardV2App:
             The full multi-line board string, ready for ``print()``.
         """
         source = (
-            f"http://{self._host}:{self._port}/api/v1/projection/runtime"
+            f"http://{self._host}:{self._port}"
+            f"{self._reader.last_http_endpoint or self._reader.default_http_endpoint}"
             if self._reader._base_url
             else (self._reader._file_path or "stdin")
         )

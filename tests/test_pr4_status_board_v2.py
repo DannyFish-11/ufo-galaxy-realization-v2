@@ -80,6 +80,36 @@ _MINIMAL_PROJECTION: Dict[str, Any] = {
     "timestamp": 1711533600.0,
 }
 
+_RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
+    "compiled_at": 1711533601.0,
+    "tri_state_phase": "manifest",
+    "primary_model_id": "gpt-4.1",
+    "continuum": {
+        "tri_state_phase": "manifest",
+        "runtime_domain": "cross_device",
+        "presence_intensity": 0.82,
+        "coherence": 0.9,
+        "collapse_tendency": 0.12,
+        "retreat_tendency": 0.04,
+    },
+    "topology": {
+        "primary_model": "gpt-4.1",
+        "support_models": ["claude-3-5-sonnet"],
+        "active_weights": {"gpt-4.1": 0.95},
+        "route_reason": "canonical-route",
+    },
+}
+
+_DESKTOP_STATUS_BOARD_PAYLOAD: Dict[str, Any] = {
+    "integrated_at": 1711533602.0,
+    "topology_projection": {
+        "primary_model_id": "qwen-vl",
+        "support_model_ids": ["deepseek-chat"],
+        "active_weights": {"qwen-vl": 0.77},
+        "route_reason": "desktop-topology-route",
+    },
+}
+
 # ---------------------------------------------------------------------------
 # 1. ProjectionReader tests
 # ---------------------------------------------------------------------------
@@ -106,6 +136,33 @@ class TestProjectionReaderFile:
         assert result["tri_state_phase"] == "silent"
         assert result["primary_model_id"] is None
         assert result["active_weights"] == {}
+
+    def test_runtime_truth_payload_normalizes_to_runtime_projection(self):
+        from windows_client.status_board_v2.projection_reader import (
+            _normalize_board_projection_payload,
+            RUNTIME_TRUTH_ENDPOINT,
+        )
+        result = _normalize_board_projection_payload(
+            dict(_RUNTIME_TRUTH_PAYLOAD),
+            RUNTIME_TRUTH_ENDPOINT,
+        )
+        assert result["tri_state_phase"] == "manifest"
+        assert result["runtime_domain"] == "cross_device"
+        assert result["primary_model_id"] == "gpt-4.1"
+        assert result["support_model_ids"] == ["claude-3-5-sonnet"]
+
+    def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
+        from windows_client.status_board_v2.projection_reader import (
+            _normalize_board_projection_payload,
+            DESKTOP_STATUS_BOARD_ENDPOINT,
+        )
+        result = _normalize_board_projection_payload(
+            dict(_DESKTOP_STATUS_BOARD_PAYLOAD),
+            DESKTOP_STATUS_BOARD_ENDPOINT,
+        )
+        assert result["tri_state_phase"] == "silent"
+        assert result["primary_model_id"] == "qwen-vl"
+        assert result["support_model_ids"] == ["deepseek-chat"]
 
     def test_missing_required_field_raises(self, tmp_path):
         bad = dict(_SAMPLE_PROJECTION)
@@ -177,6 +234,26 @@ class TestProjectionReaderAllFail:
         )
         with pytest.raises(ProjectionReadError):
             reader.read()
+
+    def test_http_read_prefers_runtime_truth_then_falls_back(self):
+        from windows_client.status_board_v2.projection_reader import (
+            ProjectionReader,
+            RUNTIME_TRUTH_ENDPOINT,
+            PROJECTION_ENDPOINT,
+        )
+        reader = ProjectionReader(base_url="http://127.0.0.1:8299")
+
+        def _fake_read(endpoint: str):
+            if endpoint == RUNTIME_TRUTH_ENDPOINT:
+                raise RuntimeError("runtime-truth unavailable")
+            if endpoint == PROJECTION_ENDPOINT:
+                return dict(_SAMPLE_PROJECTION)
+            raise RuntimeError("desktop-status-board unavailable")
+
+        with patch.object(reader, "_read_http_endpoint", side_effect=_fake_read):
+            result = reader.read()
+        assert result["tri_state_phase"] == "liminal"
+        assert reader.last_http_endpoint == PROJECTION_ENDPOINT
 
 
 # ---------------------------------------------------------------------------
@@ -443,6 +520,12 @@ class TestStatusBoardV2App:
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "Status Board V2" in out
+
+    def test_render_once_source_defaults_to_runtime_truth_endpoint(self):
+        from windows_client.status_board_v2.app import StatusBoardV2App
+        app = StatusBoardV2App(no_color=True)
+        out = app.render_once(_SAMPLE_PROJECTION)
+        assert "/api/v1/projection/runtime-truth" in out
 
     def test_render_offline_contains_offline(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
