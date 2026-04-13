@@ -38,7 +38,14 @@ The board then polls every interval and renders runtime projection snapshots.
 
 ## Data source
 
-Status Board V2 polls the canonical projection endpoint:
+Status Board V2 prefers richer board-facing truth endpoints:
+
+```text
+GET http://<host>:<port>/api/v1/projection/runtime-truth
+GET http://<host>:<port>/api/v1/projection/desktop-status-board
+```
+
+Compatibility fallback endpoint:
 
 ```text
 GET http://<host>:<port>/api/v1/projection/runtime

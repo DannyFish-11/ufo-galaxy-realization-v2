@@ -7,7 +7,10 @@ READ-ONLY: This module only reads data.  It never sends commands or writes
 state back to the server.
 
 Three input modes are supported (tried in priority order):
-1. **HTTP endpoint** — polls ``GET <base_url>/api/v1/projection/runtime``
+1. **HTTP endpoint chain** — polls richer board-facing truth paths first:
+   ``/api/v1/projection/runtime-truth`` then
+   ``/api/v1/projection/desktop-status-board``, then falls back to
+   ``/api/v1/projection/runtime``
 2. **File path**     — reads a JSON file on disk (useful for offline testing)
 3. **stdin**         — reads a single JSON blob from standard input
 
@@ -19,13 +22,24 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
-# Default endpoint path (appended to the base URL).
+# Compatibility fallback endpoint (lightweight runtime projection).
 PROJECTION_ENDPOINT = "/api/v1/projection/runtime"
+RUNTIME_TRUTH_ENDPOINT = "/api/v1/projection/runtime-truth"
+DESKTOP_STATUS_BOARD_ENDPOINT = "/api/v1/projection/desktop-status-board"
+
+# Default board-facing read order: richer truth surfaces first, then runtime fallback.
+DEFAULT_HTTP_PROJECTION_ENDPOINTS = (
+    RUNTIME_TRUTH_ENDPOINT,
+    DESKTOP_STATUS_BOARD_ENDPOINT,
+    PROJECTION_ENDPOINT,
+)
+DEFAULT_TRI_STATE_PHASE = "silent"
 
 # Fields required in every valid projection dict.
 _REQUIRED_FIELDS = frozenset(
@@ -72,12 +86,25 @@ class ProjectionReader:
         file_path: Optional[str] = None,
         from_stdin: bool = False,
         timeout: float = 3.0,
+        endpoint_paths: Optional[Tuple[str, ...]] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/") if base_url else None
         self._file_path = file_path
         self._from_stdin = from_stdin
         self._timeout = timeout
+        self._endpoint_paths = endpoint_paths or DEFAULT_HTTP_PROJECTION_ENDPOINTS
         self._stdin_cache: Optional[Dict[str, Any]] = None
+        self._last_http_endpoint: Optional[str] = None
+
+    @property
+    def default_http_endpoint(self) -> str:
+        """Return the highest-priority endpoint in the HTTP endpoint chain."""
+        return self._endpoint_paths[0]
+
+    @property
+    def last_http_endpoint(self) -> Optional[str]:
+        """Return the last successfully used HTTP endpoint, if any."""
+        return self._last_http_endpoint
 
     # ------------------------------------------------------------------
     # Public API
@@ -129,14 +156,27 @@ class ProjectionReader:
     # ------------------------------------------------------------------
 
     def _read_http(self) -> Dict[str, Any]:
-        """Fetch the projection from the HTTP endpoint."""
-        url = f"{self._base_url}{PROJECTION_ENDPOINT}"
+        """Fetch the projection from preferred HTTP endpoints with fallback."""
+        errors = []
+        for endpoint in self._endpoint_paths:
+            try:
+                data = self._read_http_endpoint(endpoint)
+                data = _normalize_board_projection_payload(data, endpoint)
+                _validate(data)
+                self._last_http_endpoint = endpoint
+                return data
+            except Exception as exc:
+                errors.append(f"{endpoint}: {exc}")
+        raise ProjectionReadError(
+            "All HTTP projection endpoints failed: " + "; ".join(errors)
+        )
+
+    def _read_http_endpoint(self, endpoint: str) -> Dict[str, Any]:
+        url = f"{self._base_url}{endpoint}"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=self._timeout) as resp:
             raw = resp.read().decode("utf-8")
-        data = json.loads(raw)
-        _validate(data)
-        return data
+        return json.loads(raw)
 
     def _read_file(self) -> Dict[str, Any]:
         """Read projection JSON from a file."""
@@ -171,6 +211,117 @@ def _validate(data: Any) -> None:
         raise ProjectionReadError(
             f"Projection dict is missing required fields: {sorted(missing)}"
         )
+
+
+def _normalize_board_projection_payload(
+    payload: Any,
+    endpoint: str,
+) -> Dict[str, Any]:
+    """Normalize endpoint-specific payloads into RuntimeProjection shape."""
+    if not isinstance(payload, dict):
+        raise ProjectionReadError(
+            f"Expected a JSON object, got {type(payload).__name__}"
+        )
+    if endpoint == RUNTIME_TRUTH_ENDPOINT:
+        return _runtime_projection_from_runtime_truth(payload)
+    if endpoint == DESKTOP_STATUS_BOARD_ENDPOINT:
+        return _runtime_projection_from_desktop_status_board(payload)
+    return payload
+
+
+def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert ``/projection/runtime-truth`` payload to RuntimeProjection fields."""
+    continuum = _coerce_dict(payload.get("continuum"))
+    topology = _coerce_dict(payload.get("topology"))
+
+    return {
+        "tri_state_phase": _first_not_none(
+            payload.get("tri_state_phase"),
+            continuum.get("tri_state_phase"),
+            DEFAULT_TRI_STATE_PHASE,
+        ),
+        "runtime_domain": continuum.get("runtime_domain"),
+        "presence_intensity": continuum.get("presence_intensity"),
+        "coherence": continuum.get("coherence"),
+        "collapse_tendency": continuum.get("collapse_tendency"),
+        "retreat_tendency": continuum.get("retreat_tendency"),
+        "primary_model_id": _first_not_none(
+            payload.get("primary_model_id"),
+            topology.get("primary_model"),
+        ),
+        "support_model_ids": _coerce_list(topology.get("support_models")),
+        "active_weights": _coerce_dict(topology.get("active_weights")),
+        "route_reason": topology.get("route_reason"),
+        # runtime-truth does not currently expose per-device IDs or execution stage text.
+        "active_device_ids": [],
+        "execution_stage": None,
+        "current_task_summary": None,
+        "timestamp": _coerce_timestamp(payload.get("compiled_at")),
+    }
+
+
+def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert ``/projection/desktop-status-board`` payload to RuntimeProjection fields."""
+    topology = _coerce_dict(payload.get("topology_projection"))
+    routing_summary = _coerce_dict(payload.get("model_routing_summary"))
+
+    return {
+        "tri_state_phase": _first_not_none(
+            payload.get("tri_state_phase"),
+            DEFAULT_TRI_STATE_PHASE,
+        ),
+        "runtime_domain": payload.get("runtime_domain"),
+        "presence_intensity": payload.get("presence_intensity"),
+        "coherence": payload.get("coherence"),
+        "collapse_tendency": payload.get("collapse_tendency"),
+        "retreat_tendency": payload.get("retreat_tendency"),
+        "primary_model_id": _first_not_none(
+            topology.get("primary_model_id"),
+            routing_summary.get("selected_model"),
+        ),
+        "support_model_ids": _coerce_list(
+            _first_not_none(
+                topology.get("support_model_ids"),
+                routing_summary.get("support_model_hints"),
+            )
+        ),
+        "active_weights": _coerce_dict(topology.get("active_weights")),
+        "route_reason": _first_not_none(
+            topology.get("route_reason"),
+            routing_summary.get("route_reason"),
+        ),
+        # desktop-status-board integration payload does not carry these runtime fields.
+        "active_device_ids": [],
+        "execution_stage": None,
+        "current_task_summary": None,
+        "timestamp": _coerce_timestamp(payload.get("integrated_at")),
+    }
+
+
+def _coerce_list(value: Any) -> List[Any]:
+    """Return *value* when it is a list; otherwise return an empty list."""
+    return value if isinstance(value, list) else []
+
+
+def _coerce_dict(value: Any) -> Dict[str, Any]:
+    """Return *value* when it is a dict; otherwise return an empty dict."""
+    return value if isinstance(value, dict) else {}
+
+
+def _coerce_timestamp(value: Any) -> float:
+    """Coerce *value* to float timestamp; fallback to current time on failure."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return time.time()
+
+
+def _first_not_none(*values: Any) -> Any:
+    """Return the first value that is not ``None``."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 # ---------------------------------------------------------------------------
