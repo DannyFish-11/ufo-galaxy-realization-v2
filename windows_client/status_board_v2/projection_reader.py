@@ -25,7 +25,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # Compatibility fallback endpoint (lightweight runtime projection).
@@ -39,6 +39,7 @@ DEFAULT_HTTP_PROJECTION_ENDPOINTS = (
     DESKTOP_STATUS_BOARD_ENDPOINT,
     PROJECTION_ENDPOINT,
 )
+DEFAULT_TRI_STATE_PHASE = "silent"
 
 # Fields required in every valid projection dict.
 _REQUIRED_FIELDS = frozenset(
@@ -85,7 +86,7 @@ class ProjectionReader:
         file_path: Optional[str] = None,
         from_stdin: bool = False,
         timeout: float = 3.0,
-        endpoint_paths: Optional[tuple[str, ...]] = None,
+        endpoint_paths: Optional[Tuple[str, ...]] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/") if base_url else None
         self._file_path = file_path
@@ -97,10 +98,12 @@ class ProjectionReader:
 
     @property
     def default_http_endpoint(self) -> str:
+        """Return the highest-priority endpoint in the HTTP endpoint chain."""
         return self._endpoint_paths[0]
 
     @property
     def last_http_endpoint(self) -> Optional[str]:
+        """Return the last successfully used HTTP endpoint, if any."""
         return self._last_http_endpoint
 
     # ------------------------------------------------------------------
@@ -214,6 +217,7 @@ def _normalize_board_projection_payload(
     payload: Any,
     endpoint: str,
 ) -> Dict[str, Any]:
+    """Normalize endpoint-specific payloads into RuntimeProjection shape."""
     if not isinstance(payload, dict):
         raise ProjectionReadError(
             f"Expected a JSON object, got {type(payload).__name__}"
@@ -226,20 +230,29 @@ def _normalize_board_projection_payload(
 
 
 def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
-    continuum = payload.get("continuum") if isinstance(payload.get("continuum"), dict) else {}
-    topology = payload.get("topology") if isinstance(payload.get("topology"), dict) else {}
+    """Convert ``/projection/runtime-truth`` payload to RuntimeProjection fields."""
+    continuum = _coerce_dict(payload.get("continuum"))
+    topology = _coerce_dict(payload.get("topology"))
 
     return {
-        "tri_state_phase": payload.get("tri_state_phase") or continuum.get("tri_state_phase") or "silent",
+        "tri_state_phase": _first_not_none(
+            payload.get("tri_state_phase"),
+            continuum.get("tri_state_phase"),
+            DEFAULT_TRI_STATE_PHASE,
+        ),
         "runtime_domain": continuum.get("runtime_domain"),
         "presence_intensity": continuum.get("presence_intensity"),
         "coherence": continuum.get("coherence"),
         "collapse_tendency": continuum.get("collapse_tendency"),
         "retreat_tendency": continuum.get("retreat_tendency"),
-        "primary_model_id": payload.get("primary_model_id") or topology.get("primary_model"),
+        "primary_model_id": _first_not_none(
+            payload.get("primary_model_id"),
+            topology.get("primary_model"),
+        ),
         "support_model_ids": _coerce_list(topology.get("support_models")),
         "active_weights": _coerce_dict(topology.get("active_weights")),
         "route_reason": topology.get("route_reason"),
+        # runtime-truth does not currently expose per-device IDs or execution stage text.
         "active_device_ids": [],
         "execution_stage": None,
         "current_task_summary": None,
@@ -248,24 +261,36 @@ def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str,
 
 
 def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Dict[str, Any]:
-    topology_projection = payload.get("topology_projection")
-    topology = topology_projection if isinstance(topology_projection, dict) else {}
-    routing = payload.get("model_routing_summary")
-    routing_summary = routing if isinstance(routing, dict) else {}
+    """Convert ``/projection/desktop-status-board`` payload to RuntimeProjection fields."""
+    topology = _coerce_dict(payload.get("topology_projection"))
+    routing_summary = _coerce_dict(payload.get("model_routing_summary"))
 
     return {
-        "tri_state_phase": payload.get("tri_state_phase") or "silent",
+        "tri_state_phase": _first_not_none(
+            payload.get("tri_state_phase"),
+            DEFAULT_TRI_STATE_PHASE,
+        ),
         "runtime_domain": payload.get("runtime_domain"),
         "presence_intensity": payload.get("presence_intensity"),
         "coherence": payload.get("coherence"),
         "collapse_tendency": payload.get("collapse_tendency"),
         "retreat_tendency": payload.get("retreat_tendency"),
-        "primary_model_id": topology.get("primary_model_id") or routing_summary.get("selected_model"),
+        "primary_model_id": _first_not_none(
+            topology.get("primary_model_id"),
+            routing_summary.get("selected_model"),
+        ),
         "support_model_ids": _coerce_list(
-            topology.get("support_model_ids") or routing_summary.get("support_model_hints")
+            _first_not_none(
+                topology.get("support_model_ids"),
+                routing_summary.get("support_model_hints"),
+            )
         ),
         "active_weights": _coerce_dict(topology.get("active_weights")),
-        "route_reason": topology.get("route_reason") or routing_summary.get("route_reason"),
+        "route_reason": _first_not_none(
+            topology.get("route_reason"),
+            routing_summary.get("route_reason"),
+        ),
+        # desktop-status-board integration payload does not carry these runtime fields.
         "active_device_ids": [],
         "execution_stage": None,
         "current_task_summary": None,
@@ -273,19 +298,30 @@ def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Di
     }
 
 
-def _coerce_list(value: Any) -> list[Any]:
+def _coerce_list(value: Any) -> List[Any]:
+    """Return *value* when it is a list; otherwise return an empty list."""
     return value if isinstance(value, list) else []
 
 
 def _coerce_dict(value: Any) -> Dict[str, Any]:
+    """Return *value* when it is a dict; otherwise return an empty dict."""
     return value if isinstance(value, dict) else {}
 
 
 def _coerce_timestamp(value: Any) -> float:
+    """Coerce *value* to float timestamp; fallback to current time on failure."""
     try:
         return float(value)
-    except Exception:
+    except (TypeError, ValueError):
         return time.time()
+
+
+def _first_not_none(*values: Any) -> Any:
+    """Return the first value that is not ``None``."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 # ---------------------------------------------------------------------------
