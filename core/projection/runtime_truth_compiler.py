@@ -520,9 +520,15 @@ def _compile_dispatch_semantics() -> Optional[Dict[str, Any]]:
             decision_reason = metadata.get("decision_reason")
         if decision_reason is None and readiness_notes:
             decision_reason = readiness_notes[0]
+        mode_str = "unknown"
+        if mode_val is not None:
+            if hasattr(mode_val, "value"):
+                mode_str = mode_val.value
+            else:
+                mode_str = str(mode_val)
 
         return {
-            "mode": mode_val.value if hasattr(mode_val, "value") else str(mode_val) if mode_val else "unknown",
+            "mode": mode_str,
             "decision_reason": decision_reason,
             "target_device_id": target_device_id,
             "target_selection_reason": selection_reason,
@@ -540,10 +546,11 @@ def _compile_execution_path_observability(
     """Compile execution-path observability (observation, not dispatch meaning)."""
     if dispatch_semantics is None:
         return None
+    observed_path = dispatch_semantics.get("mode")
     return {
-        "observed_execution_path": dispatch_semantics.get("mode"),
+        "observed_execution_path": observed_path,
         "observation_source": "source_dispatch_plan",
         "observation_reason": dispatch_semantics.get("decision_reason"),
-        "is_fallback_path": dispatch_semantics.get("mode") == "fallback_local",
+        "is_fallback_path": observed_path == "fallback_local",
         "has_remote_target": bool(dispatch_semantics.get("target_device_id")),
     }
