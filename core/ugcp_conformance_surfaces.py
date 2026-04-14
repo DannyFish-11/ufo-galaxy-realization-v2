@@ -12,6 +12,7 @@ normalized, but are explicitly classified to support safer retirement later.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -24,6 +25,8 @@ from core.ugcp_truth_event_model import (
     CanonicalTruthEventType,
     get_canonical_transition_event_types,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 UGCP_CONFORMANCE_SURFACES_AUTHORITY: str = (
     "UGCP_CONFORMANCE_SURFACES_AUTHORITY::"
@@ -125,7 +128,7 @@ class UGCPEnforcementAction(str, Enum):
 
 
 class UGCPDeprecationStage(str, Enum):
-    none = "none"
+    not_deprecated = "not_deprecated"
     transitional_tolerated = "transitional_tolerated"
     migration_required = "migration_required"
     strict_reject_candidate = "strict_reject_candidate"
@@ -331,6 +334,11 @@ _SURFACE_TRANSITIONAL_ALIASES: Dict[UGCPConformanceSurface, Dict[str, str]] = {
     UGCPConformanceSurface.truth_event: _TRUTH_EVENT_TRANSITIONAL_ALIASES,
 }
 
+# Deprecation-stage rubric:
+# - migration_required: normalize now, keep compatibility behavior, and migrate callers.
+# - transitional_tolerated: allowed short-term while adjacent profile/state alignment lands.
+# - strict_reject_candidate: compatibility is still present, but pathway is explicitly marked
+#   as a candidate for future strict-mode rejection once rollout gates are ready.
 _SURFACE_ALIAS_DEPRECATION_STAGE: Dict[UGCPConformanceSurface, Dict[str, UGCPDeprecationStage]] = {
     UGCPConformanceSurface.schema: {
         "message_interop_payload": UGCPDeprecationStage.migration_required,
@@ -441,9 +449,17 @@ def classify_surface_semantics(
 
 
 def _resolve_alias_deprecation_stage(surface: UGCPConformanceSurface, raw_value: Any) -> UGCPDeprecationStage:
+    """Map transitional aliases to deprecation stage.
+
+    Empty/whitespace alias inputs (normalized by _normalize_text) are treated
+    as migration-required so validation cleanup can be prioritized before
+    strictness is increased.
+    """
     normalized_input = _normalize_text(raw_value)
     if not normalized_input:
-        return UGCPDeprecationStage.transitional_tolerated
+        # Empty alias inputs indicate unresolved caller migration and should
+        # remain visible in migration-required review surfaces.
+        return UGCPDeprecationStage.migration_required
     return _SURFACE_ALIAS_DEPRECATION_STAGE.get(surface, {}).get(
         normalized_input,
         UGCPDeprecationStage.migration_required,
@@ -457,6 +473,11 @@ def _parse_enforcement_mode(mode: UGCPEnforcementMode | str) -> UGCPEnforcementM
     try:
         return UGCPEnforcementMode(normalized_mode)
     except ValueError:
+        _LOGGER.warning(
+            "Unknown UGCP enforcement mode '%s'; falling back to compatibility mode. "
+            "Valid modes: compatibility, review, strict",
+            mode,
+        )
         return UGCPEnforcementMode.compatibility
 
 
@@ -476,7 +497,7 @@ def evaluate_surface_enforcement(
             normalized_value=classified.normalized_value,
             semantic_class=classified.semantic_class,
             action=UGCPEnforcementAction.accept,
-            deprecation_stage=UGCPDeprecationStage.none,
+            deprecation_stage=UGCPDeprecationStage.not_deprecated,
             reject_in_mode=False,
         )
 
@@ -536,7 +557,7 @@ def build_enforcement_scaffold(
         for surface_key, raw_value in surface_inputs.items()
     }
     warnings = [decision.warning for decision in decisions.values() if decision.warning]
-    rejection_candidates = [surface for surface, decision in decisions.items() if decision.reject_in_mode]
+    rejected_surfaces_in_mode = [surface for surface, decision in decisions.items() if decision.reject_in_mode]
     strict_rejection_ready_pathways = [
         decision.compatibility_pathway
         for decision in decisions.values()
@@ -546,13 +567,13 @@ def build_enforcement_scaffold(
     deprecation_markers = {
         surface: decision.deprecation_stage.value
         for surface, decision in decisions.items()
-        if decision.deprecation_stage != UGCPDeprecationStage.none
+        if decision.deprecation_stage != UGCPDeprecationStage.not_deprecated
     }
     return {
         "mode": parsed_mode.value,
         "normalized": normalized,
         "warnings": warnings,
-        "rejection_candidates": rejection_candidates,
+        "rejected_surfaces_in_mode": rejected_surfaces_in_mode,
         "strict_rejection_ready_pathways": strict_rejection_ready_pathways,
         "deprecation_markers": deprecation_markers,
         "decisions": {

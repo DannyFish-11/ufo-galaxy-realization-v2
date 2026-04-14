@@ -166,15 +166,41 @@ def test_invariant_report_flags_cross_profile_lifecycle_drift() -> None:
     assert report["enforcement_scaffold"]["mode"] == UGCPEnforcementMode.review.value
 
 
-def test_enforcement_decision_surfaces_strict_reject_candidates_without_breakage() -> None:
-    review_decision = evaluate_surface_enforcement(UGCPConformanceSurface.authority, "projection", mode="review")
-    strict_decision = evaluate_surface_enforcement(UGCPConformanceSurface.authority, "projection", mode="strict")
+def test_enforcement_decision_strict_mode_reject_candidates() -> None:
+    review_decision = evaluate_surface_enforcement(
+        UGCPConformanceSurface.authority,
+        "projection",
+        mode=UGCPEnforcementMode.review,
+    )
+    strict_decision = evaluate_surface_enforcement(
+        UGCPConformanceSurface.authority,
+        "projection",
+        mode=UGCPEnforcementMode.strict,
+    )
 
     assert review_decision.action == UGCPEnforcementAction.normalize_warn
     assert review_decision.reject_in_mode is False
     assert review_decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
     assert strict_decision.action == UGCPEnforcementAction.reject
     assert strict_decision.reject_in_mode is True
+
+
+@pytest.mark.parametrize(
+    ("surface", "raw_value"),
+    [
+        (UGCPConformanceSurface.schema, "legacy_message_payload"),
+        (UGCPConformanceSurface.authority, "projection"),
+        (UGCPConformanceSurface.transfer, "blocked"),
+    ],
+)
+def test_strict_reject_candidates_cover_multiple_surfaces(
+    surface: UGCPConformanceSurface,
+    raw_value: str,
+) -> None:
+    decision = evaluate_surface_enforcement(surface, raw_value, mode=UGCPEnforcementMode.strict)
+    assert decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
+    assert decision.action == UGCPEnforcementAction.reject
+    assert decision.reject_in_mode is True
 
 
 def test_enforcement_scaffold_marks_warnings_and_rejection_candidates() -> None:
@@ -191,12 +217,16 @@ def test_enforcement_scaffold_marks_warnings_and_rejection_candidates() -> None:
     )
 
     assert scaffold["mode"] == UGCPEnforcementMode.strict.value
-    assert "authority" in scaffold["rejection_candidates"]
-    assert "transfer" in scaffold["rejection_candidates"]
+    assert "authority" in scaffold["rejected_surfaces_in_mode"]
+    assert "transfer" in scaffold["rejected_surfaces_in_mode"]
     assert scaffold["deprecation_markers"]["schema"] == UGCPDeprecationStage.strict_reject_candidate.value
     assert scaffold["decisions"]["coordination"]["action"] == UGCPEnforcementAction.normalize_warn.value
     assert scaffold["warnings"]
-    assert scaffold["strict_rejection_ready_pathways"]
+    assert scaffold["strict_rejection_ready_pathways"] == [
+        "schema_alias:legacy_message_payload->task_envelope",
+        "authority_alias:projection->unknown",
+        "transfer_alias:blocked->rejected",
+    ]
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
