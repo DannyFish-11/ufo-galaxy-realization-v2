@@ -187,9 +187,9 @@ are a legacy pattern.  All existing cases are tracked in
 
 | Path | File | Status |
 |------|------|--------|
-| AIP v3 message ingress | `galaxy_gateway/routes/websocket.py` | CANONICAL |
+| AIP v3 message ingress | `galaxy_gateway/routes/websocket.py` | CANONICAL (UGCP Runtime WS Profile ingress) |
 | AIP v2 compat | `galaxy_gateway/protocol/compat.py` | LEGACY compat layer |
-| Android bridge (monolith) | `galaxy_gateway/android_bridge.py` | LEGACY — partially migrated to `galaxy_gateway/android/` |
+| Android bridge (monolith) | `galaxy_gateway/android_bridge.py` | ACTIVE transport adapter for Android runtime-profile semantics (not independent truth authority) |
 | Granular adapter | `galaxy_gateway/android_granular_adapter.py` | ACTIVE — targeted for merge into `android/` package |
 
 ---

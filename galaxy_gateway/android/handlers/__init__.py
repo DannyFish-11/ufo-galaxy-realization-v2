@@ -15,6 +15,7 @@ from galaxy_gateway.android.handlers.heartbeat import (
     handle_heartbeat,
     handle_device_status,
     handle_agent_ping,
+    handle_agent_status,
 )
 from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_result,
@@ -44,6 +45,7 @@ __all__ = [
     "handle_heartbeat",
     "handle_device_status",
     "handle_agent_ping",
+    "handle_agent_status",
     "handle_task_result",
     "handle_task_end",
     "handle_task_progress",

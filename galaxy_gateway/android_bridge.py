@@ -67,6 +67,7 @@ from galaxy_gateway.android.handlers.heartbeat import (
     handle_heartbeat,
     handle_device_status,
     handle_agent_ping,
+    handle_agent_status,
 )
 from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_result,
@@ -89,6 +90,7 @@ from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_paylo
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
 # =============================================================================
 # OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
@@ -456,6 +458,7 @@ class AndroidBridge:
         self._message_handlers[MessageType.TASK_CANCEL] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.TASK_STATUS] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
+        self._message_handlers[MessageType.AGENT_STATUS] = _wrap(handle_agent_status)
         self._message_handlers[MessageType.AGENT_CONFIG_UPDATE] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.AGENT_RESTART] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.UI_TREE_REQUEST] = _wrap(handle_generic_forward)
@@ -464,6 +467,10 @@ class AndroidBridge:
         self._message_handlers[MessageType.APP_START] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.APP_STOP] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.SYSTEM_COMMAND] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.FILE_TRANSFER] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.MESH_TOPOLOGY] = _wrap(handle_generic_forward)
 
         # 设备状态上报
         self._message_handlers[MessageType.DEVICE_STATUS] = _wrap(handle_device_status)
@@ -548,6 +555,15 @@ class AndroidBridge:
                 "UNKNOWN_MESSAGE_TYPE",
                 f"Unknown message type: {msg_type_str}",
             )
+
+        profile_mapping = classify_android_runtime_ws_mapping(msg_type.value)
+        logger.debug(
+            "android runtime-ws ingress mapped: device_id=%s type=%s family=%s handling=%s",
+            device_id,
+            msg_type.value,
+            profile_mapping.semantic_family,
+            profile_mapping.handling_level,
+        )
 
         handler = self._message_handlers.get(msg_type)
         if handler:
