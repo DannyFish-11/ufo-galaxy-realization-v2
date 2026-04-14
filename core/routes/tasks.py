@@ -136,8 +136,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "routing."
                     ),
                 )
-            except Exception:
-                pass
+            except Exception as _guardrail_exc:
+                logger.debug("create_task: legacy guardrail emission skipped - %s", _guardrail_exc)
 
             await connection_manager.send_to_device(req.device_id, {
                 "type": "task",

@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import sys
 import os
-import asyncio
 import unittest
 import warnings
 from unittest.mock import patch, MagicMock
@@ -337,6 +336,7 @@ class TestCompatBypassFencing(unittest.TestCase):
         self.assertIsNotNone(get_legacy_entry("core.routes.tasks.create_task"))
 
     def test_42_route_command_emits_legacy_guardrail(self):
+        import asyncio
         from core.command_router import CommandRouter
 
         router = CommandRouter.__new__(CommandRouter)

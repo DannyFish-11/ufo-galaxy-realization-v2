@@ -206,6 +206,16 @@ _NON_AUTHORITY_TRUTH_SOURCE_LABELS = (
 )
 
 
+def _is_non_authority_truth_source_label(normalised: str) -> bool:
+    """Return True when *normalised* uses a known non-authority source label."""
+    if normalised in _NON_AUTHORITY_TRUTH_SOURCE_LABELS:
+        return True
+    return any(
+        normalised.startswith(f"{label}_") or normalised.startswith(f"{label}-")
+        for label in _NON_AUTHORITY_TRUTH_SOURCE_LABELS
+    )
+
+
 def _normalise_posture(hint: Optional[str]) -> str:
     """Return a canonical posture string, defaulting to ``control_only``."""
     if not hint or not isinstance(hint, str):
@@ -221,7 +231,7 @@ def _normalise_truth_source_label(label: Optional[str]) -> tuple[str, Optional[s
     normalised = str(label).strip().lower()
     if normalised in _CANONICAL_TRUTH_SOURCES:
         return normalised, None
-    if any(k in normalised for k in _NON_AUTHORITY_TRUTH_SOURCE_LABELS):
+    if _is_non_authority_truth_source_label(normalised):
         return (
             SessionTruthSource.unknown.value,
             f"downgraded_non_authority_label:{normalised}",
@@ -927,7 +937,7 @@ def record_session_truth(
     )
     record_metadata = dict(metadata or {})
     if truth_source_downgrade_reason is not None:
-        record_metadata.setdefault("truth_source_input", str(resolved_truth_source))
+        record_metadata.setdefault("truth_source_original", str(resolved_truth_source))
         record_metadata.setdefault("truth_source_normalized", normalised_truth_source)
         record_metadata.setdefault(
             "truth_source_downgrade_reason",

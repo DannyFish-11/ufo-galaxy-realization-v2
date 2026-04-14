@@ -778,8 +778,8 @@ class CommandRouter:
                 origin=request.source if hasattr(request, "source") else "compat",
                 goal=request.command if hasattr(request, "command") else "",
             )
-        except Exception:
-            pass
+        except Exception as _guardrail_exc:
+            logger.debug("route_command: legacy guardrail emission skipped - %s", _guardrail_exc)
 
         self._stats["total_dispatched"] += 1
         start = time.time()
@@ -1078,8 +1078,8 @@ class CommandRouter:
                         }
                     }
                 )
-        except Exception:
-            pass
+        except Exception as _guardrail_exc:
+            logger.debug("route_command: legacy guardrail emission skipped — %s", _guardrail_exc)
 
         if not envelope.targets:
             # PR-518/GAP-517-001: Cross-device envelopes are allowed to have
