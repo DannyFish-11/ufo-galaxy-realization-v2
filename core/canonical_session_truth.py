@@ -77,6 +77,8 @@ __all__ = [
     "POSTURE_AWARE_RESULT_FILTER_POLICY",
     "JOIN_RUNTIME_INCLUDED_IN_MERGE_POLICY",
     "OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY",
+    "SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY",
+    "PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY",
     "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
     # Data types
     "SessionTruthSource",
@@ -159,6 +161,21 @@ OBSERVER_ONLY_ROLE_EXCLUDED_FROM_MERGE_POLICY: str = (
 )
 """Policy: observer_only coordination-role result units are excluded from canonical merge."""
 
+SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::TRUTH_SOURCE_CANONICAL_ONLY_POLICY_V1: "
+    "record_session_truth() MUST keep truth_source within SessionTruthSource "
+    "canonical values. Unknown or non-canonical values are downgraded to "
+    "'unknown' to avoid creating parallel truth authority labels."
+)
+"""Policy: truth_source must remain inside canonical SessionTruthSource values."""
+
+PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::PROJECTION_INTEROP_COMPAT_NOT_AUTHORITY_POLICY_V1: "
+    "projection/interop/compat/legacy labels are read/adaptation surfaces only "
+    "and MUST NOT be accepted as canonical truth authority origins."
+)
+"""Policy: projection/interop/compat surfaces cannot act as truth-source authority."""
+
 # ---------------------------------------------------------------------------
 # Internal posture helpers
 # ---------------------------------------------------------------------------
@@ -169,6 +186,25 @@ _VALID_POSTURES = frozenset({_CONTROL_ONLY, _JOIN_RUNTIME})
 
 _OBSERVER_ONLY_ROLE: str = "observer_only"
 
+_CANONICAL_TRUTH_SOURCES = frozenset(
+    {
+        "local",
+        "remote_handoff",
+        "takeover",
+        "multi_device",
+        "mesh",
+        "unknown",
+    }
+)
+_NON_AUTHORITY_TRUTH_SOURCE_LABELS = (
+    "projection",
+    "interop",
+    "compat",
+    "legacy",
+    "adapter",
+    "bridge",
+)
+
 
 def _normalise_posture(hint: Optional[str]) -> str:
     """Return a canonical posture string, defaulting to ``control_only``."""
@@ -176,6 +212,24 @@ def _normalise_posture(hint: Optional[str]) -> str:
         return _CONTROL_ONLY
     normalised = hint.strip().lower()
     return normalised if normalised in _VALID_POSTURES else _CONTROL_ONLY
+
+
+def _normalise_truth_source_label(label: Optional[str]) -> tuple[str, Optional[str]]:
+    """Normalise truth_source to canonical labels and downgrade non-authority hints."""
+    if label is None:
+        return SessionTruthSource.unknown.value, None
+    normalised = str(label).strip().lower()
+    if normalised in _CANONICAL_TRUTH_SOURCES:
+        return normalised, None
+    if any(k in normalised for k in _NON_AUTHORITY_TRUTH_SOURCE_LABELS):
+        return (
+            SessionTruthSource.unknown.value,
+            f"downgraded_non_authority_label:{normalised}",
+        )
+    return (
+        SessionTruthSource.unknown.value,
+        f"downgraded_non_canonical_label:{normalised}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +922,26 @@ def record_session_truth(
                 else SessionTruthSource.unknown.value
             )
 
+    normalised_truth_source, truth_source_downgrade_reason = _normalise_truth_source_label(
+        resolved_truth_source
+    )
+    record_metadata = dict(metadata or {})
+    if truth_source_downgrade_reason is not None:
+        record_metadata.setdefault("truth_source_input", str(resolved_truth_source))
+        record_metadata.setdefault("truth_source_normalized", normalised_truth_source)
+        record_metadata.setdefault(
+            "truth_source_downgrade_reason",
+            truth_source_downgrade_reason,
+        )
+        record_metadata.setdefault(
+            "truth_source_downgrade_policy",
+            SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY,
+        )
+        record_metadata.setdefault(
+            "truth_surface_boundary_policy",
+            PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY,
+        )
+
     rec = CanonicalSessionTruthRecord(
         session_id=session_id,
         task_id=task_id,
@@ -881,7 +955,7 @@ def record_session_truth(
         merge_id=merged.merge_id,
         merge_success=merged.success,
         primary_unit_id=merged.primary_result_unit_id,
-        truth_source=resolved_truth_source,
+        truth_source=normalised_truth_source,
         reason=(
             f"posture={normalised_posture}, "
             f"coordination_role={normalised_role}, "
@@ -889,7 +963,7 @@ def record_session_truth(
             f"excluded={len(excluded_ids)}, "
             f"merge_success={merged.success}"
         ),
-        metadata=dict(metadata or {}),
+        metadata=record_metadata,
     )
 
     get_canonical_session_truth_runtime().record(rec)

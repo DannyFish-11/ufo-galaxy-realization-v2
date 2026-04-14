@@ -230,6 +230,36 @@ _register(
     ),
 )
 
+# PR-3 convergence hardening: explicit fencing for known compat ingress shims.
+_register(
+    LegacyPathEntry(
+        module_path="core.command_router.CommandRouter.route_command",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Use CommandRouter.route_envelope(TaskEnvelope) as the canonical "
+            "ingress path for control-plane dispatch."
+        ),
+        pr_guardrail_added="PR-3 convergence",
+        notes=(
+            "route_command is a compatibility shim that wraps legacy params "
+            "into TaskEnvelope. It must not be treated as canonical authority."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.tasks.create_task",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Use POST /api/v1/command/unified or CommandRouter.route_envelope() "
+            "for canonical control-plane dispatch routing."
+        ),
+        pr_guardrail_added="PR-3 convergence",
+        notes=(
+            "tasks route remains a thin route adapter surface for compatibility; "
+            "it is not canonical dispatch authority."
+        ),
+    ),
+)
+
 # PR-36: Register additional paths that are explicitly retired to secondary
 # status as part of the production-baseline promotion.  These paths may still
 # exist in the codebase for backward compatibility, but are formally demoted.

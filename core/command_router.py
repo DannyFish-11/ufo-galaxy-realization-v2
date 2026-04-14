@@ -1485,6 +1485,23 @@ class CommandRouter:
         that have not yet been migrated and for external integrations that
         depend on the existing signature.
         """
+        # PR-3 convergence: route_command is a compat shim only.
+        # Keep behavior stable but emit a structured guardrail so this path is
+        # explicitly downgraded from canonical ingress authority.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
+            emit_legacy_guardrail(
+                caller="core.command_router.CommandRouter.route_command",
+                trace_id=trace_id,
+                override_recommendation=(
+                    "Construct TaskEnvelope and call CommandRouter.route_envelope() "
+                    "directly for canonical ingress."
+                ),
+            )
+        except Exception:
+            pass
+
         from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
         envelope = _TaskEnvelope(
