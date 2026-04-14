@@ -122,6 +122,12 @@ _KIND_TO_CLASS: Dict[str, str] = {
     # Transport / overlay
     IngressEventKind.WAKE_EVENT:        IngressMessageClass.TRANSPORT,
     IngressEventKind.CAPABILITY_REPORT: IngressMessageClass.TRANSPORT,
+    IngressEventKind.AGENT_STATUS:      IngressMessageClass.PRESENCE,
+    IngressEventKind.DELEGATED_EXECUTION_SIGNAL: IngressMessageClass.EXECUTION,
+    IngressEventKind.FILE_TRANSFER:     IngressMessageClass.CONTROL,
+    IngressEventKind.PEER_ANNOUNCE:     IngressMessageClass.TRANSPORT,
+    IngressEventKind.PEER_EXCHANGE:     IngressMessageClass.TRANSPORT,
+    IngressEventKind.MESH_TOPOLOGY:     IngressMessageClass.TRANSPORT,
 }
 
 

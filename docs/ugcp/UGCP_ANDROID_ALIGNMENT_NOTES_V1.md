@@ -31,3 +31,23 @@ This note defines how Android-side concepts should align with center-side UGCP s
 ## 4) Non-overclaim note
 
 These alignment rules freeze semantics for convergence work. They do not claim all Android and center modules are already fully renamed or fully unified at protocol level.
+
+## 5) PR-4B center-side runtime WS profile treatment (incremental)
+
+Android AIP/WS ingress is now explicitly treated as a **UGCP Runtime WS Profile** on the gateway side:
+
+| Android ingress family | Center ingress handling | Canonical mapping posture |
+|---|---|---|
+| `device_register` | `android_bridge` registration handler + UDM registration write | Canonical |
+| `heartbeat` / `device_status` / `agent_status` | Heartbeat/status handlers patch runtime/session evidence into UDM/UCM and router session cache | Canonical (readiness/posture evidence) |
+| `capability_report` | Capability handler syncs gateway capability registry + CapabilityRegistry | Canonical |
+| `delegated_execution_signal` | Dedicated canonical ingress via `core.android_delegated_signal_ingress` | Canonical |
+| `file_transfer` | Explicitly recognized runtime transfer-family ingress, currently bounded through gateway generic-forward ACK path | Compat-forwarded (bounded) |
+| `peer_announce` / `peer_exchange` / `mesh_topology` | Explicitly recognized runtime mesh-family ingress, currently bounded through gateway generic-forward ACK path | Compat-forwarded (bounded) |
+
+Center-side expectations for this profile:
+
+- **Session continuity/reconnect:** reconnect + heartbeat are expected continuity signals; center-side truth remains authoritative.
+- **Readiness/capability/posture:** Android reports are evidence inputs, not parallel truth authority.
+- **Transfer/delegation:** delegated execution signals are canonicalized first; transfer-family compat signals are explicitly bounded and reviewable.
+- **Mesh participation:** mesh-family ingress is explicitly accepted and labeled as transport-coordination input, pending deeper canonical mesh-routing convergence.

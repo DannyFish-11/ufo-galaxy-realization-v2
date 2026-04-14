@@ -102,3 +102,32 @@ async def handle_agent_ping(
     device_id = message.get("device_id")
     logger.debug("Agent ping from %s", device_id)
     return MessageBuilder.heartbeat_ack(device_id)
+
+
+async def handle_agent_status(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
+    """处理 agent_status（readiness/posture 证据）."""
+    device_id = message.get("device_id")
+    status_payload = message.get("status") or message.get("payload") or {}
+
+    if device_id:
+        meta_patch: Dict[str, Any] = {}
+        if isinstance(status_payload, dict) and status_payload:
+            meta_patch["metadata"] = {"agent_status_report": status_payload}
+        bridge._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge.agent_status")
+
+    async with bridge._lock:
+        if device_id in bridge._devices:
+            bridge._devices[device_id].last_heartbeat = time.time()
+            bridge._devices[device_id].connected = True
+            bridge._sync_device_router_session(device_id, connected=True)
+
+    return {
+        "version": "3.0",
+        "type": "agent_status_ack",
+        "message_id": str(uuid.uuid4()),
+        "device_id": device_id,
+        "timestamp": int(time.time() * 1000),
+        "status": "received",
+    }

@@ -54,7 +54,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -99,6 +99,12 @@ class IngressEventKind:
 
     # System events
     CAPABILITY_REPORT: str = "capability_report"
+    AGENT_STATUS: str = "agent_status"
+    DELEGATED_EXECUTION_SIGNAL: str = "delegated_execution_signal"
+    FILE_TRANSFER: str = "file_transfer"
+    PEER_ANNOUNCE: str = "peer_announce"
+    PEER_EXCHANGE: str = "peer_exchange"
+    MESH_TOPOLOGY: str = "mesh_topology"
     WAKE_EVENT: str = "wake_event"
 
     # Unknown / unrecognised
@@ -109,7 +115,8 @@ class IngressEventKind:
         TASK_SUBMIT, TASK_RESULT, TASK_CANCEL,
         COMMAND, COMMAND_RESULT,
         GOAL_EXECUTION, PARALLEL_SUBTASK, PARALLEL_RESULT,
-        CAPABILITY_REPORT, WAKE_EVENT,
+        CAPABILITY_REPORT, AGENT_STATUS, DELEGATED_EXECUTION_SIGNAL,
+        FILE_TRANSFER, PEER_ANNOUNCE, PEER_EXCHANGE, MESH_TOPOLOGY, WAKE_EVENT,
         UNKNOWN,
     }
 
