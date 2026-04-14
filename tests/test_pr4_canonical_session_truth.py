@@ -895,6 +895,33 @@ class TestGroupT_TruthSourceInference:
             SessionTruthSource.unknown.value,  # fallback if not primary
         )
 
+    def test_T04_non_canonical_truth_source_downgraded_to_unknown(self):
+        from core.canonical_session_truth import (
+            record_session_truth,
+            SessionTruthSource,
+        )
+        rec = record_session_truth(
+            session_id="s",
+            truth_source="non_canonical_source_label",
+        )
+        assert rec.truth_source == SessionTruthSource.unknown.value
+        assert rec.metadata.get("truth_source_downgrade_reason", "").startswith(
+            "downgraded_non_canonical_label:"
+        )
+
+    def test_T05_projection_truth_source_is_explicitly_downgraded(self):
+        from core.canonical_session_truth import (
+            record_session_truth,
+            SessionTruthSource,
+        )
+        rec = record_session_truth(
+            session_id="s",
+            truth_source="projection_surface",
+        )
+        assert rec.truth_source == SessionTruthSource.unknown.value
+        assert rec.metadata.get("truth_surface_boundary_policy")
+        assert rec.metadata.get("truth_source_normalized") == SessionTruthSource.unknown.value
+
 
 # ===========================================================================
 # Group U — build_canonical_session_truth_snapshot

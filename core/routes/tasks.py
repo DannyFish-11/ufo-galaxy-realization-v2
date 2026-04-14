@@ -122,6 +122,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         task_queue[task_id] = task
 
         if req.device_id and req.device_id in connection_manager.active_devices:
+            # PR-3 convergence: this route remains a thin compat adapter and is
+            # not canonical dispatch authority; emit structured guardrail.
+            try:
+                from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
+                emit_legacy_guardrail(
+                    caller="core.routes.tasks.create_task",
+                    trace_id=trace_id,
+                    override_recommendation=(
+                        "Use POST /api/v1/command/unified or "
+                        "CommandRouter.route_envelope() for canonical control-plane "
+                        "routing."
+                    ),
+                )
+            except Exception as _guardrail_exc:
+                logger.debug("create_task: legacy guardrail emission skipped - %s", _guardrail_exc)
+
             await connection_manager.send_to_device(req.device_id, {
                 "type": "task",
                 "task_id": task_id,
@@ -130,6 +147,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "payload": req.payload
             })
             task["status"] = "sent"
+            task["dispatch_authority"] = "compat_route_adapter"
 
         return JSONResponse({
             "success": True,

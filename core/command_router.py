@@ -778,8 +778,8 @@ class CommandRouter:
                 origin=request.source if hasattr(request, "source") else "compat",
                 goal=request.command if hasattr(request, "command") else "",
             )
-        except Exception:
-            pass
+        except Exception as _guardrail_exc:
+            logger.debug("route_command: legacy guardrail emission skipped - %s", _guardrail_exc)
 
         self._stats["total_dispatched"] += 1
         start = time.time()
@@ -1078,8 +1078,8 @@ class CommandRouter:
                         }
                     }
                 )
-        except Exception:
-            pass
+        except Exception as _guardrail_exc:
+            logger.debug("route_command: legacy guardrail emission skipped — %s", _guardrail_exc)
 
         if not envelope.targets:
             # PR-518/GAP-517-001: Cross-device envelopes are allowed to have
@@ -1485,6 +1485,23 @@ class CommandRouter:
         that have not yet been migrated and for external integrations that
         depend on the existing signature.
         """
+        # PR-3 convergence: route_command is a compat shim only.
+        # Keep behavior stable but emit a structured guardrail so this path is
+        # explicitly downgraded from canonical ingress authority.
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
+            emit_legacy_guardrail(
+                caller="core.command_router.CommandRouter.route_command",
+                trace_id=trace_id,
+                override_recommendation=(
+                    "Construct TaskEnvelope and call CommandRouter.route_envelope() "
+                    "directly for canonical ingress."
+                ),
+            )
+        except Exception:
+            pass
+
         from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
         envelope = _TaskEnvelope(

@@ -326,5 +326,40 @@ class TestOrchestratorFacadeAuthority(unittest.TestCase):
         self.assertIn("FACADE", UNIFIED_ORCHESTRATOR_FACADE_AUTHORITY)
 
 
+class TestCompatBypassFencing(unittest.TestCase):
+    """PR-3 convergence: compat ingress paths are explicitly fenced/downgraded."""
+
+    def test_41_legacy_registry_contains_known_compat_ingress_paths(self):
+        from core.orchestration_authority.legacy_paths import get_legacy_entry
+
+        self.assertIsNotNone(get_legacy_entry("core.command_router.CommandRouter.route_command"))
+        self.assertIsNotNone(get_legacy_entry("core.routes.tasks.create_task"))
+
+    def test_42_route_command_emits_legacy_guardrail(self):
+        import asyncio
+        from core.command_router import CommandRouter
+
+        router = CommandRouter.__new__(CommandRouter)
+
+        async def _fake_route_envelope(_envelope):
+            return {"success": True, "via": "route_envelope"}
+
+        router.route_envelope = _fake_route_envelope
+
+        with patch("core.orchestration_authority.legacy_paths.emit_legacy_guardrail") as emit:
+            result = asyncio.run(
+                router.route_command(
+                    device_id="dev_1",
+                    command="tap",
+                    payload={"x": 1},
+                    command_id="cmd_1",
+                    task_id="task_1",
+                    trace_id="trace_1",
+                )
+            )
+        self.assertTrue(result.get("success"))
+        emit.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,9 @@ When a canonical term is frozen before universal implementation, documentation m
 - `active` (implemented as named), or
 - `mapped` (implemented through current alias terms).
 
+### Clause F — Canonical authority-chain is mandatory for new control-plane code
+Control-plane ingress, routing, source dispatch, takeover/handoff authority, truth finalization, and durable snapshot surfaces are frozen as one canonical chain. Compat/bridge/interop paths are adapter-only and must be explicitly fenced when retained.
+
 ## 3) Canonical taxonomy (frozen families)
 
 UGCP v1 freezes these families:
@@ -42,6 +45,7 @@ UGCP v1 freezes these families:
 - Profile taxonomy
 
 Normative field-level freeze is defined in `UGCP_CANONICAL_VOCABULARY_V1.md`.
+Normative chain-level freeze is defined in `UGCP_CANONICAL_AUTHORITY_CHAIN_V1.md`.
 
 ## 4) Profile taxonomy (v1)
 
