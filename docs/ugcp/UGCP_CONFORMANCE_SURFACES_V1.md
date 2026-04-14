@@ -72,3 +72,24 @@ PR-9 adds an incremental composition layer on top of the PR-8 scaffold:
 
 This keeps behavior non-breaking while reducing semantic drift across adjacent
 profiles and clarifying one distributed control-plane backbone.
+
+## 7) PR-10/PR-11 staged migration-readiness and retirement sequencing
+
+PR-10 adds enforcement/deprecation scaffolding (`build_enforcement_scaffold()`)
+with explicit handling action and deprecation-stage markers, while keeping
+compatibility mode as default behavior.
+
+PR-11 adds migration-readiness and sequencing groundwork:
+
+- `get_ugcp_retirement_stage_catalog()` groups tolerated aliases by staged
+  retirement posture (`transitional_tolerated`, `migration_required`,
+  `strict_reject_candidate`) per surface.
+- `build_migration_readiness_scaffold()` exposes:
+  - canonical surfaces ready for staged tightening review,
+  - transitional pathways still requiring tolerance,
+  - stage-gated retirement sequencing (`observe_and_normalize` →
+    `migrate_required_pathways` → `gate_strict_reject_candidates`).
+
+This remains bounded and non-disruptive: it improves rollout planning and
+reviewability without claiming immediate global strict rollout or abrupt
+compatibility removal.
