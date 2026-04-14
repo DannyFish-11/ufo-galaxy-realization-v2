@@ -243,10 +243,13 @@ def test_enforcement_scaffold_marks_warnings_and_rejection_candidates() -> None:
 def test_retirement_stage_catalog_is_surface_scoped_and_stage_grouped() -> None:
     catalog = get_ugcp_retirement_stage_catalog()
     assert set(catalog) == {"schema", "lifecycle", "authority", "transfer", "coordination", "truth_event"}
-    assert catalog["schema"]["strict_reject_candidate_aliases"] == ["legacy_message_payload"]
+    assert "legacy_message_payload" in catalog["schema"]["strict_reject_candidate_aliases"]
     assert "waiting" in catalog["lifecycle"]["transitional_tolerated_aliases"]
-    assert "projection" in catalog["authority"]["strict_reject_candidate_aliases"]
+    assert {"compat", "interop", "legacy_bridge", "projection"}.issubset(
+        set(catalog["authority"]["strict_reject_candidate_aliases"])
+    )
     assert "blocked" in catalog["transfer"]["strict_reject_candidate_aliases"]
+    assert {"cancelled_by_policy", "waiting"}.issubset(set(catalog["coordination"]["migration_required_aliases"]))
     assert "session_truth_written" in catalog["truth_event"]["migration_required_aliases"]
 
 

@@ -715,7 +715,15 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
 
 
 def get_ugcp_retirement_stage_catalog() -> Dict[str, Dict[str, List[str]]]:
-    """Return alias retirement staging grouped by conformance surface."""
+    """Return alias retirement staging grouped by conformance surface.
+
+    Returns:
+        A dictionary keyed by `UGCPConformanceSurface.value`.  Each value is a
+        dictionary with the following keys, each mapped to `List[str]`:
+        - `migration_required_aliases`
+        - `transitional_tolerated_aliases`
+        - `strict_reject_candidate_aliases`
+    """
     stage_catalog: Dict[str, Dict[str, List[str]]] = {}
     for surface in UGCPConformanceSurface:
         aliases = _SURFACE_ALIAS_DEPRECATION_STAGE.get(surface, {})
@@ -746,7 +754,28 @@ def build_migration_readiness_scaffold(
     payload: Optional[Mapping[str, Any]] = None,
     mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
 ) -> Dict[str, Any]:
-    """Build PR-11 migration-readiness and retirement-sequencing scaffold."""
+    """Build PR-11 migration-readiness and retirement-sequencing scaffold.
+
+    Args:
+        payload: Optional mapping that may include conformance inputs such as
+            `schema_kind`, `lifecycle_state`, `authority_source`,
+            `transfer_state`, `coordination_state`, and `truth_event_type`.
+        mode: Enforcement mode (`compatibility`, `review`, or `strict`).
+
+    Returns:
+        A dictionary containing:
+        - `mode` (`str`): parsed enforcement mode.
+        - `canonical_surfaces_ready_for_staged_enforcement` (`List[str]`):
+          canonical UGCP surface names available for staged tightening review.
+        - `retirement_stage_catalog` (`Dict[str, Dict[str, List[str]]]`):
+          per-surface retirement alias stage grouping.
+        - `transitional_surfaces_requiring_tolerance` (with `deprecation_stage`
+          defaulting to `transitional_tolerated` if missing from a decision).
+        - `retirement_sequence` (`List[Dict[str, Any]]`): stage-gated rollout
+          phases and pathway focus.
+        - `enforcement_scaffold` (`Dict[str, Any]`): bounded enforcement output
+          from `build_enforcement_scaffold`.
+    """
     source_payload = payload or {}
     parsed_mode = _parse_enforcement_mode(mode)
     stage_catalog = get_ugcp_retirement_stage_catalog()
