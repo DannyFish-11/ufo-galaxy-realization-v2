@@ -323,6 +323,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::UGCP_COORDINATION_PROFILE_ALIGNED_PR6_UNAVAILABLE"
     )
 
+# PR-7 (UGCP convergence plan, realization-v2 side): canonical truth/event
+# backbone alignment across authoritative truth writes, event vocabulary,
+# durable snapshot surfaces, and replay/recovery checkpoints.
+try:
+    from core.ugcp_truth_event_model import (  # noqa: F401
+        UGCP_TRUTH_EVENT_MODEL_AUTHORITY as _UTEM_AUTHORITY,
+        UGCP_TRUTH_EVENT_MODEL_PR7_SENTINEL as _UTEM_PR7,
+        CanonicalTruthEventType as _CanonicalTruthEventType,
+        TruthSurfaceClass as _TruthSurfaceClass,
+        build_session_truth_authoritative_event as _build_session_truth_authoritative_event,
+        build_snapshot_projection_surface as _build_snapshot_projection_surface,
+        build_replay_checkpoint as _build_replay_checkpoint,
+        build_runtime_observational_stream_event as _build_runtime_observational_stream_event,
+    )
+
+    UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7: str = (
+        "PROJECTION_ROUTES::UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7_V1: "
+        "canonical UGCP truth/event backbone "
+        "(core.ugcp_truth_event_model) is available and aligned with projection "
+        "routes. Authoritative truth transitions, canonical transition event "
+        "vocabulary, durable snapshots, replay checkpoints, and runtime "
+        "observational streams share one explicit semantic model."
+    )
+except ImportError:  # pragma: no cover
+    UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_TRUTH_EVENT_MODEL_ALIGNED_PR7_UNAVAILABLE"
+    )
+
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime execution-tracking and acknowledgment
 # basis.  Importing the authority sentinel and the PR-10 sentinel from the new

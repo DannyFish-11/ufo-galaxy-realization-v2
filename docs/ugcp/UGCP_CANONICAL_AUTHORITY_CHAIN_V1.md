@@ -20,10 +20,12 @@ Control-plane semantics must flow in this order:
    - coordination-profile mapping for mesh/coordinator lifecycle + authority (`core.ugcp_coordination_profile`)
 4. **Session truth authority**
    - `core.canonical_session_truth.record_session_truth`
+   - truth/event backbone semantics (`core.ugcp_truth_event_model`)
    - transfer transition truth events (`TruthEvent` via `build_control_transfer_truth_event(...)`)
    - coordination transition truth events (`TruthEvent` via `build_coordination_truth_event(...)`)
 5. **Durable snapshot + read-model surfaces**
    - `contracts.runtime_session_snapshot.RuntimeSessionSnapshot`
+   - truth snapshot/replay checkpoint projection helpers (`build_snapshot_projection_surface(...)`, `build_replay_checkpoint(...)`)
    - coordination durable snapshots (`build_coordination_durable_snapshot(...)`) for mesh/coordinator read models
    - projection/read APIs remain read-only surfaces
 
@@ -43,6 +45,7 @@ Control-plane semantics must flow in this order:
 ## 4) Truth boundary (normative)
 
 - `canonical_session_truth` is the write authority for control-plane truth semantics.
+- `ugcp_truth_event_model` defines canonical semantics for mapping truth writes into events/snapshots/replay checkpoints.
 - Projection / interop / compat / bridge labels are non-authoritative surfaces and must not become truth origins.
 - Non-canonical `truth_source` labels are downgraded to canonical-safe `unknown`.
 

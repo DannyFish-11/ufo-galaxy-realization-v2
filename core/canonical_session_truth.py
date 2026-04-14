@@ -70,6 +70,8 @@ from enum import Enum
 from threading import Lock
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
+from core.ugcp_truth_event_model import build_session_truth_authoritative_event
+
 __all__ = [
     # Authority / policy sentinels
     "CANONICAL_SESSION_TRUTH_AUTHORITY",
@@ -951,6 +953,31 @@ def record_session_truth(
             "truth_surface_boundary_policy",
             PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY,
         )
+    authoritative_event = build_session_truth_authoritative_event(
+        {
+            "record_id": "",
+            "session_id": session_id,
+            "task_id": task_id,
+            "trace_id": trace_id,
+            "truth_source": normalised_truth_source,
+            "merge_success": bool(getattr(merged, "success", False)),
+            "primary_unit_id": getattr(merged, "primary_result_unit_id", None),
+            "reason": merge_reason or "",
+        }
+    ).to_truth_event()
+    record_metadata.setdefault("truth_event_type", authoritative_event.event_type)
+    record_metadata.setdefault(
+        "truth_event_surface_class",
+        authoritative_event.payload.get("surface_class"),
+    )
+    record_metadata.setdefault(
+        "truth_event_authoritative_transition",
+        authoritative_event.payload.get("authoritative_transition"),
+    )
+    record_metadata.setdefault(
+        "truth_event_ordering_key",
+        authoritative_event.payload.get("ordering_key"),
+    )
 
     rec = CanonicalSessionTruthRecord(
         session_id=session_id,
