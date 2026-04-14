@@ -108,6 +108,9 @@ class ControlTransferTerminalReason(str, Enum):
     unknown = "unknown"
 
 
+_TERMINAL_REASON_VALUES = {item.value for item in ControlTransferTerminalReason}
+
+
 CONTROL_TRANSFER_ALLOWED_TRANSITIONS: Dict[ControlTransferState, Set[ControlTransferState]] = {
     ControlTransferState.not_started: {
         ControlTransferState.preparing,
@@ -245,6 +248,12 @@ def map_from_takeover_status(status: Any) -> ControlTransferState:
 
 
 def map_from_delegated_signal(signal_kind: Any, result_kind: Any = None) -> ControlTransferState:
+    """Map Android delegated signal kinds into canonical transfer state.
+
+    ``result_kind`` is only meaningful when ``signal_kind == "result"``.
+    If omitted/unknown, the mapping defaults to ``completed`` to stay
+    consistent with the optimistic default used by delegated signal ingress.
+    """
     signal = str(signal_kind).strip().lower() if isinstance(signal_kind, str) else ""
     result = str(result_kind).strip().lower() if isinstance(result_kind, str) else ""
     if signal == "ack":
@@ -263,16 +272,16 @@ def map_from_delegated_signal(signal_kind: Any, result_kind: Any = None) -> Cont
 def infer_terminal_reason(state: Any, raw_reason: Optional[str] = None) -> ControlTransferTerminalReason:
     if isinstance(raw_reason, str):
         normalized_reason = raw_reason.strip().lower()
-        if normalized_reason in {item.value for item in ControlTransferTerminalReason}:
+        if normalized_reason in _TERMINAL_REASON_VALUES:
             return ControlTransferTerminalReason(normalized_reason)
-        if "policy" in normalized_reason and "takeover" in normalized_reason:
-            return ControlTransferTerminalReason.takeover_disallowed_by_policy
-        if "session" in normalized_reason and "missing" in normalized_reason:
-            return ControlTransferTerminalReason.session_anchor_missing
-        if "invalid" in normalized_reason:
-            return ControlTransferTerminalReason.invalid_payload
-        if "resume" in normalized_reason and "unavailable" in normalized_reason:
-            return ControlTransferTerminalReason.resume_unavailable
+        normalized_aliases = {
+            "takeover_disallowed": ControlTransferTerminalReason.takeover_disallowed_by_policy,
+            "session_missing": ControlTransferTerminalReason.session_anchor_missing,
+            "missing_session_anchor": ControlTransferTerminalReason.session_anchor_missing,
+            "invalid_contract": ControlTransferTerminalReason.invalid_payload,
+        }
+        if normalized_reason in normalized_aliases:
+            return normalized_aliases[normalized_reason]
 
     transfer_state = _normalize_state(state)
     fallback = {
@@ -313,7 +322,6 @@ def build_control_transfer_truth_event(
             "is_terminal": current_state.is_terminal(),
             "terminal_reason": terminal_reason.value,
             "source_contract": source_contract,
-            "timestamp": time.time(),
             "metadata": dict(metadata or {}),
         },
     )

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+
+import pytest
+
 from core.ugcp_control_transfer_profile import (
     UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY,
     UGCP_CONTROL_TRANSFER_PROFILE_PR5_SENTINEL,
@@ -18,9 +22,13 @@ from core.ugcp_control_transfer_profile import (
     map_from_takeover_status,
 )
 
+_HAS_FASTAPI = importlib.util.find_spec("fastapi") is not None
+
 
 def test_sentinels_present() -> None:
     assert UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY.startswith("UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY::")
+    assert "canonical mapping authority" in UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY
+    assert "handoff/takeover/delegated-execution" in UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY
     assert "package=5" in UGCP_CONTROL_TRANSFER_PROFILE_PR5_SENTINEL
 
 
@@ -96,10 +104,13 @@ def test_build_transfer_merge_reason() -> None:
     assert reason == "ugcp_control_transfer_v1:delegated_execution:timed_out:timed_out"
 
 
+@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_projection_alignment_sentinel_present() -> None:
-    projection_path = (
-        "core/routes/projection.py"
-    )
-    with open(projection_path, "r", encoding="utf-8") as handle:
-        source = handle.read()
-    assert "UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5" in source
+    from core.routes import projection
+
+    sentinel = projection.UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5
+    assert "UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5" in sentinel
+    assert "UNAVAILABLE" not in sentinel
+    can_transition_fn = getattr(projection, "_transfer_can_transition", None)
+    assert callable(can_transition_fn)
+    assert can_transition_fn("preparing", "ready") is True

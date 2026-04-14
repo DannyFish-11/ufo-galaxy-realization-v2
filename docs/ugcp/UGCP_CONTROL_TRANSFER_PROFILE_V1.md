@@ -19,14 +19,9 @@ Canonical family:
 - `delegated_execution`
 
 Canonical states:
-- `not_started`
-- `preparing`
-- `ready`
-- `dispatched`
-- `adopting`
-- `resumed`
-- `in_progress`
+- non-terminal: `not_started`, `preparing`, `ready`, `dispatched`, `adopting`, `resumed`, `in_progress`
 - terminal: `completed`, `rejected`, `cancelled`, `expired`, `failed`, `timed_out`
+- fallback: `unknown` (compat/parse fallback; no canonical outbound transitions)
 
 Canonical terminal reasons:
 - `completed`, `rejected`, `cancelled`, `expired`, `failed`, `timed_out`
