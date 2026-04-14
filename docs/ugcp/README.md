@@ -6,5 +6,6 @@ This directory defines the first formal UGCP documentation baseline for the cent
 - `UGCP_CANONICAL_VOCABULARY_V1.md` — frozen canonical identity/session/control vocabulary.
 - `UGCP_PHASE_GRAPH_V1.md` — canonical phase graph and lifecycle-family mapping.
 - `UGCP_ANDROID_ALIGNMENT_NOTES_V1.md` — Android↔center vocabulary alignment notes.
+- `UGCP_SHARED_SCHEMA_MAPPINGS_V1.md` — compatibility mappings from key existing contracts into `core.schemas.ugcp` canonical objects.
 
 Scope note: this is a **documentation freeze** for vocabulary and semantics. It does not claim full protocol convergence is already implemented.
