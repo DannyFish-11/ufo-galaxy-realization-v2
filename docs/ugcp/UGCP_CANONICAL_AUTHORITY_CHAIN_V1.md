@@ -16,8 +16,10 @@ Control-plane semantics must flow in this order:
 3. **Takeover / handoff execution authority**
    - `core.runtime.target_takeover`
    - canonical handoff contract/envelope path
+   - transfer-profile transition mapping (`core.ugcp_control_transfer_profile`)
 4. **Session truth authority**
    - `core.canonical_session_truth.record_session_truth`
+   - transfer transition truth events (`TruthEvent` via `build_control_transfer_truth_event(...)`)
 5. **Durable snapshot + read-model surfaces**
    - `contracts.runtime_session_snapshot.RuntimeSessionSnapshot`
    - projection/read APIs remain read-only surfaces
