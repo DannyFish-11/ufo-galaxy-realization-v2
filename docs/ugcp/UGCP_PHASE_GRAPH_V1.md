@@ -26,3 +26,5 @@ Notes:
 Lifecycle families may keep domain-specific states, but every state transition should be projectable to the canonical phase graph above for cross-repo control-plane consistency.
 
 For the transfer-facing lifecycle families (handoff / takeover / delegated execution), use `UGCP_CONTROL_TRANSFER_PROFILE_V1.md` as the canonical state-graph and terminal-semantics profile that maps into this phase graph.
+
+For mesh/coordinator lifecycle and authority semantics, use `UGCP_COORDINATION_PROFILE_V1.md` as the canonical coordination profile that maps into this phase graph.

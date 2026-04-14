@@ -294,6 +294,35 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5_UNAVAILABLE"
     )
 
+# PR-6 (UGCP convergence plan, realization-v2 side): canonical UGCP
+# coordination profile alignment (mesh session / participant roles /
+# coordination authority / barriers / aggregation / outcomes).
+try:
+    from core.ugcp_coordination_profile import (  # noqa: F401
+        UGCP_COORDINATION_PROFILE_AUTHORITY as _UCP_AUTHORITY,
+        UGCP_COORDINATION_PROFILE_PR6_SENTINEL as _UCP_PR6,
+        CoordinationLifecycleState as _CoordinationLifecycleState,
+        CoordinationAuthorityScope as _CoordinationAuthorityScope,
+        CoordinationParticipantRole as _CoordinationParticipantRole,
+        CoordinationTerminalOutcome as _CoordinationTerminalOutcome,
+        build_coordination_truth_event as _build_coordination_truth_event,
+        build_coordination_durable_snapshot as _build_coordination_durable_snapshot,
+        can_transition as _coordination_can_transition,
+    )
+
+    UGCP_COORDINATION_PROFILE_ALIGNED_PR6: str = (
+        "PROJECTION_ROUTES::UGCP_COORDINATION_PROFILE_ALIGNED_PR6_V1: "
+        "canonical UGCP coordination profile "
+        "(core.ugcp_coordination_profile) is available and aligned with "
+        "projection routes. Mesh/coordinator lifecycle, participant role, "
+        "authority, barrier, aggregation, and terminal-outcome semantics can be "
+        "interpreted consistently and traced into truth/durable surfaces."
+    )
+except ImportError:  # pragma: no cover
+    UGCP_COORDINATION_PROFILE_ALIGNED_PR6: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_COORDINATION_PROFILE_ALIGNED_PR6_UNAVAILABLE"
+    )
+
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime execution-tracking and acknowledgment
 # basis.  Importing the authority sentinel and the PR-10 sentinel from the new
