@@ -20,7 +20,7 @@ ws_paths : list[str]
     Ordered list of WebSocket paths the client should try, from most
     preferred to least.  Replace the ``{id}`` placeholder with the actual
     device identifier at connection time.
-    Example: ``["/ws/android/{id}", "/ws/device/{id}", "/ws/android"]``
+    Example: ``["/ws/device/{id}", "/ws/android/{id}", "/ws/android"]``
 
 webrtc_gateway_ws_path : str
     WebSocket path for WebRTC signaling through the gateway.
@@ -89,11 +89,12 @@ _DEFAULT_GATEWAY_URL = "http://localhost:8765"
 _DEFAULT_STUN = "stun:stun.l.google.com:19302"
 _DEFAULT_TRANSPORT_PRIORITY = ["tailscale", "intranet", "internet"]
 
-_WS_PATHS = [
+_WS_CANONICAL_PATH = "/ws/device/{id}"
+_WS_COMPAT_PATHS = [
     "/ws/android/{id}",
-    "/ws/device/{id}",
     "/ws/android",
 ]
+_WS_PATHS = [_WS_CANONICAL_PATH, *_WS_COMPAT_PATHS]
 _WEBRTC_GW_PATH = "/ws/webrtc/{id}"
 
 
@@ -203,11 +204,17 @@ def build_client_config() -> Dict[str, Any]:
     """
     rest_base = _get_rest_base()
     ws_base = _http_to_ws(rest_base)
+    ws_url = f"{ws_base}{_WS_CANONICAL_PATH}"
 
     return {
         "ws_base": ws_base,
         "rest_base": rest_base,
+        "ws_url": ws_url,
+        "gateway_ws_url": ws_url,
+        "ws_url_template": ws_url,
+        "ws_canonical_path": _WS_CANONICAL_PATH,
         "ws_paths": list(_WS_PATHS),
+        "ws_paths_compat": list(_WS_COMPAT_PATHS),
         "webrtc_gateway_ws_path": _WEBRTC_GW_PATH,
         "stun_servers": _build_stun_servers(),
         "turn_servers": _build_turn_servers(),
@@ -229,7 +236,7 @@ async def client_config() -> Dict[str, Any]:
     connection settings, transport preferences, and ICE server lists rather
     than relying on hard-coded local configuration.
 
-    **Placeholder substitution**: path values such as ``/ws/android/{id}``
+    **Placeholder substitution**: path values such as ``/ws/device/{id}``
     contain the literal token ``{id}``; replace it with the actual device
     identifier before connecting.
 

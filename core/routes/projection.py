@@ -3505,6 +3505,46 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
 
         snapshot = compile_runtime_truth()
         payload = snapshot.to_dict()
+        try:
+            outward = _compile_outward_truth().to_dict()
+            payload["outward_truth"] = outward
+            operator_snapshot = outward.get("operator_snapshot") or {}
+            payload["task_truth"] = {
+                "active_task_count": operator_snapshot.get("active_task_count", 0),
+                "recent_failure_count": operator_snapshot.get("recent_failure_count", 0),
+                "reachable_executor_count": operator_snapshot.get("reachable_executor_count", 0),
+                "source": "outward_truth.operator_snapshot",
+            }
+        except Exception as exc:
+            logger.debug("_assemble_runtime_truth_payload: outward truth unavailable: %s", exc)
+            payload.setdefault("outward_truth", None)
+            payload.setdefault(
+                "task_truth",
+                {
+                    "active_task_count": 0,
+                    "recent_failure_count": 0,
+                    "reachable_executor_count": 0,
+                    "source": "unavailable",
+                },
+            )
+
+        try:
+            from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
+
+            plan = build_source_dispatch_plan()
+            payload["startup_readiness"] = {
+                "ready_to_route": bool(getattr(plan, "ready", False)),
+                "readiness_notes": list(getattr(plan, "readiness_notes", []) or []),
+                "dispatch_mode": (
+                    getattr(getattr(plan, "mode", None), "value", None)
+                    or str(getattr(plan, "mode", "unknown"))
+                ),
+                "source_runtime_posture": getattr(plan, "source_runtime_posture", None),
+            }
+        except Exception as exc:
+            logger.debug("_assemble_runtime_truth_payload: startup readiness unavailable: %s", exc)
+            payload.setdefault("startup_readiness", None)
+
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)
         return payload
@@ -3522,6 +3562,14 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "device_presence": {"registered": 0, "online": 0},
             "dispatch_semantics": None,
             "execution_path_observability": None,
+            "outward_truth": None,
+            "task_truth": {
+                "active_task_count": 0,
+                "recent_failure_count": 0,
+                "reachable_executor_count": 0,
+                "source": "fallback",
+            },
+            "startup_readiness": None,
             "has_canonical_topology": False,
             "tri_state_phase": None,
             "primary_model_id": None,
@@ -4763,6 +4811,32 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
     except Exception as exc:
         logger.warning(
             "_assemble_desktop_status_board_payload: runtime enrichment failed: %s",
+            exc,
+        )
+
+    try:
+        outward = _compile_outward_truth().to_dict()
+        result["outward_truth"] = outward
+        operator_snapshot = outward.get("operator_snapshot") or {}
+        result["task_truth"] = {
+            "active_task_count": operator_snapshot.get("active_task_count", 0),
+            "recent_failure_count": operator_snapshot.get("recent_failure_count", 0),
+            "reachable_executor_count": operator_snapshot.get("reachable_executor_count", 0),
+            "source": "outward_truth.operator_snapshot",
+        }
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_status_board_payload: outward truth unavailable: %s",
+            exc,
+        )
+
+    try:
+        runtime_truth = _assemble_runtime_truth_payload()
+        result["runtime_truth"] = runtime_truth
+        result["startup_readiness"] = runtime_truth.get("startup_readiness")
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
             exc,
         )
 

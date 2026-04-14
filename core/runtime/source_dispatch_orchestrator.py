@@ -92,6 +92,7 @@ specification.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -887,11 +888,46 @@ def _try_remote_handoff(
     Returns a result dict on success; a minimal failure dict on any error.
     """
     try:
-        from galaxy_gateway.agent_bridge import AgentBridge  # type: ignore[attr-defined]
+        from galaxy_gateway.agent_bridge import AgentBridge, HandoffContract  # type: ignore[attr-defined]
 
         bridge = AgentBridge() if hasattr(AgentBridge, "__init__") else None
-        if bridge is not None and hasattr(bridge, "forward_handoff"):
-            resp = bridge.forward_handoff(envelope)
+        if bridge is not None and hasattr(bridge, "handoff"):
+            envelope_payload = (
+                envelope.model_dump()
+                if hasattr(envelope, "model_dump")
+                else (envelope.to_dict() if hasattr(envelope, "to_dict") else envelope)
+            )
+            if not isinstance(envelope_payload, dict):
+                envelope_payload = {"envelope": str(envelope_payload)}
+
+            trace_id = str(envelope_payload.get("trace_id") or "")
+            task_id = str(envelope_payload.get("task_id") or "")
+            effective_trace_id = trace_id or (f"trace_{task_id}" if task_id else "trace_remote_handoff")
+            task_payload = {
+                "task_id": task_id,
+                "handoff_envelope_v2": envelope_payload,
+            }
+            contract = HandoffContract(
+                trace_id=effective_trace_id,
+                task_id=task_id,
+                task=task_payload,
+                capability="remote_handoff",
+                exec_mode="remote",
+                route_mode="handoff_envelope_v2",
+                session={},
+                callback_channel="ws",
+            )
+            handoff_coro = bridge.handoff(contract=contract)
+            if asyncio.iscoroutine(handoff_coro):
+                try:
+                    resp = asyncio.run(handoff_coro)
+                except RuntimeError:
+                    return {
+                        "success": False,
+                        "skipped_reason": "agent_bridge_handoff_async_unavailable_in_sync_path",
+                    }
+            else:
+                resp = handoff_coro
             if resp is None:
                 return {"success": False, "skipped_reason": "bridge_returned_none"}
             if isinstance(resp, dict):
@@ -902,7 +938,7 @@ def _try_remote_handoff(
         # Fallback: no suitable bridge method
         return {
             "success": False,
-            "skipped_reason": "agent_bridge_unavailable:no_forward_handoff",
+            "skipped_reason": "agent_bridge_unavailable:no_handoff",
         }
     except Exception as exc:  # noqa: BLE001
         logger.debug("_try_remote_handoff: bridge dispatch raised: %s", exc)

@@ -187,9 +187,17 @@ clients can obtain configuration before they have a token.
 {
   "ws_base": "ws://192.168.1.10:8765",
   "rest_base": "http://192.168.1.10:8765",
+  "ws_url": "ws://192.168.1.10:8765/ws/device/{id}",
+  "gateway_ws_url": "ws://192.168.1.10:8765/ws/device/{id}",
+  "ws_url_template": "ws://192.168.1.10:8765/ws/device/{id}",
+  "ws_canonical_path": "/ws/device/{id}",
   "ws_paths": [
-    "/ws/android/{id}",
     "/ws/device/{id}",
+    "/ws/android/{id}",
+    "/ws/android"
+  ],
+  "ws_paths_compat": [
+    "/ws/android/{id}",
     "/ws/android"
   ],
   "webrtc_gateway_ws_path": "/ws/webrtc/{id}",
@@ -211,7 +219,12 @@ clients can obtain configuration before they have a token.
 |-------|------|-------------|
 | `ws_base` | string | WebSocket base URL (`ws://` or `wss://`).  Prepend this to any `ws_paths` entry to build the full WS URL. |
 | `rest_base` | string | HTTP/REST base URL.  Use for REST API calls. |
-| `ws_paths` | array of strings | Ordered WebSocket paths to attempt, most preferred first.  Replace `{id}` with the device identifier. |
+| `ws_url` | string | Canonical full WebSocket URL template. Replace `{id}` with the device identifier. |
+| `gateway_ws_url` | string | Alias of `ws_url` for older Android/client contracts. |
+| `ws_url_template` | string | Canonical full WebSocket URL template, same value as `ws_url`. |
+| `ws_canonical_path` | string | Canonical device ingress path template (`/ws/device/{id}`). |
+| `ws_paths` | array of strings | Ordered WebSocket paths to attempt, canonical first. Replace `{id}` with the device identifier. |
+| `ws_paths_compat` | array of strings | Compatibility/fallback-only paths. |
 | `webrtc_gateway_ws_path` | string | WS path for WebRTC signaling through the gateway.  Replace `{id}` with the device identifier. |
 | `stun_servers` | array of strings | STUN server URLs for `RTCPeerConnection.iceServers`.  Never empty; falls back to `stun:stun.l.google.com:19302`. |
 | `turn_servers` | array of objects | TURN server objects (`{"urls": "...", "username": "...", "credential": "..."}`).  **May be empty** — clients must not crash when the list is empty. |

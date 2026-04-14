@@ -33,7 +33,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -42,10 +42,9 @@ from core.routes._shared import (
     connection_manager,
     command_results,
 )
-from core.routes._helpers import nodes_root, _load_node, _execute_node
+from core.routes._helpers import nodes_root
 from core.node_invocation import invoke_node, InvocationSource
 from core.routes._models import (
-    CommandDispatchRequest,
     CommandStatus,
     TargetResult,
     UnifiedCommandRequest,
@@ -174,6 +173,94 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 completed_at=datetime.now(timezone.utc).isoformat()
             )
 
+    def _build_canonical_envelope(req: UnifiedCommandRequest, request_id: str):
+        metadata: Dict[str, Any] = {}
+        if len(req.targets) > 1:
+            # Multi-target execution must remain on the canonical cross-device
+            # substrate path under CommandRouter.route_envelope().
+            metadata["cross_device"] = "true"
+
+        return envelope_from_command_request(
+            command=req.command,
+            targets=req.targets,
+            params=req.params,
+            source="api",
+            mode=req.mode,
+            timeout=float(req.timeout),
+            request_id=request_id,
+            metadata=metadata,
+        )
+
+    def _route_result_to_target_payload(
+        req: UnifiedCommandRequest,
+        route_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        success = bool(route_result.get("success"))
+        result_payload = route_result.get("result")
+        error_message = route_result.get("error_message")
+        status = CommandStatus.DONE if success else CommandStatus.FAILED
+
+        if (
+            isinstance(result_payload, dict)
+            and isinstance(result_payload.get("results"), list)
+        ):
+            mapped: Dict[str, Any] = {}
+            for entry in result_payload["results"]:
+                if not isinstance(entry, dict):
+                    continue
+                target_id = str(entry.get("device_id") or entry.get("target") or "")
+                if not target_id:
+                    continue
+                entry_success = bool(entry.get("success"))
+                mapped[target_id] = TargetResult(
+                    status=CommandStatus.DONE if entry_success else CommandStatus.FAILED,
+                    output=entry.get("result"),
+                    error=entry.get("error_message"),
+                    started_at=route_result.get("started_at") or datetime.now(timezone.utc).isoformat(),
+                    completed_at=route_result.get("completed_at") or datetime.now(timezone.utc).isoformat(),
+                ).model_dump()
+            if mapped:
+                return mapped
+
+        return {
+            target: TargetResult(
+                status=status,
+                output=result_payload,
+                error=error_message,
+                started_at=route_result.get("started_at") or datetime.now(timezone.utc).isoformat(),
+                completed_at=route_result.get("completed_at") or datetime.now(timezone.utc).isoformat(),
+            ).model_dump()
+            for target in req.targets
+        }
+
+    async def _execute_via_canonical_route(
+        req: UnifiedCommandRequest,
+        request_id: str,
+        created_at: str,
+    ) -> Dict[str, Any]:
+        envelope = _build_canonical_envelope(req, request_id)
+        logger.info(
+            "统一命令进入 canonical spine: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
+            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
+        )
+        route_result = await command_router.route_envelope(envelope)
+
+        completed_at = datetime.now(timezone.utc).isoformat()
+        route_success = bool(route_result.get("success"))
+        status = CommandStatus.DONE if route_success else CommandStatus.FAILED
+        results_payload = _route_result_to_target_payload(req, route_result)
+
+        command_results[request_id]["status"] = status
+        command_results[request_id]["completed_at"] = completed_at
+        command_results[request_id]["results"] = results_payload
+        command_results[request_id]["canonical_route"] = route_result
+        return {
+            "status": status,
+            "completed_at": completed_at,
+            "results": results_payload,
+            "canonical_route": route_result,
+        }
+
     @router.post("/api/v1/command/unified")
     async def unified_command(
         req: UnifiedCommandRequest,
@@ -185,55 +272,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         request_id = req.request_id or str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).isoformat()
 
-        # Build a TaskEnvelope for consistent trace_id propagation
-        envelope = envelope_from_command_request(
-            command=req.command,
-            targets=req.targets,
-            params=req.params,
-            source="api",
-            mode=req.mode,
-            timeout=float(req.timeout),
-            request_id=request_id,
-        )
-
-        logger.info(
-            "收到统一命令: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
-            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
-        )
-
         if req.mode not in ["sync", "async"]:
             raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
 
         if not req.targets:
             raise HTTPException(status_code=400, detail="Targets list cannot be empty")
-
-        # ── Multi-device: delegate to Node_71 MDCE ─────────────────────────
-        # When more than one target is requested, route through the Multi-Device
-        # Coordination Engine (Node_71) instead of running a naive local fan-out.
-        # Single-device commands continue through the local CommandRouter path.
-        if len(req.targets) > 1:
-            command_results[request_id] = {
-                "request_id": request_id,
-                "command": req.command,
-                "targets": req.targets,
-                "params": req.params,
-                "mode": req.mode,
-                "status": CommandStatus.QUEUED,
-                "created_at": created_at,
-                "completed_at": None,
-                "results": {},
-            }
-            mdce_response = await _delegate_to_mdce(request_id, req, created_at)
-            if mdce_response is not None:
-                logger.info(
-                    "Multi-device command %s delegated to Node_71 MDCE (targets=%s)",
-                    request_id, req.targets,
-                )
-                return mdce_response
-            # MDCE unreachable — fall through to local fan-out below
-            logger.warning(
-                "Node_71 MDCE unavailable; using local fan-out for request %s", request_id,
-            )
 
         command_results[request_id] = {
             "request_id": request_id,
@@ -249,103 +292,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         if req.mode == "sync":
             command_results[request_id]["status"] = CommandStatus.RUNNING
-
-            tasks = [
-                execute_command_on_target(target, req.command, req.params, req.timeout)
-                for target in req.targets
-            ]
-
-            try:
-                target_results = await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=req.timeout
-                )
-
-                results = {}
-                for target, result in zip(req.targets, target_results):
-                    if isinstance(result, Exception):
-                        results[target] = TargetResult(
-                            status=CommandStatus.FAILED,
-                            output=None,
-                            error=str(result),
-                            started_at=created_at,
-                            completed_at=datetime.now(timezone.utc).isoformat()
-                        )
-                    else:
-                        results[target] = result
-
-                completed_at = datetime.now(timezone.utc).isoformat()
-                command_results[request_id]["status"] = CommandStatus.DONE
-                command_results[request_id]["completed_at"] = completed_at
-                command_results[request_id]["results"] = {
-                    k: v.model_dump() for k, v in results.items()
-                }
-
-                return JSONResponse({
-                    "request_id": request_id,
-                    "status": CommandStatus.DONE,
-                    "created_at": created_at,
-                    "completed_at": completed_at,
-                    "results": command_results[request_id]["results"]
-                })
-
-            except asyncio.TimeoutError:
-                completed_at = datetime.now(timezone.utc).isoformat()
-                command_results[request_id]["status"] = CommandStatus.FAILED
-                command_results[request_id]["completed_at"] = completed_at
-                command_results[request_id]["results"] = {
-                    target: TargetResult(
-                        status=CommandStatus.FAILED,
-                        output=None,
-                        error="Execution timeout",
-                        started_at=created_at,
-                        completed_at=completed_at
-                    ).model_dump()
-                    for target in req.targets
-                }
-
-                raise HTTPException(status_code=408, detail="Command execution timeout")
+            execution = await _execute_via_canonical_route(req, request_id, created_at)
+            return JSONResponse({
+                "request_id": request_id,
+                "status": execution["status"],
+                "created_at": created_at,
+                "completed_at": execution["completed_at"],
+                "results": execution["results"],
+            })
 
         else:
             async def execute_async():
                 """后台执行任务"""
                 try:
                     command_results[request_id]["status"] = CommandStatus.RUNNING
-
-                    tasks = [
-                        execute_command_on_target(target, req.command, req.params, req.timeout)
-                        for target in req.targets
-                    ]
-
-                    target_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                    results = {}
-                    for target, result in zip(req.targets, target_results):
-                        if isinstance(result, Exception):
-                            results[target] = TargetResult(
-                                status=CommandStatus.FAILED,
-                                output=None,
-                                error=str(result),
-                                started_at=created_at,
-                                completed_at=datetime.now(timezone.utc).isoformat()
-                            )
-                        else:
-                            results[target] = result
-
-                    completed_at = datetime.now(timezone.utc).isoformat()
-                    command_results[request_id]["status"] = CommandStatus.DONE
-                    command_results[request_id]["completed_at"] = completed_at
-                    command_results[request_id]["results"] = {
-                        k: v.model_dump() for k, v in results.items()
-                    }
+                    execution = await _execute_via_canonical_route(req, request_id, created_at)
 
                     await connection_manager.broadcast_status({
                         "type": "command_result",
                         "request_id": request_id,
-                        "status": CommandStatus.DONE,
+                        "status": execution["status"],
                         "created_at": created_at,
-                        "completed_at": completed_at,
-                        "results": command_results[request_id]["results"]
+                        "completed_at": execution["completed_at"],
+                        "results": execution["results"],
                     })
 
                 except Exception as e:
@@ -379,7 +348,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "request_id": request_id,
                 "status": CommandStatus.QUEUED,
                 "created_at": created_at,
-                "message": "Command queued for async execution. Use GET /api/v1/command/{request_id}/status to check status."
+                "message": (
+                    "Command queued for async execution. "
+                    "Use GET /api/v1/command/{request_id}/status to check status."
+                ),
             })
 
     @router.get("/api/v1/command/unified/{request_id}/status")
@@ -403,10 +375,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ── Command Router endpoints ────────────────────────────────────────────
 
-    from core.command_router import (
-        CommandRequest, CommandMode,
-        get_command_router,
-    )
+    from core.command_router import get_command_router
 
     async def _on_command_status_change(cmd_result):
         """命令状态变更 → WebSocket 推送"""
@@ -455,158 +424,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         req: UnifiedCommandRequest,
         auth: dict = Depends(require_auth),
     ):
-        """
-        统一命令分发接口（支持多目标 sync/async 模式，兼容 UnifiedCommandRequest 格式）
-
-        - sync: 同步等待所有目标返回
-        - async: 立即返回 request_id，后台执行
-        """
-        # Check for device-level autonomous agent
-        try:
-            from core.device_agent_manager import DeviceAgentManager
-            dam = DeviceAgentManager()
-            device_agents = dam.get_all_agents()
-            # If target device has an active agent, delegate to it
-            for target_id in (req.targets or []):
-                if target_id in device_agents:
-                    agent = device_agents[target_id]
-                    if agent.is_connected:
-                        logger.info(f"Delegating command to DeviceAgent for {target_id}")
-        except Exception:
-            pass  # DeviceAgentManager not available, use standard routing
-
-        if req.mode not in ("sync", "async"):
-            raise HTTPException(status_code=400, detail="Invalid mode. Must be 'sync' or 'async'")
-
-        if not req.targets:
-            raise HTTPException(status_code=400, detail="Targets list cannot be empty")
-
-        request_id = req.request_id or str(uuid.uuid4())
-        created_at = datetime.now(timezone.utc).isoformat()
-
-        # Build a TaskEnvelope for consistent trace_id propagation
-        envelope = envelope_from_command_request(
-            command=req.command,
-            targets=req.targets,
-            params=req.params,
-            source="api",
-            mode=req.mode,
-            timeout=float(req.timeout),
-            request_id=request_id,
-        )
-
-        logger.info(
-            "收到命令: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
-            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
-        )
-
-        command_results[request_id] = {
-            "request_id": request_id,
-            "command": req.command,
-            "targets": req.targets,
-            "params": req.params,
-            "mode": req.mode,
-            "status": CommandStatus.QUEUED,
-            "created_at": created_at,
-            "completed_at": None,
-            "results": {},
-        }
-
-        if req.mode == "sync":
-            command_results[request_id]["status"] = CommandStatus.RUNNING
-
-            tasks = [
-                execute_command_on_target(target, req.command, req.params, req.timeout)
-                for target in req.targets
-            ]
-
-            try:
-                target_results = await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=req.timeout,
-                )
-
-                results = {}
-                for target, result in zip(req.targets, target_results):
-                    if isinstance(result, Exception):
-                        results[target] = TargetResult(
-                            status=CommandStatus.FAILED,
-                            output=None,
-                            error=str(result),
-                            started_at=created_at,
-                            completed_at=datetime.now(timezone.utc).isoformat(),
-                        )
-                    else:
-                        results[target] = result
-
-                completed_at = datetime.now(timezone.utc).isoformat()
-                command_results[request_id]["status"] = CommandStatus.DONE
-                command_results[request_id]["completed_at"] = completed_at
-                command_results[request_id]["results"] = {k: v.model_dump() for k, v in results.items()}
-
-                return JSONResponse({
-                    "request_id": request_id,
-                    "status": CommandStatus.DONE,
-                    "created_at": created_at,
-                    "completed_at": completed_at,
-                    "results": command_results[request_id]["results"],
-                })
-
-            except asyncio.TimeoutError:
-                completed_at = datetime.now(timezone.utc).isoformat()
-                command_results[request_id]["status"] = CommandStatus.FAILED
-                command_results[request_id]["completed_at"] = completed_at
-                command_results[request_id]["results"] = {
-                    target: TargetResult(
-                        status=CommandStatus.FAILED,
-                        output=None,
-                        error="Execution timeout",
-                        started_at=created_at,
-                        completed_at=completed_at,
-                    ).model_dump()
-                    for target in req.targets
-                }
-                raise HTTPException(status_code=408, detail="Command execution timeout")
-
-        else:  # async mode
-            async def _execute_async():
-                try:
-                    command_results[request_id]["status"] = CommandStatus.RUNNING
-                    tasks = [
-                        execute_command_on_target(target, req.command, req.params, req.timeout)
-                        for target in req.targets
-                    ]
-                    target_results = await asyncio.gather(*tasks, return_exceptions=True)
-                    results = {}
-                    for target, result in zip(req.targets, target_results):
-                        if isinstance(result, Exception):
-                            results[target] = TargetResult(
-                                status=CommandStatus.FAILED,
-                                output=None,
-                                error=str(result),
-                                started_at=created_at,
-                                completed_at=datetime.now(timezone.utc).isoformat(),
-                            )
-                        else:
-                            results[target] = result
-                    completed_at = datetime.now(timezone.utc).isoformat()
-                    command_results[request_id]["status"] = CommandStatus.DONE
-                    command_results[request_id]["completed_at"] = completed_at
-                    command_results[request_id]["results"] = {k: v.model_dump() for k, v in results.items()}
-                except Exception as e:
-                    logger.error(f"异步命令执行失败: {e}")
-                    completed_at = datetime.now(timezone.utc).isoformat()
-                    command_results[request_id]["status"] = CommandStatus.FAILED
-                    command_results[request_id]["completed_at"] = completed_at
-
-            asyncio.create_task(_execute_async())
-
-            return JSONResponse({
-                "request_id": request_id,
-                "status": CommandStatus.QUEUED,
-                "created_at": created_at,
-                "message": f"Command queued. Use GET /api/v1/command/{request_id}/status to check status.",
-            })
+        """Alias of /api/v1/command/unified routed through the same canonical spine."""
+        return await unified_command(req, auth)
 
     @router.get("/api/v1/command/{request_id}/status")
     async def get_command_unified_status(
