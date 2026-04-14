@@ -281,6 +281,8 @@ _LIFECYCLE_COMPOSITION_ORDER = (
     ("coordination", "coordination_state"),
 )
 
+_HARDENING_PATHWAY_SUFFIX = "_transitional_pathway"
+
 
 def _normalize_text(value: Any) -> str:
     if isinstance(value, str):
@@ -385,9 +387,9 @@ def normalize_conformance_backbone(payload: Mapping[str, Any]) -> Dict[str, Any]
     composed_lifecycle_state = "unknown"
     lifecycle_source_surface = "none"
     for source_surface, field_name in _LIFECYCLE_COMPOSITION_ORDER:
-        state = str(normalized.get(field_name, "unknown"))
-        if state and state != "unknown":
-            composed_lifecycle_state = state
+        candidate_state = str(normalized.get(field_name, "unknown"))
+        if candidate_state and candidate_state != "unknown":
+            composed_lifecycle_state = candidate_state
             lifecycle_source_surface = source_surface
             break
 
@@ -410,7 +412,7 @@ def normalize_conformance_backbone(payload: Mapping[str, Any]) -> Dict[str, Any]
         semantic_drift_signals.append("lifecycle_coordination_divergence")
 
     hardening_pathways = [
-        f"{surface}_transitional_pathway"
+        f"{surface}{_HARDENING_PATHWAY_SUFFIX}"
         for surface, semantic_class in semantic_classes.items()
         if semantic_class == UGCPSemanticClass.transitional.value
     ]
