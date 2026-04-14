@@ -57,3 +57,18 @@ The report is intended for progressive hardening, not immediate strict rejection
 PR-8 does **not** claim strict-mode enforcement or immediate legacy removal.
 It provides explicit classification and normalization groundwork so future
 retirement can be staged without destabilizing runtime behavior.
+
+## 6) PR-9 bounded consolidation update
+
+PR-9 adds an incremental composition layer on top of the PR-8 scaffold:
+
+- `normalize_conformance_backbone()` composes lifecycle from adjacent canonical
+  surfaces (`lifecycle`, then `transfer`, then `coordination`) when direct
+  lifecycle input is unknown.
+- cross-profile drift signals are emitted (for example lifecycle vs transfer
+  divergence) as reviewable diagnostics, not hard rejection.
+- transitional pathways are grouped as `hardening_pathways` to make staged
+  compatibility retirement safer and more explicit.
+
+This keeps behavior non-breaking while reducing semantic drift across adjacent
+profiles and clarifying one distributed control-plane backbone.
