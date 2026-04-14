@@ -247,13 +247,19 @@ _TRUTH_EVENT_TRANSITIONAL_ALIASES = {
 
 
 def _normalize_text(value: Any) -> str:
+    """Lowercase and strip leading/trailing whitespace for classification.
+
+    Non-string values intentionally normalize to an empty string so this module
+    can remain non-breaking for mixed payloads while still classifying such
+    values as unknown later in the pipeline.
+    """
     if isinstance(value, str):
         return value.strip().lower()
     return ""
 
 
 def get_ugcp_conformance_surface_catalog() -> Dict[str, Dict[str, Any]]:
-    """Return a machine-reviewable conformance surface catalogue."""
+    """Return a machine-reviewable conformance surface catalog."""
     return {
         surface.value: {
             "surface": definition.surface.value,
@@ -269,12 +275,27 @@ def classify_surface_semantics(
     surface: UGCPConformanceSurface | str,
     value: Any,
 ) -> UGCPConformanceClassification:
-    """Classify a surface value as canonical/transitional/unknown."""
+    """Classify one conformance surface value.
+
+    Args:
+        surface: Conformance surface enum or surface name string.
+        value: Raw incoming semantic value for the surface.
+
+    Returns:
+        UGCPConformanceClassification with normalized canonical value when
+        possible, semantic class, and optional compatibility pathway metadata.
+
+    Notes:
+        Invalid/unknown surface names are treated as unknown and marked with
+        ``compatibility_pathway="invalid_surface"``.
+    """
     raw_surface = surface.value if isinstance(surface, UGCPConformanceSurface) else str(surface).strip().lower()
     normalized_input = _normalize_text(value)
     try:
         parsed_surface = UGCPConformanceSurface(raw_surface)
     except ValueError:
+        # Keep this fallback non-breaking by preserving the enum type while
+        # explicitly marking the classification with invalid_surface pathway.
         return UGCPConformanceClassification(
             surface=UGCPConformanceSurface.schema,
             raw_value=value,
@@ -371,7 +392,21 @@ def classify_surface_semantics(
 
 
 def normalize_conformance_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    """Normalize a mixed canonical/compat payload into canonical PR-8 surfaces."""
+    """Normalize a mixed canonical/compat payload into PR-8 conformance surfaces.
+
+    Recognized keys:
+      - schema_kind
+      - lifecycle_state
+      - authority_source
+      - transfer_state
+      - coordination_state
+      - truth_event_type
+
+    Returns:
+      - normalized canonical values for the six keys above
+      - semantic_classes: per-surface canonical/transitional/unknown class
+      - compatibility_pathways: only populated for transitional mappings
+    """
     schema = classify_surface_semantics(UGCPConformanceSurface.schema, payload.get("schema_kind"))
     lifecycle = classify_surface_semantics(UGCPConformanceSurface.lifecycle, payload.get("lifecycle_state"))
     authority = classify_surface_semantics(UGCPConformanceSurface.authority, payload.get("authority_source"))
@@ -414,13 +449,13 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "coordination_state_known": semantic_classes["coordination"] != UGCPSemanticClass.unknown.value,
         "lifecycle_state_known": semantic_classes["lifecycle"] != UGCPSemanticClass.unknown.value,
     }
-    violations: List[str] = [
+    failed_invariants: List[str] = [
         name for name, passed in invariants.items() if not passed
     ]
     return {
-        "conforms": not violations,
+        "conforms": not failed_invariants,
         "invariants": invariants,
-        "violations": violations,
+        "violations": failed_invariants,
         "normalized": normalized,
     }
 
