@@ -17,11 +17,14 @@ Control-plane semantics must flow in this order:
    - `core.runtime.target_takeover`
    - canonical handoff contract/envelope path
    - transfer-profile transition mapping (`core.ugcp_control_transfer_profile`)
+   - coordination-profile mapping for mesh/coordinator lifecycle + authority (`core.ugcp_coordination_profile`)
 4. **Session truth authority**
    - `core.canonical_session_truth.record_session_truth`
    - transfer transition truth events (`TruthEvent` via `build_control_transfer_truth_event(...)`)
+   - coordination transition truth events (`TruthEvent` via `build_coordination_truth_event(...)`)
 5. **Durable snapshot + read-model surfaces**
    - `contracts.runtime_session_snapshot.RuntimeSessionSnapshot`
+   - coordination durable snapshots (`build_coordination_durable_snapshot(...)`) for mesh/coordinator read models
    - projection/read APIs remain read-only surfaces
 
 ## 2) Ingress expectations (normative)
