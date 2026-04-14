@@ -270,32 +270,59 @@ class SystemOrchestrator:
         )
 
     def _run_phase_4_background_subsystems(self) -> PhaseResult:
-        """Phase 4 — Background subsystem bring-up hooks.
+        """Phase 4 — Background subsystem readiness checks (verifiable).
 
-        .. note:: **Current status: placeholder stub.**
-
-        This phase is a hook-registration point for background subsystem
-        bring-up.  The actual async service bring-up (NATS, fabric, gateway,
-        L4 modules) is performed by ``unified_launcher.GalaxyUnified`` after
-        the orchestrator's full pre-flight sequence completes.
-
-        Later PRs will extend this phase by registering hooks via
-        ``register_hook(StartupPhase.BACKGROUND_SUBSYSTEMS, ...)`` to add:
-        - Mode-aware NATS semantics
-        - Full FabricSubsystem lifecycle management
-        - Background subsystem health tracking
+        This phase keeps orchestration ownership in ``main.py`` while performing
+        low-cost, externally explainable checks that verify the runtime can route
+        and execute through canonical surfaces.
         """
-        logger.info("[Phase 4] Beginning background subsystem bring-up …")
-        # Stub hook — full FabricSubsystem bring-up delegated to unified_launcher
-        # during the actual asyncio run in main.py.  This phase is currently a
-        # **placeholder** that returns immediately with OK status.  Later PRs will
-        # extend it via ``register_hook(StartupPhase.BACKGROUND_SUBSYSTEMS, ...)``
-        # to add mode-aware NATS semantics and full FabricSubsystem lifecycle.
+        logger.info("[Phase 4] Verifying background subsystem readiness …")
+        diagnostics: Dict[str, Any] = {
+            "delegate": "unified_launcher.GalaxyUnified",
+            "checks": {},
+            "readiness_notes": [],
+        }
+        issues: List[str] = []
+
+        try:
+            from core.command_router import get_command_router
+
+            router = get_command_router()
+            diagnostics["checks"]["command_router_available"] = router is not None
+            if router is None:
+                issues.append("command_router_unavailable")
+        except Exception as exc:
+            diagnostics["checks"]["command_router_available"] = False
+            issues.append(f"command_router_error:{exc}")
+
+        try:
+            from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
+
+            plan = build_source_dispatch_plan()
+            plan_ready = bool(getattr(plan, "ready", False))
+            readiness_notes = list(getattr(plan, "readiness_notes", []) or [])
+            diagnostics["checks"]["dispatch_plan_ready"] = plan_ready
+            diagnostics["readiness_notes"] = readiness_notes
+            if not plan_ready:
+                issues.append("dispatch_plan_not_ready")
+                issues.extend(readiness_notes)
+        except Exception as exc:
+            diagnostics["checks"]["dispatch_plan_ready"] = False
+            issues.append(f"dispatch_plan_error:{exc}")
+
+        if issues:
+            return PhaseResult(
+                phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
+                status=PhaseStatus.DEGRADED,
+                detail="background readiness degraded — " + "; ".join(issues),
+                data=diagnostics,
+            )
+
         return PhaseResult(
             phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
             status=PhaseStatus.OK,
-            detail="background subsystem bring-up hooks registered",
-            data={"delegate": "unified_launcher.GalaxyUnified"},
+            detail="background readiness verified for canonical routing",
+            data=diagnostics,
         )
 
     def _run_phase_5_runtime_subject(self) -> PhaseResult:

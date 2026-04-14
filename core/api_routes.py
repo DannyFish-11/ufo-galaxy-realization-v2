@@ -449,6 +449,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     """
 
     from core.openclawd import get_openclawd as _get_openclawd
+    compat_ws_enabled = os.getenv("GALAXY_ENABLE_CORE_COMPAT_WS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # -----------------------------------------------------------------------
     # [COMPAT] /ws/device/{device_id}
@@ -468,6 +473,19 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         Compatibility-only path.  The canonical device ingress is
         galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
         """
+        if not compat_ws_enabled:
+            await websocket.accept()
+            await websocket.send_json(
+                {
+                    "type": "compat_ws_disabled",
+                    "message": "Core compatibility WS ingress is disabled by default.",
+                    "recommended_canonical_path": f"/ws/device/{device_id}",
+                    "how_to_enable": "Set GALAXY_ENABLE_CORE_COMPAT_WS=true explicitly for fallback use.",
+                }
+            )
+            await websocket.close(code=1008, reason="Core compat WS disabled")
+            return
+
         await connection_manager.connect_device(websocket, device_id)
 
         if device_id in registered_devices:

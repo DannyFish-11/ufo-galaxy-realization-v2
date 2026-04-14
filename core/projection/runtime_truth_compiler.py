@@ -528,12 +528,21 @@ def _compile_dispatch_semantics() -> Optional[Dict[str, Any]]:
                 mode_str = str(mode_val)
 
         return {
+            # Compatibility fields (retained)
             "mode": mode_str,
             "decision_reason": decision_reason,
             "target_device_id": target_device_id,
             "target_selection_reason": selection_reason,
             "ready": bool(getattr(plan, "ready", False)),
             "source_runtime_posture": getattr(plan, "source_runtime_posture", None),
+            # Canonical planning semantics fields (preferred)
+            "planned_mode": mode_str,
+            "planning_source": "source_dispatch_plan",
+            "planning_decision_reason": decision_reason,
+            "planning_target_device_id": target_device_id,
+            "planning_target_selection_reason": selection_reason,
+            "planning_ready": bool(getattr(plan, "ready", False)),
+            "planning_readiness_notes": readiness_notes,
         }
     except Exception as exc:
         _logger.debug("_compile_dispatch_semantics: unavailable: %s", exc)
@@ -553,4 +562,7 @@ def _compile_execution_path_observability(
         "observation_reason": dispatch_semantics.get("decision_reason"),
         "is_fallback_path": observed_path == "fallback_local",
         "has_remote_target": bool(dispatch_semantics.get("target_device_id")),
+        "is_observed_runtime_execution": False,
+        "observation_kind": "planning_projection",
+        "observation_note": "Execution observability is currently projected from dispatch planning context.",
     }

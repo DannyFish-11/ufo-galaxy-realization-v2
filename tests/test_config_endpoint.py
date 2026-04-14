@@ -39,7 +39,12 @@ from galaxy_gateway.api.config import build_client_config, router
 REQUIRED_KEYS = {
     "ws_base",
     "rest_base",
+    "ws_url",
+    "gateway_ws_url",
+    "ws_url_template",
+    "ws_canonical_path",
     "ws_paths",
+    "ws_paths_compat",
     "webrtc_gateway_ws_path",
     "stun_servers",
     "turn_servers",
@@ -232,6 +237,10 @@ class TestFeatureFlags:
 
 
 class TestWsPaths:
+    def test_canonical_path_is_first(self, client):
+        data = client.get("/api/v1/config").json()
+        assert data["ws_paths"][0] == "/ws/device/{id}"
+
     def test_android_path_present(self, client):
         data = client.get("/api/v1/config").json()
         paths = data["ws_paths"]
@@ -245,3 +254,10 @@ class TestWsPaths:
     def test_webrtc_path_contains_id_placeholder(self, client):
         data = client.get("/api/v1/config").json()
         assert "{id}" in data["webrtc_gateway_ws_path"]
+
+    def test_ws_url_fields_point_to_canonical_path(self, client):
+        data = client.get("/api/v1/config").json()
+        assert data["ws_canonical_path"] == "/ws/device/{id}"
+        assert data["ws_url"].endswith("/ws/device/{id}")
+        assert data["gateway_ws_url"] == data["ws_url"]
+        assert data["ws_url_template"] == data["ws_url"]
