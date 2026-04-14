@@ -127,7 +127,7 @@ _MAPPINGS: Dict[str, AndroidRuntimeWSMapping] = {
 
 
 def classify_android_runtime_ws_mapping(message_type: str) -> AndroidRuntimeWSMapping:
-    kind = str(message_type or "").strip().lower()
+    kind = (message_type or "").strip().lower()
     default = AndroidRuntimeWSMapping(
         message_type=kind or "unknown",
         semantic_family="runtime_execution_or_compat",

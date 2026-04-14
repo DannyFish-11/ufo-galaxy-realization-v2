@@ -115,7 +115,7 @@ async def handle_agent_status(
         meta_patch: Dict[str, Any] = {}
         if isinstance(status_payload, dict) and status_payload:
             meta_patch["metadata"] = {"agent_status_report": status_payload}
-        bridge._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge_agent_status")
+        bridge._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge.agent_status")
 
     async with bridge._lock:
         if device_id in bridge._devices:
