@@ -56,9 +56,20 @@ COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY: str = (
     "explicitly identified for staged retirement."
 )
 
+PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED: "
+    "Adjacent lifecycle/transfer/coordination semantics should compose into one "
+    "stable canonical lifecycle backbone without forcing broad strict breakage."
+)
+
 UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL: str = (
     "UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL::package=8::"
     "profile=ugcp-conformance-surfaces-v1::module=core.ugcp_conformance_surfaces"
+)
+
+UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL: str = (
+    "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL::package=9::"
+    "profile=ugcp-conformance-backbone-v1::module=core.ugcp_conformance_surfaces"
 )
 
 
@@ -245,6 +256,31 @@ _TRUTH_EVENT_TRANSITIONAL_ALIASES = {
     "mesh_coordination_transition": CanonicalTruthEventType.coordination_transition.value,
 }
 
+_SURFACE_CANONICAL_VALUES: Dict[UGCPConformanceSurface, Optional[set[str]]] = {
+    UGCPConformanceSurface.schema: _SCHEMA_CANONICAL_VALUES,
+    UGCPConformanceSurface.lifecycle: _LIFECYCLE_CANONICAL_VALUES,
+    UGCPConformanceSurface.authority: _AUTHORITY_CANONICAL_VALUES,
+    UGCPConformanceSurface.transfer: _TRANSFER_CANONICAL_VALUES,
+    UGCPConformanceSurface.coordination: _COORDINATION_CANONICAL_VALUES,
+    # truth-event canonical values are sourced from truth/event authority at runtime
+    UGCPConformanceSurface.truth_event: None,
+}
+
+_SURFACE_TRANSITIONAL_ALIASES: Dict[UGCPConformanceSurface, Dict[str, str]] = {
+    UGCPConformanceSurface.schema: _SCHEMA_TRANSITIONAL_ALIASES,
+    UGCPConformanceSurface.lifecycle: _LIFECYCLE_TRANSITIONAL_ALIASES,
+    UGCPConformanceSurface.authority: _AUTHORITY_TRANSITIONAL_ALIASES,
+    UGCPConformanceSurface.transfer: _TRANSFER_TRANSITIONAL_ALIASES,
+    UGCPConformanceSurface.coordination: _COORDINATION_TRANSITIONAL_ALIASES,
+    UGCPConformanceSurface.truth_event: _TRUTH_EVENT_TRANSITIONAL_ALIASES,
+}
+
+_LIFECYCLE_COMPOSITION_ORDER = (
+    ("lifecycle", "lifecycle_state"),
+    ("transfer", "transfer_state"),
+    ("coordination", "coordination_state"),
+)
+
 
 def _normalize_text(value: Any) -> str:
     if isinstance(value, str):
@@ -283,84 +319,22 @@ def classify_surface_semantics(
             compatibility_pathway="invalid_surface",
         )
 
-    if parsed_surface == UGCPConformanceSurface.schema:
-        if normalized_input in _SCHEMA_CANONICAL_VALUES:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _SCHEMA_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"schema_alias:{normalized_input}->{mapped}",
-            )
+    canonical_values = _SURFACE_CANONICAL_VALUES.get(parsed_surface)
+    if canonical_values is None and parsed_surface == UGCPConformanceSurface.truth_event:
+        canonical_values = get_canonical_transition_event_types()
 
-    elif parsed_surface == UGCPConformanceSurface.lifecycle:
-        if normalized_input in _LIFECYCLE_CANONICAL_VALUES:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _LIFECYCLE_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"lifecycle_alias:{normalized_input}->{mapped}",
-            )
+    if canonical_values and normalized_input in canonical_values:
+        return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
 
-    elif parsed_surface == UGCPConformanceSurface.authority:
-        if normalized_input in _AUTHORITY_CANONICAL_VALUES:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _AUTHORITY_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"authority_alias:{normalized_input}->{mapped}",
-            )
-
-    elif parsed_surface == UGCPConformanceSurface.transfer:
-        if normalized_input in _TRANSFER_CANONICAL_VALUES:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _TRANSFER_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"transfer_alias:{normalized_input}->{mapped}",
-            )
-
-    elif parsed_surface == UGCPConformanceSurface.coordination:
-        if normalized_input in _COORDINATION_CANONICAL_VALUES:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _COORDINATION_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"coordination_alias:{normalized_input}->{mapped}",
-            )
-
-    elif parsed_surface == UGCPConformanceSurface.truth_event:
-        canonical_event_types = get_canonical_transition_event_types()
-        if normalized_input in canonical_event_types:
-            return UGCPConformanceClassification(parsed_surface, value, normalized_input, UGCPSemanticClass.canonical)
-        mapped = _TRUTH_EVENT_TRANSITIONAL_ALIASES.get(normalized_input)
-        if mapped:
-            return UGCPConformanceClassification(
-                parsed_surface,
-                value,
-                mapped,
-                UGCPSemanticClass.transitional,
-                compatibility_pathway=f"truth_event_alias:{normalized_input}->{mapped}",
-            )
+    mapped = _SURFACE_TRANSITIONAL_ALIASES.get(parsed_surface, {}).get(normalized_input)
+    if mapped:
+        return UGCPConformanceClassification(
+            parsed_surface,
+            value,
+            mapped,
+            UGCPSemanticClass.transitional,
+            compatibility_pathway=f"{parsed_surface.value}_alias:{normalized_input}->{mapped}",
+        )
 
     return UGCPConformanceClassification(
         surface=parsed_surface,
@@ -403,9 +377,56 @@ def normalize_conformance_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def normalize_conformance_backbone(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Normalize conformance payload and compose a stable cross-profile backbone."""
+    normalized = normalize_conformance_payload(payload)
+    semantic_classes = normalized["semantic_classes"]
+
+    composed_lifecycle_state = "unknown"
+    lifecycle_source_surface = "none"
+    for source_surface, field_name in _LIFECYCLE_COMPOSITION_ORDER:
+        state = str(normalized.get(field_name, "unknown"))
+        if state and state != "unknown":
+            composed_lifecycle_state = state
+            lifecycle_source_surface = source_surface
+            break
+
+    semantic_drift_signals: List[str] = []
+    lifecycle_state = str(normalized.get("lifecycle_state", "unknown"))
+    transfer_state = str(normalized.get("transfer_state", "unknown"))
+    coordination_state = str(normalized.get("coordination_state", "unknown"))
+
+    if (
+        lifecycle_state not in {"", "unknown"}
+        and transfer_state not in {"", "unknown"}
+        and lifecycle_state != transfer_state
+    ):
+        semantic_drift_signals.append("lifecycle_transfer_divergence")
+    if (
+        lifecycle_state not in {"", "unknown"}
+        and coordination_state not in {"", "unknown"}
+        and lifecycle_state != coordination_state
+    ):
+        semantic_drift_signals.append("lifecycle_coordination_divergence")
+
+    hardening_pathways = [
+        f"{surface}_transitional_pathway"
+        for surface, semantic_class in semantic_classes.items()
+        if semantic_class == UGCPSemanticClass.transitional.value
+    ]
+
+    return {
+        **normalized,
+        "composed_lifecycle_state": composed_lifecycle_state,
+        "lifecycle_source_surface": lifecycle_source_surface,
+        "semantic_drift_signals": semantic_drift_signals,
+        "hardening_pathways": hardening_pathways,
+    }
+
+
 def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """Build reviewable cross-profile conformance invariants."""
-    normalized = normalize_conformance_payload(payload or {})
+    normalized = normalize_conformance_backbone(payload or {})
     semantic_classes = normalized["semantic_classes"]
     invariants = {
         "truth_event_is_canonical": semantic_classes["truth_event"] == UGCPSemanticClass.canonical.value,
@@ -413,6 +434,8 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "transfer_state_known": semantic_classes["transfer"] != UGCPSemanticClass.unknown.value,
         "coordination_state_known": semantic_classes["coordination"] != UGCPSemanticClass.unknown.value,
         "lifecycle_state_known": semantic_classes["lifecycle"] != UGCPSemanticClass.unknown.value,
+        "composed_lifecycle_state_known": normalized["composed_lifecycle_state"] != "unknown",
+        "semantic_drift_signals_empty": not normalized["semantic_drift_signals"],
     }
     violations: List[str] = [
         name for name, passed in invariants.items() if not passed
@@ -431,7 +454,9 @@ __all__ = [
     "NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY",
     "CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY",
     "COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY",
+    "PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY",
     "UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL",
+    "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL",
     "UGCPConformanceSurface",
     "UGCPSemanticClass",
     "UGCPConformanceSurfaceDefinition",
@@ -439,5 +464,6 @@ __all__ = [
     "get_ugcp_conformance_surface_catalog",
     "classify_surface_semantics",
     "normalize_conformance_payload",
+    "normalize_conformance_backbone",
     "build_conformance_invariant_report",
 ]

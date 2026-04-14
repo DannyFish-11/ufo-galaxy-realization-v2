@@ -362,6 +362,7 @@ try:
         UGCPSemanticClass as _UGCPSemanticClass,
         classify_surface_semantics as _classify_surface_semantics,
         normalize_conformance_payload as _normalize_conformance_payload,
+        normalize_conformance_backbone as _normalize_conformance_backbone,
         build_conformance_invariant_report as _build_conformance_invariant_report,
         get_ugcp_conformance_surface_catalog as _get_ugcp_conformance_surface_catalog,
     )
@@ -371,8 +372,9 @@ try:
         "canonical UGCP conformance surface scaffold "
         "(core.ugcp_conformance_surfaces) is available and aligned with "
         "projection routes. Canonical vs transitional classification, "
-        "normalization boundaries, and cross-profile invariant reports are "
-        "explicit and reviewable without forcing strict-mode breakage."
+        "normalization boundaries, composed cross-profile lifecycle backbone "
+        "normalization, and invariant reports are explicit and reviewable "
+        "without forcing strict-mode breakage."
     )
 except ImportError:  # pragma: no cover
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (  # type: ignore[no-redef]

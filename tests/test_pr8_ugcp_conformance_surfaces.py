@@ -11,6 +11,8 @@ from core.ugcp_conformance_surfaces import (
     COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY,
     CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
+    PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY,
+    UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
     UGCP_CONFORMANCE_SURFACES_AUTHORITY,
     UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL,
     UGCPConformanceSurface,
@@ -18,6 +20,7 @@ from core.ugcp_conformance_surfaces import (
     build_conformance_invariant_report,
     classify_surface_semantics,
     get_ugcp_conformance_surface_catalog,
+    normalize_conformance_backbone,
     normalize_conformance_payload,
 )
 from core.ugcp_truth_event_model import CanonicalTruthEventType
@@ -33,6 +36,8 @@ def test_sentinels_present() -> None:
     assert "NORMALIZATION_BOUNDARY_IS_EXPLICIT" in NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY
     assert "CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE" in CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY
     assert "COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE" in COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY
+    assert "PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED" in PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY
+    assert "package=9" in UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL
 
 
 def test_surface_catalog_has_expected_authority_mappings() -> None:
@@ -105,6 +110,42 @@ def test_invariant_report_surfaces_nonconformance_without_hard_break() -> None:
     assert report["normalized"]["lifecycle_state"] == "completed"
 
 
+def test_backbone_normalization_composes_lifecycle_from_adjacent_profile_state() -> None:
+    normalized = normalize_conformance_backbone(
+        {
+            "lifecycle_state": "unknown_state",
+            "transfer_state": "executing",
+            "coordination_state": "waiting",
+            "truth_event_type": CanonicalTruthEventType.control_transfer_transition.value,
+        }
+    )
+
+    assert normalized["lifecycle_state"] == "unknown"
+    assert normalized["transfer_state"] == "in_progress"
+    assert normalized["coordination_state"] == "awaiting_barrier"
+    assert normalized["composed_lifecycle_state"] == "in_progress"
+    assert normalized["lifecycle_source_surface"] == "transfer"
+    assert "transfer_transitional_pathway" in normalized["hardening_pathways"]
+    assert "coordination_transitional_pathway" in normalized["hardening_pathways"]
+
+
+def test_invariant_report_flags_cross_profile_lifecycle_drift() -> None:
+    report = build_conformance_invariant_report(
+        {
+            "lifecycle_state": "completed",
+            "transfer_state": "in_progress",
+            "coordination_state": "active",
+            "truth_event_type": CanonicalTruthEventType.runtime_lifecycle_transition.value,
+            "authority_source": "ugcp_truth_event_model",
+        }
+    )
+
+    assert report["invariants"]["composed_lifecycle_state_known"] is True
+    assert report["invariants"]["semantic_drift_signals_empty"] is False
+    assert "lifecycle_transfer_divergence" in report["normalized"]["semantic_drift_signals"]
+    assert "semantic_drift_signals_empty" in report["violations"]
+
+
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_projection_alignment_sentinel_present() -> None:
     from core.routes import projection
@@ -114,4 +155,5 @@ def test_projection_alignment_sentinel_present() -> None:
     assert "UNAVAILABLE" not in sentinel
     assert callable(getattr(projection, "_classify_surface_semantics", None))
     assert callable(getattr(projection, "_normalize_conformance_payload", None))
+    assert callable(getattr(projection, "_normalize_conformance_backbone", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))
