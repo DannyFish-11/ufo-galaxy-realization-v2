@@ -358,9 +358,15 @@ try:
     from core.ugcp_conformance_surfaces import (  # noqa: F401
         UGCP_CONFORMANCE_SURFACES_AUTHORITY as _UCS_AUTHORITY,
         UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL as _UCS_PR8,
+        UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10,
         UGCPConformanceSurface as _UGCPConformanceSurface,
         UGCPSemanticClass as _UGCPSemanticClass,
+        UGCPEnforcementMode as _UGCPEnforcementMode,
+        UGCPEnforcementAction as _UGCPEnforcementAction,
+        UGCPDeprecationStage as _UGCPDeprecationStage,
         classify_surface_semantics as _classify_surface_semantics,
+        evaluate_surface_enforcement as _evaluate_surface_enforcement,
+        build_enforcement_scaffold as _build_enforcement_scaffold,
         normalize_conformance_payload as _normalize_conformance_payload,
         normalize_conformance_backbone as _normalize_conformance_backbone,
         build_conformance_invariant_report as _build_conformance_invariant_report,
@@ -376,9 +382,20 @@ try:
         "normalization, and invariant reports are explicit and reviewable "
         "without forcing strict-mode breakage."
     )
+    UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10: str = (
+        "PROJECTION_ROUTES::UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10_V1: "
+        "bounded UGCP enforcement/deprecation scaffold "
+        "(core.ugcp_conformance_surfaces) is available and aligned with "
+        "projection routes. Handling actions (accept/normalize/tolerate/reject), "
+        "deprecation-stage markers, and strict-rejection candidates are "
+        "reviewable without enabling unsafe global strict breakage."
+    )
 except ImportError:  # pragma: no cover
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8_UNAVAILABLE"
+    )
+    UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10_UNAVAILABLE"
     )
 
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo

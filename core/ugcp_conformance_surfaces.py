@@ -72,6 +72,29 @@ UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL: str = (
     "profile=ugcp-conformance-backbone-v1::module=core.ugcp_conformance_surfaces"
 )
 
+UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL: str = (
+    "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL::package=10::"
+    "profile=ugcp-enforcement-scaffold-v1::module=core.ugcp_conformance_surfaces"
+)
+
+ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT: "
+    "Canonical, transitional, and unknown semantics should map to explicit "
+    "handling actions (accept/normalize-warn/tolerate-warn/reject)."
+)
+
+DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE: "
+    "Deprecated alias and compatibility pathways should carry deprecation-stage "
+    "markers to support progressive retirement planning."
+)
+
+PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::PROGRESSIVE_STRICTNESS_IS_OPT_IN: "
+    "Compatibility mode remains default; stricter reject behavior is surfaced as "
+    "reviewable scaffold and activated only by explicit strict mode."
+)
+
 
 class UGCPConformanceSurface(str, Enum):
     schema = "schema"
@@ -88,6 +111,26 @@ class UGCPSemanticClass(str, Enum):
     unknown = "unknown"
 
 
+class UGCPEnforcementMode(str, Enum):
+    compatibility = "compatibility"
+    review = "review"
+    strict = "strict"
+
+
+class UGCPEnforcementAction(str, Enum):
+    accept = "accept"
+    normalize_warn = "normalize_warn"
+    tolerate_warn = "tolerate_warn"
+    reject = "reject"
+
+
+class UGCPDeprecationStage(str, Enum):
+    none = "none"
+    transitional_tolerated = "transitional_tolerated"
+    migration_required = "migration_required"
+    strict_reject_candidate = "strict_reject_candidate"
+
+
 @dataclass(frozen=True)
 class UGCPConformanceSurfaceDefinition:
     surface: UGCPConformanceSurface
@@ -102,6 +145,19 @@ class UGCPConformanceClassification:
     raw_value: Any
     normalized_value: str
     semantic_class: UGCPSemanticClass
+    compatibility_pathway: str = ""
+
+
+@dataclass(frozen=True)
+class UGCPEnforcementDecision:
+    surface: UGCPConformanceSurface
+    input_value: Any
+    normalized_value: str
+    semantic_class: UGCPSemanticClass
+    action: UGCPEnforcementAction
+    deprecation_stage: UGCPDeprecationStage
+    reject_in_mode: bool
+    warning: str = ""
     compatibility_pathway: str = ""
 
 
@@ -275,6 +331,44 @@ _SURFACE_TRANSITIONAL_ALIASES: Dict[UGCPConformanceSurface, Dict[str, str]] = {
     UGCPConformanceSurface.truth_event: _TRUTH_EVENT_TRANSITIONAL_ALIASES,
 }
 
+_SURFACE_ALIAS_DEPRECATION_STAGE: Dict[UGCPConformanceSurface, Dict[str, UGCPDeprecationStage]] = {
+    UGCPConformanceSurface.schema: {
+        "message_interop_payload": UGCPDeprecationStage.migration_required,
+        "legacy_message_payload": UGCPDeprecationStage.strict_reject_candidate,
+    },
+    UGCPConformanceSurface.lifecycle: {
+        "done": UGCPDeprecationStage.migration_required,
+        "ok": UGCPDeprecationStage.migration_required,
+        "error": UGCPDeprecationStage.migration_required,
+        "waiting": UGCPDeprecationStage.transitional_tolerated,
+        "cancelled_by_policy": UGCPDeprecationStage.migration_required,
+    },
+    UGCPConformanceSurface.authority: {
+        "projection": UGCPDeprecationStage.strict_reject_candidate,
+        "interop": UGCPDeprecationStage.strict_reject_candidate,
+        "legacy_bridge": UGCPDeprecationStage.strict_reject_candidate,
+        "compat": UGCPDeprecationStage.strict_reject_candidate,
+    },
+    UGCPConformanceSurface.transfer: {
+        "draft": UGCPDeprecationStage.migration_required,
+        "sealed": UGCPDeprecationStage.migration_required,
+        "pending": UGCPDeprecationStage.migration_required,
+        "executing": UGCPDeprecationStage.migration_required,
+        "succeeded": UGCPDeprecationStage.migration_required,
+        "blocked": UGCPDeprecationStage.strict_reject_candidate,
+    },
+    UGCPConformanceSurface.coordination: {
+        "waiting": UGCPDeprecationStage.migration_required,
+        "cancelled_by_policy": UGCPDeprecationStage.migration_required,
+    },
+    UGCPConformanceSurface.truth_event: {
+        "session_truth_written": UGCPDeprecationStage.migration_required,
+        "runtime_state_transition": UGCPDeprecationStage.migration_required,
+        "transfer_state_transition": UGCPDeprecationStage.migration_required,
+        "mesh_coordination_transition": UGCPDeprecationStage.migration_required,
+    },
+}
+
 _LIFECYCLE_COMPOSITION_ORDER = (
     ("lifecycle", "lifecycle_state"),
     ("transfer", "transfer_state"),
@@ -344,6 +438,135 @@ def classify_surface_semantics(
         normalized_value="unknown",
         semantic_class=UGCPSemanticClass.unknown,
     )
+
+
+def _resolve_alias_deprecation_stage(surface: UGCPConformanceSurface, raw_value: Any) -> UGCPDeprecationStage:
+    normalized_input = _normalize_text(raw_value)
+    if not normalized_input:
+        return UGCPDeprecationStage.transitional_tolerated
+    return _SURFACE_ALIAS_DEPRECATION_STAGE.get(surface, {}).get(
+        normalized_input,
+        UGCPDeprecationStage.migration_required,
+    )
+
+
+def _parse_enforcement_mode(mode: UGCPEnforcementMode | str) -> UGCPEnforcementMode:
+    if isinstance(mode, UGCPEnforcementMode):
+        return mode
+    normalized_mode = str(mode).strip().lower()
+    try:
+        return UGCPEnforcementMode(normalized_mode)
+    except ValueError:
+        return UGCPEnforcementMode.compatibility
+
+
+def evaluate_surface_enforcement(
+    surface: UGCPConformanceSurface | str,
+    value: Any,
+    mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
+) -> UGCPEnforcementDecision:
+    """Evaluate bounded enforcement action without forcing global strict breakage."""
+    parsed_mode = _parse_enforcement_mode(mode)
+    classified = classify_surface_semantics(surface, value)
+
+    if classified.semantic_class == UGCPSemanticClass.canonical:
+        return UGCPEnforcementDecision(
+            surface=classified.surface,
+            input_value=value,
+            normalized_value=classified.normalized_value,
+            semantic_class=classified.semantic_class,
+            action=UGCPEnforcementAction.accept,
+            deprecation_stage=UGCPDeprecationStage.none,
+            reject_in_mode=False,
+        )
+
+    if classified.semantic_class == UGCPSemanticClass.transitional:
+        deprecation_stage = _resolve_alias_deprecation_stage(classified.surface, value)
+        reject_in_mode = parsed_mode == UGCPEnforcementMode.strict and (
+            deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
+        )
+        action = UGCPEnforcementAction.reject if reject_in_mode else UGCPEnforcementAction.normalize_warn
+        return UGCPEnforcementDecision(
+            surface=classified.surface,
+            input_value=value,
+            normalized_value=classified.normalized_value,
+            semantic_class=classified.semantic_class,
+            action=action,
+            deprecation_stage=deprecation_stage,
+            reject_in_mode=reject_in_mode,
+            warning=(
+                f"{classified.surface.value} transitional alias normalized via "
+                f"{classified.compatibility_pathway} ({deprecation_stage.value})"
+            ),
+            compatibility_pathway=classified.compatibility_pathway,
+        )
+
+    reject_in_mode = parsed_mode == UGCPEnforcementMode.strict
+    action = UGCPEnforcementAction.reject if reject_in_mode else UGCPEnforcementAction.tolerate_warn
+    return UGCPEnforcementDecision(
+        surface=classified.surface,
+        input_value=value,
+        normalized_value=classified.normalized_value,
+        semantic_class=classified.semantic_class,
+        action=action,
+        deprecation_stage=UGCPDeprecationStage.transitional_tolerated,
+        reject_in_mode=reject_in_mode,
+        warning=f"{classified.surface.value} value is unknown and currently tolerated for compatibility review",
+        compatibility_pathway=classified.compatibility_pathway,
+    )
+
+
+def build_enforcement_scaffold(
+    payload: Mapping[str, Any],
+    mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
+) -> Dict[str, Any]:
+    """Build reviewable enforcement/deprecation scaffold for progressive hardening."""
+    parsed_mode = _parse_enforcement_mode(mode)
+    normalized = normalize_conformance_backbone(payload)
+    surface_inputs = {
+        "schema": payload.get("schema_kind"),
+        "lifecycle": payload.get("lifecycle_state"),
+        "authority": payload.get("authority_source"),
+        "transfer": payload.get("transfer_state"),
+        "coordination": payload.get("coordination_state"),
+        "truth_event": payload.get("truth_event_type"),
+    }
+    decisions = {
+        surface_key: evaluate_surface_enforcement(surface_key, raw_value, parsed_mode)
+        for surface_key, raw_value in surface_inputs.items()
+    }
+    warnings = [decision.warning for decision in decisions.values() if decision.warning]
+    rejection_candidates = [surface for surface, decision in decisions.items() if decision.reject_in_mode]
+    strict_rejection_ready_pathways = [
+        decision.compatibility_pathway
+        for decision in decisions.values()
+        if decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
+        and decision.compatibility_pathway
+    ]
+    deprecation_markers = {
+        surface: decision.deprecation_stage.value
+        for surface, decision in decisions.items()
+        if decision.deprecation_stage != UGCPDeprecationStage.none
+    }
+    return {
+        "mode": parsed_mode.value,
+        "normalized": normalized,
+        "warnings": warnings,
+        "rejection_candidates": rejection_candidates,
+        "strict_rejection_ready_pathways": strict_rejection_ready_pathways,
+        "deprecation_markers": deprecation_markers,
+        "decisions": {
+            surface: {
+                "action": decision.action.value,
+                "semantic_class": decision.semantic_class.value,
+                "normalized_value": decision.normalized_value,
+                "compatibility_pathway": decision.compatibility_pathway,
+                "deprecation_stage": decision.deprecation_stage.value,
+                "reject_in_mode": decision.reject_in_mode,
+            }
+            for surface, decision in decisions.items()
+        },
+    }
 
 
 def normalize_conformance_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
@@ -430,6 +653,7 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
     """Build reviewable cross-profile conformance invariants."""
     normalized = normalize_conformance_backbone(payload or {})
     semantic_classes = normalized["semantic_classes"]
+    enforcement = build_enforcement_scaffold(payload or {}, mode=UGCPEnforcementMode.review)
     invariants = {
         "truth_event_is_canonical": semantic_classes["truth_event"] == UGCPSemanticClass.canonical.value,
         "authority_source_not_compat_alias": semantic_classes["authority"] != UGCPSemanticClass.transitional.value,
@@ -447,6 +671,7 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "invariants": invariants,
         "violations": violations,
         "normalized": normalized,
+        "enforcement_scaffold": enforcement,
     }
 
 
@@ -459,12 +684,22 @@ __all__ = [
     "PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY",
     "UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL",
     "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL",
+    "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL",
+    "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY",
+    "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY",
+    "PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY",
     "UGCPConformanceSurface",
     "UGCPSemanticClass",
+    "UGCPEnforcementMode",
+    "UGCPEnforcementAction",
+    "UGCPDeprecationStage",
     "UGCPConformanceSurfaceDefinition",
     "UGCPConformanceClassification",
+    "UGCPEnforcementDecision",
     "get_ugcp_conformance_surface_catalog",
     "classify_surface_semantics",
+    "evaluate_surface_enforcement",
+    "build_enforcement_scaffold",
     "normalize_conformance_payload",
     "normalize_conformance_backbone",
     "build_conformance_invariant_report",

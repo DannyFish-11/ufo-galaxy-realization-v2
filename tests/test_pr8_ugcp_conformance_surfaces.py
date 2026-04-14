@@ -10,15 +10,24 @@ from core.ugcp_conformance_surfaces import (
     CANONICAL_VS_TRANSITIONAL_CLASSIFICATION_POLICY,
     COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY,
     CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
+    DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY,
+    ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY,
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
     PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY,
+    PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY,
     UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
+    UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL,
+    UGCPDeprecationStage,
+    UGCPEnforcementAction,
+    UGCPEnforcementMode,
     UGCP_CONFORMANCE_SURFACES_AUTHORITY,
     UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL,
     UGCPConformanceSurface,
     UGCPSemanticClass,
+    build_enforcement_scaffold,
     build_conformance_invariant_report,
     classify_surface_semantics,
+    evaluate_surface_enforcement,
     get_ugcp_conformance_surface_catalog,
     normalize_conformance_backbone,
     normalize_conformance_payload,
@@ -37,9 +46,16 @@ def test_sentinels_present() -> None:
     assert "CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE" in CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY
     assert "COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE" in COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY
     assert "PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED" in PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY
+    assert "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT" in ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY
+    assert "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE" in DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY
+    assert "PROGRESSIVE_STRICTNESS_IS_OPT_IN" in PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY
     assert UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL == (
         "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL::package=9::"
         "profile=ugcp-conformance-backbone-v1::module=core.ugcp_conformance_surfaces"
+    )
+    assert UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL == (
+        "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL::package=10::"
+        "profile=ugcp-enforcement-scaffold-v1::module=core.ugcp_conformance_surfaces"
     )
 
 
@@ -147,6 +163,40 @@ def test_invariant_report_flags_cross_profile_lifecycle_drift() -> None:
     assert report["invariants"]["semantic_drift_signals_empty"] is False
     assert "lifecycle_transfer_divergence" in report["normalized"]["semantic_drift_signals"]
     assert "semantic_drift_signals_empty" in report["violations"]
+    assert report["enforcement_scaffold"]["mode"] == UGCPEnforcementMode.review.value
+
+
+def test_enforcement_decision_surfaces_strict_reject_candidates_without_breakage() -> None:
+    review_decision = evaluate_surface_enforcement(UGCPConformanceSurface.authority, "projection", mode="review")
+    strict_decision = evaluate_surface_enforcement(UGCPConformanceSurface.authority, "projection", mode="strict")
+
+    assert review_decision.action == UGCPEnforcementAction.normalize_warn
+    assert review_decision.reject_in_mode is False
+    assert review_decision.deprecation_stage == UGCPDeprecationStage.strict_reject_candidate
+    assert strict_decision.action == UGCPEnforcementAction.reject
+    assert strict_decision.reject_in_mode is True
+
+
+def test_enforcement_scaffold_marks_warnings_and_rejection_candidates() -> None:
+    scaffold = build_enforcement_scaffold(
+        {
+            "schema_kind": "legacy_message_payload",
+            "lifecycle_state": "done",
+            "authority_source": "projection",
+            "transfer_state": "blocked",
+            "coordination_state": "waiting",
+            "truth_event_type": "runtime_state_transition",
+        },
+        mode=UGCPEnforcementMode.strict,
+    )
+
+    assert scaffold["mode"] == UGCPEnforcementMode.strict.value
+    assert "authority" in scaffold["rejection_candidates"]
+    assert "transfer" in scaffold["rejection_candidates"]
+    assert scaffold["deprecation_markers"]["schema"] == UGCPDeprecationStage.strict_reject_candidate.value
+    assert scaffold["decisions"]["coordination"]["action"] == UGCPEnforcementAction.normalize_warn.value
+    assert scaffold["warnings"]
+    assert scaffold["strict_rejection_ready_pathways"]
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
@@ -156,7 +206,12 @@ def test_projection_alignment_sentinel_present() -> None:
     sentinel = projection.UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8
     assert "UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8" in sentinel
     assert "UNAVAILABLE" not in sentinel
+    enforcement_sentinel = projection.UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10
+    assert "UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10" in enforcement_sentinel
+    assert "UNAVAILABLE" not in enforcement_sentinel
     assert callable(getattr(projection, "_classify_surface_semantics", None))
+    assert callable(getattr(projection, "_evaluate_surface_enforcement", None))
+    assert callable(getattr(projection, "_build_enforcement_scaffold", None))
     assert callable(getattr(projection, "_normalize_conformance_payload", None))
     assert callable(getattr(projection, "_normalize_conformance_backbone", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))
