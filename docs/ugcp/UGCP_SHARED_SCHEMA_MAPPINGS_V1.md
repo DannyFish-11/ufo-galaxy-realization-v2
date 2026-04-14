@@ -3,6 +3,8 @@
 This note documents the incremental compatibility shims from current key contracts into
 `core.schemas.ugcp` shared canonical objects.
 
+Here, “realization-v2” refers to this repository (`ufo-galaxy-realization-v2`) center/control-plane side.
+
 It is an architecture-grounding layer, not a claim of full migration.
 
 ## Canonical namespace

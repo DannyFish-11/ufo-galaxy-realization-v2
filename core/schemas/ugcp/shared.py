@@ -26,12 +26,17 @@ UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL: str = (
     "module=core.schemas.ugcp.shared"
 )
 
+# Canonical terminal states accepted by the incremental UGCP truth model.
+_VALID_TERMINAL_STATES = {"completed", "failed", "partial", "interrupted"}
+
 
 def _pick(obj: Any, *names: str, default: Any = None) -> Any:
+    """Return the first non-None value from a dict/object across candidate names."""
     if isinstance(obj, dict):
         for name in names:
-            if name in obj and obj.get(name) is not None:
-                return obj.get(name)
+            value = obj.get(name)
+            if value is not None:
+                return value
         return default
     for name in names:
         value = getattr(obj, name, None)
@@ -42,6 +47,15 @@ def _pick(obj: Any, *names: str, default: Any = None) -> Any:
 
 def _to_json_dict(instance: Any) -> Dict[str, Any]:
     return dataclasses.asdict(instance)
+
+
+def _first_target(obj: Any) -> Optional[str]:
+    """Return the first target id when a ``targets`` list is present."""
+    targets = _pick(obj, "targets", default=[])
+    if isinstance(targets, list) and targets:
+        first = targets[0]
+        return first if isinstance(first, str) else None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -244,11 +258,7 @@ class MeshSession:
     participants: List[MeshParticipant] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "mesh_session_id": self.mesh_session_id,
-            "status": self.status,
-            "participants": [p.to_dict() for p in self.participants],
-        }
+        return _to_json_dict(self)
 
 
 @dataclass(frozen=True)
@@ -289,6 +299,10 @@ class AggregationPlan:
 @dataclass(frozen=True)
 class TerminalState:
     value: str = "unknown"
+
+    def __post_init__(self) -> None:
+        if self.value not in _VALID_TERMINAL_STATES and self.value != "unknown":
+            raise ValueError(f"Unsupported terminal state: {self.value!r}")
 
 
 @dataclass(frozen=True)
@@ -367,11 +381,7 @@ def map_from_task_envelope(envelope: Any) -> TaskEnvelope:
         trace_id=str(_pick(envelope, "trace_id", default="")),
         control_session_id=_pick(envelope, "control_session_id", "session_id"),
         source_node_id=_pick(envelope, "source_node_id", "source"),
-        target_node_id=_pick(envelope, "target_node_id", default=(
-            (_pick(envelope, "targets", default=[None]) or [None])[0]
-            if isinstance(_pick(envelope, "targets", default=[]), list)
-            else None
-        )),
+        target_node_id=_pick(envelope, "target_node_id", default=_first_target(envelope)),
         tool_name=str(_pick(envelope, "tool_name", default="")),
         args=dict(_pick(envelope, "args", default={}) or {}),
         metadata=dict(_pick(envelope, "metadata", default={}) or {}),
@@ -408,20 +418,31 @@ def map_from_delegated_handoff_contract(contract: Any) -> HandoffRequest:
 def map_from_runtime_session_snapshot(snapshot: Any) -> RuntimeTruth:
     """Map runtime session snapshot contract into canonical runtime truth shape."""
     identity = _pick(snapshot, "identity", default={}) or {}
-    status = _pick(snapshot, "status", default="unknown")
+    raw_status = _pick(snapshot, "status", default="unknown")
+    normalized_status = (
+        raw_status
+        if isinstance(raw_status, str) and raw_status in _VALID_TERMINAL_STATES
+        else "unknown"
+    )
     reason = _pick(snapshot, "reason", default="")
     runtime_session_id = _pick(identity, "session_id") or _pick(snapshot, "session_id")
-    terminal_state = status if status in {"completed", "failed", "partial", "interrupted"} else "unknown"
     return RuntimeTruth(
         runtime_session_id=runtime_session_id,
-        runtime_status=str(status),
-        terminal_state=TerminalState(value=str(terminal_state)),
+        runtime_status=normalized_status,
+        terminal_state=TerminalState(value=normalized_status),
         terminal_reason=TerminalReason(value=str(reason or "")),
     )
 
 
 def map_from_message_interop_payload(payload: Dict[str, Any]) -> TaskEnvelope:
-    """Map interop-normalized payload dict into canonical UGCP task envelope."""
+    """Map interop payload into UGCP task envelope.
+
+    Notes
+    -----
+    Existing message-interop payloads may carry tool arguments in either
+    ``args`` or ``payload``. Canonical UGCP ``TaskEnvelope`` stores both
+    variants in ``args`` to keep one control-surface field.
+    """
     corr_task_id = _pick(payload, "task_id", "request_id", default="")
     corr_trace_id = _pick(payload, "trace_id", default="")
     ctx = _pick(payload, "context", default={}) or {}

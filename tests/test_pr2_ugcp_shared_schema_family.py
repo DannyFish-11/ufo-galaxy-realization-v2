@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from core.schemas.task_envelope import TaskEnvelope as ExistingTaskEnvelope
 from core.schemas.ugcp import (
     UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY,
@@ -21,8 +23,10 @@ from core.schemas.ugcp import (
 
 
 def test_sentinel_strings_present() -> None:
-    assert "UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY" in UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY
-    assert "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL" in UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL
+    assert UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY.startswith("UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY::")
+    assert UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL.startswith("UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL::")
+    assert "core.schemas.ugcp.shared" in UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY
+    assert "namespace=core.schemas.ugcp" in UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL
 
 
 def test_truth_objects_to_dict() -> None:
@@ -40,6 +44,14 @@ def test_truth_objects_to_dict() -> None:
 
     assert task_truth.to_dict()["terminal_state"] == "completed"
     assert runtime_truth.to_dict()["runtime_session_id"] == "rt_1"
+
+
+@pytest.mark.parametrize("state", ["completed", "failed", "partial", "interrupted"])
+def test_truth_objects_support_all_terminal_states(state: str) -> None:
+    task_truth = TaskTruth(task_id="task_x", terminal_state=TerminalState(state))
+    runtime_truth = RuntimeTruth(runtime_session_id="rt_x", terminal_state=TerminalState(state))
+    assert task_truth.to_dict()["terminal_state"] == state
+    assert runtime_truth.to_dict()["terminal_state"] == state
 
 
 def test_map_from_existing_task_envelope_maps_session_to_control_session() -> None:
@@ -60,6 +72,24 @@ def test_map_from_existing_task_envelope_maps_session_to_control_session() -> No
     assert mapped.control_session_id == "sess_1"
     assert mapped.source_node_id == "source_node"
     assert mapped.target_node_id == "target_node"
+
+
+@pytest.mark.parametrize(
+    "targets,expected,use_dict",
+    [
+        ([], None, False),
+        ([123], None, True),
+        (["target_ok", "target_other"], "target_ok", False),
+    ],
+)
+def test_map_from_existing_task_envelope_handles_target_edge_cases(targets, expected, use_dict) -> None:
+    existing = (
+        {"task_id": "task_edge", "trace_id": "trace_edge", "targets": targets}
+        if use_dict
+        else ExistingTaskEnvelope(task_id="task_edge", trace_id="trace_edge", targets=targets)
+    )
+    mapped = map_from_task_envelope(existing)
+    assert mapped.target_node_id == expected
 
 
 def test_map_from_delegated_dispatch_record_uses_dispatch_id_aliases() -> None:
