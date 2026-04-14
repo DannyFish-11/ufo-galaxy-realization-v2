@@ -129,6 +129,10 @@ class CoordinationTerminalOutcome(str, Enum):
 
 
 _COORDINATION_TERMINAL_REASON_VALUES = {item.value for item in CoordinationTerminalOutcome}
+_COORDINATION_STATE_ALIASES: Dict[str, str] = {
+    "waiting": CoordinationLifecycleState.awaiting_barrier.value,
+    "cancelled_by_policy": CoordinationLifecycleState.cancelled.value,
+}
 
 
 COORDINATION_ALLOWED_TRANSITIONS: Dict[CoordinationLifecycleState, Set[CoordinationLifecycleState]] = {
@@ -218,11 +222,7 @@ def _normalize_state(raw: Any) -> CoordinationLifecycleState:
     if not isinstance(raw, str):
         return CoordinationLifecycleState.unknown
     normalized = raw.strip().lower()
-    alias = {
-        "waiting": CoordinationLifecycleState.awaiting_barrier,
-        "cancelled_by_policy": CoordinationLifecycleState.cancelled,
-    }
-    normalized = alias.get(normalized, normalized)
+    normalized = _COORDINATION_STATE_ALIASES.get(normalized, normalized)
     try:
         return CoordinationLifecycleState(normalized)
     except ValueError:
