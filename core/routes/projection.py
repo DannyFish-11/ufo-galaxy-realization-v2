@@ -268,6 +268,32 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::DELEGATED_RUNTIME_HANDOFF_CONTRACT_ALIGNED_PR9_UNAVAILABLE"
     )
 
+# PR-5 (UGCP convergence plan, realization-v2 side): unified UGCP control
+# transfer profile alignment (handoff/takeover/delegated execution transfer).
+try:
+    from core.ugcp_control_transfer_profile import (  # noqa: F401
+        UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY as _UCTP_AUTHORITY,
+        UGCP_CONTROL_TRANSFER_PROFILE_PR5_SENTINEL as _UCTP_PR5,
+        ControlTransferFamily as _ControlTransferFamily,
+        ControlTransferState as _ControlTransferState,
+        ControlTransferTerminalReason as _ControlTransferTerminalReason,
+        build_control_transfer_truth_event as _build_control_transfer_truth_event,
+        can_transition as _transfer_can_transition,
+    )
+
+    UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5: str = (
+        "PROJECTION_ROUTES::UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5_V1: "
+        "unified UGCP control-transfer profile "
+        "(core.ugcp_control_transfer_profile) is available and aligned with "
+        "projection routes. Transfer state and terminal semantics can be "
+        "interpreted consistently across handoff, takeover, and delegated "
+        "execution flows."
+    )
+except ImportError:  # pragma: no cover
+    UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_CONTROL_TRANSFER_PROFILE_ALIGNED_PR5_UNAVAILABLE"
+    )
+
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime execution-tracking and acknowledgment
 # basis.  Importing the authority sentinel and the PR-10 sentinel from the new
