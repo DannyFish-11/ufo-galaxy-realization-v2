@@ -22,6 +22,7 @@ from enum import Enum
 from typing import Any, Dict, Mapping, Optional, Set
 
 from core.schemas.ugcp.shared import TruthEvent
+from core.ugcp_truth_event_model import CanonicalTruthEventType
 
 UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY: str = (
     "UGCP_CONTROL_TRANSFER_PROFILE_AUTHORITY::"
@@ -309,7 +310,7 @@ def build_control_transfer_truth_event(
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> TruthEvent:
     return TruthEvent(
-        event_type="ugcp.control_transfer.transition.v1",
+        event_type=CanonicalTruthEventType.control_transfer_transition.value,
         trace_id=trace_id,
         task_id=task_id,
         control_session_id=control_session_id,
