@@ -263,6 +263,11 @@ _TRUTH_EVENT_TRANSITIONAL_ALIASES = {
     "mesh_coordination_transition": CanonicalTruthEventType.coordination_transition.value,
 }
 
+# Alias-priority table for surface input extraction.
+# Key order is authoritative: normalization iterates each tuple in-order and
+# uses the first key present in the payload. The first key in each tuple is the
+# canonical internal field for that surface. If none of the keys are present,
+# normalization falls back to `(None, canonical_key)`.
 _SURFACE_INPUT_KEY_ALIASES: Dict[UGCPConformanceSurface, Sequence[str]] = {
     UGCPConformanceSurface.schema: ("schema_kind", "schema", "schema_type", "message_schema"),
     UGCPConformanceSurface.lifecycle: ("lifecycle_state", "state", "runtime_state", "status"),
@@ -277,9 +282,16 @@ _SURFACE_INPUT_KEY_ALIASES: Dict[UGCPConformanceSurface, Sequence[str]] = {
     UGCPConformanceSurface.truth_event: ("truth_event_type", "truth_event", "event_type", "event_name"),
 }
 
+# Terminal state sets used by PR-9 reviewable lifecycle-consistency invariants.
 _TERMINAL_LIFECYCLE_STATES = {"completed", "failed", "partial", "interrupted", "cancelled", "timed_out"}
 _TERMINAL_TRANSFER_STATES = {"completed", "rejected", "cancelled", "expired", "failed", "timed_out"}
 _TERMINAL_COORDINATION_STATES = {"completed", "partial", "failed", "cancelled", "timed_out"}
+# Semantic conflict pairs used for reviewable invariant diagnostics only. These
+# pairs intentionally cover high-confidence contradiction cases and do not
+# represent a strict exhaustive transition policy. They focus on stable
+# cross-profile contradictions already observed in production pathways; less
+# deterministic combinations (for example partial/interrupted blends) remain
+# tolerated to avoid unsafe strict-mode breakage.
 _LIFECYCLE_TRANSFER_CONFLICTS = {
     ("completed", "failed"),
     ("completed", "cancelled"),
@@ -307,12 +319,30 @@ def _pick_surface_input(
     payload: Mapping[str, Any],
     surface: UGCPConformanceSurface,
 ) -> tuple[Any, str]:
+    """Return `(value, source_key)` using alias-priority lookup for a surface.
+
+    If no key alias is present in the payload, returns `(None, canonical_key)`.
+    """
     keys = _SURFACE_INPUT_KEY_ALIASES[surface]
     canonical_key = keys[0]
     for key in keys:
         if key in payload:
-            return payload.get(key), key
+            return payload[key], key
     return None, canonical_key
+
+
+def _is_terminal_state_lifecycle_consistent(
+    state: str,
+    lifecycle_state: str,
+    *,
+    terminal_states: set[str],
+) -> bool:
+    return (
+        state not in terminal_states
+        or lifecycle_state in _TERMINAL_LIFECYCLE_STATES
+        or state == "unknown"
+        or lifecycle_state == "unknown"
+    )
 
 
 def get_ugcp_conformance_surface_catalog() -> Dict[str, Dict[str, Any]]:
@@ -491,17 +521,15 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
     truth_event_type = normalized["truth_event_type"]
     lifecycle_transfer_conflict = (lifecycle_state, transfer_state) in _LIFECYCLE_TRANSFER_CONFLICTS
     lifecycle_coordination_conflict = (lifecycle_state, coordination_state) in _LIFECYCLE_COORDINATION_CONFLICTS
-    transfer_terminal_requires_terminal_lifecycle = (
-        transfer_state not in _TERMINAL_TRANSFER_STATES
-        or lifecycle_state in _TERMINAL_LIFECYCLE_STATES
-        or transfer_state == "unknown"
-        or lifecycle_state == "unknown"
+    transfer_terminal_lifecycle_consistent = _is_terminal_state_lifecycle_consistent(
+        transfer_state,
+        lifecycle_state,
+        terminal_states=_TERMINAL_TRANSFER_STATES,
     )
-    coordination_terminal_requires_terminal_lifecycle = (
-        coordination_state not in _TERMINAL_COORDINATION_STATES
-        or lifecycle_state in _TERMINAL_LIFECYCLE_STATES
-        or coordination_state == "unknown"
-        or lifecycle_state == "unknown"
+    coordination_terminal_lifecycle_consistent = _is_terminal_state_lifecycle_consistent(
+        coordination_state,
+        lifecycle_state,
+        terminal_states=_TERMINAL_COORDINATION_STATES,
     )
     truth_event_transfer_alignment = (
         truth_event_type != CanonicalTruthEventType.control_transfer_transition.value
@@ -519,8 +547,8 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "lifecycle_state_known": semantic_classes["lifecycle"] != UGCPSemanticClass.unknown.value,
         "lifecycle_transfer_not_conflicting": not lifecycle_transfer_conflict,
         "lifecycle_coordination_not_conflicting": not lifecycle_coordination_conflict,
-        "transfer_terminal_requires_terminal_lifecycle": transfer_terminal_requires_terminal_lifecycle,
-        "coordination_terminal_requires_terminal_lifecycle": coordination_terminal_requires_terminal_lifecycle,
+        "transfer_terminal_lifecycle_consistent": transfer_terminal_lifecycle_consistent,
+        "coordination_terminal_lifecycle_consistent": coordination_terminal_lifecycle_consistent,
         "truth_event_transfer_alignment": truth_event_transfer_alignment,
         "truth_event_coordination_alignment": truth_event_coordination_alignment,
     }

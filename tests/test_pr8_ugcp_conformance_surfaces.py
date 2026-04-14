@@ -151,6 +151,7 @@ def test_cross_profile_invariants_flag_semantic_conflicts() -> None:
     assert report["invariants"]["lifecycle_transfer_not_conflicting"] is False
     assert report["invariants"]["lifecycle_coordination_not_conflicting"] is False
     assert "lifecycle_transfer_not_conflicting" in report["violations"]
+    assert "lifecycle_coordination_not_conflicting" in report["violations"]
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
