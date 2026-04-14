@@ -12,11 +12,14 @@ from core.ugcp_conformance_surfaces import (
     CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
     DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY,
     ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY,
+    MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY,
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
     PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY,
     PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY,
+    RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY,
     UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
     UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL,
+    UGCP_MIGRATION_READINESS_PR11_SENTINEL,
     UGCPDeprecationStage,
     UGCPEnforcementAction,
     UGCPEnforcementMode,
@@ -27,7 +30,9 @@ from core.ugcp_conformance_surfaces import (
     build_enforcement_scaffold,
     build_conformance_invariant_report,
     classify_surface_semantics,
+    build_migration_readiness_scaffold,
     evaluate_surface_enforcement,
+    get_ugcp_retirement_stage_catalog,
     get_ugcp_conformance_surface_catalog,
     normalize_conformance_backbone,
     normalize_conformance_payload,
@@ -49,6 +54,8 @@ def test_sentinels_present() -> None:
     assert "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT" in ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY
     assert "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE" in DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY
     assert "PROGRESSIVE_STRICTNESS_IS_OPT_IN" in PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY
+    assert "MIGRATION_READINESS_SURFACES_ARE_EXPLICIT" in MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY
+    assert "RETIREMENT_SEQUENCING_IS_STAGE_GATED" in RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY
     assert UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL == (
         "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL::package=9::"
         "profile=ugcp-conformance-backbone-v1::module=core.ugcp_conformance_surfaces"
@@ -56,6 +63,10 @@ def test_sentinels_present() -> None:
     assert UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL == (
         "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL::package=10::"
         "profile=ugcp-enforcement-scaffold-v1::module=core.ugcp_conformance_surfaces"
+    )
+    assert UGCP_MIGRATION_READINESS_PR11_SENTINEL == (
+        "UGCP_MIGRATION_READINESS_PR11_SENTINEL::package=11::"
+        "profile=ugcp-migration-readiness-v1::module=core.ugcp_conformance_surfaces"
     )
 
 
@@ -229,6 +240,49 @@ def test_enforcement_scaffold_marks_warnings_and_rejection_candidates() -> None:
     ]
 
 
+def test_retirement_stage_catalog_is_surface_scoped_and_stage_grouped() -> None:
+    catalog = get_ugcp_retirement_stage_catalog()
+    assert set(catalog) == {"schema", "lifecycle", "authority", "transfer", "coordination", "truth_event"}
+    assert "legacy_message_payload" in catalog["schema"]["strict_reject_candidate_aliases"]
+    assert "waiting" in catalog["lifecycle"]["transitional_tolerated_aliases"]
+    assert {"compat", "interop", "legacy_bridge", "projection"}.issubset(
+        set(catalog["authority"]["strict_reject_candidate_aliases"])
+    )
+    assert "blocked" in catalog["transfer"]["strict_reject_candidate_aliases"]
+    assert {"cancelled_by_policy", "waiting"}.issubset(set(catalog["coordination"]["migration_required_aliases"]))
+    assert "session_truth_written" in catalog["truth_event"]["migration_required_aliases"]
+
+
+def test_migration_readiness_scaffold_preserves_compat_defaults_and_sequences_retirement() -> None:
+    scaffold = build_migration_readiness_scaffold(
+        {
+            "schema_kind": "legacy_message_payload",
+            "lifecycle_state": "waiting",
+            "authority_source": "projection",
+            "transfer_state": "blocked",
+            "coordination_state": "waiting",
+            "truth_event_type": "runtime_state_transition",
+        },
+        mode=UGCPEnforcementMode.compatibility,
+    )
+
+    assert scaffold["mode"] == UGCPEnforcementMode.compatibility.value
+    assert scaffold["canonical_surfaces_ready_for_staged_enforcement"] == [
+        "authority",
+        "coordination",
+        "lifecycle",
+        "schema",
+        "transfer",
+        "truth_event",
+    ]
+    assert scaffold["transitional_surfaces_requiring_tolerance"]
+    assert scaffold["retirement_sequence"][0]["phase"] == "observe_and_normalize"
+    assert scaffold["retirement_sequence"][1]["phase"] == "migrate_required_pathways"
+    assert scaffold["retirement_sequence"][2]["phase"] == "gate_strict_reject_candidates"
+    assert "transfer_alias:blocked->rejected" in scaffold["retirement_sequence"][2]["pathways"]
+    assert scaffold["enforcement_scaffold"]["rejected_surfaces_in_mode"] == []
+
+
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_projection_alignment_sentinel_present() -> None:
     from core.routes import projection
@@ -237,11 +291,16 @@ def test_projection_alignment_sentinel_present() -> None:
     assert "UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8" in sentinel
     assert "UNAVAILABLE" not in sentinel
     enforcement_sentinel = projection.UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10
+    migration_sentinel = projection.UGCP_MIGRATION_READINESS_ALIGNED_PR11
     assert "UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10" in enforcement_sentinel
+    assert "UGCP_MIGRATION_READINESS_ALIGNED_PR11" in migration_sentinel
     assert "UNAVAILABLE" not in enforcement_sentinel
+    assert "UNAVAILABLE" not in migration_sentinel
     assert callable(getattr(projection, "_classify_surface_semantics", None))
     assert callable(getattr(projection, "_evaluate_surface_enforcement", None))
     assert callable(getattr(projection, "_build_enforcement_scaffold", None))
+    assert callable(getattr(projection, "_build_migration_readiness_scaffold", None))
+    assert callable(getattr(projection, "_get_ugcp_retirement_stage_catalog", None))
     assert callable(getattr(projection, "_normalize_conformance_payload", None))
     assert callable(getattr(projection, "_normalize_conformance_backbone", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))

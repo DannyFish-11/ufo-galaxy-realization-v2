@@ -359,6 +359,7 @@ try:
         UGCP_CONFORMANCE_SURFACES_AUTHORITY as _UCS_AUTHORITY,
         UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL as _UCS_PR8,
         UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10,
+        UGCP_MIGRATION_READINESS_PR11_SENTINEL as _UMR_PR11,
         UGCPConformanceSurface as _UGCPConformanceSurface,
         UGCPSemanticClass as _UGCPSemanticClass,
         UGCPEnforcementMode as _UGCPEnforcementMode,
@@ -371,6 +372,8 @@ try:
         normalize_conformance_backbone as _normalize_conformance_backbone,
         build_conformance_invariant_report as _build_conformance_invariant_report,
         get_ugcp_conformance_surface_catalog as _get_ugcp_conformance_surface_catalog,
+        get_ugcp_retirement_stage_catalog as _get_ugcp_retirement_stage_catalog,
+        build_migration_readiness_scaffold as _build_migration_readiness_scaffold,
     )
 
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (
@@ -390,12 +393,23 @@ try:
         "deprecation-stage markers, and strict-rejection candidates are "
         "reviewable without enabling unsafe global strict breakage."
     )
+    UGCP_MIGRATION_READINESS_ALIGNED_PR11: str = (
+        "PROJECTION_ROUTES::UGCP_MIGRATION_READINESS_ALIGNED_PR11_V1: "
+        "bounded UGCP migration-readiness and retirement-sequencing scaffold "
+        "(core.ugcp_conformance_surfaces) is available and aligned with "
+        "projection routes. Canonical staged-enforcement readiness, transitional "
+        "tolerance pathways, and stage-gated retirement sequencing are explicit "
+        "without forcing immediate strict rollout."
+    )
 except ImportError:  # pragma: no cover
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8_UNAVAILABLE"
     )
     UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10_UNAVAILABLE"
+    )
+    UGCP_MIGRATION_READINESS_ALIGNED_PR11: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_MIGRATION_READINESS_ALIGNED_PR11_UNAVAILABLE"
     )
 
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo

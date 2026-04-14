@@ -80,6 +80,11 @@ UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL: str = (
     "profile=ugcp-enforcement-scaffold-v1::module=core.ugcp_conformance_surfaces"
 )
 
+UGCP_MIGRATION_READINESS_PR11_SENTINEL: str = (
+    "UGCP_MIGRATION_READINESS_PR11_SENTINEL::package=11::"
+    "profile=ugcp-migration-readiness-v1::module=core.ugcp_conformance_surfaces"
+)
+
 ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY: str = (
     "UGCP_CONFORMANCE_POLICY::ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT: "
     "Canonical, transitional, and unknown semantics should map to explicit "
@@ -96,6 +101,19 @@ PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY: str = (
     "UGCP_CONFORMANCE_POLICY::PROGRESSIVE_STRICTNESS_IS_OPT_IN: "
     "Compatibility mode remains default; stricter reject behavior is surfaced as "
     "reviewable scaffold and activated only by explicit strict mode."
+)
+
+MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::MIGRATION_READINESS_SURFACES_ARE_EXPLICIT: "
+    "Canonical surfaces and transitional tolerance pathways should be exposed as "
+    "reviewable migration-readiness data."
+)
+
+RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::RETIREMENT_SEQUENCING_IS_STAGE_GATED: "
+    "Retirement sequencing should remain stage-gated (observe/normalize, "
+    "migrate-required aliases, strict-candidate gating) rather than abrupt "
+    "global strict rollout."
 )
 
 
@@ -696,6 +714,133 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
     }
 
 
+def get_ugcp_retirement_stage_catalog() -> Dict[str, Dict[str, List[str]]]:
+    """Return alias retirement staging grouped by conformance surface.
+
+    Returns:
+        A dictionary keyed by `UGCPConformanceSurface.value`.  Each value is a
+        dictionary with the following keys, each mapped to `List[str]`:
+        - `migration_required_aliases`
+        - `transitional_tolerated_aliases`
+        - `strict_reject_candidate_aliases`
+    """
+    stage_catalog: Dict[str, Dict[str, List[str]]] = {}
+    for surface in UGCPConformanceSurface:
+        aliases = _SURFACE_ALIAS_DEPRECATION_STAGE.get(surface, {})
+        migration_required_aliases = sorted(
+            alias
+            for alias, stage in aliases.items()
+            if stage == UGCPDeprecationStage.migration_required
+        )
+        transitional_tolerated_aliases = sorted(
+            alias
+            for alias, stage in aliases.items()
+            if stage == UGCPDeprecationStage.transitional_tolerated
+        )
+        strict_reject_candidate_aliases = sorted(
+            alias
+            for alias, stage in aliases.items()
+            if stage == UGCPDeprecationStage.strict_reject_candidate
+        )
+        stage_catalog[surface.value] = {
+            "migration_required_aliases": migration_required_aliases,
+            "transitional_tolerated_aliases": transitional_tolerated_aliases,
+            "strict_reject_candidate_aliases": strict_reject_candidate_aliases,
+        }
+    return stage_catalog
+
+
+def build_migration_readiness_scaffold(
+    payload: Optional[Mapping[str, Any]] = None,
+    mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
+) -> Dict[str, Any]:
+    """Build PR-11 migration-readiness and retirement-sequencing scaffold.
+
+    Args:
+        payload: Optional mapping that may include conformance inputs such as
+            `schema_kind`, `lifecycle_state`, `authority_source`,
+            `transfer_state`, `coordination_state`, and `truth_event_type`.
+        mode: Enforcement mode (`compatibility`, `review`, or `strict`).
+
+    Returns:
+        A dictionary containing:
+        - `mode` (`str`): parsed enforcement mode.
+        - `canonical_surfaces_ready_for_staged_enforcement` (`List[str]`):
+          canonical UGCP surface names available for staged tightening review.
+        - `retirement_stage_catalog` (`Dict[str, Dict[str, List[str]]]`):
+          per-surface retirement alias stage grouping.
+        - `transitional_surfaces_requiring_tolerance` (with `deprecation_stage`
+          defaulting to `transitional_tolerated` if missing from a decision).
+        - `retirement_sequence` (`List[Dict[str, Any]]`): stage-gated rollout
+          phases and pathway focus.
+        - `enforcement_scaffold` (`Dict[str, Any]`): bounded enforcement output
+          from `build_enforcement_scaffold`.
+    """
+    source_payload = payload or {}
+    parsed_mode = _parse_enforcement_mode(mode)
+    stage_catalog = get_ugcp_retirement_stage_catalog()
+    enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
+
+    canonical_surfaces_ready_for_staged_enforcement = sorted(
+        surface.value for surface in UGCPConformanceSurface
+    )
+    decisions = enforcement.get("decisions", {})
+    transitional_surfaces_requiring_tolerance = [
+        {
+            "surface": surface,
+            "semantic_class": decision.get("semantic_class", UGCPSemanticClass.unknown.value),
+            "compatibility_pathway": decision.get("compatibility_pathway", ""),
+            "deprecation_stage": decision.get(
+                "deprecation_stage",
+                UGCPDeprecationStage.transitional_tolerated.value,
+            ),
+        }
+        for surface, decision in decisions.items()
+        if decision.get("semantic_class") != UGCPSemanticClass.canonical.value
+    ]
+    migration_required_pathways = sorted(
+        item["compatibility_pathway"]
+        for item in transitional_surfaces_requiring_tolerance
+        if item["deprecation_stage"] == UGCPDeprecationStage.migration_required.value
+        and item["compatibility_pathway"]
+    )
+    strict_reject_candidate_pathways = sorted(
+        item["compatibility_pathway"]
+        for item in transitional_surfaces_requiring_tolerance
+        if item["deprecation_stage"] == UGCPDeprecationStage.strict_reject_candidate.value
+        and item["compatibility_pathway"]
+    )
+    retirement_sequence = [
+        {
+            "phase": "observe_and_normalize",
+            "focus": "Retain compatibility defaults, collect warnings, and normalize pathways.",
+            "pathways": sorted(
+                item["compatibility_pathway"]
+                for item in transitional_surfaces_requiring_tolerance
+                if item["compatibility_pathway"]
+            ),
+        },
+        {
+            "phase": "migrate_required_pathways",
+            "focus": "Prioritize migration-required aliases before strictness increase.",
+            "pathways": migration_required_pathways,
+        },
+        {
+            "phase": "gate_strict_reject_candidates",
+            "focus": "Apply strict rejection only to explicitly marked strict candidates.",
+            "pathways": strict_reject_candidate_pathways,
+        },
+    ]
+    return {
+        "mode": parsed_mode.value,
+        "canonical_surfaces_ready_for_staged_enforcement": canonical_surfaces_ready_for_staged_enforcement,
+        "retirement_stage_catalog": stage_catalog,
+        "transitional_surfaces_requiring_tolerance": transitional_surfaces_requiring_tolerance,
+        "retirement_sequence": retirement_sequence,
+        "enforcement_scaffold": enforcement,
+    }
+
+
 __all__ = [
     "UGCP_CONFORMANCE_SURFACES_AUTHORITY",
     "CANONICAL_VS_TRANSITIONAL_CLASSIFICATION_POLICY",
@@ -706,9 +851,12 @@ __all__ = [
     "UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL",
     "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL",
     "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL",
+    "UGCP_MIGRATION_READINESS_PR11_SENTINEL",
     "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY",
     "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY",
     "PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY",
+    "MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY",
+    "RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY",
     "UGCPConformanceSurface",
     "UGCPSemanticClass",
     "UGCPEnforcementMode",
@@ -724,4 +872,6 @@ __all__ = [
     "normalize_conformance_payload",
     "normalize_conformance_backbone",
     "build_conformance_invariant_report",
+    "get_ugcp_retirement_stage_catalog",
+    "build_migration_readiness_scaffold",
 ]
