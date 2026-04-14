@@ -57,3 +57,15 @@ The report is intended for progressive hardening, not immediate strict rejection
 PR-8 does **not** claim strict-mode enforcement or immediate legacy removal.
 It provides explicit classification and normalization groundwork so future
 retirement can be staged without destabilizing runtime behavior.
+
+## 6) PR-9 bounded hardening additions
+
+PR-9 keeps the same non-breaking posture but tightens cross-profile normalization
+and hardening in two bounded ways:
+
+- **profile-adjacent input key normalization** (e.g. `event_type`,
+  `control_transfer_state`, `mesh_state`) into canonical conformance fields with
+  source-key annotations in `normalization_input_sources`.
+- **cross-profile semantic checks** for lifecycle/transfer/coordination
+  consistency and truth-event/profile alignment, surfaced as reviewable
+  invariants and `transitional_seams` diagnostics (not strict rejection).

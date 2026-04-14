@@ -11,6 +11,9 @@ from core.ugcp_conformance_surfaces import (
     COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY,
     CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
+    PROFILE_NORMALIZATION_BOUNDARY_ALIGNMENT_POLICY,
+    PROTOCOL_HARDENING_WITHOUT_STRICT_BREAKAGE_POLICY,
+    UGCP_CONFORMANCE_HARDENING_PR9_SENTINEL,
     UGCP_CONFORMANCE_SURFACES_AUTHORITY,
     UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL,
     UGCPConformanceSurface,
@@ -33,6 +36,9 @@ def test_sentinels_present() -> None:
     assert "NORMALIZATION_BOUNDARY_IS_EXPLICIT" in NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY
     assert "CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE" in CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY
     assert "COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE" in COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY
+    assert "PROFILE_NORMALIZATION_BOUNDARY_ALIGNMENT" in PROFILE_NORMALIZATION_BOUNDARY_ALIGNMENT_POLICY
+    assert "PROTOCOL_HARDENING_WITHOUT_STRICT_BREAKAGE" in PROTOCOL_HARDENING_WITHOUT_STRICT_BREAKAGE_POLICY
+    assert "package=9" in UGCP_CONFORMANCE_HARDENING_PR9_SENTINEL
 
 
 def test_surface_catalog_has_expected_authority_mappings() -> None:
@@ -103,6 +109,48 @@ def test_invariant_report_surfaces_nonconformance_without_hard_break() -> None:
     assert report["invariants"]["truth_event_is_canonical"] is False
     assert "transfer_state_known" in report["violations"]
     assert report["normalized"]["lifecycle_state"] == "completed"
+    assert "transfer" in report["transitional_seams"]
+
+
+def test_profile_adjacent_input_keys_normalize_to_canonical_fields() -> None:
+    normalized = normalize_conformance_payload(
+        {
+            "schema": "message_interop_payload",
+            "status": "waiting",
+            "truth_source": "compat",
+            "control_transfer_state": "executing",
+            "mesh_state": "waiting",
+            "event_type": "transfer_state_transition",
+        }
+    )
+    assert normalized["schema_kind"] == "task_envelope"
+    assert normalized["lifecycle_state"] == "awaiting_barrier"
+    assert normalized["authority_source"] == "unknown"
+    assert normalized["transfer_state"] == "in_progress"
+    assert normalized["coordination_state"] == "awaiting_barrier"
+    assert normalized["truth_event_type"] == CanonicalTruthEventType.control_transfer_transition.value
+    assert normalized["normalization_input_sources"] == {
+        "schema": "schema",
+        "lifecycle": "status",
+        "authority": "truth_source",
+        "transfer": "control_transfer_state",
+        "coordination": "mesh_state",
+        "truth_event": "event_type",
+    }
+
+
+def test_cross_profile_invariants_flag_semantic_conflicts() -> None:
+    report = build_conformance_invariant_report(
+        {
+            "lifecycle_state": "completed",
+            "transfer_state": "failed",
+            "coordination_state": "failed",
+            "truth_event_type": CanonicalTruthEventType.control_transfer_transition.value,
+        }
+    )
+    assert report["invariants"]["lifecycle_transfer_not_conflicting"] is False
+    assert report["invariants"]["lifecycle_coordination_not_conflicting"] is False
+    assert "lifecycle_transfer_not_conflicting" in report["violations"]
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
@@ -110,8 +158,11 @@ def test_projection_alignment_sentinel_present() -> None:
     from core.routes import projection
 
     sentinel = projection.UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8
+    sentinel_pr9 = projection.UGCP_PROTOCOL_HARDENING_PROFILE_NORMALIZATION_ALIGNED_PR9
     assert "UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8" in sentinel
+    assert "UGCP_PROTOCOL_HARDENING_PROFILE_NORMALIZATION_ALIGNED_PR9" in sentinel_pr9
     assert "UNAVAILABLE" not in sentinel
+    assert "UNAVAILABLE" not in sentinel_pr9
     assert callable(getattr(projection, "_classify_surface_semantics", None))
     assert callable(getattr(projection, "_normalize_conformance_payload", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))
