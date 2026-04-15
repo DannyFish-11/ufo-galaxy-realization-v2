@@ -195,7 +195,11 @@ class CapabilityRegistry:
                 metadata=item.metadata or {},
             )
         except Exception as exc:
-            logger.debug("capability provider metadata normalization skipped: %s", exc)
+            logger.debug(
+                "capability provider metadata normalization skipped for '%s': %s",
+                getattr(item, "name", "?"),
+                exc,
+            )
 
     def _validate_via_contract(self, item: CapabilityItem) -> bool:
         """PR-2: 通过统一能力合同校验 CapabilityItem。
@@ -211,7 +215,6 @@ class CapabilityRegistry:
             from core.unified.capability_contract import (
                 CapabilityContract,
                 CapabilitySource,
-                normalize_capability_provider_metadata,
                 validate_capability_contract,
             )
             src_val = getattr(item, "source", "unknown") or "unknown"
@@ -219,12 +222,6 @@ class CapabilityRegistry:
                 src = CapabilitySource(src_val)
             except ValueError:
                 src = CapabilitySource.UNKNOWN
-            normalized_metadata = normalize_capability_provider_metadata(
-                name=item.name,
-                source=src,
-                source_id=item.source_id,
-                metadata=item.metadata or {},
-            )
             contract = CapabilityContract(
                 name=item.name,
                 description=item.description,
@@ -232,7 +229,7 @@ class CapabilityRegistry:
                 source_id=item.source_id,
                 parameters=item.parameters or {},
                 available=item.available,
-                metadata=normalized_metadata,
+                metadata=item.metadata or {},
             )
             validate_capability_contract(contract)
             return True
@@ -399,6 +396,8 @@ class CapabilityRegistry:
                 return_exceptions=True,
             )
 
+            # Converge all source loaders (MCP/Skill/Gateway/Autonomous) through one
+            # canonical capability-plane publication normalization step.
             for item in new_items.values():
                 self._normalize_capability_plane_metadata(item)
 
