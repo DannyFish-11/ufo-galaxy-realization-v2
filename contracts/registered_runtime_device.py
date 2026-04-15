@@ -36,13 +36,14 @@ Information domains
 The contract covers the six canonical single-device information domains:
 
 1. **identity** — ``device_id``, ``device_name``, ``owner_id``
-2. **registration** — ``platform``, ``form_factor``, ``device_type``
+2. **registration** — ``platform``, ``form_factor``, ``device_type``,
+   ``device_execution_model``
 3. **runtime presence** — ``status``, ``online``, ``last_seen``,
    ``connection`` (:class:`RuntimeConnectionSummary`)
 4. **capability** — ``capabilities`` (:class:`RuntimeCapabilityProfile`)
-5. **participation** — ``participation_hints``
-   (:class:`RuntimeParticipationHints`),
-   ``session_presence`` (:class:`RuntimeSessionPresence`)
+5. **participation** — ``participation_hints``, ``participant_identity``
+    (:class:`RuntimeParticipationHints`),
+    ``session_presence`` (:class:`RuntimeSessionPresence`)
 6. **topology / runtime hints** — ``autonomy`` (:class:`RuntimeAutonomySummary`)
 
 Design principles
@@ -197,6 +198,41 @@ class RuntimeConnectionState(str, Enum):
             return cls(value.lower())
         except (ValueError, AttributeError):
             return cls.DISCONNECTED
+
+
+class RuntimeDeviceExecutionModel(str, Enum):
+    """Architecture-neutral runtime execution model for a device."""
+
+    FULL_RUNTIME_HOST = "full_runtime_host"
+    PARTIAL_RUNTIME_DEVICE = "partial_runtime_device"
+    COMMAND_ORIENTED_DEVICE = "command_oriented_device"
+    OBSERVER_TELEMETRY_DEVICE = "observer_telemetry_device"
+    ADAPTER_BRIDGED_DEVICE = "adapter_bridged_device"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_string(cls, value: str) -> "RuntimeDeviceExecutionModel":
+        try:
+            return cls(value.lower())
+        except (ValueError, AttributeError):
+            return cls.UNKNOWN
+
+
+class RuntimeParticipantTier(str, Enum):
+    """Participant-tier hint kept separate from device identity."""
+
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    OBSERVER = "observer"
+    BRIDGED = "bridged"
+    UNASSIGNED = "unassigned"
+
+    @classmethod
+    def from_string(cls, value: str) -> "RuntimeParticipantTier":
+        try:
+            return cls(value.lower())
+        except (ValueError, AttributeError):
+            return cls.UNASSIGNED
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +416,36 @@ class RuntimeParticipationHints(BaseModel):
         return self.model_dump()
 
 
+class RuntimeParticipantIdentity(BaseModel):
+    """Participant identity and tier metadata, decoupled from device identity."""
+
+    participant_id: Optional[str] = Field(
+        default=None,
+        description="Participant identifier when this device maps to a participant entity.",
+    )
+    participant_tier: RuntimeParticipantTier = Field(
+        default=RuntimeParticipantTier.UNASSIGNED,
+        description="Participant-tier hint independent from runtime-host assumptions.",
+    )
+    participant_role: str = Field(
+        default="",
+        description="Optional participant role label (e.g. planner, actor, observer).",
+    )
+    attached_via_adapter: bool = Field(
+        default=False,
+        description="Whether participant membership is attached through an adapter/bridge.",
+    )
+    bridge_id: Optional[str] = Field(
+        default=None,
+        description="Adapter/bridge identity when attached_via_adapter=True.",
+    )
+
+    model_config = {"use_enum_values": True}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
 # ---------------------------------------------------------------------------
 # Top-level canonical contract
 # ---------------------------------------------------------------------------
@@ -398,10 +464,12 @@ class RegisteredRuntimeDevice(BaseModel):
 
     The contract covers six canonical information domains:
     1. **identity** — ``device_id``, ``device_name``, ``owner_id``
-    2. **registration** — ``platform``, ``form_factor``, ``device_type``
+    2. **registration** — ``platform``, ``form_factor``, ``device_type``,
+       ``device_execution_model``
     3. **runtime presence** — ``status``, ``online``, ``last_seen``, ``connection``
     4. **capability** — ``capabilities``
-    5. **participation** — ``participation_hints``, ``session_presence``
+    5. **participation** — ``participation_hints``, ``participant_identity``,
+       ``session_presence``
     6. **topology / runtime hints** — ``autonomy``
 
     Required fields
@@ -447,6 +515,14 @@ class RegisteredRuntimeDevice(BaseModel):
             "'windows_desktop').  Corresponds to AIPDeviceType values."
         ),
     )
+    device_execution_model: RuntimeDeviceExecutionModel = Field(
+        default=RuntimeDeviceExecutionModel.UNKNOWN,
+        description=(
+            "Architecture-neutral execution model classification. Supports "
+            "full runtime hosts, partial-runtime devices, command-oriented "
+            "devices, observer/telemetry devices, and adapter-bridged devices."
+        ),
+    )
 
     # -- Status --
     status: RuntimeDeviceStatus = Field(
@@ -482,6 +558,13 @@ class RegisteredRuntimeDevice(BaseModel):
     participation_hints: RuntimeParticipationHints = Field(
         default_factory=RuntimeParticipationHints,
         description="Lightweight mesh participation hints.",
+    )
+    participant_identity: RuntimeParticipantIdentity = Field(
+        default_factory=RuntimeParticipantIdentity,
+        description=(
+            "Participant identity/tier linkage for this device. Kept separate "
+            "from device identity and runtime-host posture."
+        ),
     )
 
     # -- Runtime-host identity (PR-5 / post-533 dual-repo unification) --
@@ -553,6 +636,77 @@ class RegisteredRuntimeDevice(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# "join_runtime" means the device joins as an execution participant instead of
+# staying in control-only posture.
+_CANONICAL_JOIN_RUNTIME_POSTURE = "join_runtime"
+_OBSERVER_TELEMETRY_CAPABILITY_KEYWORDS = frozenset({"observer", "telemetry", "monitor", "sensor"})
+_PARTICIPANT_ID_ALIASES = ("participant_id", "runtime_participant_id")
+
+
+def _resolve_execution_model(
+    *,
+    explicit_model: Optional[str] = None,
+    source_runtime_posture: str = "control_only",
+    is_runtime_host: bool = False,
+    runtime_enabled: bool = False,
+    supports_local_autonomy: bool = False,
+    supports_remote_handoff: bool = False,
+    capabilities: Optional[List[str]] = None,
+    attached_via_adapter: bool = False,
+) -> RuntimeDeviceExecutionModel:
+    """Resolve a neutral execution model with compatibility-safe defaults."""
+    resolved_explicit = RuntimeDeviceExecutionModel.from_string(str(explicit_model or ""))
+    if resolved_explicit != RuntimeDeviceExecutionModel.UNKNOWN:
+        return resolved_explicit
+    if attached_via_adapter:
+        return RuntimeDeviceExecutionModel.ADAPTER_BRIDGED_DEVICE
+    if is_runtime_host:
+        return RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST
+    if str(source_runtime_posture or "").strip().lower() == _CANONICAL_JOIN_RUNTIME_POSTURE:
+        return RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST
+    if runtime_enabled or supports_local_autonomy or supports_remote_handoff:
+        return RuntimeDeviceExecutionModel.PARTIAL_RUNTIME_DEVICE
+    caps = {str(c).strip().lower() for c in (capabilities or []) if str(c).strip()}
+    if caps & _OBSERVER_TELEMETRY_CAPABILITY_KEYWORDS:
+        return RuntimeDeviceExecutionModel.OBSERVER_TELEMETRY_DEVICE
+    if caps:
+        return RuntimeDeviceExecutionModel.COMMAND_ORIENTED_DEVICE
+    return RuntimeDeviceExecutionModel.UNKNOWN
+
+
+def _build_participant_identity(
+    *,
+    direct: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> RuntimeParticipantIdentity:
+    """Build participant identity from direct fields + metadata fallback keys."""
+    source: Dict[str, Any] = {}
+    if isinstance(metadata, dict):
+        source.update(metadata)
+    if isinstance(direct, dict):
+        source.update(direct)
+    participant_id_raw = None
+    for key in _PARTICIPANT_ID_ALIASES:
+        value = source.get(key)
+        if value not in (None, ""):
+            participant_id_raw = value
+            break
+    participant_id = str(participant_id_raw).strip() if participant_id_raw not in (None, "") else None
+    tier_raw = source.get("participant_tier", source.get("tier", ""))
+    role_raw = source.get("participant_role", source.get("coordination_role", ""))
+    attached_raw = source.get("attached_via_adapter", source.get("via_adapter", False))
+    bridge_raw = source.get("bridge_id", source.get("adapter_bridge_id"))
+    bridge_id = str(bridge_raw).strip() if bridge_raw not in (None, "") else None
+    attached_via_adapter = bool(attached_raw) or bool(bridge_id)
+    return RuntimeParticipantIdentity(
+        participant_id=participant_id,
+        participant_tier=RuntimeParticipantTier.from_string(str(tier_raw)),
+        participant_role=str(role_raw or ""),
+        attached_via_adapter=attached_via_adapter,
+        bridge_id=bridge_id,
+    )
+
+
 def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
     """Build a :class:`RegisteredRuntimeDevice` from a
     :class:`~core.unified.models.UnifiedDevice` (UDM SSOT).
@@ -597,16 +751,35 @@ def from_udm_device(device: Any) -> RegisteredRuntimeDevice:
 
         meta: Dict[str, Any] = dict(getattr(device, "metadata", {}) or {})
 
+        participant_identity = _build_participant_identity(metadata=meta)
+        _meta_posture = (
+            str(meta.get("source_runtime_posture", "control_only"))
+            if isinstance(meta, dict) else "control_only"
+        )
+        _meta_runtime_host = (
+            bool(meta.get("is_runtime_host", False))
+            if isinstance(meta, dict) else False
+        )
+        execution_model = _resolve_execution_model(
+            explicit_model=meta.get("device_execution_model") if isinstance(meta, dict) else None,
+            source_runtime_posture=_meta_posture,
+            is_runtime_host=_meta_runtime_host,
+            runtime_enabled=online,
+            capabilities=raw_caps,
+            attached_via_adapter=participant_identity.attached_via_adapter,
+        )
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(getattr(device, "device_name", "") or ""),
             platform=platform,
             device_type=raw_type,
+            device_execution_model=execution_model,
             status=status,
             online=online,
             last_seen=last_seen,
             capabilities=RuntimeCapabilityProfile(capabilities=raw_caps),
             autonomy=RuntimeAutonomySummary(runtime_enabled=online),
+            participant_identity=participant_identity,
             metadata=meta,
         )
     except Exception:
@@ -651,16 +824,35 @@ def from_router_device(device: Any) -> RegisteredRuntimeDevice:
 
         meta: Dict[str, Any] = dict(getattr(device, "metadata", {}) or {})
 
+        participant_identity = _build_participant_identity(metadata=meta)
+        _meta_posture = (
+            str(meta.get("source_runtime_posture", "control_only"))
+            if isinstance(meta, dict) else "control_only"
+        )
+        _meta_runtime_host = (
+            bool(meta.get("is_runtime_host", False))
+            if isinstance(meta, dict) else False
+        )
+        execution_model = _resolve_execution_model(
+            explicit_model=meta.get("device_execution_model") if isinstance(meta, dict) else None,
+            source_runtime_posture=_meta_posture,
+            is_runtime_host=_meta_runtime_host,
+            runtime_enabled=ws is not None,
+            capabilities=capabilities_str,
+            attached_via_adapter=participant_identity.attached_via_adapter,
+        )
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(getattr(device, "device_name", device_id) or device_id),
             platform=platform,
             device_type=raw_type,
+            device_execution_model=execution_model,
             status=RuntimeDeviceStatus.ONLINE if ws is not None else RuntimeDeviceStatus.OFFLINE,
             online=ws is not None,
             connection=RuntimeConnectionSummary(state=conn_state),
             capabilities=RuntimeCapabilityProfile(capabilities=capabilities_str),
             autonomy=RuntimeAutonomySummary(runtime_enabled=ws is not None),
+            participant_identity=participant_identity,
             metadata=meta,
         )
     except Exception:
@@ -731,12 +923,23 @@ def from_android_registration(data: Dict[str, Any]) -> RegisteredRuntimeDevice:
             or bool(str(data.get("app_version", "") or "").strip())
         )
 
+        participant_identity = _build_participant_identity(direct=data, metadata=meta)
+        execution_model = _resolve_execution_model(
+            explicit_model=data.get("device_execution_model"),
+            source_runtime_posture=_posture,
+            is_runtime_host=_is_runtime_host,
+            runtime_enabled=True,
+            supports_remote_handoff=True,
+            capabilities=caps_str,
+            attached_via_adapter=participant_identity.attached_via_adapter,
+        )
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(data.get("name") or "Android Device"),
             platform=RuntimeDevicePlatform.ANDROID,
             form_factor=RuntimeDeviceFormFactor.PHONE,
             device_type=str(data.get("device_type", "android_phone")),
+            device_execution_model=execution_model,
             status=RuntimeDeviceStatus.ONLINE,
             online=True,
             last_seen=time.time(),
@@ -755,6 +958,7 @@ def from_android_registration(data: Dict[str, Any]) -> RegisteredRuntimeDevice:
             ),
             source_runtime_posture=_posture,
             is_runtime_host=_is_runtime_host,
+            participant_identity=participant_identity,
             metadata=meta,
         )
     except Exception:
@@ -824,17 +1028,45 @@ def from_device_registry_record(device: Any) -> RegisteredRuntimeDevice:
         groups: List[str] = list(getattr(device, "groups", []) or [])
         tags: List[str] = list(getattr(device, "tags", []) or [])
 
+        participant_identity = _build_participant_identity(
+            direct={
+                "participant_id": getattr(device, "participant_id", None),
+                "participant_tier": getattr(device, "participant_tier", None),
+                "participant_role": getattr(device, "participant_role", None),
+                "attached_via_adapter": getattr(device, "attached_via_adapter", None),
+                "bridge_id": getattr(device, "bridge_id", None),
+            },
+            metadata=meta,
+        )
+        _meta_posture = (
+            str(meta.get("source_runtime_posture", "control_only"))
+            if isinstance(meta, dict) else "control_only"
+        )
+        _meta_runtime_host = (
+            bool(meta.get("is_runtime_host", False))
+            if isinstance(meta, dict) else False
+        )
+        execution_model = _resolve_execution_model(
+            explicit_model=meta.get("device_execution_model") if isinstance(meta, dict) else None,
+            source_runtime_posture=_meta_posture,
+            is_runtime_host=_meta_runtime_host,
+            runtime_enabled=online,
+            capabilities=caps_str,
+            attached_via_adapter=participant_identity.attached_via_adapter,
+        )
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(getattr(device, "name", "") or ""),
             platform=platform,
             device_type=raw_type,
+            device_execution_model=execution_model,
             status=status,
             online=online,
             last_seen=last_seen,
             capabilities=RuntimeCapabilityProfile(capabilities=caps_str),
             autonomy=RuntimeAutonomySummary(runtime_enabled=online),
             participation_hints=RuntimeParticipationHints(groups=groups, tags=tags),
+            participant_identity=participant_identity,
             metadata=meta,
         )
     except Exception:
@@ -927,16 +1159,44 @@ def from_device_agent_manager_record(device: Any) -> RegisteredRuntimeDevice:
             except Exception:
                 pass
 
+        participant_identity = _build_participant_identity(
+            direct={
+                "participant_id": getattr(device, "participant_id", None),
+                "participant_tier": getattr(device, "participant_tier", None),
+                "participant_role": getattr(device, "participant_role", None),
+                "attached_via_adapter": getattr(device, "attached_via_adapter", None),
+                "bridge_id": getattr(device, "bridge_id", None),
+            },
+            metadata=meta,
+        )
+        _meta_posture = (
+            str(meta.get("source_runtime_posture", "control_only"))
+            if isinstance(meta, dict) else "control_only"
+        )
+        _meta_runtime_host = (
+            bool(meta.get("is_runtime_host", False))
+            if isinstance(meta, dict) else False
+        )
+        execution_model = _resolve_execution_model(
+            explicit_model=meta.get("device_execution_model") if isinstance(meta, dict) else None,
+            source_runtime_posture=_meta_posture,
+            is_runtime_host=_meta_runtime_host,
+            runtime_enabled=online,
+            capabilities=caps_str,
+            attached_via_adapter=participant_identity.attached_via_adapter,
+        )
         return RegisteredRuntimeDevice(
             device_id=device_id,
             device_name=str(getattr(device, "device_name", "") or ""),
             platform=platform,
             device_type=raw_type,
+            device_execution_model=execution_model,
             status=status,
             online=online,
             last_seen=last_seen,
             capabilities=RuntimeCapabilityProfile(capabilities=caps_str),
             autonomy=RuntimeAutonomySummary(runtime_enabled=online),
+            participant_identity=participant_identity,
             metadata=meta,
         )
     except Exception:
@@ -979,6 +1239,12 @@ def build_registered_runtime_device(
     port: int = 0,
     source_runtime_posture: str = "control_only",
     is_runtime_host: bool = False,
+    device_execution_model: str = "unknown",
+    participant_id: Optional[str] = None,
+    participant_tier: str = "unassigned",
+    participant_role: str = "",
+    participant_attached_via_adapter: bool = False,
+    participant_bridge_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> RegisteredRuntimeDevice:
     """Generic builder for a :class:`RegisteredRuntimeDevice`.
@@ -1053,6 +1319,18 @@ def build_registered_runtime_device(
         'join_runtime'.  Defaults to 'control_only'.
     is_runtime_host:
         Whether this device is a first-class runtime host (PR-5).
+    device_execution_model:
+        Architecture-neutral execution model classification.
+    participant_id:
+        Optional participant identity linked to this device.
+    participant_tier:
+        Participant-tier hint, separate from device identity.
+    participant_role:
+        Optional participant role label.
+    participant_attached_via_adapter:
+        Whether participant linkage is through adapter/bridge.
+    participant_bridge_id:
+        Adapter/bridge identifier for bridged participant linkage.
 
     Returns
     -------
@@ -1064,6 +1342,26 @@ def build_registered_runtime_device(
         if online is not None
         else resolved_status in (RuntimeDeviceStatus.ONLINE, RuntimeDeviceStatus.BUSY)
     )
+    participant_identity = _build_participant_identity(
+        direct={
+            "participant_id": participant_id,
+            "participant_tier": participant_tier,
+            "participant_role": participant_role,
+            "attached_via_adapter": participant_attached_via_adapter,
+            "bridge_id": participant_bridge_id,
+        },
+        metadata=dict(metadata or {}),
+    )
+    resolved_execution_model = _resolve_execution_model(
+        explicit_model=device_execution_model,
+        source_runtime_posture=source_runtime_posture,
+        is_runtime_host=is_runtime_host,
+        runtime_enabled=runtime_enabled,
+        supports_local_autonomy=supports_local_autonomy,
+        supports_remote_handoff=supports_remote_handoff,
+        capabilities=list(capabilities or []),
+        attached_via_adapter=participant_identity.attached_via_adapter,
+    )
 
     return RegisteredRuntimeDevice(
         device_id=device_id,
@@ -1072,6 +1370,7 @@ def build_registered_runtime_device(
         platform=RuntimeDevicePlatform.from_string(platform),
         form_factor=RuntimeDeviceFormFactor.from_string(form_factor),
         device_type=device_type,
+        device_execution_model=resolved_execution_model,
         status=resolved_status,
         online=resolved_online,
         last_seen=last_seen,
@@ -1107,6 +1406,7 @@ def build_registered_runtime_device(
         ),
         source_runtime_posture=source_runtime_posture,
         is_runtime_host=is_runtime_host,
+        participant_identity=participant_identity,
         metadata=dict(metadata or {}),
     )
 
@@ -1127,3 +1427,14 @@ ANDROID_REGISTRATION_POSTURE_AWARE_PR5 = (
     "ANDROID_REGISTRATION_POSTURE_AWARE_PR5"
 )
 
+# Sentinel confirming architecture-neutral device-model classification fields
+# are additive and backward compatible (PR-6 convergence track).
+DEVICE_MODEL_ARCHITECTURE_NEUTRAL_PR6 = (
+    "DEVICE_MODEL_ARCHITECTURE_NEUTRAL_PR6"
+)
+
+# Sentinel confirming participant identity/tier linkage is explicit and
+# separated from device identity/runtime-host assumptions (PR-6).
+DEVICE_PARTICIPANT_IDENTITY_SEPARATION_PR6 = (
+    "DEVICE_PARTICIPANT_IDENTITY_SEPARATION_PR6"
+)

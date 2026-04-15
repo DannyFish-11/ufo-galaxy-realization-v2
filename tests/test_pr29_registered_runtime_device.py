@@ -102,10 +102,10 @@ class TestSerialisationStability:
         result = d.to_dict()
         expected_keys = {
             "device_id", "device_name", "owner_id",
-            "platform", "form_factor", "device_type",
+            "platform", "form_factor", "device_type", "device_execution_model",
             "status", "online", "last_seen",
             "connection", "capabilities", "autonomy",
-            "session_presence", "participation_hints", "metadata",
+            "session_presence", "participation_hints", "participant_identity", "metadata",
         }
         assert expected_keys <= set(result.keys())
 
@@ -342,6 +342,17 @@ class TestFromAndroidRegistration:
         )
         assert c.connection.transport == "websocket"
 
+    def test_execution_model_defaults_to_full_runtime_host_for_android_app(self):
+        from contracts.registered_runtime_device import (
+            from_android_registration,
+            RuntimeDeviceExecutionModel,
+        )
+        c = from_android_registration(self._sample_data(app_version="3.2.0"))
+        assert c.device_execution_model in (
+            RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST,
+            RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST.value,
+        )
+
 
 # ---------------------------------------------------------------------------
 # 5. Adapter: from_device_registry_record
@@ -466,6 +477,32 @@ class TestBuildRegisteredRuntimeDevice:
         from contracts.registered_runtime_device import build_registered_runtime_device
         c = build_registered_runtime_device(device_id="dev_ovr", status="offline", online=True)
         assert c.online is True
+
+    def test_participant_identity_and_adapter_model(self):
+        from contracts.registered_runtime_device import (
+            build_registered_runtime_device,
+            RuntimeDeviceExecutionModel,
+            RuntimeParticipantTier,
+        )
+        c = build_registered_runtime_device(
+            device_id="bridge_dev_01",
+            participant_id="p_bridge_01",
+            participant_tier="bridged",
+            participant_role="observer",
+            participant_attached_via_adapter=True,
+            participant_bridge_id="mqtt_bridge",
+        )
+        assert c.participant_identity.participant_id == "p_bridge_01"
+        assert c.participant_identity.participant_tier in (
+            RuntimeParticipantTier.BRIDGED,
+            RuntimeParticipantTier.BRIDGED.value,
+        )
+        assert c.participant_identity.attached_via_adapter is True
+        assert c.participant_identity.bridge_id == "mqtt_bridge"
+        assert c.device_execution_model in (
+            RuntimeDeviceExecutionModel.ADAPTER_BRIDGED_DEVICE,
+            RuntimeDeviceExecutionModel.ADAPTER_BRIDGED_DEVICE.value,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -598,6 +635,7 @@ class TestContractsPackageExports:
             RuntimeAutonomySummary,
             RuntimeSessionPresence,
             RuntimeParticipationHints,
+            RuntimeParticipantIdentity,
         )
         for cls in (
             RuntimeConnectionSummary,
@@ -605,6 +643,7 @@ class TestContractsPackageExports:
             RuntimeAutonomySummary,
             RuntimeSessionPresence,
             RuntimeParticipationHints,
+            RuntimeParticipantIdentity,
         ):
             assert cls is not None
 
@@ -614,11 +653,15 @@ class TestContractsPackageExports:
             RuntimeDeviceFormFactor,
             RuntimeDeviceStatus,
             RuntimeConnectionState,
+            RuntimeParticipantTier,
+            RuntimeDeviceExecutionModel,
         )
         assert RuntimeDevicePlatform.ANDROID.value == "android"
         assert RuntimeDeviceFormFactor.PHONE.value == "phone"
         assert RuntimeDeviceStatus.ONLINE.value == "online"
         assert RuntimeConnectionState.CONNECTED.value == "connected"
+        assert RuntimeParticipantTier.UNASSIGNED.value == "unassigned"
+        assert RuntimeDeviceExecutionModel.UNKNOWN.value == "unknown"
 
     def test_existing_execution_trace_exports_still_work(self):
         """PR-29 must not break the PR-25 execution trace exports."""
