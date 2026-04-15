@@ -97,6 +97,8 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.participant_tier import resolve_participant_tier, tier_allows_runtime_dispatch
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1173,6 +1175,13 @@ def _score_candidate(
         return 0, rejection
     if not getattr(participation, "orchestration_eligible", False):
         rejection = "participation:not_orchestration_eligible"
+        return 0, rejection
+    participant_tier = resolve_participant_tier(
+        explicit_tier=getattr(participation, "participant_tier", None),
+        orchestration_eligible=bool(getattr(participation, "orchestration_eligible", False)),
+    )
+    if not tier_allows_runtime_dispatch(participant_tier):
+        rejection = f"participation:tier_not_runtime_dispatchable:{participant_tier.value}"
         return 0, rejection
 
     # --- Reuse preference (optional, contributes to score) ---

@@ -55,6 +55,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.participant_tier import ParticipantTier, resolve_participant_tier
+
 logger = logging.getLogger("Galaxy.DeviceParticipation")
 
 __all__ = [
@@ -67,6 +69,7 @@ __all__ = [
     "PARTICIPATION_TRUTH_SOURCE",
     "PARTICIPATION_ENRICH_ONLY",
     "PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH",
+    "PARTICIPANT_TIER_DEFAULT",
 ]
 
 # Sentinel that identifies this module as the canonical authority (Layer 2).
@@ -103,6 +106,8 @@ PARTICIPATION_CANNOT_OVERRIDE_CANONICAL_TRUTH: str = (
     "registered/present/routable sourced from DEVICE_READINESS_LAYER_V2"
 )
 
+PARTICIPANT_TIER_DEFAULT: str = ParticipantTier.PARTIAL_RUNTIME_NODE.value
+
 
 # ---------------------------------------------------------------------------
 # Model
@@ -124,6 +129,7 @@ class ParticipationSummary:
     runtime_present: bool = False
     routable: bool = False
     orchestration_eligible: bool = False
+    participant_tier: str = PARTICIPANT_TIER_DEFAULT
     mesh_member: bool = False
     session_id: Optional[str] = None
     roles: List[str] = field(default_factory=list)
@@ -145,6 +151,7 @@ class ParticipationSummary:
             "runtime_present": self.runtime_present,
             "routable": self.routable,
             "orchestration_eligible": self.orchestration_eligible,
+            "participant_tier": self.participant_tier,
             "mesh_member": self.mesh_member,
             "session_id": self.session_id,
             "roles": list(self.roles),
@@ -381,6 +388,8 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
     summary = ParticipationSummary(device_id=device_id)
     sources: Dict[str, Any] = {}
     reasons: List[str] = []
+    selector_capability_tier: Optional[str] = None
+    selector_source_runtime_posture: Optional[str] = None
 
     # ------------------------------------------------------------------
     # 0. Layer-1 canonical readiness (authoritative for registered /
@@ -422,6 +431,8 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
         if sel_status is not None:
             summary.assessed = True
             raw_eligible = bool(getattr(sel_status, "orchestration_eligible", False))
+            selector_capability_tier = getattr(sel_status, "capability_tier", None)
+            selector_source_runtime_posture = getattr(sel_status, "source_runtime_posture", None)
             # Gate eligibility on Layer-1 readiness being valid.
             # A device that the selector marks eligible but is not registered
             # or not routable at the transport layer must not be eligible.
@@ -526,6 +537,13 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
         reasons.append(f"session-error: {exc}")
 
     summary.reasons = reasons
+    is_observer_only = any(r.lower() == "observer_only" for r in summary.roles)
+    summary.participant_tier = resolve_participant_tier(
+        capability_tier=selector_capability_tier,
+        source_runtime_posture=selector_source_runtime_posture,
+        coordination_role="observer_only" if is_observer_only else None,
+        orchestration_eligible=summary.orchestration_eligible,
+    ).value
     summary.sources = sources
     return summary
 

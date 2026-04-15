@@ -143,6 +143,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
+from core.participant_tier import ParticipantTier, resolve_participant_tier
+
 # ---------------------------------------------------------------------------
 # Policy sentinels
 # ---------------------------------------------------------------------------
@@ -792,8 +794,15 @@ def evaluate_dispatch_eligibility(
     """
     posture = (source_runtime_posture or _POSTURE_CONTROL_ONLY).lower().strip()
     role = (coordination_role or "").lower().strip()
-    tier = (capability_tier or _TIER_UNKNOWN).lower().strip()
+    explicit_capability_tier = capability_tier
+    normalized_capability_tier = (capability_tier or _TIER_UNKNOWN).lower().strip()
     sid = (session_id or "").strip()
+    participant_tier = resolve_participant_tier(
+        explicit_tier=explicit_capability_tier,
+        capability_tier=normalized_capability_tier,
+        source_runtime_posture=posture,
+        coordination_role=role,
+    )
 
     # Policy: session anchor required.
     if not sid:
@@ -809,7 +818,7 @@ def evaluate_dispatch_eligibility(
             session_id=sid,
             source_runtime_posture=posture,
             coordination_role=role,
-            capability_tier=tier,
+            capability_tier=normalized_capability_tier,
         )
 
     # Policy: join_runtime posture required for non-none intent.
@@ -826,11 +835,11 @@ def evaluate_dispatch_eligibility(
             session_id=sid,
             source_runtime_posture=posture,
             coordination_role=role,
-            capability_tier=tier,
+            capability_tier=normalized_capability_tier,
         )
 
-    # Policy: observer_only blocks delegation.
-    if role == _ROLE_OBSERVER_ONLY:
+    # Policy: observer-only participants are observer endpoints and block delegation.
+    if participant_tier == ParticipantTier.OBSERVER_ENDPOINT:
         return DispatchEligibilityOutcome(
             is_eligible=False,
             resolved_intent=DelegationIntent.none,
@@ -843,7 +852,7 @@ def evaluate_dispatch_eligibility(
             session_id=sid,
             source_runtime_posture=posture,
             coordination_role=role,
-            capability_tier=tier,
+            capability_tier=normalized_capability_tier,
         )
 
     # Policy: target_only_executor cannot initiate delegation.
@@ -861,11 +870,11 @@ def evaluate_dispatch_eligibility(
             session_id=sid,
             source_runtime_posture=posture,
             coordination_role=role,
-            capability_tier=tier,
+            capability_tier=normalized_capability_tier,
         )
 
-    # Determine the maximum intent the capability tier permits.
-    if tier == _TIER_COMMAND_ONLY:
+    # Determine the maximum intent the participant tier permits.
+    if participant_tier == ParticipantTier.COMMAND_ENDPOINT:
         # command_only tier may relay but not fully delegate.
         max_intent = DelegationIntent.relay
         if requested_intent == DelegationIntent.delegate:
@@ -875,14 +884,15 @@ def evaluate_dispatch_eligibility(
                 blocking_reason="",
                 applied_policy=COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY,
                 note=(
-                    f"Full delegation downgraded to relay: capability_tier={tier!r}.  "
+                    "Full delegation downgraded to relay: "
+                    f"capability_tier={normalized_capability_tier!r}. "
                     f"Policy: {COMMAND_ONLY_TIER_BLOCKS_FULL_DELEGATION_POLICY}"
                 ),
                 device_id=device_id,
                 session_id=sid,
                 source_runtime_posture=posture,
                 coordination_role=role,
-                capability_tier=tier,
+                capability_tier=normalized_capability_tier,
             )
     else:
         max_intent = requested_intent
@@ -897,7 +907,7 @@ def evaluate_dispatch_eligibility(
         session_id=sid,
         source_runtime_posture=posture,
         coordination_role=role,
-        capability_tier=tier,
+        capability_tier=normalized_capability_tier,
     )
 
 

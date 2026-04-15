@@ -748,6 +748,26 @@ class TestGroupI_Q:
         assert out.is_eligible is True
         assert out.resolved_intent == DelegationIntent.delegate
 
+    def test_Q2_explicit_command_endpoint_downgrades_delegate(self):
+        out = evaluate_dispatch_eligibility(
+            session_id=_make_session_id(),
+            source_runtime_posture="join_runtime",
+            capability_tier="COMMAND_ENDPOINT",
+            requested_intent=DelegationIntent.delegate,
+        )
+        assert out.is_eligible is True
+        assert out.resolved_intent == DelegationIntent.relay
+
+    def test_Q3_explicit_observer_endpoint_blocks_delegation(self):
+        out = evaluate_dispatch_eligibility(
+            session_id=_make_session_id(),
+            source_runtime_posture="join_runtime",
+            capability_tier="OBSERVER_ENDPOINT",
+            requested_intent=DelegationIntent.delegate,
+        )
+        assert out.is_eligible is False
+        assert out.resolved_intent == DelegationIntent.none
+
     def test_BA_relay_intent_accepted(self):
         out = evaluate_dispatch_eligibility(
             session_id=_make_session_id(),

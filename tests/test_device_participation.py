@@ -29,6 +29,7 @@ from core.device_participation import (
     ParticipationSummary,
     DEVICE_PARTICIPATION_AUTHORITY,
     PARTICIPATION_BUILDS_ON_READINESS,
+    PARTICIPANT_TIER_DEFAULT,
     get_device_participation,
     get_orchestration_ready_devices,
     is_device_orchestration_ready,
@@ -138,7 +139,7 @@ class TestParticipationSummaryModel(unittest.TestCase):
         d = ps.to_dict()
         for key in (
             "device_id", "assessed", "registered", "runtime_present",
-            "routable", "orchestration_eligible", "mesh_member", "session_id",
+            "routable", "orchestration_eligible", "participant_tier", "mesh_member", "session_id",
             "roles", "authority_scope", "routing_intent",
             "is_primary", "is_source", "is_support", "is_relay",
             "reasons", "sources",
@@ -154,6 +155,7 @@ class TestParticipationSummaryModel(unittest.TestCase):
         self.assertFalse(d["runtime_present"])
         self.assertFalse(d["routable"])
         self.assertFalse(d["orchestration_eligible"])
+        self.assertEqual(d["participant_tier"], PARTICIPANT_TIER_DEFAULT)
         self.assertFalse(d["mesh_member"])
         self.assertIsNone(d["session_id"])
         self.assertEqual(d["roles"], [])
@@ -271,6 +273,29 @@ class TestGetDeviceParticipationWithSelectorData(unittest.TestCase):
              patch("core.device_participation._get_mesh_session", return_value=None):
             ps = get_device_participation("dev-d")
         self.assertFalse(ps.orchestration_eligible)
+
+    def test_participant_tier_observer_when_role_present(self):
+        status = _make_selector_status(orchestration_eligible=True)
+        rs = _make_readiness_summary(registered=True, online=True, routable=True, device_id="dev-ob")
+        membership = MagicMock()
+        membership.roles = ["observer_only"]
+        membership.to_dict.return_value = {"roles": ["observer_only"]}
+        with self._patch_selector("dev-ob", status), \
+             _patch_canonical_readiness("dev-ob", rs), \
+             patch("core.device_participation._get_mesh_membership", return_value=membership), \
+             patch("core.device_participation._get_mesh_session", return_value=None):
+            ps = get_device_participation("dev-ob")
+        self.assertEqual(ps.participant_tier, "OBSERVER_ENDPOINT")
+
+    def test_participant_tier_command_when_not_orchestration_eligible(self):
+        status = _make_selector_status(orchestration_eligible=False)
+        rs = _make_readiness_summary(registered=True, online=True, routable=True, device_id="dev-cmd")
+        with self._patch_selector("dev-cmd", status), \
+             _patch_canonical_readiness("dev-cmd", rs), \
+             patch("core.device_participation._get_mesh_membership", return_value=None), \
+             patch("core.device_participation._get_mesh_session", return_value=None):
+            ps = get_device_participation("dev-cmd")
+        self.assertEqual(ps.participant_tier, "COMMAND_ENDPOINT")
 
     def test_orchestration_ineligible_when_readiness_not_routable(self):
         # Selector says eligible, but Layer-1 readiness says not routable — must NOT be eligible.

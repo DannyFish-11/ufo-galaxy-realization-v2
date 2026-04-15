@@ -56,6 +56,7 @@ from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.participant_tier import ParticipantTier
 
 # ---------------------------------------------------------------------------
 # Module availability guards
@@ -984,6 +985,19 @@ class TestGroupQ_FallbackReasonStability:
         )
         assert score == 0
         assert reason == "participation:not_orchestration_eligible"
+
+    def test_q5b_score_candidate_command_endpoint_rejected(self):
+        """_score_candidate: command endpoint tier cannot be runtime-dispatch target."""
+        participation = _make_participation(orchestration_eligible=True)
+        participation.participant_tier = ParticipantTier.COMMAND_ENDPOINT.value
+        score, reason = _score_candidate(
+            "sess-q5b", "dev-q5b",
+            readiness=_make_readiness(),
+            participation=participation,
+            reuse_eligible=False,
+        )
+        assert score == 0
+        assert reason == "participation:tier_not_runtime_dispatchable:COMMAND_ENDPOINT"
 
     def test_q6_score_candidate_all_pass_empty_reason(self):
         """_score_candidate: all pass → non-zero score, empty reason."""
