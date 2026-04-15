@@ -838,3 +838,42 @@ class TestSerialization:
         sc = m.get_architecture_completion_scorecard()
         d = sc.to_dict()
         assert d["generated_by_pr"] == "PR-10"
+
+    def test_91_completion_clarity_snapshot_is_exposed(self):
+        m = _import_module()
+        m.reset_architecture_completion_scorecard()
+        sc = m.get_architecture_completion_scorecard()
+        d = sc.to_dict()
+        assert "completion_clarity" in d
+        clarity = d["completion_clarity"]
+        assert "canonical_dimensions" in clarity
+        assert "transitional_dimensions" in clarity
+        assert "residual_debt_register" in clarity
+        assert "PR12" in clarity["sentinel"]
+
+    def test_92_transitional_dimensions_match_expected_incomplete_dimensions(self):
+        m = _import_module()
+        m.reset_architecture_completion_scorecard()
+        sc = m.get_architecture_completion_scorecard()
+        transitional = set(sc.completion_clarity_snapshot()["transitional_dimensions"])
+        assert transitional == {
+            m.CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS.value,
+            m.CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS.value,
+        }
+
+    def test_93_residual_debt_register_contains_blockers_or_next_actions(self):
+        m = _import_module()
+        m.reset_architecture_completion_scorecard()
+        sc = m.get_architecture_completion_scorecard()
+        entries = sc.completion_clarity_snapshot()["residual_debt_register"]
+        assert entries
+        joined = "\n".join(entries)
+        assert "capability_integration_completeness" in joined
+        assert "installability_ecosystem_readiness" in joined
+
+    def test_94_summary_lines_expose_transitional_count(self):
+        m = _import_module()
+        m.reset_architecture_completion_scorecard()
+        sc = m.get_architecture_completion_scorecard()
+        lines = sc.summary_lines()
+        assert any("Transitional dims" in line for line in lines)
