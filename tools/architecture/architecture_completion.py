@@ -435,7 +435,7 @@ class ArchitectureCompletionScorecard:
         """Return dimensions that remain transitional/compatibility-bearing.
 
         A dimension is transitional when it is not yet CANONICALIZED/COMPLETE
-        or it still reports legacy ambiguity.
+        or when legacy ambiguity still persists even at those maturity levels.
         """
         return [
             d
@@ -445,7 +445,7 @@ class ArchitectureCompletionScorecard:
         ]
 
     @staticmethod
-    def _dimension_name(dimension: Any) -> str:
+    def _dimension_name(dimension: object) -> str:
         return dimension.value if isinstance(dimension, CompletionDimension) else str(dimension)
 
     def residual_debt_register(self) -> List[str]:

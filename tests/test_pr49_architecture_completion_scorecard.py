@@ -851,7 +851,7 @@ class TestSerialization:
         assert "residual_debt_register" in clarity
         assert "PR12" in clarity["sentinel"]
 
-    def test_92_transitional_dimensions_match_partial_default_dimensions(self):
+    def test_92_transitional_dimensions_match_expected_incomplete_dimensions(self):
         m = _import_module()
         m.reset_architecture_completion_scorecard()
         sc = m.get_architecture_completion_scorecard()
