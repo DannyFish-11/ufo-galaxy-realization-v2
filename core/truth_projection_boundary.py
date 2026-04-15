@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY: str = (
     "TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY_V1: "
@@ -85,6 +85,52 @@ class TruthProjectionBoundaryEntry:
             "canonical_truth_source": self.canonical_truth_source,
             "rationale": self.rationale,
         }
+
+
+@dataclass(frozen=True)
+class PlaneBoundaryContract:
+    """Explicit boundary contract for a single authority plane."""
+
+    plane: AuthorityPlane
+    responsibility_summary: str
+    canonical_truth_surface_ids: Tuple[str, ...]
+    projection_surface_ids: Tuple[str, ...]
+    synchronization_surface_ids: Tuple[str, ...]
+    compatibility_surface_ids: Tuple[str, ...]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "plane": self.plane.value,
+            "responsibility_summary": self.responsibility_summary,
+            "canonical_truth_surface_ids": list(self.canonical_truth_surface_ids),
+            "projection_surface_ids": list(self.projection_surface_ids),
+            "synchronization_surface_ids": list(self.synchronization_surface_ids),
+            "compatibility_surface_ids": list(self.compatibility_surface_ids),
+        }
+
+
+_PLANE_RESPONSIBILITY_SUMMARY: Dict[AuthorityPlane, str] = {
+    AuthorityPlane.PARTICIPANT: (
+        "Participant plane defines runtime actor identity truth, while participant readiness "
+        "and tiering remain projection/mapping outputs."
+    ),
+    AuthorityPlane.DEVICE: (
+        "Device plane owns mutable device lifecycle/registration truth; registry compatibility "
+        "indexes and read contracts remain non-authoritative."
+    ),
+    AuthorityPlane.SESSION: (
+        "Session plane owns active runtime-attachment and session-lifecycle truth; multi-device "
+        "views are read models and reuse binders are synchronization only."
+    ),
+    AuthorityPlane.CAPABILITY: (
+        "Capability plane owns canonical capability inventory truth; resolver views and compatibility "
+        "facades must not claim authority."
+    ),
+    AuthorityPlane.EXECUTION: (
+        "Execution plane owns execution lifecycle and authority chain truth; observability and dispatch "
+        "selection remain explanatory or mapping layers."
+    ),
+}
 
 
 def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEntry]:
@@ -264,6 +310,45 @@ def classify_surface_boundary(surface_ref: str) -> str:
     return "unknown"
 
 
+def build_plane_boundary_contracts() -> List[PlaneBoundaryContract]:
+    entries = build_truth_projection_boundary_catalog()
+    contracts = [_build_plane_boundary_contract(plane, entries) for plane in AuthorityPlane]
+    return contracts
+
+
+def get_plane_boundary_contract(
+    plane: AuthorityPlane,
+    entries: Optional[List[TruthProjectionBoundaryEntry]] = None,
+) -> PlaneBoundaryContract:
+    catalog_entries = entries if entries is not None else build_truth_projection_boundary_catalog()
+    return _build_plane_boundary_contract(plane, catalog_entries)
+
+
+def _build_plane_boundary_contract(
+    plane: AuthorityPlane,
+    entries: List[TruthProjectionBoundaryEntry],
+) -> PlaneBoundaryContract:
+    plane_entries = [entry for entry in entries if entry.plane is plane]
+    if not plane_entries:
+        raise ValueError(f"No boundary entries found for plane: {plane.value}")
+    return PlaneBoundaryContract(
+        plane=plane,
+        responsibility_summary=_PLANE_RESPONSIBILITY_SUMMARY[plane],
+        canonical_truth_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.CANONICAL_TRUTH
+        ),
+        projection_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.PROJECTION_READ_MODEL
+        ),
+        synchronization_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.SYNCHRONIZATION_MAPPING
+        ),
+        compatibility_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.COMPATIBILITY_SURFACE
+        ),
+    )
+
+
 def get_plane_entries(plane: AuthorityPlane) -> List[TruthProjectionBoundaryEntry]:
     return [e for e in build_truth_projection_boundary_catalog() if e.plane == plane]
 
@@ -299,5 +384,6 @@ def build_truth_projection_boundary_snapshot() -> Dict[str, Any]:
         ],
         "total_surfaces": len(entries),
         "planes": by_plane,
+        "plane_boundary_contracts": [contract.to_dict() for contract in build_plane_boundary_contracts()],
         "non_canonical_lifecycle_owner_violations": [e.to_dict() for e in violations],
     }

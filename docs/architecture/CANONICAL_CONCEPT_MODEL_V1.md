@@ -47,3 +47,17 @@ Low-risk adapters map existing node/device/runtime records into this model:
 - `map_from_node_participant_record(...)`
 - `map_from_device_participation_summary(...)`
 - `map_from_runtime_participant_surface(...)`
+
+## Cross-plane boundary contract index
+
+`core.truth_projection_boundary` now exposes `build_plane_boundary_contracts()` as
+an explicit, machine-readable index of responsibilities for the participant,
+device, session, capability, and execution planes.  Each contract lists:
+
+- canonical truth-owner surfaces
+- projection/read-model surfaces
+- synchronization/mapping surfaces
+- compatibility-only surfaces
+
+This keeps cross-plane responsibility boundaries discoverable directly from code
+without changing runtime behavior.
