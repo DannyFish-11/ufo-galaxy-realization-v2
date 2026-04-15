@@ -65,7 +65,7 @@ class SessionMessage:
 
 @dataclass
 class Session:
-    """统一会话"""
+    """统一会话（ConversationSession 语义层）"""
     id: str
     user_id: str
     devices: List[str] = field(default_factory=list)
@@ -74,6 +74,11 @@ class Session:
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def conversation_session_id(self) -> str:
+        """Canonical alias for conversation/history continuity semantics."""
+        return self.id
 
     def to_dict(self) -> Dict:
         return {

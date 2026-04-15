@@ -288,7 +288,8 @@ class CanonicalSessionTruthRecord:
     record_id:
         Unique identifier for this truth record (UUID4 prefix).
     session_id:
-        Session for which truth was computed.
+        Runtime-attachment session for which truth was computed.
+        (Conversation session semantics are intentionally out of scope here.)
     task_id:
         Optional task identifier.
     trace_id:
@@ -340,6 +341,11 @@ class CanonicalSessionTruthRecord:
     reason: str = ""
     timestamp: float = dataclasses.field(default_factory=time.time)
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    @property
+    def runtime_attachment_session_id(self) -> str:
+        """Canonical alias for runtime attachment continuity semantics."""
+        return self.session_id
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict of this record."""
@@ -695,6 +701,7 @@ def merge_session_truth(
     result_units: Optional[Sequence[Any]] = None,
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     task_id: Optional[str] = None,
     trace_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
@@ -719,7 +726,10 @@ def merge_session_truth(
         All result units (local, remote, takeover, multi-device) for this
         session.  ``None`` or empty produces a failed ``MergedRuntimeResult``.
     session_id:
-        Runtime session identifier.
+        Legacy runtime session identifier.
+    runtime_attachment_session_id:
+        Canonical runtime attachment session identifier.  When supplied, this
+        takes precedence over ``session_id``.
     task_id:
         Optional task identifier.
     trace_id:
@@ -772,6 +782,9 @@ def merge_session_truth(
 
     normalised_posture = _normalise_posture(source_runtime_posture)
     normalised_role = (coordination_role or "").strip().lower()
+    resolved_runtime_attachment_session_id = (
+        runtime_attachment_session_id or session_id
+    )
 
     # Step 1: posture-aware + coordination-role filter
     kept_units, excluded_ids = filter_result_units_by_posture(
@@ -825,7 +838,7 @@ def merge_session_truth(
 
     merged = merge_runtime_results(
         result_units=coerced_units or None,
-        session_id=session_id,
+        session_id=resolved_runtime_attachment_session_id,
         task_id=task_id,
         trace_id=trace_id,
         merge_policy=resolved_policy,
@@ -847,6 +860,7 @@ def merge_session_truth(
 def record_session_truth(
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     task_id: Optional[str] = None,
     trace_id: Optional[str] = None,
     source_runtime_posture: Optional[str] = None,
@@ -876,6 +890,9 @@ def record_session_truth(
     coordination_role:
         Multi-device coordination role of the originating source device.
         Stored in the :class:`CanonicalSessionTruthRecord`.  PR-4 / PR-6.
+    runtime_attachment_session_id:
+        Canonical runtime attachment session identifier.  When supplied, this
+        takes precedence over ``session_id``.
     truth_source:
         Optional :class:`SessionTruthSource` value string describing the
         dominant origin of the result (``local``, ``remote_handoff``,
@@ -888,6 +905,9 @@ def record_session_truth(
     """
     normalised_posture = _normalise_posture(source_runtime_posture)
     normalised_role = (coordination_role or "").strip().lower()
+    resolved_runtime_attachment_session_id = (
+        runtime_attachment_session_id or session_id
+    )
     is_eligible = normalised_posture == _JOIN_RUNTIME
 
     # Pre-compute filter stats before full merge (cheap)
@@ -900,7 +920,7 @@ def record_session_truth(
 
     merged = merge_session_truth(
         result_units=result_units,
-        session_id=session_id,
+        session_id=resolved_runtime_attachment_session_id,
         task_id=task_id,
         trace_id=trace_id,
         source_runtime_posture=normalised_posture,
@@ -956,7 +976,7 @@ def record_session_truth(
     authoritative_event = build_session_truth_authoritative_event(
         {
             "record_id": "",
-            "session_id": session_id,
+            "session_id": resolved_runtime_attachment_session_id,
             "task_id": task_id,
             "trace_id": trace_id,
             "truth_source": normalised_truth_source,
@@ -980,7 +1000,7 @@ def record_session_truth(
     )
 
     rec = CanonicalSessionTruthRecord(
-        session_id=session_id,
+        session_id=resolved_runtime_attachment_session_id,
         task_id=task_id,
         trace_id=trace_id,
         source_runtime_posture=normalised_posture,

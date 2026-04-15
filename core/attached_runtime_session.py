@@ -415,6 +415,11 @@ class AttachedRuntimeSessionRecord:
     metadata: Dict[str, Any] = field(default_factory=dict)
     record_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
+    @property
+    def runtime_attachment_session_id(self) -> str:
+        """Canonical alias for runtime attachment continuity semantics."""
+        return self.session_id
+
     # ------------------------------------------------------------------
     # Convenience helpers
     # ------------------------------------------------------------------
@@ -479,7 +484,10 @@ class AttachedRuntimeSessionRecord:
         return cls(
             record_id=data.get("record_id", str(uuid.uuid4())),
             device_id=data.get("device_id", ""),
-            session_id=data.get("session_id", ""),
+            session_id=(
+                data.get("runtime_attachment_session_id")
+                or data.get("session_id", "")
+            ),
             source_runtime_posture=data.get("source_runtime_posture", _POSTURE_JOIN_RUNTIME),
             coordination_role=data.get("coordination_role", ""),
             android_host_role=data.get("android_host_role", ""),
@@ -657,6 +665,7 @@ def attach_runtime_session(
     android_host_role: str = "",
     capability_tier: str = "",
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     attach_reason: str = "",
     metadata: Optional[Dict[str, Any]] = None,
     runtime: Optional[AttachedRuntimeSessionRuntime] = None,
@@ -686,6 +695,9 @@ def attach_runtime_session(
         CapabilityTier string (PR package 6), informational.
     session_id
         Optional external session/correlation identifier.
+    runtime_attachment_session_id
+        Canonical runtime attachment session identifier.  When supplied, this
+        takes precedence over ``session_id``.
     attach_reason
         Human-readable reason for this attach operation.
     metadata
@@ -702,6 +714,7 @@ def attach_runtime_session(
         runtime = get_attached_runtime_session_runtime()
 
     posture = (source_runtime_posture or _POSTURE_CONTROL_ONLY).lower().strip()
+    resolved_runtime_attachment_session_id = runtime_attachment_session_id or session_id
 
     # Policy: only join_runtime posture may attach
     if posture != _POSTURE_JOIN_RUNTIME:
@@ -713,7 +726,7 @@ def attach_runtime_session(
             capability_tier=capability_tier or "",
             attachment_state=AttachmentState.detached,
             previous_state=None,
-            session_id=session_id or "",
+            session_id=resolved_runtime_attachment_session_id or "",
             attach_reason=(
                 attach_reason
                 or f"attach blocked: posture={posture!r} is not join_runtime.  "
@@ -739,7 +752,7 @@ def attach_runtime_session(
             capability_tier=capability_tier or existing.capability_tier,
             attachment_state=AttachmentState.attached,
             previous_state=existing.attachment_state,
-            session_id=session_id or existing.session_id,
+            session_id=resolved_runtime_attachment_session_id or existing.session_id,
             attach_reason=attach_reason or existing.attach_reason,
             last_signal=AttachmentLifecycleSignal.attach,
             attached_at=existing.attached_at,
@@ -760,7 +773,7 @@ def attach_runtime_session(
         capability_tier=capability_tier or "",
         attachment_state=AttachmentState.attached,
         previous_state=existing.attachment_state if existing else None,
-        session_id=session_id or "",
+        session_id=resolved_runtime_attachment_session_id or "",
         attach_reason=attach_reason or "",
         last_signal=AttachmentLifecycleSignal.attach,
         attached_at=now,

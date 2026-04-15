@@ -109,7 +109,8 @@ except ImportError:  # pragma: no cover
 # PR-4 (post-533 dual-repo runtime host unification): Canonical Session Truth
 # alignment sentinel.  Asserts that the canonical session truth module is
 # importable from this module's context, so projection endpoints can embed
-# canonical session truth snapshots when assembling runtime projections.
+# canonical runtime-attachment session truth snapshots (distinct from
+# conversation/history sessions) when assembling runtime projections.
 try:
     from core.canonical_session_truth import (  # noqa: F401
         CANONICAL_SESSION_TRUTH_AUTHORITY as _CST_AUTHORITY,
