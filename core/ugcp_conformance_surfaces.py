@@ -1057,8 +1057,19 @@ def build_ugcp_convergence_visibility_audit(
 
 
 def _resolve_strictness_tier(decision: Mapping[str, Any]) -> str:
-    deprecation_stage = str(decision.get("deprecation_stage", ""))
-    semantic_class = str(decision.get("semantic_class", ""))
+    """Resolve staged strictness tier from one surface enforcement decision.
+
+    Tier resolution is intentionally deterministic and monotonic in strictness.
+    The same decision fields always map to the same tier, and stronger
+    strictness signals dominate weaker ones:
+
+    1) `strict_reject_candidate` aliases are always `reject_ready`.
+    2) Canonical semantics are `canonical_preferred`.
+    3) Transitional semantics remain `normalize_first`.
+    4) Unknown/unclassified values remain in `warn_diagnostics`.
+    """
+    deprecation_stage = str(decision.get("deprecation_stage") or "")
+    semantic_class = str(decision.get("semantic_class") or "")
     if deprecation_stage == UGCPDeprecationStage.strict_reject_candidate.value:
         return "reject_ready"
     if semantic_class == UGCPSemanticClass.canonical.value:
@@ -1068,11 +1079,45 @@ def _resolve_strictness_tier(decision: Mapping[str, Any]) -> str:
     return "warn_diagnostics"
 
 
+def _determine_rollout_gate(strictness_tier: str, requires_cross_repo_coordination: bool) -> str:
+    """Map strictness tier + coordination requirement to a rollout gate label."""
+    if strictness_tier == "reject_ready":
+        return (
+            "reject_ready_but_coordination_gated"
+            if requires_cross_repo_coordination
+            else "reject_ready_for_canary_tightening"
+        )
+    return (
+        "cross_repo_coordination_required"
+        if requires_cross_repo_coordination
+        else "center_evidence_ready_for_earlier_tightening"
+    )
+
+
 def build_staged_strictness_rollout_gating_scaffold(
     payload: Optional[Mapping[str, Any]] = None,
     mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
 ) -> Dict[str, Any]:
-    """Build staged strictness and rollout-gating scaffold for incremental convergence."""
+    """Build staged strictness and rollout-gating scaffold for incremental convergence.
+
+    Args:
+        payload: Optional conformance payload (for example `schema_kind`,
+            `lifecycle_state`, `authority_source`, `transfer_state`,
+            `coordination_state`, `truth_event_type`). Missing keys are handled
+            as unknown/tolerated inputs and remain report-only.
+        mode: Enforcement mode (`compatibility`, `review`, `strict`). Unknown
+            mode strings fall back to `compatibility`.
+
+    Returns:
+        Dictionary with:
+        - `surface_strictness_inventory`: per-surface tier + gate metadata.
+        - tier buckets (`normalize_first_surfaces`, `warning_surfaces`,
+          `canonical_preferred_surfaces`, `reject_ready_surfaces`).
+        - rollout readiness groupings (`earlier_tightening_candidates`,
+          `coordination_required_surfaces`, `gated_reject_ready_surfaces`).
+        - `rollout_sequence`: staged tightening plan.
+        - embedded `enforcement_scaffold` and `migration_readiness`.
+    """
     source_payload = payload or {}
     parsed_mode = _parse_enforcement_mode(mode)
     enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
@@ -1084,17 +1129,7 @@ def build_staged_strictness_rollout_gating_scaffold(
         decision = enforcement["decisions"][key]
         strictness_tier = _resolve_strictness_tier(decision)
         requires_cross_repo_coordination = key in _CROSS_REPO_COORDINATION_REQUIRED_SURFACES
-        rollout_gate = (
-            "cross_repo_coordination_required"
-            if requires_cross_repo_coordination
-            else "center_evidence_ready_for_earlier_tightening"
-        )
-        if strictness_tier == "reject_ready":
-            rollout_gate = (
-                "reject_ready_but_coordination_gated"
-                if requires_cross_repo_coordination
-                else "reject_ready_for_canary_tightening"
-            )
+        rollout_gate = _determine_rollout_gate(strictness_tier, requires_cross_repo_coordination)
         surface_strictness_inventory[key] = {
             "strictness_tier": strictness_tier,
             "current_action": decision["action"],

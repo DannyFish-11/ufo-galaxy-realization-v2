@@ -413,6 +413,51 @@ def test_staged_strictness_rollout_gating_scaffold_layers_tiers_and_gates() -> N
     )
 
 
+def test_staged_strictness_rollout_gating_scaffold_handles_empty_payload_and_invalid_mode() -> None:
+    scaffold = build_staged_strictness_rollout_gating_scaffold({}, mode="unknown_mode")
+
+    assert scaffold["mode"] == UGCPEnforcementMode.compatibility.value
+    assert set(scaffold["surface_strictness_inventory"]) == {
+        "schema",
+        "lifecycle",
+        "authority",
+        "transfer",
+        "coordination",
+        "truth_event",
+    }
+    assert scaffold["warning_surfaces"]
+    assert "authority" in scaffold["coordination_required_surfaces"]
+
+
+def test_staged_strictness_rollout_gating_scaffold_respects_strict_mode() -> None:
+    scaffold = build_staged_strictness_rollout_gating_scaffold(
+        {"authority_source": "projection"},
+        mode=UGCPEnforcementMode.strict,
+    )
+    assert scaffold["mode"] == UGCPEnforcementMode.strict.value
+    assert "authority" in scaffold["enforcement_scaffold"]["rejected_surfaces_in_mode"]
+
+
+def test_staged_strictness_rollout_gating_scaffold_handles_partial_payload_inputs() -> None:
+    scaffold = build_staged_strictness_rollout_gating_scaffold(
+        {
+            "authority_source": "compat",
+            "truth_event_type": "unknown_event_marker",
+        },
+        mode=UGCPEnforcementMode.review,
+    )
+
+    assert scaffold["mode"] == UGCPEnforcementMode.review.value
+    assert scaffold["surface_strictness_inventory"]["authority"]["strictness_tier"] == "reject_ready"
+    assert scaffold["surface_strictness_inventory"]["truth_event"]["strictness_tier"] == "warn_diagnostics"
+    assert scaffold["surface_strictness_inventory"]["schema"]["strictness_tier"] == "warn_diagnostics"
+    assert scaffold["surface_strictness_inventory"]["lifecycle"]["strictness_tier"] == "warn_diagnostics"
+    assert scaffold["surface_strictness_inventory"]["transfer"]["strictness_tier"] == "warn_diagnostics"
+    assert scaffold["surface_strictness_inventory"]["coordination"]["strictness_tier"] == "warn_diagnostics"
+    assert "lifecycle" in scaffold["warning_surfaces"]
+    assert "coordination" in scaffold["warning_surfaces"]
+
+
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_projection_alignment_sentinel_present() -> None:
     from core.routes import projection
