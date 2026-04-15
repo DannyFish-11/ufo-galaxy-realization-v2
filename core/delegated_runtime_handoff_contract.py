@@ -371,6 +371,11 @@ class DelegatedHandoffContractIdentity:
     trace_id: str = ""
     dispatch_record_id: str = ""
 
+    @property
+    def delegation_transfer_session_id(self) -> str:
+        """Canonical alias for delegation/handoff transfer continuity semantics."""
+        return self.session_id
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "contract_id": self.contract_id,
@@ -392,7 +397,11 @@ class DelegatedHandoffContractIdentity:
             )
         return cls(
             contract_id=str(data.get("contract_id", "") or str(uuid.uuid4())),
-            session_id=str(data.get("session_id", "")),
+            session_id=str(
+                data.get("delegation_transfer_session_id")
+                or data.get("execution_transfer_session_id")
+                or data.get("session_id", "")
+            ),
             device_id=str(data.get("device_id", "")),
             trace_id=str(data.get("trace_id", "")),
             dispatch_record_id=str(data.get("dispatch_record_id", "")),
