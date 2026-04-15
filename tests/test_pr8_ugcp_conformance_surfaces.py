@@ -185,6 +185,37 @@ def test_invariant_report_flags_cross_profile_lifecycle_drift() -> None:
     assert report["enforcement_scaffold"]["mode"] == UGCPEnforcementMode.review.value
 
 
+def test_invariant_report_surfaces_canonical_consistency_checks() -> None:
+    report = build_conformance_invariant_report(
+        {
+            "lifecycle_state": "active",
+            "transfer_state": "completed",
+            "coordination_state": "active",
+            "truth_event_type": CanonicalTruthEventType.control_transfer_transition.value,
+            "authority_source": "ugcp_truth_event_model",
+        }
+    )
+
+    assert report["invariants"]["canonical_consistency_checks_passed"] is False
+    assert report["canonical_consistency"]["checks"]["transfer_terminal_lifecycle_consistent"] is False
+    assert "transfer_terminal_lifecycle_consistent" in report["violations"]
+
+
+def test_invariant_report_surfaces_compatibility_and_truth_event_alignment_divergence() -> None:
+    report = build_conformance_invariant_report(
+        {
+            "authority_source": "projection",
+            "transfer_state": "unknown_transfer",
+            "truth_event_type": CanonicalTruthEventType.control_transfer_transition.value,
+        }
+    )
+
+    assert report["canonical_consistency"]["checks"]["compatibility_pathways_clear"] is False
+    assert report["canonical_consistency"]["checks"]["truth_event_surface_alignment"] is False
+    assert "truth_event_surface_alignment" in report["violations"]
+    assert report["canonical_consistency"]["compatibility_pathway_count"] >= 1
+
+
 def test_enforcement_decision_strict_mode_reject_candidates() -> None:
     review_decision = evaluate_surface_enforcement(
         UGCPConformanceSurface.authority,
