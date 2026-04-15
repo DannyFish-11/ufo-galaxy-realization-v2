@@ -309,9 +309,7 @@ def test_retirement_stage_catalog_is_surface_scoped_and_stage_grouped() -> None:
     assert set(catalog) == {"schema", "lifecycle", "authority", "transfer", "coordination", "truth_event"}
     assert "legacy_message_payload" in catalog["schema"]["strict_reject_candidate_aliases"]
     assert "waiting" in catalog["lifecycle"]["transitional_tolerated_aliases"]
-    assert {"compat", "interop", "legacy_bridge", "projection"}.issubset(
-        set(catalog["authority"]["strict_reject_candidate_aliases"])
-    )
+    assert set(catalog["authority"]["strict_reject_candidate_aliases"]) == {"legacy_bridge", "projection"}
     assert "blocked" in catalog["transfer"]["strict_reject_candidate_aliases"]
     assert {"cancelled_by_policy", "waiting"}.issubset(set(catalog["coordination"]["migration_required_aliases"]))
     assert "session_truth_written" in catalog["truth_event"]["migration_required_aliases"]
@@ -441,7 +439,7 @@ def test_staged_strictness_rollout_gating_scaffold_respects_strict_mode() -> Non
 def test_staged_strictness_rollout_gating_scaffold_handles_partial_payload_inputs() -> None:
     scaffold = build_staged_strictness_rollout_gating_scaffold(
         {
-            "authority_source": "compat",
+            "authority_source": "projection",
             "truth_event_type": "unknown_event_marker",
         },
         mode=UGCPEnforcementMode.review,
@@ -456,6 +454,22 @@ def test_staged_strictness_rollout_gating_scaffold_handles_partial_payload_input
     assert scaffold["surface_strictness_inventory"]["coordination"]["strictness_tier"] == "warn_diagnostics"
     assert "lifecycle" in scaffold["warning_surfaces"]
     assert "coordination" in scaffold["warning_surfaces"]
+
+
+def test_first_phase_retired_authority_aliases_are_no_longer_transitional() -> None:
+    classification = classify_surface_semantics(UGCPConformanceSurface.authority, "compat")
+    decision = evaluate_surface_enforcement(
+        UGCPConformanceSurface.authority,
+        "compat",
+        mode=UGCPEnforcementMode.review,
+    )
+
+    assert classification.semantic_class == UGCPSemanticClass.unknown
+    assert classification.normalized_value == "unknown"
+    assert classification.compatibility_pathway == ""
+    assert decision.semantic_class == UGCPSemanticClass.unknown
+    assert decision.action == UGCPEnforcementAction.tolerate_warn
+    assert decision.deprecation_stage == UGCPDeprecationStage.transitional_tolerated
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")

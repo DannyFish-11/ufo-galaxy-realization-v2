@@ -129,3 +129,21 @@ checks (still non-disruptive, no global hard-fail behavior):
 These checks are surfaced under `canonical_consistency` and folded into
 reviewable invariant violations, so transitional/compat divergence is easier to
 audit before staged strictness layering or compatibility retirement.
+
+## 10) PR-15 first-phase low-risk retirement (center-side)
+
+PR-15 starts actual compatibility reduction with a narrow, low-risk authority
+surface retirement slice:
+
+- retired in first phase: `interop`, `compat` authority aliases
+- intentionally preserved for later phases: `projection`, `legacy_bridge`
+
+Reasoning for this first slice:
+
+- `interop` / `compat` only normalized to canonical-safe `unknown` and no longer
+  provide distinct center-side semantics beyond historical naming noise
+- preserving `projection` / `legacy_bridge` keeps stricter retirement deferred
+  where cross-repo/runtime significance can still exist
+
+This keeps retirement incremental and reviewable while improving canonical
+signal-to-noise without broad speculative deletion.

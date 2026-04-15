@@ -229,7 +229,7 @@ _SURFACE_DEFINITIONS: Dict[UGCPConformanceSurface, UGCPConformanceSurfaceDefinit
         surface=UGCPConformanceSurface.authority,
         canonical_authority=UGCP_TRUTH_EVENT_MODEL_AUTHORITY,
         canonical_contract="canonical authority chain truth source labels",
-        tolerated_transitional_aliases=("projection", "interop", "legacy_bridge", "compat"),
+        tolerated_transitional_aliases=("projection", "legacy_bridge"),
     ),
     UGCPConformanceSurface.transfer: UGCPConformanceSurfaceDefinition(
         surface=UGCPConformanceSurface.transfer,
@@ -309,9 +309,7 @@ _AUTHORITY_CANONICAL_VALUES = {
 }
 _AUTHORITY_TRANSITIONAL_ALIASES = {
     "projection": "unknown",
-    "interop": "unknown",
     "legacy_bridge": "unknown",
-    "compat": "unknown",
 }
 
 _TRANSFER_CANONICAL_VALUES = {
@@ -401,9 +399,7 @@ _SURFACE_ALIAS_DEPRECATION_STAGE: Dict[UGCPConformanceSurface, Dict[str, UGCPDep
     },
     UGCPConformanceSurface.authority: {
         "projection": UGCPDeprecationStage.strict_reject_candidate,
-        "interop": UGCPDeprecationStage.strict_reject_candidate,
         "legacy_bridge": UGCPDeprecationStage.strict_reject_candidate,
-        "compat": UGCPDeprecationStage.strict_reject_candidate,
     },
     UGCPConformanceSurface.transfer: {
         "draft": UGCPDeprecationStage.migration_required,
