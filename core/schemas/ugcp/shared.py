@@ -531,7 +531,7 @@ def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
     participant_id = str(_pick(data, "participant_id", "runtime_participant_id", default=device_id))
     runtime_present = bool(_pick(data, "runtime_present", default=False))
     orchestration_eligible = bool(_pick(data, "orchestration_eligible", default=False))
-    session_id = _pick(data, "runtime_session_id", "session_id", "attached_session_id")
+    session_id = normalize_runtime_attachment_session_id(data) or _pick(data, "session_id")
     roles = _pick(data, "roles", default=[]) or []
     coordination_role = str(roles[0]) if isinstance(roles, list) and roles else str(
         _pick(data, "coordination_role", default="")
@@ -601,7 +601,7 @@ def map_from_runtime_participant_surface(payload: Dict[str, Any]) -> Participant
     )
     posture = str(_pick(payload, "source_runtime_posture", default="control_only") or "control_only").lower().strip()
     coordination_role = str(_pick(payload, "coordination_role", default="") or "")
-    runtime_session_id = _pick(payload, "runtime_session_id", "attached_session_id")
+    runtime_session_id = normalize_runtime_attachment_session_id(payload)
     device_id = _pick(payload, "source_device_id", "device_id", "target_device_id")
     capability_refs = []
     raw_caps = _pick(payload, "capabilities", default=[]) or []
@@ -788,7 +788,7 @@ def map_from_task_envelope(envelope: Any) -> TaskEnvelope:
     return TaskEnvelope(
         task_id=str(_pick(envelope, "task_id", default="")),
         trace_id=str(_pick(envelope, "trace_id", default="")),
-        control_session_id=_pick(envelope, "control_session_id", "session_id"),
+        control_session_id=normalize_conversation_session_id(envelope),
         source_node_id=_pick(envelope, "source_node_id", "source"),
         target_node_id=_pick(envelope, "target_node_id", default=_first_target(envelope)),
         tool_name=str(_pick(envelope, "tool_name", default="")),
@@ -815,8 +815,8 @@ def map_from_delegated_handoff_contract(contract: Any) -> HandoffRequest:
     meta = _pick(contract, "meta", default={}) or {}
     return HandoffRequest(
         task_id=_pick(payload, "task_id"),
-        control_session_id=_pick(identity, "session_id"),
-        runtime_session_id=_pick(identity, "runtime_session_id", "session_id"),
+        control_session_id=normalize_conversation_session_id(identity),
+        runtime_session_id=normalize_runtime_attachment_session_id(identity) or _pick(identity, "session_id"),
         source_node_id=_pick(meta, "source_node_id", "source_device_id"),
         target_node_id=_pick(identity, "device_id", "target_device_id"),
         handoff_reason=str(_pick(contract, "reason", default="")),
@@ -834,7 +834,12 @@ def map_from_runtime_session_snapshot(snapshot: Any) -> RuntimeTruth:
         else "unknown"
     )
     reason = _pick(snapshot, "reason", default="")
-    runtime_session_id = _pick(identity, "session_id") or _pick(snapshot, "session_id")
+    runtime_session_id = (
+        normalize_runtime_attachment_session_id(identity)
+        or _pick(identity, "session_id")
+        or normalize_runtime_attachment_session_id(snapshot)
+        or _pick(snapshot, "session_id")
+    )
     return RuntimeTruth(
         runtime_session_id=runtime_session_id,
         runtime_status=normalized_status,
@@ -855,7 +860,7 @@ def map_from_message_interop_payload(payload: Dict[str, Any]) -> TaskEnvelope:
     corr_task_id = _pick(payload, "task_id", "request_id", default="")
     corr_trace_id = _pick(payload, "trace_id", default="")
     ctx = _pick(payload, "context", default={}) or {}
-    control_session_id = _pick(payload, "control_session_id", "session_id") or _pick(ctx, "session_id")
+    control_session_id = normalize_conversation_session_id(payload) or normalize_conversation_session_id(ctx)
     return TaskEnvelope(
         task_id=str(corr_task_id),
         trace_id=str(corr_trace_id),

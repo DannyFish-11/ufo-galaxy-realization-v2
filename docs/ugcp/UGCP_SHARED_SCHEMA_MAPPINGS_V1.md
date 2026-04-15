@@ -21,6 +21,7 @@ It is an architecture-grounding layer, not a claim of full migration.
 | `core.delegated_runtime_handoff_contract.DelegatedHandoffContractRecord` | `map_from_delegated_handoff_contract(...)` | `core.schemas.ugcp.HandoffRequest` |
 | `contracts.runtime_session_snapshot.RuntimeSessionSnapshot` | `map_from_runtime_session_snapshot(...)` | `core.schemas.ugcp.RuntimeTruth` |
 | `core.message_interop` normalized payload shapes | `map_from_message_interop_payload(...)` | `core.schemas.ugcp.TaskEnvelope` |
+| Existing mixed session keys (`session_id`, `control_session_id`, `runtime_attachment_session_id`, etc.) | `normalize_conversation_session_id(...)` / `normalize_runtime_attachment_session_id(...)` | Canonical `control_session_id` / `runtime_session_id` fields in mapped UGCP objects |
 
 ## Shared families covered
 
