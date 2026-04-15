@@ -14,10 +14,12 @@ from core.truth_projection_boundary import (
     SYNC_LAYERS_MUST_NOT_SELF_PROMOTE_POLICY,
     TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY,
     TRUTH_PROJECTION_BOUNDARY_PR7_SENTINEL,
+    build_plane_boundary_contracts,
     build_truth_projection_boundary_catalog,
     build_truth_projection_boundary_snapshot,
     classify_surface_boundary,
     find_non_canonical_lifecycle_owners,
+    get_plane_boundary_contract,
 )
 
 try:
@@ -77,7 +79,24 @@ def test_snapshot_has_plane_counts_and_no_lifecycle_violations() -> None:
     snapshot = build_truth_projection_boundary_snapshot()
     assert snapshot["total_surfaces"] >= 15
     assert set(snapshot["planes"].keys()) == {plane.value for plane in AuthorityPlane}
+    assert len(snapshot["plane_boundary_contracts"]) == len(AuthorityPlane)
     assert snapshot["non_canonical_lifecycle_owner_violations"] == []
+
+
+def test_plane_boundary_contracts_make_responsibilities_explicit() -> None:
+    contracts = build_plane_boundary_contracts()
+    assert {contract.plane for contract in contracts} == set(AuthorityPlane)
+    for contract in contracts:
+        assert contract.responsibility_summary
+        assert len(contract.canonical_truth_surface_ids) >= 1
+
+
+def test_get_plane_boundary_contract_for_execution_plane() -> None:
+    contract = get_plane_boundary_contract(AuthorityPlane.EXECUTION)
+    assert "execution lifecycle" in contract.responsibility_summary
+    assert "canonical_execution_chain" in contract.canonical_truth_surface_ids
+    assert "runtime_decision_observability_projection" in contract.projection_surface_ids
+    assert "dispatch_target_selection_mapping" in contract.synchronization_surface_ids
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
