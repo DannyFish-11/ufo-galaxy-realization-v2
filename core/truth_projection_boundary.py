@@ -312,35 +312,41 @@ def classify_surface_boundary(surface_ref: str) -> str:
 
 def build_plane_boundary_contracts() -> List[PlaneBoundaryContract]:
     entries = build_truth_projection_boundary_catalog()
-    contracts: List[PlaneBoundaryContract] = []
-    for plane in AuthorityPlane:
-        plane_entries = [entry for entry in entries if entry.plane is plane]
-        contracts.append(
-            PlaneBoundaryContract(
-                plane=plane,
-                responsibility_summary=_PLANE_RESPONSIBILITY_SUMMARY[plane],
-                canonical_truth_surface_ids=tuple(
-                    entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.CANONICAL_TRUTH
-                ),
-                projection_surface_ids=tuple(
-                    entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.PROJECTION_READ_MODEL
-                ),
-                synchronization_surface_ids=tuple(
-                    entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.SYNCHRONIZATION_MAPPING
-                ),
-                compatibility_surface_ids=tuple(
-                    entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.COMPATIBILITY_SURFACE
-                ),
-            )
-        )
+    contracts = [_build_plane_boundary_contract(plane, entries) for plane in AuthorityPlane]
     return contracts
 
 
-def get_plane_boundary_contract(plane: AuthorityPlane) -> PlaneBoundaryContract:
-    for contract in build_plane_boundary_contracts():
-        if contract.plane is plane:
-            return contract
-    raise ValueError(f"Unknown authority plane: {plane!r}")
+def get_plane_boundary_contract(
+    plane: AuthorityPlane,
+    entries: Optional[List[TruthProjectionBoundaryEntry]] = None,
+) -> PlaneBoundaryContract:
+    catalog_entries = entries if entries is not None else build_truth_projection_boundary_catalog()
+    return _build_plane_boundary_contract(plane, catalog_entries)
+
+
+def _build_plane_boundary_contract(
+    plane: AuthorityPlane,
+    entries: List[TruthProjectionBoundaryEntry],
+) -> PlaneBoundaryContract:
+    plane_entries = [entry for entry in entries if entry.plane is plane]
+    if not plane_entries:
+        raise ValueError(f"No boundary entries found for plane: {plane.value}")
+    return PlaneBoundaryContract(
+        plane=plane,
+        responsibility_summary=_PLANE_RESPONSIBILITY_SUMMARY[plane],
+        canonical_truth_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.CANONICAL_TRUTH
+        ),
+        projection_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.PROJECTION_READ_MODEL
+        ),
+        synchronization_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.SYNCHRONIZATION_MAPPING
+        ),
+        compatibility_surface_ids=tuple(
+            entry.surface_id for entry in plane_entries if entry.role is BoundaryRole.COMPATIBILITY_SURFACE
+        ),
+    )
 
 
 def get_plane_entries(plane: AuthorityPlane) -> List[TruthProjectionBoundaryEntry]:
