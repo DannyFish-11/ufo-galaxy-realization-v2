@@ -28,6 +28,14 @@ This note defines how Android-side concepts should align with center-side UGCP s
 - Center-side control plane resolves authoritative session state, dispatch outcome, and projection truth.
 - Compat aliases are accepted during convergence, but canonical UGCP names are the stable target vocabulary for both repos.
 
+### Android runtime host relationship clarification
+
+- Android **device** identity remains the registration/transport anchor.
+- Android **runtime host participant** is the execution actor attached on top of that device identity.
+- Android **runtime attachment session** continuity (attach/reconnect) is distinct from conversation/history continuity.
+- Android **delegation transfer session** events describe ownership transfer/handoff semantics and are not conversation sessions.
+- Android **capability reporting** remains evidence for scheduling/readiness, not participant identity replacement.
+
 ## 4) Non-overclaim note
 
 These alignment rules freeze semantics for convergence work. They do not claim all Android and center modules are already fully renamed or fully unified at protocol level.

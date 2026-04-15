@@ -29,7 +29,7 @@ Interpretation:
 | Canonical term | Definition | Status in realization-v2 | Current grounding / mapping |
 |---|---|---|---|
 | `source_runtime_posture` | Source participation posture (`control_only` / `join_runtime`) | active | `contracts/source_posture_contract.py`, handoff/session/merge contracts |
-| `coordination_role` | Source role in cross-device coordination | active | handoff/session/merge contracts |
+| `coordination_role` (coordination role) | Source role in cross-device coordination | active | handoff/session/merge contracts |
 | `dispatch_mode` | Intended dispatch mode | active | `contracts/source_dispatch.py` (`SourceDispatchMode`) |
 | `effective_mode` | Actual mode after fallback/degradation | mapped | runtime orchestrator uses `effective_mode` variable and writes resulting `mode` |
 | `delegated_signal_kind` | Canonical delegated signal kind | active | `core/android_delegated_signal_ingress.py` (`DelegatedSignalKind`) |
@@ -49,3 +49,31 @@ Current grounded authority direction:
 - `core/canonical_session_truth.py`
 - `core/projection/runtime_truth_compiler.py`
 - `core/outward_runtime_truth.py`
+
+## 4) Cross-repo canonical concept layer (participant/device/runtime/capability/session)
+
+This section freezes the canonical concept model shared by:
+- `DannyFish-11/ufo-galaxy-realization-v2` (center/control authority)
+- `DannyFish-11/ufo-galaxy-android` (Android runtime host participant)
+
+| Canonical concept | Definition |
+|---|---|
+| `participant` | A real runtime/system actor in execution and coordination (center runtime host, Android runtime host, or other runtime participant). |
+| `device` | Hardware/software endpoint identity carrying platform facts, transport, and capabilities. A device may host zero or one active runtime participant in current compatibility mode. |
+| `runtime` | Executable host/process surface that can attach, reattach, execute, and report truth. Runtime identity is tracked with runtime attachment session semantics. |
+| `capability` | A declared executable/perception/control ability surface used by readiness, routing, and scheduling. Capability is never the same thing as participant identity. |
+| `conversation_session` (conversation session) | Conversation/history continuity context (chat/request lineage scope). |
+| `runtime_attachment_session` (runtime attachment session) | Runtime attach/reconnect continuity context used by runtime truth and active attachment resolution. |
+| `delegation_transfer_session` (delegation transfer session) | Delegation/handoff transfer lifecycle context for execution ownership movement across participants/devices. |
+| `source_runtime_posture` | Source participation posture (`control_only` / `join_runtime`) that gates contribution semantics. |
+| `coordination_role` | Participant role in coordination (`controller`, `participant`, `observer`, etc.). |
+
+## 5) Node/session disambiguation rules
+
+- `node` in topology/task-model contexts means **graph node** only (non-participant abstraction).
+- Runtime/system actors use `participant` terminology for new surfaces.
+- Existing `node_id` fields remain valid as compatibility aliases until retirement.
+- Bare `session` is no longer canonical for new surfaces; choose one of:
+  - `conversation_session`
+  - `runtime_attachment_session`
+  - `delegation_transfer_session`
