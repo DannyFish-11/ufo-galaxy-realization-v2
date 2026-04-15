@@ -93,3 +93,20 @@ PR-11 adds migration-readiness and sequencing groundwork:
 This remains bounded and non-disruptive: it improves rollout planning and
 reviewability without claiming immediate global strict rollout or abrupt
 compatibility removal.
+
+## 8) PR-12 convergence visibility audit surface
+
+PR-12 adds `build_ugcp_convergence_visibility_audit()` as a center-side
+inventory/report surface for reviewability (no behavior tightening).
+
+The audit report makes the following explicit in one place:
+
+- canonical handling surfaces currently active,
+- transitional operational surfaces and normalization boundaries,
+- compatibility tolerance still present at ingress/conformance boundaries,
+- future verification targets,
+- strictness and retirement candidates.
+
+This helps later PR-13-style invariant verification and staged compatibility
+retirement by surfacing current pathway reality without forcing canonical-only
+breakage.

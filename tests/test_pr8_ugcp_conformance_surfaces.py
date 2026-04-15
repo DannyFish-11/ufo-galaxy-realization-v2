@@ -10,6 +10,7 @@ from core.ugcp_conformance_surfaces import (
     CANONICAL_VS_TRANSITIONAL_CLASSIFICATION_POLICY,
     COMPATIBILITY_RETIREMENT_IS_PROGRESSIVE_POLICY,
     CROSS_PROFILE_INVARIANTS_ARE_REVIEWABLE_POLICY,
+    CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY,
     DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY,
     ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY,
     MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY,
@@ -20,6 +21,7 @@ from core.ugcp_conformance_surfaces import (
     UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
     UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL,
     UGCP_MIGRATION_READINESS_PR11_SENTINEL,
+    UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL,
     UGCPDeprecationStage,
     UGCPEnforcementAction,
     UGCPEnforcementMode,
@@ -31,6 +33,7 @@ from core.ugcp_conformance_surfaces import (
     build_conformance_invariant_report,
     classify_surface_semantics,
     build_migration_readiness_scaffold,
+    build_ugcp_convergence_visibility_audit,
     evaluate_surface_enforcement,
     get_ugcp_retirement_stage_catalog,
     get_ugcp_conformance_surface_catalog,
@@ -68,6 +71,11 @@ def test_sentinels_present() -> None:
         "UGCP_MIGRATION_READINESS_PR11_SENTINEL::package=11::"
         "profile=ugcp-migration-readiness-v1::module=core.ugcp_conformance_surfaces"
     )
+    assert UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL == (
+        "UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL::package=12::"
+        "profile=ugcp-convergence-visibility-audit-v1::module=core.ugcp_conformance_surfaces"
+    )
+    assert "CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE" in CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY
 
 
 def test_surface_catalog_has_expected_authority_mappings() -> None:
@@ -283,6 +291,31 @@ def test_migration_readiness_scaffold_preserves_compat_defaults_and_sequences_re
     assert scaffold["enforcement_scaffold"]["rejected_surfaces_in_mode"] == []
 
 
+def test_convergence_visibility_audit_surfaces_boundaries_and_future_targets() -> None:
+    report = build_ugcp_convergence_visibility_audit(
+        {
+            "schema_kind": "legacy_message_payload",
+            "lifecycle_state": "completed",
+            "authority_source": "projection",
+            "transfer_state": "blocked",
+            "coordination_state": "waiting",
+            "truth_event_type": CanonicalTruthEventType.coordination_transition.value,
+        },
+        mode=UGCPEnforcementMode.review,
+    )
+
+    assert report["mode"] == UGCPEnforcementMode.review.value
+    assert report["surface_inventory"]["lifecycle"]["canonical_handling_active"] is True
+    assert report["surface_inventory"]["authority"]["normalization_boundary_active"] is True
+    assert report["surface_inventory"]["transfer"]["future_strictness_candidate"] is True
+    assert "authority" in report["normalization_boundary_surfaces"]
+    assert "transfer" in report["future_strictness_candidates"]
+    assert "authority" in report["future_verification_targets"]
+    assert report["summary"]["normalization_boundary_count"] >= 1
+    assert report["invariant_report"]["enforcement_scaffold"]["mode"] == UGCPEnforcementMode.review.value
+    assert report["migration_readiness"]["retirement_sequence"][2]["phase"] == "gate_strict_reject_candidates"
+
+
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_projection_alignment_sentinel_present() -> None:
     from core.routes import projection
@@ -292,10 +325,13 @@ def test_projection_alignment_sentinel_present() -> None:
     assert "UNAVAILABLE" not in sentinel
     enforcement_sentinel = projection.UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10
     migration_sentinel = projection.UGCP_MIGRATION_READINESS_ALIGNED_PR11
+    visibility_sentinel = projection.UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12
     assert "UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10" in enforcement_sentinel
     assert "UGCP_MIGRATION_READINESS_ALIGNED_PR11" in migration_sentinel
+    assert "UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12" in visibility_sentinel
     assert "UNAVAILABLE" not in enforcement_sentinel
     assert "UNAVAILABLE" not in migration_sentinel
+    assert "UNAVAILABLE" not in visibility_sentinel
     assert callable(getattr(projection, "_classify_surface_semantics", None))
     assert callable(getattr(projection, "_evaluate_surface_enforcement", None))
     assert callable(getattr(projection, "_build_enforcement_scaffold", None))
@@ -304,3 +340,4 @@ def test_projection_alignment_sentinel_present() -> None:
     assert callable(getattr(projection, "_normalize_conformance_payload", None))
     assert callable(getattr(projection, "_normalize_conformance_backbone", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))
+    assert callable(getattr(projection, "_build_ugcp_convergence_visibility_audit", None))

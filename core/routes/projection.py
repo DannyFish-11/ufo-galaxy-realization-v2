@@ -360,6 +360,7 @@ try:
         UGCP_CONFORMANCE_SURFACES_PR8_SENTINEL as _UCS_PR8,
         UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10,
         UGCP_MIGRATION_READINESS_PR11_SENTINEL as _UMR_PR11,
+        UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL as _UCV_PR12,
         UGCPConformanceSurface as _UGCPConformanceSurface,
         UGCPSemanticClass as _UGCPSemanticClass,
         UGCPEnforcementMode as _UGCPEnforcementMode,
@@ -374,6 +375,7 @@ try:
         get_ugcp_conformance_surface_catalog as _get_ugcp_conformance_surface_catalog,
         get_ugcp_retirement_stage_catalog as _get_ugcp_retirement_stage_catalog,
         build_migration_readiness_scaffold as _build_migration_readiness_scaffold,
+        build_ugcp_convergence_visibility_audit as _build_ugcp_convergence_visibility_audit,
     )
 
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (
@@ -401,6 +403,15 @@ try:
         "tolerance pathways, and stage-gated retirement sequencing are explicit "
         "without forcing immediate strict rollout."
     )
+    UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12: str = (
+        "PROJECTION_ROUTES::UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12_V1: "
+        "UGCP convergence visibility audit scaffold "
+        "(core.ugcp_conformance_surfaces) is available and aligned with "
+        "projection routes. Canonical handling pathways, transitional "
+        "normalization boundaries, compatibility tolerance surfaces, and "
+        "future verification/strictness/retirement targets are explicit and "
+        "reviewable without changing runtime behavior."
+    )
 except ImportError:  # pragma: no cover
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8_UNAVAILABLE"
@@ -410,6 +421,9 @@ except ImportError:  # pragma: no cover
     )
     UGCP_MIGRATION_READINESS_ALIGNED_PR11: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_MIGRATION_READINESS_ALIGNED_PR11_UNAVAILABLE"
+    )
+    UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12_UNAVAILABLE"
     )
 
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
