@@ -301,10 +301,11 @@ def test_convergence_visibility_audit_surfaces_boundaries_and_future_targets() -
             "coordination_state": "waiting",
             "truth_event_type": CanonicalTruthEventType.coordination_transition.value,
         },
-        mode=UGCPEnforcementMode.review,
+        mode="review",
     )
 
     assert report["mode"] == UGCPEnforcementMode.review.value
+    assert set(report["surface_inventory"]) == {"schema", "lifecycle", "authority", "transfer", "coordination", "truth_event"}
     assert report["surface_inventory"]["lifecycle"]["canonical_handling_active"] is True
     assert report["surface_inventory"]["authority"]["normalization_boundary_active"] is True
     assert report["surface_inventory"]["transfer"]["future_strictness_candidate"] is True

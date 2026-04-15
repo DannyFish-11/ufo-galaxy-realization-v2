@@ -414,6 +414,10 @@ _LIFECYCLE_COMPOSITION_ORDER = (
 )
 
 _HARDENING_PATHWAY_SUFFIX = "_transitional_pathway"
+_RETIREMENT_CANDIDATE_STAGES = {
+    UGCPDeprecationStage.migration_required.value,
+    UGCPDeprecationStage.strict_reject_candidate.value,
+}
 
 
 def _normalize_text(value: Any) -> str:
@@ -859,10 +863,11 @@ def build_ugcp_convergence_visibility_audit(
 ) -> Dict[str, Any]:
     """Build explicit center-side visibility surfaces for convergence audit/review."""
     source_payload = payload or {}
+    parsed_mode = _parse_enforcement_mode(mode)
     normalized = normalize_conformance_backbone(source_payload)
-    enforcement = build_enforcement_scaffold(source_payload, mode=mode)
+    enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
     invariant_report = build_conformance_invariant_report(source_payload)
-    migration_readiness = build_migration_readiness_scaffold(source_payload, mode=mode)
+    migration_readiness = build_migration_readiness_scaffold(source_payload, mode=parsed_mode)
 
     surface_inputs = {
         "schema": source_payload.get("schema_kind"),
@@ -890,11 +895,7 @@ def build_ugcp_convergence_visibility_audit(
             "deprecation_stage": deprecation_stage,
             "future_verification_candidate": semantic_class != UGCPSemanticClass.canonical.value,
             "future_strictness_candidate": deprecation_stage == UGCPDeprecationStage.strict_reject_candidate.value,
-            "future_retirement_candidate": deprecation_stage
-            in {
-                UGCPDeprecationStage.migration_required.value,
-                UGCPDeprecationStage.strict_reject_candidate.value,
-            },
+            "future_retirement_candidate": deprecation_stage in _RETIREMENT_CANDIDATE_STAGES,
         }
 
     canonical_handling_surfaces = sorted(
