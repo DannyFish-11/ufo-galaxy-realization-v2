@@ -57,6 +57,11 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DeviceParticipation")
 
+_PARTICIPANT_TIER_FULL_RUNTIME_HOST = "full_runtime_host"
+_PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE = "partial_runtime_node"
+_PARTICIPANT_TIER_COMMAND_ENDPOINT = "command_endpoint"
+_PARTICIPANT_TIER_OBSERVER_ENDPOINT = "observer_endpoint"
+
 __all__ = [
     "ParticipationSummary",
     "get_device_participation",
@@ -133,6 +138,7 @@ class ParticipationSummary:
     is_source: bool = False
     is_support: bool = False
     is_relay: bool = False
+    participant_tier: str = _PARTICIPANT_TIER_OBSERVER_ENDPOINT
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -154,6 +160,7 @@ class ParticipationSummary:
             "is_source": self.is_source,
             "is_support": self.is_support,
             "is_relay": self.is_relay,
+            "participant_tier": self.participant_tier,
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
         }
@@ -325,6 +332,19 @@ def _roles_from_session_participant(session: Any, device_id: str) -> List[str]:
             roles_raw = getattr(p, "roles", []) or []
             return [str(r) for r in roles_raw]
     return []
+
+
+def _derive_participant_tier(summary: ParticipationSummary) -> str:
+    role_set = {str(r).strip().lower() for r in (summary.roles or [])}
+    if "observer_only" in role_set:
+        return _PARTICIPANT_TIER_OBSERVER_ENDPOINT
+    if summary.runtime_present and summary.orchestration_eligible:
+        return _PARTICIPANT_TIER_FULL_RUNTIME_HOST
+    if summary.runtime_present or bool(summary.session_id):
+        return _PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE
+    if summary.registered:
+        return _PARTICIPANT_TIER_COMMAND_ENDPOINT
+    return _PARTICIPANT_TIER_OBSERVER_ENDPOINT
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +546,7 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
         reasons.append(f"session-error: {exc}")
 
     summary.reasons = reasons
+    summary.participant_tier = _derive_participant_tier(summary)
     summary.sources = sources
     return summary
 

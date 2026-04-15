@@ -10,7 +10,9 @@ from core.schemas.task_envelope import TaskEnvelope as ExistingTaskEnvelope
 from core.schemas.ugcp import (
     ParticipantKind,
     ParticipantRuntimeTier,
+    ParticipantTier,
     ParticipantState,
+    UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL,
     UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL,
     UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY,
     UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL,
@@ -41,6 +43,13 @@ def test_pr52_participant_model_sentinel_present() -> None:
         "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL::"
     )
     assert "participant_identity_runtime_tier" in UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL
+
+
+def test_pr3_participant_tiers_sentinel_present() -> None:
+    assert UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL.startswith(
+        "UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL::"
+    )
+    assert "full_runtime_host" in UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL
 
 
 def test_truth_objects_to_dict() -> None:
@@ -188,6 +197,7 @@ def test_map_from_node_participant_record_maps_service_node_command_only() -> No
     assert mapped.participant_id == "svc-1"
     assert mapped.participant_kind is ParticipantKind.SERVICE_NODE
     assert mapped.runtime_tier is ParticipantRuntimeTier.COMMAND_ONLY
+    assert mapped.participant_tier is ParticipantTier.COMMAND_ENDPOINT
     assert mapped.participation_state is ParticipantState.READY
     assert mapped.supports_capability_linkage is True
 
@@ -209,6 +219,7 @@ def test_map_from_device_participation_summary_maps_full_runtime_host() -> None:
     assert mapped.participant_id == "dev-1"
     assert mapped.participant_kind is ParticipantKind.DEVICE_RUNTIME_HOST
     assert mapped.runtime_tier is ParticipantRuntimeTier.FULL_RUNTIME
+    assert mapped.participant_tier is ParticipantTier.FULL_RUNTIME_HOST
     assert mapped.participation_state is ParticipantState.ACTIVE
     assert mapped.supports_attached_session is True
     assert mapped.supports_local_execution is True
@@ -226,5 +237,20 @@ def test_map_from_runtime_participant_surface_maps_observer_role() -> None:
     assert mapped.participant_id == "dev-obs"
     assert mapped.participant_kind is ParticipantKind.OBSERVER
     assert mapped.runtime_tier is ParticipantRuntimeTier.OBSERVER_ONLY
+    assert mapped.participant_tier is ParticipantTier.OBSERVER_ENDPOINT
     assert mapped.participation_state is ParticipantState.ACTIVE
     assert mapped.supports_delegation is False
+
+
+def test_map_from_device_participation_summary_maps_partial_runtime_node() -> None:
+    mapped = map_from_device_participation_summary(
+        {
+            "device_id": "dev-partial",
+            "runtime_present": True,
+            "orchestration_eligible": False,
+            "registered": True,
+            "routable": True,
+        }
+    )
+    assert mapped.runtime_tier is ParticipantRuntimeTier.PARTIAL_RUNTIME
+    assert mapped.participant_tier is ParticipantTier.PARTIAL_RUNTIME_NODE

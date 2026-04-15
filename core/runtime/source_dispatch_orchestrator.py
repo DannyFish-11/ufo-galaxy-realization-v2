@@ -1171,6 +1171,13 @@ def _score_candidate(
     if participation is None:
         rejection = "participation:unavailable"
         return 0, rejection
+    participant_tier = str(getattr(participation, "participant_tier", "") or "").strip().lower()
+    if participant_tier == "observer_endpoint":
+        rejection = "participation:observer_endpoint"
+        return 0, rejection
+    if participant_tier == "command_endpoint":
+        rejection = "participation:command_endpoint"
+        return 0, rejection
     if not getattr(participation, "orchestration_eligible", False):
         rejection = "participation:not_orchestration_eligible"
         return 0, rejection

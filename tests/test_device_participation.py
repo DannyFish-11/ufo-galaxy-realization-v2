@@ -141,6 +141,7 @@ class TestParticipationSummaryModel(unittest.TestCase):
             "routable", "orchestration_eligible", "mesh_member", "session_id",
             "roles", "authority_scope", "routing_intent",
             "is_primary", "is_source", "is_support", "is_relay",
+            "participant_tier",
             "reasons", "sources",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
@@ -163,6 +164,7 @@ class TestParticipationSummaryModel(unittest.TestCase):
         self.assertFalse(d["is_source"])
         self.assertFalse(d["is_support"])
         self.assertFalse(d["is_relay"])
+        self.assertEqual(d["participant_tier"], "observer_endpoint")
         self.assertEqual(d["reasons"], [])
         self.assertEqual(d["sources"], {})
 
@@ -704,6 +706,43 @@ class TestIsDeviceOrchestrationReady(unittest.TestCase):
 
     def test_empty_device_id_returns_false(self):
         self.assertFalse(is_device_orchestration_ready(""))
+
+
+# ---------------------------------------------------------------------------
+# Participant tier derivation
+# ---------------------------------------------------------------------------
+
+
+class TestParticipantTierDerivation(unittest.TestCase):
+    def test_full_runtime_host_when_runtime_present_and_eligible(self):
+        status = _make_selector_status(orchestration_eligible=True)
+        rs = _make_readiness_summary(registered=True, online=True, routable=True, device_id="tier-full")
+        with patch("core.device_participation._get_selector_status", return_value=status), \
+             patch("core.device_participation._get_canonical_readiness", return_value=rs), \
+             patch("core.device_participation._get_mesh_membership", return_value=None), \
+             patch("core.device_participation._get_mesh_session", return_value=None):
+            ps = get_device_participation("tier-full")
+        self.assertEqual(ps.participant_tier, "full_runtime_host")
+
+    def test_partial_runtime_node_when_runtime_present_but_not_eligible(self):
+        status = _make_selector_status(orchestration_eligible=False)
+        rs = _make_readiness_summary(registered=True, online=True, routable=True, device_id="tier-partial")
+        with patch("core.device_participation._get_selector_status", return_value=status), \
+             patch("core.device_participation._get_canonical_readiness", return_value=rs), \
+             patch("core.device_participation._get_mesh_membership", return_value=None), \
+             patch("core.device_participation._get_mesh_session", return_value=None):
+            ps = get_device_participation("tier-partial")
+        self.assertEqual(ps.participant_tier, "partial_runtime_node")
+
+    def test_command_endpoint_when_registered_without_runtime_presence(self):
+        status = _make_selector_status(orchestration_eligible=False)
+        rs = _make_readiness_summary(registered=True, online=False, routable=True, device_id="tier-command")
+        with patch("core.device_participation._get_selector_status", return_value=status), \
+             patch("core.device_participation._get_canonical_readiness", return_value=rs), \
+             patch("core.device_participation._get_mesh_membership", return_value=None), \
+             patch("core.device_participation._get_mesh_session", return_value=None):
+            ps = get_device_participation("tier-command")
+        self.assertEqual(ps.participant_tier, "command_endpoint")
 
 
 # ---------------------------------------------------------------------------

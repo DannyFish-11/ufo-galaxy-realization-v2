@@ -221,6 +221,11 @@ _ANDROID_ROLE_PARTIAL: str = "partial_runtime_host"
 _ANDROID_ROLE_CONNECTED: str = "connected_device_only"
 _ANDROID_ROLE_UNCLASSIFIED: str = "unclassified"
 
+_PARTICIPANT_TIER_FULL_RUNTIME_HOST: str = "full_runtime_host"
+_PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE: str = "partial_runtime_node"
+_PARTICIPANT_TIER_COMMAND_ENDPOINT: str = "command_endpoint"
+_PARTICIPANT_TIER_OBSERVER_ENDPOINT: str = "observer_endpoint"
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -483,6 +488,7 @@ class SchedulingBasisInputs:
         "platform",
         "source_runtime_posture",
         "coordination_role",
+        "participant_tier",
         "capability_tier",
         "is_host_present",
         "is_android_device",
@@ -499,6 +505,7 @@ class SchedulingBasisInputs:
         platform: str = "",
         source_runtime_posture: str = _POSTURE_CONTROL_ONLY,
         coordination_role: str = "",
+        participant_tier: str = "",
         capability_tier: Optional[CapabilityTier] = None,
         is_host_present: bool = False,
         is_android_device: bool = False,
@@ -512,6 +519,7 @@ class SchedulingBasisInputs:
         self.platform = platform
         self.source_runtime_posture = source_runtime_posture
         self.coordination_role = coordination_role
+        self.participant_tier = participant_tier
         self.capability_tier = capability_tier if capability_tier is not None else CapabilityTier.unknown
         self.is_host_present = is_host_present
         self.is_android_device = is_android_device
@@ -529,6 +537,7 @@ class SchedulingBasisInputs:
             "platform": self.platform,
             "source_runtime_posture": self.source_runtime_posture,
             "coordination_role": self.coordination_role,
+            "participant_tier": self.participant_tier,
             "capability_tier": self.capability_tier.value
             if isinstance(self.capability_tier, CapabilityTier)
             else str(self.capability_tier),
@@ -819,6 +828,7 @@ def build_scheduling_basis_inputs(
     platform: str = "",
     source_runtime_posture: Optional[str] = None,
     coordination_role: Optional[str] = None,
+    participant_tier: Optional[str] = None,
     capability_tier: Optional[CapabilityTier] = None,
     is_host_present: bool = False,
     is_android_device: bool = False,
@@ -868,6 +878,7 @@ def build_scheduling_basis_inputs(
         else _POSTURE_CONTROL_ONLY
     )
     role = str(coordination_role or "").strip().lower()
+    participant_tier_norm = str(participant_tier or "").strip().lower()
 
     if capability_tier is None:
         is_runtime_host = is_android_device and bool(android_host_role)
@@ -885,6 +896,7 @@ def build_scheduling_basis_inputs(
         platform=platform,
         source_runtime_posture=posture,
         coordination_role=role,
+        participant_tier=participant_tier_norm,
         capability_tier=capability_tier,
         is_host_present=is_host_present,
         is_android_device=is_android_device,
@@ -922,6 +934,7 @@ def normalize_scheduling_inputs(raw: Dict[str, Any]) -> SchedulingBasisInputs:
     platform = str(raw.get("platform", "") or "")
     posture_raw = raw.get("source_runtime_posture", None)
     role_raw = raw.get("coordination_role", None)
+    participant_tier_raw = raw.get("participant_tier", None)
     android_host_role = str(raw.get("android_host_role", "") or "")
     is_host_present = bool(raw.get("is_host_present", False))
 
@@ -951,6 +964,7 @@ def normalize_scheduling_inputs(raw: Dict[str, Any]) -> SchedulingBasisInputs:
         platform=platform,
         source_runtime_posture=str(posture_raw) if posture_raw else None,
         coordination_role=str(role_raw) if role_raw else None,
+        participant_tier=str(participant_tier_raw) if participant_tier_raw else None,
         capability_tier=pre_tier,
         is_host_present=is_host_present,
         is_android_device=is_android,
@@ -979,15 +993,17 @@ def evaluate_execution_surface_eligibility(
 
     1. **observer_only** coordination role → ``unavailable`` (observer cannot
        be an execution surface regardless of tier or posture).
-    2. **command_only / unknown** tier → ``unavailable`` (capability gate).
-    3. **local_host** surface: ``is_host_present`` is True AND tier is
+    2. **observer_endpoint / command_endpoint** participant tiers →
+       ``unavailable``.
+    3. **command_only / unknown** tier → ``unavailable`` (capability gate).
+    4. **local_host** surface: ``is_host_present`` is True AND tier is
        ``full_runtime`` or ``partial_runtime`` AND posture is ``join_runtime``
        (or role is ``joined_runtime_participant``).
-    4. **android_host** surface: ``is_android_device`` is True AND tier is
+    5. **android_host** surface: ``is_android_device`` is True AND tier is
        ``full_runtime`` or ``partial_runtime``.
-    5. **remote_device** surface: non-Android device with ``partial_runtime``
+    6. **remote_device** surface: non-Android device with ``partial_runtime``
        or ``full_runtime`` tier and a ``target_device_id`` present.
-    6. **unavailable** — none of the above conditions matched.
+    7. **unavailable** — none of the above conditions matched.
 
     Parameters
     ----------
@@ -1000,6 +1016,7 @@ def evaluate_execution_surface_eligibility(
     """
     try:
         role = str(inputs.coordination_role or "").strip().lower()
+        participant_tier = str(getattr(inputs, "participant_tier", "") or "").strip().lower()
         tier = inputs.capability_tier
         posture = str(inputs.source_runtime_posture or "").strip().lower()
         inputs_snap = inputs.to_dict()
@@ -1018,7 +1035,25 @@ def evaluate_execution_surface_eligibility(
                 inputs_snapshot=inputs_snap,
             )
 
-        # Rule 2: command_only / unknown tier → unavailable.
+        # Rule 2: participant tier explicit gate.
+        if participant_tier == _PARTICIPANT_TIER_OBSERVER_ENDPOINT:
+            return ExecutionSurfaceEligibility(
+                eligible=False,
+                surface=ExecutionSurface.unavailable,
+                reason="participant_tier=observer_endpoint: participant is observe-only.",
+                capability_tier=tier,
+                inputs_snapshot=inputs_snap,
+            )
+        if participant_tier == _PARTICIPANT_TIER_COMMAND_ENDPOINT:
+            return ExecutionSurfaceEligibility(
+                eligible=False,
+                surface=ExecutionSurface.unavailable,
+                reason="participant_tier=command_endpoint: participant is not a runtime execution surface.",
+                capability_tier=tier,
+                inputs_snapshot=inputs_snap,
+            )
+
+        # Rule 3: command_only / unknown tier → unavailable.
         if tier in (CapabilityTier.command_only, CapabilityTier.unknown):
             return ExecutionSurfaceEligibility(
                 eligible=False,

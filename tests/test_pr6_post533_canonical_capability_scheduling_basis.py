@@ -1542,3 +1542,29 @@ class TestMultipleDevicesAT:
         # Both can be full_runtime if signals are set
         assert android_profile.capability_tier == CapabilityTier.full_runtime
         assert desktop_profile.capability_tier == CapabilityTier.full_runtime
+
+
+class TestParticipantTierAwareEligibilityPR3:
+    def test_participant_tier_observer_endpoint_blocks_execution_surface(self):
+        inputs = build_scheduling_basis_inputs(
+            source_runtime_posture="join_runtime",
+            capability_tier=CapabilityTier.full_runtime,
+            participant_tier="observer_endpoint",
+            is_android_device=True,
+        )
+        result = evaluate_execution_surface_eligibility(inputs)
+        assert result.eligible is False
+        assert result.surface == ExecutionSurface.unavailable
+        assert "participant_tier=observer_endpoint" in result.reason
+
+    def test_participant_tier_command_endpoint_blocks_execution_surface(self):
+        inputs = build_scheduling_basis_inputs(
+            source_runtime_posture="join_runtime",
+            capability_tier=CapabilityTier.full_runtime,
+            participant_tier="command_endpoint",
+            is_android_device=True,
+        )
+        result = evaluate_execution_surface_eligibility(inputs)
+        assert result.eligible is False
+        assert result.surface == ExecutionSurface.unavailable
+        assert "participant_tier=command_endpoint" in result.reason
