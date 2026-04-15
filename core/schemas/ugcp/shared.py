@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY: str = (
@@ -36,6 +37,11 @@ UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL: str = (
 UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL: str = (
     "UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL::"
     "participant_device_runtime_capability_and_session_strata_are_explicit"
+)
+
+UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL: str = (
+    "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL::"
+    "participant_identity_runtime_tier_autonomy_coordination_readiness_support_surfaces"
 )
 
 # Canonical terminal states accepted by the incremental UGCP truth model.
@@ -326,6 +332,247 @@ class DiagnosticsReport:
         return _to_json_dict(self)
 
 
+class ParticipantKind(str, Enum):
+    DEVICE_RUNTIME_HOST = "device_runtime_host"
+    SPECIALIZED_NODE = "specialized_node"
+    SERVICE_NODE = "service_node"
+    TOOL_ENDPOINT = "tool_endpoint"
+    OBSERVER = "observer"
+
+
+class ParticipantRuntimeTier(str, Enum):
+    FULL_RUNTIME = "full_runtime"
+    PARTIAL_RUNTIME = "partial_runtime"
+    COMMAND_ONLY = "command_only"
+    OBSERVER_ONLY = "observer_only"
+
+
+class ParticipantAutonomyLevel(str, Enum):
+    MANUAL = "manual"
+    ASSISTED = "assisted"
+    SUPERVISED = "supervised"
+    AUTONOMOUS = "autonomous"
+
+
+class ParticipantState(str, Enum):
+    UNKNOWN = "unknown"
+    REGISTERED = "registered"
+    READY = "ready"
+    ACTIVE = "active"
+    DEGRADED = "degraded"
+    OFFLINE = "offline"
+    ARCHIVED = "archived"
+
+
+@dataclass(frozen=True)
+class ParticipantModel:
+    """Canonical system participant abstraction (additive/compat-safe)."""
+
+    participant_id: str
+    participant_kind: ParticipantKind = ParticipantKind.SPECIALIZED_NODE
+    runtime_tier: ParticipantRuntimeTier = ParticipantRuntimeTier.PARTIAL_RUNTIME
+    autonomy_level: ParticipantAutonomyLevel = ParticipantAutonomyLevel.SUPERVISED
+    coordination_role: str = ""
+    participation_state: ParticipantState = ParticipantState.UNKNOWN
+    supports_local_execution: bool = False
+    supports_delegation: bool = False
+    supports_attached_session: bool = False
+    supports_capability_linkage: bool = False
+    supports_device_linkage: bool = False
+    node_class: str = ""
+    device_id: Optional[str] = None
+    runtime_session_id: Optional[str] = None
+    capability_refs: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "participant_id": self.participant_id,
+            "participant_kind": self.participant_kind.value,
+            "runtime_tier": self.runtime_tier.value,
+            "autonomy_level": self.autonomy_level.value,
+            "coordination_role": self.coordination_role,
+            "participation_state": self.participation_state.value,
+            "supports_local_execution": self.supports_local_execution,
+            "supports_delegation": self.supports_delegation,
+            "supports_attached_session": self.supports_attached_session,
+            "supports_capability_linkage": self.supports_capability_linkage,
+            "supports_device_linkage": self.supports_device_linkage,
+            "node_class": self.node_class,
+            "device_id": self.device_id,
+            "runtime_session_id": self.runtime_session_id,
+            "capability_refs": list(self.capability_refs),
+            "metadata": dict(self.metadata),
+        }
+
+
+def _participant_state_from_node_status(status: str) -> ParticipantState:
+    normalized = (status or "").lower().strip()
+    if normalized == "healthy":
+        return ParticipantState.READY
+    if normalized in {"starting"}:
+        return ParticipantState.REGISTERED
+    if normalized in {"degraded", "draining"}:
+        return ParticipantState.DEGRADED
+    if normalized in {"offline", "unhealthy"}:
+        return ParticipantState.OFFLINE
+    return ParticipantState.UNKNOWN
+
+
+def map_from_node_participant_record(record: Any) -> ParticipantModel:
+    """Map node-fabric style records into the canonical participant model."""
+    data = record if isinstance(record, dict) else getattr(record, "to_dict", lambda: {})()
+    participant_id = str(
+        _pick(data, "participant_id", "runtime_participant_id", "node_id", default="unknown_participant")
+    )
+    node_class = str(_pick(data, "architectural_class", default="") or "")
+    role = str(_pick(data, "role", default="") or "")
+    raw_caps = _pick(data, "capabilities", default=[]) or []
+    capability_refs = [str(c) for c in raw_caps if isinstance(c, str)]
+
+    class_key = node_class.lower().strip()
+    kind = ParticipantKind.SPECIALIZED_NODE
+    tier = ParticipantRuntimeTier.PARTIAL_RUNTIME
+    if class_key == "service_node":
+        kind = ParticipantKind.SERVICE_NODE
+        tier = ParticipantRuntimeTier.COMMAND_ONLY
+    elif class_key == "archived_node":
+        kind = ParticipantKind.OBSERVER
+        tier = ParticipantRuntimeTier.OBSERVER_ONLY
+
+    supports_local_execution = tier in {
+        ParticipantRuntimeTier.FULL_RUNTIME,
+        ParticipantRuntimeTier.PARTIAL_RUNTIME,
+    }
+    supports_delegation = supports_local_execution and role != "monitor"
+
+    return ParticipantModel(
+        participant_id=participant_id,
+        participant_kind=kind,
+        runtime_tier=tier,
+        autonomy_level=ParticipantAutonomyLevel.SUPERVISED,
+        coordination_role=role,
+        participation_state=_participant_state_from_node_status(str(_pick(data, "status", default=""))),
+        supports_local_execution=supports_local_execution,
+        supports_delegation=supports_delegation,
+        supports_attached_session=tier == ParticipantRuntimeTier.FULL_RUNTIME,
+        supports_capability_linkage=bool(capability_refs),
+        supports_device_linkage=bool(_pick(data, "device_id")),
+        node_class=node_class,
+        device_id=_pick(data, "device_id"),
+        capability_refs=capability_refs,
+        metadata={"mapped_from": "node_participant_record"},
+    )
+
+
+def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
+    """Map device-participation style records into the canonical participant model."""
+    data = summary if isinstance(summary, dict) else getattr(summary, "to_dict", lambda: {})()
+    device_id = str(_pick(data, "device_id", default="unknown_device"))
+    participant_id = str(_pick(data, "participant_id", "runtime_participant_id", default=device_id))
+    runtime_present = bool(_pick(data, "runtime_present", default=False))
+    orchestration_eligible = bool(_pick(data, "orchestration_eligible", default=False))
+    session_id = _pick(data, "runtime_session_id", "session_id", "attached_session_id")
+    roles = _pick(data, "roles", default=[]) or []
+    coordination_role = str(roles[0]) if isinstance(roles, list) and roles else str(
+        _pick(data, "coordination_role", default="")
+    )
+
+    if runtime_present and orchestration_eligible:
+        tier = ParticipantRuntimeTier.FULL_RUNTIME
+    elif bool(_pick(data, "registered", default=False)):
+        tier = ParticipantRuntimeTier.COMMAND_ONLY
+    else:
+        tier = ParticipantRuntimeTier.OBSERVER_ONLY
+
+    if tier == ParticipantRuntimeTier.OBSERVER_ONLY:
+        kind = ParticipantKind.OBSERVER
+    elif tier == ParticipantRuntimeTier.COMMAND_ONLY:
+        kind = ParticipantKind.TOOL_ENDPOINT
+    else:
+        kind = ParticipantKind.DEVICE_RUNTIME_HOST
+
+    if runtime_present and bool(_pick(data, "routable", default=False)):
+        state = ParticipantState.ACTIVE if session_id else ParticipantState.READY
+    elif bool(_pick(data, "registered", default=False)):
+        state = ParticipantState.REGISTERED
+    else:
+        state = ParticipantState.UNKNOWN
+
+    supports_local_execution = tier == ParticipantRuntimeTier.FULL_RUNTIME
+    observer_role = coordination_role == "observer_only" or bool(_pick(data, "is_support", default=False))
+    supports_delegation = supports_local_execution and not observer_role
+
+    caps = _pick(data, "capabilities", default=[]) or []
+    capability_refs = [str(c) for c in caps if isinstance(c, str)]
+    return ParticipantModel(
+        participant_id=participant_id,
+        participant_kind=kind,
+        runtime_tier=tier,
+        autonomy_level=ParticipantAutonomyLevel.ASSISTED,
+        coordination_role=coordination_role,
+        participation_state=state,
+        supports_local_execution=supports_local_execution,
+        supports_delegation=supports_delegation,
+        supports_attached_session=bool(session_id) or tier == ParticipantRuntimeTier.FULL_RUNTIME,
+        supports_capability_linkage=bool(capability_refs),
+        supports_device_linkage=True,
+        device_id=device_id,
+        runtime_session_id=str(session_id) if session_id else None,
+        capability_refs=capability_refs,
+        metadata={"mapped_from": "device_participation_summary"},
+    )
+
+
+def map_from_runtime_participant_surface(payload: Dict[str, Any]) -> ParticipantModel:
+    """Map runtime dispatch/session posture payloads into canonical participant form."""
+    participant_id = str(
+        _pick(payload, "participant_id", "runtime_participant_id", "source_device_id", "device_id", default="runtime")
+    )
+    posture = str(_pick(payload, "source_runtime_posture", default="control_only") or "control_only").lower().strip()
+    coordination_role = str(_pick(payload, "coordination_role", default="") or "")
+    runtime_session_id = _pick(payload, "runtime_session_id", "attached_session_id")
+    device_id = _pick(payload, "source_device_id", "device_id", "target_device_id")
+    capability_refs = []
+    raw_caps = _pick(payload, "capabilities", default=[]) or []
+    if isinstance(raw_caps, list):
+        capability_refs = [str(c) for c in raw_caps if isinstance(c, str)]
+
+    if coordination_role == "observer_only":
+        tier = ParticipantRuntimeTier.OBSERVER_ONLY
+        kind = ParticipantKind.OBSERVER
+    elif posture == "join_runtime":
+        tier = ParticipantRuntimeTier.FULL_RUNTIME
+        kind = ParticipantKind.DEVICE_RUNTIME_HOST
+    else:
+        tier = ParticipantRuntimeTier.COMMAND_ONLY
+        kind = ParticipantKind.TOOL_ENDPOINT
+
+    supports_local_execution = posture == "join_runtime" and tier != ParticipantRuntimeTier.OBSERVER_ONLY
+    supports_delegation = supports_local_execution and coordination_role not in {
+        "observer_only",
+        "target_only_executor",
+    }
+
+    return ParticipantModel(
+        participant_id=participant_id,
+        participant_kind=kind,
+        runtime_tier=tier,
+        autonomy_level=ParticipantAutonomyLevel.ASSISTED,
+        coordination_role=coordination_role,
+        participation_state=ParticipantState.ACTIVE if runtime_session_id else ParticipantState.READY,
+        supports_local_execution=supports_local_execution,
+        supports_delegation=supports_delegation,
+        supports_attached_session=bool(runtime_session_id) or posture == "join_runtime",
+        supports_capability_linkage=bool(capability_refs),
+        supports_device_linkage=bool(device_id),
+        device_id=str(device_id) if device_id else None,
+        runtime_session_id=str(runtime_session_id) if runtime_session_id else None,
+        capability_refs=capability_refs,
+        metadata={"mapped_from": "runtime_participant_surface"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Coordination objects
 # ---------------------------------------------------------------------------
@@ -560,6 +807,7 @@ __all__ = [
     "UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY",
     "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL",
     "UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL",
+    "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL",
     # identity
     "TaskId",
     "TraceId",
@@ -589,6 +837,11 @@ __all__ = [
     "ReadinessProfile",
     "RuntimePosture",
     "DiagnosticsReport",
+    "ParticipantKind",
+    "ParticipantRuntimeTier",
+    "ParticipantAutonomyLevel",
+    "ParticipantState",
+    "ParticipantModel",
     # coordination
     "MeshSession",
     "MeshParticipant",
@@ -613,5 +866,8 @@ __all__ = [
     "normalize_conversation_session_id",
     "normalize_runtime_attachment_session_id",
     "normalize_delegation_transfer_session_id",
+    "map_from_node_participant_record",
+    "map_from_device_participation_summary",
+    "map_from_runtime_participant_surface",
     "to_json",
 ]

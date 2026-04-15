@@ -25,3 +25,25 @@ This artifact defines a single canonical concept model shared by:
 2. New runtime/control surfaces should prefer `participant` naming for real actors.
 3. Bare `session` is non-canonical for new surfaces; pick one explicit session class.
 4. Existing flows remain compatible through aliases/mappings; no runtime behavior change is required in this baseline PR.
+
+## Canonical participant model (primary abstraction)
+
+`core.schemas.ugcp.shared.ParticipantModel` is the canonical participant abstraction for
+runtime/system actors. It is additive and compatibility-safe, and is designed to sit
+above existing node/device/runtime structures while preserving current behavior.
+
+The model explicitly captures:
+
+- participant kind
+- runtime tier
+- autonomy level
+- coordination role
+- readiness/participation state
+- support surfaces (`local_execution`, `delegation`, `attached_session`)
+- linkage surfaces (`device_id`, `capability_refs`)
+
+Low-risk adapters map existing node/device/runtime records into this model:
+
+- `map_from_node_participant_record(...)`
+- `map_from_device_participation_summary(...)`
+- `map_from_runtime_participant_surface(...)`
