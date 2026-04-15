@@ -191,6 +191,29 @@ class TestCapabilityContractValidation:
         )
         assert is_valid_capability_contract(contract) is True
 
+    def test_contract_normalizes_provider_metadata_and_plane_boundary(self):
+        from core.unified.capability_contract import CapabilityContract, CapabilitySource
+
+        contract = CapabilityContract(
+            name="skill__hello",
+            description="hello skill",
+            source=CapabilitySource.SKILL,
+            source_id="hello",
+        )
+        provider_meta = contract.metadata.get("capability_provider", {})
+        boundary_meta = contract.metadata.get("capability_plane_boundary", {})
+
+        assert provider_meta.get("provider_type") == "skill"
+        assert provider_meta.get("provider_ref") == "hello"
+        assert provider_meta.get("execution_surface_type") == "skill_runtime"
+        assert provider_meta.get("capability_kind") == "tool"
+
+        assert boundary_meta.get("plane") == "capability"
+        assert boundary_meta.get("participant_lifecycle_authority") is False
+        assert boundary_meta.get("session_truth_authority") is False
+        assert boundary_meta.get("connection_truth_authority") is False
+        assert boundary_meta.get("device_truth_authority") is False
+
 
 # ---------------------------------------------------------------------------
 # Test class 2: Resolver normalisation across source types
@@ -779,3 +802,45 @@ class TestCapabilityRegistryCatalogAuthority:
         )
         # Should have been rejected
         assert reg.get("mcp__srv1__bad_schema") is None
+
+    def test_skill_injection_sets_canonical_provider_metadata(self):
+        reg = self._fresh_registry()
+        reg.inject_skill(
+            skill_id="hello",
+            skill_name="Hello Skill",
+            description="hello",
+            parameters={"type": "object", "properties": {}},
+        )
+        item = reg.get("skill__hello")
+        assert item is not None
+        provider_meta = item.metadata.get("capability_provider", {})
+        boundary_meta = item.metadata.get("capability_plane_boundary", {})
+        assert provider_meta["provider_type"] == "skill"
+        assert provider_meta["provider_ref"] == "hello"
+        assert provider_meta["execution_surface_type"] == "skill_runtime"
+        assert provider_meta["capability_kind"] == "tool"
+        assert boundary_meta["plane"] == "capability"
+        assert boundary_meta["participant_lifecycle_authority"] is False
+
+    def test_node_item_injection_sets_canonical_provider_metadata(self):
+        reg = self._fresh_registry()
+        from core.agent.capability_registry import CapabilityItem
+
+        reg.inject_item(
+            CapabilityItem(
+                name="node__n1__execute",
+                description="Execute on node n1",
+                source="node",
+                source_id="n1",
+                available=True,
+            )
+        )
+        item = reg.get("node__n1__execute")
+        assert item is not None
+        provider_meta = item.metadata.get("capability_provider", {})
+        boundary_meta = item.metadata.get("capability_plane_boundary", {})
+        assert provider_meta["provider_type"] == "node"
+        assert provider_meta["provider_ref"] == "n1"
+        assert provider_meta["execution_surface_type"] == "node_runtime"
+        assert provider_meta["capability_kind"] == "action"
+        assert boundary_meta["device_truth_authority"] is False

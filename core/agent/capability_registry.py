@@ -176,10 +176,26 @@ class CapabilityRegistry:
 
     def register(self, item: CapabilityItem) -> None:
         """手动注册一个能力条目（unified contract 校验 → 失败则跳过）。"""
+        self._normalize_capability_plane_metadata(item)
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
         logger.debug("能力已注册: %s (%s)", item.name, item.source)
+
+    @staticmethod
+    def _normalize_capability_plane_metadata(item: CapabilityItem) -> None:
+        """Normalize item metadata into canonical capability-plane provider model."""
+        try:
+            from core.unified.capability_contract import normalize_capability_provider_metadata
+
+            item.metadata = normalize_capability_provider_metadata(
+                name=item.name,
+                source=item.source,
+                source_id=item.source_id,
+                metadata=item.metadata or {},
+            )
+        except Exception as exc:
+            logger.debug("capability provider metadata normalization skipped: %s", exc)
 
     def _validate_via_contract(self, item: CapabilityItem) -> bool:
         """PR-2: 通过统一能力合同校验 CapabilityItem。
@@ -194,8 +210,8 @@ class CapabilityRegistry:
         try:
             from core.unified.capability_contract import (
                 CapabilityContract,
-                CapabilityContractError,
                 CapabilitySource,
+                normalize_capability_provider_metadata,
                 validate_capability_contract,
             )
             src_val = getattr(item, "source", "unknown") or "unknown"
@@ -203,6 +219,12 @@ class CapabilityRegistry:
                 src = CapabilitySource(src_val)
             except ValueError:
                 src = CapabilitySource.UNKNOWN
+            normalized_metadata = normalize_capability_provider_metadata(
+                name=item.name,
+                source=src,
+                source_id=item.source_id,
+                metadata=item.metadata or {},
+            )
             contract = CapabilityContract(
                 name=item.name,
                 description=item.description,
@@ -210,7 +232,7 @@ class CapabilityRegistry:
                 source_id=item.source_id,
                 parameters=item.parameters or {},
                 available=item.available,
-                metadata=item.metadata or {},
+                metadata=normalized_metadata,
             )
             validate_capability_contract(contract)
             return True
@@ -290,6 +312,7 @@ class CapabilityRegistry:
             parameters=parameters or {},
             available=True,
         )
+        self._normalize_capability_plane_metadata(item)
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
@@ -316,6 +339,7 @@ class CapabilityRegistry:
             parameters=parameters or {},
             available=True,
         )
+        self._normalize_capability_plane_metadata(item)
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
@@ -338,6 +362,7 @@ class CapabilityRegistry:
         """
         if not item.name:
             return
+        self._normalize_capability_plane_metadata(item)
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
@@ -373,6 +398,9 @@ class CapabilityRegistry:
                 self._load_autonomous(new_items),
                 return_exceptions=True,
             )
+
+            for item in new_items.values():
+                self._normalize_capability_plane_metadata(item)
 
             self._items = new_items
             self._last_refresh = time.monotonic()

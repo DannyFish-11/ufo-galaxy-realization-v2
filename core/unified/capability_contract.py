@@ -84,6 +84,100 @@ class CapabilitySource(str, Enum):
     """Source could not be determined (legacy compat)."""
 
 
+class CapabilityProviderType(str, Enum):
+    """Canonical provider identity for capability-plane registration."""
+
+    MCP_SERVER = "mcp_server"
+    SKILL = "skill"
+    NODE = "node"
+    DEVICE = "device"
+    GATEWAY = "gateway"
+    AUTONOMOUS = "autonomous"
+    UNKNOWN = "unknown"
+
+
+class CapabilityExecutionSurfaceType(str, Enum):
+    """Execution surface of a callable capability."""
+
+    MCP_RUNTIME = "mcp_runtime"
+    SKILL_RUNTIME = "skill_runtime"
+    NODE_RUNTIME = "node_runtime"
+    DEVICE_RUNTIME = "device_runtime"
+    GATEWAY_RUNTIME = "gateway_runtime"
+    AUTONOMOUS_RUNTIME = "autonomous_runtime"
+    UNKNOWN = "unknown"
+
+
+class CapabilityKind(str, Enum):
+    """Semantic kind of callable capability."""
+
+    TOOL = "tool"
+    ACTION = "action"
+    AUTONOMOUS_BEHAVIOR = "autonomous_behavior"
+    UNKNOWN = "unknown"
+
+
+def normalize_capability_provider_metadata(
+    *,
+    name: str,
+    source: Any,
+    source_id: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Return canonical capability-plane provider metadata.
+
+    This metadata is explicitly non-authoritative for participant/session/device
+    runtime truth and only describes capability-plane publication.
+    """
+    src_raw = source.value if isinstance(source, CapabilitySource) else str(source or "unknown")
+
+    provider_type_map = {
+        "mcp": CapabilityProviderType.MCP_SERVER.value,
+        "skill": CapabilityProviderType.SKILL.value,
+        "node": CapabilityProviderType.NODE.value,
+        "device": CapabilityProviderType.DEVICE.value,
+        "gateway": CapabilityProviderType.GATEWAY.value,
+        "autonomous": CapabilityProviderType.AUTONOMOUS.value,
+    }
+    execution_surface_map = {
+        CapabilityProviderType.MCP_SERVER.value: CapabilityExecutionSurfaceType.MCP_RUNTIME.value,
+        CapabilityProviderType.SKILL.value: CapabilityExecutionSurfaceType.SKILL_RUNTIME.value,
+        CapabilityProviderType.NODE.value: CapabilityExecutionSurfaceType.NODE_RUNTIME.value,
+        CapabilityProviderType.DEVICE.value: CapabilityExecutionSurfaceType.DEVICE_RUNTIME.value,
+        CapabilityProviderType.GATEWAY.value: CapabilityExecutionSurfaceType.GATEWAY_RUNTIME.value,
+        CapabilityProviderType.AUTONOMOUS.value: CapabilityExecutionSurfaceType.AUTONOMOUS_RUNTIME.value,
+    }
+    provider_type = provider_type_map.get(src_raw, CapabilityProviderType.UNKNOWN.value)
+    execution_surface = execution_surface_map.get(
+        provider_type, CapabilityExecutionSurfaceType.UNKNOWN.value
+    )
+
+    if src_raw in ("mcp", "skill"):
+        capability_kind = CapabilityKind.TOOL.value
+    elif src_raw == "autonomous":
+        capability_kind = CapabilityKind.AUTONOMOUS_BEHAVIOR.value
+    elif src_raw in ("node", "device", "gateway"):
+        capability_kind = CapabilityKind.ACTION.value
+    else:
+        capability_kind = CapabilityKind.UNKNOWN.value
+
+    merged = dict(metadata or {})
+    merged["capability_provider"] = {
+        "provider_type": provider_type,
+        "provider_ref": source_id or name,
+        "execution_surface_type": execution_surface,
+        "capability_kind": capability_kind,
+    }
+    merged["capability_plane_boundary"] = {
+        "plane": "capability",
+        "participant_lifecycle_authority": False,
+        "session_truth_authority": False,
+        "connection_truth_authority": False,
+        "device_truth_authority": False,
+    }
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # CapabilityContract
 # ---------------------------------------------------------------------------
@@ -133,6 +227,14 @@ class CapabilityContract:
     created_at: float = field(default_factory=time.time)
 
     # ── Serialisation ────────────────────────────────────────────────────────
+
+    def __post_init__(self) -> None:
+        self.metadata = normalize_capability_provider_metadata(
+            name=self.name,
+            source=self.source,
+            source_id=self.source_id,
+            metadata=self.metadata,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -255,6 +357,29 @@ def validate_capability_contract(contract: CapabilityContract) -> None:
             violations.append(
                 f"'source' value '{contract.source}' is not a valid CapabilitySource"
             )
+
+    # 4. Capability-plane provider metadata
+    provider_meta = (contract.metadata or {}).get("capability_provider", {})
+    if not isinstance(provider_meta, dict):
+        violations.append("'metadata.capability_provider' must be an object")
+    else:
+        required_provider_fields = (
+            "provider_type",
+            "provider_ref",
+            "execution_surface_type",
+            "capability_kind",
+        )
+        for field_name in required_provider_fields:
+            if not provider_meta.get(field_name):
+                violations.append(
+                    f"'metadata.capability_provider.{field_name}' must be non-empty"
+                )
+
+    boundary_meta = (contract.metadata or {}).get("capability_plane_boundary", {})
+    if not isinstance(boundary_meta, dict):
+        violations.append("'metadata.capability_plane_boundary' must be an object")
+    elif boundary_meta.get("plane") != "capability":
+        violations.append("'metadata.capability_plane_boundary.plane' must be 'capability'")
 
     if violations:
         logger.warning(
