@@ -90,6 +90,11 @@ UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL: str = (
     "profile=ugcp-convergence-visibility-audit-v1::module=core.ugcp_conformance_surfaces"
 )
 
+UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL: str = (
+    "UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL::package=14::"
+    "profile=ugcp-staged-strictness-rollout-gating-v1::module=core.ugcp_conformance_surfaces"
+)
+
 ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY: str = (
     "UGCP_CONFORMANCE_POLICY::ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT: "
     "Canonical, transitional, and unknown semantics should map to explicit "
@@ -126,6 +131,19 @@ CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY: str = (
     "Canonical handling, transitional normalization boundaries, and "
     "compatibility-tolerance pathways should be exposed as explicit audit "
     "surfaces for staged verification and retirement planning."
+)
+
+STAGED_STRICTNESS_TIERS_ARE_EXPLICIT_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::STAGED_STRICTNESS_TIERS_ARE_EXPLICIT: "
+    "Major center-side surfaces should expose explicit strictness tiers "
+    "(normalize-first, warn, canonical-preferred, reject-ready) for "
+    "reviewable convergence hardening."
+)
+
+ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::ROLLOUT_GATING_REQUIRES_COORDINATION: "
+    "Reject-ready pathways should remain stage-gated by center-side evidence "
+    "and cross-repo coordination requirements before strict rollout."
 )
 
 
@@ -417,6 +435,12 @@ _HARDENING_PATHWAY_SUFFIX = "_transitional_pathway"
 _RETIREMENT_CANDIDATE_STAGES = {
     UGCPDeprecationStage.migration_required.value,
     UGCPDeprecationStage.strict_reject_candidate.value,
+}
+
+_CROSS_REPO_COORDINATION_REQUIRED_SURFACES = {
+    UGCPConformanceSurface.authority.value,
+    UGCPConformanceSurface.coordination.value,
+    UGCPConformanceSurface.truth_event.value,
 }
 _TERMINAL_CANONICAL_STATES = {
     "completed",
@@ -951,6 +975,7 @@ def build_ugcp_convergence_visibility_audit(
     enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
     invariant_report = build_conformance_invariant_report(source_payload)
     migration_readiness = build_migration_readiness_scaffold(source_payload, mode=parsed_mode)
+    strictness_rollout_gating = build_staged_strictness_rollout_gating_scaffold(source_payload, mode=parsed_mode)
 
     surface_inputs = {
         "schema": source_payload.get("schema_kind"),
@@ -1027,6 +1052,163 @@ def build_ugcp_convergence_visibility_audit(
         "normalized_backbone": normalized,
         "invariant_report": invariant_report,
         "migration_readiness": migration_readiness,
+        "strictness_rollout_gating": strictness_rollout_gating,
+    }
+
+
+def _resolve_strictness_tier(decision: Mapping[str, Any]) -> str:
+    """Resolve staged strictness tier from one surface enforcement decision.
+
+    Tier resolution is intentionally deterministic and monotonic in strictness.
+    The same decision fields always map to the same tier, and stronger
+    strictness signals dominate weaker ones:
+
+    1) `strict_reject_candidate` aliases are always `reject_ready`.
+    2) Canonical semantics are `canonical_preferred`.
+    3) Transitional semantics remain `normalize_first`.
+    4) Unknown/unclassified values remain in `warn_diagnostics`.
+    """
+    deprecation_stage = str(decision.get("deprecation_stage") or "")
+    semantic_class = str(decision.get("semantic_class") or "")
+    if deprecation_stage == UGCPDeprecationStage.strict_reject_candidate.value:
+        return "reject_ready"
+    if semantic_class == UGCPSemanticClass.canonical.value:
+        return "canonical_preferred"
+    if semantic_class == UGCPSemanticClass.transitional.value:
+        return "normalize_first"
+    return "warn_diagnostics"
+
+
+def _determine_rollout_gate(strictness_tier: str, requires_cross_repo_coordination: bool) -> str:
+    """Map strictness tier + coordination requirement to a rollout gate label."""
+    if strictness_tier == "reject_ready":
+        return (
+            "reject_ready_but_coordination_gated"
+            if requires_cross_repo_coordination
+            else "reject_ready_for_canary_tightening"
+        )
+    return (
+        "cross_repo_coordination_required"
+        if requires_cross_repo_coordination
+        else "center_evidence_ready_for_earlier_tightening"
+    )
+
+
+def build_staged_strictness_rollout_gating_scaffold(
+    payload: Optional[Mapping[str, Any]] = None,
+    mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
+) -> Dict[str, Any]:
+    """Build staged strictness and rollout-gating scaffold for incremental convergence.
+
+    Args:
+        payload: Optional conformance payload (for example `schema_kind`,
+            `lifecycle_state`, `authority_source`, `transfer_state`,
+            `coordination_state`, `truth_event_type`). Missing keys are handled
+            as unknown/tolerated inputs and remain report-only.
+        mode: Enforcement mode (`compatibility`, `review`, `strict`). Unknown
+            mode strings fall back to `compatibility`.
+
+    Returns:
+        Dictionary with:
+        - `surface_strictness_inventory`: per-surface tier + gate metadata.
+        - tier buckets (`normalize_first_surfaces`, `warning_surfaces`,
+          `canonical_preferred_surfaces`, `reject_ready_surfaces`).
+        - rollout readiness groupings (`earlier_tightening_candidates`,
+          `coordination_required_surfaces`, `gated_reject_ready_surfaces`).
+        - `rollout_sequence`: staged tightening plan.
+        - embedded `enforcement_scaffold` and `migration_readiness`.
+    """
+    source_payload = payload or {}
+    parsed_mode = _parse_enforcement_mode(mode)
+    enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
+    migration_readiness = build_migration_readiness_scaffold(source_payload, mode=parsed_mode)
+
+    surface_strictness_inventory: Dict[str, Dict[str, Any]] = {}
+    for surface in UGCPConformanceSurface:
+        key = surface.value
+        decision = enforcement["decisions"][key]
+        strictness_tier = _resolve_strictness_tier(decision)
+        requires_cross_repo_coordination = key in _CROSS_REPO_COORDINATION_REQUIRED_SURFACES
+        rollout_gate = _determine_rollout_gate(strictness_tier, requires_cross_repo_coordination)
+        surface_strictness_inventory[key] = {
+            "strictness_tier": strictness_tier,
+            "current_action": decision["action"],
+            "semantic_class": decision["semantic_class"],
+            "deprecation_stage": decision["deprecation_stage"],
+            "compatibility_pathway": decision["compatibility_pathway"],
+            "requires_cross_repo_coordination": requires_cross_repo_coordination,
+            "rollout_gate": rollout_gate,
+            "earlier_tightening_candidate": not requires_cross_repo_coordination,
+        }
+
+    normalize_first_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["strictness_tier"] == "normalize_first"
+    )
+    warning_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["strictness_tier"] == "warn_diagnostics"
+    )
+    canonical_preferred_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["strictness_tier"] == "canonical_preferred"
+    )
+    reject_ready_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["strictness_tier"] == "reject_ready"
+    )
+    earlier_tightening_candidates = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["earlier_tightening_candidate"]
+    )
+    coordination_required_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["requires_cross_repo_coordination"]
+    )
+    gated_reject_ready_surfaces = sorted(
+        key
+        for key, record in surface_strictness_inventory.items()
+        if record["strictness_tier"] == "reject_ready" and record["requires_cross_repo_coordination"]
+    )
+
+    rollout_sequence = [
+        {
+            "phase": "normalize_and_warn",
+            "focus": "Keep normalize-first and warn diagnostics active while preserving compatibility defaults.",
+            "surfaces": sorted(normalize_first_surfaces + warning_surfaces),
+        },
+        {
+            "phase": "tighten_canonical_preferred_center_surfaces",
+            "focus": "Prioritize center-ready surfaces for canary tightening before cross-repo rollout.",
+            "surfaces": earlier_tightening_candidates,
+        },
+        {
+            "phase": "gate_reject_ready_surfaces",
+            "focus": "Apply reject-ready tightening only when rollout gates and coordination evidence are satisfied.",
+            "surfaces": reject_ready_surfaces,
+            "coordination_gated_surfaces": gated_reject_ready_surfaces,
+        },
+    ]
+
+    return {
+        "mode": parsed_mode.value,
+        "surface_strictness_inventory": surface_strictness_inventory,
+        "normalize_first_surfaces": normalize_first_surfaces,
+        "warning_surfaces": warning_surfaces,
+        "canonical_preferred_surfaces": canonical_preferred_surfaces,
+        "reject_ready_surfaces": reject_ready_surfaces,
+        "earlier_tightening_candidates": earlier_tightening_candidates,
+        "coordination_required_surfaces": coordination_required_surfaces,
+        "gated_reject_ready_surfaces": gated_reject_ready_surfaces,
+        "rollout_sequence": rollout_sequence,
+        "enforcement_scaffold": enforcement,
+        "migration_readiness": migration_readiness,
     }
 
 
@@ -1042,12 +1224,15 @@ __all__ = [
     "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL",
     "UGCP_MIGRATION_READINESS_PR11_SENTINEL",
     "UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL",
+    "UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL",
     "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY",
     "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY",
     "PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY",
     "MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY",
     "RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY",
     "CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY",
+    "STAGED_STRICTNESS_TIERS_ARE_EXPLICIT_POLICY",
+    "ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY",
     "UGCPConformanceSurface",
     "UGCPSemanticClass",
     "UGCPEnforcementMode",
@@ -1066,4 +1251,5 @@ __all__ = [
     "get_ugcp_retirement_stage_catalog",
     "build_migration_readiness_scaffold",
     "build_ugcp_convergence_visibility_audit",
+    "build_staged_strictness_rollout_gating_scaffold",
 ]
