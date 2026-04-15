@@ -735,6 +735,7 @@ def _build_canonical_consistency_checks(normalized: Mapping[str, Any]) -> Dict[s
     transfer_state = str(normalized.get("transfer_state", "unknown"))
     coordination_state = str(normalized.get("coordination_state", "unknown"))
     truth_event_type = str(normalized.get("truth_event_type", "unknown"))
+    lifecycle_source_surface = str(normalized.get("lifecycle_source_surface", "none"))
     compatibility_pathways = normalized.get("compatibility_pathways") or {}
 
     transfer_terminal_lifecycle_consistent = (
@@ -756,12 +757,21 @@ def _build_canonical_consistency_checks(normalized: Mapping[str, Any]) -> Dict[s
     elif truth_event_type == CanonicalTruthEventType.session_truth_recorded.value:
         truth_event_surface_alignment = authority_source != "unknown"
 
+    canonical_representation_consistent = (
+        lifecycle_state == composed_lifecycle_state
+        or (
+            lifecycle_state == "unknown"
+            and lifecycle_source_surface in {"transfer", "coordination"}
+            and composed_lifecycle_state != "unknown"
+        )
+    )
+
     checks = {
         "authority_chain_boundary_respected": authority_source != "unknown",
         "transfer_terminal_lifecycle_consistent": transfer_terminal_lifecycle_consistent,
         "coordination_active_lifecycle_non_terminal": coordination_active_lifecycle_non_terminal,
         "truth_event_surface_alignment": truth_event_surface_alignment,
-        "canonical_representation_consistent": lifecycle_state == composed_lifecycle_state or lifecycle_state == "unknown",
+        "canonical_representation_consistent": canonical_representation_consistent,
         "compatibility_pathways_clear": len(compatibility_pathways) == 0,
     }
     return {
@@ -794,7 +804,9 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
     return {
         "conforms": not violations,
         "invariants": invariants,
-        "violations": sorted(set(violations)),
+        # One invariant name can also appear in canonical-consistency failed checks;
+        # preserve first-seen order while de-duplicating for stable diagnostics.
+        "violations": list(dict.fromkeys(violations)),
         "normalized": normalized,
         "canonical_consistency": canonical_consistency,
         "enforcement_scaffold": enforcement,

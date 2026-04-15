@@ -201,6 +201,21 @@ def test_invariant_report_surfaces_canonical_consistency_checks() -> None:
     assert "transfer_terminal_lifecycle_consistent" in report["violations"]
 
 
+def test_invariant_report_accepts_terminal_transfer_lifecycle_alignment() -> None:
+    report = build_conformance_invariant_report(
+        {
+            "lifecycle_state": "completed",
+            "transfer_state": "completed",
+            "coordination_state": "completed",
+            "truth_event_type": CanonicalTruthEventType.control_transfer_transition.value,
+            "authority_source": "canonical_session_truth",
+        }
+    )
+
+    assert report["canonical_consistency"]["checks"]["transfer_terminal_lifecycle_consistent"] is True
+    assert report["canonical_consistency"]["checks"]["canonical_representation_consistent"] is True
+
+
 def test_invariant_report_surfaces_compatibility_and_truth_event_alignment_divergence() -> None:
     report = build_conformance_invariant_report(
         {
@@ -213,7 +228,7 @@ def test_invariant_report_surfaces_compatibility_and_truth_event_alignment_diver
     assert report["canonical_consistency"]["checks"]["compatibility_pathways_clear"] is False
     assert report["canonical_consistency"]["checks"]["truth_event_surface_alignment"] is False
     assert "truth_event_surface_alignment" in report["violations"]
-    assert report["canonical_consistency"]["compatibility_pathway_count"] >= 1
+    assert report["canonical_consistency"]["compatibility_pathway_count"] == 1
 
 
 def test_enforcement_decision_strict_mode_reject_candidates() -> None:
