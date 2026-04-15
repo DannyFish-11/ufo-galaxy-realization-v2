@@ -636,6 +636,13 @@ class RegisteredRuntimeDevice(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# "join_runtime" means the device joins as an execution participant instead of
+# staying in control-only posture.
+_CANONICAL_JOIN_RUNTIME_POSTURE = "join_runtime"
+_OBSERVER_TELEMETRY_CAPABILITY_KEYWORDS = frozenset({"observer", "telemetry", "monitor", "sensor"})
+_PARTICIPANT_ID_ALIASES = ("participant_id", "runtime_participant_id")
+
+
 def _resolve_execution_model(
     *,
     explicit_model: Optional[str] = None,
@@ -653,12 +660,14 @@ def _resolve_execution_model(
         return resolved_explicit
     if attached_via_adapter:
         return RuntimeDeviceExecutionModel.ADAPTER_BRIDGED_DEVICE
-    if is_runtime_host or str(source_runtime_posture or "").strip().lower() == "join_runtime":
+    if is_runtime_host:
+        return RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST
+    if str(source_runtime_posture or "").strip().lower() == _CANONICAL_JOIN_RUNTIME_POSTURE:
         return RuntimeDeviceExecutionModel.FULL_RUNTIME_HOST
     if runtime_enabled or supports_local_autonomy or supports_remote_handoff:
         return RuntimeDeviceExecutionModel.PARTIAL_RUNTIME_DEVICE
     caps = {str(c).strip().lower() for c in (capabilities or []) if str(c).strip()}
-    if caps & {"observer", "telemetry", "monitor", "sensor"}:
+    if caps & _OBSERVER_TELEMETRY_CAPABILITY_KEYWORDS:
         return RuntimeDeviceExecutionModel.OBSERVER_TELEMETRY_DEVICE
     if caps:
         return RuntimeDeviceExecutionModel.COMMAND_ORIENTED_DEVICE
@@ -676,14 +685,19 @@ def _build_participant_identity(
         source.update(metadata)
     if isinstance(direct, dict):
         source.update(direct)
-    participant_id_raw = source.get("participant_id", source.get("runtime_participant_id"))
+    participant_id_raw = None
+    for key in _PARTICIPANT_ID_ALIASES:
+        value = source.get(key)
+        if value not in (None, ""):
+            participant_id_raw = value
+            break
     participant_id = str(participant_id_raw).strip() if participant_id_raw not in (None, "") else None
     tier_raw = source.get("participant_tier", source.get("tier", ""))
     role_raw = source.get("participant_role", source.get("coordination_role", ""))
     attached_raw = source.get("attached_via_adapter", source.get("via_adapter", False))
     bridge_raw = source.get("bridge_id", source.get("adapter_bridge_id"))
     bridge_id = str(bridge_raw).strip() if bridge_raw not in (None, "") else None
-    attached_via_adapter = bool(attached_raw or bridge_id)
+    attached_via_adapter = bool(attached_raw) or bool(bridge_id)
     return RuntimeParticipantIdentity(
         participant_id=participant_id,
         participant_tier=RuntimeParticipantTier.from_string(str(tier_raw)),
