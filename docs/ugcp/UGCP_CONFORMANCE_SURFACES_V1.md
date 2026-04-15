@@ -110,3 +110,22 @@ The audit report makes the following explicit in one place:
 This helps later PR-13-style invariant verification and staged compatibility
 retirement by surfacing current pathway reality without forcing canonical-only
 breakage.
+
+## 9) PR-13 cross-profile invariant verification and canonical consistency checks
+
+PR-13 strengthens report-only verification surfaces in
+`build_conformance_invariant_report()` with explicit canonical consistency
+checks (still non-disruptive, no global hard-fail behavior):
+
+- authority-chain boundary check (`authority_source` should not resolve to
+  canonical-safe `unknown`),
+- transfer completion vs composed lifecycle consistency,
+- coordination active-state vs terminal lifecycle consistency,
+- truth-event-to-surface alignment checks (runtime/transfer/coordination/session truth),
+- canonical internal representation consistency check
+  (`lifecycle_state` vs `composed_lifecycle_state`),
+- compatibility-pathway divergence visibility (`compatibility_pathways_clear`).
+
+These checks are surfaced under `canonical_consistency` and folded into
+reviewable invariant violations, so transitional/compat divergence is easier to
+audit before staged strictness layering or compatibility retirement.

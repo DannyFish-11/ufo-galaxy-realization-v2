@@ -418,6 +418,29 @@ _RETIREMENT_CANDIDATE_STAGES = {
     UGCPDeprecationStage.migration_required.value,
     UGCPDeprecationStage.strict_reject_candidate.value,
 }
+_TERMINAL_CANONICAL_STATES = {
+    "completed",
+    "failed",
+    "partial",
+    "interrupted",
+    "cancelled",
+    "timed_out",
+    "rejected",
+    "expired",
+}
+_TRANSFER_COMPLETION_STATES = {
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+    "rejected",
+    "expired",
+}
+_COORDINATION_ACTIVE_STATES = {
+    "active",
+    "awaiting_barrier",
+    "merging",
+}
 
 
 def _normalize_text(value: Any) -> str:
@@ -704,11 +727,66 @@ def normalize_conformance_backbone(payload: Mapping[str, Any]) -> Dict[str, Any]
     }
 
 
+def _build_canonical_consistency_checks(normalized: Mapping[str, Any]) -> Dict[str, Any]:
+    """Build report-only consistency checks spanning major UGCP surfaces."""
+    lifecycle_state = str(normalized.get("lifecycle_state", "unknown"))
+    composed_lifecycle_state = str(normalized.get("composed_lifecycle_state", "unknown"))
+    authority_source = str(normalized.get("authority_source", "unknown"))
+    transfer_state = str(normalized.get("transfer_state", "unknown"))
+    coordination_state = str(normalized.get("coordination_state", "unknown"))
+    truth_event_type = str(normalized.get("truth_event_type", "unknown"))
+    lifecycle_source_surface = str(normalized.get("lifecycle_source_surface", "none"))
+    compatibility_pathways = normalized.get("compatibility_pathways") or {}
+
+    transfer_terminal_lifecycle_consistent = (
+        transfer_state not in _TRANSFER_COMPLETION_STATES
+        or composed_lifecycle_state in _TERMINAL_CANONICAL_STATES
+    )
+    coordination_active_lifecycle_non_terminal = (
+        coordination_state not in _COORDINATION_ACTIVE_STATES
+        or composed_lifecycle_state not in _TERMINAL_CANONICAL_STATES
+    )
+
+    truth_event_surface_alignment = True
+    if truth_event_type == CanonicalTruthEventType.control_transfer_transition.value:
+        truth_event_surface_alignment = transfer_state != "unknown"
+    elif truth_event_type == CanonicalTruthEventType.coordination_transition.value:
+        truth_event_surface_alignment = coordination_state != "unknown"
+    elif truth_event_type == CanonicalTruthEventType.runtime_lifecycle_transition.value:
+        truth_event_surface_alignment = composed_lifecycle_state != "unknown"
+    elif truth_event_type == CanonicalTruthEventType.session_truth_recorded.value:
+        truth_event_surface_alignment = authority_source != "unknown"
+
+    canonical_representation_consistent = (
+        lifecycle_state == composed_lifecycle_state
+        or (
+            lifecycle_state == "unknown"
+            and lifecycle_source_surface in {"transfer", "coordination"}
+            and composed_lifecycle_state != "unknown"
+        )
+    )
+
+    checks = {
+        "authority_chain_boundary_respected": authority_source != "unknown",
+        "transfer_terminal_lifecycle_consistent": transfer_terminal_lifecycle_consistent,
+        "coordination_active_lifecycle_non_terminal": coordination_active_lifecycle_non_terminal,
+        "truth_event_surface_alignment": truth_event_surface_alignment,
+        "canonical_representation_consistent": canonical_representation_consistent,
+        "compatibility_pathways_clear": len(compatibility_pathways) == 0,
+    }
+    return {
+        "checks": checks,
+        "failed_checks": sorted(name for name, passed in checks.items() if not passed),
+        "compatibility_pathway_count": len(compatibility_pathways),
+    }
+
+
 def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """Build reviewable cross-profile conformance invariants."""
     normalized = normalize_conformance_backbone(payload or {})
     semantic_classes = normalized["semantic_classes"]
     enforcement = build_enforcement_scaffold(payload or {}, mode=UGCPEnforcementMode.review)
+    canonical_consistency = _build_canonical_consistency_checks(normalized)
     invariants = {
         "truth_event_is_canonical": semantic_classes["truth_event"] == UGCPSemanticClass.canonical.value,
         "authority_source_not_compat_alias": semantic_classes["authority"] != UGCPSemanticClass.transitional.value,
@@ -717,15 +795,20 @@ def build_conformance_invariant_report(payload: Optional[Mapping[str, Any]] = No
         "lifecycle_state_known": semantic_classes["lifecycle"] != UGCPSemanticClass.unknown.value,
         "composed_lifecycle_state_known": normalized["composed_lifecycle_state"] != "unknown",
         "semantic_drift_signals_empty": not normalized["semantic_drift_signals"],
+        "canonical_consistency_checks_passed": not canonical_consistency["failed_checks"],
     }
     violations: List[str] = [
         name for name, passed in invariants.items() if not passed
     ]
+    violations.extend(canonical_consistency["failed_checks"])
     return {
         "conforms": not violations,
         "invariants": invariants,
-        "violations": violations,
+        # One invariant name can also appear in canonical-consistency failed checks;
+        # preserve first-seen order while de-duplicating for stable diagnostics.
+        "violations": list(dict.fromkeys(violations)),
         "normalized": normalized,
+        "canonical_consistency": canonical_consistency,
         "enforcement_scaffold": enforcement,
     }
 
