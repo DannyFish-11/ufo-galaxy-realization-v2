@@ -6,6 +6,13 @@ This module introduces an incremental canonical schema layer for shared
 identity/control/runtime/coordination/truth objects. It does not replace all
 existing contracts yet; it provides stable canonical objects and lightweight
 mapping shims from current key contracts.
+
+Canonical naming note (cross-repo baseline):
+- ``participant``: real runtime/system participant identity.
+- ``graph_node``: topology/task-model node identity (non-participant).
+- ``conversation_session``: conversation/history continuity semantics.
+- ``runtime_attachment_session``: runtime attach/reconnect identity semantics.
+- ``delegation_transfer_session``: transfer/delegation lifecycle semantics.
 """
 
 from __future__ import annotations
@@ -24,6 +31,11 @@ UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY: str = (
 UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL: str = (
     "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL::namespace=core.schemas.ugcp "
     "module=core.schemas.ugcp.shared"
+)
+
+UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL: str = (
+    "UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL::"
+    "participant_device_runtime_capability_and_session_strata_are_explicit"
 )
 
 # Canonical terminal states accepted by the incremental UGCP truth model.
@@ -58,6 +70,36 @@ def _first_target(obj: Any) -> Optional[str]:
     return None
 
 
+def normalize_runtime_participant_id(obj: Any) -> Optional[str]:
+    """Resolve runtime participant identity from canonical/compat keys."""
+    value = _pick(obj, "participant_id", "runtime_participant_id")
+    return str(value) if value is not None else None
+
+
+def normalize_graph_node_id(obj: Any) -> Optional[str]:
+    """Resolve graph/topology node identity from canonical/compat keys."""
+    value = _pick(obj, "graph_node_id", "node_id")
+    return str(value) if value is not None else None
+
+
+def normalize_conversation_session_id(obj: Any) -> Optional[str]:
+    """Resolve conversation/history continuity session identity."""
+    value = _pick(obj, "conversation_session_id", "control_session_id", "session_id")
+    return str(value) if value is not None else None
+
+
+def normalize_runtime_attachment_session_id(obj: Any) -> Optional[str]:
+    """Resolve runtime attachment/reconnect session identity."""
+    value = _pick(obj, "runtime_attachment_session_id", "runtime_session_id", "attached_session_id")
+    return str(value) if value is not None else None
+
+
+def normalize_delegation_transfer_session_id(obj: Any) -> Optional[str]:
+    """Resolve delegation/transfer session identity."""
+    value = _pick(obj, "delegation_transfer_session_id", "transfer_session_id", "handoff_session_id")
+    return str(value) if value is not None else None
+
+
 # ---------------------------------------------------------------------------
 # Identity objects
 # ---------------------------------------------------------------------------
@@ -74,12 +116,49 @@ class TraceId:
 
 
 @dataclass(frozen=True)
+class ParticipantId:
+    value: str
+
+
+@dataclass(frozen=True)
+class DeviceId:
+    value: str
+
+
+@dataclass(frozen=True)
+class RuntimeId:
+    value: str
+
+
+@dataclass(frozen=True)
+class CapabilityId:
+    value: str
+
+
+@dataclass(frozen=True)
+class ConversationSessionId:
+    value: str
+
+
+@dataclass(frozen=True)
+class RuntimeAttachmentSessionId:
+    value: str
+
+
+@dataclass(frozen=True)
+class DelegationTransferSessionId:
+    value: str
+
+
+@dataclass(frozen=True)
 class ControlSessionId:
+    """Compatibility alias for conversation/control continuity session identity."""
     value: str
 
 
 @dataclass(frozen=True)
 class RuntimeSessionId:
+    """Compatibility alias for runtime attachment session identity."""
     value: str
 
 
@@ -90,6 +169,17 @@ class MeshSessionId:
 
 @dataclass(frozen=True)
 class NodeId:
+    """Compatibility node identifier.
+
+    Use :class:`ParticipantId` for runtime/system participants and
+    :class:`GraphNodeId` for topology/task-model nodes when introducing new
+    schema surfaces.
+    """
+    value: str
+
+
+@dataclass(frozen=True)
+class GraphNodeId:
     value: str
 
 
@@ -469,13 +559,22 @@ def to_json(instance: Any, **kwargs: Any) -> str:
 __all__ = [
     "UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY",
     "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL",
+    "UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL",
     # identity
     "TaskId",
     "TraceId",
+    "ParticipantId",
+    "DeviceId",
+    "RuntimeId",
+    "CapabilityId",
+    "ConversationSessionId",
+    "RuntimeAttachmentSessionId",
+    "DelegationTransferSessionId",
     "ControlSessionId",
     "RuntimeSessionId",
     "MeshSessionId",
     "NodeId",
+    "GraphNodeId",
     "ExecutionInstanceId",
     # control
     "TaskEnvelope",
@@ -509,5 +608,10 @@ __all__ = [
     "map_from_delegated_handoff_contract",
     "map_from_runtime_session_snapshot",
     "map_from_message_interop_payload",
+    "normalize_runtime_participant_id",
+    "normalize_graph_node_id",
+    "normalize_conversation_session_id",
+    "normalize_runtime_attachment_session_id",
+    "normalize_delegation_transfer_session_id",
     "to_json",
 ]

@@ -2,6 +2,7 @@
 
 This directory defines the first formal UGCP documentation baseline for the center-side control plane.
 
+- Cross-repo architecture baseline: `../architecture/CANONICAL_CONCEPT_MODEL_V1.md`.
 - `UGCP_CONSTITUTION_V1.md` — constitutional rules and authority-chain language.
 - `UGCP_CANONICAL_AUTHORITY_CHAIN_V1.md` — canonical ingress→routing→dispatch/takeover→truth→snapshot chain freeze for PR-3.
 - `UGCP_CANONICAL_VOCABULARY_V1.md` — frozen canonical identity/session/control vocabulary.
