@@ -148,6 +148,24 @@ def test_map_from_delegated_handoff_contract_maps_identity_payload_meta() -> Non
     assert mapped.target_node_id == "android_1"
 
 
+def test_map_from_delegated_handoff_contract_accepts_canonical_session_aliases() -> None:
+    contract = {
+        "identity": {
+            "control_session_id": "conv_2",
+            "runtime_attachment_session_id": "rt_attach_2",
+            "target_device_id": "android_2",
+        },
+        "payload": {"task_id": "task_2b"},
+        "meta": {"source_node_id": "source_2b"},
+    }
+
+    mapped = map_from_delegated_handoff_contract(contract)
+
+    assert mapped.control_session_id == "conv_2"
+    assert mapped.runtime_session_id == "rt_attach_2"
+    assert mapped.target_node_id == "android_2"
+
+
 def test_map_from_runtime_session_snapshot_maps_terminal_states() -> None:
     snapshot = {
         "identity": {"session_id": "rt_3"},
@@ -161,6 +179,18 @@ def test_map_from_runtime_session_snapshot_maps_terminal_states() -> None:
     assert mapped.runtime_status == "failed"
     assert mapped.terminal_state.value == "failed"
     assert mapped.terminal_reason.value == "timeout"
+
+
+def test_map_from_runtime_session_snapshot_accepts_runtime_attachment_alias() -> None:
+    snapshot = {
+        "identity": {"runtime_attachment_session_id": "rt_attach_3"},
+        "status": "completed",
+    }
+
+    mapped = map_from_runtime_session_snapshot(snapshot)
+
+    assert mapped.runtime_session_id == "rt_attach_3"
+    assert mapped.terminal_state.value == "completed"
 
 
 def test_map_from_message_interop_payload_accepts_context_session_id() -> None:
@@ -181,6 +211,19 @@ def test_map_from_message_interop_payload_accepts_context_session_id() -> None:
     assert mapped.source_node_id == "bridge"
     assert mapped.tool_name == "click"
     assert mapped.args == {"ref": "el_1"}
+
+
+def test_map_from_message_interop_payload_accepts_conversation_session_aliases() -> None:
+    payload = {
+        "request_id": "task_4b",
+        "trace_id": "trace_4b",
+        "conversation_session_id": "conv_4b",
+        "context": {"control_session_id": "ctx_control_4b"},
+    }
+
+    mapped = map_from_message_interop_payload(payload)
+
+    assert mapped.control_session_id == "conv_4b"
 
 
 def test_map_from_node_participant_record_maps_service_node_command_only() -> None:
@@ -242,6 +285,19 @@ def test_map_from_runtime_participant_surface_maps_observer_role() -> None:
     assert mapped.supports_delegation is False
 
 
+def test_map_from_runtime_participant_surface_accepts_runtime_attachment_session_alias() -> None:
+    mapped = map_from_runtime_participant_surface(
+        {
+            "source_device_id": "dev-runtime",
+            "source_runtime_posture": "join_runtime",
+            "runtime_attachment_session_id": "rt-attach-runtime",
+        }
+    )
+
+    assert mapped.runtime_session_id == "rt-attach-runtime"
+    assert mapped.participation_state is ParticipantState.ACTIVE
+
+
 def test_map_from_device_participation_summary_maps_partial_runtime_node() -> None:
     mapped = map_from_device_participation_summary(
         {
@@ -254,3 +310,14 @@ def test_map_from_device_participation_summary_maps_partial_runtime_node() -> No
     )
     assert mapped.runtime_tier is ParticipantRuntimeTier.PARTIAL_RUNTIME
     assert mapped.participant_tier is ParticipantTier.PARTIAL_RUNTIME_NODE
+
+
+def test_map_from_device_participation_summary_accepts_runtime_attachment_session_alias() -> None:
+    mapped = map_from_device_participation_summary(
+        {
+            "device_id": "dev-attach",
+            "runtime_attachment_session_id": "rt-attach-device",
+            "registered": True,
+        }
+    )
+    assert mapped.runtime_session_id == "rt-attach-device"
