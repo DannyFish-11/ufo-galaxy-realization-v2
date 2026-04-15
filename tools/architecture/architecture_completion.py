@@ -432,7 +432,11 @@ class ArchitectureCompletionScorecard:
         return [d for d in self.dimensions if d.maturity_level.is_blocking()]
 
     def transitional_dimensions(self) -> List[DimensionScorecard]:
-        """Return dimensions that remain transitional/compatibility-bearing."""
+        """Return dimensions that remain transitional/compatibility-bearing.
+
+        A dimension is transitional when it is not yet CANONICALIZED/COMPLETE
+        or it still reports legacy ambiguity.
+        """
         return [
             d
             for d in self.dimensions
@@ -440,15 +444,15 @@ class ArchitectureCompletionScorecard:
             or d.legacy_ambiguity_remains
         ]
 
+    @staticmethod
+    def _dimension_name(dimension: Any) -> str:
+        return dimension.value if isinstance(dimension, CompletionDimension) else str(dimension)
+
     def residual_debt_register(self) -> List[str]:
         """Return explicit residual debt entries grouped by dimension."""
         entries: List[str] = []
         for d in self.transitional_dimensions():
-            dim_name = (
-                d.dimension.value
-                if isinstance(d.dimension, CompletionDimension)
-                else str(d.dimension)
-            )
+            dim_name = self._dimension_name(d.dimension)
             if d.blockers:
                 for blocker in d.blockers:
                     entries.append(f"{dim_name}: blocker - {blocker}")
@@ -458,19 +462,24 @@ class ArchitectureCompletionScorecard:
         return entries
 
     def completion_clarity_snapshot(self) -> Dict[str, Any]:
-        """Return explicit canonical/transitional boundary metadata."""
+        """Return canonical/transitional boundary metadata.
+
+        The returned dict includes:
+        - sentinel
+        - canonical_dimensions
+        - transitional_dimensions
+        - residual_debt_register
+        - canonical_boundary_note
+        - compatibility_boundary_note
+        """
         return {
             "sentinel": SYSTEM_COMPLETION_CLARITY_PR12_SENTINEL,
             "canonical_dimensions": [
-                d.dimension.value
-                if isinstance(d.dimension, CompletionDimension)
-                else str(d.dimension)
+                self._dimension_name(d.dimension)
                 for d in self.canonicalized_dimensions()
             ],
             "transitional_dimensions": [
-                d.dimension.value
-                if isinstance(d.dimension, CompletionDimension)
-                else str(d.dimension)
+                self._dimension_name(d.dimension)
                 for d in self.transitional_dimensions()
             ],
             "residual_debt_register": self.residual_debt_register(),
@@ -494,8 +503,7 @@ class ArchitectureCompletionScorecard:
             f"({self.canonical_count}/{self.total_dimensions} dimensions canonicalized)",
             f"  Legacy ambiguity   : {self.legacy_ambiguity_count} dimension(s)",
             f"  Blocking           : {self.blocking_count} dimension(s)",
-            f"  Transitional dims  : {len(clarity['transitional_dimensions'])} "
-            f"(explicitly non-final / compatibility-bearing)",
+            f"  Transitional dims  : {len(clarity['transitional_dimensions'])} dimension(s)",
             "",
         ]
         for d in self.dimensions:
