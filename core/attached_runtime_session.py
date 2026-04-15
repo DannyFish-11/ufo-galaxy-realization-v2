@@ -377,6 +377,14 @@ _TRANSITION_TABLE: Dict[tuple, AttachmentState] = {
 }
 
 
+def _resolve_next_attachment_state(
+    current: AttachmentState,
+    signal: AttachmentLifecycleSignal,
+) -> Optional[AttachmentState]:
+    """Resolve next state from canonical transition table."""
+    return _TRANSITION_TABLE.get((current, signal))
+
+
 def classify_attach_lifecycle_action(
     existing: Optional["AttachedRuntimeSessionRecord"],
     source_runtime_posture: str,
@@ -406,7 +414,7 @@ def classify_signal_lifecycle_action(
     if current == AttachmentState.invalidated and signal != AttachmentLifecycleSignal.attach:
         return AttachmentLifecycleAction.retire
 
-    next_state = _TRANSITION_TABLE.get((current, signal))
+    next_state = _resolve_next_attachment_state(current, signal)
     if next_state is None or next_state == current:
         return AttachmentLifecycleAction.no_change
 
@@ -818,7 +826,7 @@ def attach_runtime_session(
 
     now = time.time()
 
-    if lifecycle_action == AttachmentLifecycleAction.reconcile and existing is not None:
+    if lifecycle_action == AttachmentLifecycleAction.reconcile:
         # Idempotent re-attach: refresh fields on the existing record
         updated = AttachedRuntimeSessionRecord(
             record_id=existing.record_id,
@@ -899,16 +907,17 @@ def apply_lifecycle_signal(
     current = record.attachment_state
     lifecycle_action = classify_signal_lifecycle_action(record, signal)
 
-    # Terminal: invalidated sessions cannot transition
-    if current == AttachmentState.invalidated and signal != AttachmentLifecycleSignal.attach:
+    # Terminal: invalidated sessions cannot transition except via a fresh attach
+    if (
+        current == AttachmentState.invalidated
+        and lifecycle_action == AttachmentLifecycleAction.retire
+    ):
         return record
 
     if lifecycle_action == AttachmentLifecycleAction.no_change:
         return record
 
-    next_state = _TRANSITION_TABLE.get((current, signal))
-    if next_state is None:
-        return record
+    next_state = _resolve_next_attachment_state(current, signal)
 
     now = time.time()
     updated = AttachedRuntimeSessionRecord(

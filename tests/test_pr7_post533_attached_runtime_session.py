@@ -1414,6 +1414,11 @@ def test_ca2_signal_lifecycle_action_classification():
         source_runtime_posture="join_runtime",
         attachment_state=AttachmentState.detached,
     )
+    disconnected = AttachedRuntimeSessionRecord(
+        device_id="dev-4",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.disconnected,
+    )
     invalidated = AttachedRuntimeSessionRecord(
         device_id="dev-3",
         source_runtime_posture="join_runtime",
@@ -1425,7 +1430,7 @@ def test_ca2_signal_lifecycle_action_classification():
         == AttachmentLifecycleAction.deactivate
     )
     assert (
-        classify_signal_lifecycle_action(AttachmentState.disconnected, AttachmentLifecycleSignal.reconnect)
+        classify_signal_lifecycle_action(disconnected, AttachmentLifecycleSignal.reconnect)
         == AttachmentLifecycleAction.recover
     )
     assert (
