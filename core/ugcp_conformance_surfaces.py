@@ -85,6 +85,11 @@ UGCP_MIGRATION_READINESS_PR11_SENTINEL: str = (
     "profile=ugcp-migration-readiness-v1::module=core.ugcp_conformance_surfaces"
 )
 
+UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL: str = (
+    "UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL::package=12::"
+    "profile=ugcp-convergence-visibility-audit-v1::module=core.ugcp_conformance_surfaces"
+)
+
 ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY: str = (
     "UGCP_CONFORMANCE_POLICY::ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT: "
     "Canonical, transitional, and unknown semantics should map to explicit "
@@ -114,6 +119,13 @@ RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY: str = (
     "Retirement sequencing should remain stage-gated (observe/normalize, "
     "migrate-required aliases, strict-candidate gating) rather than abrupt "
     "global strict rollout."
+)
+
+CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY: str = (
+    "UGCP_CONFORMANCE_POLICY::CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE: "
+    "Canonical handling, transitional normalization boundaries, and "
+    "compatibility-tolerance pathways should be exposed as explicit audit "
+    "surfaces for staged verification and retirement planning."
 )
 
 
@@ -402,6 +414,10 @@ _LIFECYCLE_COMPOSITION_ORDER = (
 )
 
 _HARDENING_PATHWAY_SUFFIX = "_transitional_pathway"
+_RETIREMENT_CANDIDATE_STAGES = {
+    UGCPDeprecationStage.migration_required.value,
+    UGCPDeprecationStage.strict_reject_candidate.value,
+}
 
 
 def _normalize_text(value: Any) -> str:
@@ -841,6 +857,96 @@ def build_migration_readiness_scaffold(
     }
 
 
+def build_ugcp_convergence_visibility_audit(
+    payload: Optional[Mapping[str, Any]] = None,
+    mode: UGCPEnforcementMode | str = UGCPEnforcementMode.compatibility,
+) -> Dict[str, Any]:
+    """Build explicit center-side visibility surfaces for convergence audit/review."""
+    source_payload = payload or {}
+    parsed_mode = _parse_enforcement_mode(mode)
+    normalized = normalize_conformance_backbone(source_payload)
+    enforcement = build_enforcement_scaffold(source_payload, mode=parsed_mode)
+    invariant_report = build_conformance_invariant_report(source_payload)
+    migration_readiness = build_migration_readiness_scaffold(source_payload, mode=parsed_mode)
+
+    surface_inputs = {
+        "schema": source_payload.get("schema_kind"),
+        "lifecycle": source_payload.get("lifecycle_state"),
+        "authority": source_payload.get("authority_source"),
+        "transfer": source_payload.get("transfer_state"),
+        "coordination": source_payload.get("coordination_state"),
+        "truth_event": source_payload.get("truth_event_type"),
+    }
+    surface_inventory: Dict[str, Dict[str, Any]] = {}
+    for surface in UGCPConformanceSurface:
+        key = surface.value
+        decision = enforcement["decisions"][key]
+        semantic_class = decision["semantic_class"]
+        compatibility_pathway = decision["compatibility_pathway"]
+        deprecation_stage = decision["deprecation_stage"]
+        surface_inventory[key] = {
+            "raw_value": surface_inputs[key],
+            "normalized_value": decision["normalized_value"],
+            "semantic_class": semantic_class,
+            "canonical_handling_active": semantic_class == UGCPSemanticClass.canonical.value,
+            "normalization_boundary_active": bool(compatibility_pathway),
+            "compatibility_tolerance_active": semantic_class != UGCPSemanticClass.canonical.value,
+            "compatibility_pathway": compatibility_pathway,
+            "deprecation_stage": deprecation_stage,
+            "future_verification_candidate": semantic_class != UGCPSemanticClass.canonical.value,
+            "future_strictness_candidate": deprecation_stage == UGCPDeprecationStage.strict_reject_candidate.value,
+            "future_retirement_candidate": deprecation_stage in _RETIREMENT_CANDIDATE_STAGES,
+        }
+
+    canonical_handling_surfaces = sorted(
+        key for key, record in surface_inventory.items() if record["canonical_handling_active"]
+    )
+    transitional_operational_surfaces = sorted(
+        key
+        for key, record in surface_inventory.items()
+        if record["semantic_class"] == UGCPSemanticClass.transitional.value
+    )
+    normalization_boundary_surfaces = sorted(
+        key for key, record in surface_inventory.items() if record["normalization_boundary_active"]
+    )
+    compatibility_tolerance_surfaces = sorted(
+        key for key, record in surface_inventory.items() if record["compatibility_tolerance_active"]
+    )
+    future_verification_targets = sorted(
+        key for key, record in surface_inventory.items() if record["future_verification_candidate"]
+    )
+    future_strictness_candidates = sorted(
+        key for key, record in surface_inventory.items() if record["future_strictness_candidate"]
+    )
+    future_retirement_targets = sorted(
+        key for key, record in surface_inventory.items() if record["future_retirement_candidate"]
+    )
+
+    return {
+        "mode": enforcement["mode"],
+        "surface_inventory": surface_inventory,
+        "canonical_handling_surfaces": canonical_handling_surfaces,
+        "transitional_operational_surfaces": transitional_operational_surfaces,
+        "normalization_boundary_surfaces": normalization_boundary_surfaces,
+        "compatibility_tolerance_surfaces": compatibility_tolerance_surfaces,
+        "future_verification_targets": future_verification_targets,
+        "future_strictness_candidates": future_strictness_candidates,
+        "future_retirement_targets": future_retirement_targets,
+        "summary": {
+            "canonical_count": len(canonical_handling_surfaces),
+            "transitional_count": len(transitional_operational_surfaces),
+            "normalization_boundary_count": len(normalization_boundary_surfaces),
+            "compatibility_tolerance_count": len(compatibility_tolerance_surfaces),
+            "verification_target_count": len(future_verification_targets),
+            "strictness_candidate_count": len(future_strictness_candidates),
+            "retirement_target_count": len(future_retirement_targets),
+        },
+        "normalized_backbone": normalized,
+        "invariant_report": invariant_report,
+        "migration_readiness": migration_readiness,
+    }
+
+
 __all__ = [
     "UGCP_CONFORMANCE_SURFACES_AUTHORITY",
     "CANONICAL_VS_TRANSITIONAL_CLASSIFICATION_POLICY",
@@ -852,11 +958,13 @@ __all__ = [
     "UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL",
     "UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL",
     "UGCP_MIGRATION_READINESS_PR11_SENTINEL",
+    "UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL",
     "ENFORCEMENT_HANDLING_CLASSIFICATION_IS_EXPLICIT_POLICY",
     "DEPRECATION_EXECUTION_PATHWAY_IS_REVIEWABLE_POLICY",
     "PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY",
     "MIGRATION_READINESS_SURFACES_ARE_EXPLICIT_POLICY",
     "RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY",
+    "CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY",
     "UGCPConformanceSurface",
     "UGCPSemanticClass",
     "UGCPEnforcementMode",
@@ -874,4 +982,5 @@ __all__ = [
     "build_conformance_invariant_report",
     "get_ugcp_retirement_stage_catalog",
     "build_migration_readiness_scaffold",
+    "build_ugcp_convergence_visibility_audit",
 ]
