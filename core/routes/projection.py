@@ -208,6 +208,28 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ATTACHED_RUNTIME_SESSION_ALIGNED_PR7_UNAVAILABLE"
     )
 
+# PR-7 (cross-repo convergence): truth-vs-projection boundary alignment
+# sentinel.  This confirms projection routes can import the explicit
+# cross-plane boundary catalogue so projection/read-model surfaces remain
+# visibly non-authoritative relative to canonical lifecycle owners.
+try:
+    from core.truth_projection_boundary import (  # noqa: F401
+        TRUTH_PROJECTION_BOUNDARY_IS_AUTHORITY as _TPB_AUTHORITY,
+        TRUTH_PROJECTION_BOUNDARY_PR7_SENTINEL as _TPB_PR7,
+        build_truth_projection_boundary_snapshot as _build_truth_projection_boundary_snapshot,
+    )
+
+    TRUTH_PROJECTION_BOUNDARY_ALIGNED_PR7: str = (
+        "PROJECTION_ROUTES::TRUTH_PROJECTION_BOUNDARY_ALIGNED_PR7_V1: "
+        "core.truth_projection_boundary is available to projection routes.  "
+        "Cross-plane truth ownership (participant/device/session/capability/execution) "
+        "is explicitly separated from projection/read-model and synchronization surfaces."
+    )
+except ImportError:  # pragma: no cover
+    TRUTH_PROJECTION_BOUNDARY_ALIGNED_PR7: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::TRUTH_PROJECTION_BOUNDARY_ALIGNED_PR7_UNAVAILABLE"
+    )
+
 # PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime dispatch intent and handoff-preparation
 # foundations.  Importing the authority sentinel and the PR-8 sentinel from
