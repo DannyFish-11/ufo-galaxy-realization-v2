@@ -58,6 +58,7 @@ import uuid
 
 _startup_time = time.time()
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
@@ -91,6 +92,63 @@ logger = logging.getLogger("Galaxy.API")
 # treated as an architectural or status authority.
 # ---------------------------------------------------------------------------
 CANONICAL_API_ROUTES_AUTHORITY = "core.api_routes"
+
+API_COMPATIBILITY_SURFACE_BOUNDARY_POLICY = (
+    "API_COMPATIBILITY_SURFACE_BOUNDARY_POLICY_V1: "
+    "Compatibility routes must remain explicitly classified as transitional "
+    "surfaces and must not be treated as peer authorities to canonical "
+    "/api/v1/* and gateway ingress paths."
+)
+
+API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL = (
+    "API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL_V1: "
+    "Compatibility route surfaces are explicitly catalogued in "
+    "get_api_compatibility_surface_registry()."
+)
+
+
+@dataclass(frozen=True)
+class APICompatibilitySurface:
+    """Explicit compatibility-only route surface metadata."""
+
+    surface_id: str
+    path: str
+    module: str
+    canonical_replacement: str
+    compatibility_scope: str
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "surface_id": self.surface_id,
+            "path": self.path,
+            "module": self.module,
+            "canonical_replacement": self.canonical_replacement,
+            "compatibility_scope": self.compatibility_scope,
+        }
+
+
+_API_COMPATIBILITY_SURFACES: tuple[APICompatibilitySurface, ...] = (
+    APICompatibilitySurface(
+        surface_id="legacy_android_http_device_routes",
+        path="/api/devices/*",
+        module="core.routes.compat",
+        canonical_replacement="/api/v1/devices/* (core.routes.devices)",
+        compatibility_scope="legacy_android_http_clients",
+    ),
+    APICompatibilitySurface(
+        surface_id="core_direct_device_websocket_ingress",
+        path="/ws/device/{device_id}",
+        module="core.api_routes.create_websocket_routes",
+        canonical_replacement="/ws/device/{device_id} (galaxy_gateway/routes/websocket.py)",
+        compatibility_scope="legacy_core_direct_ws_clients",
+    ),
+)
+
+
+def get_api_compatibility_surface_registry() -> List[Dict[str, str]]:
+    """Return an explicit list of compatibility-only API surfaces."""
+    return [entry.to_dict() for entry in _API_COMPATIBILITY_SURFACES]
+
 
 # ---------------------------------------------------------------------------
 # Re-export shared state and models for backward compatibility
