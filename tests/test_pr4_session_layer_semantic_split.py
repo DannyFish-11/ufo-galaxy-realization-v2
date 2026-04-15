@@ -33,7 +33,7 @@ def test_attached_runtime_accepts_runtime_attachment_session_alias() -> None:
     assert rec.runtime_attachment_session_id == "rt_attach_002"
 
 
-def test_attached_runtime_record_from_dict_accepts_runtime_attachment_session_id() -> None:
+def test_attached_runtime_record_from_dict_maps_runtime_attachment_session_alias() -> None:
     rec = AttachedRuntimeSessionRecord.from_dict(
         {"device_id": "dev_001", "runtime_attachment_session_id": "rt_attach_003"}
     )

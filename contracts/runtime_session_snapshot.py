@@ -1056,6 +1056,15 @@ def _safe_bool(v: Any, default: bool = False) -> bool:
         return default
 
 
+def _resolve_runtime_attachment_session_id(
+    *,
+    runtime_attachment_session_id: Any = None,
+    session_id: Any = None,
+) -> str:
+    """Resolve canonical runtime-attachment session id with legacy fallback."""
+    return _safe_str(runtime_attachment_session_id) or _safe_str(session_id)
+
+
 # ---------------------------------------------------------------------------
 # Builders
 # ---------------------------------------------------------------------------
@@ -1294,8 +1303,9 @@ def build_runtime_session_snapshot(
             elif ms in ("failed", "error"):
                 resolved_status = RuntimeSessionSnapshotStatus.failed.value
 
-        resolved_runtime_attachment_session_id = (
-            _safe_str(runtime_attachment_session_id) or _safe_str(session_id)
+        resolved_runtime_attachment_session_id = _resolve_runtime_attachment_session_id(
+            runtime_attachment_session_id=runtime_attachment_session_id,
+            session_id=session_id,
         )
         return RuntimeSessionSnapshot(
             snapshot_id=snapshot_id or f"rsnap_{uuid.uuid4().hex[:12]}",
@@ -1326,7 +1336,10 @@ def build_runtime_session_snapshot(
         _logger.warning("build_runtime_session_snapshot: unexpected error: %s", exc)
         return RuntimeSessionSnapshot(
             snapshot_id=snapshot_id or f"rsnap_{uuid.uuid4().hex[:12]}",
-            session_id=_safe_str(runtime_attachment_session_id) or _safe_str(session_id),
+            session_id=_resolve_runtime_attachment_session_id(
+                runtime_attachment_session_id=runtime_attachment_session_id,
+                session_id=session_id,
+            ),
             metadata={"build_error": str(exc)},
         )
 
@@ -1485,8 +1498,9 @@ def from_target_takeover_result(
     """
     try:
         d = _safe_dict(takeover_result)
-        resolved_runtime_attachment_session_id = _safe_str(
-            d.get("runtime_attachment_session_id") or d.get("session_id") or ""
+        resolved_runtime_attachment_session_id = _resolve_runtime_attachment_session_id(
+            runtime_attachment_session_id=d.get("runtime_attachment_session_id"),
+            session_id=d.get("session_id"),
         )
         return build_runtime_session_snapshot(
             session_id=resolved_runtime_attachment_session_id,
@@ -1523,8 +1537,9 @@ def from_result_merge(
     """
     try:
         d = _safe_dict(merged_result)
-        resolved_runtime_attachment_session_id = _safe_str(
-            d.get("runtime_attachment_session_id") or d.get("session_id") or ""
+        resolved_runtime_attachment_session_id = _resolve_runtime_attachment_session_id(
+            runtime_attachment_session_id=d.get("runtime_attachment_session_id"),
+            session_id=d.get("session_id"),
         )
         return build_runtime_session_snapshot(
             session_id=resolved_runtime_attachment_session_id,
@@ -1563,8 +1578,9 @@ def from_recovery_state(
     """
     try:
         d = _safe_dict(recovery_state)
-        resolved_runtime_attachment_session_id = _safe_str(
-            d.get("runtime_attachment_session_id") or d.get("session_id") or ""
+        resolved_runtime_attachment_session_id = _resolve_runtime_attachment_session_id(
+            runtime_attachment_session_id=d.get("runtime_attachment_session_id"),
+            session_id=d.get("session_id"),
         )
         return build_runtime_session_snapshot(
             session_id=resolved_runtime_attachment_session_id,

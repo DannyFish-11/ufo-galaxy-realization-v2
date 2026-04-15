@@ -390,6 +390,12 @@ class DelegatedHandoffContractIdentity:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DelegatedHandoffContractIdentity":
+        """Construct identity from canonical or compatibility transfer keys.
+
+        Accepted transfer-session keys (in precedence order):
+        - ``delegation_transfer_session_id`` (canonical preferred term)
+        - ``session_id`` (legacy term)
+        """
         if not isinstance(data, dict):
             raise ValueError(
                 "DelegatedHandoffContractIdentity.from_dict: expected dict, "
@@ -399,7 +405,6 @@ class DelegatedHandoffContractIdentity:
             contract_id=str(data.get("contract_id", "") or str(uuid.uuid4())),
             session_id=str(
                 data.get("delegation_transfer_session_id")
-                or data.get("execution_transfer_session_id")
                 or data.get("session_id", "")
             ),
             device_id=str(data.get("device_id", "")),
