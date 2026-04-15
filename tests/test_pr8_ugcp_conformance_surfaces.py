@@ -456,11 +456,12 @@ def test_staged_strictness_rollout_gating_scaffold_handles_partial_payload_input
     assert "coordination" in scaffold["warning_surfaces"]
 
 
-def test_first_phase_retired_authority_aliases_are_no_longer_transitional() -> None:
-    classification = classify_surface_semantics(UGCPConformanceSurface.authority, "compat")
+@pytest.mark.parametrize("retired_alias", ["compat", "interop"])
+def test_first_phase_retired_authority_aliases_are_no_longer_transitional(retired_alias: str) -> None:
+    classification = classify_surface_semantics(UGCPConformanceSurface.authority, retired_alias)
     decision = evaluate_surface_enforcement(
         UGCPConformanceSurface.authority,
-        "compat",
+        retired_alias,
         mode=UGCPEnforcementMode.review,
     )
 
