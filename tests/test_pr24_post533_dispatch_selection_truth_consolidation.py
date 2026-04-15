@@ -138,6 +138,7 @@ class _FakeParticipation:
     registered: bool = True
     routable: bool = True
     assessed: bool = True
+    participant_tier: str = "full_runtime_host"
     reasons: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -147,6 +148,7 @@ class _FakeParticipation:
             "registered": self.registered,
             "routable": self.routable,
             "assessed": self.assessed,
+            "participant_tier": self.participant_tier,
         }
 
 
@@ -454,6 +456,26 @@ class TestParticipationGateNotEligible:
         )
         assert score == 0
         assert "unavailable" in reason
+
+    def test_score_candidate_observer_endpoint_rejected(self):
+        score, reason = _score_candidate(
+            "s", "d",
+            readiness=_FakeReadiness("d"),
+            participation=_FakeParticipation("d", orchestration_eligible=True, participant_tier="observer_endpoint"),
+            reuse_eligible=False,
+        )
+        assert score == 0
+        assert reason == "participation:observer_endpoint"
+
+    def test_score_candidate_command_endpoint_rejected(self):
+        score, reason = _score_candidate(
+            "s", "d",
+            readiness=_FakeReadiness("d"),
+            participation=_FakeParticipation("d", orchestration_eligible=True, participant_tier="command_endpoint"),
+            reuse_eligible=False,
+        )
+        assert score == 0
+        assert reason == "participation:command_endpoint"
 
 
 # ===========================================================================

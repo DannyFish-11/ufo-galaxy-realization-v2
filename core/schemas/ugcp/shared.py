@@ -44,6 +44,11 @@ UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL: str = (
     "participant_identity_runtime_tier_autonomy_coordination_readiness_support_surfaces"
 )
 
+UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL: str = (
+    "UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL::"
+    "full_runtime_host_partial_runtime_node_command_endpoint_observer_endpoint"
+)
+
 # Canonical terminal states accepted by the incremental UGCP truth model.
 _VALID_TERMINAL_STATES = {"completed", "failed", "partial", "interrupted"}
 
@@ -347,6 +352,13 @@ class ParticipantRuntimeTier(str, Enum):
     OBSERVER_ONLY = "observer_only"
 
 
+class ParticipantTier(str, Enum):
+    FULL_RUNTIME_HOST = "full_runtime_host"
+    PARTIAL_RUNTIME_NODE = "partial_runtime_node"
+    COMMAND_ENDPOINT = "command_endpoint"
+    OBSERVER_ENDPOINT = "observer_endpoint"
+
+
 class ParticipantAutonomyLevel(str, Enum):
     MANUAL = "manual"
     ASSISTED = "assisted"
@@ -371,6 +383,7 @@ class ParticipantModel:
     participant_id: str
     participant_kind: ParticipantKind = ParticipantKind.SPECIALIZED_NODE
     runtime_tier: ParticipantRuntimeTier = ParticipantRuntimeTier.PARTIAL_RUNTIME
+    participant_tier: ParticipantTier = ParticipantTier.PARTIAL_RUNTIME_NODE
     autonomy_level: ParticipantAutonomyLevel = ParticipantAutonomyLevel.SUPERVISED
     coordination_role: str = ""
     participation_state: ParticipantState = ParticipantState.UNKNOWN
@@ -390,6 +403,7 @@ class ParticipantModel:
             "participant_id": self.participant_id,
             "participant_kind": self.participant_kind.value,
             "runtime_tier": self.runtime_tier.value,
+            "participant_tier": self.participant_tier.value,
             "autonomy_level": self.autonomy_level.value,
             "coordination_role": self.coordination_role,
             "participation_state": self.participation_state.value,
@@ -419,6 +433,49 @@ def _participant_state_from_node_status(status: str) -> ParticipantState:
     return ParticipantState.UNKNOWN
 
 
+def map_runtime_tier_to_participant_tier(runtime_tier: ParticipantRuntimeTier) -> ParticipantTier:
+    """Map legacy runtime tiers into explicit PR-3 participant tiers.
+
+    ``OBSERVER_ENDPOINT`` is the conservative fallback for unknown/future tiers
+    to avoid accidentally promoting unclassified participants into executors.
+    """
+    if runtime_tier == ParticipantRuntimeTier.FULL_RUNTIME:
+        return ParticipantTier.FULL_RUNTIME_HOST
+    if runtime_tier == ParticipantRuntimeTier.PARTIAL_RUNTIME:
+        return ParticipantTier.PARTIAL_RUNTIME_NODE
+    if runtime_tier == ParticipantRuntimeTier.COMMAND_ONLY:
+        return ParticipantTier.COMMAND_ENDPOINT
+    return ParticipantTier.OBSERVER_ENDPOINT
+
+
+def derive_participant_tier(
+    *,
+    runtime_present: bool,
+    orchestration_eligible: bool,
+    registered: bool,
+    observer_role: bool = False,
+    has_runtime_session: bool = False,
+) -> ParticipantTier:
+    """Derive canonical participant tier from participation/readiness signals.
+
+    Decision priority:
+    1) observer role -> OBSERVER_ENDPOINT
+    2) runtime present + orchestration eligible -> FULL_RUNTIME_HOST
+    3) runtime present or attached runtime session -> PARTIAL_RUNTIME_NODE
+    4) registered only -> COMMAND_ENDPOINT
+    5) fallback -> OBSERVER_ENDPOINT
+    """
+    if observer_role:
+        return ParticipantTier.OBSERVER_ENDPOINT
+    if runtime_present and orchestration_eligible:
+        return ParticipantTier.FULL_RUNTIME_HOST
+    if runtime_present or has_runtime_session:
+        return ParticipantTier.PARTIAL_RUNTIME_NODE
+    if registered:
+        return ParticipantTier.COMMAND_ENDPOINT
+    return ParticipantTier.OBSERVER_ENDPOINT
+
+
 def map_from_node_participant_record(record: Any) -> ParticipantModel:
     """Map node-fabric style records into the canonical participant model."""
     data = record if isinstance(record, dict) else getattr(record, "to_dict", lambda: {})()
@@ -445,11 +502,13 @@ def map_from_node_participant_record(record: Any) -> ParticipantModel:
         ParticipantRuntimeTier.PARTIAL_RUNTIME,
     }
     supports_delegation = supports_local_execution and role != "monitor"
+    participant_tier = map_runtime_tier_to_participant_tier(tier)
 
     return ParticipantModel(
         participant_id=participant_id,
         participant_kind=kind,
         runtime_tier=tier,
+        participant_tier=participant_tier,
         autonomy_level=ParticipantAutonomyLevel.SUPERVISED,
         coordination_role=role,
         participation_state=_participant_state_from_node_status(str(_pick(data, "status", default=""))),
@@ -478,9 +537,20 @@ def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
         _pick(data, "coordination_role", default="")
     )
 
-    if runtime_present and orchestration_eligible:
+    registered = bool(_pick(data, "registered", default=False))
+    observer_role = coordination_role == "observer_only" or bool(_pick(data, "is_support", default=False))
+    participant_tier = derive_participant_tier(
+        runtime_present=runtime_present,
+        orchestration_eligible=orchestration_eligible,
+        registered=registered,
+        observer_role=observer_role,
+        has_runtime_session=bool(session_id),
+    )
+    if participant_tier == ParticipantTier.FULL_RUNTIME_HOST:
         tier = ParticipantRuntimeTier.FULL_RUNTIME
-    elif bool(_pick(data, "registered", default=False)):
+    elif participant_tier == ParticipantTier.PARTIAL_RUNTIME_NODE:
+        tier = ParticipantRuntimeTier.PARTIAL_RUNTIME
+    elif participant_tier == ParticipantTier.COMMAND_ENDPOINT:
         tier = ParticipantRuntimeTier.COMMAND_ONLY
     else:
         tier = ParticipantRuntimeTier.OBSERVER_ONLY
@@ -494,13 +564,12 @@ def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
 
     if runtime_present and bool(_pick(data, "routable", default=False)):
         state = ParticipantState.ACTIVE if session_id else ParticipantState.READY
-    elif bool(_pick(data, "registered", default=False)):
+    elif registered:
         state = ParticipantState.REGISTERED
     else:
         state = ParticipantState.UNKNOWN
 
     supports_local_execution = tier == ParticipantRuntimeTier.FULL_RUNTIME
-    observer_role = coordination_role == "observer_only" or bool(_pick(data, "is_support", default=False))
     supports_delegation = supports_local_execution and not observer_role
 
     caps = _pick(data, "capabilities", default=[]) or []
@@ -509,6 +578,7 @@ def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
         participant_id=participant_id,
         participant_kind=kind,
         runtime_tier=tier,
+        participant_tier=participant_tier,
         autonomy_level=ParticipantAutonomyLevel.ASSISTED,
         coordination_role=coordination_role,
         participation_state=state,
@@ -553,11 +623,13 @@ def map_from_runtime_participant_surface(payload: Dict[str, Any]) -> Participant
         "observer_only",
         "target_only_executor",
     }
+    participant_tier = map_runtime_tier_to_participant_tier(tier)
 
     return ParticipantModel(
         participant_id=participant_id,
         participant_kind=kind,
         runtime_tier=tier,
+        participant_tier=participant_tier,
         autonomy_level=ParticipantAutonomyLevel.ASSISTED,
         coordination_role=coordination_role,
         participation_state=ParticipantState.ACTIVE if runtime_session_id else ParticipantState.READY,
@@ -808,6 +880,7 @@ __all__ = [
     "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL",
     "UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL",
     "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL",
+    "UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL",
     # identity
     "TaskId",
     "TraceId",
@@ -839,6 +912,7 @@ __all__ = [
     "DiagnosticsReport",
     "ParticipantKind",
     "ParticipantRuntimeTier",
+    "ParticipantTier",
     "ParticipantAutonomyLevel",
     "ParticipantState",
     "ParticipantModel",
@@ -869,5 +943,7 @@ __all__ = [
     "map_from_node_participant_record",
     "map_from_device_participation_summary",
     "map_from_runtime_participant_surface",
+    "map_runtime_tier_to_participant_tier",
+    "derive_participant_tier",
     "to_json",
 ]

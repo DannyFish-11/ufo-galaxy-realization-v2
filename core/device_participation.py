@@ -55,6 +55,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.schemas.ugcp.shared import ParticipantTier, derive_participant_tier
+
 logger = logging.getLogger("Galaxy.DeviceParticipation")
 
 __all__ = [
@@ -133,6 +135,7 @@ class ParticipationSummary:
     is_source: bool = False
     is_support: bool = False
     is_relay: bool = False
+    participant_tier: str = ParticipantTier.OBSERVER_ENDPOINT.value
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -154,6 +157,7 @@ class ParticipationSummary:
             "is_source": self.is_source,
             "is_support": self.is_support,
             "is_relay": self.is_relay,
+            "participant_tier": self.participant_tier,
             "reasons": list(self.reasons),
             "sources": dict(self.sources),
         }
@@ -325,6 +329,18 @@ def _roles_from_session_participant(session: Any, device_id: str) -> List[str]:
             roles_raw = getattr(p, "roles", []) or []
             return [str(r) for r in roles_raw]
     return []
+
+
+def _derive_participant_tier(summary: ParticipationSummary) -> str:
+    """Compute participant tier for canonical participation summaries."""
+    role_set = {str(r).strip().lower() for r in (summary.roles or [])}
+    return derive_participant_tier(
+        runtime_present=bool(summary.runtime_present),
+        orchestration_eligible=bool(summary.orchestration_eligible),
+        registered=bool(summary.registered),
+        observer_role="observer_only" in role_set,
+        has_runtime_session=bool(summary.session_id),
+    ).value
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +542,7 @@ def get_device_participation(device_id: str) -> ParticipationSummary:
         reasons.append(f"session-error: {exc}")
 
     summary.reasons = reasons
+    summary.participant_tier = _derive_participant_tier(summary)
     summary.sources = sources
     return summary
 
