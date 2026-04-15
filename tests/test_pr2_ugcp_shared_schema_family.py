@@ -8,8 +8,13 @@ import pytest
 
 from core.schemas.task_envelope import TaskEnvelope as ExistingTaskEnvelope
 from core.schemas.ugcp import (
+    ParticipantKind,
+    ParticipantRuntimeTier,
+    ParticipantState,
+    UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL,
     UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY,
     UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL,
+    map_from_device_participation_summary,
     RuntimeTruth,
     TaskTruth,
     TerminalReason,
@@ -17,6 +22,8 @@ from core.schemas.ugcp import (
     map_from_delegated_dispatch_record,
     map_from_delegated_handoff_contract,
     map_from_message_interop_payload,
+    map_from_node_participant_record,
+    map_from_runtime_participant_surface,
     map_from_runtime_session_snapshot,
     map_from_task_envelope,
 )
@@ -27,6 +34,13 @@ def test_sentinel_strings_present() -> None:
     assert UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL.startswith("UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL::")
     assert "core.schemas.ugcp.shared" in UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY
     assert "namespace=core.schemas.ugcp" in UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL
+
+
+def test_pr52_participant_model_sentinel_present() -> None:
+    assert UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL.startswith(
+        "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL::"
+    )
+    assert "participant_identity_runtime_tier" in UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL
 
 
 def test_truth_objects_to_dict() -> None:
@@ -158,3 +172,59 @@ def test_map_from_message_interop_payload_accepts_context_session_id() -> None:
     assert mapped.source_node_id == "bridge"
     assert mapped.tool_name == "click"
     assert mapped.args == {"ref": "el_1"}
+
+
+def test_map_from_node_participant_record_maps_service_node_command_only() -> None:
+    mapped = map_from_node_participant_record(
+        {
+            "node_id": "svc-1",
+            "architectural_class": "service_node",
+            "role": "tool",
+            "status": "healthy",
+            "capabilities": ["ocr", "extract"],
+        }
+    )
+
+    assert mapped.participant_id == "svc-1"
+    assert mapped.participant_kind is ParticipantKind.SERVICE_NODE
+    assert mapped.runtime_tier is ParticipantRuntimeTier.COMMAND_ONLY
+    assert mapped.participation_state is ParticipantState.READY
+    assert mapped.supports_capability_linkage is True
+
+
+def test_map_from_device_participation_summary_maps_full_runtime_host() -> None:
+    mapped = map_from_device_participation_summary(
+        {
+            "device_id": "dev-1",
+            "runtime_present": True,
+            "orchestration_eligible": True,
+            "registered": True,
+            "routable": True,
+            "session_id": "rt-1",
+            "roles": ["participant"],
+            "capabilities": ["screen", "touch"],
+        }
+    )
+
+    assert mapped.participant_id == "dev-1"
+    assert mapped.participant_kind is ParticipantKind.DEVICE_RUNTIME_HOST
+    assert mapped.runtime_tier is ParticipantRuntimeTier.FULL_RUNTIME
+    assert mapped.participation_state is ParticipantState.ACTIVE
+    assert mapped.supports_attached_session is True
+    assert mapped.supports_local_execution is True
+
+
+def test_map_from_runtime_participant_surface_maps_observer_role() -> None:
+    mapped = map_from_runtime_participant_surface(
+        {
+            "source_device_id": "dev-obs",
+            "source_runtime_posture": "join_runtime",
+            "coordination_role": "observer_only",
+            "runtime_session_id": "rs-obs",
+        }
+    )
+    assert mapped.participant_id == "dev-obs"
+    assert mapped.participant_kind is ParticipantKind.OBSERVER
+    assert mapped.runtime_tier is ParticipantRuntimeTier.OBSERVER_ONLY
+    assert mapped.participation_state is ParticipantState.ACTIVE
+    assert mapped.supports_delegation is False
