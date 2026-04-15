@@ -2,8 +2,8 @@
 
 This artifact defines a single canonical concept model shared by:
 
-- `DannyFish-11/ufo-galaxy-realization-v2`
-- `DannyFish-11/ufo-galaxy-android`
+- `dannyfish-11/ufo-galaxy-realization-v2`
+- `dannyfish-11/ufo-galaxy-android`
 
 ## Canonical concepts
 

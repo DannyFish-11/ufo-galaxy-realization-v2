@@ -29,7 +29,7 @@ Interpretation:
 | Canonical term | Definition | Status in realization-v2 | Current grounding / mapping |
 |---|---|---|---|
 | `source_runtime_posture` | Source participation posture (`control_only` / `join_runtime`) | active | `contracts/source_posture_contract.py`, handoff/session/merge contracts |
-| `coordination_role` (coordination role) | Source role in cross-device coordination | active | handoff/session/merge contracts |
+| `coordination_role` | Coordination role for source participation in cross-device execution | active | handoff/session/merge contracts |
 | `dispatch_mode` | Intended dispatch mode | active | `contracts/source_dispatch.py` (`SourceDispatchMode`) |
 | `effective_mode` | Actual mode after fallback/degradation | mapped | runtime orchestrator uses `effective_mode` variable and writes resulting `mode` |
 | `delegated_signal_kind` | Canonical delegated signal kind | active | `core/android_delegated_signal_ingress.py` (`DelegatedSignalKind`) |

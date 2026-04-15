@@ -72,7 +72,7 @@ def _first_target(obj: Any) -> Optional[str]:
 
 def normalize_runtime_participant_id(obj: Any) -> Optional[str]:
     """Resolve runtime participant identity from canonical/compat keys."""
-    value = _pick(obj, "participant_id", "runtime_participant_id", "node_id", "device_id")
+    value = _pick(obj, "participant_id", "runtime_participant_id")
     return str(value) if value is not None else None
 
 
