@@ -102,6 +102,8 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from core.schemas.ugcp.shared import ParticipantTier
+
 __all__ = [
     # Sentinels
     "CANONICAL_CAPABILITY_SCHEDULING_BASIS_AUTHORITY",
@@ -221,10 +223,10 @@ _ANDROID_ROLE_PARTIAL: str = "partial_runtime_host"
 _ANDROID_ROLE_CONNECTED: str = "connected_device_only"
 _ANDROID_ROLE_UNCLASSIFIED: str = "unclassified"
 
-_PARTICIPANT_TIER_FULL_RUNTIME_HOST: str = "full_runtime_host"
-_PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE: str = "partial_runtime_node"
-_PARTICIPANT_TIER_COMMAND_ENDPOINT: str = "command_endpoint"
-_PARTICIPANT_TIER_OBSERVER_ENDPOINT: str = "observer_endpoint"
+_PARTICIPANT_TIER_FULL_RUNTIME_HOST: str = ParticipantTier.FULL_RUNTIME_HOST.value
+_PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE: str = ParticipantTier.PARTIAL_RUNTIME_NODE.value
+_PARTICIPANT_TIER_COMMAND_ENDPOINT: str = ParticipantTier.COMMAND_ENDPOINT.value
+_PARTICIPANT_TIER_OBSERVER_ENDPOINT: str = ParticipantTier.OBSERVER_ENDPOINT.value
 
 
 # ---------------------------------------------------------------------------
@@ -993,9 +995,10 @@ def evaluate_execution_surface_eligibility(
 
     1. **observer_only** coordination role → ``unavailable`` (observer cannot
        be an execution surface regardless of tier or posture).
-    2. **observer_endpoint / command_endpoint** participant tiers →
+    2. **observer_endpoint / command_endpoint** *participant tiers* →
        ``unavailable``.
-    3. **command_only / unknown** tier → ``unavailable`` (capability gate).
+    3. **command_only / unknown** *capability tiers* → ``unavailable``
+       (capability gate).
     4. **local_host** surface: ``is_host_present`` is True AND tier is
        ``full_runtime`` or ``partial_runtime`` AND posture is ``join_runtime``
        (or role is ``joined_runtime_participant``).
@@ -1016,7 +1019,7 @@ def evaluate_execution_surface_eligibility(
     """
     try:
         role = str(inputs.coordination_role or "").strip().lower()
-        participant_tier = str(getattr(inputs, "participant_tier", "") or "").strip().lower()
+        participant_tier = str(inputs.participant_tier or "").strip().lower()
         tier = inputs.capability_tier
         posture = str(inputs.source_runtime_posture or "").strip().lower()
         inputs_snap = inputs.to_dict()
@@ -1040,7 +1043,7 @@ def evaluate_execution_surface_eligibility(
             return ExecutionSurfaceEligibility(
                 eligible=False,
                 surface=ExecutionSurface.unavailable,
-                reason="participant_tier=observer_endpoint: participant is observe-only.",
+                reason="participant_tier=observer_endpoint: participant is observer-only.",
                 capability_tier=tier,
                 inputs_snapshot=inputs_snap,
             )
@@ -1069,7 +1072,7 @@ def evaluate_execution_surface_eligibility(
 
         eligible_tier = tier in (CapabilityTier.full_runtime, CapabilityTier.partial_runtime)
 
-        # Rule 3: local_host surface.
+        # Rule 4: local_host surface.
         if (
             inputs.is_host_present
             and eligible_tier
@@ -1090,7 +1093,7 @@ def evaluate_execution_surface_eligibility(
                 inputs_snapshot=inputs_snap,
             )
 
-        # Rule 4: android_host surface.
+        # Rule 5: android_host surface.
         if inputs.is_android_device and eligible_tier:
             return ExecutionSurfaceEligibility(
                 eligible=True,
@@ -1104,7 +1107,7 @@ def evaluate_execution_surface_eligibility(
                 inputs_snapshot=inputs_snap,
             )
 
-        # Rule 5: remote_device surface (non-Android, with a target).
+        # Rule 6: remote_device surface (non-Android, with a target).
         if not inputs.is_android_device and eligible_tier and inputs.target_device_id:
             return ExecutionSurfaceEligibility(
                 eligible=True,
@@ -1118,7 +1121,7 @@ def evaluate_execution_surface_eligibility(
                 inputs_snapshot=inputs_snap,
             )
 
-        # Rule 6: unavailable.
+        # Rule 7: unavailable.
         return ExecutionSurfaceEligibility(
             eligible=False,
             surface=ExecutionSurface.unavailable,

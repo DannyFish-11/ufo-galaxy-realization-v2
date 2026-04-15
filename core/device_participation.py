@@ -55,12 +55,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("Galaxy.DeviceParticipation")
+from core.schemas.ugcp.shared import ParticipantTier, derive_participant_tier
 
-_PARTICIPANT_TIER_FULL_RUNTIME_HOST = "full_runtime_host"
-_PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE = "partial_runtime_node"
-_PARTICIPANT_TIER_COMMAND_ENDPOINT = "command_endpoint"
-_PARTICIPANT_TIER_OBSERVER_ENDPOINT = "observer_endpoint"
+logger = logging.getLogger("Galaxy.DeviceParticipation")
 
 __all__ = [
     "ParticipationSummary",
@@ -138,7 +135,7 @@ class ParticipationSummary:
     is_source: bool = False
     is_support: bool = False
     is_relay: bool = False
-    participant_tier: str = _PARTICIPANT_TIER_OBSERVER_ENDPOINT
+    participant_tier: str = ParticipantTier.OBSERVER_ENDPOINT.value
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -335,16 +332,15 @@ def _roles_from_session_participant(session: Any, device_id: str) -> List[str]:
 
 
 def _derive_participant_tier(summary: ParticipationSummary) -> str:
+    """Compute participant tier for canonical participation summaries."""
     role_set = {str(r).strip().lower() for r in (summary.roles or [])}
-    if "observer_only" in role_set:
-        return _PARTICIPANT_TIER_OBSERVER_ENDPOINT
-    if summary.runtime_present and summary.orchestration_eligible:
-        return _PARTICIPANT_TIER_FULL_RUNTIME_HOST
-    if summary.runtime_present or bool(summary.session_id):
-        return _PARTICIPANT_TIER_PARTIAL_RUNTIME_NODE
-    if summary.registered:
-        return _PARTICIPANT_TIER_COMMAND_ENDPOINT
-    return _PARTICIPANT_TIER_OBSERVER_ENDPOINT
+    return derive_participant_tier(
+        runtime_present=bool(summary.runtime_present),
+        orchestration_eligible=bool(summary.orchestration_eligible),
+        registered=bool(summary.registered),
+        observer_role="observer_only" in role_set,
+        has_runtime_session=bool(summary.session_id),
+    ).value
 
 
 # ---------------------------------------------------------------------------

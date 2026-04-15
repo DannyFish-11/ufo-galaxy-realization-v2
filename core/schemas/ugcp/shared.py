@@ -434,6 +434,11 @@ def _participant_state_from_node_status(status: str) -> ParticipantState:
 
 
 def map_runtime_tier_to_participant_tier(runtime_tier: ParticipantRuntimeTier) -> ParticipantTier:
+    """Map legacy runtime tiers into explicit PR-3 participant tiers.
+
+    ``OBSERVER_ENDPOINT`` is the conservative fallback for unknown/future tiers
+    to avoid accidentally promoting unclassified participants into executors.
+    """
     if runtime_tier == ParticipantRuntimeTier.FULL_RUNTIME:
         return ParticipantTier.FULL_RUNTIME_HOST
     if runtime_tier == ParticipantRuntimeTier.PARTIAL_RUNTIME:
@@ -451,6 +456,15 @@ def derive_participant_tier(
     observer_role: bool = False,
     has_runtime_session: bool = False,
 ) -> ParticipantTier:
+    """Derive canonical participant tier from participation/readiness signals.
+
+    Decision priority:
+    1) observer role -> OBSERVER_ENDPOINT
+    2) runtime present + orchestration eligible -> FULL_RUNTIME_HOST
+    3) runtime present or attached runtime session -> PARTIAL_RUNTIME_NODE
+    4) registered only -> COMMAND_ENDPOINT
+    5) fallback -> OBSERVER_ENDPOINT
+    """
     if observer_role:
         return ParticipantTier.OBSERVER_ENDPOINT
     if runtime_present and orchestration_eligible:
