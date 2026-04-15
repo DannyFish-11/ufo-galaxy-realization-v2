@@ -91,11 +91,13 @@ Sentinels::
     ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY
     ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY
     ATTACHED_RUNTIME_SESSION_PR7_SENTINEL
+    ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY
 
 Enums::
 
     AttachmentState
     AttachmentLifecycleSignal
+    AttachmentLifecycleAction
 
 Dataclasses::
 
@@ -110,6 +112,8 @@ Functions::
 
     attach_runtime_session(...) -> AttachedRuntimeSessionRecord
     apply_lifecycle_signal(record, signal, ...) -> AttachedRuntimeSessionRecord
+    classify_attach_lifecycle_action(existing, source_runtime_posture) -> AttachmentLifecycleAction
+    classify_signal_lifecycle_action(record_or_state, signal) -> AttachmentLifecycleAction
     get_attached_runtime_session(device_id) -> AttachedRuntimeSessionRecord | None
     list_active_attached_sessions() -> list[AttachedRuntimeSessionRecord]
     build_attached_runtime_session_snapshot() -> AttachedRuntimeSessionSnapshot
@@ -194,6 +198,13 @@ ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY: str = (
     "transitions propagate and preserve source_runtime_posture so that "
     "downstream eligibility checks remain consistent with PR-1 through PR-6 "
     "semantics."
+)
+
+ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY: str = (
+    "POLICY::ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE: lifecycle governance "
+    "intent is explicit and classified into create/reconcile/recover/replace/"
+    "deactivate/retire/no_change/rejected actions so attach/signal authority "
+    "is easier to reason about without changing runtime behavior."
 )
 
 ATTACHED_RUNTIME_SESSION_PR7_SENTINEL: str = (
@@ -317,6 +328,19 @@ class AttachmentLifecycleSignal(str, Enum):
             return default
 
 
+class AttachmentLifecycleAction(str, Enum):
+    """Lifecycle governance action labels for attach/signal transitions."""
+
+    create = "create"
+    reconcile = "reconcile"
+    recover = "recover"
+    replace = "replace"
+    deactivate = "deactivate"
+    retire = "retire"
+    no_change = "no_change"
+    rejected = "rejected"
+
+
 # ---------------------------------------------------------------------------
 # Transition table
 # ---------------------------------------------------------------------------
@@ -351,6 +375,66 @@ _TRANSITION_TABLE: Dict[tuple, AttachmentState] = {
     (AttachmentState.disconnected, AttachmentLifecycleSignal.reconnect): AttachmentState.attached,
     (AttachmentState.detaching, AttachmentLifecycleSignal.reconnect): AttachmentState.attached,
 }
+
+
+def _resolve_next_attachment_state(
+    current: AttachmentState,
+    signal: AttachmentLifecycleSignal,
+) -> Optional[AttachmentState]:
+    """Resolve next state from canonical transition table."""
+    return _TRANSITION_TABLE.get((current, signal))
+
+
+def classify_attach_lifecycle_action(
+    existing: Optional["AttachedRuntimeSessionRecord"],
+    source_runtime_posture: str,
+) -> AttachmentLifecycleAction:
+    """Classify lifecycle governance intent for an attach operation."""
+    posture = (source_runtime_posture or _POSTURE_CONTROL_ONLY).lower().strip()
+    if posture != _POSTURE_JOIN_RUNTIME:
+        return AttachmentLifecycleAction.rejected
+    if existing is None:
+        return AttachmentLifecycleAction.create
+    if existing.is_active():
+        return AttachmentLifecycleAction.reconcile
+    return AttachmentLifecycleAction.replace
+
+
+def classify_signal_lifecycle_action(
+    record_or_state: "AttachedRuntimeSessionRecord | AttachmentState",
+    signal: AttachmentLifecycleSignal,
+) -> AttachmentLifecycleAction:
+    """Classify lifecycle governance intent for a signal application."""
+    current = (
+        record_or_state.attachment_state
+        if isinstance(record_or_state, AttachedRuntimeSessionRecord)
+        else record_or_state
+    )
+
+    if current == AttachmentState.invalidated and signal != AttachmentLifecycleSignal.attach:
+        return AttachmentLifecycleAction.retire
+
+    next_state = _resolve_next_attachment_state(current, signal)
+    if next_state is None or next_state == current:
+        return AttachmentLifecycleAction.no_change
+
+    if signal == AttachmentLifecycleSignal.reconnect:
+        return AttachmentLifecycleAction.recover
+    if signal in (
+        AttachmentLifecycleSignal.detach,
+        AttachmentLifecycleSignal.disconnect,
+        AttachmentLifecycleSignal.disable,
+    ):
+        return AttachmentLifecycleAction.deactivate
+    if signal == AttachmentLifecycleSignal.invalidate:
+        return AttachmentLifecycleAction.retire
+    if signal == AttachmentLifecycleSignal.attach:
+        return (
+            AttachmentLifecycleAction.reconcile
+            if current == AttachmentState.attached
+            else AttachmentLifecycleAction.recover
+        )
+    return AttachmentLifecycleAction.no_change
 
 
 # ---------------------------------------------------------------------------
@@ -715,9 +799,11 @@ def attach_runtime_session(
 
     posture = (source_runtime_posture or _POSTURE_CONTROL_ONLY).lower().strip()
     resolved_runtime_attachment_session_id = runtime_attachment_session_id or session_id
+    existing = runtime.get_latest_for_device(device_id)
+    lifecycle_action = classify_attach_lifecycle_action(existing, posture)
 
     # Policy: only join_runtime posture may attach
-    if posture != _POSTURE_JOIN_RUNTIME:
+    if lifecycle_action == AttachmentLifecycleAction.rejected:
         record = AttachedRuntimeSessionRecord(
             device_id=device_id,
             source_runtime_posture=posture,
@@ -739,9 +825,8 @@ def attach_runtime_session(
         return record
 
     now = time.time()
-    existing = runtime.get_latest_for_device(device_id)
 
-    if existing is not None and existing.is_active():
+    if lifecycle_action == AttachmentLifecycleAction.reconcile:
         # Idempotent re-attach: refresh fields on the existing record
         updated = AttachedRuntimeSessionRecord(
             record_id=existing.record_id,
@@ -820,20 +905,19 @@ def apply_lifecycle_signal(
         runtime = get_attached_runtime_session_runtime()
 
     current = record.attachment_state
+    lifecycle_action = classify_signal_lifecycle_action(record, signal)
 
-    # Terminal: invalidated sessions cannot transition
-    if current == AttachmentState.invalidated and signal != AttachmentLifecycleSignal.attach:
+    # Terminal: invalidated sessions cannot transition except via a fresh attach
+    if (
+        current == AttachmentState.invalidated
+        and lifecycle_action == AttachmentLifecycleAction.retire
+    ):
         return record
 
-    next_state = _TRANSITION_TABLE.get((current, signal))
-
-    if next_state is None or next_state == current:
-        # No transition defined for this (state, signal) pair — no change
-        # Exception: attach from attached is a no-op refresh (idempotent)
-        if signal == AttachmentLifecycleSignal.attach and current == AttachmentState.attached:
-            # Return unchanged record
-            return record
+    if lifecycle_action == AttachmentLifecycleAction.no_change:
         return record
+
+    next_state = _resolve_next_attachment_state(current, signal)
 
     now = time.time()
     updated = AttachedRuntimeSessionRecord(

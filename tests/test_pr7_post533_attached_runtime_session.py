@@ -112,10 +112,12 @@ from core.attached_runtime_session import (
     DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY,
     ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
     ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY,
+    ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY,
     ATTACHED_RUNTIME_SESSION_PR7_SENTINEL,
     # Enums
     AttachmentState,
     AttachmentLifecycleSignal,
+    AttachmentLifecycleAction,
     # Dataclasses / classes
     AttachedRuntimeSessionRecord,
     AttachedRuntimeSessionSnapshot,
@@ -123,6 +125,8 @@ from core.attached_runtime_session import (
     # Functions
     attach_runtime_session,
     apply_lifecycle_signal,
+    classify_attach_lifecycle_action,
+    classify_signal_lifecycle_action,
     get_attached_runtime_session,
     list_active_attached_sessions,
     build_attached_runtime_session_snapshot,
@@ -893,14 +897,18 @@ def test_am1_core_runtime_reexports_all_pr7_symbols():
         "DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY",
         "ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY",
         "ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY",
+        "ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY",
         "ATTACHED_RUNTIME_SESSION_PR7_SENTINEL",
         "AttachmentState",
         "AttachmentLifecycleSignal",
+        "AttachmentLifecycleAction",
         "AttachedRuntimeSessionRecord",
         "AttachedRuntimeSessionSnapshot",
         "AttachedRuntimeSessionRuntime",
         "attach_runtime_session",
         "apply_lifecycle_signal",
+        "classify_attach_lifecycle_action",
+        "classify_signal_lifecycle_action",
         "get_attached_runtime_session",
         "list_active_attached_sessions",
         "build_attached_runtime_session_snapshot",
@@ -1367,3 +1375,73 @@ def test_bz1_all_policy_sentinels_non_empty():
     for s in sentinels:
         assert isinstance(s, str)
         assert len(s) > 10
+
+
+# ---------------------------------------------------------------------------
+# Group CA — Lifecycle governance action helpers
+# ---------------------------------------------------------------------------
+
+
+def test_ca1_attach_lifecycle_action_classification():
+    assert ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY.startswith("POLICY::")
+
+    assert classify_attach_lifecycle_action(None, "join_runtime") == AttachmentLifecycleAction.create
+
+    active = AttachedRuntimeSessionRecord(
+        device_id="dev-1",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.attached,
+    )
+    assert classify_attach_lifecycle_action(active, "join_runtime") == AttachmentLifecycleAction.reconcile
+
+    disconnected = AttachedRuntimeSessionRecord(
+        device_id="dev-1",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.disconnected,
+    )
+    assert classify_attach_lifecycle_action(disconnected, "join_runtime") == AttachmentLifecycleAction.replace
+    assert classify_attach_lifecycle_action(disconnected, "control_only") == AttachmentLifecycleAction.rejected
+
+
+def test_ca2_signal_lifecycle_action_classification():
+    attached = AttachedRuntimeSessionRecord(
+        device_id="dev-1",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.attached,
+    )
+    detached = AttachedRuntimeSessionRecord(
+        device_id="dev-2",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.detached,
+    )
+    disconnected = AttachedRuntimeSessionRecord(
+        device_id="dev-4",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.disconnected,
+    )
+    invalidated = AttachedRuntimeSessionRecord(
+        device_id="dev-3",
+        source_runtime_posture="join_runtime",
+        attachment_state=AttachmentState.invalidated,
+    )
+
+    assert (
+        classify_signal_lifecycle_action(attached, AttachmentLifecycleSignal.disconnect)
+        == AttachmentLifecycleAction.deactivate
+    )
+    assert (
+        classify_signal_lifecycle_action(disconnected, AttachmentLifecycleSignal.reconnect)
+        == AttachmentLifecycleAction.recover
+    )
+    assert (
+        classify_signal_lifecycle_action(attached, AttachmentLifecycleSignal.invalidate)
+        == AttachmentLifecycleAction.retire
+    )
+    assert (
+        classify_signal_lifecycle_action(detached, AttachmentLifecycleSignal.reconnect)
+        == AttachmentLifecycleAction.no_change
+    )
+    assert (
+        classify_signal_lifecycle_action(invalidated, AttachmentLifecycleSignal.disable)
+        == AttachmentLifecycleAction.retire
+    )
