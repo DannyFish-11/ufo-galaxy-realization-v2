@@ -361,6 +361,7 @@ try:
         UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL as _UES_PR10,
         UGCP_MIGRATION_READINESS_PR11_SENTINEL as _UMR_PR11,
         UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL as _UCV_PR12,
+        UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL as _USR_PR14,
         UGCPConformanceSurface as _UGCPConformanceSurface,
         UGCPSemanticClass as _UGCPSemanticClass,
         UGCPEnforcementMode as _UGCPEnforcementMode,
@@ -376,6 +377,7 @@ try:
         get_ugcp_retirement_stage_catalog as _get_ugcp_retirement_stage_catalog,
         build_migration_readiness_scaffold as _build_migration_readiness_scaffold,
         build_ugcp_convergence_visibility_audit as _build_ugcp_convergence_visibility_audit,
+        build_staged_strictness_rollout_gating_scaffold as _build_staged_strictness_rollout_gating_scaffold,
     )
 
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (
@@ -412,6 +414,14 @@ try:
         "future verification/strictness/retirement targets are explicit and "
         "reviewable without changing runtime behavior."
     )
+    UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14: str = (
+        "PROJECTION_ROUTES::UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14_V1: "
+        "UGCP staged strictness and rollout-gating scaffold "
+        "(core.ugcp_conformance_surfaces) is available and aligned with "
+        "projection routes. Normalize/warn/canonical-preferred/reject-ready "
+        "tiers and cross-repo coordination gates are explicit for gradual "
+        "canonical convergence tightening."
+    )
 except ImportError:  # pragma: no cover
     UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_CONFORMANCE_SURFACES_ALIGNED_PR8_UNAVAILABLE"
@@ -424,6 +434,9 @@ except ImportError:  # pragma: no cover
     )
     UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12_UNAVAILABLE"
+    )
+    UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14_UNAVAILABLE"
     )
 
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo

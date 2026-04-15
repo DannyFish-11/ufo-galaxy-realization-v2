@@ -17,11 +17,14 @@ from core.ugcp_conformance_surfaces import (
     NORMALIZATION_BOUNDARY_IS_EXPLICIT_POLICY,
     PROFILE_COMPOSITION_BACKBONE_IS_NORMALIZED_POLICY,
     PROGRESSIVE_STRICTNESS_IS_OPT_IN_POLICY,
+    ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY,
     RETIREMENT_SEQUENCING_IS_STAGE_GATED_POLICY,
+    STAGED_STRICTNESS_TIERS_ARE_EXPLICIT_POLICY,
     UGCP_CONFORMANCE_BACKBONE_CONSOLIDATION_PR9_SENTINEL,
     UGCP_ENFORCEMENT_SCAFFOLDING_PR10_SENTINEL,
     UGCP_MIGRATION_READINESS_PR11_SENTINEL,
     UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL,
+    UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL,
     UGCPDeprecationStage,
     UGCPEnforcementAction,
     UGCPEnforcementMode,
@@ -39,6 +42,7 @@ from core.ugcp_conformance_surfaces import (
     get_ugcp_conformance_surface_catalog,
     normalize_conformance_backbone,
     normalize_conformance_payload,
+    build_staged_strictness_rollout_gating_scaffold,
 )
 from core.ugcp_truth_event_model import CanonicalTruthEventType
 
@@ -75,7 +79,13 @@ def test_sentinels_present() -> None:
         "UGCP_CONVERGENCE_VISIBILITY_AUDIT_PR12_SENTINEL::package=12::"
         "profile=ugcp-convergence-visibility-audit-v1::module=core.ugcp_conformance_surfaces"
     )
+    assert UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL == (
+        "UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_PR14_SENTINEL::package=14::"
+        "profile=ugcp-staged-strictness-rollout-gating-v1::module=core.ugcp_conformance_surfaces"
+    )
     assert "CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE" in CONVERGENCE_VISIBILITY_SURFACES_ARE_REVIEWABLE_POLICY
+    assert "STAGED_STRICTNESS_TIERS_ARE_EXPLICIT" in STAGED_STRICTNESS_TIERS_ARE_EXPLICIT_POLICY
+    assert "ROLLOUT_GATING_REQUIRES_COORDINATION" in ROLLOUT_GATING_REQUIRES_COORDINATION_POLICY
 
 
 def test_surface_catalog_has_expected_authority_mappings() -> None:
@@ -351,7 +361,14 @@ def test_convergence_visibility_audit_surfaces_boundaries_and_future_targets() -
     )
 
     assert report["mode"] == UGCPEnforcementMode.review.value
-    assert set(report["surface_inventory"]) == {"schema", "lifecycle", "authority", "transfer", "coordination", "truth_event"}
+    assert set(report["surface_inventory"]) == {
+        "schema",
+        "lifecycle",
+        "authority",
+        "transfer",
+        "coordination",
+        "truth_event",
+    }
     assert report["surface_inventory"]["lifecycle"]["canonical_handling_active"] is True
     assert report["surface_inventory"]["authority"]["normalization_boundary_active"] is True
     assert report["surface_inventory"]["transfer"]["future_strictness_candidate"] is True
@@ -361,6 +378,39 @@ def test_convergence_visibility_audit_surfaces_boundaries_and_future_targets() -
     assert report["summary"]["normalization_boundary_count"] >= 1
     assert report["invariant_report"]["enforcement_scaffold"]["mode"] == UGCPEnforcementMode.review.value
     assert report["migration_readiness"]["retirement_sequence"][2]["phase"] == "gate_strict_reject_candidates"
+    assert report["strictness_rollout_gating"]["rollout_sequence"][2]["phase"] == "gate_reject_ready_surfaces"
+
+
+def test_staged_strictness_rollout_gating_scaffold_layers_tiers_and_gates() -> None:
+    scaffold = build_staged_strictness_rollout_gating_scaffold(
+        {
+            "schema_kind": "legacy_message_payload",
+            "lifecycle_state": "lifecycle_unmapped",
+            "authority_source": "projection",
+            "transfer_state": "blocked",
+            "coordination_state": "waiting",
+            "truth_event_type": "runtime_state_transition",
+        },
+        mode=UGCPEnforcementMode.review,
+    )
+
+    assert scaffold["mode"] == UGCPEnforcementMode.review.value
+    assert "coordination" in scaffold["normalize_first_surfaces"]
+    assert "lifecycle" in scaffold["warning_surfaces"]
+    assert "schema" in scaffold["reject_ready_surfaces"]
+    assert "transfer" in scaffold["reject_ready_surfaces"]
+    assert "authority" in scaffold["gated_reject_ready_surfaces"]
+    assert "authority" in scaffold["coordination_required_surfaces"]
+    assert "truth_event" in scaffold["coordination_required_surfaces"]
+    assert "schema" in scaffold["earlier_tightening_candidates"]
+    assert (
+        scaffold["surface_strictness_inventory"]["authority"]["rollout_gate"]
+        == "reject_ready_but_coordination_gated"
+    )
+    assert (
+        scaffold["surface_strictness_inventory"]["transfer"]["rollout_gate"]
+        == "reject_ready_for_canary_tightening"
+    )
 
 
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
@@ -373,12 +423,15 @@ def test_projection_alignment_sentinel_present() -> None:
     enforcement_sentinel = projection.UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10
     migration_sentinel = projection.UGCP_MIGRATION_READINESS_ALIGNED_PR11
     visibility_sentinel = projection.UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12
+    strictness_sentinel = projection.UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14
     assert "UGCP_ENFORCEMENT_SCAFFOLDING_ALIGNED_PR10" in enforcement_sentinel
     assert "UGCP_MIGRATION_READINESS_ALIGNED_PR11" in migration_sentinel
     assert "UGCP_CONVERGENCE_VISIBILITY_AUDIT_ALIGNED_PR12" in visibility_sentinel
+    assert "UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14" in strictness_sentinel
     assert "UNAVAILABLE" not in enforcement_sentinel
     assert "UNAVAILABLE" not in migration_sentinel
     assert "UNAVAILABLE" not in visibility_sentinel
+    assert "UNAVAILABLE" not in strictness_sentinel
     assert callable(getattr(projection, "_classify_surface_semantics", None))
     assert callable(getattr(projection, "_evaluate_surface_enforcement", None))
     assert callable(getattr(projection, "_build_enforcement_scaffold", None))
@@ -388,3 +441,4 @@ def test_projection_alignment_sentinel_present() -> None:
     assert callable(getattr(projection, "_normalize_conformance_backbone", None))
     assert callable(getattr(projection, "_build_conformance_invariant_report", None))
     assert callable(getattr(projection, "_build_ugcp_convergence_visibility_audit", None))
+    assert callable(getattr(projection, "_build_staged_strictness_rollout_gating_scaffold", None))
