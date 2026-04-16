@@ -16,5 +16,6 @@ This directory defines the first formal UGCP documentation baseline for the cent
 - `UGCP_ANDROID_ALIGNMENT_NOTES_V1.md` — Android↔center vocabulary alignment notes.
 - `UGCP_SHARED_SCHEMA_MAPPINGS_V1.md` — compatibility mappings from key existing contracts into `core.schemas.ugcp` canonical objects.
 - `CROSS_REPO_HOMOMORPHIC_MAPPING_V1.md` — formal cross-repository homomorphic mapping (CANONICAL_MATCH / PARTIAL_MATCH / TRANSITIONAL_ALIAS / UNRESOLVED_DIVERGENCE) across participant/device/runtime/capability, device-domain vs node-domain, session families, delegated execution, protocol alignment, registry/facade/cache/adapter/authority surfaces, and runtime identity/capability-provider structures.
+- `UGCP_PROTOCOL_CONSISTENCY_RULES_V1.md` — canonical consistency rules for the most load-bearing shared protocol surfaces (PR-4): shared UGCP vocabulary, delegated execution result/status semantics, terminal states, key session and runtime identifiers, runtime profile and capability descriptors, truth-event payload structures, and explicit transitional compatibility allowances.
 
 Scope note: this is a **documentation freeze** for vocabulary and semantics. It does not claim full protocol convergence is already implemented.

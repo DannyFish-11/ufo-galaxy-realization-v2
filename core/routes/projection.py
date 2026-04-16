@@ -1802,6 +1802,37 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CANONICAL_SESSION_AXIS_ALIGNED_PR3_UNAVAILABLE"
     )
 
+# PR-4 (cross-repo protocol consistency rules): Canonical cross-repository
+# protocol consistency alignment sentinel.  Asserts that the protocol
+# consistency module is importable from this module's context, enabling
+# projection endpoints to surface protocol surface classification and
+# transitional allowance summaries for operator visibility.
+try:
+    from core.cross_repo_protocol_consistency import (  # noqa: F401
+        CROSS_REPO_PROTOCOL_CONSISTENCY_AUTHORITY as _CRPC_AUTHORITY,
+        CROSS_REPO_PROTOCOL_CONSISTENCY_PR4_SENTINEL as _CRPC_PR4,
+        ProtocolSurfaceClass as _ProtocolSurfaceClass,
+        CanonicalTerminalState as _CanonicalTerminalState,
+        get_protocol_surface_catalogue as _get_protocol_surface_catalogue,
+        get_terminal_state_consistency_catalogue as _get_terminal_state_catalogue,
+        build_protocol_consistency_snapshot as _build_protocol_consistency_snapshot,
+    )
+
+    CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4: str = (
+        "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_V1: "
+        "core.cross_repo_protocol_consistency is confirmed as the canonical "
+        "authority for cross-repository protocol consistency rules (PR-4).  "
+        "Critical shared protocol surfaces are explicitly classified as "
+        "canonical or transitional, terminal state consistency is documented, "
+        "delegated execution status semantics are defined, and transitional "
+        "compatibility allowances are enumerated.  Projection endpoints can "
+        "surface protocol consistency snapshots for operator visibility."
+    )
+except ImportError:  # pragma: no cover
+    CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
