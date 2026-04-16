@@ -2080,6 +2080,36 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8_UNAVAILABLE"
     )
 
+# PR-10 (realization-v2 convergence plan): Architecture Stabilization Baseline
+# alignment sentinel.  Asserts that the stabilization baseline module is
+# importable from this module's context, enabling projection endpoints to
+# expose the canonical-vs-transitional surface summary and future-work guidance
+# for operator and diagnostic visibility.
+try:
+    from core.architecture_stabilization_baseline import (  # noqa: F401
+        ARCHITECTURE_STABILIZATION_BASELINE_IS_AUTHORITY as _ASB_AUTHORITY,
+        ARCHITECTURE_STABILIZATION_BASELINE_PR10_SENTINEL as _ASB_PR10,
+        StabilizationTier as _StabilizationTier,
+        SurfaceCategory as _SurfaceCategory,
+        get_canonical_stable_surfaces as _get_canonical_stable_surfaces,
+        get_transitional_surfaces as _get_asb_transitional_surfaces,
+        build_stabilization_baseline_snapshot as _build_stabilization_baseline_snapshot,
+    )
+
+    ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10: str = (
+        "PROJECTION_ROUTES::ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10_V1: "
+        "core.architecture_stabilization_baseline is confirmed as the canonical "
+        "authority for the explicit architecture stabilization baseline after the "
+        "realization-v2 convergence plan PR-6 through PR-9.  Canonical-stable, "
+        "transitional-converging, extension-surface, and compat-bridge surface "
+        "tiers are explicitly classified.  Future-work guidance is machine-checkable "
+        "at the projection surface level (PR-10 stabilization baseline)."
+    )
+except ImportError:  # pragma: no cover
+    ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
