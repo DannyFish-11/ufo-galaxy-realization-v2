@@ -2092,7 +2092,7 @@ try:
         StabilizationTier as _StabilizationTier,
         SurfaceCategory as _SurfaceCategory,
         get_canonical_stable_surfaces as _get_canonical_stable_surfaces,
-        get_transitional_surfaces as _get_asb_transitional_surfaces,
+        get_transitional_surfaces as _get_transitional_surfaces,
         build_stabilization_baseline_snapshot as _build_stabilization_baseline_snapshot,
     )
 
