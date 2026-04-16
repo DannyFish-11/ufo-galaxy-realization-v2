@@ -1833,6 +1833,39 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
     )
 
+# PR-5 (device/node domain governance): Unified governance model for the device
+# domain and node domain without forcing false identity equivalence.  Importing
+# the authority and PR-5 sentinel from the governance module ties the projection
+# route layer to the explicit governance model, enabling projection endpoints to
+# surface domain definitions, bridge relationships, and registry surface
+# classifications for operator and diagnostic visibility.
+try:
+    from core.device_node_domain_governance import (  # noqa: F401
+        DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY as _DNDG_AUTHORITY,
+        DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL as _DNDG_PR5,
+        DomainKind as _DomainKind,
+        BridgeRelationshipKind as _BridgeRelationshipKind,
+        RegistrySurfaceDomain as _RegistrySurfaceDomain,
+        RegistrySurfaceRole as _RegistrySurfaceRole,
+        build_domain_governance_snapshot as _build_domain_governance_snapshot,
+        get_governance_summary as _get_governance_summary,
+    )
+
+    DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5: str = (
+        "PROJECTION_ROUTES::DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5_V1: "
+        "core.device_node_domain_governance is confirmed as the canonical "
+        "authority for the unified device/node domain governance model (PR-5). "
+        "Device-domain and node-domain responsibilities are explicitly "
+        "separated.  Runtime-host, capability-host, and dispatch-target bridge "
+        "relationships are documented.  Registry surface authority matrix "
+        "classifies all major governance surfaces.  Both domains are jointly "
+        "governed by the center runtime without false identity equivalence."
+    )
+except ImportError:  # pragma: no cover
+    DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5_UNAVAILABLE"
+    )
+
 # PR-12 (Cross-repository consistency gates — main repository side): CI-friendly
 # consistency gate mechanisms for the most important shared semantic surfaces.
 # Importing authority and PR-12 sentinel from the new module ties the projection
