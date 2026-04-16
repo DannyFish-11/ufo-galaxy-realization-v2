@@ -1776,6 +1776,32 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::RUNTIME_DECISION_OBSERVABILITY_ALIGNED_PR20_UNAVAILABLE"
     )
 
+try:
+    from core.canonical_session_axis import (  # noqa: F401
+        CANONICAL_SESSION_AXIS_AUTHORITY as _CSA_AUTHORITY,
+        CANONICAL_SESSION_AXIS_PR3_SENTINEL as _CSA_PR3,
+        SessionFamily as _SessionFamily,
+        SessionIdentifierRole as _SessionIdentifierRole,
+        get_session_family_catalogue as _get_session_family_catalogue,
+        get_session_identifier_catalogue as _get_session_identifier_catalogue,
+        get_android_session_mapping_catalogue as _get_android_session_mapping_catalogue,
+    )
+
+    CANONICAL_SESSION_AXIS_ALIGNED_PR3: str = (
+        "PROJECTION_ROUTES::CANONICAL_SESSION_AXIS_ALIGNED_PR3_V1: "
+        "core.canonical_session_axis is confirmed as the canonical authority "
+        "for the cross-layer, cross-repository session axis model (PR-3).  "
+        "Five session families (conversation, control, runtime_attachment, "
+        "delegation_transfer, mesh) are explicitly defined with canonical "
+        "identifiers, alias resolution order, continuity class, and Android "
+        "mapping catalogue.  Existing reconnect, recovery, and transfer "
+        "semantics are preserved."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_SESSION_AXIS_ALIGNED_PR3: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_SESSION_AXIS_ALIGNED_PR3_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
