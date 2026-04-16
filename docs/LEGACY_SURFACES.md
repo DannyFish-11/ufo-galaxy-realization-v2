@@ -2,6 +2,11 @@
 
 > **PR-8** — Remove retired legacy surfaces, finalize documentation, and
 > enforce non-regression architecture rules.
+>
+> **PR-10** — Compatibility-surface retirement plan: explicit inventory,
+> tier classification, and governed convergence roadmap.
+> See [`core/compat_surface_retirement.py`](../core/compat_surface_retirement.py)
+> for the machine-checkable authority module.
 
 This document is the authoritative registry of all legacy, deprecated, and
 compatibility-only surfaces in the repository.  Every entry is categorised by
@@ -117,5 +122,53 @@ This module provides `LEGACY_PATH_REGISTRY`, `LEGACY_ORCHESTRATOR_PATHS`, and
 
 ---
 
-*Last updated: PR-8 — Remove retired legacy surfaces, finalize documentation,
-and enforce non-regression architecture rules.*
+## 7. PR-10 Compatibility-surface retirement roadmap
+
+**Authority module:** `core/compat_surface_retirement.py`
+(`COMPAT_SURFACE_RETIREMENT_IS_AUTHORITY` sentinel)
+
+PR-10 introduces an explicit, machine-checkable retirement plan for all
+high-risk compatibility surfaces.  The goal is **governed convergence**:
+the compat footprint must shrink, not grow, with each batch PR.
+
+### Retirement tier key
+
+| Tier | Meaning |
+|------|---------|
+| **TIER_1** | Immediate retirement target.  Minimal active callers; canonical replacement fully available.  Remove in next cleanup batch. |
+| **TIER_2** | Near-term retirement target.  Some active callers; migration underway.  Must not receive new features.  Remove within 1–2 batches. |
+| **TIER_3** | Long-term retirement target.  Active callers present; canonical replacement exists; migration must be tracked. |
+
+### High-risk compatibility surfaces (PR-10 inventory)
+
+The following surfaces carry `CompatSurfaceRisk.HIGH` — they are prominent
+enough to be mistaken for canonical governance layers and must receive
+earliest retirement attention.
+
+| Surface | Status | Tier | Canonical replacement |
+|---------|--------|------|-----------------------|
+| `core/routes/compat.py` | LEGACY_COMPAT | **TIER_2** | `core/routes/devices.py` (`/api/v1/devices/*`) |
+| `core/node_registry.NodeRegistry` | COMPAT_ONLY | **TIER_2** | `core.nodes.node_fabric_registry.NodeFabricRegistry` |
+| `dashboard/backend/main.py` | LEGACY_COMPAT | **TIER_2** | `core/api_routes.py`; `windows_client/status_board_v2/` |
+| `core.multi_llm_router.MultiLLMRouter` | LEGACY_COMPAT | **TIER_2** | `core.model_topology.topology_router.TopologyRouter` |
+
+### TIER_1 surfaces (immediate retirement targets)
+
+| Surface | Status | Removal condition |
+|---------|--------|-------------------|
+| `core/routes/_shared.node_status_cache` | COMPAT_ONLY | Remove when `core/routes/compat.py` is deleted |
+| `galaxy_gateway/legacy/capability_registry.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
+| `galaxy_gateway/legacy/task_decomposer.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
+| `fusion/unified_orchestrator.py` | HARD_DEPRECATED | Remove when `fusion/start_fusion.py` and `fusion/demo_e2e.py` are migrated |
+| `launcher/config_manager.py` | HARD_DEPRECATED | No production callers remain; remove when deprecation tests are cleaned up |
+
+### Policy sentinels (PR-10)
+
+- `HIGH_RISK_COMPAT_SURFACES_MUST_BE_INVENTORIED_POLICY`
+- `COMPAT_SURFACES_MUST_NOT_MASQUERADE_AS_CANONICAL_POLICY`
+- `RETIREMENT_TIER_CLASSIFICATION_MUST_BE_EXPLICIT_POLICY`
+- `COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY`
+
+---
+
+*Last updated: PR-10 — Compatibility-surface retirement plan.*
