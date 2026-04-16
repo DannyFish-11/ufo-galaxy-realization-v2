@@ -606,6 +606,9 @@ class TestGroupL_ProjectionSentinel:
     def test_l2_projection_sentinel_not_unavailable(self):
         assert "UNAVAILABLE" not in CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7
 
+    def test_l2b_projection_sentinel_contains_expected_content(self):
+        assert "canonical task dispatch chain" in CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7.lower()
+
     def test_l3_projection_sentinel_is_string(self):
         assert isinstance(CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7, str)
 

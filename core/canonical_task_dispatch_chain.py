@@ -125,7 +125,7 @@ CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY: str = (
 CANONICAL_TASK_DISPATCH_CHAIN_PR7_SENTINEL: str = (
     "CANONICAL_TASK_DISPATCH_CHAIN_PR7::governance-plan-7::"
     "dispatch-chain-is-single-governed-taxonomy::"
-    "primary+remote+fallback+staged+android+blocked-paths-all-classified"
+    "primary-remote-fallback-staged-android-blocked-paths-all-classified"
 )
 
 # ---------------------------------------------------------------------------
