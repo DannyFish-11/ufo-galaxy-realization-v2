@@ -553,14 +553,60 @@ class TestAndroidBridgeDispatch:
         )
 
     def test_dispatch_wiring_in_source(self):
-        """Verify the dispatch lines use canonical handlers for the 4 types."""
+        """Verify the dispatch table uses canonical handlers for the 4 types.
+
+        Checks are done via AST inspection of the source to avoid brittle
+        exact-string-format dependencies.
+        """
+        import ast
         import pathlib
-        src = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
-        text = src.read_text(encoding="utf-8")
-        assert "MessageType.FILE_TRANSFER] = _wrap(handle_file_transfer)" in text
-        assert "MessageType.PEER_ANNOUNCE] = _wrap(handle_peer_announce)" in text
-        assert "MessageType.PEER_EXCHANGE] = _wrap(handle_peer_exchange)" in text
-        assert "MessageType.MESH_TOPOLOGY] = _wrap(handle_mesh_topology)" in text
+
+        src_path = pathlib.Path(__file__).parent.parent / "galaxy_gateway" / "android_bridge.py"
+        source = src_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+
+        # Collect all assignment targets of the form:
+        #   self._message_handlers[MessageType.XYZ] = _wrap(some_handler)
+        # Build a mapping: message_type_attr → wrapped_function_name
+        dispatch_map: dict[str, str] = {}
+
+        for node in ast.walk(tree):
+            # Look for: self._message_handlers[...] = _wrap(...)
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if not (isinstance(target, ast.Subscript) and
+                        isinstance(target.value, ast.Attribute) and
+                        target.value.attr == "_message_handlers"):
+                    continue
+                # Extract key: MessageType.FILE_TRANSFER → "FILE_TRANSFER"
+                key_node = target.slice
+                if isinstance(key_node, ast.Attribute):
+                    type_attr = key_node.attr  # e.g. "FILE_TRANSFER"
+                else:
+                    continue
+                # Extract value: _wrap(handle_file_transfer) → "handle_file_transfer"
+                val_node = node.value
+                if (isinstance(val_node, ast.Call) and
+                        isinstance(val_node.func, ast.Name) and
+                        val_node.func.id == "_wrap" and
+                        val_node.args):
+                    arg0 = val_node.args[0]
+                    if isinstance(arg0, ast.Name):
+                        dispatch_map[type_attr] = arg0.id
+
+        expected = {
+            "FILE_TRANSFER": "handle_file_transfer",
+            "PEER_ANNOUNCE": "handle_peer_announce",
+            "PEER_EXCHANGE": "handle_peer_exchange",
+            "MESH_TOPOLOGY": "handle_mesh_topology",
+        }
+        for msg_type, expected_handler in expected.items():
+            actual = dispatch_map.get(msg_type)
+            assert actual == expected_handler, (
+                f"MessageType.{msg_type} should be dispatched to"
+                f" {expected_handler}, got {actual!r}"
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

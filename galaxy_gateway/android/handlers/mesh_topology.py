@@ -78,7 +78,12 @@ async def handle_mesh_topology(
             topology = mesh.get_topology()
             # Extract peer count from topology for convenience.
             peers = topology.get("peers", {})
-            peer_count = len(peers) if isinstance(peers, dict) else int(peers) if isinstance(peers, int) else 0
+            if isinstance(peers, dict):
+                peer_count = len(peers)
+            elif isinstance(peers, int):
+                peer_count = peers
+            else:
+                peer_count = 0
         except Exception as exc:
             logger.warning(
                 "MESH_TOPOLOGY mesh integration failed (non-fatal):"
