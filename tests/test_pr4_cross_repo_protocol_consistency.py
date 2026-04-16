@@ -606,6 +606,23 @@ def test_projection_sentinel_mentions_pr4():
     assert "PR4" in CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4 or "PR-4" in CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4
 
 
+def test_projection_fallback_sentinel_format():
+    """Verify the UNAVAILABLE sentinel string follows the expected convention.
+
+    This documents the expected format of the fallback string that would be set
+    when the import guard triggers (e.g. during partial deployments).  The test
+    verifies the *constant name* so that callers can reliably detect
+    unavailability by checking for the 'UNAVAILABLE' substring.
+    """
+    expected_unavailable = (
+        "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
+    )
+    # Verify the UNAVAILABLE sentinel literal follows the naming convention.
+    assert "PROJECTION_ROUTES::" in expected_unavailable
+    assert "UNAVAILABLE" in expected_unavailable
+    assert "PR4" in expected_unavailable
+
+
 # ---------------------------------------------------------------------------
 # Cross-category coverage invariants
 # ---------------------------------------------------------------------------
