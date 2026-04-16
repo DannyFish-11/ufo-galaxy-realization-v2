@@ -1163,6 +1163,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CROSS_DEVICE_RUNTIME_ACCEPTANCE_ALIGNED_PR34_UNAVAILABLE"
     )
 
+# PR-7 (12-PR governance plan): canonical task dispatch and delegated execution
+# chain definition.  Confirms that the single canonical dispatch chain taxonomy
+# (primary_local / remote_handoff / fallback_local / staged_mesh /
+# android_inbound / blocked) is defined and inspectable, that Android inbound
+# dispatch is placed inside the same execution model, and that all dispatch
+# path roles, result owners, and policy sentinels are machine-checkable.
+try:
+    from core.canonical_task_dispatch_chain import (
+        CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY as _CTDC_AUTHORITY,
+        CANONICAL_TASK_DISPATCH_CHAIN_PR7_SENTINEL as _CTDC_PR7,
+        DISPATCH_CHAIN_PRIMARY_PATH_IS_LOCAL_POLICY as _CTDC_PRIMARY,
+        DISPATCH_CHAIN_REMOTE_HANDOFF_BLOCKS_LOCAL_POLICY as _CTDC_REMOTE,
+        DISPATCH_CHAIN_FALLBACK_IS_DISTINGUISHABLE_POLICY as _CTDC_FALLBACK,
+        DISPATCH_CHAIN_ANDROID_INBOUND_IS_SAME_SYSTEM_POLICY as _CTDC_ANDROID,
+        DISPATCH_CHAIN_STAGED_MESH_IS_COORDINATION_ONLY_POLICY as _CTDC_MESH,
+        DISPATCH_CHAIN_BLOCKED_PATH_IS_FINAL_POLICY as _CTDC_BLOCKED,
+    )
+
+    CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7: str = (
+        "PROJECTION_ROUTES::CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7_V1: "
+        "The canonical task dispatch chain taxonomy is confirmed.  All six dispatch "
+        "path kinds (primary_local, remote_handoff, fallback_local, staged_mesh, "
+        "android_inbound, blocked) are classified by role, result_owner, primary "
+        "module, and policy sentinel.  Android inbound dispatch is explicitly placed "
+        "inside the same governed execution system.  The dispatch system is "
+        "explicitly inspectable and governable without changing its core behavior."
+    )
+except ImportError:  # pragma: no cover
+    CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CANONICAL_TASK_DISPATCH_CHAIN_ALIGNED_PR7_UNAVAILABLE"
+    )
+
 # Canonical runtime node registry consolidation sentinel.
 # Confirms that NodeFabricRegistry (core.nodes.node_fabric_registry) is the
 # single canonical runtime node registry, that system status endpoints derive
