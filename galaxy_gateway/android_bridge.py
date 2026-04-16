@@ -90,6 +90,9 @@ from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_paylo
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
+from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
+from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
 # =============================================================================
@@ -467,10 +470,10 @@ class AndroidBridge:
         self._message_handlers[MessageType.APP_START] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.APP_STOP] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.SYSTEM_COMMAND] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.FILE_TRANSFER] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.MESH_TOPOLOGY] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.FILE_TRANSFER] = _wrap(handle_file_transfer)
+        self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_peer_announce)
+        self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_peer_exchange)
+        self._message_handlers[MessageType.MESH_TOPOLOGY] = _wrap(handle_mesh_topology)
 
         # 设备状态上报
         self._message_handlers[MessageType.DEVICE_STATUS] = _wrap(handle_device_status)
