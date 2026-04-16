@@ -357,7 +357,7 @@ def build_output_chain_catalog() -> List[ChainStageRecord]:
             output_type="RuntimeTruthSnapshot",
             responsibility_summary=(
                 "Gather state from all canonical subsystems once and produce an "
-                "internal-only RuntimeTruthSnapshot; must not be called directly "
+                "internal-only RuntimeTruthSnapshot; Must not be called directly "
                 "from Stage 3 when Stage 2 is available."
             ),
             may_call_stages=(),
@@ -377,8 +377,8 @@ def build_output_chain_catalog() -> List[ChainStageRecord]:
             output_type="OutwardRuntimeTruthSnapshot",
             responsibility_summary=(
                 "Call Stage 1 once, enrich with operator/bridge/ACE context, and "
-                "produce an OutwardRuntimeTruthSnapshot that is the sole authoritative "
-                "data source for all downstream outward consumers."
+                "produce an OutwardRuntimeTruthSnapshot that serves as the sole "
+                "authoritative data source for all downstream consumers."
             ),
             may_call_stages=(1,),
             known_surface_ids=(
@@ -399,7 +399,7 @@ def build_output_chain_catalog() -> List[ChainStageRecord]:
             responsibility_summary=(
                 "Read from Stage 2 (compile_outward_truth) and surface compiled state "
                 "via API endpoints, desktop status board, and operator snapshots; "
-                "must not call Stage 1 directly when Stage 2 is available."
+                "Must not call Stage 1 directly when Stage 2 is available."
             ),
             may_call_stages=(2,),
             known_surface_ids=(

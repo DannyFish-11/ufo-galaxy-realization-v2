@@ -303,11 +303,11 @@ def test_get_stage_record_stage3() -> None:
 
 
 def test_get_stage_record_invalid_raises() -> None:
-    class _FakeStage:
+    class InvalidStage:
         pass
 
     with pytest.raises((KeyError, AttributeError, TypeError)):
-        get_stage_record(_FakeStage())  # type: ignore[arg-type]
+        get_stage_record(InvalidStage())  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
