@@ -1833,6 +1833,38 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CROSS_REPO_PROTOCOL_CONSISTENCY_ALIGNED_PR4_UNAVAILABLE"
     )
 
+# PR-12 (Cross-repository consistency gates — main repository side): CI-friendly
+# consistency gate mechanisms for the most important shared semantic surfaces.
+# Importing authority and PR-12 sentinel from the new module ties the projection
+# route layer to the consistency gate infrastructure, enabling CI-level automated
+# checking of shared schema vocabulary, session identifiers, execution enums,
+# terminal state semantics, descriptor fields, and transitional allowance
+# explicitness.
+try:
+    from core.cross_repo_consistency_gates import (  # noqa: F401
+        CROSS_REPO_CONSISTENCY_GATES_IS_AUTHORITY as _CRCG_AUTHORITY,
+        CROSS_REPO_CONSISTENCY_GATES_PR12_SENTINEL as _CRCG_PR12,
+        ConsistencyGateKind as _ConsistencyGateKind,
+        GateVerdict as _GateVerdict,
+        build_consistency_gate_snapshot as _build_consistency_gate_snapshot,
+        run_all_consistency_gates as _run_all_consistency_gates,
+    )
+
+    CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12: str = (
+        "PROJECTION_ROUTES::CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_V1: "
+        "core.cross_repo_consistency_gates is confirmed as the canonical "
+        "authority for CI-friendly cross-repository consistency gate mechanisms "
+        "(PR-12).  Schema vocabulary, session family, execution enum, terminal "
+        "state, descriptor field, and transitional marker gates are available "
+        "and produce structured ConsistencyGateResult objects.  Projection "
+        "endpoints can surface gate snapshots for operator and CI visibility "
+        "without changing runtime behavior."
+    )
+except ImportError:  # pragma: no cover
+    CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
