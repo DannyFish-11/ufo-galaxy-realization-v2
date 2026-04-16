@@ -462,6 +462,34 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::UGCP_STAGED_STRICTNESS_ROLLOUT_GATING_ALIGNED_PR14_UNAVAILABLE"
     )
 
+# PR-9 (realization-v2 convergence plan): explicit runtime-truth to outward-truth
+# compilation and output chain.  Importing the authority sentinel and PR-9 sentinel
+# ties projection routes to the canonical chain contract, making the ordered
+# Stage 1 (RuntimeTruthCompiler) → Stage 2 (OutwardRuntimeTruth) → Stage 3
+# (Projection Surfaces) dependency explicit and policy-governed.
+try:
+    from core.runtime_truth_output_chain import (  # noqa: F401
+        RUNTIME_TRUTH_OUTPUT_CHAIN_IS_AUTHORITY as _RTOC_AUTHORITY,
+        RUNTIME_TRUTH_OUTPUT_CHAIN_PR9_SENTINEL as _RTOC_PR9,
+        TruthOutputStage as _TruthOutputStage,
+        build_output_chain_catalog as _build_output_chain_catalog,
+        build_output_chain_snapshot as _build_output_chain_snapshot,
+        classify_output_stage as _classify_output_stage,
+    )
+
+    RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9: str = (
+        "PROJECTION_ROUTES::RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9_V1: "
+        "explicit runtime-truth to outward-truth compilation chain "
+        "(core.runtime_truth_output_chain) is available and aligned with "
+        "projection routes.  Stage ordering (RuntimeTruthCompiler → "
+        "OutwardRuntimeTruth → ProjectionSurfaces), single-output authority, "
+        "and no-repeated-assembly constraints are policy-governed."
+    )
+except ImportError:  # pragma: no cover
+    RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::RUNTIME_TRUTH_OUTPUT_CHAIN_ALIGNED_PR9_UNAVAILABLE"
+    )
+
 # PR package 10 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime execution-tracking and acknowledgment
 # basis.  Importing the authority sentinel and the PR-10 sentinel from the new
