@@ -1971,6 +1971,49 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6_UNAVAILABLE"
     )
 
+# PR-8 (UGCP convergence plan, realization-v2 side): long-tail compat surface
+# classification and replacement of generic-forward paths for the highest-value
+# multi-device flows (file transfer, peer exchange, mesh topology).
+try:
+    from core.long_tail_compat_surface import (  # noqa: F401
+        LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY as _LTCS_AUTHORITY,
+        LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL as _LTCS_PR8,
+        GENERIC_FORWARD_IS_TRANSITIONAL_POLICY as _LTCS_GF_POLICY,
+        MINIMAL_COMPAT_PATHS_MUST_BE_CATALOGUED_POLICY as _LTCS_CATALOG_POLICY,
+        HIGHEST_VALUE_FLOWS_REQUIRE_STATEFUL_HANDLING_POLICY as _LTCS_HV_POLICY,
+        LONG_TAIL_HONESTY_POLICY as _LTCS_HONESTY_POLICY,
+        LongTailPathKind as _LongTailPathKind,
+        LongTailValueTier as _LongTailValueTier,
+        LongTailTransitionStatus as _LongTailTransitionStatus,
+        LongTailPathRecord as _LongTailPathRecord,
+        LongTailCatalogSummary as _LongTailCatalogSummary,
+        get_long_tail_catalog as _get_long_tail_catalog,
+        get_paths_by_tier as _get_paths_by_tier,
+        get_generic_forward_paths as _get_generic_forward_paths,
+        get_closed_loop_paths as _get_closed_loop_paths,
+        get_transitional_paths as _get_transitional_paths,
+        build_catalog_summary as _build_long_tail_catalog_summary,
+    )
+
+    LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8: str = (
+        "PROJECTION_ROUTES::LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8_V1: "
+        "core.long_tail_compat_surface is confirmed as the canonical "
+        "authority for classifying all long-tail generic-forward and "
+        "minimal-compat message-family paths.  The highest-value flows "
+        "(file_transfer, peer_announce, peer_exchange, mesh_topology) "
+        "now have dedicated stateful handlers in "
+        "galaxy_gateway.android.handlers.  The remaining generic-forward "
+        "paths (remote control, app lifecycle, system command, task "
+        "lifecycle, agent config) are explicitly catalogued as transitional "
+        "and must not be extended as canonical architecture.  The catalog "
+        "is machine-checkable and diagnosable at the projection surface "
+        "level (PR-8 long-tail compat surface)."
+    )
+except ImportError:  # pragma: no cover
+    LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::LONG_TAIL_COMPAT_SURFACE_ALIGNED_PR8_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.

@@ -38,6 +38,12 @@ from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_paylo
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
+from galaxy_gateway.android.handlers.peer_exchange import (
+    handle_peer_announce,
+    handle_peer_exchange,
+)
+from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 
 __all__ = [
     "handle_device_register",
@@ -61,4 +67,8 @@ __all__ = [
     "handle_vision_request",
     "handle_generic_forward",
     "handle_delegated_execution_signal",
+    "handle_file_transfer",
+    "handle_peer_announce",
+    "handle_peer_exchange",
+    "handle_mesh_topology",
 ]
