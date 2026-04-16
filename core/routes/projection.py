@@ -1898,6 +1898,47 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::CROSS_REPO_CONSISTENCY_GATES_ALIGNED_PR12_UNAVAILABLE"
     )
 
+# PR-6 (UGCP convergence plan, realization-v2 side): authority boundary
+# classification across SSOT, UDM, UCM, registries, caches, projections,
+# facades, and adapters.  Importing authority and PR-6 sentinel from the
+# new module ties the projection route layer to the authority boundary
+# classification infrastructure, making the authority matrix machine-checkable
+# and diagnosable at the projection surface level.
+try:
+    from core.authority_boundary_classification import (  # noqa: F401
+        AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY as _ABC_AUTHORITY,
+        AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL as _ABC_PR6,
+        COMPAT_SURFACES_ARE_NON_AUTHORITATIVE_POLICY as _ABC_COMPAT_POLICY,
+        CACHE_INDEX_SURFACES_MUST_NOT_WRITE_TRUTH_POLICY as _ABC_CACHE_POLICY,
+        ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY as _ABC_ADAPTER_POLICY,
+        TRANSITIONAL_SURFACES_MUST_NOT_BE_EXTENDED_POLICY as _ABC_TRANSITIONAL_POLICY,
+        AuthorityRole as _AuthorityRole,
+        AuthoritySurface as _AuthoritySurface,
+        AuthorityMatrixSummary as _AuthorityMatrixSummary,
+        get_authority_matrix as _get_authority_matrix,
+        classify_surface as _classify_surface,
+        get_surfaces_by_role as _get_surfaces_by_role,
+        get_non_authoritative_surfaces as _get_non_authoritative_surfaces,
+        get_transitional_surfaces as _get_transitional_surfaces,
+        build_authority_matrix_summary as _build_authority_matrix_summary,
+    )
+
+    AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6: str = (
+        "PROJECTION_ROUTES::AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6_V1: "
+        "core.authority_boundary_classification is confirmed as the canonical "
+        "authority for classifying all major SSOT, UDM, UCM, registry, cache, "
+        "projection, compat-facade, adapter, and routing-helper surfaces by "
+        "authority role (PR-6 authority boundary classification).  The full "
+        "authority matrix is reviewable and machine-checkable.  Compat-facing "
+        "surfaces are explicitly non-authoritative.  Transitional surfaces are "
+        "marked for retirement.  Projection endpoints can surface the authority "
+        "matrix summary for operator and CI visibility."
+    )
+except ImportError:  # pragma: no cover
+    AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
