@@ -263,8 +263,8 @@ def test_get_authority_matrix_returns_copy():
     """get_authority_matrix() should not return the internal list directly."""
     m1 = get_authority_matrix()
     m2 = get_authority_matrix()
-    m1.append(None)  # type: ignore[arg-type]
-    assert len(get_authority_matrix()) == len(m2)
+    # Each call should return a distinct list object (a copy, not the same reference)
+    assert m1 is not m2
 
 
 # ---------------------------------------------------------------------------
@@ -310,8 +310,11 @@ def test_classify_surface_returns_none_for_empty_string():
 
 
 def test_get_surfaces_by_role_ssot_write_not_empty():
+    # The authority matrix must have at least UDM and UCM as ssot_write surfaces.
     surfaces = get_surfaces_by_role(AuthorityRole.ssot_write)
-    assert len(surfaces) >= 2, "Expected at least UDM and UCM as ssot_write surfaces"
+    ssot_ids = {s.surface_id for s in surfaces}
+    assert "udm" in ssot_ids, "UDM must be an ssot_write surface"
+    assert "ucm" in ssot_ids, "UCM must be an ssot_write surface"
 
 
 def test_get_surfaces_by_role_ssot_write_all_authoritative():

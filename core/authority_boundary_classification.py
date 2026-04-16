@@ -909,6 +909,11 @@ _AUTHORITY_MATRIX: List[AuthoritySurface] = [
     ),
 ]
 
+# Lookup index by surface_id for O(1) classify_surface() calls.
+_AUTHORITY_MATRIX_INDEX: Dict[str, AuthoritySurface] = {
+    entry.surface_id: entry for entry in _AUTHORITY_MATRIX
+}
+
 
 # ---------------------------------------------------------------------------
 # Public functions
@@ -941,10 +946,7 @@ def classify_surface(surface_id: str) -> Optional[AuthoritySurface]:
         The classification entry if found; ``None`` if the surface is not
         in the authority matrix.
     """
-    for entry in _AUTHORITY_MATRIX:
-        if entry.surface_id == surface_id:
-            return entry
-    return None
+    return _AUTHORITY_MATRIX_INDEX.get(surface_id)
 
 
 def get_surfaces_by_role(role: AuthorityRole) -> List[AuthoritySurface]:
