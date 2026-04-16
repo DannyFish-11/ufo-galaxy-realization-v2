@@ -1519,6 +1519,44 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::OPENCLAWD_CANONICAL_NODE_TOOL_EXPOSURE_ALIGNED_PR10_UNAVAILABLE"
     )
 
+# PR-10 (compatibility-surface retirement): Confirms that the compatibility-
+# surface retirement inventory is available and classifies high-risk compat
+# surfaces by retirement tier.  The inventory establishes the governed
+# convergence roadmap that shrinks the compat footprint across batch PRs.
+try:
+    from core.compat_surface_retirement import (  # noqa: F401
+        COMPAT_SURFACE_RETIREMENT_IS_AUTHORITY as _CSR_AUTHORITY,
+        COMPAT_SURFACE_RETIREMENT_PR10_SENTINEL as _CSR_PR10,
+        HIGH_RISK_COMPAT_SURFACES_MUST_BE_INVENTORIED_POLICY as _CSR_INVENTORY_POLICY,
+        COMPAT_SURFACES_MUST_NOT_MASQUERADE_AS_CANONICAL_POLICY as _CSR_MASQUERADE_POLICY,
+        RETIREMENT_TIER_CLASSIFICATION_MUST_BE_EXPLICIT_POLICY as _CSR_TIER_POLICY,
+        COMPAT_FOOTPRINT_MUST_SHRINK_OVER_TIME_POLICY as _CSR_FOOTPRINT_POLICY,
+        RetirementTier as _RetirementTier,
+        RetirementStatus as _RetirementStatus,
+        CompatSurfaceRisk as _CompatSurfaceRisk,
+        CompatSurfaceRecord as _CompatSurfaceRecord,
+        RetirementRoadmapSummary as _RetirementRoadmapSummary,
+        get_compat_surface_inventory as _get_compat_surface_inventory,
+        get_surfaces_by_tier as _get_surfaces_by_tier,
+        get_high_risk_surfaces as _get_high_risk_surfaces,
+        build_retirement_roadmap_summary as _build_retirement_roadmap_summary,
+        classify_surface_tier as _classify_surface_tier,
+    )
+
+    COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10: str = (
+        "PROJECTION_ROUTES::COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10_V1: "
+        "core.compat_surface_retirement is confirmed as the canonical authority "
+        "for the compatibility-surface retirement inventory and tier classification "
+        "after PR-10.  All high-risk compat surfaces are inventoried.  "
+        "TIER_1 surfaces (immediate retirement targets) are explicitly identified.  "
+        "The system is transitioning from broad compatibility coexistence toward "
+        "governed convergence with a shrinking compat footprint."
+    )
+except ImportError:  # pragma: no cover
+    COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::COMPAT_SURFACE_RETIREMENT_ALIGNED_PR10_UNAVAILABLE"
+    )
+
 # PR-11 (node invocation governance): Confirms that governance eligibility is
 # enforced at invocation time, not only at capability/tool-surface exposure
 # time.  UnifiedNodeExecutor.execute() consults NodeFabricRegistry and
