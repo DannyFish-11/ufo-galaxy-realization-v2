@@ -253,6 +253,16 @@ class OutwardRuntimeTruthSnapshot:
     authority_conflict_summary: Optional[Dict[str, Any]] = None
     """AuthorityConflictElimination snapshot — boundary compliance."""
 
+    durable_mesh_session_facet: Optional[Dict[str, Any]] = None
+    """Durable mesh session facet — recoverable session count, session IDs, and
+    lifecycle summary surfaced from :class:`~core.mesh.mesh_session_persistence.MeshSessionPersistenceStore`.
+
+    This facet is the outward truth integration point for the durable mesh
+    session runtime foundation (PR-1).  Downstream projection surfaces and
+    recovery monitors should prefer this field over independently querying
+    the persistence store.
+    """
+
     # Aggregated source records
     source_records: List[TruthSourceRecord] = field(default_factory=list)
 
@@ -285,6 +295,7 @@ class OutwardRuntimeTruthSnapshot:
             "operator_snapshot": self.operator_snapshot,
             "projection_bridge_augmentation": self.projection_bridge_augmentation,
             "authority_conflict_summary": self.authority_conflict_summary,
+            "durable_mesh_session_facet": self.durable_mesh_session_facet,
             "sources": [
                 {
                     "source_name": r.source_name,
@@ -543,6 +554,48 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
             latency_ms=(time.monotonic() - t0) * 1000,
         ))
 
+    # ── 5. DurableMeshSessionFacet ───────────────────────────────────────
+    # PR-1: Durable mesh session runtime foundation.
+    # Surface recoverable session state through the outward truth path so
+    # downstream projection and recovery monitors have a single authoritative
+    # read point rather than independently querying the persistence store.
+    t0 = time.monotonic()
+    mesh_session_data: Optional[Dict[str, Any]] = None
+    try:
+        from core.mesh.mesh_session_persistence import (
+            recover_mesh_sessions,
+            list_recoverable_sessions,
+        )
+
+        recoverable_records = recover_mesh_sessions()
+        recoverable_ids = [r.session_id for r in recoverable_records]
+        mesh_session_data = {
+            "recoverable_session_count": len(recoverable_ids),
+            "recoverable_session_ids": recoverable_ids,
+            "status_breakdown": {
+                r.session_id: r.overall_status for r in recoverable_records
+            },
+            "authority": (
+                "DURABLE_MESH_SESSION_FACET::PR1_OUTWARD_TRUTH_INTEGRATION: "
+                "Recoverable session state sourced from "
+                "core/mesh/mesh_session_persistence.py."
+            ),
+        }
+        records.append(TruthSourceRecord(
+            source_name="DurableMeshSessionFacet",
+            signal_class=TruthSignalClass.PRIMARY,
+            data=mesh_session_data,
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+    except Exception as exc:
+        notes.append(f"DurableMeshSessionFacet unavailable: {exc}")
+        records.append(TruthSourceRecord(
+            source_name="DurableMeshSessionFacet",
+            signal_class=TruthSignalClass.UNAVAILABLE,
+            error=str(exc),
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+
     # ── Aggregate counts ─────────────────────────────────────────────────
     primary = sum(1 for r in records if r.signal_class == TruthSignalClass.PRIMARY)
     secondary = sum(1 for r in records if r.signal_class == TruthSignalClass.SECONDARY)
@@ -556,6 +609,7 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         operator_snapshot=op_data,
         projection_bridge_augmentation=bridge_data,
         authority_conflict_summary=ace_data,
+        durable_mesh_session_facet=mesh_session_data,
         source_records=records,
         primary_source_count=primary,
         secondary_source_count=secondary,
