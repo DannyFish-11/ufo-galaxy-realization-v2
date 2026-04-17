@@ -1,6 +1,7 @@
 # Unified Scheduling Authority Map
 
-> **Dual-repo audit document** — produced as part of the complete unresolved audit PR.
+> **Full re-audit pass** — fresh standalone review. Supersedes all prior scheduling
+> authority map versions including `REAUDIT_SCHEDULING_AUTHORITY_V2.md`.
 > Primary repo: `DannyFish-11/ufo-galaxy-realization-v2`.
 > Cross-repo reference: `DannyFish-11/ufo-galaxy-android`.
 
@@ -175,9 +176,9 @@ For architecture purposes, `DeviceRouter` is best classified as a **canonical di
 
 | Gap ID | Severity | Module | Description | Target |
 |--------|----------|--------|-------------|--------|
-| GAP-512-004 | MEDIUM | `core/command_router.py` | `CommandRouter` does not call `query_routable_executors()` / `query_network_path()` before selecting dispatch targets. Routing decisions may bypass canonical capability/network truth. | PR-514 |
-
-No HIGH-severity scheduling gaps remain after PR-517 through PR-532 closure sweep.
+| GAP-512-004 | MEDIUM | `core/command_router.py` | `CommandRouter` now calls `query_routable_executors()` / `query_network_path()` (PR-513) but only as advisory logging — results are not used to gate or alter the routing decision. Dispatch still uses the three-gate admissibility chain. Capability graph convergence is advisory-only, not enforced. | PR-514 |
+| SCHED-003 | MEDIUM | `galaxy_gateway/device_router.py` | `DeviceRouter.route_task()` still calls `_analyze_command()` and `_select_devices()` (delegated to `galaxy_gateway/routing/` modules) — policy and selection logic that belongs in `CommandRouter`. Two parallel device selection paths remain. | CommandRouter authority consolidation PR |
+| SCHED-004 | LOW | `core/constellation_runtime.py` | `ConstellationRuntime._run_dag_loop()` calls `pool.select_device(required_capabilities=caps)` via `DevicePool`. Whether `DevicePool` reads from `CapabilityAssimilationLayer` is unconfirmed. Possible third parallel selection path. | DevicePool audit PR |
 
 ---
 
@@ -189,4 +190,10 @@ No HIGH-severity scheduling gaps remain after PR-517 through PR-532 closure swee
 
 **AC2 — Is `DeviceRouter` cleanly reduced to substrate responsibility?**
 
-> **Substantially yes, with acknowledged formation-level logic.** `DeviceRouter` is sentinel-enforced as substrate-only. It no longer owns dispatch authority. However, it legitimately performs formation resolution and route-mode analysis as "late-stage orchestration before transport." This is by-design rather than leaked policy. The boundary is well-governed.
+> **No — policy residue confirmed.** `DeviceRouter.route_task()` still calls
+> `_analyze_command()` (delegated to `galaxy_gateway/routing/policy.py`) to derive
+> `exec_mode` and `task_type`, and `_select_devices()` (delegated to
+> `galaxy_gateway/routing/device_selection.py`) for a second independent device
+> selection pass. Both contain classification and selection logic that belongs in
+> `CommandRouter`. Gap SCHED-003 is confirmed open. Until this logic is extracted to
+> `CommandRouter` and retired from `DeviceRouter`, `DeviceRouter` is not pure substrate.

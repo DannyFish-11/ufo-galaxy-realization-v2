@@ -1,8 +1,12 @@
 # Multi-Device Runtime Maturity Assessment
 
-> **Dual-repo audit document** — produced as part of the complete unresolved audit PR.
+> **Full re-audit pass** — fresh standalone review. Supersedes all prior maturity
+> assessment versions including `REAUDIT_MULTI_DEVICE_MATURITY_V2.md`.
 > Primary repo: `DannyFish-11/ufo-galaxy-realization-v2`.
 > Cross-repo reference: `DannyFish-11/ufo-galaxy-android`.
+>
+> Each component is classified as: **runtime-complete**, **partial**,
+> **contract-first**, **transitional**, **compatibility/side-path**, or **placeholder**.
 
 ---
 
@@ -282,3 +286,35 @@ stack. For each component, it classifies whether it is:
 | Staged mesh participation | ❌ Not implemented |
 | Persistent mesh session store | ❌ Not implemented |
 | Recovery / resume from checkpoint | ❌ Not implemented |
+
+---
+
+## Re-audit addendum (fresh pass)
+
+### Session migration path confirmed
+
+`galaxy_gateway/session_roaming.py` implements the roaming/migration engine.
+`galaxy_gateway/routes/sessions.py` correctly delegates to it via REST endpoints.
+**These two are properly related.** The split-brain risk is between
+`galaxy_gateway/routes/sessions.py` and any parallel path in `core/routes/sessions.py`
+that may not delegate to the same engine. This needs explicit confirmation (MESH-005).
+
+### MeshSessionCoordinator state population
+
+`MeshSessionCoordinator` state is populated at construction time from a static
+`MeshSession` snapshot. `pending_device_ids`, `completed_device_ids`, and
+`failed_device_ids` are never updated dynamically as execution progresses.
+The coordinator contract is well-designed; the gap is a live engine that reads
+from `TaskGraphRuntime` and updates state as execution progresses.
+
+### Critical dependency chain for multi-device sessions
+
+For a true multi-device session to execute:
+
+1. **MeshSession lifecycle engine** must be built (drives `FORMING → ACTIVE → COMPLETING → DONE`)
+2. **Barrier coordination engine** must be built (waits for all devices before proceeding)
+3. **Role handoff protocol** must be implemented (promotes fallback when primary fails)
+4. **CrossRuntimeResultMerge engine** must be built (merges per-device results into canonical output)
+5. **Persistent session store** must be built (survives restarts, enables recovery)
+
+None of items 1–5 exist today. Items 1 and 2 are the most critical blockers.

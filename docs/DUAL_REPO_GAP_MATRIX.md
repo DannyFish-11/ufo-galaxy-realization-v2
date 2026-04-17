@@ -1,12 +1,14 @@
 # Dual-Repo Gap Matrix
 
-> **Dual-repo audit document** — produced as part of the complete unresolved audit PR.
+> **Full re-audit pass** — fresh standalone review. Supersedes all prior gap matrix versions.
 > Primary repo: `DannyFish-11/ufo-galaxy-realization-v2`.
 > Cross-repo reference: `DannyFish-11/ufo-galaxy-android`.
 >
-> This is the machine-readable companion to `DUAL_REPO_UNRESOLVED_AUDIT.md`.
+> This is the machine-readable companion to `DUAL_REPO_FULL_REAUDIT.md`.
 > Each row is a discrete gap with severity, classification, owning layer,
 > and recommended follow-up.
+>
+> **Prior versions**: `REAUDIT_GAP_MATRIX_V2.md` (superseded), `DUAL_REPO_UNRESOLVED_AUDIT.md` (superseded).
 
 ---
 
