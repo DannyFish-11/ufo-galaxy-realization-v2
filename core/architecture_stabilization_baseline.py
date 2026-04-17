@@ -147,6 +147,17 @@ ARCHITECTURE_STABILIZATION_BASELINE_PR10_SENTINEL: str = (
     "extend versus where to converge."
 )
 
+ARCHITECTURE_STABILIZATION_BASELINE_PR11_SENTINEL: str = (
+    "ARCHITECTURE_STABILIZATION_BASELINE_PR11_SENTINEL_V1: "
+    "PR-11 (realization-v2 convergence plan) — architecture stabilization "
+    "baseline is extended with session-axis, session-truth, and session-registry "
+    "canonical surfaces.  The canonical session axis, canonical session truth, "
+    "and attached-runtime session registry are explicitly declared as "
+    "CANONICAL_STABLE extension points.  Future session-semantics work must "
+    "route through these canonical surfaces and must not introduce parallel "
+    "session authority."
+)
+
 # ---------------------------------------------------------------------------
 # Policy sentinels
 # ---------------------------------------------------------------------------
@@ -192,6 +203,7 @@ __all__ = [
     # Sentinels
     "ARCHITECTURE_STABILIZATION_BASELINE_IS_AUTHORITY",
     "ARCHITECTURE_STABILIZATION_BASELINE_PR10_SENTINEL",
+    "ARCHITECTURE_STABILIZATION_BASELINE_PR11_SENTINEL",
     "CANONICAL_SURFACES_ARE_STABLE_EXTENSION_POINTS_POLICY",
     "TRANSITIONAL_SURFACES_MUST_CONVERGE_NOT_EXTEND_POLICY",
     "EXTENSION_MUST_USE_CANONICAL_PATHS_ONLY_POLICY",
@@ -618,6 +630,54 @@ _BASELINE_CATALOG: List[StabilizationSurfaceRecord] = [
         ),
     ),
     StabilizationSurfaceRecord(
+        surface_id="canonical_session_axis",
+        surface_name="Canonical Session Axis",
+        module_path="core.canonical_session_axis",
+        tier=StabilizationTier.CANONICAL_STABLE,
+        category=SurfaceCategory.GOVERNANCE_AUTHORITY,
+        is_extension_ready=True,
+        pr_introduced="PR-3 (canonical session axis, PR-11 UGCP stabilization)",
+        rationale=(
+            "Canonical authority for the cross-layer, cross-repository session "
+            "axis model: the five session families, canonical identifier "
+            "resolution order, Android-to-center session mapping, and continuity "
+            "semantics.  New session-family definitions or identifier resolution "
+            "rules must be catalogued here."
+        ),
+    ),
+    StabilizationSurfaceRecord(
+        surface_id="canonical_session_truth",
+        surface_name="Canonical Session Truth",
+        module_path="core.canonical_session_truth",
+        tier=StabilizationTier.CANONICAL_STABLE,
+        category=SurfaceCategory.SESSION_LIFECYCLE,
+        is_extension_ready=True,
+        pr_introduced="PR-4 (post-533, PR-11 UGCP stabilization)",
+        rationale=(
+            "Canonical authority for posture-aware result-merge truth and "
+            "session-truth recording.  Determines the single authoritative "
+            "execution truth for a session given local, remote/takeover, and "
+            "partial/multi-device contributions.  New session-truth fields or "
+            "merge policies must be added here."
+        ),
+    ),
+    StabilizationSurfaceRecord(
+        surface_id="attached_runtime_session_registry",
+        surface_name="Attached Runtime Session Registry",
+        module_path="core.attached_runtime_session_registry",
+        tier=StabilizationTier.CANONICAL_STABLE,
+        category=SurfaceCategory.SESSION_LIFECYCLE,
+        is_extension_ready=True,
+        pr_introduced="PR-19 (post-533, PR-11 UGCP stabilization)",
+        rationale=(
+            "Canonical single-source-of-truth registry for attached runtime "
+            "sessions.  Dispatch, reuse, and reconciliation layers MUST consult "
+            "this registry to resolve session identity.  New session-state "
+            "transitions (register, reconnect, reattach, detach, invalidate) "
+            "must flow through this registry."
+        ),
+    ),
+    StabilizationSurfaceRecord(
         surface_id="long_tail_compat_surface",
         surface_name="Long-Tail Compat Surface Catalog",
         module_path="core.long_tail_compat_surface",
@@ -632,9 +692,6 @@ _BASELINE_CATALOG: List[StabilizationSurfaceRecord] = [
             "per-module comments."
         ),
     ),
-    # =========================================================================
-    # EXTENSION_SURFACE — designated extension points per domain
-    # =========================================================================
     StabilizationSurfaceRecord(
         surface_id="projection_routes",
         surface_name="Projection Routes (GET endpoints)",
