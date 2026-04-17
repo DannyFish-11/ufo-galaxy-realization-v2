@@ -140,6 +140,21 @@ from .formation_policy import (
     DEFAULT_LOCAL_FORMATION_POLICY,
 )
 from .formation_resolver import resolve_formation
+from .formation_rebalance_engine import (
+    FormationHealthSignal,
+    MemberRebalanceAction,
+    RebalanceDecision,
+    FormationRebalanceEngine,
+    evaluate_formation_health,
+    apply_rebalance,
+    maybe_promote_fallback,
+    maybe_remove_unhealthy,
+    FORMATION_REBALANCE_ENGINE_IS_AUTHORITY,
+    FORMATION_REBALANCE_GAP_CLOSURE_SENTINEL,
+    REBALANCE_MUST_PRESERVE_SOURCE_POLICY,
+    REBALANCE_MUST_MAINTAIN_PRIMARY_POLICY,
+    HEALTH_THRESHOLD_GOVERNS_REMOVAL_POLICY,
+)
 from .formation_summary import (
     FormationSummary,
     IDLE_FORMATION_SUMMARY,
@@ -166,6 +181,20 @@ __all__ = [
     "DEFAULT_LOCAL_FORMATION_POLICY",
     # Resolver
     "resolve_formation",
+    # Rebalance engine
+    "FormationHealthSignal",
+    "MemberRebalanceAction",
+    "RebalanceDecision",
+    "FormationRebalanceEngine",
+    "evaluate_formation_health",
+    "apply_rebalance",
+    "maybe_promote_fallback",
+    "maybe_remove_unhealthy",
+    "FORMATION_REBALANCE_ENGINE_IS_AUTHORITY",
+    "FORMATION_REBALANCE_GAP_CLOSURE_SENTINEL",
+    "REBALANCE_MUST_PRESERVE_SOURCE_POLICY",
+    "REBALANCE_MUST_MAINTAIN_PRIMARY_POLICY",
+    "HEALTH_THRESHOLD_GOVERNS_REMOVAL_POLICY",
     # Summary helpers
     "FormationSummary",
     "IDLE_FORMATION_SUMMARY",
