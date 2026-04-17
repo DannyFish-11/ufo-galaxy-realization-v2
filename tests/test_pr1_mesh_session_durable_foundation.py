@@ -385,8 +385,11 @@ class TestMeshSessionLifecycleCoordinator:
         assert rec.session_id == "sess-get"
 
     def test_get_record_unknown_returns_none(self, tmp_path):
-        coord = _make_coordinator(store=_make_store(str(tmp_path)))
-        assert coord.get_record("no-such") is None
+        store = _make_store(str(tmp_path))
+        coord = _make_coordinator(store=store)
+        # A known session exists, but a different ID returns None
+        coord.create_session(_make_session_dict("known-sess"))
+        assert coord.get_record("no-such-session") is None
 
     def test_list_active_session_ids(self, tmp_path):
         store = _make_store(str(tmp_path))

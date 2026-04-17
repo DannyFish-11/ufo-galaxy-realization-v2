@@ -585,12 +585,14 @@ class MeshSessionLifecycleCoordinator:
     def _persist(self, record: MeshSessionLifecycleRecord) -> None:
         """Persist *record* to the backing store.  Failures are logged, not raised."""
         store = self._get_store()
-        # Build a coordinator-state-compatible dict for the persistence store
+        # Merge session_dict first, then override identity fields so that values
+        # from session_dict cannot shadow session_id, coordinator_id, or
+        # overall_status which must always reflect the current lifecycle record.
         payload: Dict[str, Any] = {
+            **record.session_dict,
             "session_id": record.session_id,
             "coordinator_id": f"lifecycle_{record.session_id}",
             "overall_status": record.status,
-            **record.session_dict,
         }
         try:
             store.save(payload)
