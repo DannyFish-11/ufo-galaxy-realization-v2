@@ -9,12 +9,13 @@
 ## Summary
 
 This document describes the concrete code changes introduced to begin closing the
-known Galaxy architecture gaps in four areas:
+known Galaxy architecture gaps in five areas:
 
 1. **Mesh Session Durable Persistence** — `core/mesh/mesh_session_persistence.py`
 2. **Formation Rebalance / Recovery Hooks** — `core/device_formation/formation_rebalance_engine.py`
-3. **Scheduling / Truth Convergence Hardening** — `core/scheduling_truth_harness.py`
-4. **Multi-Device Runtime Systemization** — `core/multi_device_runtime_harness.py`
+3. **Formation Runtime Controller (PR-2)** — `core/device_formation/formation_runtime_controller.py`
+4. **Scheduling / Truth Convergence Hardening** — `core/scheduling_truth_harness.py`
+5. **Multi-Device Runtime Systemization** — `core/multi_device_runtime_harness.py`
 
 ---
 
@@ -107,6 +108,77 @@ Provides:
 - `REBALANCE_MUST_PRESERVE_SOURCE_POLICY`
 - `REBALANCE_MUST_MAINTAIN_PRIMARY_POLICY`
 - `HEALTH_THRESHOLD_GOVERNS_REMOVAL_POLICY`
+
+---
+
+## PR-2: Formation Rebalance and Runtime Recovery Hooks
+
+### Problem
+
+The existing `formation_rebalance_engine.py` (Gap 2, above) provides a **stateless**
+health-evaluation engine but stops short of providing **trigger-point-driven** recovery
+semantics.  There are no named trigger hooks for readiness changes, participant loss,
+role instability, or partial-formation degradation.  As a result, the multi-device
+runtime has no explicit API for reacting to changing formation conditions — callers must
+manually thread health maps into the engine with no guidance on what decision should
+follow.
+
+### Implementation
+
+**Module**: `core/device_formation/formation_runtime_controller.py`
+
+Provides the trigger-point and recovery-decision layer that connects runtime state
+changes to formation reshaping:
+
+- `FormationTriggerType` — named trigger categories: `PARTICIPANT_LOST`,
+  `READINESS_CHANGED`, `HEALTH_DEGRADED`, `ROLE_INSTABILITY`, `PARTICIPANT_JOINED`.
+- `FormationTriggerEvent` — structured event carrying trigger type, affected device,
+  session/formation context, health score, and caller metadata.
+- `DegradedContinuationDecision` — set of recovery decisions: `CONTINUE_DEGRADED`,
+  `RESHAPE_AND_CONTINUE`, `AWAIT_RECOVERY`, `ABORT`.
+- `FormationRecoveryPlan` — complete recovery output with continuation decision,
+  reshaped formation, policy, affected device IDs, degradation flag, reason, and
+  structured `recovery_hints` for downstream consumers.
+- `FormationRuntimeController` — processes trigger events and returns recovery plans:
+  - `process_trigger(event, formation)` — generic dispatch to the appropriate hook.
+  - `on_participant_lost(event, formation)` — handles device loss by role.
+  - `on_readiness_changed(event, formation)` — unready device → delegates to lost path;
+    ready device → continue with no action.
+  - `on_health_degraded(event, formation)` — below unhealthy threshold → lost path;
+    degraded band → CONTINUE_DEGRADED with warn; above degraded → no-op.
+  - `on_role_instability(event, formation)` — re-evaluates device as lost from its role.
+  - `on_participant_joined(event, formation)` — signals whether re-resolution is
+    recommended.
+- Module-level convenience functions for each trigger type.
+
+**Trigger routing table**:
+
+| Device role | Trigger result |
+|-------------|----------------|
+| SOURCE | AWAIT_RECOVERY |
+| PRIMARY_EXECUTION (fallback available) | RESHAPE_AND_CONTINUE (promotes fallback) |
+| PRIMARY_EXECUTION (no fallback) | ABORT |
+| FALLBACK | CONTINUE_DEGRADED |
+| SUPPORT / RELAY / OBSERVER | CONTINUE_DEGRADED |
+
+**Design**:
+- Additive only — does not modify any existing module.
+- Delegates all reshaping to `FormationRebalanceEngine` — recovery decisions stay
+  consistent with health-evaluation policy.
+- Graceful degradation — every method returns a valid `FormationRecoveryPlan` even when
+  inputs are `None` or malformed.
+- Stateless — callers update their own formation reference from `plan.reshaped_formation`.
+
+**Exported from**: `core/device_formation/__init__.py`
+
+**Tests**: `tests/test_formation_runtime_controller.py` (51 tests)
+
+**Sentinels**:
+- `FORMATION_RUNTIME_CONTROLLER_IS_AUTHORITY`
+- `FORMATION_RUNTIME_CONTROLLER_PR2_SENTINEL`
+- `SOURCE_LOSS_REQUIRES_AWAIT_RECOVERY_POLICY`
+- `PRIMARY_LOSS_WITH_FALLBACK_TRIGGERS_RESHAPE_POLICY`
+- `NON_CRITICAL_LOSS_CONTINUES_DEGRADED_POLICY`
 
 ---
 
@@ -261,20 +333,23 @@ for snapshot in recoverable:
 | `core/mesh/mesh_session_persistence.py` | New | Durable mesh session persistence store |
 | `core/mesh/__init__.py` | Modified | Export new persistence symbols |
 | `core/device_formation/formation_rebalance_engine.py` | New | Health-driven formation rebalance engine |
-| `core/device_formation/__init__.py` | Modified | Export new rebalance engine symbols |
+| `core/device_formation/formation_runtime_controller.py` | New | Formation trigger hooks and runtime recovery controller (PR-2) |
+| `core/device_formation/__init__.py` | Modified | Export rebalance engine and runtime controller symbols |
 | `core/scheduling_truth_harness.py` | New | Scheduling/truth convergence harness |
 | `core/multi_device_runtime_harness.py` | New | Multi-device runtime integration harness |
 | `tests/test_mesh_session_persistence.py` | New | 25 tests for mesh session persistence |
 | `tests/test_formation_rebalance_engine.py` | New | 33 tests for formation rebalance engine |
+| `tests/test_formation_runtime_controller.py` | New | 51 tests for formation runtime controller (PR-2) |
 | `tests/test_scheduling_truth_harness.py` | New | 20 tests for scheduling truth harness |
 | `tests/test_multi_device_runtime_harness.py` | New | 20 tests for multi-device runtime harness |
-| `docs/ARCHITECTURE_GAP_CLOSURE.md` | New | This document |
+| `docs/ARCHITECTURE_GAP_CLOSURE.md` | Modified | Added PR-2 section |
 
 ---
 
 ## What Remains (Future PRs)
 
-This PR is intentionally scoped. The following gaps are noted but deferred:
+This document covers two implementation rounds (gap-closure PR and PR-2). The
+following gaps are noted but deferred:
 
 1. **Live coordinator engine** — a runtime class that continuously evolves
    `MeshSessionCoordinatorState` across session phases (barrier wait, assignment
@@ -283,13 +358,19 @@ This PR is intentionally scoped. The following gaps are noted but deferred:
 
 2. **Wiring existing call sites** — `core/scheduler.py` relay/mesh paths and
    `galaxy_gateway/device_router.py` should call `on_task_admitted_for_dispatch` and
-   `on_device_health_changed` respectively. This can be done incrementally without
-   breaking existing behavior.
+   `on_device_health_changed` respectively.  The new `FormationRuntimeController`
+   trigger hooks should similarly be wired into gateway connection-loss handlers and
+   heartbeat-miss paths. This can be done incrementally without breaking existing behavior.
 
-3. **Android-side Android health signal forwarding** — the Android repo should forward
+3. **Android-side health signal forwarding** — the Android repo should forward
    device health events through the gateway's WebSocket channel so the
-   `on_device_health_changed` hook receives them automatically.
+   `on_device_health_changed` hook and `FormationRuntimeController.on_participant_lost`
+   hook receive them automatically.
 
 4. **Redis/SQLite backend for persistence** — the pluggable backend interface in
    `MeshSessionPersistenceStore` is ready; a Redis adapter can be added for
    production deployments.
+
+5. **Participant replacement / re-resolution path** — `on_participant_joined` signals
+   when re-resolution is recommended but does not call `resolve_formation()`.  A future
+   PR can wire this into a full participant-replacement loop.
