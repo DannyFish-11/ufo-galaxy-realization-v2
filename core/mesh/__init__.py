@@ -28,6 +28,16 @@ from .mesh_session_persistence import (
     RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY,
     PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY,
 )
+from .mesh_session_lifecycle import (
+    SessionRegistryEntry,
+    MeshSessionLifecycleManager,
+    get_lifecycle_manager,
+    reset_lifecycle_manager,
+    MESH_SESSION_LIFECYCLE_AUTHORITY,
+    LIFECYCLE_PERSISTS_ON_EVERY_TRANSITION_POLICY,
+    LIFECYCLE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY,
+    DURABLE_FOUNDATION_FOR_RESTORE_ROAMING_REBALANCE_SENTINEL,
+)
 
 __all__ = [
     "BodyMeshRegistry",
@@ -53,4 +63,13 @@ __all__ = [
     "MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL",
     "RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY",
     "PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY",
+    # Lifecycle
+    "SessionRegistryEntry",
+    "MeshSessionLifecycleManager",
+    "get_lifecycle_manager",
+    "reset_lifecycle_manager",
+    "MESH_SESSION_LIFECYCLE_AUTHORITY",
+    "LIFECYCLE_PERSISTS_ON_EVERY_TRANSITION_POLICY",
+    "LIFECYCLE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY",
+    "DURABLE_FOUNDATION_FOR_RESTORE_ROAMING_REBALANCE_SENTINEL",
 ]

@@ -97,6 +97,7 @@ Policy sentinels (drift prevention)::
     NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY
     NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY
     OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY
+    MESH_SESSION_TRUTH_INTEGRATED_IN_OUTWARD_TRUTH
 
 Enums::
 
@@ -172,6 +173,15 @@ OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY: str = (
     "All outward-facing surfaces MUST prefer OutwardRuntimeTruthSnapshot as "
     "their primary data source.  Legacy/fallback paths may remain as "
     "compatibility scaffolding but must be explicitly marked secondary."
+)
+
+MESH_SESSION_TRUTH_INTEGRATED_IN_OUTWARD_TRUTH: str = (
+    "MESH_SESSION_TRUTH_INTEGRATED::PR1_DURABLE_FOUNDATION_V1: "
+    "compile_outward_truth() includes MeshSessionLifecycleManager as a PRIMARY "
+    "source (source 5), surfacing durable mesh session state — active, suspended, "
+    "and restoring session counts — through the canonical outward truth pipeline.  "
+    "This ensures session state is not only in transient coordinator memory but "
+    "visible through the authoritative truth projection path."
 )
 
 # ===========================================================================
@@ -253,6 +263,16 @@ class OutwardRuntimeTruthSnapshot:
     authority_conflict_summary: Optional[Dict[str, Any]] = None
     """AuthorityConflictElimination snapshot — boundary compliance."""
 
+    mesh_session_truth: Optional[Dict[str, Any]] = None
+    """Durable mesh session truth summary — active, suspended, and restoring
+    session counts sourced from the MeshSessionLifecycleManager.
+
+    This field is the authoritative bridge between the durable session
+    lifecycle layer (PR-1) and the outward truth pipeline, ensuring that
+    mesh session state is visible through the canonical truth projection
+    path rather than only in transient coordinator memory.
+    """
+
     # Aggregated source records
     source_records: List[TruthSourceRecord] = field(default_factory=list)
 
@@ -285,6 +305,7 @@ class OutwardRuntimeTruthSnapshot:
             "operator_snapshot": self.operator_snapshot,
             "projection_bridge_augmentation": self.projection_bridge_augmentation,
             "authority_conflict_summary": self.authority_conflict_summary,
+            "mesh_session_truth": self.mesh_session_truth,
             "sources": [
                 {
                     "source_name": r.source_name,
@@ -543,6 +564,33 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
             latency_ms=(time.monotonic() - t0) * 1000,
         ))
 
+    # ── 5. MeshSessionLifecycleManager (PR-1 durable foundation) ────────
+    # The lifecycle manager is the authoritative bridge between the durable
+    # session persistence layer and the outward truth pipeline.  Querying
+    # active_session_summary() here ensures that mesh session state is
+    # visible through the canonical truth projection path.
+    t0 = time.monotonic()
+    mesh_session_data: Optional[Dict[str, Any]] = None
+    try:
+        from core.mesh.mesh_session_lifecycle import get_lifecycle_manager
+
+        mgr = get_lifecycle_manager()
+        mesh_session_data = mgr.active_session_summary()
+        records.append(TruthSourceRecord(
+            source_name="MeshSessionLifecycleManager",
+            signal_class=TruthSignalClass.PRIMARY,
+            data=mesh_session_data,
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+    except Exception as exc:
+        notes.append(f"MeshSessionLifecycleManager unavailable: {exc}")
+        records.append(TruthSourceRecord(
+            source_name="MeshSessionLifecycleManager",
+            signal_class=TruthSignalClass.UNAVAILABLE,
+            error=str(exc),
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+
     # ── Aggregate counts ─────────────────────────────────────────────────
     primary = sum(1 for r in records if r.signal_class == TruthSignalClass.PRIMARY)
     secondary = sum(1 for r in records if r.signal_class == TruthSignalClass.SECONDARY)
@@ -556,6 +604,7 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         operator_snapshot=op_data,
         projection_bridge_augmentation=bridge_data,
         authority_conflict_summary=ace_data,
+        mesh_session_truth=mesh_session_data,
         source_records=records,
         primary_source_count=primary,
         secondary_source_count=secondary,

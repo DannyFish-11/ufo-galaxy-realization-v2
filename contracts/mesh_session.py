@@ -114,6 +114,24 @@ class MeshSessionStatus(str, Enum):
     ACTIVE = "active"
     """Session is active and execution is in progress."""
 
+    SUSPENDED = "suspended"
+    """Session has been durably suspended; state is persisted and can be restored.
+
+    A suspended session retains its identity, topology, and participant records
+    in the durable store.  It is not terminal — :attr:`RESTORING` and
+    :attr:`ACTIVE` are valid next states.  This enables session continuity across
+    device disconnects, process restarts, or deliberate pause-and-resume flows.
+    """
+
+    RESTORING = "restoring"
+    """Session is in the process of being restored from durable state.
+
+    A session enters this transient state while the coordinator re-hydrates
+    session identity, participant topology, and subtask assignments from the
+    persistence store.  The valid next state is :attr:`ACTIVE` on successful
+    restore, or :attr:`FAILED` if restore cannot complete.
+    """
+
     MERGING = "merging"
     """Subtask execution is complete; merge/aggregation is in progress."""
 
@@ -551,6 +569,8 @@ def _map_session_status(raw: Any) -> MeshSessionStatus:
     mapping = {
         "pending": MeshSessionStatus.PENDING,
         "active": MeshSessionStatus.ACTIVE,
+        "suspended": MeshSessionStatus.SUSPENDED,
+        "restoring": MeshSessionStatus.RESTORING,
         "merging": MeshSessionStatus.MERGING,
         "completed": MeshSessionStatus.COMPLETED,
         "cancelled": MeshSessionStatus.CANCELLED,
