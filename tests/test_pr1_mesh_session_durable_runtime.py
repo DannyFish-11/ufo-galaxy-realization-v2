@@ -376,7 +376,13 @@ class TestRestoreFromPersistence:
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleManager
         mgr = MeshSessionLifecycleManager(persistence_store=store)
         restored = mgr.restore_from_persistence()
-        assert restored >= 2  # At least 2 non-terminal sessions restored
+        assert restored == 2  # Exactly 2 non-terminal sessions restored
+
+        # Terminal session must not appear in the registry
+        assert mgr.get_session("sess-rp-3") is None
+        # Non-terminal sessions must be in the registry
+        assert mgr.get_session("sess-rp-1") is not None
+        assert mgr.get_session("sess-rp-2") is not None
 
         # Already-tracked sessions should not be double-counted
         restored_again = mgr.restore_from_persistence()

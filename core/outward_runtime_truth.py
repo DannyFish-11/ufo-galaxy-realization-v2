@@ -565,10 +565,11 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         ))
 
     # ── 5. MeshSessionLifecycleManager (PR-1 durable foundation) ────────
-    # The lifecycle manager is the authoritative bridge between the durable
-    # session persistence layer and the outward truth pipeline.  Querying
-    # active_session_summary() here ensures that mesh session state is
-    # visible through the canonical truth projection path.
+    # Sources 1–4 above cover the internal runtime compiler, operator surface,
+    # projection bridge, and authority conflict elimination.  Source 5 adds
+    # the durable mesh session layer so that active, suspended, and restoring
+    # session counts are visible through the canonical outward truth pipeline
+    # rather than only in transient coordinator memory.
     t0 = time.monotonic()
     mesh_session_data: Optional[Dict[str, Any]] = None
     try:

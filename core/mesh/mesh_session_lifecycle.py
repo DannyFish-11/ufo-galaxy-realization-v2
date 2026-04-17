@@ -521,6 +521,14 @@ class MeshSessionLifecycleManager:
             with self._lock:
                 if sid in self._registry:
                     continue  # already tracked in-process
+                # All sessions loaded from persistence start as 'suspended'
+                # regardless of their original persisted status (which could be
+                # 'active', 'restoring', etc.).  This is intentional: a session
+                # recovered from the backing store is not yet running in this
+                # process; it is in a paused/dormant state until the caller
+                # explicitly calls restore_session() → activate_session() to
+                # resume it.  Preserving the original status would incorrectly
+                # imply the session is currently executing.
                 entry = SessionRegistryEntry(
                     session_id=sid,
                     coordinator_state=record.snapshot_dict,
