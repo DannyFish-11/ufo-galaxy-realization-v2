@@ -1,6 +1,7 @@
 # Android Protocol Maturity Matrix
 
-> **Dual-repo audit document** — produced as part of the complete unresolved audit PR.
+> **Full re-audit pass** — fresh standalone review. Supersedes all prior Android
+> protocol maturity matrix versions including `REAUDIT_ANDROID_PROTOCOL_V2.md`.
 > Primary repo: `DannyFish-11/ufo-galaxy-realization-v2`.
 > Cross-repo reference: `DannyFish-11/ufo-galaxy-android`.
 
@@ -320,3 +321,42 @@ logged, and not acted upon. They should be explicitly reviewed:
 - `/ws/ufo3/` legacy path
 - Legacy REST compat aliases (after client migration confirmed)
 - `_handle_forward_log` catch-all pattern for types that should have real handlers
+
+---
+
+## Re-audit addendum (fresh pass)
+
+### task_cancel re-classified HIGH
+
+In prior audit versions, `task_cancel` was classified MEDIUM. This re-audit
+re-classifies it **HIGH** because:
+
+- An Android user can initiate task cancellation via `task_cancel`
+- The center-side `CommandRouter` has no consumer for this message type
+- The catch-all `_handle_forward_log` logs and discards the cancellation request
+- The task continues executing on the center side after Android believes it is cancelled
+- This is a **correctness failure**, not merely a missing feature
+
+`task_status` is similarly re-classified HIGH because the Android side has no way
+to receive authoritative task state from the center side, making lifecycle
+observability unreliable.
+
+### Cross-repo coordination required before retirement
+
+The following message types require coordination with `ufo-galaxy-android` before
+any server-side retirement:
+
+| Type | Coordination required |
+|------|----------------------|
+| `/ws/ufo3/` legacy path | Confirm all Android client versions have migrated |
+| Legacy REST aliases | Confirm all client SDK versions have migrated |
+| AIP v2 binary types | Confirm Android side ships v3 JSON handlers before retiring v2 ingestion |
+| `SESSION_MIGRATE` binary | Must ship AIP v3 JSON session_migrate handler in Android before retiring binary path |
+
+### REPLY / BROADCAST / FORWARD disposition clarification
+
+- `REPLY`: Maps to `task_result` on the Android canonical path. Current binary `REPLY`
+  type should be **REPLACE** with structured `task_result` JSON.
+- `BROADCAST`: No canonical equivalent. **DEFER** pending design for center-to-many-device push.
+- `FORWARD`: Used as a catch-all relay. **RETIRE the pattern** — all message types that
+  currently fall through to `_handle_forward_log` should have dedicated handlers.
