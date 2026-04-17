@@ -297,6 +297,68 @@ def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEnt
             canonical_truth_source="canonical_execution_chain",
             rationale="Selection combines readiness/registry/session truths without owning them.",
         ),
+        # PR-4: Formation, Topology, and Truth Convergence entries
+        TruthProjectionBoundaryEntry(
+            surface_id="formation_resolver",
+            plane=AuthorityPlane.PARTICIPANT,
+            role=BoundaryRole.CANONICAL_TRUTH,
+            module_path="core.device_formation.formation_resolver.resolve_formation",
+            lifecycle_owner=True,
+            canonical_truth_source=None,
+            rationale=(
+                "Canonical formation authority — produces DeviceFormationGroup that "
+                "defines device grouping, role assignment, and formation health at dispatch time."
+            ),
+        ),
+        TruthProjectionBoundaryEntry(
+            surface_id="formation_truth_convergence_projection",
+            plane=AuthorityPlane.PARTICIPANT,
+            role=BoundaryRole.PROJECTION_READ_MODEL,
+            module_path="core.multi_device_truth_convergence.MultiDeviceTruthConvergenceSnapshot.formation",
+            lifecycle_owner=False,
+            canonical_truth_source="formation_resolver",
+            rationale=(
+                "Formation domain facet in the PR-4 convergence snapshot is a read projection "
+                "over the canonical formation_resolver output."
+            ),
+        ),
+        TruthProjectionBoundaryEntry(
+            surface_id="network_topology_runtime",
+            plane=AuthorityPlane.DEVICE,
+            role=BoundaryRole.CANONICAL_TRUTH,
+            module_path="core.network_topology_runtime.NetworkTopologyRuntime",
+            lifecycle_owner=True,
+            canonical_truth_source=None,
+            rationale=(
+                "Canonical network topology authority — unified view of topology nodes, "
+                "edges, connection state, transport preference, and route availability."
+            ),
+        ),
+        TruthProjectionBoundaryEntry(
+            surface_id="topology_truth_convergence_projection",
+            plane=AuthorityPlane.DEVICE,
+            role=BoundaryRole.PROJECTION_READ_MODEL,
+            module_path="core.multi_device_truth_convergence.MultiDeviceTruthConvergenceSnapshot.topology",
+            lifecycle_owner=False,
+            canonical_truth_source="network_topology_runtime",
+            rationale=(
+                "Topology domain facet in the PR-4 convergence snapshot is a read projection "
+                "over the canonical NetworkTopologyRuntime snapshot."
+            ),
+        ),
+        TruthProjectionBoundaryEntry(
+            surface_id="multi_device_truth_convergence",
+            plane=AuthorityPlane.SESSION,
+            role=BoundaryRole.SYNCHRONIZATION_MAPPING,
+            module_path="core.multi_device_truth_convergence.converge_multi_device_truth",
+            lifecycle_owner=False,
+            canonical_truth_source="attached_runtime_session_registry",
+            rationale=(
+                "PR-4 convergence layer maps all five multi-device truth domains "
+                "(formation, readiness, participation, topology, session context) "
+                "into a single canonical snapshot without owning any of them."
+            ),
+        ),
     ]
 
 

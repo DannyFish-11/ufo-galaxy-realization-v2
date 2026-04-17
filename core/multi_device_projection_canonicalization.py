@@ -82,6 +82,7 @@ __all__ = [
     "MULTI_DEVICE_PROJECTION_CANONICALIZATION_INTEGRATED",
     "MULTI_DEVICE_PROJECTION_GAP008_RESOLVED",
     "MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED",
+    "MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED",
     # Enums
     "CanonicalProjectionSurfacingState",
     # Dataclasses
@@ -131,6 +132,18 @@ MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED: str = (
     "included in the projection enrichment output so that source_controller / "
     "joined_runtime_participant / target_only_executor / observer_only roles "
     "are visible in the canonical multi-device projection surface."
+)
+
+#: PR-4 truth convergence integration sentinel.
+MULTI_DEVICE_PROJECTION_PR4_TRUTH_CONVERGENCE_INTEGRATED: str = (
+    "MULTI_DEVICE_PROJECTION_CANONICALIZATION::PR4_TRUTH_CONVERGENCE_INTEGRATED_V1: "
+    "PR-4 (multi-device truth and projection convergence) — "
+    "the multi-device projection enrichment layer now acknowledges that "
+    "formation / readiness / participation / topology / session-context truth "
+    "is converged through core.multi_device_truth_convergence.converge_multi_device_truth() "
+    "and surfaced in MultiDeviceRuntimeProjection.truth_convergence and "
+    "OutwardRuntimeTruthSnapshot.multi_device_truth_convergence.  "
+    "Downstream consumers must prefer these fields over independent raw-source assembly."
 )
 
 

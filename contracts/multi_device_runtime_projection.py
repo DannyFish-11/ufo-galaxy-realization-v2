@@ -104,6 +104,34 @@ __canonical_authority__: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-4: Multi-Device Truth and Projection Convergence sentinels
+# ---------------------------------------------------------------------------
+
+#: PR-4 convergence sentinel — importable evidence that the projection contract
+#: has been extended to carry multi-device truth convergence state.
+MULTI_DEVICE_PROJECTION_PR4_CONVERGENCE_SENTINEL: str = (
+    "MULTI_DEVICE_PROJECTION::PR4_CONVERGENCE_SENTINEL_V1: "
+    "MultiDeviceRuntimeProjection now carries truth_convergence — a canonical "
+    "multi-device truth convergence snapshot (formation / readiness / participation / "
+    "topology / session context) assembled by "
+    "core.multi_device_truth_convergence.converge_multi_device_truth().  "
+    "Downstream consumers must prefer this field over independently assembling "
+    "multi-device truth from raw sources."
+)
+
+#: PR-4 truth authority precedence sentinel — describes the authority chain.
+MULTI_DEVICE_PROJECTION_TRUTH_AUTHORITY_POLICY: str = (
+    "MULTI_DEVICE_PROJECTION_TRUTH_AUTHORITY_V1: "
+    "truth_convergence.formation sourced from formation_resolver [primary]; "
+    "truth_convergence.readiness sourced from TruthIntegrationLayer [primary]; "
+    "truth_convergence.participation sourced from device_participation [primary]; "
+    "truth_convergence.topology sourced from NetworkTopologyRuntime [primary]; "
+    "truth_convergence.session_context sourced from AttachedSessionRegistry + "
+    "MeshSessionPersistenceStore [primary].  "
+    "Compat-cache and raw session registry data are excluded from truth_convergence."
+)
+
+# ---------------------------------------------------------------------------
 # Sub-projection entry contracts
 # ---------------------------------------------------------------------------
 
@@ -510,6 +538,19 @@ class MultiDeviceRuntimeProjection(BaseModel):
             "None when no session snapshot has been attached to this projection."
         ),
     )
+    # PR-4: Multi-Device Truth and Projection Convergence (optional)
+    truth_convergence: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional canonical multi-device truth convergence snapshot (PR-4).  "
+            "Contains authoritative facets for formation, readiness, participation, "
+            "topology, and session context domains assembled by "
+            "core.multi_device_truth_convergence.converge_multi_device_truth(). "
+            "Downstream consumers should prefer this field over independently "
+            "assembling multi-device truth from raw sources.  "
+            "None when the truth convergence layer was not queried or was unavailable."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Serialisation helpers
@@ -537,6 +578,7 @@ class MultiDeviceRuntimeProjection(BaseModel):
 
     def to_compact_summary(self) -> Dict[str, Any]:
         """Return a lightweight summary dict suitable for log lines and quick consumers."""
+        tc = self.truth_convergence or {}
         return {
             "projection_id": self.projection_id,
             "generated_at": self.generated_at,
@@ -551,6 +593,9 @@ class MultiDeviceRuntimeProjection(BaseModel):
             "merged_result_count": len(self.merged_results),
             "has_governance_snapshot": self.governance_snapshot is not None,
             "has_policy_alignment": self.policy_alignment is not None,
+            "has_truth_convergence": self.truth_convergence is not None,
+            "truth_convergence_fully_canonical": tc.get("fully_canonical", False),
+            "truth_convergence_partial_domains": tc.get("partial_domains", []),
         }
 
     def __repr__(self) -> str:
@@ -1017,6 +1062,7 @@ def build_multi_device_runtime_projection(
     policy_alignment: Optional[Any] = None,
     runtime_recovery: Optional[Any] = None,
     runtime_session_snapshot: Optional[Any] = None,
+    truth_convergence: Optional[Any] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> MultiDeviceRuntimeProjection:
     """Build a :class:`MultiDeviceRuntimeProjection` from the current contract inputs.
@@ -1110,6 +1156,13 @@ def build_multi_device_runtime_projection(
         except Exception:
             pass
 
+    truth_convergence_dict: Optional[Dict[str, Any]] = None
+    if truth_convergence is not None:
+        try:
+            truth_convergence_dict = _safe_dict(truth_convergence) or None
+        except Exception:
+            pass
+
     return MultiDeviceRuntimeProjection(
         runtime_devices=project_runtime_devices(runtime_devices),
         runtime_hosts=project_runtime_hosts(runtime_hosts),
@@ -1124,5 +1177,6 @@ def build_multi_device_runtime_projection(
         policy_alignment=pol_dict,
         runtime_recovery=recovery_dict,
         runtime_session_snapshot=snapshot_dict,
+        truth_convergence=truth_convergence_dict,
         metadata=metadata or {},
     )
