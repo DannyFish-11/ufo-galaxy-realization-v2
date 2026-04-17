@@ -283,7 +283,9 @@ class TestMeshSessionLifecycleCoordinator:
         store = _make_store(str(tmp_path))
         coord = _make_coordinator(store=store)
         coord.create_session(_make_session_dict("sess-act-bad"))
-        coord.activate_session("sess-act-bad")
+        first = coord.activate_session("sess-act-bad")
+        assert first is not None
+        assert first.status == "active"
         # Already active — activating again should fail (active not in valid_sources)
         rec = coord.activate_session("sess-act-bad")
         assert rec is None
@@ -585,9 +587,10 @@ class TestOutwardRuntimeTruthDurableFacet:
         reset_outward_runtime_truth_runtime()
 
         # Patch recover_mesh_sessions to return our test store's records
+        recoverable = store.list_recoverable()
         with mock.patch(
             "core.mesh.mesh_session_persistence.recover_mesh_sessions",
-            side_effect=lambda **kw: store.list_recoverable(),
+            return_value=recoverable,
         ):
             snap = compile_outward_truth()
 

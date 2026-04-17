@@ -259,7 +259,7 @@ class MeshSessionLifecycleCoordinator:
         with self._lock:
             self._sessions[session_id] = record
 
-        self._persist(record, session)
+        self._persist(record)
         logger.debug("create_session: session_id=%s status=%s", session_id, record.status)
         return record
 
@@ -562,8 +562,12 @@ class MeshSessionLifecycleCoordinator:
                         "%s: contract transition %s→%s not in MESH_SESSION_VALID_TRANSITIONS — proceeding anyway",
                         op_name, record.status, target_status,
                     )
-            except Exception:
-                pass  # Graceful if contracts unavailable
+            except ValueError:
+                # target_status or record.status is not a known MeshSessionStatus value
+                pass
+            except ImportError:
+                # contracts unavailable (e.g. during bootstrap)
+                pass
 
             # Apply update
             if session is not None:
@@ -574,11 +578,11 @@ class MeshSessionLifecycleCoordinator:
             if extra_meta:
                 record.metadata.update(extra_meta)
 
-        self._persist(record, session)
+        self._persist(record)
         logger.debug("%s: session_id=%s → status=%s", op_name, session_id, target_status)
         return record
 
-    def _persist(self, record: MeshSessionLifecycleRecord, session: Any) -> None:
+    def _persist(self, record: MeshSessionLifecycleRecord) -> None:
         """Persist *record* to the backing store.  Failures are logged, not raised."""
         store = self._get_store()
         # Build a coordinator-state-compatible dict for the persistence store
