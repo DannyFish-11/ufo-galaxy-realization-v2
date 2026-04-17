@@ -163,6 +163,21 @@ from .formation_summary import (
     get_formation_hints,
     resolve_formation_summary,
 )
+from .formation_runtime_coordinator import (
+    FormationParticipantState,
+    FormationRuntimeState,
+    RecoveryActionType,
+    FormationParticipantStatus,
+    FormationRecoveryAction,
+    FormationRuntimeDecision,
+    FormationRuntimeSnapshot,
+    FormationRuntimeCoordinator,
+    make_formation_runtime_coordinator,
+    FORMATION_RUNTIME_COORDINATOR_IS_AUTHORITY,
+    FORMATION_RECOVERY_HOOKS_GAP_CLOSURE_SENTINEL,
+    DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY,
+    RECOVERY_PRESERVES_SOURCE_POLICY,
+)
 
 __all__ = [
     # Formation roles
@@ -202,4 +217,18 @@ __all__ = [
     "attach_formation_to_projection",
     "get_formation_hints",
     "resolve_formation_summary",
+    # Runtime coordinator
+    "FormationParticipantState",
+    "FormationRuntimeState",
+    "RecoveryActionType",
+    "FormationParticipantStatus",
+    "FormationRecoveryAction",
+    "FormationRuntimeDecision",
+    "FormationRuntimeSnapshot",
+    "FormationRuntimeCoordinator",
+    "make_formation_runtime_coordinator",
+    "FORMATION_RUNTIME_COORDINATOR_IS_AUTHORITY",
+    "FORMATION_RECOVERY_HOOKS_GAP_CLOSURE_SENTINEL",
+    "DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY",
+    "RECOVERY_PRESERVES_SOURCE_POLICY",
 ]
