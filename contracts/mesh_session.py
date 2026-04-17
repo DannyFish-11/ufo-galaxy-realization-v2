@@ -106,6 +106,11 @@ class MeshSessionStatus(str, Enum):
 
     Values are stable contract identifiers.  Downstream consumers must
     treat unknown values gracefully (forward-compatible).
+
+    Full explicit lifecycle:
+      PENDING → ACTIVE → MERGING → COMPLETED
+      ACTIVE → SUSPENDED → RESTORING → ACTIVE
+      Any non-terminal → CANCELLED / FAILED
     """
 
     PENDING = "pending"
@@ -116,6 +121,18 @@ class MeshSessionStatus(str, Enum):
 
     MERGING = "merging"
     """Subtask execution is complete; merge/aggregation is in progress."""
+
+    SUSPENDED = "suspended"
+    """Session has been temporarily paused; participants have been notified.
+    A suspended session retains its identity, topology, and durable state and
+    is eligible for restoration.  This state bridges runtime interruption with
+    later :attr:`RESTORING` / :attr:`ACTIVE` re-entry."""
+
+    RESTORING = "restoring"
+    """Session is in the process of being restored from durable state.
+    The lifecycle coordinator transitions through this state when re-hydrating
+    a previously :attr:`SUSPENDED` session before returning it to
+    :attr:`ACTIVE`."""
 
     COMPLETED = "completed"
     """Session completed successfully — all subtasks done, merge finished."""
@@ -128,6 +145,84 @@ class MeshSessionStatus(str, Enum):
 
     UNKNOWN = "unknown"
     """Status could not be determined from available sources."""
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle helpers — terminal / restorable sets and transition table
+# ---------------------------------------------------------------------------
+
+#: Statuses from which no further lifecycle transition is permitted.
+MESH_SESSION_TERMINAL_STATUSES: frozenset = frozenset({
+    MeshSessionStatus.COMPLETED,
+    MeshSessionStatus.CANCELLED,
+    MeshSessionStatus.FAILED,
+})
+
+#: Statuses from which a session is eligible for restoration.
+MESH_SESSION_RESTORABLE_STATUSES: frozenset = frozenset({
+    MeshSessionStatus.SUSPENDED,
+})
+
+#: Valid lifecycle transitions.  Only transitions listed here are permitted.
+#: Enforcement is advisory by default; callers may choose to raise on violation.
+MESH_SESSION_VALID_TRANSITIONS: dict = {
+    MeshSessionStatus.PENDING:    {MeshSessionStatus.ACTIVE,
+                                    MeshSessionStatus.CANCELLED,
+                                    MeshSessionStatus.FAILED},
+    MeshSessionStatus.ACTIVE:     {MeshSessionStatus.MERGING,
+                                    MeshSessionStatus.SUSPENDED,
+                                    MeshSessionStatus.COMPLETED,
+                                    MeshSessionStatus.CANCELLED,
+                                    MeshSessionStatus.FAILED},
+    MeshSessionStatus.MERGING:    {MeshSessionStatus.COMPLETED,
+                                    MeshSessionStatus.FAILED,
+                                    MeshSessionStatus.CANCELLED},
+    MeshSessionStatus.SUSPENDED:  {MeshSessionStatus.RESTORING,
+                                    MeshSessionStatus.CANCELLED,
+                                    MeshSessionStatus.FAILED},
+    MeshSessionStatus.RESTORING:  {MeshSessionStatus.ACTIVE,
+                                    MeshSessionStatus.FAILED},
+    MeshSessionStatus.COMPLETED:  set(),
+    MeshSessionStatus.CANCELLED:  set(),
+    MeshSessionStatus.FAILED:     set(),
+    MeshSessionStatus.UNKNOWN:    {MeshSessionStatus.PENDING,
+                                    MeshSessionStatus.ACTIVE,
+                                    MeshSessionStatus.SUSPENDED,
+                                    MeshSessionStatus.RESTORING},
+}
+
+#: Sentinel — affirms that MeshSession lifecycle semantics are explicit and
+#: stable, forming a durable foundation for restore/roaming/rebalance work.
+MESH_SESSION_LIFECYCLE_IS_EXPLICIT: str = (
+    "MESH_SESSION_LIFECYCLE_IS_EXPLICIT: "
+    "contracts/mesh_session.py defines an explicit, stable lifecycle model "
+    "(PENDING→ACTIVE→MERGING→COMPLETED; ACTIVE→SUSPENDED→RESTORING→ACTIVE) "
+    "with machine-checkable transition rules (MESH_SESSION_VALID_TRANSITIONS). "
+    "PR-1 durable mesh session runtime foundation."
+)
+
+
+def is_valid_lifecycle_transition(
+    from_status: MeshSessionStatus,
+    to_status: MeshSessionStatus,
+) -> bool:
+    """Return ``True`` if transitioning *from_status* → *to_status* is valid.
+
+    Parameters
+    ----------
+    from_status:
+        Current :class:`MeshSessionStatus`.
+    to_status:
+        Desired target :class:`MeshSessionStatus`.
+
+    Returns
+    -------
+    bool
+        ``True`` when the transition is listed in
+        :data:`MESH_SESSION_VALID_TRANSITIONS`.
+    """
+    allowed = MESH_SESSION_VALID_TRANSITIONS.get(from_status, set())
+    return to_status in allowed
 
 
 class MeshMergePolicy(str, Enum):
@@ -552,6 +647,8 @@ def _map_session_status(raw: Any) -> MeshSessionStatus:
         "pending": MeshSessionStatus.PENDING,
         "active": MeshSessionStatus.ACTIVE,
         "merging": MeshSessionStatus.MERGING,
+        "suspended": MeshSessionStatus.SUSPENDED,
+        "restoring": MeshSessionStatus.RESTORING,
         "completed": MeshSessionStatus.COMPLETED,
         "cancelled": MeshSessionStatus.CANCELLED,
         "failed": MeshSessionStatus.FAILED,
@@ -1102,6 +1199,12 @@ __all__ = [
     "MeshSessionStatus",
     "MeshMergePolicy",
     "MeshBarrierPosture",
+    # Lifecycle helpers
+    "MESH_SESSION_TERMINAL_STATUSES",
+    "MESH_SESSION_RESTORABLE_STATUSES",
+    "MESH_SESSION_VALID_TRANSITIONS",
+    "MESH_SESSION_LIFECYCLE_IS_EXPLICIT",
+    "is_valid_lifecycle_transition",
     # Sub-contracts
     "MeshSessionParticipant",
     "MeshSubtaskAssignment",

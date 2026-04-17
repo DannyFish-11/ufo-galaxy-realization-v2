@@ -28,6 +28,20 @@ from .mesh_session_persistence import (
     RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY,
     PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY,
 )
+from .mesh_session_lifecycle import (
+    MeshSessionLifecycleRecord,
+    MeshSessionLifecycleCoordinator,
+    get_lifecycle_coordinator,
+    reset_lifecycle_coordinator,
+    create_durable_session,
+    activate_durable_session,
+    suspend_durable_session,
+    restore_durable_session,
+    terminate_durable_session,
+    MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY,
+    LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY,
+    RESTORE_REQUIRES_DURABLE_STATE_POLICY,
+)
 
 __all__ = [
     "BodyMeshRegistry",
@@ -53,4 +67,18 @@ __all__ = [
     "MESH_SESSION_PERSISTENCE_GAP_CLOSURE_SENTINEL",
     "RECOVERY_RESTORES_NON_TERMINAL_SESSIONS_POLICY",
     "PERSISTENCE_DOES_NOT_OWN_RUNTIME_TRUTH_POLICY",
+    # Lifecycle coordinator
+    "MeshSessionLifecycleRecord",
+    "MeshSessionLifecycleCoordinator",
+    "get_lifecycle_coordinator",
+    "reset_lifecycle_coordinator",
+    "create_durable_session",
+    "activate_durable_session",
+    "suspend_durable_session",
+    "restore_durable_session",
+    "terminate_durable_session",
+    "MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY",
+    "LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY",
+    "RESTORE_REQUIRES_DURABLE_STATE_POLICY",
 ]
+
