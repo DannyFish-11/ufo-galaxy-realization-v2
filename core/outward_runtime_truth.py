@@ -263,6 +263,17 @@ class OutwardRuntimeTruthSnapshot:
     the persistence store.
     """
 
+    multi_device_truth_convergence: Optional[Dict[str, Any]] = None
+    """Multi-device truth convergence snapshot — formation, readiness, participation,
+    topology, and session context domains converged through a single canonical
+    compilation point.
+
+    This facet is the outward truth integration point for multi-device truth
+    convergence (PR-4).  Downstream projection surfaces should prefer this field
+    over independently assembling multi-device truth from raw sources.
+    Populated from :func:`~core.multi_device_truth_convergence.converge_multi_device_truth`.
+    """
+
     # Aggregated source records
     source_records: List[TruthSourceRecord] = field(default_factory=list)
 
@@ -296,6 +307,7 @@ class OutwardRuntimeTruthSnapshot:
             "projection_bridge_augmentation": self.projection_bridge_augmentation,
             "authority_conflict_summary": self.authority_conflict_summary,
             "durable_mesh_session_facet": self.durable_mesh_session_facet,
+            "multi_device_truth_convergence": self.multi_device_truth_convergence,
             "sources": [
                 {
                     "source_name": r.source_name,
@@ -596,6 +608,34 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
             latency_ms=(time.monotonic() - t0) * 1000,
         ))
 
+    # ── 6. MultiDeviceTruthConvergence ────────────────────────────────────
+    # PR-4: Multi-Device Truth and Projection Convergence.
+    # Surface the canonical multi-device truth convergence snapshot so that
+    # downstream projection and monitoring consumers have a single authoritative
+    # read point for formation / readiness / participation / topology /
+    # session-context rather than independently querying raw sources.
+    t0 = time.monotonic()
+    multi_device_truth_convergence_data: Optional[Dict[str, Any]] = None
+    try:
+        from core.multi_device_truth_convergence import converge_multi_device_truth
+
+        convergence_snap = converge_multi_device_truth()
+        multi_device_truth_convergence_data = convergence_snap.to_dict()
+        records.append(TruthSourceRecord(
+            source_name="MultiDeviceTruthConvergence",
+            signal_class=TruthSignalClass.PRIMARY,
+            data=multi_device_truth_convergence_data,
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+    except Exception as exc:
+        notes.append(f"MultiDeviceTruthConvergence unavailable: {exc}")
+        records.append(TruthSourceRecord(
+            source_name="MultiDeviceTruthConvergence",
+            signal_class=TruthSignalClass.UNAVAILABLE,
+            error=str(exc),
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+
     # ── Aggregate counts ─────────────────────────────────────────────────
     primary = sum(1 for r in records if r.signal_class == TruthSignalClass.PRIMARY)
     secondary = sum(1 for r in records if r.signal_class == TruthSignalClass.SECONDARY)
@@ -610,6 +650,7 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         projection_bridge_augmentation=bridge_data,
         authority_conflict_summary=ace_data,
         durable_mesh_session_facet=mesh_session_data,
+        multi_device_truth_convergence=multi_device_truth_convergence_data,
         source_records=records,
         primary_source_count=primary,
         secondary_source_count=secondary,
