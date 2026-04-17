@@ -52,7 +52,7 @@ AB. is_cross_repo_convergence_ready() returns True when no OPEN gaps exist.
 AC. CompatGapRecord fields for COMPAT-006 reference DeprecationWarning fence.
 AD. CompatGapRecord for PROTO-007 references env_var_gate fence and
     GALAXY_ENABLE_LEGACY_PROTOCOLS.
-AE. All HIGH or MEDIUM severity gaps are FENCED, RETIRED, or TOMBSTONED.
+AE. All CRITICAL, HIGH or MEDIUM severity gaps are FENCED, RETIRED, or TOMBSTONED.
 """
 
 from __future__ import annotations
@@ -557,14 +557,14 @@ def test_proto_007_env_var_gate_fence() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AE. All HIGH or MEDIUM severity gaps are FENCED, RETIRED, or TOMBSTONED
+# AE. All CRITICAL, HIGH or MEDIUM severity gaps are FENCED, RETIRED, or TOMBSTONED
 # ---------------------------------------------------------------------------
 
 
-def test_high_medium_gaps_not_open() -> None:
+def test_critical_high_medium_gaps_not_open() -> None:
     for rec in get_compat_gap_catalog():
         if rec.severity in ("CRITICAL", "HIGH", "MEDIUM"):
             assert rec.status != CompatClosureStatus.OPEN, (
                 f"{rec.gap_id} has severity={rec.severity} but status=OPEN. "
-                "HIGH/MEDIUM gaps must be at least FENCED."
+                "CRITICAL/HIGH/MEDIUM gaps must be at least FENCED."
             )

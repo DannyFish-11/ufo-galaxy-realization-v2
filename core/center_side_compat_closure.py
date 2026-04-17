@@ -849,7 +849,7 @@ def check_compat_fence(
         )
 
     # Compat path is being invoked — determine fence posture.
-    if record.status in (CompatClosureStatus.FENCED,):
+    if record.status == CompatClosureStatus.FENCED:
         msg = (
             f"CENTER_SIDE_COMPAT_CLOSURE [{gap_id}] COMPAT PATH INVOKED "
             f"(fence={record.fence_kind.value}): {record.surface_name!r}. "
@@ -968,10 +968,7 @@ def build_compat_closure_snapshot() -> CompatClosureSnapshot:
         r for r in open_gaps if r.severity in ("CRITICAL", "HIGH", "MEDIUM")
     ]
 
-    cross_repo_ready = (
-        len(open_gaps) == 0
-        and len(high_or_medium_open) == 0
-    )
+    cross_repo_ready = len(open_gaps) == 0
 
     return CompatClosureSnapshot(
         total_gaps=len(catalog),
