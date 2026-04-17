@@ -505,8 +505,12 @@ class TestQueryCapableDeviceExecutors:
         reset_capability_assimilation_layer()
         layer = get_capability_assimilation_layer()
 
-        layer.assimilate("node_x", capabilities=["compute"], participant_kind=NodeParticipantKind.WORKER)
-        layer.assimilate("device_x", capabilities=["screen"], participant_kind=NodeParticipantKind.DEVICE)
+        layer.assimilate(
+            "node_x", capabilities=["compute"], participant_kind=NodeParticipantKind.WORKER
+        )
+        layer.assimilate(
+            "device_x", capabilities=["screen"], participant_kind=NodeParticipantKind.DEVICE
+        )
 
         try:
             records = layer.list_online_records()
