@@ -100,6 +100,7 @@ __all__ = [
     # Functions
     "on_coordinator_state_updated",
     "on_device_health_changed",
+    "on_participant_readiness_changed",
     "on_task_admitted_for_dispatch",
     "get_multi_device_runtime_harness",
     "reset_multi_device_runtime_harness",
@@ -213,6 +214,9 @@ class RuntimeHarnessResult:
     task_registered: bool = False
     routable_executor_ids: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+    runtime_decision: Optional[Any] = None
+    """Optional :class:`~core.device_formation.formation_runtime_coordinator.FormationRuntimeDecision`
+    produced when a :class:`FormationRuntimeCoordinator` was involved."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -224,6 +228,12 @@ class RuntimeHarnessResult:
             "task_registered": self.task_registered,
             "routable_executor_ids": list(self.routable_executor_ids),
             "errors": list(self.errors),
+            "runtime_decision": (
+                self.runtime_decision.to_dict()
+                if self.runtime_decision is not None
+                and hasattr(self.runtime_decision, "to_dict")
+                else None
+            ),
         }
 
 
@@ -516,6 +526,154 @@ class MultiDeviceRuntimeHarness:
             logger.debug("MultiDeviceRuntimeHarness.recover_sessions: error: %s", exc)
             return []
 
+    def on_participant_readiness_changed(
+        self,
+        device_id: str,
+        new_readiness: str,
+        *,
+        health_score: Optional[float] = None,
+        formation: Optional[Any] = None,
+        session_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> RuntimeHarnessResult:
+        """Hook: called when a formation participant's readiness state changes.
+
+        This is the primary entry point for readiness-driven formation recovery.
+        It:
+
+        1. Translates the readiness string into a
+           :class:`~core.device_formation.formation_runtime_coordinator.FormationParticipantState`.
+        2. If a *formation* is provided, creates a temporary
+           :class:`~core.device_formation.formation_runtime_coordinator.FormationRuntimeCoordinator`
+           and triggers ``on_participant_readiness_changed`` on it to get a
+           :class:`~core.device_formation.formation_runtime_coordinator.FormationRuntimeDecision`.
+        3. If the decision recommends a reshape (and a formation is present),
+           runs the formation rebalance engine.
+        4. If a *session_id* is provided and the participant is no longer ready,
+           marks the session snapshot with a recovery hint.
+
+        Parameters
+        ----------
+        device_id:
+            Device whose readiness changed.
+        new_readiness:
+            String readiness state.  Recognised values: ``"ready"``,
+            ``"degraded"``, ``"lost"``, ``"recovering"``.  Unknown values
+            default to ``"degraded"``.
+        health_score:
+            Optional health score override.
+        formation:
+            Optional :class:`~core.device_formation.DeviceFormationGroup` to
+            evaluate and potentially reshape.
+        session_id:
+            Optional mesh session ID to update in the persistence store.
+        reason:
+            Optional human-readable reason.
+
+        Returns
+        -------
+        RuntimeHarnessResult
+        """
+        errors: List[str] = []
+        rebalance_triggered = False
+        snapshot_saved = False
+        runtime_decision: Optional[Any] = None
+
+        try:
+            from core.device_formation.formation_runtime_coordinator import (
+                FormationParticipantState,
+                FormationRuntimeCoordinator,
+                RecoveryActionType,
+            )
+
+            # Map string to enum
+            _state_map = {
+                "ready": FormationParticipantState.READY,
+                "degraded": FormationParticipantState.DEGRADED,
+                "lost": FormationParticipantState.LOST,
+                "recovering": FormationParticipantState.RECOVERING,
+            }
+            participant_state = _state_map.get(
+                (new_readiness or "").lower(),
+                FormationParticipantState.DEGRADED,
+            )
+
+            if formation is not None:
+                try:
+                    coordinator = FormationRuntimeCoordinator(formation)
+                    decision = coordinator.on_participant_readiness_changed(
+                        device_id,
+                        participant_state,
+                        health_score=health_score,
+                        reason=reason or new_readiness,
+                    )
+                    runtime_decision = decision
+
+                    # If the decision resulted in a reshape, mark rebalance_triggered
+                    if decision.new_group is not None:
+                        rebalance_triggered = True
+                        logger.info(
+                            "on_participant_readiness_changed: formation reshaped for "
+                            "device=%s state=%s (formation=%s)",
+                            device_id,
+                            new_readiness,
+                            getattr(formation, "formation_id", ""),
+                        )
+                except Exception as exc:
+                    errors.append(f"formation runtime coordinator error: {exc}")
+                    logger.warning(
+                        "on_participant_readiness_changed: coordinator error: %s", exc
+                    )
+
+            # Update session snapshot if session_id is provided
+            if session_id and participant_state in (
+                FormationParticipantState.LOST,
+                FormationParticipantState.DEGRADED,
+            ):
+                try:
+                    store = self._get_persistence_store()
+                    if store is not None:
+                        record = store.load(session_id)
+                        if record is not None and not record.is_terminal():
+                            snap = dict(record.snapshot_dict)
+                            snap.setdefault("readiness_hints", {})
+                            snap["readiness_hints"][device_id] = {
+                                "readiness": new_readiness,
+                                "health_score": health_score,
+                                "reason": reason,
+                            }
+                            updated_record = record.__class__(
+                                session_id=record.session_id,
+                                coordinator_id=record.coordinator_id,
+                                overall_status=record.overall_status,
+                                snapshot_dict=snap,
+                                version=record.version + 1,
+                            )
+                            store._write_record(updated_record)  # type: ignore[attr-defined]
+                            store._memory_cache[record.session_id] = updated_record  # type: ignore[attr-defined]
+                            snapshot_saved = True
+                except Exception as exc:
+                    errors.append(f"session snapshot readiness update error: {exc}")
+
+        except Exception as exc:
+            errors.append(f"unexpected harness error: {exc}")
+            logger.warning(
+                "on_participant_readiness_changed: unexpected error: %s", exc
+            )
+
+        return RuntimeHarnessResult(
+            operation="on_participant_readiness_changed",
+            success=not errors or rebalance_triggered,
+            details=(
+                f"device={device_id} readiness={new_readiness} "
+                f"rebalance={'yes' if rebalance_triggered else 'no'}"
+            ),
+            rebalance_triggered=rebalance_triggered,
+            snapshot_saved=snapshot_saved,
+            errors=errors,
+            runtime_decision=runtime_decision,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton management
@@ -622,4 +780,49 @@ def on_task_admitted_for_dispatch(
         canonical_task,
         candidate_device_ids=candidate_device_ids,
         trace_id=trace_id,
+    )
+
+
+def on_participant_readiness_changed(
+    device_id: str,
+    new_readiness: str,
+    *,
+    health_score: Optional[float] = None,
+    formation: Optional[Any] = None,
+    session_id: Optional[str] = None,
+    reason: Optional[str] = None,
+    harness: Optional[MultiDeviceRuntimeHarness] = None,
+) -> RuntimeHarnessResult:
+    """Hook: respond to a participant readiness state change.
+
+    Parameters
+    ----------
+    device_id:
+        Device whose readiness changed.
+    new_readiness:
+        String readiness state: ``"ready"``, ``"degraded"``, ``"lost"``,
+        or ``"recovering"``.
+    health_score:
+        Optional health score.
+    formation:
+        Optional formation to evaluate and potentially reshape.
+    session_id:
+        Optional mesh session ID to update.
+    reason:
+        Optional human-readable reason.
+    harness:
+        Optional explicit harness instance.
+
+    Returns
+    -------
+    RuntimeHarnessResult
+    """
+    _harness = harness or get_multi_device_runtime_harness()
+    return _harness.on_participant_readiness_changed(
+        device_id,
+        new_readiness,
+        health_score=health_score,
+        formation=formation,
+        session_id=session_id,
+        reason=reason,
     )
