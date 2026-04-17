@@ -174,26 +174,20 @@ For architecture purposes, `DeviceRouter` is best classified as a **canonical di
 
 ## Open scheduling convergence gaps
 
-| Gap ID | Severity | Module | Description | Target |
+| Gap ID | Severity | Module | Description | Status |
 |--------|----------|--------|-------------|--------|
-| GAP-512-004 | MEDIUM | `core/command_router.py` | `CommandRouter` now calls `query_routable_executors()` / `query_network_path()` (PR-513) but only as advisory logging — results are not used to gate or alter the routing decision. Dispatch still uses the three-gate admissibility chain. Capability graph convergence is advisory-only, not enforced. | PR-514 |
-| SCHED-003 | MEDIUM | `galaxy_gateway/device_router.py` | `DeviceRouter.route_task()` still calls `_analyze_command()` and `_select_devices()` (delegated to `galaxy_gateway/routing/` modules) — policy and selection logic that belongs in `CommandRouter`. Two parallel device selection paths remain. | CommandRouter authority consolidation PR |
-| SCHED-004 | LOW | `core/constellation_runtime.py` | `ConstellationRuntime._run_dag_loop()` calls `pool.select_device(required_capabilities=caps)` via `DevicePool`. Whether `DevicePool` reads from `CapabilityAssimilationLayer` is unconfirmed. Possible third parallel selection path. | DevicePool audit PR |
+| GAP-512-004 | ~~MEDIUM~~ | `core/command_router.py` | **CLOSED (PR-3).** `CommandRouter.route_envelope()` now passes `required_capabilities` to `query_routable_executors()` and enforces target validation against the canonical capability graph. Targets confirmed in the graph proceed unchanged; unconfirmed targets emit structured warnings and are filtered when confirmed alternatives exist. Falls back gracefully when the layer is unavailable. New sentinel: `CAPABILITY_GRAPH_SELECTION_ENFORCED`. | ✅ Closed |
+| SCHED-003 | MEDIUM | `galaxy_gateway/device_router.py` | **Partially closed (PR-3).** `DeviceRouter.route_task()` now supports a CommandRouter pre-analysis passthrough: when `context["_command_router_pre_analyzed"]==True` and `context["_pre_analysis"]` is set, `route_task()` skips its own `_analyze_command()` call. New governance sentinel: `DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL`. Full extraction of `_analyze_command()` authority to `CommandRouter` and retirement of the DeviceRouter copy remains as a future hardening step. | ⚠️ Partially closed |
+| SCHED-004 | LOW | `core/constellation_runtime.py` | `ConstellationRuntime._run_dag_loop()` calls `pool.select_device(required_capabilities=caps)` via `DevicePool`. Whether `DevicePool` reads from `CapabilityAssimilationLayer` is unconfirmed. Possible third parallel selection path. | Open |
 
 ---
 
-## Answer to acceptance criteria 1 & 2
+## Answer to acceptance criteria 1 & 2 (PR-3 update)
 
 **AC1 — Is node and device capability scheduling truly unified in practice?**
 
-> **Architecturally unified, operationally partially.** Both nodes and devices are first-class entries in `CapabilityAssimilationLayer`. The canonical capability graph covers both. However, `CommandRouter` routing decisions do not yet consume `query_routable_executors()`, so the unified graph is built but not yet consulted in the dispatch hot path (GAP-512-004, MEDIUM, PR-514 target).
+> **PR-3 improvement**: Both nodes and devices are first-class entries in `CapabilityAssimilationLayer`.  The canonical capability graph covers both kinds.  `CommandRouter.route_envelope()` now passes `required_capabilities` to `query_routable_executors()` and enforces target selection against the canonical graph (GAP-512-004 closed).  `query_capable_device_executors()` provides an explicit device-only selection helper so the node/device unified scheduling basis is directly testable.  The remaining gap is that `_execute_command` does not yet re-derive the target from the capability graph on retry paths, and `ConstellationRuntime` (SCHED-004) is not yet audited.
 
 **AC2 — Is `DeviceRouter` cleanly reduced to substrate responsibility?**
 
-> **No — policy residue confirmed.** `DeviceRouter.route_task()` still calls
-> `_analyze_command()` (delegated to `galaxy_gateway/routing/policy.py`) to derive
-> `exec_mode` and `task_type`, and `_select_devices()` (delegated to
-> `galaxy_gateway/routing/device_selection.py`) for a second independent device
-> selection pass. Both contain classification and selection logic that belongs in
-> `CommandRouter`. Gap SCHED-003 is confirmed open. Until this logic is extracted to
-> `CommandRouter` and retired from `DeviceRouter`, `DeviceRouter` is not pure substrate.
+> **PR-3 improvement**: `DeviceRouter.route_task()` now has a pre-analysis passthrough (`_command_router_pre_analyzed` context flag) so callers that have already resolved command analysis at the `CommandRouter` (decision) layer can bypass the DeviceRouter re-analysis entirely.  The governance intent is documented in `DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL`.  Full retirement of the DeviceRouter copy of `_analyze_command()` logic requires migrating all direct `route_task()` callers through `CommandRouter`, which is the remaining work in this gap.

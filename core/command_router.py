@@ -366,6 +366,26 @@ COMMAND_ROUTER_PARALLEL_FANOUT_CANONICAL_PATH: str = (
 # that coordinators can detect and warn on non-canonical invocations (GAP-517-003).
 _CROSS_DEVICE_SUBSTRATE_CALLER_KEY: str = "_galaxy_cross_device_substrate_caller"
 
+# PR-3 (UCS follow-up): Capability graph selection enforcement sentinel.
+#
+# CommandRouter.route_envelope() now passes required_capabilities to
+# query_routable_executors() so routing decisions reflect the canonical
+# capability graph rather than issuing an unfiltered advisory query.
+# When required_capabilities is set and routable executors are found in the
+# canonical graph, the selected targets are validated/filtered against the
+# confirmed capability graph entries.  Targets not confirmed in the graph
+# receive a structured warning; confirmed targets proceed unchanged.
+# Falls back gracefully when the capability layer is unavailable.
+# Closes GAP-512-004.
+CAPABILITY_GRAPH_SELECTION_ENFORCED: str = (
+    "COMMAND_ROUTER::CAPABILITY_GRAPH_SELECTION_ENFORCED_V1: "
+    "route_envelope() passes required_capabilities to query_routable_executors() "
+    "and enforces target validation against the canonical capability graph "
+    "when capabilities are specified. Unconfirmed targets emit structured "
+    "warnings; routing falls back gracefully if the layer is unavailable. "
+    "Closes GAP-512-004."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1147,22 +1167,84 @@ class CommandRouter:
         except Exception as _lc_exc:
             logger.debug("Lifecycle mark_running skipped: %s", _lc_exc)
 
-        # ── PR-513 / GAP-512-004: Query canonical capability/network truth ───
-        # Before selecting dispatch targets, consult query_routable_executors()
-        # and query_network_path() so routing decisions reflect canonical
-        # capability and network state rather than bypassing those layers.
+        # ── PR-3 / GAP-512-004 closure: Capability graph enforcement ─────────
+        # query_routable_executors() is now called with required_capabilities so
+        # routing decisions reflect the canonical capability graph rather than
+        # issuing an unfiltered advisory query.
+        # Enforcement logic:
+        #   1. If required_capabilities is set and the canonical layer returns
+        #      confirmed executors, validate the envelope targets against them.
+        #   2. Targets confirmed in the capability graph proceed unchanged.
+        #   3. Targets NOT confirmed in the graph emit a structured warning so
+        #      that capability coverage gaps become observable.
+        #   4. Fully falls back gracefully when the capability layer is unavailable.
+        # Closes GAP-512-004 (capability graph convergence no longer advisory-only).
+        _cap_query_caps: Optional[List[str]] = None
+        _meta_for_cap_query = envelope.metadata or {}
+        if envelope.required_capabilities:
+            _cap_query_caps = list(envelope.required_capabilities)
+        elif isinstance(_meta_for_cap_query.get("required_capabilities"), list):
+            _cap_query_caps = [str(c) for c in _meta_for_cap_query["required_capabilities"]]
         try:
             from core.capability_network_runtime_policy import (
                 query_routable_executors as _query_exec,
                 query_network_path as _query_path,
             )
 
-            _routable = _query_exec()
+            _routable = _query_exec(_cap_query_caps)
             logger.debug(
-                "route_envelope: capability/network query returned %d routable executor(s)",
+                "route_envelope: capability/network query returned %d routable executor(s) "
+                "(required_caps=%s)",
                 len(_routable),
+                _cap_query_caps,
             )
-            # Annotate envelope metadata with canonical routing advisory.
+
+            # ── Enforcement: validate/filter targets against capability graph ─
+            if _cap_query_caps and _routable:
+                _canonical_ids = {e.node_id for e in _routable}
+                _current_targets = list(envelope.targets)
+                _confirmed_targets = [t for t in _current_targets if t in _canonical_ids]
+                _unconfirmed_targets = [t for t in _current_targets if t not in _canonical_ids]
+
+                if _confirmed_targets:
+                    if _unconfirmed_targets:
+                        # Some targets are not in the capability graph — filter to confirmed.
+                        logger.warning(
+                            "route_envelope [GAP-512-004]: target(s) %s not confirmed in "
+                            "capability graph for caps=%s; routing to confirmed target(s)=%s only",
+                            _unconfirmed_targets,
+                            _cap_query_caps,
+                            _confirmed_targets,
+                        )
+                        envelope = envelope.model_copy(
+                            update={"targets": _confirmed_targets}
+                        )
+                    else:
+                        logger.debug(
+                            "route_envelope: all %d target(s) confirmed in capability "
+                            "graph for caps=%s",
+                            len(_confirmed_targets),
+                            _cap_query_caps,
+                        )
+                elif _current_targets:
+                    # Targets specified but none are confirmed in the capability graph.
+                    # Warn but proceed — the capability graph may not have registered
+                    # these executors yet (e.g. direct-connected devices not yet assimilated).
+                    logger.warning(
+                        "route_envelope [GAP-512-004]: target(s) %s not confirmed in "
+                        "capability graph for caps=%s; proceeding with original targets "
+                        "(assimilate devices to close this gap)",
+                        _current_targets,
+                        _cap_query_caps,
+                    )
+            elif _cap_query_caps and not _routable:
+                logger.debug(
+                    "route_envelope: capability graph returned no executors for caps=%s; "
+                    "proceeding with existing targets",
+                    _cap_query_caps,
+                )
+
+            # ── Canonical path observability ─────────────────────────────────
             _target_list = list(envelope.targets)
             if _target_list:
                 _primary_target = _target_list[0]
