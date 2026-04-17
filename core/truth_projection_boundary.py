@@ -297,7 +297,7 @@ def build_truth_projection_boundary_catalog() -> List[TruthProjectionBoundaryEnt
             canonical_truth_source="canonical_execution_chain",
             rationale="Selection combines readiness/registry/session truths without owning them.",
         ),
-        # PR-4: Formation and Topology domain entries
+        # PR-4: Formation, Topology, and Truth Convergence entries
         TruthProjectionBoundaryEntry(
             surface_id="formation_resolver",
             plane=AuthorityPlane.PARTICIPANT,

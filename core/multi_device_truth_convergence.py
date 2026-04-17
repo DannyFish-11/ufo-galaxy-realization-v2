@@ -75,7 +75,7 @@ Governance sentinels
     Identifies this module as the canonical convergence layer.
 
 ``MULTI_DEVICE_TRUTH_CONVERGENCE_LAYER_POSITION``
-    Layer 14.5 — sits above projection canonicalization (Layer 13) and
+    Layer 14 — sits above projection canonicalization (Layer 13) and
     below outward truth (Layer 15).
 
 ``FORMATION_TRUTH_SOURCE_PRECEDENCE_POLICY``
@@ -157,6 +157,8 @@ MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY: str = (
 )
 
 MULTI_DEVICE_TRUTH_CONVERGENCE_LAYER_POSITION: int = 14
+"""Architectural layer position — sits above projection canonicalization
+(Layer 13) and below outward truth (Layer 15)."""
 
 MULTI_DEVICE_TRUTH_CONVERGENCE_PR4_SENTINEL: str = (
     "MULTI_DEVICE_TRUTH_CONVERGENCE::PR4_SENTINEL_V1: "

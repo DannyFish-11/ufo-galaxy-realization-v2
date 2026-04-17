@@ -231,6 +231,7 @@ class TestMultiDeviceTruthDomainFacet:
         d = facet.to_dict()
         # latency_ms should be rounded to 2 decimal places
         assert isinstance(d["latency_ms"], float)
+        assert d["latency_ms"] == round(12.3456789, 2)
 
 
 # ---------------------------------------------------------------------------
