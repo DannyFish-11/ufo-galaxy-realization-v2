@@ -124,6 +124,7 @@ __all__ = [
     "absorb_path_change_event",
     # Planner/router/policy consumption helpers
     "query_routable_executors",
+    "query_capable_device_executors",
     "query_network_path",
     "snapshot_canonical_runtime",
 ]
@@ -752,6 +753,103 @@ def query_routable_executors(
                 participant_kind=exec_profile.participant_kind.value
                 if hasattr(exec_profile.participant_kind, "value")
                 else str(exec_profile.participant_kind),
+                capabilities=list(caps),
+                presence_state=pstate.value if hasattr(pstate, "value") else str(pstate),
+                network_state=net_state,
+                health_score=h_score,
+                host=record.fabric_presence.host,
+                port=record.fabric_presence.port,
+            )
+        )
+
+    results.sort(key=lambda e: e.health_score, reverse=True)
+    return results
+
+
+def query_capable_device_executors(
+    required_capabilities: Optional[List[str]] = None,
+) -> List[RoutableExecutor]:
+    """Query the canonical runtime for *device*-kind executors that are online
+    and declare the required capabilities.
+
+    This is the device-specific variant of :func:`query_routable_executors`.
+    It restricts results to entries assimilated as
+    :attr:`~core.capability_assimilation.NodeParticipantKind.DEVICE`, making the
+    node/device scheduling basis explicit and testable.
+
+    This function is the canonical API for planner/router/policy code that needs
+    to schedule work on physical/virtual *devices* (e.g. Android, Windows) rather
+    than on compute *nodes* (e.g. worker nodes, specialists).  Using it instead of
+    a raw registry read ensures capability selection is unified under the canonical
+    assimilation layer for both node and device execution participants.
+
+    Args:
+        required_capabilities: Optional list of capability names a candidate
+            device must expose.  If empty or ``None``, all online DEVICE-kind
+            executors are returned.
+
+    Returns:
+        List of :class:`RoutableExecutor` objects for DEVICE-kind entries,
+        ordered by health_score (descending).  May be empty if no online,
+        capable device is registered in the canonical layer.
+    """
+    results: List[RoutableExecutor] = []
+    required = set(required_capabilities or [])
+
+    try:
+        from core.capability_assimilation import (
+            get_capability_assimilation_layer,
+            NodeParticipantKind,
+            AssimilationPresenceState,
+        )
+        layer = get_capability_assimilation_layer()
+        online_records = layer.list_online_records()
+    except Exception as exc:
+        logger.debug("query_capable_device_executors: capability layer unavailable: %s", exc)
+        return results
+
+    # Resolve per-node topology state (best-effort, failure-isolated)
+    topology_states: Dict[str, str] = {}
+    try:
+        from core.network_topology_runtime import get_network_topology_runtime
+        topology_runtime = get_network_topology_runtime()
+        topo_snap = topology_runtime.snapshot()
+        for node in topo_snap.nodes:
+            topology_states[node.node_id] = (
+                node.state.value if hasattr(node.state, "value") else str(node.state)
+            )
+    except Exception as exc:
+        logger.debug("query_capable_device_executors: topology runtime unavailable: %s", exc)
+
+    for record in online_records:
+        # Filter to DEVICE-kind participants only.
+        exec_profile = record.execution_profile
+        participant_kind_val = (
+            exec_profile.participant_kind.value
+            if hasattr(exec_profile.participant_kind, "value")
+            else str(exec_profile.participant_kind)
+        )
+        if participant_kind_val != NodeParticipantKind.DEVICE.value:
+            continue
+
+        caps = set(record.capability_descriptor.capabilities)
+        if required and not required.issubset(caps):
+            continue
+
+        net_state = topology_states.get(record.node_id, "unknown")
+
+        pstate = record.fabric_presence.presence_state
+        if pstate == AssimilationPresenceState.DEGRADED:
+            h_score = 0.4
+        elif pstate == AssimilationPresenceState.ONLINE:
+            h_score = 1.0
+        else:
+            h_score = 0.0
+
+        results.append(
+            RoutableExecutor(
+                node_id=record.node_id,
+                participant_kind=participant_kind_val,
                 capabilities=list(caps),
                 presence_state=pstate.value if hasattr(pstate, "value") else str(pstate),
                 network_state=net_state,

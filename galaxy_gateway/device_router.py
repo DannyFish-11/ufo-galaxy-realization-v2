@@ -156,6 +156,31 @@ DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION = (
     "transparently.  Resolves GAP-517-006."
 )
 
+# PR-3 (UCS follow-up): CommandRouter pre-analysis passthrough sentinel.
+#
+# DeviceRouter._analyze_command() performs routing policy analysis (target
+# device type, task type, exec_mode) that architecturally belongs in
+# CommandRouter (the decision authority layer), not DeviceRouter (the
+# dispatch substrate layer).  This is Gap SCHED-003.
+#
+# Partial closure: when CommandRouter has already analysed the command and
+# stamps context["_command_router_pre_analyzed"] == True together with a
+# context["_pre_analysis"] dict, route_task() uses the pre-resolved analysis
+# directly and skips its own _analyze_command() call.  This reduces duplicated
+# policy authority and moves decision responsibility toward the canonical layer.
+#
+# Legacy paths that do not supply pre-analysis continue to call
+# _analyze_command() unchanged (backward compatible).
+DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL: str = (
+    "DEVICE_ROUTER::COMMAND_ANALYSIS_GOVERNANCE_V1: "
+    "_analyze_command() is policy logic that belongs in CommandRouter "
+    "(decision authority layer), not DeviceRouter (dispatch substrate). "
+    "When context['_command_router_pre_analyzed']==True and "
+    "context['_pre_analysis'] is present, route_task() uses the pre-resolved "
+    "analysis and skips re-analysis to reduce duplicated policy authority. "
+    "Partially closes SCHED-003."
+)
+
 # ---------------------------------------------------------------------------
 # PR-2 (post-533 dual-repo runtime host unification): posture-aware dispatch
 # sentinel.
@@ -887,7 +912,21 @@ class DeviceRouter:
             logger.info(f"🎯 开始路由任务: {command}")
 
             # 1. 分析命令，确定目标设备和任务类型
-            analysis = await self._analyze_command(command, ctx)
+            # PR-3 / SCHED-003 partial closure: when CommandRouter has already
+            # analysed the command and stamped _command_router_pre_analyzed=True
+            # in context, use the pre-resolved analysis directly to avoid
+            # duplicating policy decision authority in the substrate layer.
+            _pre_analyzed = ctx.get("_command_router_pre_analyzed", False)
+            if _pre_analyzed and ctx.get("_pre_analysis"):
+                analysis = dict(ctx["_pre_analysis"])
+                logger.debug(
+                    "DeviceRouter.route_task: using CommandRouter pre-analysis "
+                    "(SCHED-003 passthrough) — task_type=%s exec_mode=%s",
+                    analysis.get("task_type", ""),
+                    analysis.get("exec_mode", ""),
+                )
+            else:
+                analysis = await self._analyze_command(command, ctx)
 
             route_mode = ctx.get("route_mode", "")
             exec_mode = analysis.get("exec_mode", "both")
