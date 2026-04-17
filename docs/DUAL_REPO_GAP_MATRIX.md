@@ -75,7 +75,7 @@
 | PROTO-004 | MEDIUM | OPEN | `galaxy_gateway/android_bridge.py` | `ui_tree_request`, `action_sequence_execute`, `app_start` handled by `_handle_forward_log` — not actively executed. | Action protocol handlers PR |
 | PROTO-005 | MEDIUM | OPEN | Android | AIP v2 binary `ANDROID_SCREEN` (0x60) / `ANDROID_INPUT` (0x61) not migrated to AIP v3 `screen_stream_data` / `action_execute`. | AIP v2 binary migration PR |
 | PROTO-006 | LOW | OPEN | Android + V2 | `HYBRID_EXECUTE` / `HYBRID_RESULT` defined in AIP v3 enum but Android uses degrade path (`HYBRID_DEGRADE`). True hybrid execution not wired. | Hybrid execution design PR |
-| PROTO-007 | LOW | OPEN | V2 | `/ws/ufo3/{device_id}` legacy path still served. No client confirmed; retire after confirming no active usage. | Compat retirement PR |
+| PROTO-007 | LOW | FENCED (PR-5) | V2 | `/ws/ufo3/{device_id}` legacy path still served. No client confirmed; retire after confirming no active usage. Fence: `GALAXY_ENABLE_LEGACY_PROTOCOLS` env-var gate (default: false); connection rejected with redirect to canonical path. Catalogued in `core.center_side_compat_closure`. | Compat retirement PR |
 
 ---
 
@@ -105,12 +105,12 @@
 
 | Gap ID | Severity | Status | Module | Description | Recommended PR |
 |--------|----------|--------|--------|-------------|----------------|
-| COMPAT-001 | MEDIUM | PARTIAL | `galaxy_gateway/task_router.py` | `TaskRouter` / `TaskScheduler` RETIRED (PR-516) but residual file may remain on disk. Confirm removal and verify no callers. | Compat retirement PR |
-| COMPAT-002 | MEDIUM | GATED | `core/capability_registry.py` | `CapabilityRegistry` gated (PR-516); permitted for device-local bookkeeping but routing decisions must use `CapabilityAssimilationLayer`. Risk: developers may still route through `CapabilityRegistry` for routing decisions. | Compat governance PR |
-| COMPAT-003 | MEDIUM | PARTIAL | `galaxy_gateway/cross_device_coordinator.py` | Substrate-only with sentinel enforcement (PR-518). External callers still possible. Emit `LEGACY_DISPATCH` warnings. Risk if sentinel enforcement is bypassed. | Sentinel coverage audit |
-| COMPAT-004 | LOW | GATED | `core/local_agent_runtime.py` | `LocalAgentRuntime` gated; server-side planning role retired. Device-side sandbox retained. Risk: unclear boundary may cause confusion. | Documentation and boundary clarification |
-| COMPAT-005 | LOW | GATED | `desktop_projection/projection_engine.py` | `ProjectionEngine` gated; must delegate to `ProjectionSurfaceBridge` for runtime enrichment. Risk: gating not enforced at runtime. | Projection consolidation PR |
-| COMPAT-006 | LOW | OPEN | Android REST compat | `POST /api/devices/register`, `GET /api/devices/list` compat aliases still served. No active retirement timeline. | Gradual retirement after traffic analysis |
+| COMPAT-001 | MEDIUM | FENCED (PR-5) | `galaxy_gateway/task_router.py` | `TaskRouter` / `TaskScheduler` RETIRED (PR-516) but residual file may remain on disk. Confirm removal and verify no callers. Fence: `NO_PARALLEL_DISPATCH_AUTHORITY_POLICY` sentinel via `legacy_system_decommission`. Catalogued in `core.center_side_compat_closure`. | Compat retirement PR |
+| COMPAT-002 | MEDIUM | FENCED (PR-5) | `core/capability_registry.py` | `CapabilityRegistry` gated (PR-516); permitted for device-local bookkeeping but routing decisions must use `CapabilityAssimilationLayer`. Fence: `CANONICAL_CAPABILITY_SOURCE_POLICY` sentinel. Catalogued in `core.center_side_compat_closure`. | Compat governance PR |
+| COMPAT-003 | MEDIUM | FENCED (PR-5) | `galaxy_gateway/cross_device_coordinator.py` | Substrate-only with sentinel enforcement (PR-518). External callers still possible. Emit `LEGACY_DISPATCH` warnings. Catalogued in `core.center_side_compat_closure`. | Sentinel coverage audit |
+| COMPAT-004 | LOW | FENCED (PR-5) | `core/local_agent_runtime.py` | `LocalAgentRuntime` gated; server-side planning role retired. Device-side sandbox retained. Fence: `legacy_system_decommission` sentinel. Catalogued in `core.center_side_compat_closure`. | Documentation and boundary clarification |
+| COMPAT-005 | LOW | FENCED (PR-5) | `desktop_projection/projection_engine.py` | `ProjectionEngine` gated; must delegate to `ProjectionSurfaceBridge` for runtime enrichment. Fence: `CANONICAL_PROJECTION_CONTRACT_POLICY` sentinel. Catalogued in `core.center_side_compat_closure`. | Projection consolidation PR |
+| COMPAT-006 | LOW | FENCED (PR-5) | Android REST compat | `POST /api/devices/register`, `GET /api/devices/list` compat aliases still served. Fence: `DeprecationWarning` emitted at `create_router()` call. Catalogued in `core.center_side_compat_closure`. | Gradual retirement after traffic analysis |
 
 ---
 
@@ -135,11 +135,12 @@
 | 4. Android protocol | 0 | 2 | 3 | 2 | 7 |
 | 5. WebRTC | 0 | 0 | 2 | 1 | 3 |
 | 6. Truth/projection | 0 | 0 | 3 | 2 | 5 |
-| 7. Compatibility | 0 | 0 | 3 | 3 | 6 |
+| 7. Compatibility | 0 | 0 | 3 (all FENCED) | 3 (all FENCED) | 6 |
 | 8. Cross-repo | 0 | 1 | 2 | 1 | 4 |
 | **Total** | **0** | **5** | **19** | **16** | **40** |
 
 No CRITICAL gaps. 5 HIGH gaps (MESH-001, MESH-002, PROTO-001, PROTO-002, CROSS-001) require priority attention.
+Domain 7 (Compatibility): all 6 gaps are now FENCED via `core.center_side_compat_closure` (PR-5).
 
 ---
 
@@ -162,4 +163,4 @@ No CRITICAL gaps. 5 HIGH gaps (MESH-001, MESH-002, PROTO-001, PROTO-002, CROSS-0
 10. **Staged mesh execution** — MESH-008
 11. **Mesh result merge engine** — MESH-007
 12. **Android-V2 truth reconciliation** — CROSS-002, TRUTH-005
-13. **Compat retirement** — COMPAT-001 through COMPAT-006, PROTO-007
+13. **Compat retirement (physical deletion)** — COMPAT-001 through COMPAT-006, PROTO-007 — all FENCED in PR-5; physical deletion pending retirement conditions (see `core.center_side_compat_closure` for each gap's retirement_condition)
