@@ -928,13 +928,6 @@ def test_ay1_snapshot_records_newest_first():
 # ---------------------------------------------------------------------------
 
 def test_az1_manager_config_accepts_task_id():
-    # Import directly to avoid core.multimodal.__init__ numpy dependency in test environment
-    import importlib.util, sys
-    spec = importlib.util.spec_from_file_location(
-        "webrtc_session_manager_direct",
-        "/home/runner/work/ufo-galaxy-realization-v2/ufo-galaxy-realization-v2/"
-        "core/multimodal/webrtc_session_manager.py",
-    )
     pytest.importorskip("numpy", reason="numpy required for WebRTCManagerConfig tests")
     from core.multimodal.webrtc_session_manager import WebRTCManagerConfig
     cfg = WebRTCManagerConfig(task_id="my_task")

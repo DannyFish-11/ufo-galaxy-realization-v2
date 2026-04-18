@@ -505,17 +505,19 @@ class WebRTCTaskSessionRegistry:
         """Replace the most-recent binding for *binding.task_id*.
 
         If no prior binding exists for that task the record is appended.
-        The replacement is performed in-ring by creating a new deque without
-        the superseded entry and appending the updated one.
+        The replacement is performed in a single pass: the latest index for
+        the task is found while building the updated deque.
         """
         updated: Deque[WebRTCTaskBinding] = deque(maxlen=self._capacity)
-        replaced = False
-        latest_idx = None
-        # find the latest index for this task_id
-        for i, rec in enumerate(self._ring):
+        latest_idx: Optional[int] = None
+        entries = list(self._ring)
+        # Find the index of the most-recent record for this task_id
+        for i, rec in enumerate(entries):
             if rec.task_id == binding.task_id:
                 latest_idx = i
-        for i, rec in enumerate(self._ring):
+        # Build the updated deque in a single pass, replacing only at latest_idx
+        replaced = False
+        for i, rec in enumerate(entries):
             if i == latest_idx and not replaced:
                 updated.append(binding)
                 replaced = True

@@ -374,6 +374,13 @@ class WebRTCSessionManager:
 
             binding = get_webrtc_task_binding(self.config.task_id)
             if binding is None:
+                logger.info(
+                    "_notify_transport_state: task_id=%s configured but no binding found "
+                    "(session_id=%s); transport state '%s' will not be propagated",
+                    self.config.task_id,
+                    self.session_id,
+                    transport_state,
+                )
                 return
             apply_transport_state_to_task_lifecycle(
                 binding,
