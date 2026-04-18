@@ -41,6 +41,11 @@ class MultimodalEventType(str, Enum):
     # Transport
     TRANSPORT_FALLBACK = "transport.fallback"
 
+    # WebRTC task-lifecycle integration (PR-6)
+    WEBRTC_TASK_BOUND = "webrtc.task.bound"
+    WEBRTC_TASK_LIFECYCLE_CHANGED = "webrtc.task.lifecycle_changed"
+    WEBRTC_TASK_TORN_DOWN = "webrtc.task.torn_down"
+
 
 # ---------------------------------------------------------------------------
 # Base event
@@ -205,3 +210,60 @@ class TransportFallbackEvent(MultimodalEvent):
     to_method: str = "http"
     reason: str = ""
     device_id: str = ""
+
+
+# ---------------------------------------------------------------------------
+# WebRTC task-lifecycle integration events (PR-6)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class WebRTCTaskBoundEvent(MultimodalEvent):
+    """Emitted when a WebRTC session is bound to a canonical task.
+
+    This event signals that the task now has an associated WebRTC session and
+    its lifecycle will be governed by the transport state of that session.
+    """
+
+    event_type: MultimodalEventType = field(
+        default=MultimodalEventType.WEBRTC_TASK_BOUND, init=False
+    )
+    task_id: str = ""
+    webrtc_session_id: str = ""
+    device_id: str = ""
+    binding_id: str = ""
+
+
+@dataclass
+class WebRTCTaskLifecycleChangedEvent(MultimodalEvent):
+    """Emitted when a transport-state change drives a task lifecycle transition.
+
+    Carries both the transport state that triggered the change and the
+    resulting task lifecycle action so that observers can react appropriately.
+    """
+
+    event_type: MultimodalEventType = field(
+        default=MultimodalEventType.WEBRTC_TASK_LIFECYCLE_CHANGED, init=False
+    )
+    task_id: str = ""
+    webrtc_session_id: str = ""
+    transport_state: str = "unknown"
+    lifecycle_action: str = "no_change"
+    previous_task_lifecycle: str = ""
+    new_task_lifecycle: str = ""
+
+
+@dataclass
+class WebRTCTaskTornDownEvent(MultimodalEvent):
+    """Emitted when a WebRTC task binding is torn down on task terminal state.
+
+    Signals that the WebRTC session associated with the task should be closed
+    and its resources released.
+    """
+
+    event_type: MultimodalEventType = field(
+        default=MultimodalEventType.WEBRTC_TASK_TORN_DOWN, init=False
+    )
+    task_id: str = ""
+    webrtc_session_id: str = ""
+    device_id: str = ""
+    terminal_lifecycle: str = ""
