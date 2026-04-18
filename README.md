@@ -8,6 +8,7 @@
 
 | Document | Purpose |
 |----------|---------|
+| [docs/CROSS_REPO_CODE_REALITY_AUDIT_BASELINE.md](docs/CROSS_REPO_CODE_REALITY_AUDIT_BASELINE.md) | **Cross-repo code-reality audit baseline & unified target-state model** ★ |
 | [docs/TEST_STRATEGY.md](docs/TEST_STRATEGY.md) | Test layout, markers, and CI jobs |
 | [tests/README.md](tests/README.md) | Running tests — quick reference |
 | [docs/DEPLOYMENT_SURFACES.md](docs/DEPLOYMENT_SURFACES.md) | Docker/compose surface catalogue |
