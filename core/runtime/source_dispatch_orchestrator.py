@@ -771,6 +771,67 @@ DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-F: Durable Dispatch-to-Session Continuity and Recovery Context
+# ---------------------------------------------------------------------------
+
+DISPATCH_CONTINUITY_RECOVERY_CONTEXT_PR_F_SENTINEL: str = (
+    "DISPATCH_CONTINUITY_RECOVERY_CONTEXT_PR_F::"
+    "source-dispatch-orchestrator::dispatch-continuity-context::"
+    "execution-interruption-classification::mesh-session-restoration-hook::"
+    "durable-continuity-metadata-survives-reconnect-handoff::"
+    "package=PR-F::multi-device-runtime-continuity"
+)
+
+CONTINUITY_CONTEXT_CONNECTS_DISPATCH_SESSION_STATE_PR_F_POLICY: str = (
+    "POLICY::CONTINUITY_CONTEXT_CONNECTS_DISPATCH_SESSION_STATE_PR_F: "
+    "DispatchContinuityContext is the canonical durable continuity record that "
+    "connects dispatch decisions, executor targets, and mesh session state so "
+    "that recoverable runtime interruptions can be distinguished from terminal "
+    "failure.  It MUST be attached to SourceDispatchPlan, SourceDispatchResult, "
+    "and TaskEnvelope when the dispatch cycle may be interrupted and resumed.  "
+    "The context carries stable prior identity fields (prior_dispatch_id, "
+    "prior_session_id, prior_mesh_session_id, prior_task_id, prior_trace_id) "
+    "that survive reconnect and handoff scenarios.  PR-F."
+)
+
+RECOVERABLE_VS_TERMINAL_DISTINCTION_IS_EXPLICIT_PR_F_POLICY: str = (
+    "POLICY::RECOVERABLE_VS_TERMINAL_DISTINCTION_IS_EXPLICIT_PR_F: "
+    "Production paths MUST distinguish recoverable execution interruption from "
+    "terminal session/task loss using ExecutionInterruptionClass.  A 'recoverable' "
+    "classification implies that a resume path is available and a "
+    "DispatchContinuityContext SHOULD be carried.  A 'terminal' classification "
+    "implies that no resume is possible and a new dispatch cycle is required.  "
+    "Callers MUST NOT attempt to resume from a terminal interruption record.  "
+    "This distinction enables upstream UX and retry logic to branch correctly "
+    "without inspecting raw error strings.  PR-F."
+)
+
+RESTORATION_HOOK_ASSOCIATES_RESUMED_EXECUTION_PR_F_POLICY: str = (
+    "POLICY::RESTORATION_HOOK_ASSOCIATES_RESUMED_EXECUTION_PR_F: "
+    "associate_resumed_execution_with_session() in "
+    "core.mesh.mesh_session_lifecycle is the canonical restoration path for "
+    "reconnect/handoff scenarios.  It MUST be called with the "
+    "DispatchContinuityContext after a reconnect or handoff so that the resumed "
+    "execution is correlated with the correct active mesh session and dispatch "
+    "context.  The association is recorded in the session's metadata and "
+    "persisted durably.  This is additive over the existing restore_session() "
+    "path; existing direct/fallback execution paths remain functional "
+    "without calling this hook.  PR-F."
+)
+
+EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F_POLICY: str = (
+    "POLICY::EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F: "
+    "All existing direct and fallback execution paths (local, remote_handoff, "
+    "fallback_local, staged_mesh, blocked, unknown) remain fully functional "
+    "without a continuity_context.  The continuity_context field is Optional "
+    "in all contracts (SourceDispatchPlan, SourceDispatchResult, TaskEnvelope) "
+    "and defaults to None.  Callers that do not set continuity_context continue "
+    "to work unchanged.  This ensures backward compatibility during migration "
+    "from the pre-PR-F dispatch architecture.  PR-F."
+)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

@@ -82,6 +82,7 @@ __all__ = [
     "MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY",
     "LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY",
     "RESTORE_REQUIRES_DURABLE_STATE_POLICY",
+    "RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_POLICY",
     # Data
     "MeshSessionLifecycleRecord",
     # Coordinator class
@@ -94,6 +95,7 @@ __all__ = [
     "suspend_durable_session",
     "restore_durable_session",
     "terminate_durable_session",
+    "associate_resumed_execution_with_session",
 ]
 
 logger = logging.getLogger("Galaxy.Mesh.Lifecycle")
@@ -124,6 +126,17 @@ RESTORE_REQUIRES_DURABLE_STATE_POLICY: str = (
     "in MeshSessionPersistenceStore with a non-terminal status.  "
     "If no durable state is found the method returns None rather than "
     "creating a synthetic session."
+)
+
+RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_POLICY: str = (
+    "POLICY::RESUMED_EXECUTION_ASSOCIATION_IS_RESTORATION_PATH_PR-F: "
+    "associate_resumed_execution() is the canonical restoration hook that links "
+    "a resumed execution to its prior active mesh session and dispatch context.  "
+    "It MUST be called after a reconnect or handoff with a "
+    "DispatchContinuityContext that carries the prior_dispatch_id, "
+    "prior_session_id, and prior_mesh_session_id.  The association is recorded in "
+    "the session's metadata and persisted durably.  This is the authoritative "
+    "re-association path for reconnect/handoff scenarios.  PR-F."
 )
 
 
@@ -554,6 +567,86 @@ class MeshSessionLifecycleCoordinator:
             "status_breakdown": statuses,
         }
 
+    def associate_resumed_execution(
+        self,
+        session_id: str,
+        continuity_context: Optional[Dict[str, Any]],
+        *,
+        resumed_dispatch_id: Optional[str] = None,
+        resumed_trace_id: Optional[str] = None,
+    ) -> Optional[MeshSessionLifecycleRecord]:
+        """Associate a resumed execution with an active mesh session.
+
+        This is the canonical restoration hook (PR-F) for reconnect and handoff
+        scenarios.  It records the ``continuity_context`` in the session's
+        metadata and persists the updated state, allowing downstream observers
+        to correlate resumed execution with the prior dispatch and session
+        context.
+
+        This method DOES NOT perform a lifecycle transition.  The session must
+        already be in a non-terminal state (typically ``active`` or ``restoring``).
+        Call :meth:`restore_session` first if the session is ``suspended``.
+
+        Parameters
+        ----------
+        session_id:
+            The mesh session to associate the resumed execution with.
+        continuity_context:
+            Serialised :class:`~contracts.dispatch_continuity.DispatchContinuityContext`
+            dict (PR-F) carrying prior identity fields.  ``None`` is tolerated
+            for backward-compatible callers; in that case the association is
+            recorded with an empty continuity_context placeholder.
+        resumed_dispatch_id:
+            The new dispatch_id of the resumed execution, if known.
+        resumed_trace_id:
+            The new trace_id of the resumed execution, if known.
+
+        Returns
+        -------
+        MeshSessionLifecycleRecord or None
+            The updated record, or ``None`` when the session is not tracked
+            or is in a terminal state.
+        """
+        _TERMINAL = {"completed", "cancelled", "failed"}
+        with self._lock:
+            record = self._sessions.get(session_id)
+            if record is None:
+                logger.warning(
+                    "associate_resumed_execution: unknown session_id '%s'", session_id
+                )
+                return None
+            if record.status in _TERMINAL:
+                logger.warning(
+                    "associate_resumed_execution: session '%s' is terminal (status=%s) — "
+                    "cannot associate resumed execution",
+                    session_id, record.status,
+                )
+                return None
+
+            # Record the association in session metadata
+            association: Dict[str, Any] = {
+                "continuity_context": continuity_context or {},
+                "associated_at": time.time(),
+            }
+            if resumed_dispatch_id is not None:
+                association["resumed_dispatch_id"] = resumed_dispatch_id
+            if resumed_trace_id is not None:
+                association["resumed_trace_id"] = resumed_trace_id
+
+            record.metadata["resumed_execution_association"] = association
+            record.updated_at = time.time()
+
+        self._persist(record)
+        logger.info(
+            "associate_resumed_execution: session '%s' (status=%s) associated with resumed "
+            "execution (prior_dispatch_id=%s, resumed_dispatch_id=%s)",
+            session_id,
+            record.status,
+            (continuity_context or {}).get("prior_dispatch_id"),
+            resumed_dispatch_id,
+        )
+        return record
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -834,3 +927,48 @@ def terminate_durable_session(
     """
     c = coordinator or get_lifecycle_coordinator()
     return c.terminate_session(session_id, outcome=outcome, session=session, reason=reason)
+
+
+def associate_resumed_execution_with_session(
+    session_id: str,
+    continuity_context: Optional[Dict[str, Any]],
+    *,
+    resumed_dispatch_id: Optional[str] = None,
+    resumed_trace_id: Optional[str] = None,
+    coordinator: Optional[MeshSessionLifecycleCoordinator] = None,
+) -> Optional[MeshSessionLifecycleRecord]:
+    """Associate a resumed execution with an active mesh session (PR-F).
+
+    This is the module-level convenience wrapper for
+    :meth:`MeshSessionLifecycleCoordinator.associate_resumed_execution`.  It
+    is the canonical production restoration hook for reconnect/handoff
+    scenarios.
+
+    Parameters
+    ----------
+    session_id:
+        The mesh session to associate the resumed execution with.
+    continuity_context:
+        Serialised :class:`~contracts.dispatch_continuity.DispatchContinuityContext`
+        dict (PR-F) carrying prior identity fields.
+    resumed_dispatch_id:
+        The new dispatch_id of the resumed execution, if known.
+    resumed_trace_id:
+        The new trace_id of the resumed execution, if known.
+    coordinator:
+        Optional explicit coordinator instance.  When ``None``, the
+        process-level singleton is used.
+
+    Returns
+    -------
+    MeshSessionLifecycleRecord or None
+        The updated record with the continuity association recorded in
+        metadata, or ``None`` when the session is not tracked or terminal.
+    """
+    c = coordinator or get_lifecycle_coordinator()
+    return c.associate_resumed_execution(
+        session_id,
+        continuity_context,
+        resumed_dispatch_id=resumed_dispatch_id,
+        resumed_trace_id=resumed_trace_id,
+    )
