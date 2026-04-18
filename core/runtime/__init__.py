@@ -685,6 +685,37 @@ from core.delegated_target_selection_policy import (  # noqa: E402
     build_selection_explanation,
 )
 
+# PR-6 (center-side): WebRTC Task-Lifecycle Integration.
+# Re-exported here so callers can reach the WebRTC task-lifecycle API from
+# core.runtime without importing the module directly.
+from core.webrtc_task_lifecycle import (  # noqa: E402
+    WEBRTC_TASK_LIFECYCLE_AUTHORITY,
+    WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY,
+    TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY,
+    TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY,
+    DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY,
+    FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY,
+    RECONNECTED_TRANSPORT_RESUMES_RUNNING_TASK_POLICY,
+    BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY,
+    TEARDOWN_IS_IDEMPOTENT_POLICY,
+    SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY,
+    WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL,
+    WebRTCTransportState,
+    WebRTCTaskLifecycleAction,
+    WebRTCTaskBinding,
+    WebRTCTaskBindingSnapshot,
+    WebRTCTaskSessionRegistry,
+    bind_webrtc_session_to_task,
+    classify_transport_lifecycle_action,
+    apply_transport_state_to_task_lifecycle,
+    teardown_binding_on_task_terminal,
+    get_webrtc_task_binding,
+    list_active_webrtc_task_bindings,
+    build_webrtc_task_binding_snapshot,
+    get_webrtc_task_session_registry,
+    reset_webrtc_task_session_registry,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -1231,4 +1262,30 @@ __all__ = [
     "rank_candidates",
     "select_delegated_target",
     "build_selection_explanation",
+    # PR-6 (center-side): WebRTC Task-Lifecycle Integration
+    "WEBRTC_TASK_LIFECYCLE_AUTHORITY",
+    "WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY",
+    "TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY",
+    "TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY",
+    "DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY",
+    "FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY",
+    "RECONNECTED_TRANSPORT_RESUMES_RUNNING_TASK_POLICY",
+    "BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY",
+    "TEARDOWN_IS_IDEMPOTENT_POLICY",
+    "SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY",
+    "WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL",
+    "WebRTCTransportState",
+    "WebRTCTaskLifecycleAction",
+    "WebRTCTaskBinding",
+    "WebRTCTaskBindingSnapshot",
+    "WebRTCTaskSessionRegistry",
+    "bind_webrtc_session_to_task",
+    "classify_transport_lifecycle_action",
+    "apply_transport_state_to_task_lifecycle",
+    "teardown_binding_on_task_terminal",
+    "get_webrtc_task_binding",
+    "list_active_webrtc_task_bindings",
+    "build_webrtc_task_binding_snapshot",
+    "get_webrtc_task_session_registry",
+    "reset_webrtc_task_session_registry",
 ]

@@ -66,6 +66,12 @@ class WebRTCManagerConfig:
     metrics_interval_s  How often to emit :class:`WebRTCQualityMetricsEvent`.
     trace_id            Optional trace correlation ID.
     runtime_session_id  Optional runtime session ID.
+    task_id             Optional canonical task ID this session is bound to
+                        (PR-6: task-lifecycle integration).  When set, the
+                        manager will coordinate lifecycle transitions with
+                        the :mod:`core.webrtc_task_lifecycle` registry.
+    device_id           Optional Android device ID associated with this session
+                        (PR-6: used for task-binding registration).
     """
 
     stun_url: str = "stun:stun.l.google.com:19302"
@@ -75,6 +81,8 @@ class WebRTCManagerConfig:
     metrics_interval_s: float = _METRICS_INTERVAL_S
     trace_id: Optional[str] = None
     runtime_session_id: Optional[str] = None
+    task_id: Optional[str] = None
+    device_id: Optional[str] = None
 
 
 class WebRTCSessionManager:
@@ -201,6 +209,8 @@ class WebRTCSessionManager:
                 total_reconnect_attempts=self._reconnect_attempts,
             )
         )
+        # PR-6: notify task-lifecycle integration layer of session close
+        self._notify_transport_state("closed")
         logger.info(
             "WebRTCSessionManager closed (reconnects=%d)", self._reconnect_attempts
         )
@@ -234,9 +244,13 @@ class WebRTCSessionManager:
                     total_reconnect_attempts=self._reconnect_attempts,
                 )
             )
+            # PR-6: max reconnects exhausted → transport failed
+            self._notify_transport_state("failed")
             return None
 
         self._reconnect_attempts += 1
+        # PR-6: notify that transport is in reconnecting state
+        self._notify_transport_state("reconnecting")
         self._emit_event(
             WebRTCReconnectingEvent(
                 trace_id=self.config.trace_id,
@@ -329,6 +343,8 @@ class WebRTCSessionManager:
                 has_audio=False,
             )
         )
+        # PR-6: notify task-lifecycle integration layer of connected state
+        self._notify_transport_state("connected")
         # Start / restart the metrics polling task
         if self._metrics_task is None or self._metrics_task.done():
             try:
@@ -339,6 +355,41 @@ class WebRTCSessionManager:
                 )
             except RuntimeError:
                 pass  # no running event loop — metrics deferred
+
+    def _notify_transport_state(self, transport_state: str) -> None:
+        """PR-6: Notify the canonical task-lifecycle integration layer of a
+        transport-state change for the task bound to this session.
+
+        This is a best-effort notification; failures are logged at DEBUG level
+        and never propagate to the caller.
+        """
+        if not self.config.task_id:
+            return
+        try:
+            from core.webrtc_task_lifecycle import (
+                apply_transport_state_to_task_lifecycle,
+                get_webrtc_task_binding,
+                WebRTCTransportState,
+            )
+
+            binding = get_webrtc_task_binding(self.config.task_id)
+            if binding is None:
+                logger.info(
+                    "_notify_transport_state: task_id=%s configured but no binding found "
+                    "(session_id=%s); transport state '%s' will not be propagated",
+                    self.config.task_id,
+                    self.session_id,
+                    transport_state,
+                )
+                return
+            apply_transport_state_to_task_lifecycle(
+                binding,
+                WebRTCTransportState.from_string(transport_state),
+            )
+        except Exception as exc:
+            logger.debug(
+                "_notify_transport_state: task-lifecycle update skipped: %s", exc
+            )
 
     def _emit_event(self, event: MultimodalEvent) -> None:
         """Dispatch a :class:`MultimodalEvent` to registered listeners."""
