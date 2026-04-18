@@ -190,6 +190,20 @@ class TaskEnvelope(BaseModel):
         ),
     )
 
+    # ── Dispatch continuity context (PR-F) ────────────────────────────────────
+    continuity_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Durable continuity context (PR-F) for reconnect/handoff correlation. "
+            "Serialised DispatchContinuityContext dict carrying prior dispatch_id, "
+            "session_id, mesh_session_id, task_id, and trace_id.  Allows resumed "
+            "execution to be correlated with the prior session and dispatch context "
+            "after a disconnect or handoff.  None for fresh dispatch attempts or "
+            "when continuity tracking is not required. "
+            "(PR-F)"
+        ),
+    )
+
     model_config = {"from_attributes": True}
 
     # ── Convenience helpers ─────────────────────────────────────────────────

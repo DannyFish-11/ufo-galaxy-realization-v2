@@ -461,6 +461,15 @@ class SourceDispatchPlan(BaseModel):
         default_factory=time.time,
         description="Unix timestamp when the plan was built.",
     )
+    continuity_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Durable continuity context (PR-F) carrying prior identity fields for "
+            "reconnect/handoff correlation.  Serialised DispatchContinuityContext dict. "
+            "None when not yet established (first dispatch attempt or ephemeral context). "
+            "(PR-F)"
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extension metadata.",
@@ -620,6 +629,16 @@ class SourceDispatchResult(BaseModel):
             "Canonical field name per SOURCE_POSTURE_CONTRACT_AUTHORITY."
         ),
     )
+    continuity_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Durable continuity context (PR-F) carrying prior identity fields for "
+            "reconnect/handoff correlation.  Serialised DispatchContinuityContext dict. "
+            "Populated when this result may be interrupted and resumed, or when it "
+            "corresponds to a resumed execution.  None for clean terminal results. "
+            "(PR-F)"
+        ),
+    )
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix timestamp when this result was produced.",
@@ -666,6 +685,7 @@ class SourceDispatchResult(BaseModel):
             "has_governance_snapshot": self.governance_snapshot is not None,
             "has_policy_alignment": self.policy_alignment is not None,
             "has_mesh_session": self.mesh_session is not None,
+            "has_continuity_context": self.continuity_context is not None,
             "timestamp": self.timestamp,
         }
 
@@ -895,6 +915,7 @@ def build_source_dispatch_plan(
     governance_snapshot: Optional[Dict[str, Any]] = None,
     ready: bool = False,
     readiness_notes: Optional[List[str]] = None,
+    continuity_context: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> SourceDispatchPlan:
     """Convenience factory for :class:`SourceDispatchPlan`.
@@ -914,6 +935,10 @@ def build_source_dispatch_plan(
     source_runtime_posture:
         Source-device runtime participation posture.  Falls back to the
         decision's posture when not provided explicitly.
+    continuity_context:
+        Serialised :class:`~contracts.dispatch_continuity.DispatchContinuityContext`
+        dict (PR-F) for reconnect/handoff correlation.  ``None`` for first
+        dispatch attempts or ephemeral contexts.
     """
     try:
         d_trace = trace_id if trace_id is not None else (decision.trace_id if decision else None)
@@ -943,6 +968,7 @@ def build_source_dispatch_plan(
             governance_snapshot=d_gov,
             ready=ready,
             readiness_notes=readiness_notes or [],
+            continuity_context=continuity_context,
             metadata=metadata or {},
         )
     except Exception:
@@ -972,12 +998,20 @@ def build_source_dispatch_result(
     mesh_session: Optional[Dict[str, Any]] = None,
     errors: Optional[List[str]] = None,
     decision_reason: Optional[str] = None,
+    continuity_context: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> SourceDispatchResult:
     """Convenience factory for :class:`SourceDispatchResult`.
 
     All parameters are optional.  Never raises; construction errors produce a
     minimal failed result.
+
+    Parameters
+    ----------
+    continuity_context:
+        Serialised :class:`~contracts.dispatch_continuity.DispatchContinuityContext`
+        dict (PR-F) for reconnect/handoff correlation.  ``None`` for clean
+        terminal results or when continuity context is not applicable.
     """
     _posture = _normalise_posture_hint(source_runtime_posture)
     try:
@@ -1000,6 +1034,7 @@ def build_source_dispatch_result(
             mesh_session=mesh_session,
             errors=errors or [],
             decision_reason=decision_reason,
+            continuity_context=continuity_context,
             metadata=metadata or {},
         )
     except Exception:
