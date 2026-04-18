@@ -4202,11 +4202,19 @@ class OpenClawd:
         ~~~~~~~~~~~~~~~~~~~~~~
         * OpenClawd (decision core) decides that multi-device orchestration is
           needed and calls this method.
-        * This method delegates to :meth:`_dispatch_parallel_goal`, which in
-          turn invokes the orchestration layer
-          (:class:`~core.swarm_coordinator.SwarmCoordinator`).
-        * The orchestration layer makes device-selection / coordination
-          decisions (above the substrate).
+        * When a mesh session with multiple active participants is present this
+          method first routes through
+          :func:`~core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch`
+          (the canonical source-side dispatch orchestration layer).  This
+          makes :class:`~contracts.source_dispatch.SourceDispatchPlan` part of
+          the real dispatch flow and enables the ``staged_mesh`` mode under
+          production conditions.
+        * When the source dispatch orchestrator selects ``staged_mesh`` and
+          succeeds, the coordinated result is returned directly.
+        * When no mesh context is present, or when the orchestrator returns a
+          non-mesh result or fails, execution falls through to
+          :meth:`_dispatch_parallel_goal` (SwarmCoordinator path) which
+          remains the fallback for the migration period.
         * The substrate (:class:`~core.command_router.CommandRouter`) handles
           transport/execution after the orchestration layer has selected targets.
 
@@ -4220,6 +4228,77 @@ class OpenClawd:
             Standard handler response with
             ``delegation_point="multi_device_orchestration"`` in ``metadata``.
         """
+        # PR-D: Source Dispatch Orchestrator production wiring.
+        # When a mesh session with 2+ active participants is available, route
+        # through the canonical source dispatch orchestration layer first.
+        # This gives orchestrate_source_runtime_dispatch() a real production
+        # caller, makes SourceDispatchPlan part of a real dispatch flow, and
+        # makes staged_mesh reachable under production conditions.
+        try:
+            from core.runtime.source_dispatch_orchestrator import (
+                _try_mesh_session,
+                orchestrate_source_runtime_dispatch,
+            )
+            from contracts.source_dispatch import SourceDispatchMode
+
+            mesh_session_dict = _try_mesh_session()
+            _use_orchestrator = False
+            if mesh_session_dict and isinstance(mesh_session_dict, dict):
+                participants = mesh_session_dict.get("participants") or []
+                active_count = sum(
+                    1
+                    for p in participants
+                    if isinstance(p, dict)
+                    and p.get("status") in ("active", "ready", "joined")
+                )
+                _use_orchestrator = active_count >= 2
+
+            if _use_orchestrator:
+                task_hint = message
+                task_dict: Optional[Dict[str, Any]] = None
+                if intent is not None:
+                    _cmd = getattr(intent, "command", None)
+                    _params = getattr(intent, "params", None) or {}
+                    if _cmd:
+                        task_dict = {"tool_name": _cmd, "args": _params}
+
+                orch_result = orchestrate_source_runtime_dispatch(
+                    trace_id=trace_id,
+                    session_id=session_id,
+                    task=task_dict,
+                    mesh_session=mesh_session_dict,
+                    task_hint=task_hint,
+                    metadata={"source": "openclawd._delegate_multi_device_orchestration"},
+                )
+
+                if (
+                    orch_result is not None
+                    and orch_result.mode == SourceDispatchMode.staged_mesh
+                    and orch_result.success
+                ):
+                    result_payload = orch_result.result or {}
+                    return {
+                        "success": True,
+                        "response": result_payload.get(
+                            "action_taken", "staged_mesh_coordinated"
+                        ),
+                        "intent": "parallel_goal",
+                        "metadata": {
+                            "delegation_point": "multi_device_orchestration",
+                            "dispatch_mode": "staged_mesh",
+                            "dispatch_id": orch_result.dispatch_id,
+                            "decision_reason": orch_result.decision_reason,
+                            "coordinator_status": result_payload.get(
+                                "coordinator_status"
+                            ),
+                        },
+                    }
+                # Orchestrator ran but did not produce a successful staged_mesh
+                # result — fall through to the SwarmCoordinator path below.
+        except Exception:  # noqa: BLE001
+            # Any import or runtime error must not interrupt existing dispatch.
+            pass
+
         result = await self._dispatch_parallel_goal(
             message=message,
             intent=intent,
