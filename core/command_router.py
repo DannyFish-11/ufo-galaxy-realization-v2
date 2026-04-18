@@ -386,6 +386,53 @@ CAPABILITY_GRAPH_SELECTION_ENFORCED: str = (
     "Closes GAP-512-004."
 )
 
+# PR-E: Explicit executor target typing — first-class dispatch routing.
+#
+# route_envelope() now inspects envelope.executor_target_type as the
+# *primary* branching input for dispatch path selection.  When the field is
+# set, no ID guessing or metadata heuristic is needed:
+#
+#   ExecutorTargetType.android_device  → _route_cross_device_envelope()
+#   ExecutorTargetType.node_service    → _route_cross_device_envelope()
+#   ExecutorTargetType.go_worker       → _route_worker_envelope() (MasterBrain)
+#   ExecutorTargetType.local           → _execute_command() (local runtime)
+#
+# When executor_target_type is None the existing metadata-based heuristics
+# (cross_device / parallel_fanout flags) remain active for backward compat.
+#
+# Boundary between direct envelope routing and MasterBrain/worker dispatch
+# -------------------------------------------------------------------------
+# Direct envelope routing (android_device / node_service / local):
+#   CommandRouter remains the sole orchestration authority.  Envelopes travel
+#   directly to the target via DeviceRouter or the local executor.  All
+#   canonical audit / trace / graph writes occur in route_envelope() itself.
+#
+# MasterBrain/worker dispatch (go_worker):
+#   CommandRouter delegates to _route_worker_envelope(), which calls
+#   MasterBrain.dispatch_task().  MasterBrain owns worker selection, NATS
+#   publication, and worker-level retry.  CommandRouter remains the
+#   *system-level* canonical authority (ACL, lifecycle, audit, trace) while
+#   MasterBrain is the *worker-domain* authority (worker selection, NATS
+#   routing, worker lifecycle).  The two authorities are non-overlapping.
+EXECUTOR_TARGET_TYPE_ROUTING_POLICY: str = (
+    "COMMAND_ROUTER::EXECUTOR_TARGET_TYPE_ROUTING_V1: "
+    "route_envelope() uses TaskEnvelope.executor_target_type as the primary "
+    "dispatch branch selector. android_device/node_service → "
+    "_route_cross_device_envelope(); go_worker → _route_worker_envelope() "
+    "(MasterBrain); local → _execute_command(). "
+    "None falls back to metadata heuristics for backward compat. (PR-E)"
+)
+
+MASTERBRAIN_WORKER_DISPATCH_BOUNDARY: str = (
+    "COMMAND_ROUTER::MASTERBRAIN_WORKER_DISPATCH_BOUNDARY_V1: "
+    "For go_worker targets, CommandRouter is the system-level authority "
+    "(ACL, lifecycle, audit, trace) while MasterBrain is the worker-domain "
+    "authority (worker selection, NATS routing, worker lifecycle). "
+    "CommandRouter delegates via _route_worker_envelope() → "
+    "MasterBrain.dispatch_task(). The two authority domains are "
+    "non-overlapping. (PR-E)"
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1354,12 +1401,61 @@ class CommandRouter:
         except (TypeError, ValueError):
             max_retries = 2
 
+        # ── PR-E: Explicit executor target type routing (first-class) ────────
+        # When envelope.executor_target_type is set, route_envelope() branches
+        # primarily on the explicit target type rather than metadata heuristics.
+        # This is the canonical PR-E dispatch path.
+        #
+        # Mapping:
+        #   android_device / node_service → _route_cross_device_envelope()
+        #   go_worker                     → _route_worker_envelope() (MasterBrain)
+        #   local                         → _execute_command() (local runtime)
+        #
+        # When executor_target_type is None the existing metadata-based heuristics
+        # below remain active for backward compatibility.
+        _explicit_target_type = envelope.executor_target_type
+        if _explicit_target_type is not None:
+            try:
+                from core.schemas.remote_execution import ExecutorTargetType as _ETT
+            except Exception:
+                _ETT = None  # type: ignore[assignment]
+
+            if _ETT is not None and _explicit_target_type in (
+                _ETT.android_device,
+                _ETT.node_service,
+            ):
+                # Android device or node service — route via cross-device substrate.
+                result = await self._route_cross_device_envelope(
+                    envelope=envelope,
+                    command_id=command_id,
+                    request_id=request_id,
+                )
+            elif _ETT is not None and _explicit_target_type == _ETT.go_worker:
+                # Go worker — delegate to MasterBrain/worker dispatch boundary.
+                result = await self._route_worker_envelope(
+                    envelope=envelope,
+                    command_id=command_id,
+                    request_id=request_id,
+                )
+            else:
+                # local (or unknown explicit type) — local runtime execution.
+                result = await self._execute_command(
+                    device_id=envelope.target,
+                    command=envelope.tool_name,
+                    payload=envelope.args,
+                    command_id=command_id,
+                    task_id=envelope.task_id,
+                    timeout=envelope.timeout,
+                    request_id=request_id,
+                    trace_id=envelope.trace_id,
+                    retry_candidates=retry_candidates,
+                    required_capabilities=required_capabilities,
+                    max_retries=max_retries,
+                )
         # ── PR-518/GAP-517-001: Cross-device canonical dispatch path ─────────
-        # When the envelope carries metadata["cross_device"] == "true", delegate
-        # execution to the DeviceRouter substrate via _route_cross_device_envelope().
-        # All canonical audit/trace/graph work above remains in effect; this branch
-        # only replaces the single-device _execute_command() call.
-        if meta.get("cross_device") == "true":
+        # Fallback heuristic (backward compat): when executor_target_type is
+        # not set, check metadata["cross_device"] / ["parallel_fanout"].
+        elif meta.get("cross_device") == "true":
             result = await self._route_cross_device_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -1680,6 +1776,86 @@ class CommandRouter:
                 "success": False,
                 "result": None,
                 "error_code": "CROSS_DEVICE_SUBSTRATE_ERROR",
+                "error_message": str(_exc),
+                "latency_ms": round(_latency_ms, 1),
+            }
+
+    async def _route_worker_envelope(
+        self,
+        envelope: "TaskEnvelope",
+        command_id: str,
+        request_id: str,
+    ) -> Dict[str, Any]:
+        """PR-E: Delegate dispatch to MasterBrain for go_worker targets.
+
+        Called by :meth:`route_envelope` when
+        ``envelope.executor_target_type == ExecutorTargetType.go_worker``.
+
+        Authority boundary
+        ------------------
+        * **CommandRouter** (this module) is the *system-level* authority:
+          ACL enforcement, lifecycle state transitions, audit/trace writes,
+          and the canonical ``TaskEnvelope`` contract all happen in
+          :meth:`route_envelope` *before* this method is called.
+
+        * **MasterBrain** is the *worker-domain* authority: it owns worker
+          selection (least-loaded, device-type matching), NATS/JetStream
+          publication, and worker-level retry.
+
+        The two authority domains are non-overlapping.  Callers MUST NOT
+        invoke :class:`~core.master_brain.MasterBrain` directly for
+        go_worker tasks — route through :meth:`route_envelope` so that
+        system-level concerns are always enforced.
+        """
+        import time as _time_m
+
+        _t0 = _time_m.monotonic()
+        try:
+            from core.master_brain import get_master_brain
+
+            mb = get_master_brain()
+            raw_task: Dict[str, Any] = {
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "tool_name": envelope.tool_name,
+                "args": dict(envelope.args or {}),
+                "target_worker_id": envelope.target,
+                "timeout": envelope.timeout,
+            }
+            raw = await mb.dispatch_task(raw_task)
+            _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            return {
+                "request_id": request_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "device_id": envelope.target,
+                "command": envelope.tool_name,
+                "via": "command_router.worker_masterbrain",
+                "success": bool(raw.get("success")),
+                "result": raw,
+                "error_code": None if raw.get("success") else "WORKER_DISPATCH_FAILED",
+                "error_message": raw.get("error"),
+                "latency_ms": round(_latency_ms, 1),
+            }
+        except Exception as _exc:
+            _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            logger.error(
+                "_route_worker_envelope failed | task_id=%s error=%s",
+                envelope.task_id,
+                _exc,
+            )
+            return {
+                "request_id": request_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "command_id": command_id,
+                "device_id": envelope.target,
+                "command": envelope.tool_name,
+                "via": "command_router.worker_masterbrain",
+                "success": False,
+                "result": None,
+                "error_code": "WORKER_DISPATCH_ERROR",
                 "error_message": str(_exc),
                 "latency_ms": round(_latency_ms, 1),
             }

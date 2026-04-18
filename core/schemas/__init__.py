@@ -26,6 +26,9 @@ from core.schemas.task_envelope import (
     envelope_from_mcp_call,
 )
 
+# -- Executor target type (PR-E) -----------------------------------------------
+from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
+
 # -- Device schemas ----------------------------------------------------------
 from core.schemas.device import (
     DeviceModel,
@@ -159,6 +162,9 @@ __all__ = [
     "envelope_from_command_request",
     "envelope_from_relay_request",
     "envelope_from_mcp_call",
+    # executor target type (PR-E)
+    "ExecutorTargetType",
+    "RemoteExecutionMode",
     # device (unified models)
     "DeviceModel",
     "DeviceCapabilityModel",
