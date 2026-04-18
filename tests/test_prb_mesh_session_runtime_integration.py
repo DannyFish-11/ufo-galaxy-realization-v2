@@ -63,7 +63,7 @@ def _make_session(device_id: str, session_id: Optional[str] = None):
 class TestFindSessionsForDevice:
     """MeshSessionLifecycleCoordinator.find_sessions_for_device"""
 
-    def test_returns_session_id_for_source_device(self):
+    def test_finds_session_for_source_device(self):
         coord = _fresh_coordinator()
         sess = _make_session("dev_source_01")
         record = coord.create_session(sess)
@@ -72,7 +72,7 @@ class TestFindSessionsForDevice:
         result = coord.find_sessions_for_device("dev_source_01")
         assert record.session_id in result
 
-    def test_returns_session_id_for_primary_device(self):
+    def test_finds_session_for_primary_device(self):
         from contracts.mesh_session import build_mesh_session
 
         coord = _fresh_coordinator()
@@ -86,7 +86,7 @@ class TestFindSessionsForDevice:
         result = coord.find_sessions_for_device("primary_device_01")
         assert record.session_id in result
 
-    def test_returns_empty_for_unknown_device(self):
+    def test_finds_no_sessions_for_unknown_device(self):
         coord = _fresh_coordinator()
         sess = _make_session("dev_known")
         coord.create_session(sess)
