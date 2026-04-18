@@ -548,6 +548,29 @@ class DeviceRegistry:
                     await self._emit_event("online", device)
                 elif status == DeviceStatus.OFFLINE:
                     await self._emit_event("offline", device)
+                    # Wire device-offline lifecycle event into multi-device runtime harness.
+                    try:
+                        from core.multi_device_runtime_harness import (
+                            on_device_health_changed,
+                            on_participant_readiness_changed,
+                            DeviceHealthEvent,
+                        )
+                        on_device_health_changed(
+                            DeviceHealthEvent(
+                                device_id=device_id,
+                                health_score=0.0,
+                                is_reachable=False,
+                                event_type="disconnect",
+                            )
+                        )
+                        on_participant_readiness_changed(
+                            device_id, "lost", reason="disconnect"
+                        )
+                    except Exception as _harn_exc:
+                        logger.debug(
+                            "DeviceRegistry.update_status: harness notification failed — %s",
+                            _harn_exc,
+                        )
         
         return True
     
@@ -574,6 +597,29 @@ class DeviceRegistry:
                     device.status = DeviceStatus.OFFLINE
                     await self._emit_event("offline", device)
                     logger.warning("DeviceRegistry: local cache marks device offline: %s", device.device_id)
+                    # Wire heartbeat-miss lifecycle event into multi-device runtime harness.
+                    try:
+                        from core.multi_device_runtime_harness import (
+                            on_device_health_changed,
+                            on_participant_readiness_changed,
+                            DeviceHealthEvent,
+                        )
+                        on_device_health_changed(
+                            DeviceHealthEvent(
+                                device_id=device.device_id,
+                                health_score=0.0,
+                                is_reachable=False,
+                                event_type="heartbeat_miss",
+                            )
+                        )
+                        on_participant_readiness_changed(
+                            device.device_id, "lost", reason="heartbeat_miss"
+                        )
+                    except Exception as _harn_exc:
+                        logger.debug(
+                            "DeviceRegistry.check_offline_devices: harness notification failed — %s",
+                            _harn_exc,
+                        )
     
     # ========================================================================
     # 能力协商

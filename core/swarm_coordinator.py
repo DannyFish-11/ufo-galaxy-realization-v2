@@ -351,6 +351,32 @@ class SwarmCoordinator:
             orch_plan.to_summary_dict(),
         )
 
+        # PR-A: Wire multi-device task admission into the runtime harness before
+        # any substrate dispatch so that task-graph and routable-executor truth
+        # are updated prior to the first CommandRouter call.
+        try:
+            from core.multi_device_runtime_harness import on_task_admitted_for_dispatch
+
+            on_task_admitted_for_dispatch(
+                {
+                    "task_id": root_task_id,
+                    "task_type": "swarm_team",
+                    "session_id": session_id,
+                    "trace_id": root_trace_id,
+                },
+                candidate_device_ids=[
+                    d.target_device_id
+                    for d in orch_decisions
+                    if d.target_device_id is not None
+                ],
+                trace_id=root_trace_id,
+            )
+        except Exception as _harn_exc:
+            logger.debug(
+                "SwarmCoordinator.dispatch_team: harness task-admission notification failed — %s",
+                _harn_exc,
+            )
+
         # ── SUBSTRATE DELEGATION: Dispatch all members concurrently ──────────
         # From this point we hand control to the substrate (CommandRouter).
         # The orchestration layer does not perform any routing itself.
