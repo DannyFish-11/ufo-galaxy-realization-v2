@@ -377,6 +377,60 @@ class SwarmCoordinator:
                 _harn_exc,
             )
 
+        # PR-B: Create and activate a durable mesh session for this swarm execution
+        # so that MeshSessionLifecycleCoordinator is part of the multi-device task
+        # runtime path.  The session is terminated (completed or failed) once all
+        # member dispatches resolve.
+        _mesh_session_id: Optional[str] = None
+        try:
+            from contracts.mesh_session import (
+                MeshSessionParticipant,
+                build_mesh_session,
+            )
+            from core.mesh.mesh_session_lifecycle import (
+                activate_durable_session,
+                create_durable_session,
+            )
+
+            _participants = [
+                MeshSessionParticipant(
+                    device_id=d.target_device_id,
+                    role="executor",
+                )
+                for d in orch_decisions
+                if d.target_device_id is not None
+            ]
+            _mesh_sess = build_mesh_session(
+                source_device_id="swarm_coordinator",
+                primary_device_id=_participants[0].device_id if _participants else "swarm_coordinator",
+                session_id=session_id or root_task_id,
+                task_id=root_task_id,
+                trace_id=root_trace_id,
+                participants=_participants if _participants else None,
+                multi_device_required=len(_participants) > 1,
+                metadata={"swarm_task": task, "trigger": "dispatch_team"},
+            )
+            _record = create_durable_session(
+                _mesh_sess,
+                metadata={
+                    "task_id": root_task_id,
+                    "trace_id": root_trace_id,
+                    "trigger": "swarm_dispatch_team",
+                },
+            )
+            if _record:
+                activate_durable_session(_record.session_id)
+                _mesh_session_id = _record.session_id
+                logger.info(
+                    "SwarmCoordinator: mesh session created+activated: task_id=%s session_id=%s",
+                    root_task_id, _mesh_session_id,
+                )
+        except Exception as _mesh_exc:
+            logger.debug(
+                "SwarmCoordinator.dispatch_team: mesh session create/activate non-fatal — %s",
+                _mesh_exc,
+            )
+
         # ── SUBSTRATE DELEGATION: Dispatch all members concurrently ──────────
         # From this point we hand control to the substrate (CommandRouter).
         # The orchestration layer does not perform any routing itself.
@@ -387,8 +441,10 @@ class SwarmCoordinator:
         # ── ORCHESTRATION LAYER: Aggregate results ───────────────────────────
         total_ms = (time.monotonic() - t0) * 1000
         member_results: List[MemberResult] = []
+        any_failure = False
         for member, result in zip(members, raw_results):
             if isinstance(result, Exception):
+                any_failure = True
                 member_results.append(MemberResult(
                     member=member,
                     result="",
@@ -396,6 +452,8 @@ class SwarmCoordinator:
                     error=str(result),
                 ))
             else:
+                if not result.get("success", True):
+                    any_failure = True
                 member_results.append(MemberResult(
                     member=member,
                     result=result.get("output", result.get("result", "")),
@@ -405,6 +463,26 @@ class SwarmCoordinator:
                 ))
 
         synthesized = self._synthesize(member_results)
+
+        # PR-B: Terminate the mesh session now that all dispatches have resolved.
+        if _mesh_session_id is not None:
+            try:
+                from core.mesh.mesh_session_lifecycle import terminate_durable_session
+
+                terminate_durable_session(
+                    _mesh_session_id,
+                    outcome="failed" if any_failure else "completed",
+                    reason="swarm_dispatch_team_complete",
+                )
+                logger.info(
+                    "SwarmCoordinator: mesh session terminated: task_id=%s session_id=%s outcome=%s",
+                    root_task_id, _mesh_session_id, "failed" if any_failure else "completed",
+                )
+            except Exception as _mesh_term_exc:
+                logger.debug(
+                    "SwarmCoordinator.dispatch_team: mesh session terminate non-fatal — %s",
+                    _mesh_term_exc,
+                )
 
         return TeamResult(
             team_id=root_task_id,

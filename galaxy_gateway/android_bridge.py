@@ -266,6 +266,31 @@ class AndroidBridge:
                 device_id, exc,
             )
 
+        # PR-B: Terminate any active/pending mesh sessions associated with this
+        # device so the MeshSessionLifecycleCoordinator reflects the disconnect.
+        try:
+            from core.mesh.mesh_session_lifecycle import (
+                get_lifecycle_coordinator,
+                terminate_durable_session,
+            )
+            _coord = get_lifecycle_coordinator()
+            _session_ids = _coord.find_sessions_for_device(device_id)
+            for _sid in _session_ids:
+                terminate_durable_session(
+                    _sid,
+                    outcome="cancelled",
+                    reason=f"device_disconnect:{device_id}",
+                )
+                logger.info(
+                    "Mesh session terminated on device disconnect: device_id=%s session_id=%s",
+                    device_id, _sid,
+                )
+        except Exception as _mesh_exc:
+            logger.debug(
+                "android_bridge: mesh session terminate non-fatal: device_id=%s error=%s",
+                device_id, _mesh_exc,
+            )
+
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created)."""
         self._patch_runtime_state_to_udm(

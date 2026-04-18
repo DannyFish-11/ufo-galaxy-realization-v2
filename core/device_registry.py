@@ -620,6 +620,30 @@ class DeviceRegistry:
                             "DeviceRegistry.check_offline_devices: harness notification failed — %s",
                             _harn_exc,
                         )
+                    # PR-B: Suspend active mesh sessions for the lost device so the
+                    # MeshSessionLifecycleCoordinator reflects the heartbeat-miss.
+                    try:
+                        from core.mesh.mesh_session_lifecycle import (
+                            get_lifecycle_coordinator,
+                            suspend_durable_session,
+                        )
+                        _coord = get_lifecycle_coordinator()
+                        _session_ids = _coord.find_sessions_for_device(device.device_id)
+                        for _sid in _session_ids:
+                            suspend_durable_session(
+                                _sid,
+                                reason=f"heartbeat_miss:{device.device_id}",
+                            )
+                            logger.info(
+                                "DeviceRegistry: mesh session suspended for offline device: "
+                                "device_id=%s session_id=%s",
+                                device.device_id, _sid,
+                            )
+                    except Exception as _mesh_exc:
+                        logger.debug(
+                            "DeviceRegistry.check_offline_devices: mesh session suspend non-fatal — %s",
+                            _mesh_exc,
+                        )
     
     # ========================================================================
     # 能力协商

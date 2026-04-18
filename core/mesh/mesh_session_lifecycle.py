@@ -507,6 +507,41 @@ class MeshSessionLifecycleCoordinator:
             logger.warning("list_restorable_session_ids: store scan failed: %s", exc)
             return []
 
+    def find_sessions_for_device(
+        self,
+        device_id: str,
+        *,
+        only_non_terminal: bool = True,
+    ) -> List[str]:
+        """Return session IDs whose source or primary device matches *device_id*.
+
+        Parameters
+        ----------
+        device_id:
+            The device to search for in tracked session records.
+        only_non_terminal:
+            When ``True`` (default) terminal sessions (completed / cancelled /
+            failed) are excluded from the result.
+
+        Returns
+        -------
+        List[str]
+            Session IDs associated with *device_id*.
+        """
+        _TERMINAL = {"completed", "cancelled", "failed"}
+        results: List[str] = []
+        with self._lock:
+            for sid, record in self._sessions.items():
+                if only_non_terminal and record.status in _TERMINAL:
+                    continue
+                sd = record.session_dict
+                if (
+                    sd.get("source_device_id") == device_id
+                    or sd.get("primary_device_id") == device_id
+                ):
+                    results.append(sid)
+        return results
+
     def summary(self) -> Dict[str, Any]:
         """Return a lightweight summary dict for monitoring/diagnostics."""
         with self._lock:

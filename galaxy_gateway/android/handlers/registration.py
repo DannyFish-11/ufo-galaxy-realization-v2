@@ -42,6 +42,37 @@ async def handle_device_register(
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
+        # PR-B: Create and activate a durable mesh session for this device so that
+        # the MeshSessionLifecycleCoordinator is aware of the device's registration.
+        # The session tracks this device as both source and primary participant so
+        # that disconnect handling can later locate and terminate it.
+        try:
+            from contracts.mesh_session import build_mesh_session
+            from core.mesh.mesh_session_lifecycle import (
+                create_durable_session,
+                activate_durable_session,
+            )
+            _mesh_session = build_mesh_session(
+                source_device_id=device_id,
+                primary_device_id=device_id,
+                metadata={"registration_trigger": "android_device_register"},
+            )
+            _record = create_durable_session(
+                _mesh_session,
+                metadata={"device_id": device_id, "trigger": "device_register"},
+            )
+            if _record:
+                activate_durable_session(_record.session_id)
+                logger.info(
+                    "Mesh session created+activated for device: device_id=%s session_id=%s",
+                    device_id, _record.session_id,
+                )
+        except Exception as _mesh_exc:
+            logger.debug(
+                "android_bridge: mesh session create/activate non-fatal: device_id=%s error=%s",
+                device_id, _mesh_exc,
+            )
+
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s",
             device_id, device.model, device.platform,
