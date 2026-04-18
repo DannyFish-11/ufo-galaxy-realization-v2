@@ -37,6 +37,7 @@ Coverage:
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any, Dict, Optional
 
@@ -126,14 +127,12 @@ class TestDispatchContinuityContextRoundTrip:
         assert restored.resume_attempt_count == 2
 
     def test_to_json_is_valid_json(self):
-        import json
         ctx = self._make_context()
         j = ctx.to_json()
         parsed = json.loads(j)
         assert parsed["prior_dispatch_id"] == "dispatch_001"
 
     def test_to_json_with_indent(self):
-        import json
         ctx = self._make_context()
         j = ctx.to_json(indent=2)
         assert "\n" in j

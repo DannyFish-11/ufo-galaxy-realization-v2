@@ -324,11 +324,6 @@ class ExecutionInterruptionClass(str, Enum):
 # ExecutionInterruptionRecord — structured record of an interruption
 # ---------------------------------------------------------------------------
 
-_RECOVERABLE_ACTIONS = frozenset(
-    {"resume_local", "resume_on_target", "fallback_local", "reassociate_session"}
-)
-_TERMINAL_ACTIONS = frozenset({"terminal_abort"})
-
 
 class ExecutionInterruptionRecord(BaseModel):
     """Structured record of a runtime execution interruption.
