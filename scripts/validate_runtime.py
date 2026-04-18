@@ -1597,9 +1597,157 @@ def check_capability_utilization_observability() -> None:
         _print_result(r)
 
 
+def check_runtime_invariant_enforcement() -> None:
+    """Check 15: PR-8 runtime invariant enforcement posture.
+
+    Validates that:
+    a. core.runtime_invariant_enforcement is importable and exports the PR-8
+       authority sentinel.
+    b. The invariant registry is non-empty and contains no REGRESSION_RISK
+       entries (clean-state assertion).
+    c. The cross-repo assumption registry is non-empty and all assumptions
+       are validated.
+    d. is_enforcement_posture_acceptable() returns True (acceptance bar met).
+    e. build_enforcement_snapshot() returns a well-formed snapshot with
+       internally consistent counts.
+    """
+    _section("15. PR-8 Runtime Invariant Enforcement")
+
+    # 15a. Module importable; authority sentinel present
+    try:
+        from core.runtime_invariant_enforcement import (
+            RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY,
+            RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL,
+            get_invariant_registry,
+            get_cross_repo_assumption_registry,
+            get_violated_invariants,
+            get_unvalidated_assumptions,
+            is_enforcement_posture_acceptable,
+            build_enforcement_snapshot,
+        )
+        r = _record(
+            "runtime_invariant_enforcement: module importable",
+            bool(RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY),
+            RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY[:60],
+        )
+        _print_result(r)
+        r = _record(
+            "runtime_invariant_enforcement: PR-8 sentinel present",
+            "PR8" in RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL,
+            RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL[:60],
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "runtime_invariant_enforcement: module importable",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+        return
+
+    # 15b. Invariant registry non-empty; no REGRESSION_RISK entries
+    try:
+        registry = get_invariant_registry()
+        r = _record(
+            "runtime_invariant_enforcement: invariant registry non-empty",
+            len(registry) > 0,
+            f"count={len(registry)}",
+        )
+        _print_result(r)
+        violated = get_violated_invariants()
+        r = _record(
+            "runtime_invariant_enforcement: no REGRESSION_RISK invariants",
+            len(violated) == 0,
+            f"regression_risk_count={len(violated)}" if violated else "clean",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "runtime_invariant_enforcement: invariant registry check",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 15c. Assumption registry non-empty; all assumptions validated
+    try:
+        assumptions = get_cross_repo_assumption_registry()
+        r = _record(
+            "runtime_invariant_enforcement: assumption registry non-empty",
+            len(assumptions) > 0,
+            f"count={len(assumptions)}",
+        )
+        _print_result(r)
+        unvalidated = get_unvalidated_assumptions()
+        r = _record(
+            "runtime_invariant_enforcement: all assumptions validated",
+            len(unvalidated) == 0,
+            f"unvalidated_count={len(unvalidated)}" if unvalidated else "all validated",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "runtime_invariant_enforcement: assumption registry check",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 15d. is_enforcement_posture_acceptable() returns True
+    try:
+        acceptable = is_enforcement_posture_acceptable()
+        r = _record(
+            "runtime_invariant_enforcement: enforcement posture acceptable",
+            acceptable,
+            "posture=acceptable" if acceptable else "posture=NOT_ACCEPTABLE",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "runtime_invariant_enforcement: enforcement posture check",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+    # 15e. build_enforcement_snapshot() returns well-formed snapshot
+    try:
+        snapshot = build_enforcement_snapshot()
+        total_inv = snapshot.total_invariants
+        inv_sum = (
+            snapshot.enforced_count
+            + snapshot.partially_enforced_count
+            + snapshot.documented_only_count
+            + snapshot.regression_risk_count
+        )
+        counts_consistent = total_inv == inv_sum
+        r = _record(
+            "runtime_invariant_enforcement: snapshot invariant counts consistent",
+            counts_consistent,
+            f"total={total_inv} sum={inv_sum}",
+        )
+        _print_result(r)
+        total_assum = snapshot.total_assumptions
+        assum_sum = snapshot.validated_assumption_count + snapshot.unvalidated_assumption_count
+        r = _record(
+            "runtime_invariant_enforcement: snapshot assumption counts consistent",
+            total_assum == assum_sum,
+            f"total={total_assum} sum={assum_sum}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        r = _record(
+            "runtime_invariant_enforcement: snapshot check",
+            False,
+            str(exc)[:120],
+        )
+        _print_result(r)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-9 / PR-10 / PR-530 / PR-531)"
+        description="Galaxy runtime integration validator (PR-8 / PR-9 / PR-10 / PR-530 / PR-531)"
     )
     parser.add_argument(
         "--json",
@@ -1633,6 +1781,7 @@ def main() -> int:
     check_node_lifecycle_governor()
     check_deployment_baseline()
     check_capability_utilization_observability()
+    check_runtime_invariant_enforcement()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))
