@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from core.schemas.remote_execution import RemoteExecutionMode
+from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +170,23 @@ class TaskEnvelope(BaseModel):
             "None for local tasks or when the mode is not yet determined. "
             "Optional — callers that do not set this field continue to work "
             "unchanged. (PR-5)"
+        ),
+    )
+
+    # ── Executor target type (PR-E) ───────────────────────────────────────────
+    executor_target_type: Optional[ExecutorTargetType] = Field(
+        default=None,
+        description=(
+            "Explicit executor target type for first-class dispatch routing. "
+            "When set, CommandRouter.route_envelope() branches on this field "
+            "rather than inferring target kind from ID patterns or metadata "
+            "heuristics. "
+            "'android_device' — Android device via gateway/DeviceRouter; "
+            "'node_service' — Galaxy node service via DeviceRouter; "
+            "'go_worker' — Go edge worker via MasterBrain/NATS; "
+            "'local' — local runtime execution. "
+            "None preserves existing metadata-based routing (backward compat). "
+            "(PR-E)"
         ),
     )
 
