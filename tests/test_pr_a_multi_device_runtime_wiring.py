@@ -279,7 +279,7 @@ class TestSwarmCoordinatorWiring:
         member.agent_id = "agent-001"
         member.agent_name = "TestAgent"
 
-        # Build a minimal valid manifest so manifets creation doesn't raise
+        # Build a minimal valid manifest so manifest creation doesn't raise
         mock_manifest = MagicMock(spec=SwarmAgentManifest)
         mock_manifest.target_device_id = "target-dev-01"
         mock_manifest.required_capabilities = []

@@ -513,7 +513,7 @@ class CrossDeviceCoordinator:
                         _src_id,
                         "degraded",
                         session_id=_ctx.get("session_id"),
-                        reason=f"cross_device_task_failure",
+                        reason="cross_device_task_failure",
                     )
             except Exception:
                 pass  # advisory only
