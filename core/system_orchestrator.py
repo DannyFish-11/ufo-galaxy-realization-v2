@@ -310,6 +310,23 @@ class SystemOrchestrator:
             diagnostics["checks"]["dispatch_plan_ready"] = False
             issues.append(f"dispatch_plan_error:{exc}")
 
+        # PR-A: Trigger mesh session recovery so that any non-terminal sessions
+        # persisted from a previous run are surfaced before normal operation
+        # resumes.  This is the real startup/bootstrap callsite for recover_sessions().
+        try:
+            from core.multi_device_runtime_harness import get_multi_device_runtime_harness
+
+            _harness = get_multi_device_runtime_harness()
+            _recovered = _harness.recover_sessions()
+            diagnostics["checks"]["mesh_sessions_recovered"] = len(_recovered)
+            logger.info(
+                "[Phase 4] Multi-device session recovery: %d recoverable session(s) found.",
+                len(_recovered),
+            )
+        except Exception as exc:
+            diagnostics["checks"]["mesh_sessions_recovered"] = 0
+            logger.debug("[Phase 4] Multi-device session recovery skipped — %s", exc)
+
         if issues:
             return PhaseResult(
                 phase=StartupPhase.BACKGROUND_SUBSYSTEMS,

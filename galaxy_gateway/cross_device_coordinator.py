@@ -422,6 +422,27 @@ class CrossDeviceCoordinator:
                         "CrossDeviceCoordinator.execute_cross_device_task: " "integrity recording skipped — %s",
                         _rec_err,
                     )  # integrity recording is advisory
+                # PR-A: Notify the runtime harness that all formation participants
+                # are ready so readiness-driven formation tracking is active from
+                # the start of this cross-device task.
+                try:
+                    from core.multi_device_runtime_harness import on_participant_readiness_changed
+
+                    _session_id = _ctx_inner.get("session_id")
+                    for _member_id in _formation_group.all_member_device_ids:
+                        on_participant_readiness_changed(
+                            _member_id,
+                            "ready",
+                            formation=_formation_group,
+                            session_id=_session_id,
+                            reason="cross_device_task_start",
+                        )
+                except Exception as _harn_err:
+                    logger.debug(
+                        "CrossDeviceCoordinator.execute_cross_device_task: "
+                        "harness readiness notification skipped — %s",
+                        _harn_err,
+                    )  # harness notification is advisory
             except Exception as _form_err:
                 logger.warning(
                     "CrossDeviceCoordinator.execute_cross_device_task: "
@@ -481,6 +502,21 @@ class CrossDeviceCoordinator:
                 route_mode=_ctx.get("route_mode", "cross_device"),
                 legacy_path_used=(None if _is_canonical else "cross_device_coordinator.execute_cross_device_task"),
             )
+            # PR-A: Mark the source device as degraded so the harness and formation
+            # rebalance engine are aware that this cross-device task failed.
+            try:
+                from core.multi_device_runtime_harness import on_participant_readiness_changed
+
+                _src_id = _ctx.get("source_device_id", "")
+                if _src_id:
+                    on_participant_readiness_changed(
+                        _src_id,
+                        "degraded",
+                        session_id=_ctx.get("session_id"),
+                        reason="cross_device_task_failure",
+                    )
+            except Exception:
+                pass  # advisory only
             return _err_result
 
     def _analyze_cross_device_task(self, command: str) -> str:
