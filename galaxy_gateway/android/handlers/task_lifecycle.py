@@ -69,10 +69,11 @@ def _signal_guard_accept(message: Dict[str, Any]) -> bool:
             key, message.get("type"),
         )
         return False
-    # Record as seen; evict the oldest entry when the window is full.
-    _processed_signals[key] = True
-    if len(_processed_signals) > _SIGNAL_GUARD_CAPACITY:
+    # Record as seen; evict the oldest entry first when at capacity so the
+    # dict never temporarily exceeds _SIGNAL_GUARD_CAPACITY.
+    if len(_processed_signals) >= _SIGNAL_GUARD_CAPACITY:
         _processed_signals.popitem(last=False)
+    _processed_signals[key] = True
     return True
 
 
