@@ -291,6 +291,32 @@ class AndroidBridge:
                 device_id, _mesh_exc,
             )
 
+        # V2 lifecycle mainline: detach attached session in AttachedSessionRegistry
+        # so that the registry reflects the transport-level disconnect.
+        try:
+            from core.attached_runtime_session_registry import (
+                lookup_session_by_device,
+                detach_session,
+                InvalidationReason,
+            )
+            _entry = lookup_session_by_device(device_id)
+            if _entry is not None:
+                detach_session(
+                    _entry,
+                    reason=InvalidationReason.disconnected,
+                    metadata={"disconnect_source": "android_bridge"},
+                )
+                logger.info(
+                    "AttachedSessionRegistry: session detached on device disconnect: "
+                    "device_id=%s runtime_session_id=%s",
+                    device_id, _entry.runtime_session_id,
+                )
+        except Exception as _asr_exc:
+            logger.debug(
+                "android_bridge: attached session detach non-fatal: device_id=%s error=%s",
+                device_id, _asr_exc,
+            )
+
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created)."""
         self._patch_runtime_state_to_udm(
@@ -764,6 +790,62 @@ class AndroidBridge:
 
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)
+
+        # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
+        # so that runtime_session_id is preserved and the session returns to active.
+        try:
+            from core.attached_runtime_session_registry import (
+                lookup_session_by_device,
+                reconnect_session,
+                get_session_registry,
+            )
+            # First try the active pointer; fall back to the most-recent
+            # non-terminal entry (e.g. detached after a prior disconnect).
+            _entry = lookup_session_by_device(device_id)
+            if _entry is None:
+                _reg = get_session_registry()
+                for _e in _reg.list_all():
+                    if _e.device_id == device_id and not _e.is_terminal():
+                        _entry = _e
+                        break
+            if _entry is not None and not _entry.is_terminal():
+                _updated = reconnect_session(
+                    _entry,
+                    metadata={"reconnect_source": "android_bridge"},
+                )
+                logger.info(
+                    "AttachedSessionRegistry: session reconnected: "
+                    "device_id=%s runtime_session_id=%s reconnect_count=%d",
+                    device_id, _updated.runtime_session_id, _updated.reconnect_count,
+                )
+        except Exception as _asr_exc:
+            logger.debug(
+                "android_bridge: attached session reconnect non-fatal: device_id=%s error=%s",
+                device_id, _asr_exc,
+            )
+
+        # V2 lifecycle mainline: restore any suspended mesh sessions associated
+        # with this device so that mesh state comes back to ACTIVE after reconnect.
+        try:
+            from core.mesh.mesh_session_lifecycle import (
+                get_lifecycle_coordinator,
+                restore_durable_session,
+            )
+            _coord = get_lifecycle_coordinator()
+            _session_ids = _coord.find_sessions_for_device(device_id)
+            for _sid in _session_ids:
+                _rec = _coord.get_record(_sid)
+                if _rec is not None and _rec.status == "suspended":
+                    restore_durable_session(_sid)
+                    logger.info(
+                        "Mesh session restored on device reconnect: device_id=%s session_id=%s",
+                        device_id, _sid,
+                    )
+        except Exception as _mesh_exc:
+            logger.debug(
+                "android_bridge: mesh session restore non-fatal: device_id=%s error=%s",
+                device_id, _mesh_exc,
+            )
 
         logger.info("设备重连成功: %s", device_id)
         return True
