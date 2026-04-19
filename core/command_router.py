@@ -433,6 +433,18 @@ MASTERBRAIN_WORKER_DISPATCH_BOUNDARY: str = (
     "non-overlapping. (PR-E)"
 )
 
+POLICY_ENGINE_CONSULTED_ON_HEURISTIC_PATH: str = (
+    "COMMAND_ROUTER::POLICY_ENGINE_CONSULTED_ON_HEURISTIC_PATH_PR5A: "
+    "When executor_target_type is None, route_envelope() consults "
+    "apply_target_selection_policy() from "
+    "core.runtime.execution_target_policy_engine before falling through to "
+    "legacy metadata heuristics.  The policy decision is recorded in "
+    "envelope.metadata['_policy_selection_decision'] for downstream "
+    "observability.  Legacy heuristic branches are not changed — backward "
+    "compat is preserved.  This is the canonical production call site for "
+    "the policy engine on the main routing path.  PR-5A."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1490,7 +1502,33 @@ class CommandRouter:
         # ── PR-518/GAP-517-001: Cross-device canonical dispatch path ─────────
         # Fallback heuristic (backward compat): when executor_target_type is
         # not set, check metadata["cross_device"] / ["parallel_fanout"].
+        # ── PR-5A: Policy engine consultation (heuristic path) ───────────────
+        # When executor_target_type is None (i.e. we are in the heuristic
+        # branch), consult apply_target_selection_policy() before the legacy
+        # metadata branches.  The decision is recorded for observability but
+        # does NOT override the heuristic routing — backward compat is preserved.
         elif meta.get("cross_device") == "true":
+            # PR-5A: invoke policy engine as an observability side-effect only.
+            try:
+                from core.runtime.execution_target_policy_engine import (
+                    apply_target_selection_policy as _apply_tsp_cd,
+                )
+
+                _tsp_cd = _apply_tsp_cd(
+                    executor_target_type="android_device",
+                    candidate_device_ids=list(envelope.targets),
+                    task_id=envelope.task_id,
+                    trace_id=envelope.trace_id,
+                    metadata={"source": "command_router.route_envelope.cross_device"},
+                )
+                if _tsp_cd is not None:
+                    logger.debug(
+                        "route_envelope[cross_device]: policy_engine decision=%s task_id=%s",
+                        getattr(_tsp_cd, "policy_kind", None),
+                        envelope.task_id,
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             result = await self._route_cross_device_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -1503,6 +1541,58 @@ class CommandRouter:
                 request_id=request_id,
             )
         else:
+            # PR-5A: invoke policy engine for the local (heuristic) path.
+            try:
+                from core.runtime.execution_target_policy_engine import (
+                    apply_target_selection_policy as _apply_tsp_local,
+                )
+
+                _ps_candidate_ids = list(envelope.targets) if envelope.targets else []
+                _ps_readiness_map: Dict[str, str] = {}
+                for _cid in _ps_candidate_ids:
+                    try:
+                        from core.device_readiness import get_device_readiness as _gdr
+
+                        _r = _gdr(_cid)
+                        if _r is not None:
+                            _ps_readiness_map[_cid] = str(
+                                getattr(_r, "readiness_status", None)
+                                or getattr(_r, "status", None)
+                                or "unknown"
+                            )
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                _ps_decision = _apply_tsp_local(
+                    executor_target_type=None,
+                    candidate_device_ids=_ps_candidate_ids,
+                    readiness_map=_ps_readiness_map,
+                    task_id=envelope.task_id,
+                    trace_id=envelope.trace_id,
+                    metadata={"source": "command_router.route_envelope.local_heuristic"},
+                )
+                if _ps_decision is not None:
+                    logger.debug(
+                        "route_envelope[local]: policy_engine decision=%s reason=%r task_id=%s",
+                        getattr(_ps_decision, "policy_kind", None),
+                        getattr(_ps_decision, "decision_reason", None),
+                        envelope.task_id,
+                    )
+                    _ps_dict = (
+                        _ps_decision.to_dict()
+                        if hasattr(_ps_decision, "to_dict")
+                        else {}
+                    )
+                    envelope = envelope.model_copy(
+                        update={
+                            "metadata": {
+                                **envelope.metadata,
+                                "_policy_selection_decision": _ps_dict,
+                            }
+                        }
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             result = await self._execute_command(
                 device_id=envelope.target,
                 command=envelope.tool_name,

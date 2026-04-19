@@ -4168,12 +4168,57 @@ class OpenClawd:
         Called by :meth:`_dispatch_agent` when ``effective_target`` is a
         non-local device ID.
 
+        PR-5A: Before delegating, build a :class:`~contracts.source_dispatch.SourceDispatchPlan`
+        via :class:`~core.runtime.source_dispatch_orchestrator.SourceDispatchOrchestrator`
+        so the orchestrator is active on the single-remote path (not only on
+        the multi-device mesh path).  The plan is recorded in response metadata
+        for observability; dispatch is not blocked on plan failure.
+
         Returns
         -------
         dict
             Standard handler response with ``delegation_point="single_remote"``
             in ``metadata``.
         """
+        # PR-5A: Record a SourceDispatchPlan for the single-remote path so the
+        # orchestrator is active on more than just the staged_mesh path.
+        _orch_plan_meta: Dict[str, Any] = {}
+        try:
+            from core.runtime.source_dispatch_orchestrator import (
+                SourceDispatchOrchestrator as _SDO,
+            )
+
+            _task_dict: Optional[Dict[str, Any]] = None
+            if intent is not None:
+                _cmd = getattr(intent, "command", None)
+                _params = getattr(intent, "params", None) or {}
+                if _cmd:
+                    _task_dict = {"tool_name": _cmd, "args": _params}
+
+            _orch = _SDO()
+            _plan = _orch.plan(
+                trace_id=trace_id,
+                session_id=session_id,
+                task=_task_dict,
+                target_device_id=device_id,
+                metadata={"source": "openclawd._delegate_single_remote"},
+            )
+            if _plan is not None and hasattr(_plan, "to_dict"):
+                _plan_d = _plan.to_dict()
+                _orch_plan_meta = {
+                    "orchestrator_plan_id": _plan_d.get("plan_id"),
+                    "orchestrator_mode": _plan_d.get("mode"),
+                    "orchestrator_ready": _plan_d.get("ready"),
+                }
+                logger.debug(
+                    "_delegate_single_remote: orchestrator plan mode=%s ready=%s trace_id=%s",
+                    _plan_d.get("mode"),
+                    _plan_d.get("ready"),
+                    trace_id,
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         result = await self._dispatch_remote_agent(
             message=message,
             intent=intent,
@@ -4183,6 +4228,8 @@ class OpenClawd:
         )
         result.setdefault("metadata", {})
         result["metadata"]["delegation_point"] = "single_remote"
+        if _orch_plan_meta:
+            result["metadata"].update(_orch_plan_meta)
         return result
 
     async def _delegate_multi_device_orchestration(
