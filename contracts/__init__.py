@@ -12,8 +12,9 @@ Unified Multi-Device Runtime Projection introduced in PR-38, the
 Runtime Recovery and Reconciliation Contract introduced in PR-39, the
 Durable Runtime Session Snapshot Contract introduced in PR-40, the
 Desktop Status Projection introduced in PR-22, the Canonical Device
-Identity contract introduced in PR-56, and the Runtime Presence Record
-contract introduced in PR-56.
+Identity contract introduced in PR-56, the Runtime Presence Record
+contract introduced in PR-56, and the Execution Target Policy contracts
+introduced in PR-I.
 """
 
 from contracts.execution_trace import (
@@ -513,4 +514,38 @@ __all__ = [
     "SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY",
     "SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL",
     "SOURCE_POSTURE_VALID_VALUES",
+]
+
+# PR-I: Execution Target Policy Contracts
+from contracts.execution_target_policy import (
+    EXECUTION_TARGET_POLICY_IS_AUTHORITY,
+    TARGET_SELECTION_IS_POLICY_DRIVEN_POLICY,
+    FAILURE_HANDLING_IS_EXPLICIT_POLICY,
+    POLICY_SEPARATION_FROM_ROUTING_MECHANICS_POLICY,
+    BACKWARD_COMPAT_DURING_POLICY_MIGRATION_POLICY,
+    EXECUTION_TARGET_POLICY_PR_I_SENTINEL,
+    TargetSelectionPolicyKind,
+    FailureHandlingPolicyKind,
+    DegradedReadinessPolicyKind,
+    TargetSelectionDecision,
+    FailureHandlingDecision,
+    build_target_selection_decision,
+    build_failure_handling_decision,
+)
+
+__all__ += [
+    # PR-I: Execution Target Policy Contracts
+    "EXECUTION_TARGET_POLICY_IS_AUTHORITY",
+    "TARGET_SELECTION_IS_POLICY_DRIVEN_POLICY",
+    "FAILURE_HANDLING_IS_EXPLICIT_POLICY",
+    "POLICY_SEPARATION_FROM_ROUTING_MECHANICS_POLICY",
+    "BACKWARD_COMPAT_DURING_POLICY_MIGRATION_POLICY",
+    "EXECUTION_TARGET_POLICY_PR_I_SENTINEL",
+    "TargetSelectionPolicyKind",
+    "FailureHandlingPolicyKind",
+    "DegradedReadinessPolicyKind",
+    "TargetSelectionDecision",
+    "FailureHandlingDecision",
+    "build_target_selection_decision",
+    "build_failure_handling_decision",
 ]
