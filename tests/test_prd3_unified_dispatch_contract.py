@@ -69,6 +69,30 @@ def _make_dcm_dict(
     trace_id: str = "trace_001",
     task_id: str = "task_001",
 ) -> Dict[str, Any]:
+    """Return a complete dispatch contract metadata dictionary for use in tests.
+
+    Builds a plain-dict representation of :class:`DispatchContractMetadata`
+    with all required stable keys populated.  All parameters have sensible
+    test defaults so callers can override only the fields they care about.
+
+    Parameters
+    ----------
+    dispatch_plan_id:
+        Plan identifier.  Defaults to ``"plan_001"``.
+    source_dispatch_strategy:
+        Dispatch strategy string.  Defaults to ``"remote_handoff"``.
+    executor_target_type:
+        Executor target type string.  Defaults to ``"android_device"``.
+    trace_id:
+        Distributed trace identifier.  Defaults to ``"trace_001"``.
+    task_id:
+        Task identifier.  Defaults to ``"task_001"``.
+
+    Returns
+    -------
+    dict
+        A JSON-safe dictionary compatible with ``DispatchContractMetadata.from_dict``.
+    """
     return {
         "dispatch_plan_id": dispatch_plan_id,
         "source_dispatch_strategy": source_dispatch_strategy,

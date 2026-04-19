@@ -497,6 +497,34 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
     return None
 
 
+def _extract_envelope_dispatch_contract_metadata(
+    envelope: Any,
+) -> Optional[Dict[str, Any]]:
+    """Extract ``dispatch_contract_metadata`` dict from a normalised envelope.
+
+    Accepts a :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2` or
+    any object that carries a ``dispatch_contract_metadata`` attribute.
+    Returns the dict form of the metadata, or ``None`` when absent.
+
+    This helper centralises the extraction logic that is needed at multiple
+    points in :class:`TargetTakeoverHandler.handle` (early policy check,
+    successful execution path, and the unhandled-exception fallback path).
+    """
+    if envelope is None:
+        return None
+    try:
+        raw = getattr(envelope, "dispatch_contract_metadata", None)
+        if raw is None and hasattr(envelope, "get"):
+            raw = envelope.get("dispatch_contract_metadata")
+        if isinstance(raw, dict):
+            return raw
+        if raw is not None and hasattr(raw, "to_dict"):
+            return raw.to_dict()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 # ---------------------------------------------------------------------------
 # TargetTakeoverHandler — stateless handler class
 # ---------------------------------------------------------------------------
@@ -575,13 +603,7 @@ class TargetTakeoverHandler:
 
             # Step 1b — extract dispatch_contract_metadata early so it is
             # available to all early-return paths (policy rejection, etc.)
-            _early_dcm: Optional[Dict[str, Any]] = None
-            if envelope is not None:
-                _raw_early = getattr(envelope, "dispatch_contract_metadata", None)
-                if isinstance(_raw_early, dict):
-                    _early_dcm = _raw_early
-                elif _raw_early is not None and hasattr(_raw_early, "to_dict"):
-                    _early_dcm = _raw_early.to_dict()
+            _early_dcm: Optional[Dict[str, Any]] = _extract_envelope_dispatch_contract_metadata(envelope)
 
             # Step 2 — check takeover policy
             if envelope is not None:
@@ -642,18 +664,9 @@ class TargetTakeoverHandler:
             # Step 6b — extract dispatch_contract_metadata (PR-03) from envelope
             # so the takeover path carries the same stable metadata as the
             # goal_execution and handoff paths.
-            _dispatch_contract_metadata: Optional[Dict[str, Any]] = None
-            if envelope is not None:
-                _raw_dcm = getattr(envelope, "dispatch_contract_metadata", None)
-                if _raw_dcm is None and hasattr(envelope, "__getitem__"):
-                    try:
-                        _raw_dcm = envelope.get("dispatch_contract_metadata")
-                    except Exception:  # noqa: BLE001
-                        pass
-                if isinstance(_raw_dcm, dict):
-                    _dispatch_contract_metadata = _raw_dcm
-                elif _raw_dcm is not None and hasattr(_raw_dcm, "to_dict"):
-                    _dispatch_contract_metadata = _raw_dcm.to_dict()
+            _dispatch_contract_metadata: Optional[Dict[str, Any]] = (
+                _extract_envelope_dispatch_contract_metadata(envelope)
+            )
 
             # Step 7 — build result
             return from_execution_output(
@@ -684,11 +697,7 @@ class TargetTakeoverHandler:
                 if envelope is not None:
                     _trace_id2 = getattr(envelope, "trace_id", None)
                     _task_id2 = getattr(envelope, "task_id", None)
-                    _raw_dcm2 = getattr(envelope, "dispatch_contract_metadata", None)
-                    if isinstance(_raw_dcm2, dict):
-                        _dcm_fallback = _raw_dcm2
-                    elif _raw_dcm2 is not None and hasattr(_raw_dcm2, "to_dict"):
-                        _dcm_fallback = _raw_dcm2.to_dict()
+                    _dcm_fallback = _extract_envelope_dispatch_contract_metadata(envelope)
             except Exception:  # noqa: BLE001
                 pass
             return failure_result(

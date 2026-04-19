@@ -79,11 +79,14 @@ See ``docs/SOURCE_RUNTIME_DISPATCH_ORCHESTRATOR.md`` for context.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +309,14 @@ def build_dispatch_contract_metadata(
             target_device_id=target_device_id,
             metadata=dict(metadata) if metadata else {},
         )
-    except Exception:  # noqa: BLE001
+    except Exception as _exc:  # noqa: BLE001
+        logger.debug(
+            "build_dispatch_contract_metadata: construction failed; "
+            "returning degraded instance (trace_id=%r, task_id=%r): %s",
+            trace_id,
+            task_id,
+            _exc,
+        )
         return DispatchContractMetadata(
             trace_id=trace_id,
             task_id=task_id,
