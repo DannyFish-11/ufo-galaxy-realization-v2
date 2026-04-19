@@ -115,6 +115,58 @@ logger = logging.getLogger(__name__)
 #: session-cache roles only.
 ANDROID_BRIDGE_EXECUTION_SPINE_APPLIED: str = "ANDROID_BRIDGE_EXECUTION_SPINE_V1"
 
+# =============================================================================
+# PR-G4: Android trace round-trip hook — stable entry point for cross-repo
+# trace correlation.
+# =============================================================================
+
+#: Affirms that AndroidBridge exposes a stable observability hook for Android
+#: dispatch trace round-trips.  Callers can extract the dispatch_trace_id from
+#: an inbound AIP message via :func:`get_android_bridge_trace_id` and match it
+#: against the :class:`~core.runtime.runtime_observability_sink.RuntimeObservabilitySink`
+#: dispatch decision events for end-to-end correlation.
+ANDROID_BRIDGE_TRACE_HOOK_SENTINEL: str = (
+    "ANDROID_BRIDGE_TRACE_HOOK_V1: "
+    "galaxy_gateway.android_bridge exposes get_android_bridge_trace_id() as "
+    "the canonical stable hook for Android trace round-trip correlation.  "
+    "Use this function to extract the dispatch_trace_id from an inbound AIP "
+    "message dict and correlate it with RuntimeObservabilitySink events.  PR-G4."
+)
+
+
+def get_android_bridge_trace_id(message: Dict[str, Any]) -> Optional[str]:
+    """Extract the dispatch trace ID from an inbound AIP message.
+
+    This is the canonical stable hook for Android trace round-trip correlation.
+    It returns the first non-empty value found at ``trace_id``,
+    ``dispatch_trace_id``, or ``message_id`` in the message dict, making
+    it robust across AIP protocol evolution.
+
+    Parameters
+    ----------
+    message:
+        Inbound AIP message dict (already normalised to v3 shape, or raw).
+
+    Returns
+    -------
+    str or None
+        The trace ID string, or ``None`` when no trace identifier is present.
+    """
+    if not isinstance(message, dict):
+        return None
+    for key in ("trace_id", "dispatch_trace_id", "message_id"):
+        val = message.get(key)
+        if val and isinstance(val, str):
+            return val
+    # Also check inside nested payload dict
+    payload = message.get("payload")
+    if isinstance(payload, dict):
+        for key in ("trace_id", "dispatch_trace_id"):
+            val = payload.get(key)
+            if val and isinstance(val, str):
+                return val
+    return None
+
 
 class AndroidBridge:
     """
@@ -763,6 +815,20 @@ class AndroidBridge:
             self._sync_device_router_session(device_id, connected=False)
             self._patch_disconnect_to_udm(device_id)
 
+        # PR-G: emit device lifecycle (detach) so the observability sink records
+        # the disconnect event in the production path.
+        try:
+            from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+            emit_device_lifecycle_event(
+                device_id,
+                event_kind="detach",
+                prior_state="online",
+                new_state="disconnected",
+                reason="android_bridge_disconnect",
+            )
+        except Exception:
+            pass
+
     async def cleanup_stale_devices(self, timeout_seconds: float = 120.0):
         """清理超时的设备"""
         current_time = time.time()
@@ -848,6 +914,21 @@ class AndroidBridge:
             )
 
         logger.info("设备重连成功: %s", device_id)
+
+        # PR-G: emit device lifecycle (reconnect) so the observability sink records
+        # the reconnect event in the production path.
+        try:
+            from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+            emit_device_lifecycle_event(
+                device_id,
+                event_kind="reconnect",
+                prior_state="disconnected",
+                new_state="online",
+                reason="android_bridge_reconnect",
+            )
+        except Exception:
+            pass
+
         return True
 
     def get_device_health(self) -> Dict[str, Any]:

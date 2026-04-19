@@ -274,6 +274,19 @@ class MeshSessionLifecycleCoordinator:
 
         self._persist(record)
         logger.debug("create_session: session_id=%s status=%s", session_id, record.status)
+        # PR-G: emit mesh session transition event for observability
+        try:
+            from core.runtime.runtime_observability_sink import emit_mesh_session_transition_event
+            emit_mesh_session_transition_event(
+                session_id,
+                transition_kind="create",
+                new_status="pending",
+                source_device_id=str(session_dict.get("source_device_id") or ""),
+                primary_device_id=str(session_dict.get("primary_device_id") or ""),
+                reason="mesh_session_created",
+            )
+        except Exception:
+            pass
         return record
 
     def activate_session(
@@ -304,6 +317,7 @@ class MeshSessionLifecycleCoordinator:
             valid_sources={"pending", "restoring"},
             session=session,
             op_name="activate_session",
+            _emit_transition_kind="activate",
         )
 
     def suspend_session(
@@ -340,6 +354,7 @@ class MeshSessionLifecycleCoordinator:
             session=session,
             op_name="suspend_session",
             extra_meta=extra_meta,
+            _emit_transition_kind="suspend",
         )
 
     def restore_session(
@@ -430,6 +445,32 @@ class MeshSessionLifecycleCoordinator:
                 session_id,
                 active_record.restore_count,
             )
+            # PR-G: emit mesh session restore transition + recovery decision
+            try:
+                from core.runtime.runtime_observability_sink import (
+                    emit_mesh_session_transition_event,
+                    emit_recovery_decision_event,
+                )
+                sd = active_record.session_dict
+                emit_mesh_session_transition_event(
+                    session_id,
+                    transition_kind="restore",
+                    prior_status="suspended",
+                    new_status="active",
+                    source_device_id=str(sd.get("source_device_id") or ""),
+                    primary_device_id=str(sd.get("primary_device_id") or ""),
+                    restore_count=active_record.restore_count,
+                    reason="mesh_session_restored",
+                )
+                emit_recovery_decision_event(
+                    decision_kind="resumable_reassociation",
+                    prior_session_id=session_id,
+                    prior_mesh_session_id=session_id,
+                    is_resumable=True,
+                    reason="restore_session: session successfully restored from suspended state",
+                )
+            except Exception:
+                pass
         return active_record
 
     def terminate_session(
@@ -480,6 +521,7 @@ class MeshSessionLifecycleCoordinator:
             session=session,
             op_name="terminate_session",
             extra_meta=extra_meta,
+            _emit_transition_kind="terminate",
         )
 
         # Mark terminal in persistence store
@@ -660,8 +702,17 @@ class MeshSessionLifecycleCoordinator:
         session: Any,
         op_name: str,
         extra_meta: Optional[Dict[str, Any]] = None,
+        _emit_transition_kind: Optional[str] = None,
     ) -> Optional[MeshSessionLifecycleRecord]:
-        """Apply a lifecycle transition if the current status is in *valid_sources*."""
+        """Apply a lifecycle transition if the current status is in *valid_sources*.
+
+        Parameters
+        ----------
+        _emit_transition_kind:
+            Optional :class:`~contracts.runtime_observability.MeshSessionTransitionKind`
+            string to emit via the observability sink after a successful transition.
+            When ``None``, no emit is produced (caller is responsible).
+        """
         with self._lock:
             record = self._sessions.get(session_id)
             if record is None:
@@ -708,6 +759,21 @@ class MeshSessionLifecycleCoordinator:
 
         self._persist(record)
         logger.debug("%s: session_id=%s → status=%s", op_name, session_id, target_status)
+        # PR-G: emit mesh session transition event when a kind is specified
+        if _emit_transition_kind is not None:
+            try:
+                from core.runtime.runtime_observability_sink import emit_mesh_session_transition_event
+                sd = record.session_dict
+                emit_mesh_session_transition_event(
+                    session_id,
+                    transition_kind=_emit_transition_kind,
+                    new_status=target_status,
+                    source_device_id=str(sd.get("source_device_id") or ""),
+                    primary_device_id=str(sd.get("primary_device_id") or ""),
+                    reason=op_name,
+                )
+            except Exception:
+                pass
         return record
 
     def _persist(self, record: MeshSessionLifecycleRecord) -> None:

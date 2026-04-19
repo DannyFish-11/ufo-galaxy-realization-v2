@@ -42,6 +42,19 @@ async def handle_device_register(
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
+        # PR-G: emit device lifecycle (attach) so the observability sink records
+        # the registration event in the production path.
+        try:
+            from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+            emit_device_lifecycle_event(
+                device_id,
+                event_kind="attach",
+                new_state="online",
+                reason="android_device_register",
+            )
+        except Exception:
+            pass
+
         # PR-B: Create and activate a durable mesh session for this device so that
         # the MeshSessionLifecycleCoordinator is aware of the device's registration.
         # The session tracks this device as both source and primary participant so
