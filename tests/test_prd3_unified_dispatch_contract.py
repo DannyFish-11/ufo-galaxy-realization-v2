@@ -72,8 +72,17 @@ def _make_dcm_dict(
     """Return a complete dispatch contract metadata dictionary for use in tests.
 
     Builds a plain-dict representation of :class:`DispatchContractMetadata`
-    with all required stable keys populated.  All parameters have sensible
-    test defaults so callers can override only the fields they care about.
+    with all required stable keys populated.  The following fields are
+    included with hardcoded test values that cannot be overridden via
+    parameters:
+
+    - ``session_id`` — always ``"sess_001"``
+    - ``source_device_id`` — always ``"src_dev_001"``
+    - ``target_device_id`` — always ``"tgt_dev_001"``
+    - ``schema_version`` — always ``"v1"``
+
+    All other parameters have sensible test defaults so callers can override
+    only the fields they care about.
 
     Parameters
     ----------

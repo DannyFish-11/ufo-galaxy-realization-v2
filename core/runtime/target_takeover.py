@@ -661,14 +661,7 @@ class TargetTakeoverHandler:
             if capture_policy_alignment:
                 _alignment = _try_policy_alignment()
 
-            # Step 6b — extract dispatch_contract_metadata (PR-03) from envelope
-            # so the takeover path carries the same stable metadata as the
-            # goal_execution and handoff paths.
-            _dispatch_contract_metadata: Optional[Dict[str, Any]] = (
-                _extract_envelope_dispatch_contract_metadata(envelope)
-            )
-
-            # Step 7 — build result
+            # Step 7 — build result (reuse _early_dcm extracted at Step 1b)
             return from_execution_output(
                 trace_id=_trace_id,
                 execution_output=exec_output,
@@ -678,7 +671,7 @@ class TargetTakeoverHandler:
                 session_context=session_ctx,
                 governance_snapshot=_governance,
                 policy_alignment=_alignment,
-                dispatch_contract_metadata=_dispatch_contract_metadata,
+                dispatch_contract_metadata=_early_dcm,
                 metadata={
                     "source_device_id": getattr(envelope, "source_device_id", None) if envelope else None,
                     "target_device_id": getattr(envelope, "target_device_id", None) if envelope else None,

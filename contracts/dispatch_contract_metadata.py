@@ -217,6 +217,8 @@ class DispatchContractMetadata(BaseModel):
         description="Arbitrary extension metadata for future use.",
     )
 
+    model_config = {"extra": "allow", "populate_by_name": True}
+
     # ------------------------------------------------------------------
     # Serialisation helpers
     # ------------------------------------------------------------------
@@ -233,8 +235,6 @@ class DispatchContractMetadata(BaseModel):
     def from_dict(cls, data: Dict[str, Any]) -> "DispatchContractMetadata":
         """Construct from a dictionary.  Tolerates unknown extra fields."""
         return cls.model_validate(data)
-
-    model_config = {"extra": "allow", "populate_by_name": True}
 
 
 # ---------------------------------------------------------------------------
