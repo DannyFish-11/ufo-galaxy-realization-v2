@@ -32,7 +32,7 @@ This module validates three acceptance criteria from the PR-4 problem statement:
       canonical contract dicts (automated regression gate).
    K. ``core.cross_repo_consistency_gates`` gate runner returns pass/warn
       verdicts without raising (automated regression gate).
-   L. The full gate snapshot is JSON-serialisable (CI-suitable output).
+   L. The full gate snapshot is JSON-serializable (CI-suitable output).
    M. Both check suites run together without interference (unified gate).
 
 3. **Stable Android trace round-trip hook**:
@@ -515,13 +515,13 @@ class TestCrossRepoConsistencyGatesAutomatedGate:
         assert isinstance(results, (list, tuple))
         assert len(results) > 0, "Expected at least one gate result"
 
-    def test_gate_snapshot_is_json_serialisable(self):
-        """build_consistency_gate_snapshot() returns a JSON-serialisable dict."""
+    def test_gate_snapshot_is_json_serializable(self):
+        """build_consistency_gate_snapshot() returns a JSON-serializable dict."""
         import json
         from core.cross_repo_consistency_gates import build_consistency_gate_snapshot
 
         snapshot = build_consistency_gate_snapshot()
-        # Must be serialisable — the CI output pipeline requires this.
+        # Must be serializable — the CI output pipeline requires this.
         json_str = json.dumps(snapshot.to_dict())
         assert isinstance(json_str, str)
         assert len(json_str) > 0

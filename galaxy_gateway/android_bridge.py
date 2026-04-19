@@ -138,9 +138,14 @@ def get_android_bridge_trace_id(message: Dict[str, Any]) -> Optional[str]:
     """Extract the dispatch trace ID from an inbound AIP message.
 
     This is the canonical stable hook for Android trace round-trip correlation.
-    It returns the first non-empty value found at ``trace_id``,
-    ``dispatch_trace_id``, or ``message_id`` in the message dict, making
-    it robust across AIP protocol evolution.
+    It returns the first non-empty string value found by checking these keys in
+    order:
+
+    1. ``trace_id`` (top-level)
+    2. ``dispatch_trace_id`` (top-level)
+    3. ``message_id`` (top-level)
+    4. ``trace_id`` (inside nested ``payload`` dict)
+    5. ``dispatch_trace_id`` (inside nested ``payload`` dict)
 
     Parameters
     ----------

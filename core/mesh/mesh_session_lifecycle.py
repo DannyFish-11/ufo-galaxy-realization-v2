@@ -711,6 +711,8 @@ class MeshSessionLifecycleCoordinator:
         _emit_transition_kind:
             Optional :class:`~contracts.runtime_observability.MeshSessionTransitionKind`
             string to emit via the observability sink after a successful transition.
+            Valid values: ``"create"``, ``"activate"``, ``"suspend"``, ``"restore"``,
+            ``"terminate"``, ``"participant_joined"``, ``"participant_left"``.
             When ``None``, no emit is produced (caller is responsible).
         """
         with self._lock:
