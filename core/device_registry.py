@@ -644,6 +644,31 @@ class DeviceRegistry:
                             "DeviceRegistry.check_offline_devices: mesh session suspend non-fatal — %s",
                             _mesh_exc,
                         )
+                    # V2 lifecycle mainline: detach attached session in
+                    # AttachedSessionRegistry so the registry reflects heartbeat-miss.
+                    try:
+                        from core.attached_runtime_session_registry import (
+                            lookup_session_by_device,
+                            detach_session,
+                            InvalidationReason,
+                        )
+                        _entry = lookup_session_by_device(device.device_id)
+                        if _entry is not None:
+                            detach_session(
+                                _entry,
+                                reason=InvalidationReason.disconnected,
+                                metadata={"detach_source": "heartbeat_miss"},
+                            )
+                            logger.info(
+                                "DeviceRegistry: attached session detached on heartbeat-miss: "
+                                "device_id=%s runtime_session_id=%s",
+                                device.device_id, _entry.runtime_session_id,
+                            )
+                    except Exception as _asr_exc:
+                        logger.debug(
+                            "DeviceRegistry.check_offline_devices: attached session detach non-fatal — %s",
+                            _asr_exc,
+                        )
     
     # ========================================================================
     # 能力协商

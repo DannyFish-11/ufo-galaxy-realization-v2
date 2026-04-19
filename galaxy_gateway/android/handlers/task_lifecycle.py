@@ -9,7 +9,8 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from collections import deque
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from galaxy_gateway.protocol.aip_v3 import TaskStatus
 
@@ -31,6 +32,50 @@ try:
 except ImportError:
     _reconcile_inbound_message = None  # type: ignore[assignment]
 
+# ---------------------------------------------------------------------------
+# Compat lifecycle path signal guard
+# ---------------------------------------------------------------------------
+# Prevents the same lifecycle signal (identified by idempotency_key or
+# message_id) from being processed more than once when the compat layer
+# normalises v1/v2 messages before dispatch.  This is a process-local,
+# in-memory ring buffer — it does not need to survive restarts.
+
+_SIGNAL_GUARD_CAPACITY: int = 512
+_processed_signal_keys: deque = deque(maxlen=_SIGNAL_GUARD_CAPACITY)
+_processed_signal_set: Set[str] = set()
+
+
+def _signal_guard_accept(message: Dict[str, Any]) -> bool:
+    """Return True and record the signal if it has not been seen before.
+
+    Returns False (reject / skip) if the idempotency_key or message_id of
+    *message* was already processed within the current guard window.  This
+    prevents the compat normalisation layer from causing the same lifecycle
+    event to be reconciled or acted upon twice.
+
+    The guard key prefers ``idempotency_key`` (injected by the compat layer)
+    over ``message_id`` (supplied by the sender).  When neither is present the
+    signal is always accepted so that the guard is never a blocking error path.
+    """
+    key = message.get("idempotency_key") or message.get("message_id")
+    if not key:
+        # No stable identity — cannot guard; allow through.
+        return True
+    key = str(key)
+    if key in _processed_signal_set:
+        logger.debug(
+            "task_lifecycle signal guard: duplicate signal suppressed key=%r type=%s",
+            key, message.get("type"),
+        )
+        return False
+    # Record as seen
+    if len(_processed_signal_keys) >= _SIGNAL_GUARD_CAPACITY:
+        evicted = _processed_signal_keys[0]
+        _processed_signal_set.discard(evicted)
+    _processed_signal_keys.append(key)
+    _processed_signal_set.add(key)
+    return True
+
 
 def _try_reconcile(message: Dict[str, Any]) -> None:
     """Best-effort reconcile *message* against the host-side execution tracker.
@@ -41,7 +86,17 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
     at DEBUG level and never propagated so existing handler behaviour is
     unchanged when the reconciler is unavailable or the message is not
     associated with a tracked delegated execution.
+
+    A compat-path signal guard is applied first: if the same idempotency_key
+    or message_id was already processed in this process session the reconcile
+    call is skipped entirely, preventing duplicate processing when v1/v2 compat
+    normalisation causes the same lifecycle event to be dispatched more than
+    once.
     """
+    # Compat lifecycle path signal guard — skip duplicates.
+    if not _signal_guard_accept(message):
+        return
+
     if _reconcile_inbound_message is None:
         return
     payload = message.get("payload") or {}
