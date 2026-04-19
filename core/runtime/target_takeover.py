@@ -573,6 +573,16 @@ class TargetTakeoverHandler:
             _trace_id: Optional[str] = getattr(envelope, "trace_id", None) if envelope else None
             _task_id: Optional[str] = getattr(envelope, "task_id", None) if envelope else None
 
+            # Step 1b — extract dispatch_contract_metadata early so it is
+            # available to all early-return paths (policy rejection, etc.)
+            _early_dcm: Optional[Dict[str, Any]] = None
+            if envelope is not None:
+                _raw_early = getattr(envelope, "dispatch_contract_metadata", None)
+                if isinstance(_raw_early, dict):
+                    _early_dcm = _raw_early
+                elif _raw_early is not None and hasattr(_raw_early, "to_dict"):
+                    _early_dcm = _raw_early.to_dict()
+
             # Step 2 — check takeover policy
             if envelope is not None:
                 _policy = getattr(envelope, "takeover_policy", None)
@@ -589,6 +599,7 @@ class TargetTakeoverHandler:
                             task_id=_task_id,
                             reason="takeover_disallowed_by_policy",
                             status=LocalTakeoverStatus.rejected,
+                            dispatch_contract_metadata=_early_dcm,
                         )
 
             # Step 3 — adopt / create session context
@@ -628,6 +639,22 @@ class TargetTakeoverHandler:
             if capture_policy_alignment:
                 _alignment = _try_policy_alignment()
 
+            # Step 6b — extract dispatch_contract_metadata (PR-03) from envelope
+            # so the takeover path carries the same stable metadata as the
+            # goal_execution and handoff paths.
+            _dispatch_contract_metadata: Optional[Dict[str, Any]] = None
+            if envelope is not None:
+                _raw_dcm = getattr(envelope, "dispatch_contract_metadata", None)
+                if _raw_dcm is None and hasattr(envelope, "__getitem__"):
+                    try:
+                        _raw_dcm = envelope.get("dispatch_contract_metadata")
+                    except Exception:  # noqa: BLE001
+                        pass
+                if isinstance(_raw_dcm, dict):
+                    _dispatch_contract_metadata = _raw_dcm
+                elif _raw_dcm is not None and hasattr(_raw_dcm, "to_dict"):
+                    _dispatch_contract_metadata = _raw_dcm.to_dict()
+
             # Step 7 — build result
             return from_execution_output(
                 trace_id=_trace_id,
@@ -638,6 +665,7 @@ class TargetTakeoverHandler:
                 session_context=session_ctx,
                 governance_snapshot=_governance,
                 policy_alignment=_alignment,
+                dispatch_contract_metadata=_dispatch_contract_metadata,
                 metadata={
                     "source_device_id": getattr(envelope, "source_device_id", None) if envelope else None,
                     "target_device_id": getattr(envelope, "target_device_id", None) if envelope else None,
@@ -651,10 +679,16 @@ class TargetTakeoverHandler:
             )
             _trace_id2: Optional[str] = None
             _task_id2: Optional[str] = None
+            _dcm_fallback: Optional[Dict[str, Any]] = None
             try:
                 if envelope is not None:
                     _trace_id2 = getattr(envelope, "trace_id", None)
                     _task_id2 = getattr(envelope, "task_id", None)
+                    _raw_dcm2 = getattr(envelope, "dispatch_contract_metadata", None)
+                    if isinstance(_raw_dcm2, dict):
+                        _dcm_fallback = _raw_dcm2
+                    elif _raw_dcm2 is not None and hasattr(_raw_dcm2, "to_dict"):
+                        _dcm_fallback = _raw_dcm2.to_dict()
             except Exception:  # noqa: BLE001
                 pass
             return failure_result(
@@ -662,6 +696,7 @@ class TargetTakeoverHandler:
                 task_id=_task_id2,
                 reason=f"internal_error:{exc}",
                 errors=[str(exc)],
+                dispatch_contract_metadata=_dcm_fallback,
             )
 
 

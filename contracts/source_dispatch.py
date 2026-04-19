@@ -643,6 +643,15 @@ class SourceDispatchResult(BaseModel):
         default_factory=time.time,
         description="Unix timestamp when this result was produced.",
     )
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Unified dispatch contract metadata (PR-03) stamped by SourceDispatchOrchestrator. "
+            "Carries dispatch_plan_id, source_dispatch_strategy, executor_target_type, "
+            "and stable tracing fields shared across all three dispatch paths "
+            "(goal_execution, handoff, takeover).  None for legacy callers."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extension metadata.",
@@ -667,6 +676,7 @@ class SourceDispatchResult(BaseModel):
 
     def to_compact_summary(self) -> Dict[str, Any]:
         """Return a compact human-readable summary dict."""
+        _dcm = self.dispatch_contract_metadata
         return {
             "result_id": self.result_id,
             "dispatch_id": self.dispatch_id,
@@ -686,6 +696,10 @@ class SourceDispatchResult(BaseModel):
             "has_policy_alignment": self.policy_alignment is not None,
             "has_mesh_session": self.mesh_session is not None,
             "has_continuity_context": self.continuity_context is not None,
+            "has_dispatch_contract_metadata": _dcm is not None,
+            "dispatch_plan_id": _dcm.get("dispatch_plan_id") if isinstance(_dcm, dict) else None,
+            "source_dispatch_strategy": _dcm.get("source_dispatch_strategy") if isinstance(_dcm, dict) else None,
+            "executor_target_type": _dcm.get("executor_target_type") if isinstance(_dcm, dict) else None,
             "timestamp": self.timestamp,
         }
 
@@ -999,6 +1013,7 @@ def build_source_dispatch_result(
     errors: Optional[List[str]] = None,
     decision_reason: Optional[str] = None,
     continuity_context: Optional[Dict[str, Any]] = None,
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> SourceDispatchResult:
     """Convenience factory for :class:`SourceDispatchResult`.
@@ -1012,6 +1027,12 @@ def build_source_dispatch_result(
         Serialised :class:`~contracts.dispatch_continuity.DispatchContinuityContext`
         dict (PR-F) for reconnect/handoff correlation.  ``None`` for clean
         terminal results or when continuity context is not applicable.
+    dispatch_contract_metadata:
+        Unified dispatch contract metadata dict (PR-03) built by
+        :func:`~contracts.dispatch_contract_metadata.build_dispatch_contract_metadata`.
+        Carries ``dispatch_plan_id``, ``source_dispatch_strategy``,
+        ``executor_target_type``, and stable tracing fields.  ``None`` for
+        legacy callers.
     """
     _posture = _normalise_posture_hint(source_runtime_posture)
     try:
@@ -1035,6 +1056,7 @@ def build_source_dispatch_result(
             errors=errors or [],
             decision_reason=decision_reason,
             continuity_context=continuity_context,
+            dispatch_contract_metadata=dispatch_contract_metadata,
             metadata=metadata or {},
         )
     except Exception:

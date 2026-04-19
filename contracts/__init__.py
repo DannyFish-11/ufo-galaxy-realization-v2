@@ -295,6 +295,15 @@ from contracts.source_posture_contract import (
     CANONICAL_POSTURE_ADJACENT_FIELDS,
 )
 
+# PR-03 (post-533 dual-repo unification): Unified Dispatch Contract Metadata
+from contracts.dispatch_contract_metadata import (
+    DispatchContractMetadata,
+    build_dispatch_contract_metadata,
+    extract_dispatch_contract_metadata,
+    UNIFIED_DISPATCH_CONTRACT_PR03_SENTINEL,
+    DISPATCH_CONTRACT_METADATA_IS_STABLE_ANDROID_SURFACE_PR03_POLICY,
+)
+
 __all__ = [
     # PR-25: Execution Trace Contract
     "ExecutionTraceEnvelope",
@@ -514,6 +523,12 @@ __all__ = [
     "SOURCE_POSTURE_NO_CROSS_DEVICE_ENABLED_OVERLOAD_POLICY",
     "SOURCE_POSTURE_CONTRACT_PR1_UNIFICATION_SENTINEL",
     "SOURCE_POSTURE_VALID_VALUES",
+    # PR-03: Unified Dispatch Contract Metadata
+    "DispatchContractMetadata",
+    "build_dispatch_contract_metadata",
+    "extract_dispatch_contract_metadata",
+    "UNIFIED_DISPATCH_CONTRACT_PR03_SENTINEL",
+    "DISPATCH_CONTRACT_METADATA_IS_STABLE_ANDROID_SURFACE_PR03_POLICY",
 ]
 
 # PR-I: Execution Target Policy Contracts

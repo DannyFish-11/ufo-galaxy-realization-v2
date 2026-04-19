@@ -597,6 +597,17 @@ class HandoffEnvelopeV2(BaseModel):
         description="Structured return expectations.",
     )
 
+    # Unified dispatch contract metadata (PR-03)
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Unified dispatch contract metadata (PR-03) carrying dispatch_plan_id, "
+            "source_dispatch_strategy, executor_target_type, and stable tracing fields. "
+            "Stamped by SourceDispatchOrchestrator on the handoff path and propagated "
+            "through to the target-side LocalTakeoverResult.  None for legacy callers."
+        ),
+    )
+
     # Metadata and schema versioning
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -935,6 +946,7 @@ def build_handoff_envelope_v2(
     handoff_policy: Optional[Dict[str, Any]] = None,
     allow_local_takeover: bool = True,
     require_ack_before_takeover: bool = False,
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> HandoffEnvelopeV2:
     """Convenience factory for building a :class:`HandoffEnvelopeV2`.
@@ -985,6 +997,13 @@ def build_handoff_envelope_v2(
         Whether the target may take over local execution.
     require_ack_before_takeover:
         Whether an ack is required before takeover begins.
+    dispatch_contract_metadata:
+        Unified dispatch contract metadata dict (PR-03) built by
+        :func:`~contracts.dispatch_contract_metadata.build_dispatch_contract_metadata`.
+        Carries ``dispatch_plan_id``, ``source_dispatch_strategy``,
+        ``executor_target_type``, and stable tracing fields so the Android
+        consumer can stably interpret dispatch semantics.  ``None`` for legacy
+        callers.
     metadata:
         Arbitrary extra metadata.
 
@@ -1036,6 +1055,15 @@ def build_handoff_envelope_v2(
         require_ack_before_takeover=require_ack_before_takeover,
     )
 
+    # Normalise dispatch_contract_metadata: accept a DispatchContractMetadata
+    # instance or a plain dict; store as dict for JSON-safe serialisation.
+    _dcm: Optional[Dict[str, Any]] = None
+    if dispatch_contract_metadata is not None:
+        if hasattr(dispatch_contract_metadata, "to_dict"):
+            _dcm = dispatch_contract_metadata.to_dict()
+        elif isinstance(dispatch_contract_metadata, dict):
+            _dcm = dispatch_contract_metadata
+
     return HandoffEnvelopeV2(
         trace_id=trace_id,
         task_id=task_id,
@@ -1058,6 +1086,7 @@ def build_handoff_envelope_v2(
         handoff_policy=handoff_policy or {},
         takeover_policy=takeover_policy,
         return_contract=HandoffReturnContract(callback_channel=callback_channel),
+        dispatch_contract_metadata=_dcm,
         metadata=metadata or {},
     )
 

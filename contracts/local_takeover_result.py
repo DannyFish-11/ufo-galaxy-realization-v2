@@ -294,6 +294,16 @@ class LocalTakeoverResult(BaseModel):
         default_factory=time.time,
         description="Unix timestamp when this result was produced.",
     )
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Unified dispatch contract metadata (PR-03) propagated from the incoming "
+            "HandoffEnvelopeV2.  Carries dispatch_plan_id, source_dispatch_strategy, "
+            "executor_target_type, and stable tracing fields so the Android consumer "
+            "can interpret dispatch semantics without inspecting the envelope shape. "
+            "None for legacy callers that do not stamp the unified contract."
+        ),
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary extension metadata.",
@@ -335,6 +345,7 @@ class LocalTakeoverResult(BaseModel):
 
         Suitable for logging, dashboard tiles, and trace metadata.
         """
+        _dcm = self.dispatch_contract_metadata
         return {
             "result_id": self.result_id,
             "trace_id": self.trace_id,
@@ -348,6 +359,10 @@ class LocalTakeoverResult(BaseModel):
             "has_execution_trace": self.execution_trace is not None,
             "has_governance_snapshot": self.governance_snapshot is not None,
             "has_policy_alignment": self.policy_alignment is not None,
+            "has_dispatch_contract_metadata": _dcm is not None,
+            "dispatch_plan_id": _dcm.get("dispatch_plan_id") if isinstance(_dcm, dict) else None,
+            "source_dispatch_strategy": _dcm.get("source_dispatch_strategy") if isinstance(_dcm, dict) else None,
+            "executor_target_type": _dcm.get("executor_target_type") if isinstance(_dcm, dict) else None,
             "timestamp": self.timestamp,
         }
 
@@ -374,6 +389,7 @@ def build_local_takeover_result(
     session_context: Optional[LocalTakeoverSessionContext] = None,
     errors: Optional[List[str]] = None,
     reason: Optional[str] = None,
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> LocalTakeoverResult:
     """Convenience factory for :class:`LocalTakeoverResult`.
@@ -409,6 +425,9 @@ def build_local_takeover_result(
         List of error strings.
     reason:
         Human-readable failure reason.
+    dispatch_contract_metadata:
+        Unified dispatch contract metadata dict (PR-03) propagated from the
+        incoming HandoffEnvelopeV2.  ``None`` for legacy callers.
     metadata:
         Arbitrary extension metadata.
 
@@ -431,6 +450,7 @@ def build_local_takeover_result(
             session_context=session_context,
             errors=list(errors) if errors else [],
             reason=reason,
+            dispatch_contract_metadata=dispatch_contract_metadata,
             metadata=dict(metadata) if metadata else {},
         )
     except Exception:  # noqa: BLE001
@@ -452,6 +472,7 @@ def from_execution_output(
     session_context: Optional[LocalTakeoverSessionContext] = None,
     governance_snapshot: Optional[Dict[str, Any]] = None,
     policy_alignment: Optional[Dict[str, Any]] = None,
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> LocalTakeoverResult:
     """Build a :class:`LocalTakeoverResult` from raw execution output.
@@ -481,6 +502,9 @@ def from_execution_output(
         Serialised RuntimeGovernanceSnapshot dict, if available.
     policy_alignment:
         Serialised ExecutionPolicyAlignmentSurface dict, if available.
+    dispatch_contract_metadata:
+        Unified dispatch contract metadata dict (PR-03) propagated from the
+        incoming HandoffEnvelopeV2.  ``None`` for legacy callers.
     metadata:
         Arbitrary extension metadata.
 
@@ -536,6 +560,7 @@ def from_execution_output(
             session_context=session_context,
             errors=_errors,
             reason=_reason,
+            dispatch_contract_metadata=dispatch_contract_metadata,
             metadata=dict(metadata) if metadata else {},
         )
     except Exception as _e:  # noqa: BLE001
@@ -558,6 +583,7 @@ def failure_result(
     reason: str = "unknown",
     errors: Optional[List[str]] = None,
     status: LocalTakeoverStatus = LocalTakeoverStatus.failed,
+    dispatch_contract_metadata: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> LocalTakeoverResult:
     """Build a minimal failure :class:`LocalTakeoverResult`.
@@ -578,6 +604,9 @@ def failure_result(
         List of error strings.
     status:
         Specific lifecycle status (defaults to :attr:`LocalTakeoverStatus.failed`).
+    dispatch_contract_metadata:
+        Unified dispatch contract metadata dict (PR-03).  ``None`` for
+        legacy callers.
     metadata:
         Arbitrary extension metadata.
 
@@ -593,6 +622,7 @@ def failure_result(
         status=status,
         reason=reason,
         errors=list(errors) if errors else [],
+        dispatch_contract_metadata=dispatch_contract_metadata,
         metadata=dict(metadata) if metadata else {},
     )
 

@@ -1941,6 +1941,36 @@ def orchestrate_source_runtime_dispatch(
             # Attempt to extract from governance snapshot or policy alignment
             decision_reason = _extract_decision_reason(plan)
 
+        # ---- Step 1b: Build unified dispatch contract metadata (PR-03) -------
+        # Build the DispatchContractMetadata once and stamp it on every result
+        # path (goal_execution, handoff, takeover) so all three share the same
+        # stable Android-facing metadata surface.
+        _dispatch_contract_metadata_dict: Optional[Dict[str, Any]] = None
+        try:
+            from contracts.dispatch_contract_metadata import build_dispatch_contract_metadata
+
+            _target_device_id = (
+                selected_target.target_device_id if selected_target is not None else None
+            )
+            _dcm = build_dispatch_contract_metadata(
+                dispatch_plan_id=plan.plan_id if hasattr(plan, "plan_id") else None,
+                dispatch_decision_id=plan.dispatch_id,
+                source_dispatch_strategy=mode.value if hasattr(mode, "value") else str(mode),
+                executor_target_type=None,  # populated by CommandRouter; unknown at plan time
+                trace_id=trace_id,
+                task_id=task_id,
+                session_id=session_id,
+                source_device_id=source_device_id,
+                target_device_id=_target_device_id,
+            )
+            _dispatch_contract_metadata_dict = _dcm.to_dict()
+        except Exception as _dcm_exc:  # noqa: BLE001
+            logger.debug(
+                "orchestrate_source_runtime_dispatch: "
+                "failed to build DispatchContractMetadata: %s",
+                _dcm_exc,
+            )
+
         # ---- Step 2: Execute ------------------------------------------------
         exec_result: Optional[Dict[str, Any]] = None
         takeover_result_dict: Optional[Dict[str, Any]] = None
@@ -1968,11 +1998,22 @@ def orchestrate_source_runtime_dispatch(
                 policy_alignment=plan.policy_alignment,
                 mesh_session=plan.mesh_session,
                 source_runtime_posture=source_runtime_posture,
+                dispatch_contract_metadata=_dispatch_contract_metadata_dict,
                 metadata=plan.metadata,
             )
 
         elif mode == SourceDispatchMode.remote_handoff:
             if selected_target is not None and handoff_env_dict is not None:
+                # Stamp the dispatch_contract_metadata onto the handoff envelope
+                # so the target-side takeover handler can propagate it.
+                if _dispatch_contract_metadata_dict is not None:
+                    try:
+                        handoff_env_dict = dict(handoff_env_dict)
+                        handoff_env_dict["dispatch_contract_metadata"] = (
+                            _dispatch_contract_metadata_dict
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                 # Attempt remote handoff
                 try:
                     from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
@@ -2089,6 +2130,7 @@ def orchestrate_source_runtime_dispatch(
                 errors=errors,
                 decision_reason=decision_reason,
                 source_runtime_posture=source_runtime_posture,
+                dispatch_contract_metadata=_dispatch_contract_metadata_dict,
                 metadata=plan.metadata,
             )
 
@@ -2135,6 +2177,7 @@ def orchestrate_source_runtime_dispatch(
             errors=errors,
             decision_reason=decision_reason,
             source_runtime_posture=source_runtime_posture,
+            dispatch_contract_metadata=_dispatch_contract_metadata_dict,
             metadata=plan.metadata,
         )
 
