@@ -497,6 +497,34 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
     return None
 
 
+def _extract_envelope_dispatch_contract_metadata(
+    envelope: Any,
+) -> Optional[Dict[str, Any]]:
+    """Extract ``dispatch_contract_metadata`` dict from a normalised envelope.
+
+    Accepts a :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2` or
+    any object that carries a ``dispatch_contract_metadata`` attribute.
+    Returns the dict form of the metadata, or ``None`` when absent.
+
+    This helper centralises the extraction logic that is needed at multiple
+    points in :class:`TargetTakeoverHandler.handle` (early policy check,
+    successful execution path, and the unhandled-exception fallback path).
+    """
+    if envelope is None:
+        return None
+    try:
+        raw = getattr(envelope, "dispatch_contract_metadata", None)
+        if raw is None and hasattr(envelope, "get"):
+            raw = envelope.get("dispatch_contract_metadata")
+        if isinstance(raw, dict):
+            return raw
+        if raw is not None and hasattr(raw, "to_dict"):
+            return raw.to_dict()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 # ---------------------------------------------------------------------------
 # TargetTakeoverHandler — stateless handler class
 # ---------------------------------------------------------------------------
@@ -573,6 +601,10 @@ class TargetTakeoverHandler:
             _trace_id: Optional[str] = getattr(envelope, "trace_id", None) if envelope else None
             _task_id: Optional[str] = getattr(envelope, "task_id", None) if envelope else None
 
+            # Step 1b — extract dispatch_contract_metadata early so it is
+            # available to all early-return paths (policy rejection, etc.)
+            _early_dcm: Optional[Dict[str, Any]] = _extract_envelope_dispatch_contract_metadata(envelope)
+
             # Step 2 — check takeover policy
             if envelope is not None:
                 _policy = getattr(envelope, "takeover_policy", None)
@@ -589,6 +621,7 @@ class TargetTakeoverHandler:
                             task_id=_task_id,
                             reason="takeover_disallowed_by_policy",
                             status=LocalTakeoverStatus.rejected,
+                            dispatch_contract_metadata=_early_dcm,
                         )
 
             # Step 3 — adopt / create session context
@@ -628,7 +661,7 @@ class TargetTakeoverHandler:
             if capture_policy_alignment:
                 _alignment = _try_policy_alignment()
 
-            # Step 7 — build result
+            # Step 7 — build result (reuse _early_dcm extracted at Step 1b)
             return from_execution_output(
                 trace_id=_trace_id,
                 execution_output=exec_output,
@@ -638,6 +671,7 @@ class TargetTakeoverHandler:
                 session_context=session_ctx,
                 governance_snapshot=_governance,
                 policy_alignment=_alignment,
+                dispatch_contract_metadata=_early_dcm,
                 metadata={
                     "source_device_id": getattr(envelope, "source_device_id", None) if envelope else None,
                     "target_device_id": getattr(envelope, "target_device_id", None) if envelope else None,
@@ -651,10 +685,12 @@ class TargetTakeoverHandler:
             )
             _trace_id2: Optional[str] = None
             _task_id2: Optional[str] = None
+            _dcm_fallback: Optional[Dict[str, Any]] = None
             try:
                 if envelope is not None:
                     _trace_id2 = getattr(envelope, "trace_id", None)
                     _task_id2 = getattr(envelope, "task_id", None)
+                    _dcm_fallback = _extract_envelope_dispatch_contract_metadata(envelope)
             except Exception:  # noqa: BLE001
                 pass
             return failure_result(
@@ -662,6 +698,7 @@ class TargetTakeoverHandler:
                 task_id=_task_id2,
                 reason=f"internal_error:{exc}",
                 errors=[str(exc)],
+                dispatch_contract_metadata=_dcm_fallback,
             )
 
 
