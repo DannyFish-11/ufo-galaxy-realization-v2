@@ -10,7 +10,10 @@ This handler is the **single authoritative entry-point** for inbound
 1. Calls :func:`~core.android_delegated_signal_ingress.ingest_delegated_execution_signal`
    — the PR-16 canonical ingress path.
 2. Logs the reconciliation outcome at DEBUG level (success or skip).
-3. Returns an ACK response.
+3. PR-5A: For ``result``-kind signals, forwards the outcome to
+   :meth:`~core.runtime.source_dispatch_orchestrator.SourceDispatchOrchestrator.consume_android_behavioral_result`
+   — the stable consumer endpoint on the source side.
+4. Returns an ACK response.
 
 It does **not** fall back to the PR-13 ``reconcile_inbound_message``
 compatibility path; that path is only for legacy message types.
@@ -36,6 +39,16 @@ try:
 except ImportError:  # pragma: no cover
     _ingest_delegated_signal = None  # type: ignore[assignment]
 
+# PR-5A: stable Android behavioral result consumer binding.
+try:
+    from core.runtime.source_dispatch_orchestrator import (
+        SourceDispatchOrchestrator as _SourceDispatchOrchestrator,
+    )
+
+    _android_result_consumer = _SourceDispatchOrchestrator()
+except Exception:  # pragma: no cover  # noqa: BLE001
+    _android_result_consumer = None  # type: ignore[assignment]
+
 
 async def handle_delegated_execution_signal(
     bridge: "AndroidBridge",
@@ -48,6 +61,11 @@ async def handle_delegated_execution_signal(
     lifecycle signals.  It routes the message through the PR-16
     :func:`~core.android_delegated_signal_ingress.ingest_delegated_execution_signal`
     ingress path and returns an ACK response.
+
+    PR-5A: When the ingested signal is a ``result``-kind signal that was
+    successfully reconciled, the outcome is forwarded to
+    :meth:`~core.runtime.source_dispatch_orchestrator.SourceDispatchOrchestrator.consume_android_behavioral_result`
+    so the source-side orchestrator is the stable consumer.
 
     Parameters
     ----------
@@ -82,6 +100,23 @@ async def handle_delegated_execution_signal(
                     env.emission_seq,
                     outcome.record.phase.value if outcome.record else "?",
                 )
+
+                # PR-5A: Forward result-kind signals to the stable consumer.
+                if _android_result_consumer is not None:
+                    try:
+                        _sk = getattr(env, "signal_kind", None)
+                        _sk_val = _sk.value if hasattr(_sk, "value") else str(_sk) if _sk else ""
+                        if _sk_val == "result":
+                            _android_result_consumer.consume_android_behavioral_result(
+                                outcome,
+                                source=f"android_bridge:{device_id}",
+                            )
+                    except Exception as _consumer_exc:  # pragma: no cover  # noqa: BLE001
+                        logger.debug(
+                            "PR-5A android_result_consumer skipped (non-fatal): %s",
+                            _consumer_exc,
+                        )
+
             elif outcome.reject_reason:
                 logger.debug(
                     "PR-16 delegated signal skipped: device_id=%s reason=%s",

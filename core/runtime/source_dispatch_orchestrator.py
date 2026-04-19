@@ -832,8 +832,34 @@ EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# PR-5A: Delegated target selection policy integration
 # ---------------------------------------------------------------------------
+
+DELEGATED_POLICY_PARTICIPATES_IN_TARGET_SELECTION_PR5A_SENTINEL: str = (
+    "DELEGATED_POLICY_PARTICIPATES_IN_TARGET_SELECTION_PR5A::"
+    "source-dispatch-orchestrator::delegated-target-selection-policy-consulted::"
+    "select_dispatch_target-consults-select_delegated_target::"
+    "target-selection-no-longer-bypasses-policy::"
+    "package=PR-5A::policy-engine-mainline-convergence"
+)
+
+DELEGATED_SELECTION_POLICY_IS_POST_GATE_PR5A_POLICY: str = (
+    "POLICY::DELEGATED_SELECTION_POLICY_IS_POST_GATE_PR5A: "
+    "select_dispatch_target() MUST consult select_delegated_target() from "
+    "core.delegated_target_selection_policy after the PR-24 registry path "
+    "produces a candidate.  When the policy returns outcome='degrade' or "
+    "'local_fallback', the caller is informed via selection_reason on the "
+    "returned SourceDispatchTarget.  The legacy mesh-participant fallback is "
+    "unaffected.  Backward compat is preserved: when the policy module is "
+    "unavailable the PR-24 candidate is returned unchanged.  PR-5A."
+)
+
+ORCHESTRATOR_MAINLINE_PATH_EXTENDED_PR5A_SENTINEL: str = (
+    "ORCHESTRATOR_MAINLINE_PATH_EXTENDED_PR5A::"
+    "openclawd._delegate_single_remote-now-records-orchestrator-dispatch-plan::"
+    "SourceDispatchOrchestrator-active-on-single-remote-delegation-path::"
+    "package=PR-5A::policy-engine-mainline-convergence"
+)
 
 
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
@@ -1521,6 +1547,101 @@ def select_dispatch_target(
         mesh_session_id=_effective_mesh_session_id,
     )
     if candidate_target is not None:
+        # PR-5A: Post-gate via delegated target selection policy (PR-20).
+        # When the registry path selects a candidate, additionally consult
+        # select_delegated_target() to allow the PR-20 policy layer to
+        # evaluate and potentially demote the candidate.  The policy outcome
+        # is recorded in selection_reason for observability.  On error or when
+        # the policy module is unavailable, the PR-24 candidate is returned
+        # unchanged (graceful degradation).
+        try:
+            from core.delegated_target_selection_policy import (
+                select_delegated_target as _select_delegated,
+                SelectionCandidateContext,
+                SelectionOutcome,
+            )
+            from core.attached_runtime_session_registry import list_active_sessions
+
+            _active_entries = list_active_sessions(registry=registry) or []
+            _ctx_list = []
+            for _entry in _active_entries:
+                _dev = str(getattr(_entry, "device_id", "") or "")
+                _sess = str(getattr(_entry, "session_id", "") or "")
+                if not _dev:
+                    continue
+                _reuse_valid = False
+                if reuse_inputs is not None:
+                    _reuse_valid = bool(reuse_inputs.get(_dev, False))
+                _ctx_list.append(
+                    SelectionCandidateContext(
+                        entry=_entry,
+                        is_reuse_valid=_reuse_valid,
+                    )
+                )
+
+            if _ctx_list:
+                _delegated_decision = _select_delegated(_ctx_list)
+                _outcome = getattr(_delegated_decision, "outcome", None)
+                if _outcome == SelectionOutcome.local_fallback:
+                    logger.debug(
+                        "select_dispatch_target: delegated policy → local_fallback; "
+                        "fallback_reason=%r",
+                        getattr(_delegated_decision, "fallback_reason", None),
+                    )
+                    # Return the PR-24 candidate with policy outcome annotated
+                    # in selection_reason so callers can distinguish this case.
+                    from contracts.source_dispatch import SourceDispatchTarget as _SDT2
+
+                    return _SDT2(
+                        target_device_id=candidate_target.target_device_id,
+                        target_runtime_id=candidate_target.target_runtime_id,
+                        target_session_id=candidate_target.target_session_id,
+                        handoff_envelope_id=candidate_target.handoff_envelope_id,
+                        mesh_session_id=candidate_target.mesh_session_id,
+                        selection_reason=(
+                            candidate_target.selection_reason
+                            + ":delegated_policy=local_fallback_recommended"
+                        ),
+                        metadata={
+                            **(candidate_target.metadata or {}),
+                            "delegated_policy_outcome": "local_fallback",
+                            "delegated_policy_fallback_reason": str(
+                                getattr(_delegated_decision, "fallback_reason", "")
+                            ),
+                        },
+                    )
+                elif _outcome == SelectionOutcome.degrade:
+                    logger.debug(
+                        "select_dispatch_target: delegated policy → degrade; "
+                        "fallback_reason=%r",
+                        getattr(_delegated_decision, "fallback_reason", None),
+                    )
+                    from contracts.source_dispatch import SourceDispatchTarget as _SDT3
+
+                    return _SDT3(
+                        target_device_id=candidate_target.target_device_id,
+                        target_runtime_id=candidate_target.target_runtime_id,
+                        target_session_id=candidate_target.target_session_id,
+                        handoff_envelope_id=candidate_target.handoff_envelope_id,
+                        mesh_session_id=candidate_target.mesh_session_id,
+                        selection_reason=(
+                            candidate_target.selection_reason
+                            + ":delegated_policy=degrade_recommended"
+                        ),
+                        metadata={
+                            **(candidate_target.metadata or {}),
+                            "delegated_policy_outcome": "degrade",
+                            "delegated_policy_fallback_reason": str(
+                                getattr(_delegated_decision, "fallback_reason", "")
+                            ),
+                        },
+                    )
+                # outcome == selected_attached or unknown: proceed normally
+        except Exception as _dp_exc:  # noqa: BLE001
+            logger.debug(
+                "select_dispatch_target: delegated_policy post-gate skipped (non-fatal): %s",
+                _dp_exc,
+            )
         return candidate_target
 
     # Legacy fallback: extract first active participant from mesh session (PR-33)
@@ -2450,3 +2571,141 @@ class SourceDispatchOrchestrator:
             cognitive_execution_hint=cognitive_execution_hint,
             metadata=metadata,
         )
+
+    # ------------------------------------------------------------------
+    # PR-5A: Stable Android behavioral result consumer
+    # ------------------------------------------------------------------
+
+    def consume_android_behavioral_result(
+        self,
+        reconcile_outcome: Any,
+        *,
+        trace_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        source: str = "android_bridge",
+    ) -> Dict[str, Any]:
+        """Consume an Android behavioral result from a reconciled delegated
+        execution signal.
+
+        This is the **stable consumer endpoint** for Android delegated
+        execution results on the source side.  It bridges the PR-16 ingress
+        path (``ingest_delegated_execution_signal``) into the
+        ``SourceDispatchOrchestrator`` so that the orchestrator is the
+        authoritative consumer of Android behavioral results.
+
+        The method:
+        1. Extracts identity and outcome fields from the reconcile outcome.
+        2. Emits an observability event via the runtime observability sink.
+        3. Returns a structured summary dict for the caller.
+
+        This is the stable contract (PR-5A) — the full behavioral result
+        integration (Android → dispatch result correlation) is deferred to
+        a later PR.
+
+        Parameters
+        ----------
+        reconcile_outcome:
+            :class:`~core.android_execution_signal_reconciler.AndroidSignalReconcileOutcome`
+            returned by :func:`~core.android_delegated_signal_ingress.ingest_delegated_execution_signal`.
+        trace_id:
+            Distributed trace ID for correlation (if not already in outcome).
+        session_id:
+            Session ID for correlation.
+        task_id:
+            Task ID for correlation.
+        source:
+            Caller identifier for observability.
+
+        Returns
+        -------
+        dict
+            Structured consumer summary with keys: ``consumed``, ``was_updated``,
+            ``signal_kind``, ``result_kind``, ``contract_id``, ``session_id``,
+            ``task_id``, ``trace_id``, ``reject_reason``.
+        """
+        consumed = False
+        was_updated = False
+        signal_kind: Optional[str] = None
+        result_kind: Optional[str] = None
+        contract_id: Optional[str] = None
+        _session_id: Optional[str] = session_id
+        _task_id: Optional[str] = task_id
+        _trace_id: Optional[str] = trace_id
+        reject_reason: str = ""
+
+        try:
+            was_updated = bool(getattr(reconcile_outcome, "was_updated", False))
+            reject_reason = str(getattr(reconcile_outcome, "reject_reason", "") or "")
+            _envelope = getattr(reconcile_outcome, "envelope", None)
+            if _envelope is not None:
+                _sk = getattr(_envelope, "signal_kind", None)
+                signal_kind = _sk.value if hasattr(_sk, "value") else (str(_sk) if _sk else None)
+                _rk = getattr(_envelope, "result_kind", None)
+                result_kind = _rk.value if hasattr(_rk, "value") else (str(_rk) if _rk else None)
+                contract_id = str(getattr(_envelope, "contract_id", "") or "")
+                _session_id = str(getattr(_envelope, "session_id", "") or session_id or "")
+                _task_id = str(getattr(_envelope, "task_id", "") or task_id or "")
+                _trace_id = str(getattr(_envelope, "trace_id", "") or trace_id or "")
+
+            if was_updated:
+                consumed = True
+                logger.debug(
+                    "SourceDispatchOrchestrator.consume_android_behavioral_result: "
+                    "signal_kind=%s result_kind=%s contract_id=%r session_id=%r "
+                    "task_id=%r trace_id=%r source=%s",
+                    signal_kind,
+                    result_kind,
+                    contract_id,
+                    _session_id,
+                    _task_id,
+                    _trace_id,
+                    source,
+                )
+                # Emit to the observability sink so dispatch-level monitoring
+                # can correlate Android behavioral results with dispatch plans.
+                try:
+                    from core.runtime.runtime_observability_sink import (
+                        emit_dispatch_decision_event,
+                    )
+
+                    emit_dispatch_decision_event(
+                        mode="android_behavioral_result",
+                        event_kind="android_result_consumed",
+                        dispatch_id=contract_id or "",
+                        trace_id=_trace_id or "",
+                        task_id=_task_id or "",
+                        session_id=_session_id or "",
+                        source_device_id=source,
+                        executor_target_type="android_device",
+                        target_device_id="",
+                        has_continuity_context=False,
+                        has_mesh_session=False,
+                        decision_reason=(
+                            f"android_behavioral_result:signal_kind={signal_kind}"
+                            f":result_kind={result_kind}"
+                        ),
+                        success=(result_kind == "success"),
+                    )
+                except Exception as _obs_exc:  # noqa: BLE001
+                    logger.debug(
+                        "consume_android_behavioral_result: observability emit skipped: %s",
+                        _obs_exc,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "consume_android_behavioral_result: error processing outcome (non-fatal): %s",
+                exc,
+            )
+
+        return {
+            "consumed": consumed,
+            "was_updated": was_updated,
+            "signal_kind": signal_kind,
+            "result_kind": result_kind,
+            "contract_id": contract_id,
+            "session_id": _session_id,
+            "task_id": _task_id,
+            "trace_id": _trace_id,
+            "reject_reason": reject_reason,
+        }
