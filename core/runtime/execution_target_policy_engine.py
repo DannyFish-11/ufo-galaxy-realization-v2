@@ -307,8 +307,8 @@ def apply_target_selection_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "apply_target_selection_policy: error applying policy: %s", exc
+        logger.warning(
+            "apply_target_selection_policy: error applying policy: %s", exc, exc_info=True
         )
         return build_target_selection_decision(
             policy_kind=TargetSelectionPolicyKind.default_local,
@@ -533,8 +533,8 @@ def apply_failure_handling_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "apply_failure_handling_policy: error applying policy: %s", exc
+        logger.warning(
+            "apply_failure_handling_policy: error applying policy: %s", exc, exc_info=True
         )
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.reject_with_reason,
@@ -769,8 +769,8 @@ def apply_degraded_readiness_policy(
             metadata=dict(metadata or {}),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "apply_degraded_readiness_policy: error applying policy: %s", exc
+        logger.warning(
+            "apply_degraded_readiness_policy: error applying policy: %s", exc, exc_info=True
         )
         return build_failure_handling_decision(
             policy_kind=FailureHandlingPolicyKind.reject_with_reason,
