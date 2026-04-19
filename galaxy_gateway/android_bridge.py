@@ -797,17 +797,17 @@ class AndroidBridge:
             from core.attached_runtime_session_registry import (
                 lookup_session_by_device,
                 reconnect_session,
+                get_session_registry,
             )
-            # Prefer the detached entry so reconnect can restore it.
-            # get_active_for_device returns None when detached; scan by device.
-            from core.attached_runtime_session_registry import get_session_registry
-            _reg = get_session_registry()
-            # Look for the most recent entry (active or detached) for this device.
-            _entry = None
-            for _e in _reg.list_all():
-                if _e.device_id == device_id:
-                    _entry = _e
-                    break
+            # First try the active pointer; fall back to the most-recent
+            # non-terminal entry (e.g. detached after a prior disconnect).
+            _entry = lookup_session_by_device(device_id)
+            if _entry is None:
+                _reg = get_session_registry()
+                for _e in _reg.list_all():
+                    if _e.device_id == device_id and not _e.is_terminal():
+                        _entry = _e
+                        break
             if _entry is not None and not _entry.is_terminal():
                 _updated = reconnect_session(
                     _entry,

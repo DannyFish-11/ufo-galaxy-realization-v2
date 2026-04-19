@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections import deque
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from galaxy_gateway.protocol.aip_v3 import TaskStatus
 
@@ -38,11 +38,12 @@ except ImportError:
 # Prevents the same lifecycle signal (identified by idempotency_key or
 # message_id) from being processed more than once when the compat layer
 # normalises v1/v2 messages before dispatch.  This is a process-local,
-# in-memory ring buffer — it does not need to survive restarts.
+# in-memory bounded ordered dict — it acts as a 512-slot LRU seen-set.
+# OrderedDict gives O(1) lookup and O(1) ordered eviction; entries older
+# than the 512-slot window are automatically discarded.
 
 _SIGNAL_GUARD_CAPACITY: int = 512
-_processed_signal_keys: deque = deque(maxlen=_SIGNAL_GUARD_CAPACITY)
-_processed_signal_set: Set[str] = set()
+_processed_signals: OrderedDict = OrderedDict()
 
 
 def _signal_guard_accept(message: Dict[str, Any]) -> bool:
@@ -62,18 +63,16 @@ def _signal_guard_accept(message: Dict[str, Any]) -> bool:
         # No stable identity — cannot guard; allow through.
         return True
     key = str(key)
-    if key in _processed_signal_set:
+    if key in _processed_signals:
         logger.debug(
             "task_lifecycle signal guard: duplicate signal suppressed key=%r type=%s",
             key, message.get("type"),
         )
         return False
-    # Record as seen
-    if len(_processed_signal_keys) >= _SIGNAL_GUARD_CAPACITY:
-        evicted = _processed_signal_keys[0]
-        _processed_signal_set.discard(evicted)
-    _processed_signal_keys.append(key)
-    _processed_signal_set.add(key)
+    # Record as seen; evict the oldest entry when the window is full.
+    _processed_signals[key] = True
+    if len(_processed_signals) > _SIGNAL_GUARD_CAPACITY:
+        _processed_signals.popitem(last=False)
     return True
 
 
