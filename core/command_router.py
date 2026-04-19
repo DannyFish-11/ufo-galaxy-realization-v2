@@ -1384,6 +1384,41 @@ class CommandRouter:
                 _replay_pre_exc,
             )
 
+        # ── PR-G: Emit dispatch decision event for observability sink ─────────
+        # Emit before executing so the event is recorded even if dispatch fails.
+        try:
+            from core.runtime.runtime_observability_sink import emit_dispatch_decision_event
+
+            _obs_meta = envelope.metadata or {}
+            _obs_targets = list(envelope.targets)
+            _obs_mode = "local"
+            if _obs_meta.get("cross_device") == "true":
+                _obs_mode = "remote_handoff"
+            elif _obs_meta.get("parallel_fanout") == "true":
+                _obs_mode = "staged_mesh"
+            elif envelope.executor_target_type is not None:
+                _obs_mode = str(envelope.executor_target_type)
+            emit_dispatch_decision_event(
+                mode=_obs_mode,
+                event_kind="plan_selected",
+                dispatch_id=envelope.task_id,
+                trace_id=envelope.trace_id or "",
+                task_id=envelope.task_id,
+                session_id=str(_obs_meta.get("session_id", "")),
+                source_device_id=str(envelope.source or ""),
+                executor_target_type=str(envelope.executor_target_type or ""),
+                target_device_id=_obs_targets[0] if _obs_targets else "",
+                has_continuity_context=bool(_obs_meta.get("continuity_context")),
+                has_mesh_session=bool(_obs_meta.get("mesh_session_id")),
+                decision_reason="command_router.route_envelope",
+                success=True,
+            )
+        except Exception as _obs_exc:
+            logger.debug(
+                "route_envelope: observability dispatch emit skipped (non-fatal): %s",
+                _obs_exc,
+            )
+
         # Extract optional routing params stored in metadata by the compat layer.
         meta = envelope.metadata or {}
         command_id: str = str(meta.get("command_id") or envelope.task_id)
