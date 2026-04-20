@@ -792,7 +792,32 @@ class AndroidBridge:
                 "falling back to send_to_device — %s", _router_err
             )
 
-        msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
+        # PR-F: when the payload carries orchestrator_dispatch=True the task
+        # originated from SourceDispatchOrchestrator's canonical Android path.
+        # Use task_assign_from_orchestrator_dispatch so the TASK_ASSIGN message
+        # exposes orchestrator context (trace_id, session_id,
+        # orchestrator_dispatch) at the top level for observability.
+        _is_orch = bool(payload.get("orchestrator_dispatch"))
+        if _is_orch:
+            logger.debug(
+                "AndroidBridge.assign_task: using orchestrator-dispatch message builder "
+                "for device_id=%s task_id=%s task_type=%s",
+                device_id,
+                task_id,
+                task_type,
+            )
+            msg = MessageBuilder.task_assign_from_orchestrator_dispatch(
+                device_id,
+                task_id,
+                task_type,
+                payload,
+                trace_id=payload.get("trace_id"),
+                session_id=payload.get("session_id"),
+                priority=priority,
+                timeout=timeout,
+            )
+        else:
+            msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
 
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:

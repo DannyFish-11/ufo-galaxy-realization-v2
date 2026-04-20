@@ -227,3 +227,70 @@ class MessageBuilder:
             task_type="vision_action",
             payload=result,
         )
+
+    @classmethod
+    def task_assign_from_orchestrator_dispatch(
+        cls,
+        device_id: str,
+        task_id: str,
+        task_type: str,
+        payload: Dict[str, Any],
+        *,
+        trace_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        priority: int = 5,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """PR-F: TASK_ASSIGN stamped with canonical orchestrator dispatch context.
+
+        This is the preferred builder for tasks dispatched through the
+        ``SourceDispatchOrchestrator`` → ``AndroidBridge`` canonical path
+        (PR-F).  It calls :meth:`task_assign` and adds top-level
+        ``orchestrator_dispatch``, ``trace_id``, and ``session_id`` fields so
+        that the message is self-describing and the dispatch chain is
+        observable without unpacking ``payload``.
+
+        Callers outside the orchestrator path should use the plain
+        :meth:`task_assign` method.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        task_id:
+            Stable task identifier propagated from the orchestrator.
+        task_type:
+            Android-side task type string (e.g. ``"screenshot"``,
+            ``"goal_execution"``).
+        payload:
+            Task-specific payload dict.  May already contain
+            ``orchestrator_dispatch=True``; it will be preserved.
+        trace_id:
+            Distributed trace ID from the orchestrator for end-to-end
+            correlation.
+        session_id:
+            Session ID for correlation.
+        priority / timeout:
+            Forwarded to :meth:`task_assign`.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``TASK_ASSIGN`` message with top-level
+            ``orchestrator_dispatch=True``, ``trace_id``, and
+            ``session_id`` fields.
+        """
+        msg = cls.task_assign(
+            device_id=device_id,
+            task_id=task_id,
+            task_type=task_type,
+            payload=payload,
+            priority=priority,
+            timeout=timeout,
+        )
+        msg["orchestrator_dispatch"] = True
+        if trace_id:
+            msg["trace_id"] = trace_id
+        if session_id:
+            msg["session_id"] = session_id
+        return msg

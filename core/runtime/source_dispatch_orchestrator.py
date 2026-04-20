@@ -954,6 +954,58 @@ POSTURE_UPDATE_AFFECTS_NEXT_SELECTION_CYCLE_POLICY: str = (
 )
 
 
+# ---------------------------------------------------------------------------
+# PR-F: _delegate_single_remote → orchestrate_source_runtime_dispatch canonical path
+# ---------------------------------------------------------------------------
+
+SINGLE_REMOTE_DELEGATES_THROUGH_ORCHESTRATOR_PR_F_SENTINEL: str = (
+    "SINGLE_REMOTE_DELEGATES_THROUGH_ORCHESTRATOR_PR_F::"
+    "openclawd._delegate_single_remote::dispatch-via-orchestrate_source_runtime_dispatch::"
+    "android-bridge-dispatch-before-_dispatch_remote_agent::"
+    "package=PR-F::single-device-android-orchestrator-canonical-path"
+)
+
+SINGLE_REMOTE_ANDROID_BRIDGE_IS_CANONICAL_DISPATCH_PR_F_POLICY: str = (
+    "POLICY::SINGLE_REMOTE_ANDROID_BRIDGE_IS_CANONICAL_DISPATCH_PR_F: "
+    "openclawd._delegate_single_remote() MUST attempt "
+    "orchestrate_source_runtime_dispatch() before falling through to "
+    "_dispatch_remote_agent().  When the orchestrator returns "
+    "success=True and action_taken='android_bridge_dispatch', the "
+    "orchestrator result is returned directly to the caller and "
+    "_dispatch_remote_agent() is NOT called.  This makes the "
+    "orchestrator → AndroidBridge → DeviceRouter path the canonical "
+    "single-device Android dispatch path (PR-F) and demotes "
+    "_dispatch_remote_agent() to a fallback for non-Android targets "
+    "and for Android targets not currently connected to the bridge.  "
+    "PR-F."
+)
+
+ORCHESTRATOR_DISPATCH_MESSAGE_BUILDER_CONTRACT_PR_F_POLICY: str = (
+    "POLICY::ORCHESTRATOR_DISPATCH_MESSAGE_BUILDER_CONTRACT_PR_F: "
+    "When AndroidBridge.assign_task() is called with a payload that "
+    "carries orchestrator_dispatch=True (injected by "
+    "_try_android_bridge_dispatch), the fallback send_to_device path "
+    "MUST use MessageBuilder.task_assign_from_orchestrator_dispatch() "
+    "instead of MessageBuilder.task_assign().  This stamps trace_id, "
+    "session_id, and orchestrator_dispatch at the TASK_ASSIGN message "
+    "top level, making the dispatch chain observable without unpacking "
+    "the payload.  The DeviceRouter path is unaffected because it does "
+    "not call MessageBuilder directly.  PR-F."
+)
+
+ANDROID_RESULT_LIFECYCLE_NOT_DEGRADED_PR_F_POLICY: str = (
+    "POLICY::ANDROID_RESULT_LIFECYCLE_NOT_DEGRADED_PR_F: "
+    "Routing single-device Android dispatch through the orchestrator "
+    "canonical path (PR-F) MUST NOT degrade the existing result and "
+    "lifecycle signal flow.  task_result / goal_execution_result / "
+    "task_cancel / task_status signals continue to flow through the "
+    "canonical android_execution_signal_reconciler path and are "
+    "consumed by SourceDispatchOrchestrator.consume_android_behavioral_result().  "
+    "cancel/status capabilities established in prior PRs are unaffected.  "
+    "PR-F."
+)
+
+
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
     """Attempt to capture the current RuntimeGovernanceSnapshot (PR-27)."""
     try:
@@ -1174,6 +1226,14 @@ def _try_android_bridge_dispatch(
                 "action_taken": "none",
             }
 
+        logger.debug(
+            "_try_android_bridge_dispatch: PR-F canonical path — "
+            "device_id=%s task_id=%s trace_id=%s",
+            device_id,
+            task_id,
+            trace_id,
+        )
+
         task_payload: Dict[str, Any] = dict(task or {})
         # Derive task_type from the task dict; fall back to "generic".
         task_type: str = str(
@@ -1183,6 +1243,8 @@ def _try_android_bridge_dispatch(
         )
 
         # Embed orchestrator context into the task payload for observability.
+        # AndroidBridge.assign_task will use task_assign_from_orchestrator_dispatch
+        # (PR-F) when it detects orchestrator_dispatch=True in the payload.
         assign_payload: Dict[str, Any] = {
             **task_payload,
             "trace_id": trace_id,
@@ -1243,8 +1305,17 @@ def _try_android_bridge_dispatch(
             if isinstance(result, dict)
             else {"raw": str(result)}
         )
+        dispatch_success = bridge_response.get("success", True)
+        logger.debug(
+            "_try_android_bridge_dispatch: bridge responded success=%s "
+            "device_id=%s task_id=%s trace_id=%s",
+            dispatch_success,
+            device_id,
+            effective_task_id,
+            trace_id,
+        )
         return {
-            "success": bridge_response.get("success", True),
+            "success": dispatch_success,
             "action_taken": "android_bridge_dispatch",
             "android_bridge_response": bridge_response,
             "device_id": device_id,
