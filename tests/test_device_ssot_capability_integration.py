@@ -603,8 +603,12 @@ class TestUDMCapabilityAssimilationProjection(unittest.TestCase):
             "Updated capability 'bluetooth' must appear in assimilation record after re-registration",
         )
         # Exactly one record exists for this device_id (idempotent, no duplication)
-        device_records = [k for k in layer._records if k == "assimilate_test_002"]
-        self.assertEqual(len(device_records), 1, "Only one assimilation record must exist per device_id")
+        self.assertIn("assimilate_test_002", layer._records)
+        self.assertEqual(
+            sum(1 for k in layer._records if k == "assimilate_test_002"),
+            1,
+            "Only one assimilation record must exist per device_id",
+        )
 
     def test_upsert_capabilities_triggers_assimilation_update(self):
         """upsert_device_state with updated capabilities re-assimilates the device."""

@@ -333,9 +333,12 @@ class UnifiedDeviceManager:
         must succeed even if the assimilation layer is unavailable.
         """
         try:
+            # Deferred import avoids circular-dependency issues at module load
+            # time: capability_assimilation imports from several core modules
+            # that may themselves import from core.unified.
             from core.capability_assimilation import assimilate_device  # noqa: PLC0415
 
-            caps = [str(c).strip() for c in (device.capabilities or []) if str(c).strip()]
+            caps = [c.strip() for c in (device.capabilities or []) if isinstance(c, str) and c.strip()]
             host = device.ip_address or "localhost"
             port = device.port or 0
             meta: Dict[str, Any] = dict(device.metadata or {})
