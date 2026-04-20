@@ -132,6 +132,44 @@ CONTINUITY_CONTEXT_SURVIVES_RECONNECT_POLICY: str = (
     "have been made so that the runtime can bound retry behaviour.  PR-F."
 )
 
+# ---------------------------------------------------------------------------
+# PR-G sentinels — runtime_attachment_session_id continuity alignment
+# ---------------------------------------------------------------------------
+
+RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_CONTINUITY_IDENTITY: str = (
+    "RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_CONTINUITY_IDENTITY::PR-G: "
+    "runtime_attachment_session_id is the canonical stable identity that survives "
+    "Android reconnect/resume scenarios.  It is distinct from the transient "
+    "transport session_id and from the registry-generated runtime_session_id.  "
+    "DispatchContinuityContext carries it as prior_runtime_attachment_session_id "
+    "so that resumed execution can be correlated with the correct prior attachment "
+    "even when the transport session changes.  PR-G."
+)
+
+CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_POLICY: str = (
+    "POLICY::CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_PR-G: "
+    "The registration and reconnect paths MUST attempt to consume "
+    "runtime_attachment_session_id from inbound Android messages.  When the field "
+    "is absent (older clients) a compatible fallback MUST be used rather than "
+    "blocking the attach/reconnect.  The field's presence is the canonical signal "
+    "that continuity resume should be attempted before creating a new attachment.  "
+    "PR-G."
+)
+
+RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_POLICY: str = (
+    "POLICY::RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_PR-G: "
+    "A reconnect is classified as 'continuity resume' only when the inbound "
+    "runtime_attachment_session_id matches an active or detached registry entry "
+    "for the same device_id.  If no match is found the reconnect is treated as "
+    "'new_attachment'.  This prevents stale or spoofed IDs from hijacking existing "
+    "sessions.  PR-G."
+)
+
+DISPATCH_CONTINUITY_PR_G_SENTINEL: str = (
+    "DISPATCH_CONTINUITY_PR_G::runtime-attachment-session-id-canonical-handling::"
+    "continuity-reconnect-consumer::package=G::post-533-dual-repo-runtime-unification"
+)
+
 
 # ---------------------------------------------------------------------------
 # DispatchContinuityClass — how execution continuity should be reasoned about
@@ -246,6 +284,15 @@ class DispatchContinuityContext(BaseModel):
     originating_device_id: Optional[str] = Field(
         default=None,
         description="Device that initiated the original dispatch cycle.",
+    )
+    prior_runtime_attachment_session_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "The runtime_attachment_session_id of the prior attached runtime session.  "
+            "Carries canonical attachment identity across reconnect/resume scenarios so "
+            "that the server can correlate a resumed execution with the correct prior "
+            "attachment even when the transport session_id changes.  PR-G."
+        ),
     )
     resume_attempt_count: int = Field(
         default=0,
@@ -476,6 +523,7 @@ def build_dispatch_continuity_context(
     prior_task_id: Optional[str] = None,
     prior_trace_id: Optional[str] = None,
     originating_device_id: Optional[str] = None,
+    prior_runtime_attachment_session_id: Optional[str] = None,
     resume_attempt_count: int = 0,
     continuity_class: DispatchContinuityClass = DispatchContinuityClass.persistent,
     last_checkpoint_at: Optional[float] = None,
@@ -500,6 +548,9 @@ def build_dispatch_continuity_context(
         Distributed trace ID from the prior execution context.
     originating_device_id:
         Device that initiated the original dispatch cycle.
+    prior_runtime_attachment_session_id:
+        The runtime_attachment_session_id of the prior attached runtime session.
+        Carries canonical attachment identity through reconnect/resume.  PR-G.
     resume_attempt_count:
         Number of resume attempts already made.
     continuity_class:
@@ -517,6 +568,7 @@ def build_dispatch_continuity_context(
             prior_task_id=prior_task_id,
             prior_trace_id=prior_trace_id,
             originating_device_id=originating_device_id,
+            prior_runtime_attachment_session_id=prior_runtime_attachment_session_id,
             resume_attempt_count=resume_attempt_count,
             continuity_class=continuity_class,
             last_checkpoint_at=last_checkpoint_at,

@@ -212,6 +212,19 @@ ATTACHED_RUNTIME_SESSION_PR7_SENTINEL: str = (
     "post-533-main-repo-pr7-v1"
 )
 
+ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_PR_G::runtime-attachment-session-id-canonical-handling::"
+    "continuity-reconnect-consumer::package=G::post-533-dual-repo-runtime-unification"
+)
+
+RUNTIME_ATTACHMENT_SESSION_ID_CANONICAL_FIELD_POLICY: str = (
+    "POLICY::RUNTIME_ATTACHMENT_SESSION_ID_CANONICAL_FIELD_PR-G: "
+    "runtime_attachment_session_id is the canonical, stable identity field for an "
+    "attached runtime session.  It is exposed explicitly in to_dict() output so that "
+    "downstream consumers (registry, dispatch continuity, wire serialisation) can "
+    "consume it by name without relying on the session_id alias.  PR-G."
+)
+
 # ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
@@ -534,6 +547,7 @@ class AttachedRuntimeSessionRecord:
             "record_id": self.record_id,
             "device_id": self.device_id,
             "session_id": self.session_id,
+            "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "source_runtime_posture": self.source_runtime_posture,
             "coordination_role": self.coordination_role,
             "android_host_role": self.android_host_role,

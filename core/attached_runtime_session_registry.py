@@ -302,6 +302,43 @@ REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-G: runtime_attachment_session_id canonical handling sentinels
+# ---------------------------------------------------------------------------
+
+ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_REGISTRY_PR_G::runtime-attachment-session-id-"
+    "canonical-handling::continuity-reconnect-consumer::package=G::"
+    "post-533-dual-repo-runtime-unification"
+)
+
+REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY: str = (
+    "POLICY::REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR-G: "
+    "runtime_attachment_session_id is the canonical, client-supplied stable identity "
+    "for an Android attached runtime session.  It is distinct from the registry-generated "
+    "runtime_session_id (which is internal and opaque) and from the transient "
+    "transport session_id.  The registry MUST store and index it so that "
+    "reconnect/resume paths can look up an existing session by this identity.  PR-G."
+)
+
+REGISTRY_RECONNECT_OUTCOME_CLASSIFICATION_PR_G_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_OUTCOME_CLASSIFICATION_PR-G: "
+    "classify_reconnect_outcome() is the canonical server-side function for "
+    "distinguishing 'continuity_resume' from 'new_attachment' on reconnect.  "
+    "A reconnect is classified as continuity_resume only when an active or detached "
+    "entry for the same device_id is found AND the supplied "
+    "runtime_attachment_session_id matches the entry's stored value (or both are "
+    "empty).  All other cases produce new_attachment.  PR-G."
+)
+
+REGISTRY_FALLBACK_WHEN_ATTACHMENT_ID_ABSENT_PR_G_POLICY: str = (
+    "POLICY::REGISTRY_FALLBACK_WHEN_ATTACHMENT_ID_ABSENT_PR-G: "
+    "When runtime_attachment_session_id is absent in an inbound message the "
+    "registry MUST NOT block the attach/reconnect.  It MUST use the existing "
+    "entry's stored id (if any) or generate a new stable id as a compatible "
+    "fallback, ensuring backward compatibility with older Android clients.  PR-G."
+)
+
+# ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 
@@ -555,6 +592,7 @@ class AttachedSessionRegistryEntry:
     device_id: str
     session_id: str = ""
     runtime_session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    runtime_attachment_session_id: str = ""
     attachment_state: RegistryEntryState = RegistryEntryState.active
     invalidation_reason: InvalidationReason = InvalidationReason.none
     posture: str = _POSTURE_JOIN_RUNTIME
@@ -597,6 +635,7 @@ class AttachedSessionRegistryEntry:
             "session_id": self.session_id,
             "device_id": self.device_id,
             "runtime_session_id": self.runtime_session_id,
+            "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "attachment_state": self.attachment_state.value,
             "invalidation_reason": self.invalidation_reason.value,
             "posture": self.posture,
@@ -641,6 +680,7 @@ class AttachedSessionRegistryEntry:
             session_id=data.get("session_id", ""),
             device_id=data.get("device_id", ""),
             runtime_session_id=data.get("runtime_session_id", str(uuid.uuid4())),
+            runtime_attachment_session_id=data.get("runtime_attachment_session_id", ""),
             attachment_state=state,
             invalidation_reason=reason,
             posture=data.get("posture", _POSTURE_JOIN_RUNTIME),
@@ -749,6 +789,8 @@ class AttachedSessionRegistry:
         self._active_by_device: Dict[str, str] = {}
         # session_id → entry_id of the most recent entry for that session_id
         self._entry_by_session: Dict[str, str] = {}
+        # runtime_attachment_session_id → entry_id of the most recent entry
+        self._entry_by_attachment_id: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -781,6 +823,8 @@ class AttachedSessionRegistry:
             self._active_by_device[entry.device_id] = entry.entry_id
         if entry.session_id:
             self._entry_by_session[entry.session_id] = entry.entry_id
+        if entry.runtime_attachment_session_id:
+            self._entry_by_attachment_id[entry.runtime_attachment_session_id] = entry.entry_id
 
     def _update_indices(self, entry: AttachedSessionRegistryEntry) -> None:
         """Refresh lookup indices after an in-place buffer replacement."""
@@ -792,6 +836,8 @@ class AttachedSessionRegistry:
         ):
             # Remove stale active pointer
             del self._active_by_device[entry.device_id]
+        if entry.runtime_attachment_session_id:
+            self._entry_by_attachment_id[entry.runtime_attachment_session_id] = entry.entry_id
 
     # ------------------------------------------------------------------
     # Mutation API (called only by module-level functions)
@@ -808,6 +854,7 @@ class AttachedSessionRegistry:
         *,
         invalidation_reason: InvalidationReason = InvalidationReason.none,
         session_id: str = "",
+        runtime_attachment_session_id: str = "",
         posture: str = "",
         host_role: str = "",
         coordination_role: str = "",
@@ -847,11 +894,19 @@ class AttachedSessionRegistry:
         elif transition == RegistryTransition.replace:
             new_reason = InvalidationReason.replaced
 
+        # PR-G: preserve runtime_attachment_session_id through transitions;
+        # allow callers to supply an updated value (e.g. on reconnect).
+        resolved_attachment_id = (
+            runtime_attachment_session_id
+            or entry.runtime_attachment_session_id
+        )
+
         updated = AttachedSessionRegistryEntry(
             entry_id=entry.entry_id,
             session_id=session_id if session_id else entry.session_id,
             device_id=entry.device_id,
             runtime_session_id=entry.runtime_session_id,
+            runtime_attachment_session_id=resolved_attachment_id,
             attachment_state=next_state,
             invalidation_reason=new_reason,
             posture=(posture.lower().strip() if posture else entry.posture),
@@ -940,6 +995,38 @@ class AttachedSessionRegistry:
             return None
         return entry
 
+    def get_by_runtime_attachment_session_id(
+        self,
+        runtime_attachment_session_id: str,
+        *,
+        active_only: bool = True,
+    ) -> Optional[AttachedSessionRegistryEntry]:
+        """Return the most recent entry matching *runtime_attachment_session_id*, or None.
+
+        This is the canonical PR-G lookup used by reconnect/resume paths to find
+        an existing session by its stable client-supplied attachment identity.
+
+        Parameters
+        ----------
+        runtime_attachment_session_id
+            The canonical attachment identity to look up.
+        active_only
+            When True (default) only returns the entry if it is currently active.
+            Pass ``False`` to also return detached entries (for continuity resume
+            from detached state).
+        """
+        if not runtime_attachment_session_id:
+            return None
+        entry_id = self._entry_by_attachment_id.get(runtime_attachment_session_id)
+        if entry_id is None:
+            return None
+        entry = self._get_by_entry_id(entry_id)
+        if entry is None:
+            return None
+        if active_only and not entry.is_active():
+            return None
+        return entry
+
     def list_all_active(self) -> List[AttachedSessionRegistryEntry]:
         """Return all entries currently in ``active`` state, newest first."""
         return [e for e in reversed(self._buffer) if e.is_active()]
@@ -961,6 +1048,7 @@ class AttachedSessionRegistry:
         self._buffer.clear()
         self._active_by_device.clear()
         self._entry_by_session.clear()
+        self._entry_by_attachment_id.clear()
 
     # ------------------------------------------------------------------
     # Snapshot
@@ -1024,6 +1112,7 @@ def register_session(
     device_id: str,
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     posture: str = _POSTURE_JOIN_RUNTIME,
     host_role: str = "",
     coordination_role: str = "",
@@ -1046,6 +1135,9 @@ def register_session(
         Identifier of the device/runtime to register.
     session_id
         Optional external session identifier.
+    runtime_attachment_session_id
+        Canonical stable attachment identity supplied by the client (PR-G).
+        When absent a new UUID is generated as a compatible fallback.
     posture
         Participation posture; defaults to ``join_runtime``.
     host_role
@@ -1071,11 +1163,15 @@ def register_session(
     # Supersede any existing active session for this device
     registry.supersede_active_for_device(device_id)
 
+    # PR-G: generate a fallback attachment id if the caller didn't supply one
+    resolved_attachment_id = runtime_attachment_session_id or str(uuid.uuid4())
+
     now = time.time()
     entry = AttachedSessionRegistryEntry(
         device_id=device_id,
         session_id=session_id or "",
         runtime_session_id=str(uuid.uuid4()),
+        runtime_attachment_session_id=resolved_attachment_id,
         attachment_state=RegistryEntryState.active,
         invalidation_reason=InvalidationReason.none,
         posture=(posture or _POSTURE_JOIN_RUNTIME).lower().strip(),
@@ -1101,6 +1197,7 @@ def reconnect_session(
     entry: AttachedSessionRegistryEntry,
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     metadata: Optional[Dict[str, Any]] = None,
     registry: Optional[AttachedSessionRegistry] = None,
 ) -> AttachedSessionRegistryEntry:
@@ -1110,12 +1207,19 @@ def reconnect_session(
     ``runtime_session_id`` (per
     :data:`REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY`).
 
+    The ``runtime_attachment_session_id`` is preserved through the reconnect;
+    if the caller supplies an updated value it will be used, otherwise the
+    existing stored value is kept (PR-G).
+
     Parameters
     ----------
     entry
         The registry entry to reconnect.
     session_id
         Optional updated external session identifier.
+    runtime_attachment_session_id
+        Optional updated canonical attachment identity (PR-G).  When absent
+        the existing stored value is preserved.
     metadata
         Optional metadata to merge into the entry.
     registry
@@ -1134,6 +1238,7 @@ def reconnect_session(
         RegistryTransition.reconnect,
         invalidation_reason=InvalidationReason.none,
         session_id=session_id,
+        runtime_attachment_session_id=runtime_attachment_session_id,
         metadata=metadata,
     )
 
@@ -1147,6 +1252,7 @@ def reattach_session(
     entry: AttachedSessionRegistryEntry,
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     posture: str = "",
     host_role: str = "",
     coordination_role: str = "",
@@ -1165,6 +1271,9 @@ def reattach_session(
         The registry entry to re-attach.
     session_id
         Optional updated external session identifier.
+    runtime_attachment_session_id
+        Optional updated canonical attachment identity (PR-G).  When absent
+        the existing stored value is preserved.
     posture / host_role / coordination_role / capability_tier
         Fields to update on the entry; empty string means keep existing value.
     metadata
@@ -1185,6 +1294,7 @@ def reattach_session(
         RegistryTransition.reattach,
         invalidation_reason=InvalidationReason.none,
         session_id=session_id,
+        runtime_attachment_session_id=runtime_attachment_session_id,
         posture=posture,
         host_role=host_role,
         coordination_role=coordination_role,
@@ -1386,6 +1496,128 @@ def build_registry_snapshot(
 
 
 # ---------------------------------------------------------------------------
+# Core API — lookup_session_by_attachment_id  (PR-G)
+# ---------------------------------------------------------------------------
+
+
+def lookup_session_by_attachment_id(
+    runtime_attachment_session_id: str,
+    *,
+    active_only: bool = True,
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> Optional[AttachedSessionRegistryEntry]:
+    """Look up a registry entry by *runtime_attachment_session_id*.
+
+    This is the canonical PR-G lookup for reconnect/resume paths.  Callers
+    supply the client-provided attachment identity; the registry returns the
+    matching entry if found.
+
+    Parameters
+    ----------
+    runtime_attachment_session_id
+        The canonical attachment identity to look up (PR-G).
+    active_only
+        When True (default) returns only active entries.  Pass ``False`` to
+        also return detached entries (useful when deciding whether to resume
+        a detached session rather than creating a new one).
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    AttachedSessionRegistryEntry | None
+        The matching entry, or None if not found.
+    """
+    if registry is None:
+        registry = get_session_registry()
+    return registry.get_by_runtime_attachment_session_id(
+        runtime_attachment_session_id, active_only=active_only
+    )
+
+
+# ---------------------------------------------------------------------------
+# Core API — classify_reconnect_outcome  (PR-G)
+# ---------------------------------------------------------------------------
+
+_RECONNECT_OUTCOME_CONTINUITY_RESUME: str = "continuity_resume"
+_RECONNECT_OUTCOME_NEW_ATTACHMENT: str = "new_attachment"
+
+
+def classify_reconnect_outcome(
+    device_id: str,
+    *,
+    runtime_attachment_session_id: str = "",
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> tuple:
+    """Classify a reconnect event as *continuity_resume* or *new_attachment*.
+
+    This is the canonical PR-G server-side decision function for the
+    registration/reconnect path.  It consults the registry to determine
+    whether the inbound reconnect should restore an existing runtime
+    attachment continuity or start a new attachment session.
+
+    Decision logic
+    --------------
+    1. Look up the current entry for *device_id* (active **or** detached).
+    2. If no entry exists → ``new_attachment``.
+    3. If the entry is in a terminal state (replaced/invalidated) → ``new_attachment``.
+    4. If *runtime_attachment_session_id* is supplied:
+       - If it matches the stored value → ``continuity_resume``.
+       - If it does **not** match → ``new_attachment`` (prevents identity spoofing).
+    5. If *runtime_attachment_session_id* is absent (older clients):
+       - If an active/detached entry exists → ``continuity_resume`` (backward
+         compatible: treat existing session as resumable without explicit id).
+       - Otherwise → ``new_attachment``.
+
+    Parameters
+    ----------
+    device_id
+        The device identifier from the inbound reconnect message.
+    runtime_attachment_session_id
+        The canonical attachment identity supplied by the client (PR-G).
+        May be empty for older clients; see fallback logic above.
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    tuple[str, AttachedSessionRegistryEntry | None]
+        ``(outcome, entry)`` where *outcome* is one of
+        ``'continuity_resume'`` or ``'new_attachment'`` and *entry* is the
+        existing registry entry when the outcome is ``continuity_resume``
+        (else ``None``).
+    """
+    if registry is None:
+        registry = get_session_registry()
+
+    # Check for an existing entry (active OR detached) for this device
+    existing = registry.get_active_for_device(device_id)
+    if existing is None:
+        # Try detached entry via brute-force scan (detached entries not in _active_by_device)
+        for e in registry.list_all():
+            if e.device_id == device_id and e.attachment_state == RegistryEntryState.detached:
+                existing = e
+                break
+
+    if existing is None:
+        return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+
+    if existing.attachment_state.is_terminal():
+        return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+
+    if runtime_attachment_session_id:
+        # Explicit id supplied: must match stored value for continuity resume
+        if existing.runtime_attachment_session_id == runtime_attachment_session_id:
+            return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
+        return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+
+    # Fallback: no explicit id; treat existing session as continuity resume
+    # (backward compatible with older Android clients)
+    return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
+
+# ---------------------------------------------------------------------------
 # Core API — update_session_posture  (Android posture gating)
 # ---------------------------------------------------------------------------
 
@@ -1456,6 +1688,7 @@ def update_session_posture(
         session_id=entry.session_id,
         device_id=entry.device_id,
         runtime_session_id=entry.runtime_session_id,
+        runtime_attachment_session_id=entry.runtime_attachment_session_id,
         attachment_state=entry.attachment_state,
         invalidation_reason=entry.invalidation_reason,
         posture=_normalised,
