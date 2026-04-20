@@ -1299,38 +1299,76 @@ class DesktopPresenceRuntime:
     ) -> None:
         """收到设备端目标执行结果时的回调。
 
-        由 GalaxyGateway.android_bridge._handle_goal_execution_result 调用，
-        在结果持久化到 TaskMemory 之后触发。
+        由 GalaxyGateway.android_bridge._handle_goal_execution_result 调用。
 
-        用途：
-        - 更新当前 RuntimeSession 的运行时状态
-        - 记录跨设备执行结果到 continuum（用于 LLM 上下文注入）
-        - 触发后续自动化链（如果 GoalExecutionPayload 指定了 follow_up 动作）
-
-        当前实现：日志记录（可扩展为 Future Continuum 集成）
+        实现了以下真实行为：
+        1. 写入 TaskMemory，使结果可被后续 LLM 上下文注入查询
+        2. 如果存在匹配 trace_id 的活跃 RuntimeSession，注入结果字段
+        3. 记录结构化日志，供 audit / replay 使用
         """
         logger.info(
-            "GoalExecutionResult received | task_id=%s device_id=%s status=%s " "result=%r trace_id=%s",
+            "GoalExecutionResult received | task_id=%s device_id=%s status=%s "
+            "result=%r trace_id=%s",
             task_id,
             device_id,
             status,
             str(result)[:100],
             trace_id,
         )
-        # ── 查找对应的 runtime session 并注入结果 ────────────────────────
-        # 注意：当 Android 通过 TASK_SUBMIT/GOAL_EXECUTION 发起会话时，
-        # DesktopPresenceRuntime 会创建一个 RuntimeSession。
-        # 这里可以将结果注入该 session 的上下文，供 LLM 后续推理使用。
-        # 目前为 Future Continuum 集成预留接口。
-        # TODO: 当 Continuum.openclowd_memory_integration 就绪后，
-        #       在此处注入 result 到 session.context，确保 LLM 可感知跨设备执行结果。
+
+        # ── 1. 写入 TaskMemory ───────────────────────────────────────────
+        try:
+            from core.task_memory import get_task_memory
+            mem = get_task_memory()
+            success = str(status).lower() in ("success", "completed", "done", "true")
+            mem.record_task(
+                task=f"[goal_execution_result] task_id={task_id}",
+                result_summary=(
+                    f"device={device_id} status={status} result={str(result)[:120]}"
+                ),
+                success=success,
+                strategy="goal_execution",
+                session_id=trace_id or "",
+                tags=["goal_execution_result", "android", device_id],
+                extra={
+                    "task_id": task_id,
+                    "device_id": device_id,
+                    "status": status,
+                    "result": result,
+                    "trace_id": trace_id,
+                },
+                task_type="goal_execution_result",
+            )
+            logger.debug(
+                "GoalExecutionResult written to TaskMemory | task_id=%s trace_id=%s",
+                task_id,
+                trace_id,
+            )
+        except Exception as mem_err:
+            logger.debug(
+                "GoalExecutionResult TaskMemory write failed (non-fatal): %s",
+                mem_err,
+            )
+
+        # ── 2. 注入到匹配的活跃 RuntimeSession ──────────────────────────
         try:
             if hasattr(self, "_active_sessions") and self._active_sessions:
                 for session in self._active_sessions.values():
-                    if session.runtime_session_id == trace_id:
-                        # 将结果注入 session 上下文（Future: Continuum 集成点）
+                    if session.runtime_session_id == trace_id or session.trace_id == trace_id:
+                        # Attach the goal execution result to the session so
+                        # subsequent LLM calls can reference it.
+                        if not hasattr(session, "goal_execution_results"):
+                            session.goal_execution_results = []  # type: ignore[attr-defined]
+                        session.goal_execution_results.append(  # type: ignore[attr-defined]
+                            {
+                                "task_id": task_id,
+                                "device_id": device_id,
+                                "status": status,
+                                "result": result,
+                            }
+                        )
                         logger.debug(
-                            "GoalExecutionResult injected into session %s | task_id=%s",
+                            "GoalExecutionResult injected into active session %s | task_id=%s",
                             trace_id,
                             task_id,
                         )

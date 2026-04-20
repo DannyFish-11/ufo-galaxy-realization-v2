@@ -20,8 +20,16 @@ logger = logging.getLogger(__name__)
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:
     from core.openclawd_memory_backflow import store_task_result
+    from core.openclawd_memory_backflow import store_goal_execution_result as _store_goal_result
 except ImportError:
     store_task_result = None  # type: ignore[assignment]
+    _store_goal_result = None  # type: ignore[assignment]
+
+# Parallel group tracker for aggregating grouped subtask results.
+try:
+    from galaxy_gateway.orchestrator.parallel_tracker import get_tracker as _get_parallel_tracker
+except ImportError:
+    _get_parallel_tracker = None  # type: ignore[assignment]
 
 # PR-13: canonical host-side reconciliation binding — top-level import so
 # tests can patch() it and so the import failure is handled gracefully.
@@ -301,21 +309,52 @@ async def handle_goal_execution_result(
         task_id, device_id, status, group_id, subtask_index, latency_ms,
     )
 
-    # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
-    if store_task_result is not None:
+    # ── 持久化到 TaskMemory（通过 canonical goal result backflow）────────
+    if _store_goal_result is not None:
         try:
-            await store_task_result(
+            await _store_goal_result(
                 task_id=task_id,
                 device_id=device_id,
                 status=status,
                 result=result_text,
                 trace_id=trace_id,
-                latency_ms=latency_ms,
                 route_mode=payload.get("route_mode", "cross_device"),
-                steps=payload.get("steps", []),
+                session_id=payload.get("session_id") or trace_id or None,
+                group_id=group_id,
+                subtask_index=subtask_index,
+                latency_ms=latency_ms,
+                extra_payload=payload,
             )
             logger.debug(
                 "GOAL_EXECUTION_RESULT: task_memory 写入成功 task_id=%s", task_id,
+            )
+        except Exception as mem_err:
+            logger.warning(
+                "GOAL_EXECUTION_RESULT: task_memory 写入失败（非致命）task_id=%s error=%s",
+                task_id, mem_err,
+            )
+    elif store_task_result is not None:
+        # Fallback: use the legacy store_task_result with correct parameters.
+        try:
+            route_mode = payload.get("route_mode", "cross_device")
+            await store_task_result(
+                task_id=task_id,
+                device_id=device_id,
+                route_mode=route_mode,
+                result={
+                    "task_id": task_id,
+                    "device_id": device_id,
+                    "status": status,
+                    "result": result_text,
+                    "trace_id": trace_id,
+                    "latency_ms": latency_ms,
+                    "route_mode": route_mode,
+                    "type": "goal_execution_result",
+                },
+                session_id=payload.get("session_id") or trace_id or None,
+            )
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: task_memory 写入成功（fallback）task_id=%s", task_id,
             )
         except Exception as mem_err:
             logger.warning(
@@ -327,6 +366,82 @@ async def handle_goal_execution_result(
             "GOAL_EXECUTION_RESULT: store_task_result 不可用，跳过内存回流 task_id=%s",
             task_id,
         )
+
+    # ── Parallel group aggregation ────────────────────────────────────
+    # When group_id and subtask_index are present, this result belongs to a
+    # parallel subtask group. Record the subtask result and, once all
+    # subtasks for the group are complete, write a consolidated group summary
+    # to TaskMemory and notify the runtime.
+    if group_id is not None and subtask_index is not None and _get_parallel_tracker is not None:
+        try:
+            tracker = _get_parallel_tracker()
+            subtask_status = "success" if str(status).lower() in (
+                "success", "completed", "done", "true"
+            ) else "failed"
+            await tracker.record_result(
+                group_id=group_id,
+                subtask_index=int(subtask_index),
+                status=subtask_status,
+                latency_ms=int(latency_ms or 0),
+                summary=str(result_text)[:200] if result_text else None,
+            )
+            group_status = await tracker.finalize_if_complete(group_id)
+            if group_status is not None:
+                logger.info(
+                    "GOAL_EXECUTION_RESULT: parallel group complete "
+                    "group_id=%s status=%s subtasks=%d",
+                    group_id, group_status.status, len(group_status.results),
+                )
+                # Write consolidated group summary to TaskMemory.
+                if _store_goal_result is not None:
+                    try:
+                        await _store_goal_result(
+                            task_id=f"group_summary:{group_id}",
+                            device_id=device_id,
+                            status=group_status.status,
+                            result=(
+                                f"parallel group {group_id} finished: "
+                                f"{group_status.status} "
+                                f"({len(group_status.results)} subtasks)"
+                            ),
+                            route_mode=payload.get("route_mode", "cross_device"),
+                            session_id=payload.get("session_id") or trace_id or None,
+                            group_id=group_id,
+                            extra_payload=group_status.to_dict(),
+                        )
+                    except Exception as agg_mem_err:
+                        logger.debug(
+                            "GOAL_EXECUTION_RESULT: group summary memory write failed "
+                            "(non-fatal): group_id=%s error=%s",
+                            group_id, agg_mem_err,
+                        )
+                # Notify the runtime of group completion.
+                try:
+                    from core.desktop_presence_runtime import get_desktop_presence_runtime
+                    runtime = get_desktop_presence_runtime()
+                    if hasattr(runtime, "on_goal_execution_result"):
+                        await runtime.on_goal_execution_result(
+                            task_id=f"group_summary:{group_id}",
+                            device_id=device_id,
+                            status=group_status.status,
+                            result=(
+                                f"group {group_id} completed "
+                                f"({len(group_status.results)} subtasks)"
+                            ),
+                            trace_id=trace_id,
+                        )
+                except Exception as grp_rt_err:
+                    logger.debug(
+                        "GOAL_EXECUTION_RESULT: group runtime notification failed "
+                        "(non-fatal): group_id=%s error=%s",
+                        group_id, grp_rt_err,
+                    )
+        except Exception as agg_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: parallel aggregation failed (non-fatal): "
+                "group_id=%s error=%s",
+                group_id, agg_err,
+            )
 
     # ── 触发 OpenClawd 反馈（如果有对应会话）────────────────────────
     try:

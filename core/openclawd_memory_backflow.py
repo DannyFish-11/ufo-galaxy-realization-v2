@@ -124,6 +124,116 @@ async def store_task_result(
         )
 
 
+async def store_goal_execution_result(
+    task_id: str,
+    device_id: str,
+    status: str,
+    result: str,
+    *,
+    trace_id: str = "",
+    route_mode: str = "cross_device",
+    session_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    subtask_index: Optional[int] = None,
+    latency_ms: int = 0,
+    extra_payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Canonical backflow entry point for ``GOAL_EXECUTION_RESULT`` messages.
+
+    Writes the result to TaskMemory using the same schema as
+    :func:`store_task_result` so that ``goal_execution_result`` and
+    ``task_result`` converge to the same canonical result family in storage.
+
+    Parameters
+    ----------
+    task_id:
+        Task identifier from the inbound ``GOAL_EXECUTION_RESULT`` message.
+    device_id:
+        Source Android device ID.
+    status:
+        Result status string (e.g. ``"completed"``, ``"failed"``).
+    result:
+        Human-readable result summary text returned by the device.
+    trace_id:
+        Distributed trace / runtime session correlation ID.
+    route_mode:
+        Routing mode, e.g. ``"cross_device"`` (default) or ``"local"``.
+    session_id:
+        Optional session ID to correlate with an active runtime session.
+    group_id:
+        Optional parallel group identifier (present for parallel subtasks).
+    subtask_index:
+        Optional subtask index within the parallel group.
+    latency_ms:
+        Execution latency in milliseconds reported by the device.
+    extra_payload:
+        Additional payload fields to include in the ``extra`` metadata.
+    """
+    if get_task_memory is None:
+        return
+
+    try:
+        mem = get_task_memory()
+
+        success = str(status).lower() in ("success", "completed", "done", "true")
+        task_description = (
+            f"[goal_execution_result] task_id={task_id}"
+            + (f" group={group_id}[{subtask_index}]" if group_id is not None else "")
+        )
+        result_summary = (
+            f"device={device_id} status={status}"
+            + (f" latency={latency_ms}ms" if latency_ms else "")
+            + (f" result={str(result)[:120]}" if result else "")
+        )
+
+        tags = ["goal_execution_result", route_mode, device_id]
+        if group_id:
+            tags.append(f"group:{group_id}")
+
+        extra: Dict[str, Any] = {
+            "task_id": task_id,
+            "device_id": device_id,
+            "route_mode": route_mode,
+            "trace_id": trace_id,
+            "status": status,
+            "result": result,
+            "latency_ms": latency_ms,
+        }
+        if group_id is not None:
+            extra["group_id"] = group_id
+        if subtask_index is not None:
+            extra["subtask_index"] = subtask_index
+        if extra_payload:
+            extra["raw_payload"] = {
+                k: v for k, v in extra_payload.items()
+                if k not in ("image_base64", "screenshot_base64")
+            }
+
+        mem.record_task(
+            task=task_description,
+            result_summary=result_summary,
+            success=success,
+            strategy=route_mode,
+            session_id=session_id or trace_id or "",
+            tags=tags,
+            extra=extra,
+            task_type="goal_execution_result",
+        )
+
+        logger.debug(
+            "store_goal_execution_result: recorded task_id=%s device_id=%s "
+            "status=%s success=%s group_id=%s subtask_index=%s",
+            task_id, device_id, status, success, group_id, subtask_index,
+        )
+
+    except Exception as exc:
+        logger.warning(
+            "store_goal_execution_result: memory write failed (non-fatal): "
+            "task_id=%s error=%s",
+            task_id, exc,
+        )
+
+
 async def store_result_envelope(
     envelope: "Any",
     *,
