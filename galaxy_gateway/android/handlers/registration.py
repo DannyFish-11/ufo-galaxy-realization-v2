@@ -147,16 +147,22 @@ async def handle_device_register(
         # PR-C: register in the authoritative attached runtime session registry
         # (PR-19 single-truth source) so dispatch/reuse layers can look up the
         # active session identity.
+        # PR-G: pass through runtime_attachment_session_id if supplied by the
+        # client so the registry can use it for reconnect continuity judgment.
         try:
             from core.attached_runtime_session_registry import register_session
+            _client_rt_attach_id = message.get("runtime_attachment_session_id", "")
             _reg_entry = register_session(
                 device_id,
                 posture="join_runtime",
+                runtime_attachment_session_id=_client_rt_attach_id,
                 metadata={"registration_trigger": "android_device_register"},
             )
             logger.info(
-                "attached_runtime_session_registry: registered device_id=%s runtime_session_id=%s",
+                "attached_runtime_session_registry: registered device_id=%s runtime_session_id=%s"
+                " runtime_attachment_session_id=%s",
                 device_id, _reg_entry.runtime_session_id,
+                _reg_entry.runtime_attachment_session_id or "(none)",
             )
         except Exception as _reg_exc:
             logger.debug(

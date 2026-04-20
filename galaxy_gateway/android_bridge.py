@@ -850,8 +850,20 @@ class AndroidBridge:
             await self.disconnect_device(device_id)
             logger.warning("Device timed out: %s", device_id)
 
-    async def reconnect_device(self, device_id: str, websocket: Any) -> bool:
-        """重新连接设备（WebSocket 断线重连时调用）."""
+    async def reconnect_device(
+        self,
+        device_id: str,
+        websocket: Any,
+        *,
+        runtime_attachment_session_id: str = "",
+    ) -> bool:
+        """重新连接设备（WebSocket 断线重连时调用）.
+
+        PR-G: Accepts an optional ``runtime_attachment_session_id`` (client-
+        supplied identity anchor) for continuity judgment.  When provided, the
+        registry uses it to distinguish "restore existing attachment" from
+        "register new attachment".
+        """
         async with self._lock:
             device = self._devices.get(device_id)
             if device is None:
@@ -864,32 +876,66 @@ class AndroidBridge:
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
-        # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
-        # so that runtime_session_id is preserved and the session returns to active.
+        # PR-G: use resolve_reconnect_continuity to decide restore vs register_new.
+        # The existing non-PR-G path (fallback scan) is subsumed by the new judgment.
         try:
             from core.attached_runtime_session_registry import (
+                resolve_reconnect_continuity,
                 lookup_session_by_device,
                 reconnect_session,
+                register_session,
                 get_session_registry,
+                ReconnectContinuityVerdict,
             )
-            # First try the active pointer; fall back to the most-recent
-            # non-terminal entry (e.g. detached after a prior disconnect).
-            _entry = lookup_session_by_device(device_id)
-            if _entry is None:
-                _reg = get_session_registry()
-                for _e in _reg.list_all():
-                    if _e.device_id == device_id and not _e.is_terminal():
-                        _entry = _e
-                        break
-            if _entry is not None and not _entry.is_terminal():
-                _updated = reconnect_session(
-                    _entry,
-                    metadata={"reconnect_source": "android_bridge"},
+            _verdict = resolve_reconnect_continuity(
+                device_id,
+                runtime_attachment_session_id=runtime_attachment_session_id,
+            )
+            if _verdict == ReconnectContinuityVerdict.restore_existing:
+                # Find the most-recent non-terminal entry and restore it.
+                _entry = lookup_session_by_device(device_id)
+                if _entry is None:
+                    _reg = get_session_registry()
+                    for _e in _reg.list_all():
+                        if _e.device_id == device_id and not _e.is_terminal():
+                            _entry = _e
+                            break
+                if _entry is not None and not _entry.is_terminal():
+                    _updated = reconnect_session(
+                        _entry,
+                        metadata={"reconnect_source": "android_bridge"},
+                    )
+                    logger.info(
+                        "AttachedSessionRegistry: session RESTORED (continuity): "
+                        "device_id=%s runtime_session_id=%s "
+                        "runtime_attachment_session_id=%s reconnect_count=%d",
+                        device_id, _updated.runtime_session_id,
+                        _updated.runtime_attachment_session_id or "(none)",
+                        _updated.reconnect_count,
+                    )
+                else:
+                    # Edge case: verdict said restore but entry disappeared — register new.
+                    _new_entry = register_session(
+                        device_id,
+                        runtime_attachment_session_id=runtime_attachment_session_id,
+                        metadata={"reconnect_source": "android_bridge", "continuity_fallback": True},
+                    )
+                    logger.info(
+                        "AttachedSessionRegistry: session RE-REGISTERED (continuity fallback): "
+                        "device_id=%s runtime_session_id=%s",
+                        device_id, _new_entry.runtime_session_id,
+                    )
+            else:
+                # register_new verdict: create a fresh session, superseding any stale entry.
+                _new_entry = register_session(
+                    device_id,
+                    runtime_attachment_session_id=runtime_attachment_session_id,
+                    metadata={"reconnect_source": "android_bridge", "continuity_verdict": "register_new"},
                 )
                 logger.info(
-                    "AttachedSessionRegistry: session reconnected: "
-                    "device_id=%s runtime_session_id=%s reconnect_count=%d",
-                    device_id, _updated.runtime_session_id, _updated.reconnect_count,
+                    "AttachedSessionRegistry: NEW session registered on reconnect: "
+                    "device_id=%s runtime_session_id=%s",
+                    device_id, _new_entry.runtime_session_id,
                 )
         except Exception as _asr_exc:
             logger.debug(

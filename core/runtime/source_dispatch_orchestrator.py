@@ -832,6 +832,43 @@ EXISTING_EXECUTION_PATHS_REMAIN_FUNCTIONAL_DURING_MIGRATION_PR_F_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-G: Android Runtime Attachment Session Continuity
+# ---------------------------------------------------------------------------
+
+ANDROID_ATTACHMENT_SESSION_CONTINUITY_PRG_SENTINEL: str = (
+    "ANDROID_ATTACHMENT_SESSION_CONTINUITY_PRG::"
+    "source-dispatch-orchestrator::android-runtime-attachment-continuity::"
+    "runtime-attachment-session-id-canonical-handling::"
+    "reconnect-continuity-judgment-restore-vs-new::"
+    "dispatch-eligibility-preserved-through-reconnect::"
+    "package=PRG::post-533-dual-repo-runtime-unification"
+)
+
+DISPATCH_TARGET_CONTINUITY_REQUIRES_ACTIVE_SESSION_PRG_POLICY: str = (
+    "POLICY::DISPATCH_TARGET_CONTINUITY_REQUIRES_ACTIVE_SESSION_PRG: "
+    "An Android device may only be a canonical dispatch target when its "
+    "AttachedSessionRegistryEntry is in 'active' state.  A reconnect that "
+    "restores an existing session (ReconnectContinuityVerdict.restore_existing) "
+    "restores the device's dispatch eligibility without creating a new "
+    "runtime_session_id.  A reconnect that creates a new session supersedes "
+    "the old entry and re-establishes dispatch eligibility under the new "
+    "identity.  Dispatch target discovery MUST consult the registry as the "
+    "authoritative gate; a device not in 'active' state MUST NOT be selected. "
+    "PR-G."
+)
+
+RECONNECT_CONTINUITY_VERDICT_GATES_SESSION_IDENTITY_PRG_POLICY: str = (
+    "POLICY::RECONNECT_CONTINUITY_VERDICT_GATES_SESSION_IDENTITY_PRG: "
+    "resolve_reconnect_continuity() in core.attached_runtime_session_registry is "
+    "the canonical judgment point that determines whether a reconnecting Android "
+    "device should restore its prior runtime_session_id (restore_existing) or "
+    "receive a new one (register_new).  No other path may make this determination. "
+    "The verdict is idempotent and read-only; it does not mutate registry state. "
+    "PR-G."
+)
+
+
+# ---------------------------------------------------------------------------
 # PR-5A: Delegated target selection policy integration
 # ---------------------------------------------------------------------------
 
