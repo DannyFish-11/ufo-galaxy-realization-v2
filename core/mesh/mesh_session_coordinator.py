@@ -68,6 +68,17 @@ from typing import Any, Dict, List, Optional
 
 _logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# PR-J authority sentinel — live mesh runtime engine integration
+# ---------------------------------------------------------------------------
+
+MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL: str = (
+    "SENTINEL::MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J: "
+    "mesh_session_coordinator is now integrated with the LiveMeshRuntimeEngine "
+    "(PR-J) for true staged_mesh reachability; "
+    "package=PR-J::mesh-session-coordinator-live-runtime-integration"
+)
+
 
 # ---------------------------------------------------------------------------
 # Lazy contract imports — avoids hard dependency at import time
@@ -451,11 +462,152 @@ def get_coordinator_summary(
 
 
 # ---------------------------------------------------------------------------
+# PR-J: Live mesh runtime execution — module-level convenience functions
+# ---------------------------------------------------------------------------
+
+
+def run_live_mesh_session(
+    coordinator_state: Any,
+    *,
+    participant_results: Optional[Dict[str, Any]] = None,
+    barrier_timeout_seconds: float = 30.0,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """Drive a coordinator state to completion via the LiveMeshRuntimeEngine.
+
+    This is the PR-J live mesh execution entry point.  It advances the
+    coordinator from ``pending``/``staged`` through participant tracking,
+    barrier coordination, result merge, and finalisation.
+
+    Parameters
+    ----------
+    coordinator_state:
+        A :class:`~contracts.mesh_session_coordinator.MeshSessionCoordinatorState`
+        to drive to completion.
+    participant_results:
+        Optional mapping of ``device_id → result_dict``.
+    barrier_timeout_seconds:
+        Advisory barrier timeout in seconds.
+    metadata:
+        Optional extra metadata for the result.
+
+    Returns
+    -------
+    LiveMeshRunResult
+        Never raises.
+    """
+    try:
+        from core.mesh.live_mesh_runtime_engine import run_live_mesh_session as _run
+        return _run(
+            coordinator_state,
+            participant_results=participant_results,
+            barrier_timeout_seconds=barrier_timeout_seconds,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        _logger.warning("run_live_mesh_session: error: %s", exc)
+        # Return a minimal failure result
+        try:
+            from core.mesh.live_mesh_runtime_engine import LiveMeshRunResult
+            return LiveMeshRunResult(
+                session_id=getattr(coordinator_state, "session_id", None),
+                outcome="failed",
+                success=False,
+                errors=[f"run_live_mesh_session_error:{exc}"],
+                metadata=metadata or {},
+            )
+        except Exception:
+            return None
+
+
+def register_participant(
+    coordinator_state: Any,
+    device_id: str,
+    *,
+    roles: Optional[List[str]] = None,
+    online: bool = True,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """Register or update a participant in the coordinator state.
+
+    Delegates to :func:`core.mesh.live_mesh_runtime_engine.register_participant`.
+
+    Returns
+    -------
+    MeshSessionCoordinatorState
+        Updated coordinator state.  Never raises.
+    """
+    try:
+        from core.mesh.live_mesh_runtime_engine import register_participant as _reg
+        return _reg(
+            coordinator_state,
+            device_id,
+            roles=roles,
+            online=online,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        _logger.warning("register_participant: error: %s", exc)
+        return coordinator_state
+
+
+def update_participant_status(
+    coordinator_state: Any,
+    device_id: str,
+    status: str,
+) -> Any:
+    """Update the lifecycle status of a participant.
+
+    Delegates to :func:`core.mesh.live_mesh_runtime_engine.update_participant_status`.
+
+    Returns
+    -------
+    MeshSessionCoordinatorState
+        Updated coordinator state.  Never raises.
+    """
+    try:
+        from core.mesh.live_mesh_runtime_engine import update_participant_status as _upd
+        return _upd(coordinator_state, device_id, status)
+    except Exception as exc:
+        _logger.warning("update_participant_status: error: %s", exc)
+        return coordinator_state
+
+
+def drop_participant(
+    coordinator_state: Any,
+    device_id: str,
+    *,
+    reason: Optional[str] = None,
+) -> Any:
+    """Mark a participant as offline/dropped.
+
+    Delegates to :func:`core.mesh.live_mesh_runtime_engine.drop_participant`.
+
+    Returns
+    -------
+    MeshSessionCoordinatorState
+        Updated coordinator state.  Never raises.
+    """
+    try:
+        from core.mesh.live_mesh_runtime_engine import drop_participant as _drop
+        return _drop(coordinator_state, device_id, reason=reason)
+    except Exception as exc:
+        _logger.warning("drop_participant: error: %s", exc)
+        return coordinator_state
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL",
     "MeshSessionCoordinator",
     "coordinate_mesh_session",
     "get_coordinator_summary",
+    # PR-J live execution
+    "run_live_mesh_session",
+    "register_participant",
+    "update_participant_status",
+    "drop_participant",
 ]
