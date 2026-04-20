@@ -105,6 +105,10 @@ from core.runtime.source_dispatch_orchestrator import (
     STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY,
     STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY,
     STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY,
+    # PR-J: live mesh runtime engine
+    LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL,
+    LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY,
+    LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY,
     # PR-33: reconnect and recovery consistency hardening
     RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
     RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
@@ -144,6 +148,12 @@ from core.mesh.mesh_session_coordinator import (  # noqa: E402
     MeshSessionCoordinator,
     coordinate_mesh_session,
     get_coordinator_summary,
+    # PR-J: live mesh runtime execution helpers
+    run_live_mesh_session,
+    register_participant,
+    update_participant_status,
+    drop_participant,
+    MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
 )
 
 # PR-2 (post-533 dual-repo runtime host unification): posture-aware source
@@ -786,6 +796,10 @@ __all__ = [
     "STAGED_MESH_SESSION_COORDINATOR_INTEGRATION_PR32_POLICY",
     "STAGED_MESH_RESULT_INTEGRATION_CONTRACT_PR32_POLICY",
     "STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY",
+    # PR-J: live mesh runtime engine
+    "LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL",
+    "LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY",
+    "LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY",
     # PR-33: reconnect and recovery consistency hardening
     "RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL",
     "RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY",
@@ -816,6 +830,12 @@ __all__ = [
     "MeshSessionCoordinator",
     "coordinate_mesh_session",
     "get_coordinator_summary",
+    # PR-J: live mesh runtime execution helpers
+    "run_live_mesh_session",
+    "register_participant",
+    "update_participant_status",
+    "drop_participant",
+    "MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL",
     # PR-2: Posture-Aware Source Execution Eligibility
     "SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY",
     "CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",

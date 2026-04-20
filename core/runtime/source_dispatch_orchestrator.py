@@ -661,6 +661,34 @@ STAGED_MESH_GRACEFUL_DEGRADATION_FALLBACK_PR32_POLICY: str = (
     "MUST remain stable; no new error-surfacing mechanism is introduced."
 )
 
+# ---------------------------------------------------------------------------
+# PR-J: Live Mesh Runtime Engine + staged_mesh 真实可达化
+# ---------------------------------------------------------------------------
+
+LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL: str = (
+    "SENTINEL::LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J: "
+    "source_dispatch_orchestrator is now integrated with the LiveMeshRuntimeEngine "
+    "(PR-J) for true staged_mesh reachability via run_live_mesh_session(); "
+    "package=PR-J::live-mesh-runtime-engine-orchestrator-integration"
+)
+
+LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY: str = (
+    "POLICY::LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J: "
+    "When staged_mesh dispatch is selected, the orchestrator MUST invoke "
+    "run_live_mesh_session() from core.mesh.live_mesh_runtime_engine after "
+    "coordinate_mesh_session() to drive the coordinator state from staged/pending "
+    "to active and through the full execution lifecycle.  The live run result "
+    "MUST be surfaced in the SourceDispatchResult.result dict."
+)
+
+LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY: str = (
+    "POLICY::LIVE_MESH_RESULT_CONVERGENCE_PR_J: "
+    "The live mesh session result MUST carry a valid outcome ('completed', "
+    "'partial', or 'failed') and a merged_result dict.  The orchestrator MUST "
+    "propagate live_outcome and live_merged_result into the SourceDispatchResult "
+    "without introducing new result-surfacing authority."
+)
+
 
 # ---------------------------------------------------------------------------
 # PR-33: Reconnect and Recovery Consistency Hardening
@@ -2533,10 +2561,12 @@ def orchestrate_source_runtime_dispatch(
                 decision_reason = "remote_handoff:no_target_or_envelope:fallback_local"
 
         elif mode == SourceDispatchMode.staged_mesh:
-            # PR-32: Execute the minimal coordination closure via MeshSessionCoordinator.
+            # PR-32 + PR-J: Execute via MeshSessionCoordinator + LiveMeshRuntimeEngine.
             # staged_mesh must no longer stop at returning "plan prepared".
+            # PR-J advances execution all the way to a live convergent result.
             coordinator_state = None
             coordinator_summary = None
+            live_run_result = None
             try:
                 from core.mesh.mesh_session_coordinator import (
                     coordinate_mesh_session,
@@ -2556,6 +2586,20 @@ def orchestrate_source_runtime_dispatch(
                     ),
                 )
                 coordinator_summary = get_coordinator_summary(coordinator_state)
+
+                # PR-J: Drive the coordinator state to live completion
+                from core.mesh.live_mesh_runtime_engine import run_live_mesh_session
+                live_run_result = run_live_mesh_session(
+                    coordinator_state,
+                    participant_results={},
+                    metadata={"trace_id": trace_id, "task_id": task_id},
+                )
+                # Update coordinator_state from live run result
+                live_coord = getattr(live_run_result, "coordinator_state", None)
+                if live_run_result is not None and live_coord is not None:
+                    coordinator_state = live_coord
+                    coordinator_summary = get_coordinator_summary(coordinator_state)
+
             except Exception as exc:  # noqa: BLE001 - PR-32 graceful degradation
                 errors.append(f"staged_mesh_coordinator_error:{exc}")
                 logger.warning(
@@ -2580,6 +2624,18 @@ def orchestrate_source_runtime_dispatch(
                 elif isinstance(coordinator_summary, dict):
                     coordinator_summary_dict = coordinator_summary
 
+            # PR-J: extract live run result fields
+            live_outcome: Optional[str] = None
+            live_merged_result: Optional[Dict[str, Any]] = None
+            if live_run_result is not None:
+                live_outcome = getattr(live_run_result, "outcome", None)
+                live_merged_result = getattr(live_run_result, "merged_result", None)
+                # Propagate live run errors
+                live_errors = getattr(live_run_result, "errors", []) or []
+                for e in live_errors:
+                    if e not in errors:
+                        errors.append(e)
+
             exec_result = {
                 "action_taken": "staged_mesh_coordinated",
                 "success": success,
@@ -2590,6 +2646,9 @@ def orchestrate_source_runtime_dispatch(
                 ),
                 "coordinator_status": coordinator_status_val,
                 "coordinator_summary": coordinator_summary_dict,
+                # PR-J live execution fields
+                "live_outcome": live_outcome,
+                "live_merged_result": live_merged_result,
             }
             decision_reason = decision_reason or (
                 "staged_mesh:coordinated"
