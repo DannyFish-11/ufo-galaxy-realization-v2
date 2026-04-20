@@ -1161,8 +1161,12 @@ def _try_android_bridge_dispatch(
                 # no running loop (sync context).  This is the safe Python 3.10+
                 # idiom that does not create a stale event loop.
                 asyncio.get_running_loop()
-                # We ARE in a running loop — use a thread pool so we do not
-                # block it with a nested run_until_complete call.
+                # We ARE in a running loop — use a per-call ThreadPoolExecutor
+                # to offload the coroutine to a fresh thread with its own event
+                # loop.  A persistent shared executor is not used here because
+                # this dispatch path is low-frequency (one task at a time) and
+                # a shared executor would require lifecycle management that is
+                # disproportionate for this call site.
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
                     _fut = _pool.submit(asyncio.run, coro)
@@ -1210,9 +1214,10 @@ def _try_android_bridge_dispatch(
             "action_taken": "none",
         }
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "_try_android_bridge_dispatch: dispatch failed for device_id=%s: %s",
+        logger.warning(
+            "_try_android_bridge_dispatch: dispatch failed for device_id=%s task_id=%s: %s",
             device_id,
+            task_id,
             exc,
         )
         return {
@@ -2319,6 +2324,9 @@ def orchestrate_source_runtime_dispatch(
                 # AndroidBridge / DeviceRouter.  If the device is not in the
                 # Android transport layer, we fall through to the generic
                 # HandoffEnvelopeV2 path below.
+                # `not success` is always True here (success is initialised to
+                # False and no earlier branch sets it to True in this mode).
+                # The guard is kept explicit for defensive clarity.
                 if _target_dev and not success:
                     _android_resp = _try_android_bridge_dispatch(
                         _target_dev,

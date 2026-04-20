@@ -557,10 +557,7 @@ class TestTargetDiscoveryAndroidDevice:
         )
 
         monkeypatch.setattr(
-            "core.runtime.source_dispatch_orchestrator."
-            "core.attached_runtime_session_registry.list_active_sessions"
-            if False  # block — use direct path below
-            else "core.attached_runtime_session_registry.list_active_sessions",
+            "core.attached_runtime_session_registry.list_active_sessions",
             lambda **kw: [entry],
             raising=False,
         )
