@@ -269,9 +269,13 @@ class TestSectionA_ModuleAvailability:
         assert callable(orchestrate_source_runtime_dispatch)
 
     def test_a9_pr_j_sentinel_is_present_and_non_empty(self) -> None:
-        """PR-J sentinel must be present — confirms PR-J is loaded, not bypassed."""
-        if not _ENGINE_AVAILABLE:
-            pytest.skip("engine not available")
+        """PR-J sentinel must be present — confirms PR-J is loaded, not bypassed.
+
+        Unlike tests a1-a8 which use direct imports to assert availability,
+        this test validates the sentinel VALUE after a confirmed import.
+        It fails (not skips) if the engine is unavailable.
+        """
+        from core.mesh.live_mesh_runtime_engine import LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL
         assert "PR-J" in LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL
         assert len(LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL) > 20
 
@@ -1086,7 +1090,7 @@ class TestSectionH_AndroidInterfaceContract:
             "device_id": "android_h6",
         }
         envelope = from_android_ack_message(ack_msg)
-        # is_terminal is a @property, not callable
+        # is_terminal is accessed as an attribute (property), not called as a method
         assert envelope.is_terminal is False, (
             "ACK must not be terminal — execution is still in progress"
         )
@@ -1118,9 +1122,18 @@ class TestSectionH_AndroidInterfaceContract:
     def test_h9_extract_handoff_response_envelope_dispatches_correctly(self) -> None:
         """extract_handoff_response_envelope must correctly classify message kinds."""
         messages = [
-            ({"type": "handoff_ack", "handoff_id": "x"}, HandoffResponseKind.ack),
-            ({"type": "handoff_result", "handoff_id": "x", "success": True}, HandoffResponseKind.result),
-            ({"type": "handoff_failure", "handoff_id": "x"}, HandoffResponseKind.failure),
+            (
+                {"type": "handoff_ack", "handoff_id": "test_handoff_id_ack", "device_id": "android_h9"},
+                HandoffResponseKind.ack,
+            ),
+            (
+                {"type": "handoff_result", "handoff_id": "test_handoff_id_result", "device_id": "android_h9", "success": True},
+                HandoffResponseKind.result,
+            ),
+            (
+                {"type": "handoff_failure", "handoff_id": "test_handoff_id_failure", "device_id": "android_h9"},
+                HandoffResponseKind.failure,
+            ),
         ]
         for msg, expected_kind in messages:
             envelope = extract_handoff_response_envelope(msg)
