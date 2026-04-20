@@ -86,6 +86,61 @@ async def handle_device_register(
                 device_id, _mesh_exc,
             )
 
+        # PR-C: Attach runtime session — promotes the device from "registered object"
+        # to "attached runtime node" visible in the AttachedRuntimeSessionRegistry.
+        # Uses join_runtime posture (default) so the record achieves attachment_state=attached.
+        # Idempotent: repeated registration/reconnect refreshes the existing record.
+        try:
+            from core.attached_runtime_session import attach_runtime_session
+            _raw_posture = message.get("source_runtime_posture")
+            if isinstance(_raw_posture, str) and _raw_posture.strip():
+                _posture = _raw_posture.lower().strip()
+            else:
+                _posture = "join_runtime"
+            attach_runtime_session(
+                device_id,
+                source_runtime_posture=_posture,
+                attach_reason="android_device_register",
+                metadata={"platform": "android", "trigger": "device_register"},
+            )
+            logger.info(
+                "Attached runtime session for device: device_id=%s posture=%s",
+                device_id, _posture,
+            )
+        except Exception as _attach_exc:
+            logger.debug(
+                "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
+                device_id, _attach_exc,
+            )
+
+        # PR-C: BodyMeshRegistry role assignment — infer roles from capabilities
+        # and register the device in the mesh so it becomes a projection/participation candidate.
+        # Idempotent: repeated calls merge/update roles rather than duplicating entries.
+        try:
+            from galaxy_gateway.android_bridge import DeviceCapability
+            from core.mesh.device_role_allocator import get_device_role_allocator
+            raw_caps = message.get("capabilities", 0)
+            if isinstance(raw_caps, int):
+                caps_list = DeviceCapability.to_list(raw_caps)
+            elif isinstance(raw_caps, (list, tuple)):
+                caps_list = [str(c) for c in raw_caps]
+            else:
+                caps_list = []
+            _alloc_result = get_device_role_allocator().allocate(
+                device_id=device_id,
+                capabilities=caps_list,
+                extra_metadata={"platform": "android", "trigger": "device_register"},
+            )
+            logger.info(
+                "BodyMeshRegistry roles assigned: device_id=%s roles=%s",
+                device_id, [r.value for r in _alloc_result.roles_assigned],
+            )
+        except Exception as _role_exc:
+            logger.debug(
+                "android_bridge: body mesh role assignment non-fatal: device_id=%s error=%s",
+                device_id, _role_exc,
+            )
+
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s",
             device_id, device.model, device.platform,

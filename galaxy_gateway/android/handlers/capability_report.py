@@ -111,6 +111,28 @@ async def handle_capability_report(
         except Exception as sync_err:
             logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
 
+    # PR-C: BodyMeshRegistry role update — refresh roles based on the reported
+    # supported_actions.  Runs after both registry syncs so that the body mesh
+    # reflects the most current capability set.  Idempotent: repeated reports
+    # merge/update roles rather than creating duplicate entries.
+    if device_id:
+        try:
+            from core.mesh.device_role_allocator import get_device_role_allocator
+            _alloc_result = get_device_role_allocator().allocate(
+                device_id=device_id,
+                capabilities=list(supported_actions),
+                extra_metadata={"platform": platform or "android", "trigger": "capability_report"},
+            )
+            logger.info(
+                "capability_report: BodyMeshRegistry roles updated: device_id=%s roles=%s",
+                device_id, [r.value for r in _alloc_result.roles_assigned],
+            )
+        except Exception as _role_exc:
+            logger.debug(
+                "capability_report: body mesh role update non-fatal: device_id=%s error=%s",
+                device_id, _role_exc,
+            )
+
     return MessageBuilder.capability_report_ack(
         device_id=device_id or "unknown",
         accepted=True,
