@@ -1296,49 +1296,166 @@ class DesktopPresenceRuntime:
         status: str,
         result: str,
         trace_id: str,
+        *,
+        group_id: Optional[str] = None,
+        group_summary: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """收到设备端目标执行结果时的回调。
+        """收到设备端目标执行结果时的回调 — canonical result 收口。
 
         由 GalaxyGateway.android_bridge._handle_goal_execution_result 调用，
         在结果持久化到 TaskMemory 之后触发。
 
-        用途：
-        - 更新当前 RuntimeSession 的运行时状态
-        - 记录跨设备执行结果到 continuum（用于 LLM 上下文注入）
-        - 触发后续自动化链（如果 GoalExecutionPayload 指定了 follow_up 动作）
+        本方法承担以下职责：
+        1. 记录结构化日志（可观测性）
+        2. 将结果写入 CanonicalTaskRuntime（更新 lifecycle → COMPLETED/FAILED）
+        3. 将结果注入匹配的 RuntimeSession 上下文（供 LLM 后续推理）
+        4. 将结果写入 TaskMemory（canonical backflow）
 
-        当前实现：日志记录（可扩展为 Future Continuum 集成）
+        Args:
+            task_id: Unique identifier for the task that completed.
+            device_id: ID of the Android device that produced the result.
+            status: Execution status string (e.g. ``"completed"``, ``"failed"``).
+            result: Human-readable result or error summary text.
+            trace_id: Correlation trace ID propagated from the original request.
+            group_id: Optional group identifier when this result belongs to a
+                parallel/grouped subtask batch.  Provided only on the
+                group-complete notification emitted by the goal_execution handler.
+            group_summary: Optional aggregated summary dict produced by
+                :class:`~core.goal_result_aggregator.GoalResultAggregator` when
+                the group-complete notification fires.  Contains fields such as
+                ``overall_success``, ``completed_count``, ``success_count``, etc.
         """
+        _status_lower = (status or "").lower().strip()
+        _success = _status_lower in ("completed", "success", "done", "true")
+
         logger.info(
-            "GoalExecutionResult received | task_id=%s device_id=%s status=%s " "result=%r trace_id=%s",
+            "GoalExecutionResult received | task_id=%s device_id=%s status=%s "
+            "result=%r trace_id=%s group_id=%s",
             task_id,
             device_id,
             status,
             str(result)[:100],
             trace_id,
+            group_id,
         )
-        # ── 查找对应的 runtime session 并注入结果 ────────────────────────
-        # 注意：当 Android 通过 TASK_SUBMIT/GOAL_EXECUTION 发起会话时，
-        # DesktopPresenceRuntime 会创建一个 RuntimeSession。
-        # 这里可以将结果注入该 session 的上下文，供 LLM 后续推理使用。
-        # 目前为 Future Continuum 集成预留接口。
-        # TODO: 当 Continuum.openclowd_memory_integration 就绪后，
-        #       在此处注入 result 到 session.context，确保 LLM 可感知跨设备执行结果。
+
+        # ── 1. Write to CanonicalTaskRuntime ─────────────────────────────
+        try:
+            from core.canonical_task import (
+                get_canonical_task_runtime,
+                TaskLifecycle,
+                build_canonical_task,
+                TaskOrigin,
+            )
+            ctr = get_canonical_task_runtime()
+            canonical_task = ctr.get_by_task_id(task_id)
+            if canonical_task is not None:
+                new_lifecycle = (
+                    TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
+                )
+                canonical_task.result.success = _success
+                canonical_task.result.result_summary = (
+                    str(result)[:400] if result else f"status={status}"
+                )
+                ctr.update_lifecycle(task_id, new_lifecycle)
+                logger.debug(
+                    "GoalExecutionResult: CanonicalTask updated | task_id=%s lifecycle=%s",
+                    task_id,
+                    new_lifecycle.value,
+                )
+            else:
+                # Task not registered — create a lightweight record so the
+                # result is at least visible in the observability ring-buffer.
+                try:
+                    new_task = build_canonical_task(
+                        task_id=task_id,
+                        trace_id=trace_id or task_id,
+                        goal=f"[goal_execution_result] task_id={task_id}",
+                        origin=TaskOrigin.DEVICE_COMMAND,
+                        selected_targets=[device_id],
+                    )
+                    new_task.result.success = _success
+                    new_task.result.result_summary = (
+                        str(result)[:400] if result else f"status={status}"
+                    )
+                    new_lifecycle = (
+                        TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
+                    )
+                    new_task.advance_lifecycle(TaskLifecycle.ADMITTED)
+                    new_task.advance_lifecycle(TaskLifecycle.RUNNING)
+                    new_task.advance_lifecycle(new_lifecycle)
+                    ctr.register(new_task)
+                    logger.debug(
+                        "GoalExecutionResult: new CanonicalTask registered (result-first) | "
+                        "task_id=%s lifecycle=%s",
+                        task_id,
+                        new_lifecycle.value,
+                    )
+                except Exception as _build_err:
+                    logger.debug(
+                        "GoalExecutionResult: build_canonical_task failed (non-fatal): %s",
+                        _build_err,
+                    )
+        except Exception as ctr_err:
+            logger.debug(
+                "GoalExecutionResult: CanonicalTaskRuntime update failed (non-fatal): %s",
+                ctr_err,
+            )
+
+        # ── 2. Inject result into matching RuntimeSession ────────────────
         try:
             if hasattr(self, "_active_sessions") and self._active_sessions:
                 for session in self._active_sessions.values():
                     if session.runtime_session_id == trace_id:
-                        # 将结果注入 session 上下文（Future: Continuum 集成点）
+                        # Attach result context to the session so that
+                        # subsequent LLM reasoning can observe it.
+                        if not hasattr(session, "goal_results"):
+                            session.goal_results = {}  # type: ignore[attr-defined]
+                        session.goal_results[task_id] = {  # type: ignore[attr-defined]
+                            "task_id": task_id,
+                            "device_id": device_id,
+                            "status": status,
+                            "result": result,
+                            "success": _success,
+                            "group_id": group_id,
+                        }
                         logger.debug(
-                            "GoalExecutionResult injected into session %s | task_id=%s",
+                            "GoalExecutionResult: injected into session %s | task_id=%s",
                             trace_id,
                             task_id,
                         )
                         break
         except Exception as inject_err:
             logger.debug(
-                "GoalExecutionResult session injection failed (non-fatal): %s",
+                "GoalExecutionResult: session injection failed (non-fatal): %s",
                 inject_err,
+            )
+
+        # ── 3. Canonical TaskMemory backflow ─────────────────────────────
+        try:
+            from core.openclawd_memory_backflow import store_task_result as _store_task_result_fn
+            await _store_task_result_fn(
+                task_id=task_id,
+                device_id=device_id,
+                route_mode="goal_execution",
+                result={
+                    "status": status,
+                    "result": result,
+                    "trace_id": trace_id,
+                    "task_type": "goal_execution_result",
+                    "group_id": group_id,
+                    "group_summary": group_summary,
+                },
+                session_id=trace_id or None,
+            )
+            logger.debug(
+                "GoalExecutionResult: TaskMemory canonical backflow completed | task_id=%s",
+                task_id,
+            )
+        except Exception as mem_err:
+            logger.debug(
+                "GoalExecutionResult: TaskMemory backflow failed (non-fatal): %s",
+                mem_err,
             )
 
     def _log_request_start(
