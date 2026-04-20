@@ -107,7 +107,13 @@ async def handle_agent_ping(
 async def handle_agent_status(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """处理 agent_status（readiness/posture 证据）."""
+    """处理 agent_status（readiness/posture 证据）.
+
+    Android posture gating: if the status payload carries a
+    ``source_runtime_posture`` or ``posture`` field the canonical
+    posture for the device's active registry session is updated so that
+    dispatch target selection reflects the device's real runtime state.
+    """
     device_id = message.get("device_id")
     status_payload = message.get("status") or message.get("payload") or {}
 
@@ -116,6 +122,39 @@ async def handle_agent_status(
         if isinstance(status_payload, dict) and status_payload:
             meta_patch["metadata"] = {"agent_status_report": status_payload}
         bridge._patch_runtime_state_to_udm(device_id, meta_patch, source="android_bridge.agent_status")
+
+        # Android posture gating: propagate the device's current participation
+        # posture into the attached runtime session registry so that dispatch
+        # target selection gates on actual posture rather than the default set
+        # at registration time.
+        if isinstance(status_payload, dict):
+            _posture_hint = (
+                status_payload.get("source_runtime_posture")
+                or status_payload.get("posture")
+            )
+            if _posture_hint:
+                try:
+                    from core.attached_runtime_session_registry import (
+                        update_session_posture,
+                    )
+
+                    update_session_posture(
+                        device_id,
+                        str(_posture_hint),
+                        metadata={"posture_source": "agent_status"},
+                    )
+                    logger.debug(
+                        "android_bridge: updated posture device_id=%s posture=%s",
+                        device_id,
+                        _posture_hint,
+                    )
+                except Exception as _posture_exc:
+                    logger.debug(
+                        "android_bridge: update_session_posture non-fatal:"
+                        " device_id=%s error=%s",
+                        device_id,
+                        _posture_exc,
+                    )
 
     async with bridge._lock:
         if device_id in bridge._devices:

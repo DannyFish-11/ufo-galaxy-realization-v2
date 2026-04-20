@@ -1383,3 +1383,98 @@ def build_registry_snapshot(
     if registry is None:
         registry = get_session_registry()
     return registry.snapshot()
+
+
+# ---------------------------------------------------------------------------
+# Core API — update_session_posture  (Android posture gating)
+# ---------------------------------------------------------------------------
+
+ANDROID_POSTURE_GATING_UPDATE_AUTHORITY: str = (
+    "POLICY::ANDROID_POSTURE_GATING_UPDATE_AUTHORITY: "
+    "update_session_posture() is the canonical API for updating the posture "
+    "field of an active registry entry without triggering a state transition. "
+    "The posture field reflects the device's current runtime participation "
+    "posture ('join_runtime' or 'control_only') and directly gates dispatch "
+    "target selection.  Callers MUST use this function to update posture "
+    "rather than re-registering the session or mutating the entry directly."
+)
+
+
+def update_session_posture(
+    device_id: str,
+    posture: str,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> Optional[AttachedSessionRegistryEntry]:
+    """Update the participation posture of the active session for *device_id*.
+
+    This is a lightweight in-place posture field update that does NOT trigger
+    a state transition and does NOT change the ``runtime_session_id``.  It is
+    the canonical API for applying Android-side posture signals received via
+    ``agent_status`` or ``source_posture_update`` messages.
+
+    Unknown or invalid posture values are normalised to ``control_only`` (the
+    safe conservative default) rather than silently dropped.  Callers that
+    want ``join_runtime`` MUST pass the exact string ``"join_runtime"``.
+
+    Parameters
+    ----------
+    device_id
+        Device identifier whose active session posture should be updated.
+    posture
+        New posture value; normalised to lowercase.  Must be one of
+        ``"join_runtime"`` or ``"control_only"``.  Unknown values are
+        normalised to ``"control_only"`` (safe conservative default).
+    metadata
+        Optional metadata to merge into the entry's existing metadata.
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    AttachedSessionRegistryEntry | None
+        The updated entry if an active session was found; ``None`` if no
+        active session exists for *device_id*.
+    """
+    if registry is None:
+        registry = get_session_registry()
+
+    entry = registry.get_active_for_device(device_id)
+    if entry is None:
+        return None
+
+    # Normalise posture: only known values are accepted; unknowns → control_only.
+    _normalised = (posture or "").strip().lower()
+    if _normalised not in (_POSTURE_JOIN_RUNTIME, _POSTURE_CONTROL_ONLY):
+        _normalised = _POSTURE_CONTROL_ONLY
+
+    now = time.time()
+    updated = AttachedSessionRegistryEntry(
+        entry_id=entry.entry_id,
+        session_id=entry.session_id,
+        device_id=entry.device_id,
+        runtime_session_id=entry.runtime_session_id,
+        attachment_state=entry.attachment_state,
+        invalidation_reason=entry.invalidation_reason,
+        posture=_normalised,
+        host_role=entry.host_role,
+        coordination_role=entry.coordination_role,
+        capability_tier=entry.capability_tier,
+        last_transition=entry.last_transition,
+        previous_state=entry.previous_state,
+        registered_at=entry.registered_at,
+        last_transition_at=now,
+        metadata={**entry.metadata, **(metadata or {})},
+        reconnect_count=entry.reconnect_count,
+        last_reconnect_at=entry.last_reconnect_at,
+    )
+
+    replaced = registry._replace_in_buffer(updated)
+    if not replaced:
+        registry._push(updated)
+    else:
+        registry._update_indices(updated)
+
+    return updated
