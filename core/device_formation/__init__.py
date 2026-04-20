@@ -178,6 +178,14 @@ from .formation_runtime_coordinator import (
     DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY,
     RECOVERY_PRESERVES_SOURCE_POLICY,
 )
+from .formation_auto_enrollment import (
+    FormationParticipantEntry,
+    FormationAutoEnrollmentManager,
+    get_formation_auto_enrollment_manager,
+    reset_formation_auto_enrollment_manager,
+    FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
+    FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
+)
 
 __all__ = [
     # Formation roles
@@ -231,4 +239,11 @@ __all__ = [
     "FORMATION_RECOVERY_HOOKS_GAP_CLOSURE_SENTINEL",
     "DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY",
     "RECOVERY_PRESERVES_SOURCE_POLICY",
+    # Auto-enrollment manager
+    "FormationParticipantEntry",
+    "FormationAutoEnrollmentManager",
+    "get_formation_auto_enrollment_manager",
+    "reset_formation_auto_enrollment_manager",
+    "FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY",
+    "FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY",
 ]
