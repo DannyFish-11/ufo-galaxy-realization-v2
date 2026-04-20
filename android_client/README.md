@@ -6,14 +6,14 @@
 
 Android 客户端 APK 的唯一来源：
 
-👉 **https://github.com/DannyFish-11/galaxy-android**
+👉 **https://github.com/DannyFish-11/ufo-galaxy-android**
 
 ## 如何克隆和构建 APK
 
 ```bash
 # 1. 克隆独立仓库
-git clone https://github.com/DannyFish-11/galaxy-android.git
-cd galaxy-android
+git clone https://github.com/DannyFish-11/ufo-galaxy-android.git
+cd ufo-galaxy-android
 
 # 2. 配置服务端地址（编辑 app/build.gradle）
 #    buildConfigField "String", "GALAXY_SERVER_URL", '"ws://YOUR_SERVER_IP:8765"'
@@ -55,7 +55,7 @@ AIP v3.0（Android Integration Protocol v3.0）
 
 ```
 独立仓库(APK)
-  DannyFish-11/galaxy-android
+  DannyFish-11/ufo-galaxy-android
         │
         │  WebSocket (AIP v3.0)
         │  ws://<host>:8765/ws/android

@@ -3,6 +3,17 @@
 Galaxy Launcher v2.0
 DeepSeek Audited Architecture - Smart Startup Orchestrator
 
+.. deprecated::
+    ``scripts/launcher_v2.py`` is a **legacy Docker/container orchestration helper**
+    and is NOT the canonical system startup path.
+
+    **Canonical startup authority**: ``main.py``
+    **Canonical subordinate launcher**: ``unified_launcher.py``
+
+    Use ``python main.py`` to start the Galaxy-Nexus system.
+    This script is retained only for container/Docker deployment workflows via
+    ``docker-compose``.  Do not use it as a substitute for ``main.py``.
+
 Features:
 - Phased startup sequence
 - Health check verification
