@@ -48,14 +48,26 @@ class MessageBuilder:
     @classmethod
     def task_assign(cls, device_id: str, task_id: str, task_type: str,
                     payload: Dict[str, Any], priority: int = 5,
-                    timeout: int = 300) -> Dict[str, Any]:
-        """分配任务"""
+                    timeout: int = 300,
+                    trace_id: Optional[str] = None) -> Dict[str, Any]:
+        """分配任务
+
+        Parameters
+        ----------
+        trace_id:
+            Optional distributed trace identifier.  When provided it is
+            stamped as a top-level field on the AIP message for end-to-end
+            observability.  It is also accessible inside the ``payload``
+            dict when embedded there by the orchestrator dispatch path.
+        """
         msg = cls._base_message(MessageType.TASK_ASSIGN, device_id)
         msg["task_id"] = task_id
         msg["task_type"] = task_type
         msg["payload"] = payload
         msg["priority"] = priority
         msg["timeout"] = timeout
+        if trace_id:
+            msg["trace_id"] = trace_id
         return msg
 
     @classmethod
