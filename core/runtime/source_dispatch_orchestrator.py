@@ -2595,8 +2595,9 @@ def orchestrate_source_runtime_dispatch(
                     metadata={"trace_id": trace_id, "task_id": task_id},
                 )
                 # Update coordinator_state from live run result
-                if live_run_result is not None and getattr(live_run_result, "coordinator_state", None) is not None:
-                    coordinator_state = live_run_result.coordinator_state
+                live_coord = getattr(live_run_result, "coordinator_state", None)
+                if live_run_result is not None and live_coord is not None:
+                    coordinator_state = live_coord
                     coordinator_summary = get_coordinator_summary(coordinator_state)
 
             except Exception as exc:  # noqa: BLE001 - PR-32 graceful degradation

@@ -155,6 +155,8 @@ class LiveMeshRunResult:
         List of error strings accumulated during execution.
     metadata:
         Arbitrary extension metadata.
+    created_at:
+        Unix timestamp (seconds) when this result was created.
     """
 
     def __init__(
@@ -188,7 +190,13 @@ class LiveMeshRunResult:
         self.created_at: float = time.time()
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return a stable, JSON-safe dictionary."""
+        """Return a stable, JSON-safe dictionary representation.
+
+        Returned keys: ``run_id``, ``session_id``, ``mesh_id``, ``trace_id``,
+        ``outcome``, ``success``, ``merged_result``, ``participant_outcomes``,
+        ``barrier_released``, ``coordinator_state``, ``errors``, ``metadata``,
+        ``created_at``.
+        """
         coord_dict: Any = None
         if self.coordinator_state is not None:
             if hasattr(self.coordinator_state, "to_dict"):
