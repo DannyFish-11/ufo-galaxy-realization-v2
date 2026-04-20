@@ -125,9 +125,7 @@ from core.runtime.source_dispatch_orchestrator import (
     # PR-closure: Android terminal signal → canonical ReplayFoundation truth
     ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
     ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
-    _ANDROID_TERMINAL_SIGNAL_KINDS,
 )
-
 # PR-36: Cross-Runtime Result Merge Contract helpers
 from contracts.cross_runtime_result_merge import (
     RuntimeResultRole,

@@ -280,8 +280,13 @@ class TestGroupA_AuthorityChain:
         """_ANDROID_TERMINAL_SIGNAL_KINDS must be a frozenset containing the four
         terminal signal kind strings."""
         assert isinstance(_ANDROID_TERMINAL_SIGNAL_KINDS, frozenset)
-        for kind in ("cancelled", "error", "final_result", "timeout"):
-            assert kind in _ANDROID_TERMINAL_SIGNAL_KINDS
+        # Use the imported frozenset as the source of truth; enumerate expected values
+        # via the frozenset itself rather than duplicating them as a hardcoded tuple.
+        for kind in _ANDROID_TERMINAL_SIGNAL_KINDS:
+            assert isinstance(kind, str), f"Expected str kind, got {type(kind)}: {kind!r}"
+        # Also verify the four canonical terminal kinds are all present.
+        expected_terminal_kinds = frozenset({"cancelled", "error", "final_result", "timeout"})
+        assert expected_terminal_kinds == _ANDROID_TERMINAL_SIGNAL_KINDS
 
     @pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator unavailable")
     def test_a9_new_sentinels_reexported_from_core_runtime(self) -> None:

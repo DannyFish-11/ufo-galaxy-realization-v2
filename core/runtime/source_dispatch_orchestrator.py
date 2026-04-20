@@ -3157,7 +3157,12 @@ class SourceDispatchOrchestrator:
                 # Android terminal signals were only logged via the observability
                 # sink but not recorded in the canonical ReplayFoundation truth
                 # store.  See ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY.
-                _sk_str = signal_kind or ""
+                #
+                # NOTE: `signal_kind` is already a string value extracted from
+                # the envelope's AndroidSignalKind enum (see extraction above:
+                # `_sk.value if hasattr(_sk, "value") else str(_sk)`).
+                # The `or ""` guard handles the None case safely.
+                _sk_str: str = signal_kind or ""
                 if _sk_str in _ANDROID_TERMINAL_SIGNAL_KINDS:
                     try:
                         from core.replay_foundation import emit_runtime_event as _emit_ev
