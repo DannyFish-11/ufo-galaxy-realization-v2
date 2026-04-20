@@ -142,7 +142,7 @@ def _fresh() -> "AttachedSessionRegistry":
 
 
 @_skip_registry
-class TestPolicysentinels:
+class TestPolicySentinels:
     def test_AA1_prg_sentinel_non_empty(self):
         assert ATTACHMENT_SESSION_CONTINUITY_PRG_SENTINEL
         assert "PRG" in ATTACHMENT_SESSION_CONTINUITY_PRG_SENTINEL
@@ -581,7 +581,7 @@ class TestResolveReconnectContinuityIdempotent:
 
 
 @_skip_registry
-class TestNoduplicateActiveSessions:
+class TestNoDuplicateActiveSessions:
     def test_PA1_single_active_session_after_reconnects(self):
         reg = _fresh()
         entry = register_session(
