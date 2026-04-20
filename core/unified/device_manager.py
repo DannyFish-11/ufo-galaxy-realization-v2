@@ -15,6 +15,7 @@ Canonical mutation path::
     caller → galaxy_gateway.ssot.udm_write_*()
             → UnifiedDeviceManager  ← THIS CLASS (SSOT write point)
             → CapabilityBus          (device capabilities propagated automatically)
+            → CapabilityAssimilationLayer  (device enters capability/network graph)
 
 Downstream modules that maintain their own per-device records (e.g.
 ``core.device_registry``, ``core.device_pool_manager``,
@@ -168,6 +169,14 @@ class UnifiedDeviceManager:
         # call — failure to propagate never prevents device registration.
         self._propagate_capabilities_to_bus(device)
 
+        # Capability assimilation integration:
+        # Project the device into the CapabilityAssimilationLayer so that its
+        # capabilities become visible in the capability graph, network graph,
+        # and task graph — enabling capability-based routing, target selection,
+        # and formation participation.  This call is idempotent: re-registering
+        # a device simply updates its assimilation record.
+        self._assimilate_device_capabilities(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -311,6 +320,58 @@ class UnifiedDeviceManager:
                 extra={"event": "capability_bus_remove_skip", "device_id": device_id},
             )
 
+    def _assimilate_device_capabilities(self, device: UnifiedDevice) -> None:
+        """Project *device* into the CapabilityAssimilationLayer.
+
+        This ensures the device is visible in the capability graph, network
+        graph, and task graph — enabling capability-based routing, target
+        selection, and formation participation.  The call is idempotent: if
+        the device was already assimilated, its record is updated in-place
+        (presence state → ONLINE, capabilities merged).
+
+        Failure is logged at DEBUG level and never raises — device registration
+        must succeed even if the assimilation layer is unavailable.
+        """
+        try:
+            from core.capability_assimilation import assimilate_device  # noqa: PLC0415
+
+            caps = [str(c).strip() for c in (device.capabilities or []) if str(c).strip()]
+            host = device.ip_address or "localhost"
+            port = device.port or 0
+            meta: Dict[str, Any] = dict(device.metadata or {})
+            meta.setdefault("device_name", device.device_name or device.device_id)
+            meta.setdefault("device_type", str(device.device_type))
+            meta.setdefault("source", device.source or "udm")
+
+            assimilate_device(
+                device.device_id,
+                capabilities=caps,
+                host=host,
+                port=port,
+                tags=[str(device.device_type)],
+                metadata=meta,
+            )
+            logger.debug(
+                "Assimilated device %s into CapabilityAssimilationLayer (%d capabilities)",
+                device.device_id,
+                len(caps),
+                extra={
+                    "event": "capability_assimilation_project",
+                    "device_id": device.device_id,
+                    "capabilities": caps,
+                },
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityAssimilationLayer projection skipped for device %s: %s",
+                device.device_id,
+                exc,
+                extra={
+                    "event": "capability_assimilation_skip",
+                    "device_id": device.device_id,
+                },
+            )
+
     # ------------------------------------------------------------------
     # 状态更新
     # ------------------------------------------------------------------
@@ -420,6 +481,13 @@ class UnifiedDeviceManager:
                 "timestamp": now.isoformat(),
             },
         )
+
+        # Re-assimilate whenever capabilities (or host/port) change so the
+        # capability graph always reflects the latest device state.  This call
+        # is idempotent — it updates the existing assimilation record in-place.
+        if any(f in fields_changed for f in ("capabilities", "ip_address", "port")):
+            self._assimilate_device_capabilities(device)
+
         return device
 
     def update_device_status(self, device_id: str, status: UnifiedDeviceStatus) -> None:

@@ -48,6 +48,15 @@ def _reset_capability_bus_singleton() -> None:
         pass
 
 
+def _reset_assimilation_layer() -> None:
+    """Reset the CapabilityAssimilationLayer singleton between tests."""
+    try:
+        from core.capability_assimilation import reset_capability_assimilation_layer
+        reset_capability_assimilation_layer()
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # 1. UDM register → CapabilityBus propagation
 # ---------------------------------------------------------------------------
@@ -471,6 +480,197 @@ class TestDeviceStatusAPIArchitectureRole(unittest.TestCase):
             "presentation",
             doc.lower(),
             "device_status_api must describe its presentation-layer role",
+        )
+
+
+# ---------------------------------------------------------------------------
+# 8. UDM register → CapabilityAssimilationLayer projection
+# ---------------------------------------------------------------------------
+
+class TestUDMCapabilityAssimilationProjection(unittest.TestCase):
+    """Registering a device via UDM must project it into CapabilityAssimilationLayer."""
+
+    def setUp(self):
+        _reset_udm_singleton()
+        _reset_capability_bus_singleton()
+        _reset_assimilation_layer()
+
+    def tearDown(self):
+        _reset_udm_singleton()
+        _reset_capability_bus_singleton()
+        _reset_assimilation_layer()
+
+    def test_register_device_projects_into_assimilation_layer(self):
+        """Capabilities declared on a device appear in CapabilityAssimilationLayer after UDM registration."""
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+        from core.capability_assimilation import get_capability_assimilation_layer
+
+        udm = UnifiedDeviceManager()
+        device = UnifiedDevice(
+            device_id="assimilate_test_001",
+            device_name="Assimilation Phone",
+            device_type=UnifiedDeviceType.ANDROID,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=["screen", "camera", "touch"],
+            metadata={},
+        )
+        udm.register_device(device)
+
+        layer = get_capability_assimilation_layer()
+        record = layer._records.get("assimilate_test_001")
+
+        self.assertIsNotNone(
+            record,
+            "Device must appear in CapabilityAssimilationLayer after UDM registration",
+        )
+        self.assertIn(
+            "screen",
+            record.capability_descriptor.capabilities,
+            "'screen' capability must be visible in assimilation record",
+        )
+        self.assertIn(
+            "camera",
+            record.capability_descriptor.capabilities,
+            "'camera' capability must be visible in assimilation record",
+        )
+        self.assertIn(
+            "touch",
+            record.capability_descriptor.capabilities,
+            "'touch' capability must be visible in assimilation record",
+        )
+
+    def test_register_device_no_capabilities_does_not_raise_assimilation(self):
+        """Registering a device with no capabilities must not raise during assimilation."""
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+        from core.capability_assimilation import get_capability_assimilation_layer
+
+        udm = UnifiedDeviceManager()
+        device = UnifiedDevice(
+            device_id="assimilate_nocaps_001",
+            device_name="No Caps Device",
+            device_type=UnifiedDeviceType.IOT,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=[],
+            metadata={},
+        )
+        # Must not raise
+        udm.register_device(device)
+
+        # Even with no capabilities, the device should be assimilated
+        layer = get_capability_assimilation_layer()
+        record = layer._records.get("assimilate_nocaps_001")
+        self.assertIsNotNone(
+            record,
+            "Device with empty capabilities must still appear in CapabilityAssimilationLayer",
+        )
+
+    def test_reregister_device_updates_assimilation_idempotently(self):
+        """Re-registering a device updates its assimilation record without duplication."""
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+        from core.capability_assimilation import get_capability_assimilation_layer
+
+        udm = UnifiedDeviceManager()
+        device_v1 = UnifiedDevice(
+            device_id="assimilate_test_002",
+            device_name="Device V1",
+            device_type=UnifiedDeviceType.ANDROID,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=["screen"],
+            metadata={},
+        )
+        udm.register_device(device_v1)
+
+        device_v2 = UnifiedDevice(
+            device_id="assimilate_test_002",
+            device_name="Device V1",
+            device_type=UnifiedDeviceType.ANDROID,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=["screen", "bluetooth"],
+            metadata={},
+        )
+        udm.register_device(device_v2)
+
+        layer = get_capability_assimilation_layer()
+        record = layer._records.get("assimilate_test_002")
+
+        self.assertIsNotNone(record)
+        self.assertIn(
+            "bluetooth",
+            record.capability_descriptor.capabilities,
+            "Updated capability 'bluetooth' must appear in assimilation record after re-registration",
+        )
+        # Exactly one record exists for this device_id (idempotent, no duplication)
+        device_records = [k for k in layer._records if k == "assimilate_test_002"]
+        self.assertEqual(len(device_records), 1, "Only one assimilation record must exist per device_id")
+
+    def test_upsert_capabilities_triggers_assimilation_update(self):
+        """upsert_device_state with updated capabilities re-assimilates the device."""
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+        from core.capability_assimilation import get_capability_assimilation_layer
+
+        udm = UnifiedDeviceManager()
+        device = UnifiedDevice(
+            device_id="assimilate_test_003",
+            device_name="Upsert Device",
+            device_type=UnifiedDeviceType.ANDROID,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=["screen"],
+            metadata={},
+        )
+        udm.register_device(device)
+
+        # Now update capabilities via upsert
+        udm.upsert_device_state(
+            "assimilate_test_003",
+            {"capabilities": ["screen", "nfc", "gps"]},
+            source="capability_report",
+        )
+
+        layer = get_capability_assimilation_layer()
+        record = layer._records.get("assimilate_test_003")
+
+        self.assertIsNotNone(record)
+        self.assertIn(
+            "nfc",
+            record.capability_descriptor.capabilities,
+            "'nfc' capability must be visible after upsert-triggered assimilation",
+        )
+        self.assertIn(
+            "gps",
+            record.capability_descriptor.capabilities,
+            "'gps' capability must be visible after upsert-triggered assimilation",
+        )
+
+    def test_assimilation_participant_kind_is_device(self):
+        """Device assimilation record must use DEVICE participant kind."""
+        from core.unified.device_manager import UnifiedDeviceManager
+        from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+        from core.capability_assimilation import get_capability_assimilation_layer
+        from core.capability_assimilation import NodeParticipantKind
+
+        udm = UnifiedDeviceManager()
+        device = UnifiedDevice(
+            device_id="assimilate_test_004",
+            device_name="Participant Kind Device",
+            device_type=UnifiedDeviceType.ANDROID,
+            status=UnifiedDeviceStatus.ONLINE,
+            capabilities=["screen"],
+            metadata={},
+        )
+        udm.register_device(device)
+
+        layer = get_capability_assimilation_layer()
+        record = layer._records.get("assimilate_test_004")
+
+        self.assertIsNotNone(record)
+        self.assertEqual(
+            record.execution_profile.participant_kind,
+            NodeParticipantKind.DEVICE,
+            "Devices must be assimilated with DEVICE participant kind",
         )
 
 
