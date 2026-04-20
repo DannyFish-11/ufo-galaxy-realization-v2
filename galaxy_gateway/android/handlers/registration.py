@@ -20,6 +20,25 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _extract_runtime_attachment_session_id(message: Dict[str, Any]) -> str:
+    """Extract the canonical runtime attachment session identity from a message.
+
+    Priority order (PR-G):
+    1. ``runtime_attachment_session_id`` — explicit canonical field.
+    2. ``session_id`` — backward-compatible fallback for older clients.
+    3. Generated UUID fallback — ensures every call produces a non-empty id.
+
+    Returns a non-empty string; never returns ``None`` or ``""``.
+    """
+    value = message.get("runtime_attachment_session_id") or message.get("session_id")
+    if value:
+        return value
+    return str(uuid.uuid4())
+
+# ---------------------------------------------------------------------------
 # Role derivation helpers
 # ---------------------------------------------------------------------------
 
@@ -88,13 +107,8 @@ async def handle_device_register(
         # PR-G: extract canonical runtime attachment session identity.
         # Prefer the explicit field; fall back to a generated UUID so that
         # older clients that do not supply the field remain compatible.
-        inbound_attachment_id = (
-            message.get("runtime_attachment_session_id")
-            or message.get("session_id")
-            or ""
-        )
-        if not inbound_attachment_id:
-            inbound_attachment_id = str(uuid.uuid4())
+        inbound_attachment_id = _extract_runtime_attachment_session_id(message)
+        if not message.get("runtime_attachment_session_id") and not message.get("session_id"):
             logger.debug(
                 "handle_device_register: runtime_attachment_session_id absent in "
                 "message, generated fallback: device_id=%s attachment_id=%s",
@@ -278,11 +292,7 @@ async def handle_device_reconnect(
 
     try:
         # PR-G: extract canonical attachment identity from the reconnect message.
-        inbound_attachment_id = (
-            message.get("runtime_attachment_session_id")
-            or message.get("session_id")
-            or ""
-        )
+        inbound_attachment_id = _extract_runtime_attachment_session_id(message)
 
         # Update local transport/session cache so the bridge sees the new socket.
         async with bridge._lock:
@@ -340,8 +350,6 @@ async def handle_device_reconnect(
                 )
         else:
             # new_attachment: treat as a fresh registration
-            if not resolved_attachment_id:
-                resolved_attachment_id = str(uuid.uuid4())
             logger.info(
                 "handle_device_reconnect: new_attachment: device_id=%s "
                 "runtime_attachment_session_id=%s",

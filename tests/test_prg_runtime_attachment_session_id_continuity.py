@@ -119,7 +119,7 @@ class TestPRGSentinelsDispatchContinuity:
 
     def test_pr_g_sentinel_present(self):
         assert DISPATCH_CONTINUITY_PR_G_SENTINEL
-        assert "PR_G" in DISPATCH_CONTINUITY_PR_G_SENTINEL or "PR-G" in DISPATCH_CONTINUITY_PR_G_SENTINEL.upper() or "package=G" in DISPATCH_CONTINUITY_PR_G_SENTINEL
+        assert "package=G" in DISPATCH_CONTINUITY_PR_G_SENTINEL
 
     def test_canonical_identity_sentinel(self):
         assert RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_CONTINUITY_IDENTITY
@@ -143,7 +143,7 @@ class TestPRGSentinelsAttachedRuntimeSession:
 
     def test_pr_g_sentinel_present(self):
         assert ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL
-        assert "PR_G" in ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL or "package=G" in ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL
+        assert "package=G" in ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL
 
     def test_canonical_field_policy(self):
         assert RUNTIME_ATTACHMENT_SESSION_ID_CANONICAL_FIELD_POLICY
@@ -159,7 +159,7 @@ class TestPRGSentinelsRegistry:
 
     def test_pr_g_sentinel_present(self):
         assert ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL
-        assert "PR_G" in ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL or "package=G" in ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL
+        assert "package=G" in ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL
 
     def test_canonical_identity_policy(self):
         assert REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY
