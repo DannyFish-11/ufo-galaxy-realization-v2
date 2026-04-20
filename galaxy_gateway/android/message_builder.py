@@ -239,3 +239,41 @@ class MessageBuilder:
             task_type="vision_action",
             payload=result,
         )
+
+    @classmethod
+    def handoff_dispatch(
+        cls,
+        device_id: str,
+        envelope: Any,
+        *,
+        priority: int = 5,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """Build an AIP v3 ``handoff_dispatch`` message for Android (PR-H).
+
+        Wraps :meth:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2.to_android_native_payload`
+        in an AIP message frame so the caller can pass the result directly to
+        the WebSocket send path.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        envelope:
+            A :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2` instance.
+        priority:
+            AIP message priority (1-10).  Defaults to 5.
+        timeout:
+            Expected execution timeout in seconds.  Defaults to 300.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``handoff_dispatch`` message.
+        """
+        return envelope.to_android_task_assign_payload(
+            device_id,
+            task_type="handoff_v2",
+            priority=priority,
+            timeout=timeout,
+        )

@@ -261,6 +261,12 @@ class MessageType(str, Enum):
     # === Android Delegated Execution Signals (PR-16) ===
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 
+    # === Android Native Handoff V2 (PR-H) ===
+    HANDOFF_DISPATCH = "handoff_dispatch"
+    HANDOFF_ACK = "handoff_ack"
+    HANDOFF_RESULT = "handoff_result"
+    HANDOFF_FAILURE = "handoff_failure"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""
