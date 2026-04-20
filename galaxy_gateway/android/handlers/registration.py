@@ -156,8 +156,18 @@ async def handle_device_register(
                 resolve_android_reconnect_continuity,
                 ReconnectOutcome,
             )
-            # Extract runtime_attachment_session_id from the registration message
-            # (PR-G canonical field; fall back gracefully when absent).
+            # Extract runtime_attachment_session_id from the registration message.
+            # PR-G canonical field: ``runtime_attachment_session_id`` is the
+            # preferred field.  The fallback fields below are legacy / transitional
+            # names that some Android clients may still use before adopting the
+            # canonical RASID field:
+            #   - ``runtime_session_id``: used by some clients as a combined
+            #     identity field that conflates server-side and client-supplied IDs.
+            #   - ``attached_session_id``: older name used before canonical naming.
+            # All three refer to the same concept (a stable client-side session
+            # token for continuity matching) and are safe fallbacks.  When none
+            # are present the value defaults to "" and the device-id fallback path
+            # is used instead.
             _rasid = (
                 message.get("runtime_attachment_session_id")
                 or message.get("runtime_session_id")

@@ -3,8 +3,6 @@
 Tests for PR-G: Server-side continuity / reconnect / attachment identity
 groundwork for Android runtime attachment sessions.
 
-This test suite verifies that:
-
 1. PR-G policy sentinels are present in the registry module.
 2. ``AttachedSessionRegistryEntry`` carries a ``runtime_attachment_session_id``
    field that is stored, preserved across transitions, and round-trips through
@@ -57,8 +55,6 @@ Q  — ``runtime_attachment_session_id`` preserved through reconnect transition.
 R  — ``runtime_attachment_session_id`` preserved through reattach transition.
 S  — ``runtime_attachment_session_id`` preserved through posture update.
 """
-
-from __future__ import annotations
 
 import pytest
 

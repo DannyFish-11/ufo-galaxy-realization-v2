@@ -1667,6 +1667,15 @@ def resolve_android_reconnect_continuity(
     device with the same arguments produces consistent results without
     creating duplicate sessions.
 
+    Security boundary
+    -----------------
+    RASID matches are **only** honoured when the matched entry's ``device_id``
+    also equals the supplied *device_id*.  This prevents a device from
+    presenting a RASID that belongs to a different device to hijack another
+    device's session identity.  If the RASID is found but the device_id does
+    not match, the lookup falls through to the device-id fallback or new
+    registration path for the requesting device.
+
     Parameters
     ----------
     device_id
