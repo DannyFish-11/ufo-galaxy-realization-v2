@@ -86,6 +86,58 @@ async def handle_device_register(
                 device_id, _mesh_exc,
             )
 
+        # PR-C: Attach device to the runtime session registry so that it is
+        # visible as an attached runtime node after registration completes.
+        # Posture defaults to 'join_runtime' for actively registering Android
+        # devices; PR-E will replace this with a real posture field from the
+        # wire message.
+        _capabilities_list = list(message.get("capabilities_list") or [])
+        if not _capabilities_list:
+            from galaxy_gateway.android.capabilities import DeviceCapability
+            _raw_caps = message.get("capabilities", DeviceCapability.get_android_default())
+            _capabilities_list = DeviceCapability.to_list(_raw_caps)
+
+        try:
+            from core.attached_runtime_session import attach_runtime_session
+            attach_runtime_session(
+                device_id,
+                source_runtime_posture="join_runtime",
+                attach_reason="android_device_register",
+                metadata={
+                    "platform": device.platform,
+                    "model": device.model,
+                    "capabilities": _capabilities_list,
+                },
+            )
+            logger.info(
+                "android_registration: attach_runtime_session succeeded: device_id=%s",
+                device_id,
+            )
+        except Exception as _attach_exc:
+            logger.warning(
+                "android_registration: attach_runtime_session non-fatal: device_id=%s error=%s",
+                device_id, _attach_exc,
+            )
+
+        # PR-C: Assign BodyMeshRegistry roles based on device capabilities.
+        try:
+            from core.mesh.device_role_allocator import get_device_role_allocator
+            _alloc = get_device_role_allocator()
+            _alloc.allocate(
+                device_id=device_id,
+                capabilities=_capabilities_list,
+                extra_metadata={"platform": device.platform, "trigger": "device_register"},
+            )
+            logger.info(
+                "android_registration: BodyMeshRegistry role allocation succeeded: device_id=%s",
+                device_id,
+            )
+        except Exception as _alloc_exc:
+            logger.warning(
+                "android_registration: BodyMeshRegistry allocation non-fatal: device_id=%s error=%s",
+                device_id, _alloc_exc,
+            )
+
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s",
             device_id, device.model, device.platform,

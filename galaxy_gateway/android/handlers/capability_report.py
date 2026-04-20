@@ -111,6 +111,26 @@ async def handle_capability_report(
         except Exception as sync_err:
             logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
 
+    # ── 3. PR-C: Update BodyMeshRegistry roles based on reported capabilities ─
+    if device_id and supported_actions:
+        try:
+            from core.mesh.device_role_allocator import get_device_role_allocator
+            _alloc = get_device_role_allocator()
+            _alloc.allocate(
+                device_id=device_id,
+                capabilities=list(supported_actions),
+                extra_metadata={"platform": platform, "trigger": "capability_report"},
+            )
+            logger.info(
+                "capability_report: BodyMeshRegistry role allocation succeeded: device_id=%s",
+                device_id,
+            )
+        except Exception as _alloc_exc:
+            logger.warning(
+                "capability_report: BodyMeshRegistry allocation non-fatal: device_id=%s error=%s",
+                device_id, _alloc_exc,
+            )
+
     return MessageBuilder.capability_report_ack(
         device_id=device_id or "unknown",
         accepted=True,
