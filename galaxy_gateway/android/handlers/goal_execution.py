@@ -30,6 +30,13 @@ try:
 except ImportError:
     _reconcile_goal_result = None  # type: ignore[assignment]
 
+# PR-D: parallel group tracker — top-level import so tests can patch() it.
+try:
+    from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields, get_tracker as _get_parallel_tracker
+except ImportError:
+    record_parallel_fields = None  # type: ignore[assignment]
+    _get_parallel_tracker = None  # type: ignore[assignment]
+
 
 async def handle_goal_execution(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
@@ -284,6 +291,7 @@ async def handle_goal_execution_result(
     处理策略：
     - 记录到 TaskMemory（供 LLM 上下文注入）
     - 触发 OpenClawd 反馈（如果有对话反馈路径）
+    - PR-D: 并行子任务聚合（当消息包含 group_id / subtask_index 时）
     """
     payload = message.get("payload", {})
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
@@ -294,6 +302,8 @@ async def handle_goal_execution_result(
     latency_ms = payload.get("latency_ms", 0)
     group_id = payload.get("group_id")
     subtask_index = payload.get("subtask_index")
+    route_mode = payload.get("route_mode", "cross_device")
+    session_id = payload.get("session_id") or message.get("session_id")
 
     logger.info(
         "GOAL_EXECUTION_RESULT received: task_id=%s device_id=%s status=%s "
@@ -302,17 +312,28 @@ async def handle_goal_execution_result(
     )
 
     # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
+    # Build a canonical result dict for store_task_result (expects a dict, not raw fields).
+    result_dict: Dict[str, Any] = {
+        "status": status,
+        "result_summary": result_text,
+        "task_description": f"[goal_execution_result] task_id={task_id}",
+        "task_type": "goal_execution_result",
+        "trace_id": trace_id,
+        "latency_ms": latency_ms,
+        "steps": payload.get("steps", []),
+        "device_id": device_id,
+        "session_id": session_id or "",
+        "group_id": group_id,
+        "subtask_index": subtask_index,
+    }
     if store_task_result is not None:
         try:
             await store_task_result(
                 task_id=task_id,
                 device_id=device_id,
-                status=status,
-                result=result_text,
-                trace_id=trace_id,
-                latency_ms=latency_ms,
-                route_mode=payload.get("route_mode", "cross_device"),
-                steps=payload.get("steps", []),
+                route_mode=route_mode,
+                result=result_dict,
+                session_id=session_id,
             )
             logger.debug(
                 "GOAL_EXECUTION_RESULT: task_memory 写入成功 task_id=%s", task_id,
@@ -359,6 +380,74 @@ async def handle_goal_execution_result(
                 )
         except Exception as rec_err:
             logger.debug("PR-13 reconcile goal_execution_result failed (non-fatal): %s", rec_err)
+
+    # PR-D: 并行子任务聚合 ─────────────────────────────────────────
+    # When a GOAL_EXECUTION_RESULT carries group_id / subtask_index, record it
+    # into the parallel tracker and check whether all subtasks in the group have
+    # completed.  If they have, write the aggregated summary to TaskMemory so
+    # the upper session / LLM context can consume a single unified result.
+    if group_id and record_parallel_fields is not None:
+        try:
+            await record_parallel_fields({
+                "group_id": group_id,
+                "subtask_index": subtask_index if subtask_index is not None else 0,
+                "status": "success" if str(status).lower() in ("success", "completed", "done", "true") else "failed",
+                "latency_ms": int(latency_ms or 0),
+                "summary": result_text,
+                "outputs": payload.get("steps"),
+            })
+            # Check whether the group is now complete and, if so, write an
+            # aggregated summary record to TaskMemory.
+            if _get_parallel_tracker is not None:
+                tracker = _get_parallel_tracker()
+                group_status = await tracker.finalize_if_complete(str(group_id))
+                if group_status is not None:
+                    logger.info(
+                        "GOAL_EXECUTION_RESULT: parallel group complete "
+                        "group_id=%s status=%s subtasks=%d",
+                        group_id, group_status.status, len(group_status.results),
+                    )
+                    # Write the aggregated group result to TaskMemory
+                    if store_task_result is not None:
+                        try:
+                            succeeded = sum(
+                                1 for r in group_status.results
+                                if r.status == "success"
+                            )
+                            agg_summary = (
+                                f"group={group_id} status={group_status.status} "
+                                f"succeeded={succeeded}/{len(group_status.results)}"
+                            )
+                            await store_task_result(
+                                task_id=task_id,
+                                device_id=device_id,
+                                route_mode=route_mode,
+                                result={
+                                    "status": group_status.status,
+                                    "result_summary": agg_summary,
+                                    "task_description": f"[parallel_group_complete] group_id={group_id}",
+                                    "task_type": "parallel_group_result",
+                                    "group_id": group_id,
+                                    "subtask_count": len(group_status.results),
+                                    "succeeded": succeeded,
+                                    "group_detail": group_status.to_dict(),
+                                },
+                                session_id=session_id,
+                            )
+                            logger.debug(
+                                "GOAL_EXECUTION_RESULT: parallel group aggregation 写入 TaskMemory "
+                                "group_id=%s", group_id,
+                            )
+                        except Exception as agg_mem_err:
+                            logger.warning(
+                                "GOAL_EXECUTION_RESULT: parallel group aggregation 写入失败（非致命）"
+                                "group_id=%s error=%s", group_id, agg_mem_err,
+                            )
+        except Exception as par_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: parallel aggregation failed (non-fatal) "
+                "group_id=%s error=%s", group_id, par_err,
+            )
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
     return None
