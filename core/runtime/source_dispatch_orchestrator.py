@@ -909,6 +909,51 @@ ANDROID_TARGET_DISCOVERY_USES_CANONICAL_REGISTRY_PR_E_POLICY: str = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Android source runtime posture → dispatch gating
+# ---------------------------------------------------------------------------
+
+ANDROID_POSTURE_GATING_INTEGRATED_SENTINEL: str = (
+    "ANDROID_POSTURE_GATING_INTEGRATED::"
+    "source-dispatch-orchestrator::"
+    "android-source-runtime-posture-gates-dispatch-target-selection::"
+    "_score_candidate-rejects-control_only-posture-entries::"
+    "package=android-posture-gating::posture-aware-readiness-dispatch"
+)
+
+ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET_POLICY: str = (
+    "POLICY::ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET: "
+    "A registry entry whose posture field is 'control_only' MUST NOT be selected "
+    "as a dispatch target by _select_target_from_candidates().  Only entries with "
+    "'join_runtime' posture (or an absent posture that defaults to 'join_runtime') "
+    "are eligible as dispatch targets.  This gate is applied in _score_candidate() "
+    "after readiness and participation gates so that posture-blocked entries "
+    "produce the stable rejection reason "
+    "'posture:control_only:not_dispatch_target'.  Non-Android candidates are "
+    "unaffected because they do not carry a 'control_only' posture by default."
+)
+
+POSTURE_GATE_PRESERVES_BACKWARD_COMPAT_POLICY: str = (
+    "POLICY::POSTURE_GATE_PRESERVES_BACKWARD_COMPAT: "
+    "A registry entry with an absent or empty posture field is treated as "
+    "'join_runtime' (eligible) during _score_candidate() evaluation.  This "
+    "preserves backward compatibility for existing non-Android sessions and "
+    "sessions registered before posture tracking was introduced.  The conservative "
+    "default at registration time remains 'join_runtime' (the pre-posture-gating "
+    "assumption).  Only an explicitly set 'control_only' posture blocks dispatch."
+)
+
+POSTURE_UPDATE_AFFECTS_NEXT_SELECTION_CYCLE_POLICY: str = (
+    "POLICY::POSTURE_UPDATE_AFFECTS_NEXT_SELECTION_CYCLE: "
+    "When Android posture changes (e.g. device goes to background → 'control_only') "
+    "the updated posture is written into the attached runtime session registry via "
+    "update_session_posture().  The change takes effect on the NEXT call to "
+    "_select_target_from_candidates() — there is no retroactive effect on "
+    "dispatches already in flight.  This is intentional: posture gating is a "
+    "forward-looking filter on candidate discovery, not a cancel signal."
+)
+
+
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
     """Attempt to capture the current RuntimeGovernanceSnapshot (PR-27)."""
     try:
@@ -1415,16 +1460,25 @@ def _score_candidate(
     readiness: Any,
     participation: Any,
     reuse_eligible: bool,
+    posture: str = "",
 ) -> Tuple[int, str]:
     """Score a single dispatch candidate using consolidated truth inputs.
 
     Scoring (higher is better, baseline 100):
       +20  reuse_eligible == True  (established reuse surface)
 
-    Gate failures (readiness / participation) immediately return score=0 and
-    a stable rejection reason string; they are not treated as score deductions.
-    A rejected candidate (score=0 with a non-empty reason) must NOT be
-    selected as a dispatch target.
+    Gate failures (readiness / participation / posture) immediately return
+    score=0 and a stable rejection reason string; they are not treated as
+    score deductions.  A rejected candidate (score=0 with a non-empty reason)
+    must NOT be selected as a dispatch target.
+
+    Posture gate (Android posture gating)
+    --------------------------------------
+    When the entry ``posture`` is ``"control_only"`` the candidate is rejected
+    with reason ``"posture:control_only:not_dispatch_target"``.  An absent or
+    empty posture defaults to ``"join_runtime"`` (eligible) to preserve backward
+    compatibility for sessions that predate posture tracking (per
+    :data:`POSTURE_GATE_PRESERVES_BACKWARD_COMPAT_POLICY`).
 
     Returns ``(score, rejection_reason)`` where *rejection_reason* is an
     empty string when the candidate passes all required gates, or a stable
@@ -1460,6 +1514,14 @@ def _score_candidate(
     if not getattr(participation, "orchestration_eligible", False):
         rejection = "participation:not_orchestration_eligible"
         return 0, rejection
+
+    # --- Posture gate (required) — Android posture gating ---
+    # 'control_only' posture means the device is a control-plane participant
+    # only and MUST NOT be selected as a dispatch target.  An absent/empty
+    # posture defaults to 'join_runtime' (eligible) for backward compat.
+    _posture_norm = (posture or "").strip().lower() or "join_runtime"
+    if _posture_norm == "control_only":
+        return 0, "posture:control_only:not_dispatch_target"
 
     # --- Reuse preference (optional, contributes to score) ---
     if reuse_eligible:
@@ -1607,13 +1669,16 @@ def _select_target_from_candidates(
                     exc,
                 )
 
-        # Score the candidate
+        # Score the candidate — pass registry entry posture so the posture gate
+        # can reject 'control_only' devices (Android posture gating).
+        _entry_posture: str = str(getattr(entry, "posture", "") or "")
         score, rejection_reason = _score_candidate(
             session_id,
             device_id,
             readiness=readiness,
             participation=participation,
             reuse_eligible=reuse_eligible,
+            posture=_entry_posture,
         )
 
         if rejection_reason:
