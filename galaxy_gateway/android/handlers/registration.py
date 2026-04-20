@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
@@ -17,6 +17,44 @@ if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Role derivation helpers
+# ---------------------------------------------------------------------------
+
+def _derive_body_mesh_roles(capabilities: int) -> List[Any]:
+    """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
+    ``DeviceCapability`` bitmask.
+
+    Mapping:
+    - PERCEPTION  — any of SENSOR_CAMERA, SENSOR_MIC, SENSOR_MOTION
+    - ACTION      — any of INPUT_TOUCH, INPUT_KEYBOARD, GUI_WRITE, SYSTEM_SHELL
+    - PRESENCE    — any of GUI_READ, GUI_SCREENSHOT, SYSTEM_NOTIFICATION
+
+    A device that has none of the above defaults to the ACTION role to ensure
+    every registered device has at least one role.
+    """
+    try:
+        from core.mesh.body_mesh_registry import DeviceRole
+        from galaxy_gateway.android.capabilities import DeviceCapability as DC
+    except ImportError:
+        return []
+
+    roles: List = []
+    has = DC.has_capability
+
+    if has(capabilities, DC.SENSOR_CAMERA) or has(capabilities, DC.SENSOR_MIC) or has(capabilities, DC.SENSOR_MOTION):
+        roles.append(DeviceRole.PERCEPTION)
+    if has(capabilities, DC.INPUT_TOUCH) or has(capabilities, DC.INPUT_KEYBOARD) or has(capabilities, DC.GUI_WRITE) or has(capabilities, DC.SYSTEM_SHELL):
+        roles.append(DeviceRole.ACTION)
+    if has(capabilities, DC.GUI_READ) or has(capabilities, DC.GUI_SCREENSHOT) or has(capabilities, DC.SYSTEM_NOTIFICATION):
+        roles.append(DeviceRole.PRESENCE)
+
+    if not roles:
+        roles.append(DeviceRole.ACTION)
+
+    return roles
 
 
 async def handle_device_register(
@@ -83,6 +121,68 @@ async def handle_device_register(
         except Exception as _mesh_exc:
             logger.debug(
                 "android_bridge: mesh session create/activate non-fatal: device_id=%s error=%s",
+                device_id, _mesh_exc,
+            )
+
+        # PR-C: attach runtime session so the device enters the attached runtime
+        # session registry and becomes visible as a managed runtime node.
+        try:
+            from core.attached_runtime_session import attach_runtime_session
+            _attach_record = attach_runtime_session(
+                device_id,
+                source_runtime_posture="join_runtime",
+                attach_reason="android_device_register",
+                metadata={"registration_trigger": "android_device_register"},
+            )
+            logger.info(
+                "attach_runtime_session: device_id=%s state=%s",
+                device_id, _attach_record.attachment_state,
+            )
+        except Exception as _attach_exc:
+            logger.debug(
+                "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
+                device_id, _attach_exc,
+            )
+
+        # PR-C: register in the authoritative attached runtime session registry
+        # (PR-19 single-truth source) so dispatch/reuse layers can look up the
+        # active session identity.
+        try:
+            from core.attached_runtime_session_registry import register_session
+            _reg_entry = register_session(
+                device_id,
+                posture="join_runtime",
+                metadata={"registration_trigger": "android_device_register"},
+            )
+            logger.info(
+                "attached_runtime_session_registry: registered device_id=%s runtime_session_id=%s",
+                device_id, _reg_entry.runtime_session_id,
+            )
+        except Exception as _reg_exc:
+            logger.debug(
+                "android_bridge: attached_runtime_session_registry non-fatal: device_id=%s error=%s",
+                device_id, _reg_exc,
+            )
+
+        # PR-C: assign Body Mesh roles based on device capability bitmask so
+        # that the BodyMeshRegistry (and downstream presence/projection paths)
+        # can correctly classify the device.
+        try:
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
+            _cap_flags = message.get("capabilities", device.capabilities)
+            _roles = _derive_body_mesh_roles(_cap_flags)
+            get_body_mesh_registry().register(
+                device_id,
+                roles=_roles,
+                metadata={"registration_trigger": "android_device_register", "platform": device.platform.value if device.platform else None},
+            )
+            logger.info(
+                "BodyMeshRegistry: registered device_id=%s roles=%s",
+                device_id, [r.value for r in _roles],
+            )
+        except Exception as _mesh_exc:
+            logger.debug(
+                "android_bridge: BodyMeshRegistry registration non-fatal: device_id=%s error=%s",
                 device_id, _mesh_exc,
             )
 
