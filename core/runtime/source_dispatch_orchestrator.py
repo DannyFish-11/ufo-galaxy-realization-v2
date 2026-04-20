@@ -910,6 +910,52 @@ ANDROID_TARGET_DISCOVERY_USES_CANONICAL_REGISTRY_PR_E_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# PR-F: Android single-device dispatch — openclawd wiring to orchestrator
+# ---------------------------------------------------------------------------
+
+OPENCLAWD_SINGLE_REMOTE_USES_ORCHESTRATOR_DISPATCH_PR_F_SENTINEL: str = (
+    "OPENCLAWD_SINGLE_REMOTE_USES_ORCHESTRATOR_DISPATCH_PR_F::"
+    "openclawd._delegate_single_remote::orchestrate_source_runtime_dispatch::"
+    "android-single-device-canonical-dispatch-from-openclawd::"
+    "orchestrator-is-real-dispatch-not-plan-only::"
+    "package=PR-F::android-single-device-orchestrator-mainline-wiring"
+)
+
+OPENCLAWD_ANDROID_DISPATCH_FALLS_BACK_TO_REMOTE_AGENT_PR_F_POLICY: str = (
+    "POLICY::OPENCLAWD_ANDROID_DISPATCH_FALLS_BACK_TO_REMOTE_AGENT_PR_F: "
+    "openclawd._delegate_single_remote() MUST first attempt dispatch via "
+    "orchestrate_source_runtime_dispatch().  If the orchestrator succeeds "
+    "(result.success=True and action_taken='android_bridge_dispatch'), the "
+    "orchestrator result is returned directly as the delegation result.  "
+    "If the orchestrator does not succeed or raises, the method falls through "
+    "to _dispatch_remote_agent() which remains the compatible fallback path.  "
+    "This ensures Android single-device tasks enter the canonical "
+    "SourceDispatchOrchestrator → AndroidBridge → DeviceRouter chain rather "
+    "than the legacy CommandRouter path.  PR-F."
+)
+
+ANDROID_BRIDGE_DISPATCH_CHAIN_IS_OBSERVABLE_PR_F_POLICY: str = (
+    "POLICY::ANDROID_BRIDGE_DISPATCH_CHAIN_IS_OBSERVABLE_PR_F: "
+    "The full orchestrator → AndroidBridge → MessageBuilder dispatch chain "
+    "MUST be observable via structured logging at each boundary node.  "
+    "AndroidBridge.assign_task() logs the trace_id, task_id, device_id, and "
+    "whether dispatch was routed through DeviceRouter or MessageBuilder "
+    "directly.  This makes the canonical dispatch path auditable end-to-end.  "
+    "PR-F."
+)
+
+RESULT_BACKFLOW_UNAFFECTED_BY_ORCHESTRATOR_WIRING_PR_F_POLICY: str = (
+    "POLICY::RESULT_BACKFLOW_UNAFFECTED_BY_ORCHESTRATOR_WIRING_PR_F: "
+    "Routing the outbound dispatch through SourceDispatchOrchestrator MUST NOT "
+    "alter the inbound result/lifecycle signal flow.  task_result / "
+    "goal_execution_result / task_cancel / task_status signals continue to "
+    "flow through the canonical android_execution_signal_reconciler path and "
+    "are consumed via SourceDispatchOrchestrator.consume_android_behavioral_result().  "
+    "PR-F."
+)
+
+
+# ---------------------------------------------------------------------------
 # Android source runtime posture → dispatch gating
 # ---------------------------------------------------------------------------
 

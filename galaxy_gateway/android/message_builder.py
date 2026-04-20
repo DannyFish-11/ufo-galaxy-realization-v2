@@ -49,13 +49,22 @@ class MessageBuilder:
     def task_assign(cls, device_id: str, task_id: str, task_type: str,
                     payload: Dict[str, Any], priority: int = 5,
                     timeout: int = 300) -> Dict[str, Any]:
-        """分配任务"""
+        """分配任务.
+
+        PR-F: trace_id is propagated from the payload into the wire message
+        when present, making the orchestrator → bridge → message dispatch chain
+        fully observable end-to-end.
+        """
         msg = cls._base_message(MessageType.TASK_ASSIGN, device_id)
         msg["task_id"] = task_id
         msg["task_type"] = task_type
         msg["payload"] = payload
         msg["priority"] = priority
         msg["timeout"] = timeout
+        # PR-F: propagate trace_id from orchestrator context into wire message.
+        _trace_id = payload.get("trace_id") if isinstance(payload, dict) else None
+        if _trace_id:
+            msg["trace_id"] = str(_trace_id)
         return msg
 
     @classmethod

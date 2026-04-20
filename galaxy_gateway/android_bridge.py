@@ -768,7 +768,21 @@ class AndroidBridge:
     async def assign_task(self, device_id: str, task_id: str, task_type: str,
                           payload: Dict[str, Any], priority: int = 5,
                           timeout: int = 300) -> Optional[Dict[str, Any]]:
-        """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3)."""
+        """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3).
+
+        PR-F: Structured logging added at each dispatch boundary so the full
+        orchestrator → AndroidBridge → MessageBuilder chain is observable.
+        """
+        _trace_id: str = str(payload.get("trace_id") or "") if payload else ""
+        _orchestrator_dispatch: bool = bool(
+            payload.get("orchestrator_dispatch", False) if payload else False
+        )
+        logger.debug(
+            "AndroidBridge.assign_task: device_id=%s task_id=%s task_type=%s "
+            "trace_id=%s orchestrator_dispatch=%s",
+            device_id, task_id, task_type, _trace_id, _orchestrator_dispatch,
+        )
+
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].current_task_id = task_id
@@ -785,6 +799,11 @@ class AndroidBridge:
                         **payload,
                     },
                 }
+                logger.debug(
+                    "AndroidBridge.assign_task: routing via DeviceRouter "
+                    "device_id=%s task_id=%s trace_id=%s",
+                    device_id, task_id, _trace_id,
+                )
                 return await _device_router.dispatch_task(task_dict, router_device)
         except Exception as _router_err:
             logger.warning(
@@ -792,6 +811,11 @@ class AndroidBridge:
                 "falling back to send_to_device — %s", _router_err
             )
 
+        logger.debug(
+            "AndroidBridge.assign_task: falling back to MessageBuilder.task_assign "
+            "device_id=%s task_id=%s trace_id=%s",
+            device_id, task_id, _trace_id,
+        )
         msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
 

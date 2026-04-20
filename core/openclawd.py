@@ -4180,12 +4180,18 @@ class OpenClawd:
             Standard handler response with ``delegation_point="single_remote"``
             in ``metadata``.
         """
-        # PR-5A: Record a SourceDispatchPlan for the single-remote path so the
-        # orchestrator is active on more than just the staged_mesh path.
+        # PR-5A / PR-F: Attempt dispatch via SourceDispatchOrchestrator.
+        # PR-5A: the orchestrator was previously consulted for *planning* only
+        # (via .plan()).  PR-F upgrades this to a real *dispatch* attempt via
+        # orchestrate_source_runtime_dispatch().  When the orchestrator succeeds
+        # via android_bridge_dispatch, that result is returned directly as the
+        # canonical single-device Android dispatch result.  If the orchestrator
+        # does not succeed or raises, the method falls through to
+        # _dispatch_remote_agent() (CommandRouter path) unchanged.
         _orch_plan_meta: Dict[str, Any] = {}
         try:
             from core.runtime.source_dispatch_orchestrator import (
-                SourceDispatchOrchestrator as _SDO,
+                orchestrate_source_runtime_dispatch as _orchestrate,
             )
 
             _task_dict: Optional[Dict[str, Any]] = None
@@ -4195,25 +4201,67 @@ class OpenClawd:
                 if _cmd:
                     _task_dict = {"tool_name": _cmd, "args": _params}
 
-            _orch = _SDO()
-            _plan = _orch.plan(
+            _orch_result = _orchestrate(
                 trace_id=trace_id,
                 session_id=session_id,
                 task=_task_dict,
                 target_device_id=device_id,
                 metadata={"source": "openclawd._delegate_single_remote"},
             )
-            if _plan is not None and hasattr(_plan, "to_dict"):
-                _plan_d = _plan.to_dict()
+
+            if _orch_result is not None:
+                _orch_dict = (
+                    _orch_result.to_dict()
+                    if hasattr(_orch_result, "to_dict")
+                    else dict(_orch_result)
+                )
                 _orch_plan_meta = {
-                    "orchestrator_plan_id": _plan_d.get("plan_id"),
-                    "orchestrator_mode": _plan_d.get("mode"),
-                    "orchestrator_ready": _plan_d.get("ready"),
+                    "orchestrator_plan_id": _orch_dict.get("dispatch_id"),
+                    "orchestrator_mode": _orch_dict.get("mode"),
+                    "orchestrator_success": _orch_dict.get("success"),
                 }
+
+                # PR-F: if the orchestrator dispatched through android_bridge, use
+                # its result directly as the canonical single-device dispatch result.
+                _orch_action = ""
+                _orch_exec = _orch_dict.get("result") or {}
+                if isinstance(_orch_exec, dict):
+                    _orch_action = _orch_exec.get("action_taken", "")
+                if _orch_dict.get("success") and _orch_action == "android_bridge_dispatch":
+                    logger.debug(
+                        "_delegate_single_remote: PR-F orchestrator android_bridge_dispatch "
+                        "succeeded for device_id=%s trace_id=%s",
+                        device_id,
+                        trace_id,
+                    )
+                    orch_response: Dict[str, Any] = {
+                        "success": True,
+                        "response": (
+                            _orch_exec.get("response")
+                            or f"Android task dispatched via orchestrator to {device_id}"
+                        ),
+                        "metadata": {
+                            "delegation_point": "single_remote",
+                            "dispatch_path": "orchestrator:android_bridge_dispatch",
+                            "orchestrator_plan_id": _orch_dict.get("dispatch_id"),
+                            "orchestrator_mode": _orch_dict.get("mode"),
+                            "device_id": device_id,
+                            "trace_id": trace_id,
+                            "android_bridge_response": _orch_exec.get(
+                                "android_bridge_response", {}
+                            ),
+                        },
+                    }
+                    return orch_response
+
                 logger.debug(
-                    "_delegate_single_remote: orchestrator plan mode=%s ready=%s trace_id=%s",
-                    _plan_d.get("mode"),
-                    _plan_d.get("ready"),
+                    "_delegate_single_remote: orchestrator mode=%s success=%s "
+                    "action=%s for device_id=%s trace_id=%s — falling through to "
+                    "_dispatch_remote_agent",
+                    _orch_dict.get("mode"),
+                    _orch_dict.get("success"),
+                    _orch_action,
+                    device_id,
                     trace_id,
                 )
         except Exception:  # noqa: BLE001
