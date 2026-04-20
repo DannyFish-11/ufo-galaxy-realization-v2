@@ -171,23 +171,40 @@ async def handle_capability_report(
     # This ensures that even if a device registered with no/partial capabilities,
     # a subsequent capability_report can update its body mesh role assignment.
     # Behaviour is idempotent: re-registration merges roles.
+    _cap_roles: List[Any] = []
     if device_id:
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
-            _roles = _derive_roles_from_supported_actions(supported_actions)
+            _cap_roles = _derive_roles_from_supported_actions(supported_actions)
             get_body_mesh_registry().register(
                 device_id,
-                roles=_roles,
+                roles=_cap_roles,
                 metadata={"capability_report_trigger": True, "platform": platform},
             )
             logger.info(
                 "BodyMeshRegistry: updated device_id=%s roles=%s via capability_report",
-                device_id, [r.value for r in _roles],
+                device_id, [r.value for r in _cap_roles],
             )
         except Exception as _bmr_exc:
             logger.debug(
                 "capability_report: BodyMeshRegistry update non-fatal: device_id=%s error=%s",
                 device_id, _bmr_exc,
+            )
+
+    # ── 4. PR-I: notify auto-enrollment service so that MeshMembership and
+    #    Formation auto-enrollment are triggered after capability is reported.
+    if device_id:
+        try:
+            from core.mesh.mesh_auto_enrollment import notify_capability_reported
+            notify_capability_reported(
+                device_id,
+                roles=_cap_roles,
+                metadata={"capability_report_trigger": True, "platform": platform},
+            )
+        except Exception as _ae_exc:
+            logger.debug(
+                "capability_report: auto_enrollment notify non-fatal: device_id=%s error=%s",
+                device_id, _ae_exc,
             )
 
     return MessageBuilder.capability_report_ack(

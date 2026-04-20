@@ -206,6 +206,7 @@ async def handle_device_register(
         # PR-C: assign Body Mesh roles based on device capability bitmask so
         # that the BodyMeshRegistry (and downstream presence/projection paths)
         # can correctly classify the device.
+        _roles = []
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
             _cap_flags = message.get("capabilities", device.capabilities)
@@ -223,6 +224,22 @@ async def handle_device_register(
             logger.debug(
                 "android_bridge: BodyMeshRegistry registration non-fatal: device_id=%s error=%s",
                 device_id, _mesh_exc,
+            )
+
+        # PR-I: notify the auto-enrollment service so that MeshMembership and
+        # Formation auto-enrollment are triggered as part of the registration chain.
+        try:
+            from core.mesh.mesh_auto_enrollment import notify_device_registered
+            notify_device_registered(
+                device_id,
+                roles=_roles,
+                session_id=inbound_attachment_id,
+                metadata={"registration_trigger": "android_device_register"},
+            )
+        except Exception as _ae_exc:
+            logger.debug(
+                "android_bridge: auto_enrollment notify non-fatal: device_id=%s error=%s",
+                device_id, _ae_exc,
             )
 
         logger.info(
