@@ -666,6 +666,122 @@ class HandoffEnvelopeV2(BaseModel):
             "created_at": self.created_at,
         }
 
+    def to_android_native_payload(self) -> Dict[str, Any]:
+        """Return a wire-format dict for Android native consumption (PR-H).
+
+        Produces a flat, Android-typed-model–compatible payload that Android
+        can deserialize without processing nested Pydantic sub-contracts.  All
+        identity, correlation, and routing fields are preserved at the top level
+        so Android can correlate ACK / result / failure responses back to this
+        specific handoff event via ``handoff_id``.
+
+        Field mapping (V2 → Android wire):
+        - ``handoff_id``          → ``handoff_id``   (primary correlation key)
+        - ``trace_id``            → ``trace_id``
+        - ``task_id``             → ``task_id``
+        - ``session_id``          → ``session_id``
+        - ``source_device_id``    → ``source_device_id``
+        - ``target_device_id``    → ``target_device_id``
+        - ``source_runtime_id``   → ``source_runtime_id``
+        - ``target_runtime_id``   → ``target_runtime_id``
+        - ``source_runtime_posture`` → ``source_runtime_posture``
+        - ``coordination_role``   → ``coordination_role``
+        - ``capability``          → ``capability``
+        - ``exec_mode``           → ``exec_mode``
+        - ``route_mode``          → ``route_mode``
+        - ``callback_channel``    → ``callback_channel``
+        - ``task_spec``           → ``handoff_task`` (flattened task spec dict)
+        - ``agent_spec``          → ``agent_spec``   (flattened agent spec dict)
+        - ``return_contract``     → ``return_contract`` (ack/result expectations)
+        - ``schema_version``      → ``schema_version``
+        - ``created_at``          → ``created_at``
+
+        Returns
+        -------
+        dict
+            JSON-serialisable payload safe for AIP HANDOFF_DISPATCH message body.
+        """
+        task_spec_dict = self.task_spec.model_dump() if self.task_spec else {}
+        agent_spec_dict = self.agent_spec.model_dump() if self.agent_spec else {}
+        return_contract_dict = self.return_contract.model_dump() if self.return_contract else {}
+        return {
+            # Primary correlation / identity
+            "handoff_id": self.handoff_id,
+            "trace_id": self.trace_id,
+            "task_id": self.task_id,
+            "session_id": self.session_id,
+            # Device / runtime routing
+            "source_device_id": self.source_device_id,
+            "target_device_id": self.target_device_id,
+            "source_runtime_id": self.source_runtime_id,
+            "target_runtime_id": self.target_runtime_id,
+            # Posture / authority
+            "source_runtime_posture": self.source_runtime_posture,
+            "coordination_role": self.coordination_role,
+            # Execution hints
+            "capability": self.capability,
+            "exec_mode": self.exec_mode,
+            "route_mode": self.route_mode,
+            "callback_channel": self.callback_channel,
+            # Task and agent specs (flattened for Android deserialization)
+            "handoff_task": task_spec_dict,
+            "agent_spec": agent_spec_dict,
+            # Return / ACK expectations
+            "return_contract": return_contract_dict,
+            # Schema
+            "schema_version": self.schema_version,
+            "created_at": self.created_at,
+        }
+
+    def to_android_task_assign_payload(
+        self,
+        device_id: str,
+        *,
+        task_type: str = "handoff_v2",
+        priority: int = 5,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """Build a complete AIP ``handoff_dispatch`` message for Android (PR-H).
+
+        Wraps :meth:`to_android_native_payload` inside an AIP v3 message frame
+        so the caller can pass the dict directly to the WebSocket send path
+        without further transformation.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier (the handoff recipient).
+        task_type:
+            AIP task_type label.  Defaults to ``"handoff_v2"`` which Android
+            uses to route the message to its native HandoffEnvelopeV2 consumer.
+        priority:
+            AIP message priority (1-10).
+        timeout:
+            Expected execution timeout in seconds.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``handoff_dispatch`` message with the full Android-native
+            handoff payload embedded in the ``payload`` field.
+        """
+        import time as _time
+        import uuid as _uuid
+        return {
+            "version": "3.0",
+            "type": "handoff_dispatch",
+            "message_id": str(_uuid.uuid4()),
+            "device_id": device_id,
+            "timestamp": int(_time.time() * 1000),
+            "task_id": self.task_id or self.handoff_id,
+            "task_type": task_type,
+            "handoff_id": self.handoff_id,
+            "trace_id": self.trace_id,
+            "priority": priority,
+            "timeout": timeout,
+            "payload": self.to_android_native_payload(),
+        }
+
 
 # ---------------------------------------------------------------------------
 # Adapter / builder functions
