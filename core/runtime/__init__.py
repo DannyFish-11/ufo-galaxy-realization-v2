@@ -122,8 +122,10 @@ from core.runtime.source_dispatch_orchestrator import (
     MULTI_TARGET_RANKING_MATURITY_PR34_POLICY,
     STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY,
     DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY,
+    # PR-closure: Android terminal signal → canonical ReplayFoundation truth
+    ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
+    ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
 )
-
 # PR-36: Cross-Runtime Result Merge Contract helpers
 from contracts.cross_runtime_result_merge import (
     RuntimeResultRole,
@@ -813,6 +815,9 @@ __all__ = [
     "MULTI_TARGET_RANKING_MATURITY_PR34_POLICY",
     "STAGED_MESH_CLOSURE_RUNNABLE_PR34_POLICY",
     "DIAGNOSTICS_READINESS_PARTICIPATION_FORMATION_USABILITY_PR34_POLICY",
+    # PR-closure: Android terminal signal → canonical ReplayFoundation truth
+    "ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL",
+    "ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY",
     # PR-36: Cross-Runtime Result Merge Contract
     "RuntimeResultRole",
     "RuntimeResultStatus",
