@@ -37,6 +37,14 @@ except ImportError:
     record_parallel_fields = None  # type: ignore[assignment]
     _get_parallel_tracker = None  # type: ignore[assignment]
 
+# Canonical success-status indicators used across result-path handlers.
+_SUCCESS_STATUSES = frozenset(("success", "completed", "done", "true"))
+
+
+def _normalize_status_to_canonical(status: str) -> str:
+    """Map a raw Android status string to the canonical 'success' or 'failed' value."""
+    return "success" if str(status).lower() in _SUCCESS_STATUSES else "failed"
+
 
 async def handle_goal_execution(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
@@ -391,7 +399,7 @@ async def handle_goal_execution_result(
             await record_parallel_fields({
                 "group_id": group_id,
                 "subtask_index": subtask_index if subtask_index is not None else 0,
-                "status": "success" if str(status).lower() in ("success", "completed", "done", "true") else "failed",
+                "status": _normalize_status_to_canonical(status),
                 "latency_ms": int(latency_ms or 0),
                 "summary": result_text,
                 "outputs": payload.get("steps"),
@@ -440,7 +448,7 @@ async def handle_goal_execution_result(
                             )
                         except Exception as agg_mem_err:
                             logger.warning(
-                                "GOAL_EXECUTION_RESULT: parallel group aggregation 写入失败（非致命）"
+                                "GOAL_EXECUTION_RESULT: parallel group aggregation 写入失败（非致命） "
                                 "group_id=%s error=%s", group_id, agg_mem_err,
                             )
         except Exception as par_err:
