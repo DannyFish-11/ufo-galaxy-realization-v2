@@ -39,7 +39,7 @@ import pytest
 
 def run(coro):
     """Run a coroutine synchronously."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.new_event_loop().run_until_complete(coro)
 
 
 def _make_goal_result_message(

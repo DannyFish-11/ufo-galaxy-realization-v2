@@ -204,6 +204,7 @@ async def store_goal_execution_result(
         if subtask_index is not None:
             extra["subtask_index"] = subtask_index
         if extra_payload:
+            # Exclude large binary/image fields to prevent bloating TaskMemory records.
             extra["raw_payload"] = {
                 k: v for k, v in extra_payload.items()
                 if k not in ("image_base64", "screenshot_base64")

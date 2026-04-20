@@ -1354,6 +1354,11 @@ class DesktopPresenceRuntime:
         try:
             if hasattr(self, "_active_sessions") and self._active_sessions:
                 for session in self._active_sessions.values():
+                    # RuntimeSession exposes two aliases for the same underlying
+                    # correlation ID: `runtime_session_id` (canonical) and
+                    # `trace_id` (kept for backward-compat with older callers).
+                    # We check both to handle cases where Android sends trace_id
+                    # that maps to either alias on the server session.
                     if session.runtime_session_id == trace_id or session.trace_id == trace_id:
                         # Attach the goal execution result to the session so
                         # subsequent LLM calls can reference it.
