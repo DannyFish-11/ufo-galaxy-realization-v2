@@ -147,16 +147,35 @@ async def handle_device_register(
         # PR-C: register in the authoritative attached runtime session registry
         # (PR-19 single-truth source) so dispatch/reuse layers can look up the
         # active session identity.
+        # PR-G: use resolve_android_reconnect_continuity() to determine whether
+        # this is a session restoration (reconnect continuity) or a new
+        # attachment.  This prevents register_session() from always superseding
+        # the existing session on reconnect.
         try:
-            from core.attached_runtime_session_registry import register_session
-            _reg_entry = register_session(
+            from core.attached_runtime_session_registry import (
+                resolve_android_reconnect_continuity,
+                ReconnectOutcome,
+            )
+            # Extract runtime_attachment_session_id from the registration message
+            # (PR-G canonical field; fall back gracefully when absent).
+            _rasid = (
+                message.get("runtime_attachment_session_id")
+                or message.get("runtime_session_id")
+                or message.get("attached_session_id")
+                or ""
+            )
+            _continuity_outcome, _reg_entry = resolve_android_reconnect_continuity(
                 device_id,
+                runtime_attachment_session_id=_rasid,
                 posture="join_runtime",
                 metadata={"registration_trigger": "android_device_register"},
             )
             logger.info(
-                "attached_runtime_session_registry: registered device_id=%s runtime_session_id=%s",
-                device_id, _reg_entry.runtime_session_id,
+                "attached_runtime_session_registry: continuity_outcome=%s "
+                "device_id=%s runtime_session_id=%s rasid=%r",
+                _continuity_outcome.value, device_id,
+                _reg_entry.runtime_session_id,
+                _rasid or "(none)",
             )
         except Exception as _reg_exc:
             logger.debug(

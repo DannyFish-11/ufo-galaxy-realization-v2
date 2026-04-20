@@ -69,6 +69,7 @@ Enums::
     RegistryEntryState
     RegistryTransition
     InvalidationReason
+    ReconnectOutcome
 
 Dataclasses::
 
@@ -88,6 +89,8 @@ Functions::
     invalidate_session(entry, reason, ...) -> AttachedSessionRegistryEntry
     lookup_active_session(session_id, ...) -> AttachedSessionRegistryEntry | None
     lookup_session_by_device(device_id, ...) -> AttachedSessionRegistryEntry | None
+    lookup_session_by_runtime_attachment_id(rasid, ...) -> AttachedSessionRegistryEntry | None
+    resolve_android_reconnect_continuity(device_id, ...) -> (ReconnectOutcome, AttachedSessionRegistryEntry)
     list_active_sessions(...) -> list[AttachedSessionRegistryEntry]
     build_registry_snapshot(...) -> AttachedSessionRegistrySnapshot
     get_session_registry() -> AttachedSessionRegistry
@@ -102,7 +105,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Policy sentinels
@@ -302,6 +305,57 @@ REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33_POLICY: str = (
 )
 
 # ---------------------------------------------------------------------------
+# PR-G: Continuity / reconnect / attachment identity sentinels
+# ---------------------------------------------------------------------------
+
+REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_CANONICAL_FIELD_PRG_SENTINEL: str = (
+    "ATTACHED_RUNTIME_SESSION_REGISTRY_PRG::runtime-attachment-session-id-canonical-field::"
+    "package=G::post-533-dual-repo-runtime-unification::"
+    "runtime_attachment_session_id-is-client-supplied-stable-identity-for-continuity"
+)
+
+REGISTRY_RASID_IS_CLIENT_SUPPLIED_CONTINUITY_IDENTITY_PRG_POLICY: str = (
+    "POLICY::REGISTRY_RASID_IS_CLIENT_SUPPLIED_CONTINUITY_IDENTITY_PRG: "
+    "runtime_attachment_session_id (RASID) is the client-supplied stable session "
+    "identity used for reconnect continuity determination.  It is distinct from "
+    "runtime_session_id (which is server-generated).  When a connecting Android "
+    "device provides a RASID, the registry MUST attempt to match it against "
+    "existing entries before creating a new session."
+)
+
+REGISTRY_RASID_CONTINUITY_LOOKUP_TAKES_PRIORITY_PRG_POLICY: str = (
+    "POLICY::REGISTRY_RASID_CONTINUITY_LOOKUP_TAKES_PRIORITY_PRG: "
+    "In resolve_android_reconnect_continuity(), when a runtime_attachment_session_id "
+    "is provided it is the highest-priority signal for continuity matching.  Device-id "
+    "fallback lookup is applied only when no RASID is provided or no RASID match is "
+    "found.  This ensures that a device carrying a known RASID can always restore "
+    "its session identity even if transient state was lost server-side."
+)
+
+REGISTRY_RECONNECT_OUTCOME_RESTORED_PRESERVES_RUNTIME_SESSION_ID_PRG_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_OUTCOME_RESTORED_PRESERVES_RUNTIME_SESSION_ID_PRG: "
+    "When resolve_android_reconnect_continuity() returns ReconnectOutcome.restored, "
+    "the resulting entry MUST carry the same runtime_session_id as the prior entry. "
+    "This preserves host-side execution tracking, dispatch binding, and reuse binding "
+    "identity across the reconnect event."
+)
+
+REGISTRY_RECONNECT_OUTCOME_NEW_REPLACES_OLD_SESSION_PRG_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_OUTCOME_NEW_REPLACES_OLD_SESSION_PRG: "
+    "When resolve_android_reconnect_continuity() returns ReconnectOutcome.new_registration, "
+    "any previously active session for the device is superseded (moved to 'replaced').  "
+    "This avoids duplicate active targets and zombie sessions that could pollute "
+    "dispatch target discovery."
+)
+
+REGISTRY_RECONNECT_CONTINUITY_IS_IDEMPOTENT_PRG_POLICY: str = (
+    "POLICY::REGISTRY_RECONNECT_CONTINUITY_IS_IDEMPOTENT_PRG: "
+    "resolve_android_reconnect_continuity() MUST be idempotent.  Calling it multiple "
+    "times for the same device in the same state MUST produce consistent results "
+    "without creating duplicate sessions or changing session identity."
+)
+
+# ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 
@@ -473,6 +527,30 @@ class InvalidationReason(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# ReconnectOutcome  (PR-G continuity)
+# ---------------------------------------------------------------------------
+
+
+class ReconnectOutcome(str, Enum):
+    """Outcome of an :func:`resolve_android_reconnect_continuity` call.
+
+    Values
+    ------
+    restored
+        An existing session entry was found and restored to ``active`` state
+        (or was already active).  The returned entry retains the original
+        ``runtime_session_id`` for continuity.
+    new_registration
+        No matching prior session was found; a new session was registered.
+        Any previous active entry for the device has been moved to
+        ``replaced`` state.
+    """
+
+    restored = "restored"
+    new_registration = "new_registration"
+
+
+# ---------------------------------------------------------------------------
 # State transition table
 # ---------------------------------------------------------------------------
 
@@ -550,6 +628,12 @@ class AttachedSessionRegistryEntry:
         Unix epoch seconds when the last state transition occurred.
     metadata
         Arbitrary caller-supplied metadata dict.
+    runtime_attachment_session_id
+        Client-supplied stable identity for runtime attachment continuity.
+        Distinct from ``runtime_session_id`` (server-generated).  When the
+        Android device provides this field on register/reconnect, the registry
+        uses it as a first-priority key for continuity matching so that the
+        device can restore its session identity across reconnects.
     """
 
     device_id: str
@@ -569,6 +653,7 @@ class AttachedSessionRegistryEntry:
     entry_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     reconnect_count: int = 0
     last_reconnect_at: Optional[float] = None
+    runtime_attachment_session_id: str = ""
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -597,6 +682,7 @@ class AttachedSessionRegistryEntry:
             "session_id": self.session_id,
             "device_id": self.device_id,
             "runtime_session_id": self.runtime_session_id,
+            "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "attachment_state": self.attachment_state.value,
             "invalidation_reason": self.invalidation_reason.value,
             "posture": self.posture,
@@ -654,6 +740,7 @@ class AttachedSessionRegistryEntry:
             metadata=data.get("metadata", {}),
             reconnect_count=int(data.get("reconnect_count", 0)),
             last_reconnect_at=float(data["last_reconnect_at"]) if data.get("last_reconnect_at") is not None else None,
+            runtime_attachment_session_id=data.get("runtime_attachment_session_id", ""),
         )
 
 
@@ -852,6 +939,7 @@ class AttachedSessionRegistry:
             session_id=session_id if session_id else entry.session_id,
             device_id=entry.device_id,
             runtime_session_id=entry.runtime_session_id,
+            runtime_attachment_session_id=entry.runtime_attachment_session_id,
             attachment_state=next_state,
             invalidation_reason=new_reason,
             posture=(posture.lower().strip() if posture else entry.posture),
@@ -1024,6 +1112,7 @@ def register_session(
     device_id: str,
     *,
     session_id: str = "",
+    runtime_attachment_session_id: str = "",
     posture: str = _POSTURE_JOIN_RUNTIME,
     host_role: str = "",
     coordination_role: str = "",
@@ -1046,6 +1135,11 @@ def register_session(
         Identifier of the device/runtime to register.
     session_id
         Optional external session identifier.
+    runtime_attachment_session_id
+        Client-supplied stable session identity for continuity matching
+        (PR-G).  Stored on the entry and used by
+        :func:`resolve_android_reconnect_continuity` for reconnect
+        determination.
     posture
         Participation posture; defaults to ``join_runtime``.
     host_role
@@ -1076,6 +1170,7 @@ def register_session(
         device_id=device_id,
         session_id=session_id or "",
         runtime_session_id=str(uuid.uuid4()),
+        runtime_attachment_session_id=runtime_attachment_session_id or "",
         attachment_state=RegistryEntryState.active,
         invalidation_reason=InvalidationReason.none,
         posture=(posture or _POSTURE_JOIN_RUNTIME).lower().strip(),
@@ -1456,6 +1551,7 @@ def update_session_posture(
         session_id=entry.session_id,
         device_id=entry.device_id,
         runtime_session_id=entry.runtime_session_id,
+        runtime_attachment_session_id=entry.runtime_attachment_session_id,
         attachment_state=entry.attachment_state,
         invalidation_reason=entry.invalidation_reason,
         posture=_normalised,
@@ -1478,3 +1574,181 @@ def update_session_posture(
         registry._update_indices(updated)
 
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Core API — lookup_session_by_runtime_attachment_id  (PR-G)
+# ---------------------------------------------------------------------------
+
+
+def lookup_session_by_runtime_attachment_id(
+    runtime_attachment_session_id: str,
+    *,
+    active_only: bool = False,
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> Optional[AttachedSessionRegistryEntry]:
+    """Look up a registry entry by client-supplied *runtime_attachment_session_id*.
+
+    Scans the ring buffer for the most recent entry whose
+    ``runtime_attachment_session_id`` matches *runtime_attachment_session_id*.
+
+    Parameters
+    ----------
+    runtime_attachment_session_id
+        The client-supplied stable identity to search for.
+    active_only
+        When True, only returns the entry if it is currently ``active``.
+        When False (default), also returns ``detached`` entries so that the
+        caller can restore them via :func:`reconnect_session`.
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    AttachedSessionRegistryEntry | None
+        The most recent matching entry, or None if not found or filtered out.
+    """
+    if not runtime_attachment_session_id:
+        return None
+    if registry is None:
+        registry = get_session_registry()
+    for entry in registry.list_all():
+        if entry.runtime_attachment_session_id == runtime_attachment_session_id:
+            if active_only and not entry.is_active():
+                return None
+            # Skip terminal entries (replaced / invalidated)
+            if entry.is_terminal():
+                continue
+            return entry
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Core API — resolve_android_reconnect_continuity  (PR-G)
+# ---------------------------------------------------------------------------
+
+
+def resolve_android_reconnect_continuity(
+    device_id: str,
+    *,
+    runtime_attachment_session_id: str = "",
+    session_id: str = "",
+    posture: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> Tuple[ReconnectOutcome, AttachedSessionRegistryEntry]:
+    """Determine whether an Android device connecting should restore an existing
+    attachment session or establish a new one, then take the appropriate action.
+
+    This is the canonical server-side continuity determination function for
+    PR-G.  It implements the following priority order:
+
+    1. **RASID match** — if *runtime_attachment_session_id* is provided and a
+       non-terminal entry with that RASID exists in the registry:
+
+       * Active entry: returned as-is (already restored).
+       * Recoverable (detached) entry: transitioned to ``active`` via
+         :func:`reconnect_session`.
+       Outcome: :attr:`ReconnectOutcome.restored`.
+
+    2. **Device-id fallback** — if no RASID is provided or no RASID match is
+       found, look up the device's current active entry:
+
+       * Active entry found: returned as-is.
+       * No active entry, but a recoverable (detached) entry exists: restore it.
+       Outcome: :attr:`ReconnectOutcome.restored`.
+
+    3. **New registration** — no matching prior entry; call
+       :func:`register_session` to create a new session.
+       Outcome: :attr:`ReconnectOutcome.new_registration`.
+
+    The function is **idempotent**: calling it multiple times for the same
+    device with the same arguments produces consistent results without
+    creating duplicate sessions.
+
+    Parameters
+    ----------
+    device_id
+        Identifier of the connecting Android device.
+    runtime_attachment_session_id
+        Optional client-supplied stable session identity.  When provided,
+        used as the first-priority key for continuity matching
+        (:data:`REGISTRY_RASID_CONTINUITY_LOOKUP_TAKES_PRIORITY_PRG_POLICY`).
+    session_id
+        Optional external session identifier passed through to
+        :func:`register_session` when creating a new session.
+    posture
+        Optional posture string passed through to metadata on new session.
+    metadata
+        Optional metadata to merge into the registry entry on any path.
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    (ReconnectOutcome, AttachedSessionRegistryEntry)
+        A tuple of the continuity determination outcome and the resulting
+        active registry entry.
+    """
+    if registry is None:
+        registry = get_session_registry()
+
+    _meta = dict(metadata or {})
+    if runtime_attachment_session_id:
+        _meta.setdefault("runtime_attachment_session_id_provided", True)
+
+    # ------------------------------------------------------------------
+    # Priority 1: RASID match
+    # ------------------------------------------------------------------
+    if runtime_attachment_session_id:
+        _rasid_entry = lookup_session_by_runtime_attachment_id(
+            runtime_attachment_session_id,
+            active_only=False,
+            registry=registry,
+        )
+        if _rasid_entry is not None and _rasid_entry.device_id == device_id:
+            if _rasid_entry.is_active():
+                # Already active — idempotent; nothing to do.
+                return (ReconnectOutcome.restored, _rasid_entry)
+            if _rasid_entry.is_recoverable():
+                _restored = reconnect_session(
+                    _rasid_entry,
+                    session_id=session_id,
+                    metadata={**_meta, "reconnect_reason": "rasid_continuity_match"},
+                    registry=registry,
+                )
+                return (ReconnectOutcome.restored, _restored)
+
+    # ------------------------------------------------------------------
+    # Priority 2: Device-id fallback
+    # ------------------------------------------------------------------
+    _active_entry = registry.get_active_for_device(device_id)
+    if _active_entry is not None:
+        # Already active — idempotent.
+        return (ReconnectOutcome.restored, _active_entry)
+
+    # Look for a recoverable (detached) entry for this device.
+    for _e in registry.list_all():
+        if _e.device_id == device_id and _e.is_recoverable():
+            _restored = reconnect_session(
+                _e,
+                session_id=session_id,
+                metadata={**_meta, "reconnect_reason": "device_id_fallback"},
+                registry=registry,
+            )
+            return (ReconnectOutcome.restored, _restored)
+
+    # ------------------------------------------------------------------
+    # Priority 3: New registration
+    # ------------------------------------------------------------------
+    _new_entry = register_session(
+        device_id,
+        session_id=session_id,
+        runtime_attachment_session_id=runtime_attachment_session_id,
+        posture=posture or _POSTURE_JOIN_RUNTIME,
+        metadata={**_meta, "reconnect_reason": "new_registration"},
+        registry=registry,
+    )
+    return (ReconnectOutcome.new_registration, _new_entry)

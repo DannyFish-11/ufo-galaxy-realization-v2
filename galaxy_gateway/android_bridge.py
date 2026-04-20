@@ -866,31 +866,32 @@ class AndroidBridge:
 
         # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
         # so that runtime_session_id is preserved and the session returns to active.
+        # PR-G: use resolve_android_reconnect_continuity() for canonical continuity
+        # determination (RASID-based match or device-id fallback).
         try:
             from core.attached_runtime_session_registry import (
-                lookup_session_by_device,
-                reconnect_session,
-                get_session_registry,
+                resolve_android_reconnect_continuity,
+                ReconnectOutcome,
             )
-            # First try the active pointer; fall back to the most-recent
-            # non-terminal entry (e.g. detached after a prior disconnect).
-            _entry = lookup_session_by_device(device_id)
-            if _entry is None:
-                _reg = get_session_registry()
-                for _e in _reg.list_all():
-                    if _e.device_id == device_id and not _e.is_terminal():
-                        _entry = _e
-                        break
-            if _entry is not None and not _entry.is_terminal():
-                _updated = reconnect_session(
-                    _entry,
-                    metadata={"reconnect_source": "android_bridge"},
-                )
-                logger.info(
-                    "AttachedSessionRegistry: session reconnected: "
-                    "device_id=%s runtime_session_id=%s reconnect_count=%d",
-                    device_id, _updated.runtime_session_id, _updated.reconnect_count,
-                )
+            # Extract runtime_attachment_session_id from the stored device metadata
+            # if available; fall back to empty string (device-id fallback path).
+            async with self._lock:
+                _dev = self._devices.get(device_id)
+                _rasid = (
+                    getattr(_dev, "runtime_attachment_session_id", "")
+                    if _dev is not None else ""
+                ) or ""
+            _continuity_outcome, _updated = resolve_android_reconnect_continuity(
+                device_id,
+                runtime_attachment_session_id=_rasid,
+                metadata={"reconnect_source": "android_bridge"},
+            )
+            logger.info(
+                "AttachedSessionRegistry: reconnect continuity: "
+                "device_id=%s outcome=%s runtime_session_id=%s reconnect_count=%d",
+                device_id, _continuity_outcome.value,
+                _updated.runtime_session_id, _updated.reconnect_count,
+            )
         except Exception as _asr_exc:
             logger.debug(
                 "android_bridge: attached session reconnect non-fatal: device_id=%s error=%s",
