@@ -332,7 +332,7 @@ async def handle_task_status(
         task_id, device_id,
     )
 
-    status: str = TaskStatus.FAILED.value
+    status: str = "not_found"
     progress: Optional[float] = None
     current_step: Optional[int] = None
 
