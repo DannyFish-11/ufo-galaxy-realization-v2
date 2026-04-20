@@ -15,6 +15,7 @@ Canonical mutation path::
     caller → galaxy_gateway.ssot.udm_write_*()
             → UnifiedDeviceManager  ← THIS CLASS (SSOT write point)
             → CapabilityBus          (device capabilities propagated automatically)
+            → CapabilityAssimilationLayer (device enters capability/network/scheduler graphs)
 
 Downstream modules that maintain their own per-device records (e.g.
 ``core.device_registry``, ``core.device_pool_manager``,
@@ -26,6 +27,7 @@ they must not act as parallel canonical truth sources.
   - 设备查询（按 ID / 类型 / 在线状态）
   - 向统一连接管理器注册/注销 WebSocket 连接
   - 设备注册后自动向 CapabilityBus 传播设备能力（capability visibility integration）
+  - 设备注册后自动将设备 assimilate 到 CapabilityAssimilationLayer（capability graph integration）
 
 所有旧 DeviceManager 实现（galaxy_gateway/handlers/device_manager.py、
 enhancements/multidevice/device_manager.py、core/device_agent_manager.py）
@@ -168,6 +170,13 @@ class UnifiedDeviceManager:
         # call — failure to propagate never prevents device registration.
         self._propagate_capabilities_to_bus(device)
 
+        # Capability assimilation integration:
+        # Assimilate the device into the CapabilityAssimilationLayer so that
+        # the capability graph, network graph, and scheduler graph all see the
+        # device as a first-class capability provider.  This is a best-effort,
+        # non-blocking call — failure never prevents device registration.
+        self._assimilate_device_to_capability_layer(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -309,6 +318,66 @@ class UnifiedDeviceManager:
                 device_id,
                 exc,
                 extra={"event": "capability_bus_remove_skip", "device_id": device_id},
+            )
+
+    def _assimilate_device_to_capability_layer(self, device: UnifiedDevice) -> None:
+        """Assimilate *device* into the CapabilityAssimilationLayer.
+
+        This is the bridge between the UDM SSOT write path and the capability
+        assimilation / graph layer.  Calling this ensures that registered
+        devices become first-class capability providers visible to the
+        capability graph, network graph, and scheduler graph — not just to the
+        CapabilityBus.
+
+        The call is idempotent: re-registering a device (e.g. on reconnect or
+        capability update) will update the existing assimilation record rather
+        than creating a duplicate.
+
+        Supports empty capabilities: a device with no capabilities still
+        receives an assimilation record so it is visible to the graph as a
+        registered node.
+
+        Failure is logged at DEBUG level and never raises — device registration
+        must succeed even if the assimilation layer is unavailable.
+        """
+        try:
+            from core.capability_assimilation import assimilate_device  # noqa: PLC0415
+
+            caps = [stripped for c in (device.capabilities or []) if (stripped := str(c).strip())]
+            host = device.ip_address or "localhost"
+            port = device.port or 0
+            tags = [str(device.device_type)] if device.device_type else []
+            meta = dict(device.metadata or {})
+            meta.setdefault("device_name", device.device_name or device.device_id)
+            meta.setdefault("source", device.source or "udm")
+
+            assimilate_device(
+                device.device_id,
+                capabilities=caps,
+                host=host,
+                port=port,
+                tags=tags,
+                metadata=meta,
+            )
+            logger.debug(
+                "Assimilated device %s into CapabilityAssimilationLayer (%d capabilities)",
+                device.device_id,
+                len(caps),
+                extra={
+                    "event": "capability_assimilation_device",
+                    "device_id": device.device_id,
+                    "capabilities": caps,
+                },
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityAssimilationLayer assimilation skipped for device %s: %s",
+                device.device_id,
+                exc,
+                extra={
+                    "event": "capability_assimilation_skip",
+                    "device_id": device.device_id,
+                },
             )
 
     # ------------------------------------------------------------------
