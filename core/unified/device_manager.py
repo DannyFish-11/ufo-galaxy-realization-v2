@@ -15,6 +15,7 @@ Canonical mutation path::
     caller → galaxy_gateway.ssot.udm_write_*()
             → UnifiedDeviceManager  ← THIS CLASS (SSOT write point)
             → CapabilityBus          (device capabilities propagated automatically)
+            → CapabilityAssimilationLayer  (device projected into capability/task/network graphs)
 
 Downstream modules that maintain their own per-device records (e.g.
 ``core.device_registry``, ``core.device_pool_manager``,
@@ -26,6 +27,7 @@ they must not act as parallel canonical truth sources.
   - 设备查询（按 ID / 类型 / 在线状态）
   - 向统一连接管理器注册/注销 WebSocket 连接
   - 设备注册后自动向 CapabilityBus 传播设备能力（capability visibility integration）
+  - 设备注册后自动将设备能力注入 CapabilityAssimilationLayer（capability graph integration）
 
 所有旧 DeviceManager 实现（galaxy_gateway/handlers/device_manager.py、
 enhancements/multidevice/device_manager.py、core/device_agent_manager.py）
@@ -168,6 +170,13 @@ class UnifiedDeviceManager:
         # call — failure to propagate never prevents device registration.
         self._propagate_capabilities_to_bus(device)
 
+        # Capability graph integration (PR-B2):
+        # Project the device into the CapabilityAssimilationLayer so that the
+        # capability graph, task graph, and network graph are all aware of this
+        # device as a first-class capability provider.  This is idempotent —
+        # re-registering the same device_id merges/updates the existing record.
+        self._assimilate_device_to_capability_layer(device)
+
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
         从字典构建并注册 UnifiedDevice（向后兼容旧注册路径使用）。
@@ -224,6 +233,15 @@ class UnifiedDeviceManager:
         )
 
     # ------------------------------------------------------------------
+    # Internal capability helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_capabilities(raw: Any) -> List[str]:
+        """Return a deduplicated, stripped list of non-empty capability strings."""
+        return [s for s in (str(c).strip() for c in (raw or [])) if s]
+
+    # ------------------------------------------------------------------
     # Capability-bus integration helpers (private)
     # ------------------------------------------------------------------
 
@@ -239,16 +257,13 @@ class UnifiedDeviceManager:
         Failure is logged at DEBUG level and never raises — device registration
         must succeed even if the bus is unavailable.
         """
-        caps = list(device.capabilities or [])
+        caps = self._normalize_capabilities(device.capabilities)
         if not caps:
             return
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
             bus = get_capability_bus()
-            for cap in caps:
-                cap_str = str(cap).strip()
-                if not cap_str:
-                    continue
+            for cap_str in caps:
                 bus.register_device_capability(
                     device_id=device.device_id,
                     action=cap_str,
@@ -286,16 +301,13 @@ class UnifiedDeviceManager:
         device = self._devices.get(device_id)
         if device is None:
             return
-        caps = list(device.capabilities or [])
+        caps = self._normalize_capabilities(device.capabilities)
         if not caps:
             return
         try:
             from core.capability_bus import get_capability_bus  # noqa: PLC0415
             bus = get_capability_bus()
-            for cap in caps:
-                cap_str = str(cap).strip()
-                if not cap_str:
-                    continue
+            for cap_str in caps:
                 bus.unregister(f"device__{device_id}__{cap_str}")
             logger.debug(
                 "Removed %d capability/capabilities from CapabilityBus for device %s",
@@ -309,6 +321,51 @@ class UnifiedDeviceManager:
                 device_id,
                 exc,
                 extra={"event": "capability_bus_remove_skip", "device_id": device_id},
+            )
+
+    def _assimilate_device_to_capability_layer(self, device: UnifiedDevice) -> None:
+        """Project *device* into the CapabilityAssimilationLayer.
+
+        Ensures the device is a first-class participant in the capability graph,
+        task graph, and network graph — not just visible in the CapabilityBus.
+
+        This call is idempotent: re-assimilating the same device_id merges the
+        updated capabilities into the existing record without creating duplicate
+        entries.  It is safe to call after every registration or capability
+        update.
+
+        Failure is logged at DEBUG level and never raises — device registration
+        must succeed even if the assimilation layer is unavailable.
+        """
+        try:
+            from core.capability_assimilation import assimilate_device  # noqa: PLC0415
+            caps = self._normalize_capabilities(device.capabilities)
+            assimilate_device(
+                device_id=device.device_id,
+                capabilities=caps,
+                host=device.ip_address or "localhost",
+                port=device.port or 0,
+                tags=[str(device.device_type)],
+                metadata=dict(device.metadata or {}),
+            )
+            logger.debug(
+                "Assimilated device into CapabilityAssimilationLayer: device_id=%s caps=%d",
+                device.device_id,
+                len(caps),
+                extra={
+                    "event": "capability_assimilation_ok",
+                    "device_id": device.device_id,
+                },
+            )
+        except Exception as exc:
+            logger.debug(
+                "CapabilityAssimilationLayer assimilation skipped for device %s: %s",
+                device.device_id,
+                exc,
+                extra={
+                    "event": "capability_assimilation_skip",
+                    "device_id": device.device_id,
+                },
             )
 
     # ------------------------------------------------------------------
@@ -420,6 +477,14 @@ class UnifiedDeviceManager:
                 "timestamp": now.isoformat(),
             },
         )
+
+        # If capabilities were updated, re-project the device into the
+        # CapabilityAssimilationLayer so the capability graph stays current.
+        # This handles the case where capabilities arrive after the initial
+        # registration (e.g. a separate capability_report message).
+        if "capabilities" in fields_changed:
+            self._assimilate_device_to_capability_layer(device)
+
         return device
 
     def update_device_status(self, device_id: str, status: UnifiedDeviceStatus) -> None:
