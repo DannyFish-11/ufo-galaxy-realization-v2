@@ -158,6 +158,7 @@ class TestConsumeAndroidBehavioralResult:
             "task_id",
             "trace_id",
             "reject_reason",
+            "terminal_signal_recorded",
         }
         assert expected_keys == set(result.keys())
 

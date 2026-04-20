@@ -1022,6 +1022,40 @@ POSTURE_UPDATE_AFFECTS_NEXT_SELECTION_CYCLE_POLICY: str = (
 )
 
 
+# ---------------------------------------------------------------------------
+# PR-closure: Android terminal signal → canonical ReplayFoundation truth
+# ---------------------------------------------------------------------------
+
+ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL: str = (
+    "ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH::"
+    "source-dispatch-orchestrator::consume_android_behavioral_result::"
+    "terminal-signals-emitted-to-replay-foundation::"
+    "cancel+failure+result-signals-affect-canonical-orchestration-truth::"
+    "package=closure-audit::v2-android-runtime-closure"
+)
+
+ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY: str = (
+    "POLICY::ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION: "
+    "When consume_android_behavioral_result() receives a reconcile outcome where "
+    "was_updated=True and the signal kind is terminal "
+    "(cancelled / error / final_result / timeout), "
+    "it MUST emit a ReplayFoundation runtime event so the canonical orchestration "
+    "event stream reflects the Android terminal outcome.  "
+    "This closes the correctness gap where Android terminal signals were only "
+    "logged via observability sink but not recorded in the canonical "
+    "ReplayFoundation truth store, leaving the orchestration event stream "
+    "incomplete for cancel/failure/result paths.  "
+    "The ReplayEventKind used is 'android_terminal_signal'.  "
+    "Non-terminal signals (ack, progress, partial_result) are NOT emitted to "
+    "ReplayFoundation because they are transient lifecycle probes, not "
+    "orchestration-truth events."
+)
+
+_ANDROID_TERMINAL_SIGNAL_KINDS: frozenset = frozenset(
+    {"cancelled", "error", "final_result", "timeout"}
+)
+
+
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
     """Attempt to capture the current RuntimeGovernanceSnapshot (PR-27)."""
     try:
@@ -3043,7 +3077,8 @@ class SourceDispatchOrchestrator:
         dict
             Structured consumer summary with keys: ``consumed``, ``was_updated``,
             ``signal_kind``, ``result_kind``, ``contract_id``, ``session_id``,
-            ``task_id``, ``trace_id``, ``reject_reason``.
+            ``task_id``, ``trace_id``, ``reject_reason``,
+            ``terminal_signal_recorded``.
         """
         consumed = False
         was_updated = False
@@ -3054,6 +3089,7 @@ class SourceDispatchOrchestrator:
         _task_id: Optional[str] = task_id
         _trace_id: Optional[str] = trace_id
         reject_reason: str = ""
+        terminal_signal_recorded: bool = False
 
         try:
             was_updated = bool(getattr(reconcile_outcome, "was_updated", False))
@@ -3113,6 +3149,50 @@ class SourceDispatchOrchestrator:
                         "consume_android_behavioral_result: observability emit skipped: %s",
                         _obs_exc,
                     )
+
+                # PR-closure: for terminal Android signals (cancelled / error /
+                # final_result / timeout), emit a ReplayFoundation runtime event
+                # so the canonical orchestration event stream reflects the
+                # terminal outcome.  This closes the correctness gap where
+                # Android terminal signals were only logged via the observability
+                # sink but not recorded in the canonical ReplayFoundation truth
+                # store.  See ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY.
+                _sk_str = signal_kind or ""
+                if _sk_str in _ANDROID_TERMINAL_SIGNAL_KINDS:
+                    try:
+                        from core.replay_foundation import emit_runtime_event as _emit_ev
+
+                        _emit_ev(
+                            kind="android_terminal_signal",
+                            task_id=_task_id or "",
+                            trace_id=_trace_id or "",
+                            source="consume_android_behavioral_result",
+                            message=(
+                                f"Android terminal signal received: "
+                                f"signal_kind={_sk_str} "
+                                f"result_kind={result_kind or ''} "
+                                f"contract_id={contract_id or ''} "
+                                f"session_id={_session_id or ''}"
+                            ),
+                            payload={
+                                "signal_kind": _sk_str,
+                                "result_kind": result_kind,
+                                "contract_id": contract_id,
+                                "session_id": _session_id,
+                                "task_id": _task_id,
+                                "trace_id": _trace_id,
+                                "source": source,
+                                "policy": ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
+                            },
+                        )
+                        terminal_signal_recorded = True
+                    except Exception as _replay_exc:  # noqa: BLE001
+                        logger.debug(
+                            "consume_android_behavioral_result: "
+                            "replay_foundation terminal signal emit skipped: %s",
+                            _replay_exc,
+                        )
+
         except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "consume_android_behavioral_result: error processing outcome (non-fatal): %s",
@@ -3129,4 +3209,5 @@ class SourceDispatchOrchestrator:
             "task_id": _task_id,
             "trace_id": _trace_id,
             "reject_reason": reject_reason,
+            "terminal_signal_recorded": terminal_signal_recorded,
         }
