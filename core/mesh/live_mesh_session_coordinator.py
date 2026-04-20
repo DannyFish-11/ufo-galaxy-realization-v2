@@ -478,7 +478,7 @@ class LiveMeshSessionCoordinator:
                 self._state = engine.update_participant_status(self._state, device_id, "failed")
                 self._errors.append(f"participant_failed:{device_id}:{reason}")
                 _logger.info(
-                    "live_coordinator_event: participant_failed session_id=%s " "device_id=%s reason=%s",
+                    "live_coordinator_event: participant_failed session_id=%s device_id=%s reason=%s",
                     getattr(self._state, "session_id", None),
                     device_id,
                     reason,
@@ -516,7 +516,7 @@ class LiveMeshSessionCoordinator:
                 engine = _import_engine()
                 self._state = engine.drop_participant(self._state, device_id, reason=reason or "dropped_by_coordinator")
                 _logger.info(
-                    "live_coordinator_event: participant_dropped session_id=%s " "device_id=%s reason=%s",
+                    "live_coordinator_event: participant_dropped session_id=%s device_id=%s reason=%s",
                     getattr(self._state, "session_id", None),
                     device_id,
                     reason,
