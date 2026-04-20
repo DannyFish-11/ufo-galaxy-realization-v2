@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from galaxy_gateway.android.message_builder import MessageBuilder
 
@@ -16,6 +16,50 @@ if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Role derivation helper
+# ---------------------------------------------------------------------------
+
+def _derive_roles_from_supported_actions(supported_actions: List) -> "List":
+    """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
+    list of supported action strings reported by the device.
+
+    Mapping:
+    - PERCEPTION  — actions containing any of: camera, photo, scan, mic,
+                    audio, record, sensor
+    - ACTION      — actions containing any of: tap, swipe, type, keyboard,
+                    click, input, write, exec, shell, install
+    - PRESENCE    — actions containing any of: screenshot, screen, display,
+                    notify, notification, speak, tts
+
+    A device with no matched roles defaults to ACTION to ensure every device
+    has at least one role.
+    """
+    try:
+        from core.mesh.body_mesh_registry import DeviceRole
+    except ImportError:
+        return []
+
+    _PERCEPTION_KEYWORDS = {"camera", "photo", "scan", "mic", "audio", "record", "sensor"}
+    _ACTION_KEYWORDS = {"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"}
+    _PRESENCE_KEYWORDS = {"screenshot", "screen", "display", "notify", "notification", "speak", "tts"}
+
+    roles: List = []
+    actions_lower = {(a.lower() if isinstance(a, str) else str(a).lower()) for a in supported_actions}
+
+    if any(k in action for action in actions_lower for k in _PERCEPTION_KEYWORDS):
+        roles.append(DeviceRole.PERCEPTION)
+    if any(k in action for action in actions_lower for k in _ACTION_KEYWORDS):
+        roles.append(DeviceRole.ACTION)
+    if any(k in action for action in actions_lower for k in _PRESENCE_KEYWORDS):
+        roles.append(DeviceRole.PRESENCE)
+
+    if not roles:
+        roles.append(DeviceRole.ACTION)
+
+    return roles
 
 
 async def handle_capability_report(
@@ -110,6 +154,29 @@ async def handle_capability_report(
             )
         except Exception as sync_err:
             logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
+
+    # ── 3. Update BodyMeshRegistry roles based on supported_actions ───────────
+    # This ensures that even if a device registered with no/partial capabilities,
+    # a subsequent capability_report can update its body mesh role assignment.
+    # Behaviour is idempotent: re-registration merges roles.
+    if device_id:
+        try:
+            from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
+            _roles = _derive_roles_from_supported_actions(supported_actions)
+            get_body_mesh_registry().register(
+                device_id,
+                roles=_roles,
+                metadata={"capability_report_trigger": True, "platform": platform},
+            )
+            logger.info(
+                "BodyMeshRegistry: updated device_id=%s roles=%s via capability_report",
+                device_id, [r.value for r in _roles],
+            )
+        except Exception as _bmr_exc:
+            logger.debug(
+                "capability_report: BodyMeshRegistry update non-fatal: device_id=%s error=%s",
+                device_id, _bmr_exc,
+            )
 
     return MessageBuilder.capability_report_ack(
         device_id=device_id or "unknown",
