@@ -1186,7 +1186,7 @@ def _try_android_dispatch(
                 # Event loop already running (e.g. in async context)
                 return {
                     "success": False,
-                    "skipped_reason": "android_bridge_assign_task_async_unavailable_in_sync_path",
+                    "skipped_reason": "async_bridge_call_in_sync_context",
                 }
         else:
             resp = assign_coro
@@ -2315,19 +2315,19 @@ def orchestrate_source_runtime_dispatch(
                 # PR-E: If the selected target is an Android attached device,
                 # route through the canonical AndroidBridge path instead of the
                 # generic agent_bridge remote-handoff path.
-                _android_target_id = (
+                android_target_id = (
                     selected_target.target_device_id
                     if selected_target is not None
                     else None
                 )
-                if _android_target_id and _is_android_dispatch_target(_android_target_id):
+                if android_target_id and _is_android_dispatch_target(android_target_id):
                     logger.debug(
                         "orchestrate_source_runtime_dispatch: "
                         "target %s is Android attached device; routing via android_dispatch",
-                        _android_target_id,
+                        android_target_id,
                     )
                     android_resp = _try_android_dispatch(
-                        _android_target_id,
+                        android_target_id,
                         task,
                         trace_id=trace_id,
                         task_id=task_id,

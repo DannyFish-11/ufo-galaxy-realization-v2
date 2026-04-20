@@ -160,12 +160,14 @@ class TestIsAndroidDispatchTarget:
         from core.runtime.source_dispatch_orchestrator import _is_android_dispatch_target
 
         with patch.dict("sys.modules", {"galaxy_gateway.android_bridge": None}):
-            # Should not raise; just return False
+            # Graceful degradation contract: must return False (not raise)
             try:
                 result = _is_android_dispatch_target("dev_x")
                 assert result is False
-            except Exception:
-                pass  # Acceptable — graceful degradation may raise or return False
+            except Exception as exc:
+                pytest.fail(
+                    f"_is_android_dispatch_target raised instead of returning False: {exc}"
+                )
 
     def test_returns_false_when_bridge_has_no_devices(self):
         """_is_android_dispatch_target returns False when bridge has no _devices attr."""
