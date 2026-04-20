@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Role derivation helper
 # ---------------------------------------------------------------------------
 
-def _derive_roles_from_supported_actions(supported_actions: List) -> "List":
+def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
     """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
     list of supported action strings reported by the device.
 
@@ -42,18 +42,30 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> "List":
     except ImportError:
         return []
 
-    _PERCEPTION_KEYWORDS = {"camera", "photo", "scan", "mic", "audio", "record", "sensor"}
-    _ACTION_KEYWORDS = {"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"}
-    _PRESENCE_KEYWORDS = {"screenshot", "screen", "display", "notify", "notification", "speak", "tts"}
+    _PERCEPTION_KEYWORDS = frozenset({"camera", "photo", "scan", "mic", "audio", "record", "sensor"})
+    _ACTION_KEYWORDS = frozenset({"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"})
+    _PRESENCE_KEYWORDS = frozenset({"screenshot", "screen", "display", "notify", "notification", "speak", "tts"})
 
-    roles: List = []
+    roles: List[Any] = []
     actions_lower = {(a.lower() if isinstance(a, str) else str(a).lower()) for a in supported_actions}
 
-    if any(k in action for action in actions_lower for k in _PERCEPTION_KEYWORDS):
+    # Single-pass over the action strings, accumulating matched role categories
+    has_perception = has_action = has_presence = False
+    for action in actions_lower:
+        if not has_perception and any(k in action for k in _PERCEPTION_KEYWORDS):
+            has_perception = True
+        if not has_action and any(k in action for k in _ACTION_KEYWORDS):
+            has_action = True
+        if not has_presence and any(k in action for k in _PRESENCE_KEYWORDS):
+            has_presence = True
+        if has_perception and has_action and has_presence:
+            break  # all roles found, no need to continue
+
+    if has_perception:
         roles.append(DeviceRole.PERCEPTION)
-    if any(k in action for action in actions_lower for k in _ACTION_KEYWORDS):
+    if has_action:
         roles.append(DeviceRole.ACTION)
-    if any(k in action for action in actions_lower for k in _PRESENCE_KEYWORDS):
+    if has_presence:
         roles.append(DeviceRole.PRESENCE)
 
     if not roles:
@@ -161,7 +173,7 @@ async def handle_capability_report(
     # Behaviour is idempotent: re-registration merges roles.
     if device_id:
         try:
-            from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
+            from core.mesh.body_mesh_registry import get_body_mesh_registry
             _roles = _derive_roles_from_supported_actions(supported_actions)
             get_body_mesh_registry().register(
                 device_id,

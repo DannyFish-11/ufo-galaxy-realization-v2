@@ -505,28 +505,28 @@ class TestRegistrationFailureNoSideEffects:
 
     @pytest.mark.asyncio
     async def test_failed_registration_does_not_create_attached_session(self):
-        """When registration fails (no device_id), no attached session is created."""
+        """When registration fails (exception in UDM write), no attached session
+        is created for that failure path; the handler must not raise."""
         from galaxy_gateway.android_bridge import AndroidBridge
         from core.attached_runtime_session import get_attached_runtime_session
 
         bridge = AndroidBridge()
         ws = _make_websocket()
-        # Missing device_id will cause registration to fail at UDM write
-        msg = {
-            "type": "device_register",
-            "platform": "android",
-            # no device_id
-        }
-        # We monkeypatch _write_registration_to_udm to raise an exception
-        original = bridge._write_registration_to_udm
+
+        # Force the UDM write to raise so the handler takes the error path
         def _fail(*a, **kw):
             raise RuntimeError("Simulated UDM failure")
         bridge._write_registration_to_udm = _fail
 
-        await bridge._handle_device_register(ws, msg)
+        msg = {"type": "device_register", "platform": "android", "device_id": "p_fail_dev"}
+        response = await bridge._handle_device_register(ws, msg)
 
-        # No device_id to look up, so nothing to assert — but verify no crash
-        record = get_attached_runtime_session("")
-        # If device_id was empty and exception path was taken, no record should exist
-        # for a deliberately-failed registration with no valid device_id
-        assert record is None or record.device_id != "p_fail_dev"
+        # Handler must return a failure ACK, not raise
+        assert response is not None
+        assert response.get("success") is False or response.get("status") in (False, "error", None)
+
+        # No attached session should have been created for this device
+        record = get_attached_runtime_session("p_fail_dev")
+        assert record is None, (
+            "Failed registration must not create an attached runtime session record"
+        )

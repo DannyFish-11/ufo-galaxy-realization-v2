@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Role derivation helpers
 # ---------------------------------------------------------------------------
 
-def _derive_body_mesh_roles(capabilities: int) -> "List":
+def _derive_body_mesh_roles(capabilities: int) -> List[Any]:
     """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
     ``DeviceCapability`` bitmask.
 
