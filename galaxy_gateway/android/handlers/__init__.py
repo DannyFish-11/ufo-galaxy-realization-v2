@@ -23,6 +23,8 @@ from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_progress,
     handle_command_result,
     handle_error,
+    handle_task_cancel,
+    handle_task_status,
 )
 from galaxy_gateway.android.handlers.task_submit import (
     handle_task_execute,
@@ -57,6 +59,8 @@ __all__ = [
     "handle_task_progress",
     "handle_command_result",
     "handle_error",
+    "handle_task_cancel",
+    "handle_task_status",
     "handle_task_execute",
     "handle_task_submit",
     "handle_goal_execution",

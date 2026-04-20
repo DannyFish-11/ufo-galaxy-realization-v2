@@ -140,8 +140,10 @@ class MessageType(str, Enum):
     TASK_SUBMIT = "task_submit"
     TASK_ASSIGN = "task_assign"
     TASK_STATUS = "task_status"
+    TASK_STATUS_RESPONSE = "task_status_response"
     TASK_RESULT = "task_result"
     TASK_CANCEL = "task_cancel"
+    TASK_CANCEL_ACK = "task_cancel_ack"
     TASK_PROGRESS = "task_progress"
     TASK_END = "task_end"
     

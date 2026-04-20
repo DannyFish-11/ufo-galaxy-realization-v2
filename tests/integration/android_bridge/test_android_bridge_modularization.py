@@ -103,9 +103,11 @@ class TestSubModuleImports:
         from galaxy_gateway.android.handlers.task_lifecycle import (
             handle_task_result, handle_task_end, handle_task_progress,
             handle_command_result, handle_error,
+            handle_task_cancel, handle_task_status,
         )
         for fn in (handle_task_result, handle_task_end, handle_task_progress,
-                   handle_command_result, handle_error):
+                   handle_command_result, handle_error,
+                   handle_task_cancel, handle_task_status):
             assert callable(fn)
 
     def test_handler_task_submit_importable(self):
@@ -150,6 +152,7 @@ class TestSubModuleImports:
             handle_heartbeat, handle_device_status, handle_agent_ping,
             handle_task_result, handle_task_end, handle_task_progress,
             handle_command_result, handle_error,
+            handle_task_cancel, handle_task_status,
             handle_task_execute, handle_task_submit,
             handle_goal_execution, handle_parallel_subtask, handle_goal_execution_result,
             handle_capability_report, handle_diagnostics_payload,
@@ -160,6 +163,7 @@ class TestSubModuleImports:
             handle_heartbeat, handle_device_status, handle_agent_ping,
             handle_task_result, handle_task_end, handle_task_progress,
             handle_command_result, handle_error,
+            handle_task_cancel, handle_task_status,
             handle_task_execute, handle_task_submit,
             handle_goal_execution, handle_parallel_subtask, handle_goal_execution_result,
             handle_capability_report, handle_diagnostics_payload,
@@ -370,9 +374,26 @@ class TestAndroidBridgeBackwardCompatWrappers:
     async def test_handle_generic_forward_wrapper(self):
         bridge = self._make_bridge()
         ws = _make_ws()
-        msg = {"type": "task_cancel", "device_id": "dev_01", "message_id": "m1"}
+        msg = {"type": "app_start", "device_id": "dev_01", "message_id": "m1"}
         resp = await bridge._handle_generic_forward(ws, msg)
+        assert resp["type"] == "app_start_ack"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_cancel_wrapper(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {"type": "task_cancel", "device_id": "dev_01", "task_id": "no_such_task", "message_id": "m_cancel"}
+        resp = await bridge._handle_task_cancel(ws, msg)
         assert resp["type"] == "task_cancel_ack"
+        assert resp["cancelled"] is False
+
+    @pytest.mark.asyncio
+    async def test_handle_task_status_wrapper(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {"type": "task_status", "device_id": "dev_01", "task_id": "no_such_task", "message_id": "m_status"}
+        resp = await bridge._handle_task_status(ws, msg)
+        assert resp["type"] == "task_status_response"
 
     @pytest.mark.asyncio
     async def test_handle_agent_ping_wrapper(self):
@@ -484,6 +505,44 @@ class TestAndroidBridgeDispatch:
         # Registration ack doesn't have a payload dict so trace_id propagation
         # only applies to responses with a payload — just verify the response is valid.
         assert resp["type"] == "device_register_ack"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_task_cancel_routes_to_real_handler(self):
+        """task_cancel 应路由到真实 handler 而非 generic forward"""
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "task_cancel",
+            "device_id": "dispatch_cancel_01",
+            "task_id": "some_task",
+            "message_id": "msg_cancel",
+            "timestamp": 1000,
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        # Real handler returns task_cancel_ack (not generic "task_cancel_ack" from forward)
+        assert resp["type"] == "task_cancel_ack"
+        # Real handler populates 'cancelled' boolean
+        assert "cancelled" in resp
+
+    @pytest.mark.asyncio
+    async def test_dispatch_task_status_routes_to_real_handler(self):
+        """task_status 应路由到真实 handler 而非 generic forward"""
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "task_status",
+            "device_id": "dispatch_status_01",
+            "task_id": "some_task",
+            "message_id": "msg_status",
+            "timestamp": 1000,
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert resp["type"] == "task_status_response"
+        assert "status" in resp
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +670,169 @@ class TestStandaloneHandlers:
         resp = await handle_task_execute(bridge, ws, msg)
         assert bridge._devices["te_sa_01"].current_task_id == "t_exec_99"
         assert resp["task_id"] == "t_exec_99"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_cancel_cancels_pending_future(self):
+        """task_cancel 应取消 _pending_responses 中的 Future 并返回 task_cancel_ack"""
+        from galaxy_gateway.android.handlers.registration import handle_device_register
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        with patch.object(bridge, "_write_registration_to_udm"):
+            await handle_device_register(bridge, ws, _make_reg_msg("tc_sa_01"))
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        task_id = "cancel_task_001"
+        bridge._pending_responses[task_id] = fut
+        bridge._devices["tc_sa_01"].current_task_id = task_id
+
+        msg = {
+            "type": "task_cancel",
+            "device_id": "tc_sa_01",
+            "task_id": task_id,
+            "message_id": "msg-cancel-001",
+        }
+        resp = await handle_task_cancel(bridge, ws, msg)
+
+        # Future should be cancelled
+        assert fut.cancelled()
+        # task_id should be cleaned from pending_responses
+        assert task_id not in bridge._pending_responses
+        # device current_task_id cleared
+        assert bridge._devices["tc_sa_01"].current_task_id is None
+        # response shape
+        assert resp["type"] == "task_cancel_ack"
+        assert resp["task_id"] == task_id
+        assert resp["cancelled"] is True
+        assert resp["correlation_id"] == "msg-cancel-001"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_cancel_unknown_task_returns_not_found(self):
+        """取消不存在任务时返回 cancelled=False 且包含 reason"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "type": "task_cancel",
+            "device_id": "tc_sa_02",
+            "task_id": "nonexistent_task",
+            "message_id": "msg-cancel-002",
+        }
+        resp = await handle_task_cancel(bridge, ws, msg)
+        assert resp["type"] == "task_cancel_ack"
+        assert resp["cancelled"] is False
+        assert resp["reason"] == "task_not_found"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_cancel_already_done_future(self):
+        """已完成的 Future 被 cancel 时返回 cancelled=False + reason"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_cancel
+        bridge = self._make_bridge()
+        ws = _make_ws()
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        fut.set_result({"status": "completed"})
+        task_id = "done_task_001"
+        bridge._pending_responses[task_id] = fut
+
+        msg = {
+            "type": "task_cancel",
+            "device_id": "tc_sa_03",
+            "task_id": task_id,
+            "message_id": "msg-cancel-003",
+        }
+        resp = await handle_task_cancel(bridge, ws, msg)
+        assert resp["type"] == "task_cancel_ack"
+        assert resp["cancelled"] is False
+        assert resp["reason"] == "task_already_completed"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_status_running(self):
+        """有待处理 Future 时返回 running 状态"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+        bridge = self._make_bridge()
+        ws = _make_ws()
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        task_id = "status_task_001"
+        bridge._pending_responses[task_id] = fut
+
+        msg = {
+            "type": "task_status",
+            "device_id": "ts_sa_01",
+            "task_id": task_id,
+            "message_id": "msg-status-001",
+        }
+        resp = await handle_task_status(bridge, ws, msg)
+        assert resp["type"] == "task_status_response"
+        assert resp["task_id"] == task_id
+        assert resp["status"] == "running"
+        assert resp["correlation_id"] == "msg-status-001"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_status_completed_after_result(self):
+        """Future 已完成时返回 completed 状态"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+        bridge = self._make_bridge()
+        ws = _make_ws()
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        fut.set_result({"status": "completed"})
+        task_id = "status_task_002"
+        bridge._pending_responses[task_id] = fut
+
+        msg = {
+            "type": "task_status",
+            "device_id": "ts_sa_02",
+            "task_id": task_id,
+            "message_id": "msg-status-002",
+        }
+        resp = await handle_task_status(bridge, ws, msg)
+        assert resp["type"] == "task_status_response"
+        assert resp["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_status_cancelled_future(self):
+        """已取消的 Future 返回 cancelled 状态"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+        bridge = self._make_bridge()
+        ws = _make_ws()
+
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        fut.cancel()
+        task_id = "status_task_003"
+        bridge._pending_responses[task_id] = fut
+
+        msg = {
+            "type": "task_status",
+            "device_id": "ts_sa_03",
+            "task_id": task_id,
+            "message_id": "msg-status-003",
+        }
+        resp = await handle_task_status(bridge, ws, msg)
+        assert resp["type"] == "task_status_response"
+        assert resp["status"] == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_handle_task_status_unknown_task(self):
+        """未知任务返回 completed（默认状态）"""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_status
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "type": "task_status",
+            "device_id": "ts_sa_04",
+            "task_id": "unknown_task_xyz",
+            "message_id": "msg-status-004",
+        }
+        resp = await handle_task_status(bridge, ws, msg)
+        assert resp["type"] == "task_status_response"
+        assert resp["status"] == "completed"
 
 
 # ---------------------------------------------------------------------------

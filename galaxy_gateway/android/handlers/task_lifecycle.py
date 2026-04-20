@@ -13,6 +13,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from galaxy_gateway.protocol.aip_v3 import TaskStatus
+from galaxy_gateway.android.message_builder import MessageBuilder
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -256,4 +257,109 @@ async def handle_error(
 
     # PR-13: reconcile inbound error signal against host-side execution tracker
     _try_reconcile(message)
+
+
+async def handle_task_cancel(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
+    """处理任务取消请求，取消待处理 Future 并返回 task_cancel_ack。
+
+    链路：Android → task_cancel → 查找 _pending_responses[task_id]
+    → 标记 Future 为已取消 → 更新设备 current_task_id → 返回 task_cancel_ack
+    """
+    task_id = message.get("task_id")
+    device_id = message.get("device_id")
+    correlation_id = message.get("message_id")
+
+    logger.info(
+        "Task cancel requested: task_id=%s device_id=%s",
+        task_id, device_id,
+    )
+
+    cancelled = False
+    reason: Optional[str] = None
+
+    if task_id and task_id in bridge._pending_responses:
+        future = bridge._pending_responses.pop(task_id)
+        if not future.done():
+            future.cancel()
+            cancelled = True
+            logger.info(
+                "Task cancelled successfully: task_id=%s device_id=%s",
+                task_id, device_id,
+            )
+        else:
+            reason = "task_already_completed"
+            logger.info(
+                "Task cancel: future already done: task_id=%s device_id=%s",
+                task_id, device_id,
+            )
+    else:
+        reason = "task_not_found"
+        logger.info(
+            "Task cancel: task not found in pending_responses: task_id=%s device_id=%s",
+            task_id, device_id,
+        )
+
+    # 清理设备端 current_task_id
+    async with bridge._lock:
+        if device_id and device_id in bridge._devices:
+            if bridge._devices[device_id].current_task_id == task_id:
+                bridge._devices[device_id].current_task_id = None
+
+    return MessageBuilder.task_cancel_ack(
+        device_id=device_id or "",
+        task_id=task_id,
+        cancelled=cancelled,
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+
+
+async def handle_task_status(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
+    """处理任务状态查询，返回结构化 task_status_response。
+
+    链路：Android → task_status → 查询 current_task_id / _pending_responses
+    → 返回 task_status_response
+    """
+    task_id = message.get("task_id")
+    device_id = message.get("device_id")
+    correlation_id = message.get("message_id")
+
+    logger.info(
+        "Task status query: task_id=%s device_id=%s",
+        task_id, device_id,
+    )
+
+    # 基于 _pending_responses 和设备缓存确定真实状态
+    if task_id and task_id in bridge._pending_responses:
+        future = bridge._pending_responses[task_id]
+        if future.cancelled():
+            status = TaskStatus.CANCELLED.value
+        elif future.done():
+            status = TaskStatus.COMPLETED.value
+        else:
+            status = TaskStatus.RUNNING.value
+    else:
+        # 检查设备当前任务
+        async with bridge._lock:
+            device = bridge._devices.get(device_id or "")
+        if device and device.current_task_id == task_id and task_id:
+            status = TaskStatus.RUNNING.value
+        else:
+            status = TaskStatus.COMPLETED.value
+
+    logger.info(
+        "Task status resolved: task_id=%s device_id=%s status=%s",
+        task_id, device_id, status,
+    )
+
+    return MessageBuilder.task_status_response(
+        device_id=device_id or "",
+        task_id=task_id,
+        status=status,
+        correlation_id=correlation_id,
+    )
 

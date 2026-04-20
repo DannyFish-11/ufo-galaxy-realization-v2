@@ -59,6 +59,34 @@ class MessageBuilder:
         return msg
 
     @classmethod
+    def task_cancel_ack(cls, device_id: str, task_id: Optional[str],
+                        cancelled: bool, reason: Optional[str] = None,
+                        correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        """取消任务确认"""
+        msg = cls._base_message(MessageType.TASK_CANCEL_ACK, device_id)
+        msg["task_id"] = task_id
+        msg["cancelled"] = cancelled
+        if reason:
+            msg["reason"] = reason
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        return msg
+
+    @classmethod
+    def task_status_response(cls, device_id: str, task_id: Optional[str],
+                             status: str, progress: Optional[float] = None,
+                             correlation_id: Optional[str] = None) -> Dict[str, Any]:
+        """任务状态查询响应"""
+        msg = cls._base_message(MessageType.TASK_STATUS_RESPONSE, device_id)
+        msg["task_id"] = task_id
+        msg["status"] = status
+        if progress is not None:
+            msg["progress"] = progress
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        return msg
+
+    @classmethod
     def goal_execution_result(cls, device_id: str, payload: Dict[str, Any],
                               correlation_id: Optional[str] = None,
                               trace_id: Optional[str] = None) -> Dict[str, Any]:

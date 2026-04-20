@@ -520,6 +520,18 @@ class AndroidSignalReconcileOutcome:
 # Both keys are lowercased before lookup.  A None status is normalised to "".
 
 _TYPE_STATUS_MAP: Dict[Tuple[str, str], AndroidSignalKind] = {
+    # task_cancel — Android requests cancellation; treat as cancelled signal
+    ("task_cancel", ""):              AndroidSignalKind.cancelled,
+    ("task_cancel", "cancelled"):     AndroidSignalKind.cancelled,
+
+    # task_status — Android queries current status; treated as a progress ack
+    ("task_status", ""):              AndroidSignalKind.ack,
+    ("task_status", "running"):       AndroidSignalKind.progress,
+    ("task_status", "pending"):       AndroidSignalKind.ack,
+    ("task_status", "completed"):     AndroidSignalKind.final_result,
+    ("task_status", "failed"):        AndroidSignalKind.error,
+    ("task_status", "cancelled"):     AndroidSignalKind.cancelled,
+
     # task_result
     ("task_result", "completed"):     AndroidSignalKind.final_result,
     ("task_result", "success"):       AndroidSignalKind.final_result,
@@ -608,6 +620,8 @@ _TYPE_STATUS_MAP: Dict[Tuple[str, str], AndroidSignalKind] = {
 _TYPE_ONLY_MAP: Dict[str, AndroidSignalKind] = {
     "task_result":                  AndroidSignalKind.final_result,
     "task_end":                     AndroidSignalKind.final_result,
+    "task_cancel":                  AndroidSignalKind.cancelled,
+    "task_status":                  AndroidSignalKind.ack,
     "goal_execution_result":        AndroidSignalKind.final_result,
     "agent_result":                 AndroidSignalKind.final_result,
     "error":                        AndroidSignalKind.error,
