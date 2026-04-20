@@ -910,6 +910,46 @@ ANDROID_TARGET_DISCOVERY_USES_CANONICAL_REGISTRY_PR_E_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# Openclawd → SourceDispatchOrchestrator wiring for single-device Android
+# ---------------------------------------------------------------------------
+
+OPENCLAWD_SINGLE_REMOTE_USES_ORCHESTRATOR_DISPATCH_SENTINEL: str = (
+    "OPENCLAWD_SINGLE_REMOTE_USES_ORCHESTRATOR_DISPATCH::"
+    "openclawd._delegate_single_remote::dispatch-not-plan::"
+    "orchestrator-is-canonical-entry-for-android-single-device::"
+    "action_taken=android_bridge_dispatch:return-directly::"
+    "fallback=_dispatch_remote_agent-for-non-android-targets"
+)
+
+OPENCLAWD_SINGLE_REMOTE_ORCHESTRATOR_DISPATCH_POLICY: str = (
+    "POLICY::OPENCLAWD_SINGLE_REMOTE_USES_ORCHESTRATOR_DISPATCH: "
+    "openclawd._delegate_single_remote() calls SourceDispatchOrchestrator.dispatch() "
+    "(not just .plan()) so the orchestrator is the *actual* dispatch brain for "
+    "single-device Android targets.  When the orchestrator result has "
+    "action_taken='android_bridge_dispatch' and success=True, the result is "
+    "returned directly without falling through to _dispatch_remote_agent().  "
+    "For non-Android targets (device not in AndroidBridge transport layer) the "
+    "call falls through to _dispatch_remote_agent() unchanged, preserving "
+    "backward compatibility.  The orchestrator dispatch metadata is always "
+    "attached to the response metadata for observability."
+)
+
+ANDROID_BRIDGE_DISPATCH_CHAIN_IS_CANONICAL_POLICY: str = (
+    "POLICY::ANDROID_BRIDGE_DISPATCH_CHAIN_IS_CANONICAL: "
+    "The canonical Android single-device dispatch chain is: "
+    "openclawd._delegate_single_remote() "
+    "→ SourceDispatchOrchestrator.dispatch() "
+    "→ orchestrate_source_runtime_dispatch() "
+    "→ _try_android_bridge_dispatch() "
+    "→ AndroidBridge.assign_task() "
+    "→ DeviceRouter.dispatch_task() (primary) / MessageBuilder.task_assign() + send_to_device() (fallback). "
+    "The trace_id is propagated top-level in the AIP TASK_ASSIGN message for "
+    "end-to-end observability.  Legacy bypass paths (_dispatch_remote_agent) "
+    "are only used for non-Android targets."
+)
+
+
+# ---------------------------------------------------------------------------
 # Android source runtime posture → dispatch gating
 # ---------------------------------------------------------------------------
 

@@ -768,10 +768,40 @@ class AndroidBridge:
     async def assign_task(self, device_id: str, task_id: str, task_type: str,
                           payload: Dict[str, Any], priority: int = 5,
                           timeout: int = 300) -> Optional[Dict[str, Any]]:
-        """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3)."""
+        """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3).
+
+        Dispatch chain (canonical path):
+            SourceDispatchOrchestrator
+                → _try_android_bridge_dispatch()
+                    → AndroidBridge.assign_task()          ← here
+                        → DeviceRouter.dispatch_task()     (primary)
+                        → MessageBuilder.task_assign()     (fallback send)
+                            → send_to_device()
+
+        The ``trace_id`` embedded in *payload* by the orchestrator dispatch
+        path is surfaced as a top-level AIP message field for end-to-end
+        observability (see PR-G4 / ``get_android_bridge_trace_id``).
+        """
+        # Extract trace_id from payload if the orchestrator embedded it there.
+        # Surfacing it at the top level makes it visible to get_android_bridge_trace_id
+        # and to any log-line inspection without needing to unwrap the payload.
+        _trace_id: Optional[str] = None
+        if isinstance(payload, dict):
+            _trace_id = payload.get("trace_id") or payload.get("dispatch_trace_id")
+
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].current_task_id = task_id
+
+        logger.debug(
+            "AndroidBridge.assign_task: device_id=%s task_id=%s task_type=%s "
+            "trace_id=%s orchestrator_dispatch=%s",
+            device_id,
+            task_id,
+            task_type,
+            _trace_id,
+            payload.get("orchestrator_dispatch") if isinstance(payload, dict) else False,
+        )
 
         try:
             from galaxy_gateway.device_router import device_router as _device_router
@@ -785,6 +815,11 @@ class AndroidBridge:
                         **payload,
                     },
                 }
+                logger.debug(
+                    "AndroidBridge.assign_task: routing via DeviceRouter "
+                    "device_id=%s task_id=%s trace_id=%s",
+                    device_id, task_id, _trace_id,
+                )
                 return await _device_router.dispatch_task(task_dict, router_device)
         except Exception as _router_err:
             logger.warning(
@@ -792,7 +827,15 @@ class AndroidBridge:
                 "falling back to send_to_device — %s", _router_err
             )
 
-        msg = MessageBuilder.task_assign(device_id, task_id, task_type, payload, priority, timeout)
+        logger.debug(
+            "AndroidBridge.assign_task: fallback to send_to_device "
+            "device_id=%s task_id=%s trace_id=%s",
+            device_id, task_id, _trace_id,
+        )
+        msg = MessageBuilder.task_assign(
+            device_id, task_id, task_type, payload, priority, timeout,
+            trace_id=_trace_id,
+        )
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
 
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
