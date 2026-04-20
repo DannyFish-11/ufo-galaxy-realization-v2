@@ -862,6 +862,53 @@ ORCHESTRATOR_MAINLINE_PATH_EXTENDED_PR5A_SENTINEL: str = (
 )
 
 
+# ---------------------------------------------------------------------------
+# PR-E: Android single-device dispatch through canonical orchestrator path
+# ---------------------------------------------------------------------------
+
+ANDROID_DISPATCH_CANONICAL_PATH_PR_E_SENTINEL: str = (
+    "ANDROID_DISPATCH_CANONICAL_PATH_PR_E::"
+    "source-dispatch-orchestrator::android-single-device-dispatch-via-orchestrator::"
+    "_try_android_bridge_dispatch-routes-remote_handoff-to-android-bridge::"
+    "package=PR-E::android-single-device-orchestrator-mainline"
+)
+
+ANDROID_BRIDGE_DISPATCH_IS_PRE_HANDOFF_ADAPTER_PR_E_POLICY: str = (
+    "POLICY::ANDROID_BRIDGE_DISPATCH_IS_PRE_HANDOFF_ADAPTER_PR_E: "
+    "When dispatch mode is remote_handoff and a target device is selected, "
+    "_try_android_bridge_dispatch() is attempted BEFORE _try_remote_handoff(). "
+    "If the target device is registered in the AndroidBridge transport layer "
+    "(android_bridge._devices), the dispatch is routed directly via "
+    "AndroidBridge.assign_task() → DeviceRouter.dispatch_task().  "
+    "If the device is NOT in the AndroidBridge transport layer, "
+    "_try_android_bridge_dispatch returns 'device_not_in_android_bridge' and "
+    "the caller falls through to _try_remote_handoff() unchanged.  "
+    "This preserves backward compatibility for non-Android targets.  PR-E."
+)
+
+ANDROID_RESULT_FLOW_PRESERVED_PR_E_POLICY: str = (
+    "POLICY::ANDROID_RESULT_FLOW_PRESERVED_PR_E: "
+    "Android dispatch through the orchestrator MUST NOT alter the existing "
+    "result and lifecycle signal flow.  task_result / goal_execution_result / "
+    "task_cancel / task_status signals continue to flow through the canonical "
+    "android_execution_signal_reconciler path and are consumed via "
+    "SourceDispatchOrchestrator.consume_android_behavioral_result().  "
+    "The orchestrator's _try_android_bridge_dispatch() only covers the "
+    "outbound dispatch (assign) direction; inbound result handling is unchanged.  "
+    "PR-E."
+)
+
+ANDROID_TARGET_DISCOVERY_USES_CANONICAL_REGISTRY_PR_E_POLICY: str = (
+    "POLICY::ANDROID_TARGET_DISCOVERY_USES_CANONICAL_REGISTRY_PR_E: "
+    "_select_target_from_candidates() discovers Android attached devices via the "
+    "AttachedSessionRegistry (canonical truth source established in PR-19).  "
+    "No Android-specific hardcoded branch is added to target discovery.  "
+    "Android devices that are registered, attached, and pass readiness + "
+    "participation gates are selected through the same general scoring path as "
+    "any other device.  PR-E."
+)
+
+
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
     """Attempt to capture the current RuntimeGovernanceSnapshot (PR-27)."""
     try:
@@ -1032,6 +1079,146 @@ def _try_remote_handoff(
         return {
             "success": False,
             "skipped_reason": f"bridge_error:{exc}",
+        }
+
+
+def _try_android_bridge_dispatch(
+    device_id: str,
+    task_id: str,
+    *,
+    task: Optional[Dict[str, Any]] = None,
+    trace_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Attempt to dispatch a task to a device via the Android bridge.
+
+    PR-E: This is the canonical Android single-device dispatch adapter.  It
+    checks whether *device_id* is registered in the
+    ``galaxy_gateway.android_bridge`` transport layer.  If so, the task is
+    dispatched via :meth:`~galaxy_gateway.android_bridge.AndroidBridge.assign_task`,
+    which itself delegates to ``DeviceRouter.dispatch_task()`` as the canonical
+    dispatch authority (PR-S3).
+
+    The function is intentionally self-contained so that the orchestrator can
+    call it before :func:`_try_remote_handoff` without any Android-specific
+    logic leaking into the main dispatch decision path.
+
+    Returns
+    -------
+    dict
+        ``{"success": True, "action_taken": "android_bridge_dispatch", ...}``
+        on success.
+
+        ``{"success": False, "skipped_reason": "device_not_in_android_bridge"}``
+        when the device is not registered in the Android transport layer —
+        callers SHOULD fall through to :func:`_try_remote_handoff`.
+
+        ``{"success": False, "skipped_reason": "...", "action_taken": "none"}``
+        on other errors — callers MAY fall back to local execution.
+    """
+    try:
+        from galaxy_gateway.android_bridge import android_bridge as _bridge  # type: ignore[attr-defined]
+
+        # Check whether the device is in the Android transport cache.
+        # _devices is the operational transport session cache (NOT a canonical
+        # truth source); it only contains currently-connected Android devices.
+        if device_id not in _bridge._devices:
+            return {
+                "success": False,
+                "skipped_reason": "device_not_in_android_bridge",
+                "action_taken": "none",
+            }
+
+        task_payload: Dict[str, Any] = dict(task or {})
+        # Derive task_type from the task dict; fall back to "generic".
+        task_type: str = str(
+            task_payload.pop("task_type", None)
+            or task_payload.get("tool_name")
+            or "generic"
+        )
+
+        # Embed orchestrator context into the task payload for observability.
+        assign_payload: Dict[str, Any] = {
+            **task_payload,
+            "trace_id": trace_id,
+            "session_id": session_id,
+            "orchestrator_dispatch": True,
+        }
+
+        effective_task_id = task_id or str(uuid.uuid4())
+
+        # assign_task is an async coroutine; handle both sync and async callers.
+        coro = _bridge.assign_task(
+            device_id=device_id,
+            task_id=effective_task_id,
+            task_type=task_type,
+            payload=assign_payload,
+        )
+
+        if asyncio.iscoroutine(coro):
+            try:
+                # asyncio.get_running_loop() raises RuntimeError when there is
+                # no running loop (sync context).  This is the safe Python 3.10+
+                # idiom that does not create a stale event loop.
+                asyncio.get_running_loop()
+                # We ARE in a running loop — use a thread pool so we do not
+                # block it with a nested run_until_complete call.
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                    _fut = _pool.submit(asyncio.run, coro)
+                    result = _fut.result(timeout=30)
+            except RuntimeError:
+                # No running loop — create a dedicated event loop that we own,
+                # run the coroutine, then close it.  We deliberately avoid
+                # asyncio.run() (which resets the thread's event loop to None
+                # in Python 3.12) and asyncio.get_event_loop() (deprecated
+                # in Python 3.12).  Using new_event_loop() + explicit close()
+                # leaves the caller's event-loop state untouched.
+                _loop = asyncio.new_event_loop()
+                try:
+                    result = _loop.run_until_complete(coro)
+                finally:
+                    _loop.close()
+        else:
+            result = coro
+
+        if result is None:
+            return {
+                "success": False,
+                "skipped_reason": "android_bridge_returned_none",
+                "action_taken": "none",
+            }
+
+        bridge_response: Dict[str, Any] = (
+            result
+            if isinstance(result, dict)
+            else {"raw": str(result)}
+        )
+        return {
+            "success": bridge_response.get("success", True),
+            "action_taken": "android_bridge_dispatch",
+            "android_bridge_response": bridge_response,
+            "device_id": device_id,
+            "task_id": effective_task_id,
+            "trace_id": trace_id,
+        }
+
+    except ImportError:
+        return {
+            "success": False,
+            "skipped_reason": "android_bridge_unavailable:import_error",
+            "action_taken": "none",
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "_try_android_bridge_dispatch: dispatch failed for device_id=%s: %s",
+            device_id,
+            exc,
+        )
+        return {
+            "success": False,
+            "skipped_reason": f"android_bridge_error:{exc}",
+            "action_taken": "none",
         }
 
 
@@ -2124,47 +2311,109 @@ def orchestrate_source_runtime_dispatch(
             )
 
         elif mode == SourceDispatchMode.remote_handoff:
-            if selected_target is not None and handoff_env_dict is not None:
-                # Stamp the dispatch_contract_metadata onto the handoff envelope
-                # so the target-side takeover handler can propagate it.
-                if _dispatch_contract_metadata_dict is not None:
-                    try:
-                        handoff_env_dict = dict(handoff_env_dict)
-                        handoff_env_dict["dispatch_contract_metadata"] = (
-                            _dispatch_contract_metadata_dict
-                        )
-                    except Exception:  # noqa: BLE001
-                        pass
-                # Attempt remote handoff
-                try:
-                    from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+            if selected_target is not None:
+                _target_dev = selected_target.target_device_id or ""
 
-                    envelope_obj = HandoffEnvelopeV2.model_validate(handoff_env_dict)
-                    bridge_resp = _try_remote_handoff(envelope_obj)
-                    if bridge_resp.get("success"):
-                        exec_result = bridge_resp
+                # PR-E: attempt Android bridge dispatch first.  This covers the
+                # case where the target is a connected Android device managed by
+                # AndroidBridge / DeviceRouter.  If the device is not in the
+                # Android transport layer, we fall through to the generic
+                # HandoffEnvelopeV2 path below.
+                if _target_dev and not success:
+                    _android_resp = _try_android_bridge_dispatch(
+                        _target_dev,
+                        task_id or str(uuid.uuid4()),
+                        task=task,
+                        trace_id=trace_id,
+                        session_id=session_id,
+                    )
+                    _android_skipped = _android_resp.get("skipped_reason", "")
+                    if _android_resp.get("success"):
+                        exec_result = _android_resp
                         success = True
-                        decision_reason = decision_reason or "remote_handoff:success"
-                        # Extract takeover result if present
-                        if "takeover_result" in bridge_resp:
-                            takeover_result_dict = bridge_resp["takeover_result"]
-                    else:
-                        # Remote failed — fall back to local
-                        errors.append(
-                            "remote_handoff_failed:"
-                            + bridge_resp.get("skipped_reason", "unknown")
+                        decision_reason = (
+                            decision_reason or "android_bridge_dispatch:success"
                         )
-                        effective_mode = SourceDispatchMode.fallback_local
-                        decision_reason = "remote_handoff_failed:fallback_local"
                         logger.debug(
                             "orchestrate_source_runtime_dispatch: "
-                            "remote handoff failed; falling back to local"
+                            "android_bridge_dispatch succeeded for device_id=%s",
+                            _target_dev,
                         )
-                        # Fall through to local execution below
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"remote_handoff_error:{exc}")
-                    effective_mode = SourceDispatchMode.fallback_local
-                    decision_reason = f"remote_handoff_error:fallback_local:{exc}"
+                    elif _android_skipped != "device_not_in_android_bridge":
+                        # Android bridge failed for a structural reason (not merely
+                        # "this device is not an Android device") — fall back to
+                        # local with the failure recorded.
+                        errors.append(
+                            f"android_bridge_dispatch_failed:{_android_skipped}"
+                        )
+                        effective_mode = SourceDispatchMode.fallback_local
+                        decision_reason = "android_bridge_dispatch_failed:fallback_local"
+                        logger.debug(
+                            "orchestrate_source_runtime_dispatch: "
+                            "android_bridge_dispatch failed for device_id=%s "
+                            "skipped_reason=%s; falling back to local",
+                            _target_dev,
+                            _android_skipped,
+                        )
+                    # else: device not in android bridge → fall through to
+                    #       generic HandoffEnvelopeV2 path below.
+
+                # Generic HandoffEnvelopeV2 remote handoff path (PR-35).
+                # Only entered when the Android bridge did not handle the
+                # dispatch (either device not Android, or target_dev empty).
+                if not success and effective_mode == SourceDispatchMode.remote_handoff:
+                    if handoff_env_dict is not None:
+                        # Stamp the dispatch_contract_metadata onto the handoff
+                        # envelope so the target-side takeover handler can
+                        # propagate it.
+                        if _dispatch_contract_metadata_dict is not None:
+                            try:
+                                handoff_env_dict = dict(handoff_env_dict)
+                                handoff_env_dict["dispatch_contract_metadata"] = (
+                                    _dispatch_contract_metadata_dict
+                                )
+                            except Exception:  # noqa: BLE001
+                                pass
+                        # Attempt remote handoff
+                        try:
+                            from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
+
+                            envelope_obj = HandoffEnvelopeV2.model_validate(
+                                handoff_env_dict
+                            )
+                            bridge_resp = _try_remote_handoff(envelope_obj)
+                            if bridge_resp.get("success"):
+                                exec_result = bridge_resp
+                                success = True
+                                decision_reason = (
+                                    decision_reason or "remote_handoff:success"
+                                )
+                                # Extract takeover result if present
+                                if "takeover_result" in bridge_resp:
+                                    takeover_result_dict = bridge_resp["takeover_result"]
+                            else:
+                                # Remote failed — fall back to local
+                                errors.append(
+                                    "remote_handoff_failed:"
+                                    + bridge_resp.get("skipped_reason", "unknown")
+                                )
+                                effective_mode = SourceDispatchMode.fallback_local
+                                decision_reason = "remote_handoff_failed:fallback_local"
+                                logger.debug(
+                                    "orchestrate_source_runtime_dispatch: "
+                                    "remote handoff failed; falling back to local"
+                                )
+                                # Fall through to local execution below
+                        except Exception as exc:  # noqa: BLE001
+                            errors.append(f"remote_handoff_error:{exc}")
+                            effective_mode = SourceDispatchMode.fallback_local
+                            decision_reason = f"remote_handoff_error:fallback_local:{exc}"
+                    else:
+                        errors.append("remote_handoff:no_target_or_envelope")
+                        effective_mode = SourceDispatchMode.fallback_local
+                        decision_reason = (
+                            "remote_handoff:no_target_or_envelope:fallback_local"
+                        )
             else:
                 errors.append("remote_handoff:no_target_or_envelope")
                 effective_mode = SourceDispatchMode.fallback_local
