@@ -419,28 +419,39 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         message_type="task_cancel",
         kind=LongTailPathKind.TASK_LIFECYCLE,
         value_tier=LongTailValueTier.MEDIUM,
-        transition_status=LongTailTransitionStatus.GENERIC_FORWARD,
+        transition_status=LongTailTransitionStatus.CANONICAL,
+        canonical_handler=(
+            "galaxy_gateway.android.handlers.task_lifecycle.handle_task_cancel"
+        ),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
-            "TRANSITIONAL: TASK_CANCEL from a device should look up the"
-            " pending task in TaskOrchestrator / PendingTaskTracker and"
-            " confirm cancellation or return not-found.  Current"
-            " generic-forward returns a bare ACK with no task lookup."
+            "CANONICAL: handle_task_cancel() looks up the pending Future in"
+            " bridge._pending_responses[task_id], cancels it, clears"
+            " current_task_id from the device cache, and returns a structured"
+            " task_cancel_ack with cancelled=True/False and a reason field."
+            " Previously routed through handle_generic_forward with no real"
+            " task cancellation semantics."
         ),
-        is_closed_loop=False,
+        is_closed_loop=True,
     ),
     LongTailPathRecord(
         message_type="task_status",
         kind=LongTailPathKind.TASK_LIFECYCLE,
         value_tier=LongTailValueTier.MEDIUM,
-        transition_status=LongTailTransitionStatus.GENERIC_FORWARD,
+        transition_status=LongTailTransitionStatus.CANONICAL,
+        canonical_handler=(
+            "galaxy_gateway.android.handlers.task_lifecycle.handle_task_status"
+        ),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
-            "TRANSITIONAL: TASK_STATUS query from a device should look up"
-            " the actual task state and return structured status/progress."
-            " Current generic-forward returns a bare ACK with no task lookup."
+            "CANONICAL: handle_task_status() reads current_task_id from"
+            " bridge._devices[device_id] and checks bridge._pending_responses"
+            " to determine the real task state, returning a structured"
+            " task_status_response with status/progress fields."
+            " Previously routed through handle_generic_forward with no real"
+            " task state lookup."
         ),
-        is_closed_loop=False,
+        is_closed_loop=True,
     ),
     # ── Lower-value flows ────────────────────────────────────────────────────
     LongTailPathRecord(

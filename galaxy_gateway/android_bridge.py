@@ -75,6 +75,8 @@ from galaxy_gateway.android.handlers.task_lifecycle import (
     handle_task_progress,
     handle_command_result,
     handle_error,
+    handle_task_cancel,
+    handle_task_status,
 )
 from galaxy_gateway.android.handlers.task_submit import (
     handle_task_execute,
@@ -566,8 +568,8 @@ class AndroidBridge:
         self._message_handlers[MessageType.GOAL_EXECUTION] = _wrap(handle_goal_execution)
         self._message_handlers[MessageType.PARALLEL_SUBTASK] = _wrap(handle_parallel_subtask)
         self._message_handlers[MessageType.GOAL_EXECUTION_RESULT] = _wrap(handle_goal_execution_result)
-        self._message_handlers[MessageType.TASK_CANCEL] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.TASK_STATUS] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.TASK_CANCEL] = _wrap(handle_task_cancel)
+        self._message_handlers[MessageType.TASK_STATUS] = _wrap(handle_task_status)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
         self._message_handlers[MessageType.AGENT_STATUS] = _wrap(handle_agent_status)
         self._message_handlers[MessageType.AGENT_CONFIG_UPDATE] = _wrap(handle_generic_forward)
@@ -1026,6 +1028,12 @@ class AndroidBridge:
 
     async def _handle_generic_forward(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         return await handle_generic_forward(self, websocket, message)
+
+    async def _handle_task_cancel(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        return await handle_task_cancel(self, websocket, message)
+
+    async def _handle_task_status(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        return await handle_task_status(self, websocket, message)
 
     async def _handle_unregistered(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         return await handle_unregistered(self, websocket, message)

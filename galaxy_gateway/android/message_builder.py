@@ -190,6 +190,49 @@ class MessageBuilder:
         return msg
 
     @classmethod
+    def task_cancel_ack(
+        cls,
+        device_id: str,
+        task_id: Optional[str],
+        cancelled: bool,
+        reason: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """任务取消确认 (task_cancel_ack)"""
+        msg = cls._base_message(MessageType.TASK_CANCEL, device_id)
+        msg["type"] = "task_cancel_ack"
+        msg["task_id"] = task_id
+        msg["cancelled"] = cancelled
+        if reason:
+            msg["reason"] = reason
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        return msg
+
+    @classmethod
+    def task_status_response(
+        cls,
+        device_id: str,
+        task_id: Optional[str],
+        status: str,
+        progress: Optional[float] = None,
+        current_step: Optional[int] = None,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """任务状态查询响应 (task_status_response)"""
+        msg = cls._base_message(MessageType.TASK_STATUS, device_id)
+        msg["type"] = "task_status_response"
+        msg["task_id"] = task_id
+        msg["status"] = status
+        if progress is not None:
+            msg["progress"] = progress
+        if current_step is not None:
+            msg["current_step"] = current_step
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        return msg
+
+    @classmethod
     def vision_result(cls, device_id: str, task_id: str,
                       result: Dict[str, Any]) -> Dict[str, Any]:
         """视觉分析结果（以 task_assign 形式下发操作指令）"""

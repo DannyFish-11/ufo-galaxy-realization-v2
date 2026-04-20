@@ -159,8 +159,6 @@ class TestTransitionalPaths:
         "app_start",
         "app_stop",
         "system_command",
-        "task_cancel",
-        "task_status",
         "agent_config_update",
         "agent_restart",
     }
@@ -186,6 +184,38 @@ class TestTransitionalPaths:
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         for mt in self._TRANSITIONAL_TYPES:
             assert catalog[mt].notes, f"{mt} should have non-empty notes"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 4b. task_cancel / task_status — 已升级为 CANONICAL closed-loop
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestTaskLifecycleCanonicalPaths:
+    """task_cancel and task_status are now CANONICAL closed-loop handlers."""
+
+    _CANONICAL_TYPES = {"task_cancel", "task_status"}
+
+    def test_task_lifecycle_paths_are_canonical(self):
+        from core.long_tail_compat_surface import (
+            get_long_tail_catalog,
+            LongTailTransitionStatus,
+        )
+        catalog = {r.message_type: r for r in get_long_tail_catalog()}
+        for mt in self._CANONICAL_TYPES:
+            assert mt in catalog, f"Missing: {mt}"
+            record = catalog[mt]
+            assert record.transition_status == LongTailTransitionStatus.CANONICAL, (
+                f"{mt} should be CANONICAL, got {record.transition_status}"
+            )
+            assert record.is_closed_loop, f"{mt} should be is_closed_loop=True"
+            assert record.canonical_handler, f"{mt} should have a canonical_handler"
+
+    def test_task_lifecycle_canonical_handler_paths(self):
+        from core.long_tail_compat_surface import get_long_tail_catalog
+        catalog = {r.message_type: r for r in get_long_tail_catalog()}
+        assert "handle_task_cancel" in catalog["task_cancel"].canonical_handler
+        assert "handle_task_status" in catalog["task_status"].canonical_handler
 
 
 # ──────────────────────────────────────────────────────────────────────────────
