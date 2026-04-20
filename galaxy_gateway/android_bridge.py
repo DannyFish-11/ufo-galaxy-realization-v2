@@ -135,6 +135,24 @@ ANDROID_BRIDGE_TRACE_HOOK_SENTINEL: str = (
     "message dict and correlate it with RuntimeObservabilitySink events.  PR-G4."
 )
 
+# =============================================================================
+# PR-E: Android canonical orchestrator dispatch path sentinel
+# =============================================================================
+
+#: Affirms that AndroidBridge.assign_task is the canonical downstream entry
+#: point for tasks dispatched through SourceDispatchOrchestrator to an Android
+#: attached device.  SourceDispatchOrchestrator calls assign_task (via
+#: _try_android_dispatch) when it detects a known Android target, routing the
+#: task through the DeviceRouter → WebSocket path rather than the generic
+#: agent_bridge remote-handoff path.
+ANDROID_BRIDGE_IS_ORCHESTRATOR_DISPATCH_TARGET_PRE: str = (
+    "ANDROID_BRIDGE_IS_ORCHESTRATOR_DISPATCH_TARGET_PRE: "
+    "AndroidBridge.assign_task is the canonical downstream dispatch entry "
+    "point when SourceDispatchOrchestrator targets an Android attached device.  "
+    "This closes the dispatch bypass and routes single-device Android execution "
+    "through the orchestrator mainline path.  PR-E."
+)
+
 
 def get_android_bridge_trace_id(message: Dict[str, Any]) -> Optional[str]:
     """Extract the dispatch trace ID from an inbound AIP message.
