@@ -201,6 +201,25 @@ DEVICE_ROUTER_POSTURE_AWARE_DISPATCH = (
     "PR-2, post-533 dual-repo runtime host unification track."
 )
 
+# PR-ALIGN / ADMIT-003: Participation eligibility filter before formation.
+#
+# _dispatch_cross_device_task() now consults core.device_participation to
+# filter out devices that are not orchestration-eligible before calling
+# resolve_formation().  Devices that fail the participation eligibility check
+# are excluded from the formation with a structured warning.  This closes
+# ADMIT-003: formation is now assembled only from participation-eligible
+# devices rather than from whatever the routing substrate passed in without
+# eligibility verification.  Gracefully degrades when the participation module
+# is unavailable.
+DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED: str = (
+    "DEVICE_ROUTER::FORMATION_PARTICIPATION_FILTERED_V1: "
+    "_dispatch_cross_device_task() filters device list through "
+    "core.device_participation.get_device_participation() before calling "
+    "resolve_formation().  Non-eligible devices are excluded with a structured "
+    "warning.  Graceful degradation if participation module unavailable. "
+    "Resolves ADMIT-003."
+)
+
 # PR-3 (post-533 dual-repo runtime host unification): canonical handoff path
 # authority propagation sentinel.
 DEVICE_ROUTER_HANDOFF_AUTHORITY_PROPAGATION = (
@@ -1628,6 +1647,57 @@ class DeviceRouter:
             except Exception as _env_err:
                 logger.debug("DeviceRouter._dispatch_cross_device_task: TaskEnvelope skipped — %s", _env_err)
 
+            # PR-ALIGN / ADMIT-003: filter device list to participation-eligible
+            # devices before building the formation.  This ensures that formation
+            # membership is grounded in the canonical participation truth rather
+            # than whatever the routing substrate passed in.  Gracefully degrades
+            # when the participation module is unavailable.
+            _participation_filtered_devices = list(devices)
+            try:
+                from core.device_participation import get_device_participation as _gdp  # type: ignore
+
+                _elig: List[Any] = []
+                for _dev in devices:
+                    _did = getattr(_dev, "device_id", "")
+                    _ps = _gdp(_did)
+                    _is_eligible = bool(getattr(_ps, "orchestration_eligible", False))
+                    if _is_eligible:
+                        _elig.append(_dev)
+                    else:
+                        logger.warning(
+                            "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
+                            "device %r excluded from formation — not participation-eligible "
+                            "task_id=%s",
+                            _did,
+                            task.get("task_id", ""),
+                        )
+                if _elig:
+                    _participation_filtered_devices = _elig
+                    if len(_elig) < len(devices):
+                        logger.debug(
+                            "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
+                            "participation filter reduced formation members %d → %d",
+                            len(devices),
+                            len(_elig),
+                        )
+                else:
+                    # All devices ineligible — degrade to original list so dispatch
+                    # can still proceed and produce a meaningful error rather than
+                    # silently sending to zero devices.
+                    logger.warning(
+                        "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
+                        "participation filter excluded all %d device(s); falling back "
+                        "to original list (graceful degradation) task_id=%s",
+                        len(devices),
+                        task.get("task_id", ""),
+                    )
+            except Exception as _part_err:
+                logger.debug(
+                    "DeviceRouter._dispatch_cross_device_task: participation "
+                    "filter unavailable (graceful degradation): %s",
+                    _part_err,
+                )
+
             # PR-520 / GAP-517-004: resolve and attach an explicit canonical
             # DeviceFormationGroup before dispatching sub-tasks.  The group
             # captures source device, primary execution device, all participating
@@ -1638,7 +1708,7 @@ class DeviceRouter:
             try:
                 from core.device_formation.formation_resolver import resolve_formation
 
-                _device_ids = [d.device_id for d in devices]
+                _device_ids = [d.device_id for d in _participation_filtered_devices]
                 _source_device_id = task.get("source_device_id", "")
                 _source_runtime_posture = task.get("source_runtime_posture", "control_only")
                 _primary_device_id = _device_ids[0] if _device_ids else ""
