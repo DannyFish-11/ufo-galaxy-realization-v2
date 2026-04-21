@@ -33,7 +33,7 @@
 
 | Gap ID | Severity | Status | Module | Description | Recommended PR |
 |--------|----------|--------|--------|-------------|----------------|
-| SCHED-001 | MEDIUM | OPEN | `core/command_router.py` | `CommandRouter` does not call `query_routable_executors()` / `query_network_path()` before selecting dispatch targets. Routing decisions bypass canonical capability/network truth. | PR-514 (per RESIDUAL_GAP_MAP) |
+| SCHED-001 | MEDIUM | RESOLVED | `core/command_router.py` | `CommandRouter.route_envelope()` now calls `query_routable_executors()` and `query_network_path()` from `core.capability_network_runtime_policy` before dispatching cross-device envelopes. Targets not confirmed in the capability graph emit a structured warning and are filtered when confirmed alternatives exist. Closes GAP-512-004. | Resolved in baseline hardening PR |
 | SCHED-002 | LOW | OPEN | `core/capability_assimilation.py` | `assimilate_device()` registers devices in the capability graph, but `DeviceRouter` does not query the capability graph when selecting target devices. Two parallel device-selection paths exist: admissibility chain (canonical) and DeviceRouter._select_devices() (legacy). | Scheduling convergence PR |
 | SCHED-003 | LOW | OPEN | `galaxy_gateway/device_router.py` | `DeviceRouter.route_task()` still performs command analysis (`_analyze_command`) to derive `exec_mode` and `task_type`. This is policy/classification logic that ideally lives in `CommandRouter` pre-dispatch. | Scheduling authority clean-up PR |
 
@@ -70,7 +70,7 @@
 | Gap ID | Severity | Status | Module | Description | Recommended PR |
 |--------|----------|--------|--------|-------------|----------------|
 | PROTO-001 | HIGH | OPEN | Android + `galaxy_gateway/session_roaming.py` | `SESSION_MIGRATE` / `session_restore` remains in AIP v2 binary format. Two center-side implementations (gateway + core). No unified AIP v3 JSON path. | Session protocol unification PR (high-priority) |
-| PROTO-002 | HIGH | OPEN | `galaxy_gateway/android_bridge.py` | `task_cancel` and `task_status` use `_handle_forward_log` catch-all — received, logged, not acted upon. No canonical cancel/status propagation to `CommandRouter`. | Task control protocol PR (high-priority) |
+| PROTO-002 | HIGH | RESOLVED | `galaxy_gateway/android_bridge.py` | `task_cancel` and `task_status` messages are now routed to dedicated `handle_task_cancel()` / `handle_task_status()` handlers in `galaxy_gateway/android/handlers/task_lifecycle.py`, registered via `_register_default_handlers()`. `handle_task_cancel` cancels the pending Future and clears `current_task_id`; `handle_task_status` returns a structured `task_status_response`; both return canonical ack messages to Android. No longer falls through to `_handle_forward_log`. | Resolved in baseline hardening PR |
 | PROTO-003 | MEDIUM | OPEN | Android + V2 | `WAKE_EVENT` / `WAKE_ROUTE_RESULT` remain in AIP v2 binary (hex 0x70/0x71). Need migration to AIP v3 JSON with typed payload and canonical session-routing wiring. | Wake protocol promotion PR |
 | PROTO-004 | MEDIUM | OPEN | `galaxy_gateway/android_bridge.py` | `ui_tree_request`, `action_sequence_execute`, `app_start` handled by `_handle_forward_log` — not actively executed. | Action protocol handlers PR |
 | PROTO-005 | MEDIUM | OPEN | Android | AIP v2 binary `ANDROID_SCREEN` (0x60) / `ANDROID_INPUT` (0x61) not migrated to AIP v3 `screen_stream_data` / `action_execute`. | AIP v2 binary migration PR |
