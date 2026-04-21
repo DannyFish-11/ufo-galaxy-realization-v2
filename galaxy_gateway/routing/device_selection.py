@@ -12,6 +12,16 @@ Separation of concerns
 The implementation is extracted from ``DeviceRouter._select_devices``.
 Callers that hold a ``DeviceRouter`` instance continue to use
 ``DeviceRouter._select_devices``, which now delegates here.
+
+PR-3 addition
+-------------
+When ``required_capabilities`` is present in *analysis*, a **hard capability
+gate** is applied via :mod:`core.capability_routing_gate` *after* exec_mode
+filtering and *before* the autonomous-device preference step.  Devices that
+fail the gate are excluded from selection.  This promotes capability
+requirements from advisory metadata to meaningful routing constraints.
+The gate is additive — it does not modify the existing exec_mode or pool
+selection paths.
 """
 
 from __future__ import annotations
@@ -32,6 +42,16 @@ logger = logging.getLogger(__name__)
 DEVICE_SELECTION_AUTHORITY = "galaxy_gateway.routing.device_selection"
 """Sentinel string identifying this module as the device-selection authority."""
 
+# PR-3: sentinel affirming capability gate wiring.
+CAPABILITY_GATE_WIRED_IN_SELECTION: str = (
+    "CAPABILITY_GATE_WIRED_IN_SELECTION: "
+    "galaxy_gateway/routing/device_selection.py applies a hard capability "
+    "routing gate (core.capability_routing_gate.filter_by_required_capabilities) "
+    "when required_capabilities is declared in the routing analysis.  This "
+    "promotes capability requirements from advisory to enforced constraints.  "
+    "Resolves PR-3 requirement §2."
+)
+
 
 # ---------------------------------------------------------------------------
 # Core selection function
@@ -51,10 +71,14 @@ def select_devices(
        devices whose registered capabilities match the requested action and
        exec_mode.  Legacy devices (no capability_report yet) are kept as a
        fallback group.
-    2. **Autonomous-device preference** via ``autonomous_filter`` — promotes
+    2. **Hard capability gate** (PR-3) via ``core.capability_routing_gate`` —
+       when ``required_capabilities`` is non-empty, devices that do not satisfy
+       all requirements are excluded.  This step elevates capability requirements
+       from advisory metadata to meaningful routing constraints.
+    3. **Autonomous-device preference** via ``autonomous_filter`` — promotes
        devices with goal-execution capability.  Falls back to online-only
        filter when the filter is unavailable.
-    3. **DevicePoolManager selection** — delegates the final scheduling
+    4. **DevicePoolManager selection** — delegates the final scheduling
        decision (health scoring, circuit-breaker, strategy) to the pool.
        Falls back to the first preferred candidate when the pool is
        unavailable.
@@ -140,7 +164,39 @@ def select_devices(
                 _reg_err,
             )
 
-    # ── 2. Autonomous-device preference (with fallback) ──────────────────────
+    # ── 2. Hard capability gate (PR-3) ───────────────────────────────────────
+    required_caps: List[str] = analysis.get("required_capabilities") or []
+    if required_caps:
+        try:
+            from core.capability_routing_gate import filter_by_required_capabilities
+
+            gated = filter_by_required_capabilities(
+                devices=devices,
+                required_capabilities=required_caps,
+            )
+            if gated:
+                devices = gated
+                logger.debug(
+                    "select_devices: capability gate passed — %d device(s) satisfy "
+                    "required_capabilities=%r",
+                    len(devices),
+                    required_caps,
+                )
+            else:
+                logger.warning(
+                    "select_devices: capability gate excluded all devices for "
+                    "required_capabilities=%r; no eligible device found",
+                    required_caps,
+                )
+                return []
+        except Exception as _gate_err:
+            logger.warning(
+                "select_devices: capability gate unavailable, "
+                "required_capabilities treated as advisory: %s",
+                _gate_err,
+            )
+
+    # ── 3. Autonomous-device preference (with fallback) ──────────────────────
     require_cross = analysis.get("requires_cross_device", False)
     task_role = analysis.get("task_role")
     try:
@@ -165,8 +221,7 @@ def select_devices(
         logger.warning("select_devices: no online %s devices", target_device_type)
         return []
 
-    # ── 3. DevicePoolManager final scheduling ────────────────────────────────
-    required_caps: List[str] = analysis.get("required_capabilities") or []
+    # ── 4. DevicePoolManager final scheduling ────────────────────────────────
     target_device_type = analysis.get("target_device_type")
     try:
         pool = get_device_pool_manager()
