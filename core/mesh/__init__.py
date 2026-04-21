@@ -51,6 +51,17 @@ from .live_mesh_session_coordinator import (
     COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY,
     PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY,
 )
+from .body_mesh_persistence import (
+    BodyMeshSnapshotRecord,
+    BodyMeshPersistenceStore,
+    save_body_mesh_snapshot,
+    restore_body_mesh_from_snapshot,
+    get_body_mesh_persistence_store,
+    reset_body_mesh_persistence_store,
+    BODY_MESH_PERSISTENCE_IS_AUTHORITY,
+    BODY_MESH_PERSISTENCE_CLOSES_VOLATILE_REGISTRY_GAP_SENTINEL,
+    RESTORE_DOES_NOT_REPLACE_LIVE_REGISTRY_POLICY,
+)
 
 __all__ = [
     "BodyMeshRegistry",
@@ -97,4 +108,14 @@ __all__ = [
     "BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY",
     "COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY",
     "PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY",
+    # PR-5: Body mesh persistence
+    "BodyMeshSnapshotRecord",
+    "BodyMeshPersistenceStore",
+    "save_body_mesh_snapshot",
+    "restore_body_mesh_from_snapshot",
+    "get_body_mesh_persistence_store",
+    "reset_body_mesh_persistence_store",
+    "BODY_MESH_PERSISTENCE_IS_AUTHORITY",
+    "BODY_MESH_PERSISTENCE_CLOSES_VOLATILE_REGISTRY_GAP_SENTINEL",
+    "RESTORE_DOES_NOT_REPLACE_LIVE_REGISTRY_POLICY",
 ]
