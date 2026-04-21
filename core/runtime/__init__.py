@@ -126,6 +126,7 @@ from core.runtime.source_dispatch_orchestrator import (
     ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
     ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY,
 )
+
 # PR-36: Cross-Runtime Result Merge Contract helpers
 from contracts.cross_runtime_result_merge import (
     RuntimeResultRole,
@@ -142,7 +143,6 @@ from contracts.cross_runtime_result_merge import (
     build_result_merge_summary,
 )
 
-
 # PR-37: Mesh Session Coordinator (mesh package)
 # Imported here for convenience so consumers can reach the coordinator
 # from either core.runtime or core.mesh.
@@ -156,6 +156,18 @@ from core.mesh.mesh_session_coordinator import (  # noqa: E402
     update_participant_status,
     drop_participant,
     MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
+)
+
+# PR-J: Live MeshSession Coordinator — incremental event-driven runtime driver.
+# Re-exported here so callers can reach the live coordinator from core.runtime.
+from core.mesh.live_mesh_session_coordinator import (  # noqa: E402
+    LiveMeshSessionCoordinator,
+    create_live_mesh_session_coordinator,
+    LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
+    INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY,
+    BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY,
+    COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY,
+    PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY,
 )
 
 # PR-2 (post-533 dual-repo runtime host unification): posture-aware source
@@ -661,6 +673,7 @@ from core.attached_runtime_session_registry import (  # noqa: E402
     REGISTRY_TAKEOVER_ELIGIBILITY_REQUIRES_ACTIVE_STATE_PR23_POLICY,
     REGISTRY_REPLACED_SESSION_IS_INELIGIBLE_FOR_TAKEOVER_PR23_POLICY,
 )
+
 # PR package 20 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated target selection policy layer.
 from core.delegated_target_selection_policy import (  # noqa: E402
@@ -841,6 +854,14 @@ __all__ = [
     "update_participant_status",
     "drop_participant",
     "MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL",
+    # PR-J: live mesh session coordinator (incremental event-driven)
+    "LiveMeshSessionCoordinator",
+    "create_live_mesh_session_coordinator",
+    "LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL",
+    "INCREMENTAL_PARTICIPANT_EVENTS_PR_J_POLICY",
+    "BARRIER_TRACKS_ACROSS_EVENTS_PR_J_POLICY",
+    "COORDINATOR_FINALIZE_PRODUCES_STABLE_RESULT_PR_J_POLICY",
+    "PARTICIPANT_DROPOUT_AFFECTS_OUTCOME_PR_J_POLICY",
     # PR-2: Posture-Aware Source Execution Eligibility
     "SOURCE_DISPATCH_POSTURE_AWARE_AUTHORITY",
     "CONTROL_ONLY_SOURCE_INELIGIBLE_FOR_LOCAL_EXECUTION_POLICY",
