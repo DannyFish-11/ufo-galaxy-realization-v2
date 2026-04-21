@@ -131,8 +131,8 @@
 |--------|----------|------|--------|-----|-------|
 | 1. Scheduling | 0 | 0 | 1 | 2 | 3 |
 | 2. Admission chain | 0 | 0 | 2 | 2 | 4 |
-| 3. Multi-device runtime | 0 | 0 (was 2, MESH-001/002 now RESOLVED) | 3 | 3 | 6 |
-| 4. Android protocol | 0 | 1 (PROTO-001; PROTO-002 RESOLVED) | 3 | 2 | 6 |
+| 3. Multi-device runtime | 0 | 0 (was 2; MESH-001/002 now RESOLVED) | 3 | 3 | 6 |
+| 4. Android protocol | 0 | 1 (was 2; PROTO-002 now RESOLVED; PROTO-001 remains) | 3 | 2 | 6 |
 | 5. WebRTC | 0 | 0 | 2 | 1 | 3 |
 | 6. Truth/projection | 0 | 0 | 3 | 2 | 5 |
 | 7. Compatibility | 0 | 0 | 3 (all FENCED) | 3 (all FENCED) | 6 |
