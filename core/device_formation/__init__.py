@@ -34,8 +34,6 @@ What this package does NOT do
   router (:mod:`~galaxy_gateway.device_router`), TaskGraph,
   :class:`~core.unified.device_manager.UnifiedDeviceManager`, or any other
   orchestration module.
-- It does **not** implement live membership rebalancing or dynamic
-  health-driven reshaping (planned for future work).
 - It does **not** introduce a competing orchestrator or runtime.
 - All paths are additive and read-only from the perspective of existing
   orchestration layers.
@@ -186,6 +184,16 @@ from .formation_auto_enrollment import (
     FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
     FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
 )
+from .formation_rebalance_trigger import (
+    FormationRuntimeEventType,
+    FormationRuntimeEvent,
+    FormationRebuildResult,
+    on_runtime_event,
+    trigger_rebalance_if_needed,
+    FORMATION_REBALANCE_TRIGGER_IS_AUTHORITY,
+    FORMATION_TRIGGER_WIRES_COORDINATOR_TO_ENGINE_POLICY,
+    FORMATION_TRIGGER_DOES_NOT_OWN_STATE_POLICY,
+)
 
 __all__ = [
     # Formation roles
@@ -246,4 +254,13 @@ __all__ = [
     "reset_formation_auto_enrollment_manager",
     "FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY",
     "FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY",
+    # Rebalance trigger
+    "FormationRuntimeEventType",
+    "FormationRuntimeEvent",
+    "FormationRebuildResult",
+    "on_runtime_event",
+    "trigger_rebalance_if_needed",
+    "FORMATION_REBALANCE_TRIGGER_IS_AUTHORITY",
+    "FORMATION_TRIGGER_WIRES_COORDINATOR_TO_ENGINE_POLICY",
+    "FORMATION_TRIGGER_DOES_NOT_OWN_STATE_POLICY",
 ]
