@@ -135,7 +135,7 @@ def select_devices(
         from core.target_device_validator import validate_target_device as _vtd
 
         _admitted: List[Any] = []
-        _any_readiness_consulted = False
+        _at_least_one_readiness_check_succeeded = False
         for _dev in devices:
             _tid = getattr(_dev, "device_id", None) or ""
             if not _tid:
@@ -149,7 +149,7 @@ def select_devices(
                 for r in (_tvr.reasons or [])
             )
             if _readiness_consulted:
-                _any_readiness_consulted = True
+                _at_least_one_readiness_check_succeeded = True
                 if _tvr.ready:
                     _admitted.append(_dev)
                 else:
@@ -167,7 +167,7 @@ def select_devices(
                 _admitted.append(_dev)
 
         if _admitted:
-            if _any_readiness_consulted and len(_admitted) < len(devices):
+            if _at_least_one_readiness_check_succeeded and len(_admitted) < len(devices):
                 logger.debug(
                     "select_devices [SCHED-002]: admissibility pre-filter "
                     "reduced candidates %d → %d",

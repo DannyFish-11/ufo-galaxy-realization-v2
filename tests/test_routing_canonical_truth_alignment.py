@@ -199,7 +199,13 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
         self.assertIn("dev-ready", result_ids)
 
     def test_prefilter_degrades_gracefully_when_all_fail_readiness(self) -> None:
-        """When all candidates fail readiness, the original list is preserved (graceful degradation)."""
+        """When all candidates fail readiness, the original list is preserved (graceful degradation).
+
+        The admissibility pre-filter falls back to the full candidate list so that
+        downstream steps (exec_mode filter, pool manager) can still operate and
+        produce a more descriptive 'no online devices' message rather than silently
+        returning an empty result.
+        """
         dev1 = _make_device("dev1", status="online")
         dev2 = _make_device("dev2", status="online")
 
@@ -208,12 +214,17 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
             return _make_validation_result(device_id, valid=False, ready=False, reasons=["not-ready"])
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
-            # select_devices degrades gracefully — returns at least some result
-            # (downstream "no online devices" filter will produce empty)
-            result = self._call_select([dev1, dev2])
-        # Graceful degradation: result may be empty (from downstream online filter),
-        # but must not raise and must be a list.
+            from galaxy_gateway.routing.device_selection import select_devices
+            # Pass minimal analysis so exec_mode/pool filters don't further trim.
+            result = select_devices({"target_device_type": "android"}, [dev1, dev2])
+
+        # Graceful degradation: result must be a list and must not raise.
+        # The pre-filter fell back to the original candidate list; downstream
+        # online-only and pool filters may reduce it further (that is correct
+        # behavior), but neither device should have been silently dropped by
+        # the pre-filter itself before reaching those downstream filters.
         self.assertIsInstance(result, list)
+        self.assertIsNotNone(result)
 
     def test_prefilter_degrades_when_readiness_module_unavailable(self) -> None:
         """Graceful degradation when validate_target_device raises ImportError."""

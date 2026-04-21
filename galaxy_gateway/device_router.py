@@ -1656,13 +1656,13 @@ class DeviceRouter:
             try:
                 from core.device_participation import get_device_participation as _gdp  # type: ignore
 
-                _elig: List[Any] = []
+                _eligible_devices: List[Any] = []
                 for _dev in devices:
                     _did = getattr(_dev, "device_id", "")
                     _ps = _gdp(_did)
                     _is_eligible = bool(getattr(_ps, "orchestration_eligible", False))
                     if _is_eligible:
-                        _elig.append(_dev)
+                        _eligible_devices.append(_dev)
                     else:
                         logger.warning(
                             "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
@@ -1671,14 +1671,14 @@ class DeviceRouter:
                             _did,
                             task.get("task_id", ""),
                         )
-                if _elig:
-                    _participation_filtered_devices = _elig
-                    if len(_elig) < len(devices):
+                if _eligible_devices:
+                    _participation_filtered_devices = _eligible_devices
+                    if len(_eligible_devices) < len(devices):
                         logger.debug(
                             "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
                             "participation filter reduced formation members %d → %d",
                             len(devices),
-                            len(_elig),
+                            len(_eligible_devices),
                         )
                 else:
                     # All devices ineligible — degrade to original list so dispatch

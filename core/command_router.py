@@ -1905,7 +1905,7 @@ class CommandRouter:
                         if envelope.required_capabilities
                         else None
                     )
-                    _valid_targets: List[str] = []
+                    _validated_ready_targets: List[str] = []
                     for _tid in _envelope_targets:
                         _tvr = _vtd(_tid, required_capabilities=_req_caps)
                         _readiness_consulted = not any(
@@ -1914,7 +1914,7 @@ class CommandRouter:
                         )
                         if _readiness_consulted:
                             if _tvr.ready:
-                                _valid_targets.append(_tid)
+                                _validated_ready_targets.append(_tid)
                             else:
                                 logger.warning(
                                     "_route_cross_device_envelope [SCHED-002]: "
@@ -1928,20 +1928,20 @@ class CommandRouter:
                                 )
                         else:
                             # Readiness module unavailable — include by default
-                            _valid_targets.append(_tid)
+                            _validated_ready_targets.append(_tid)
 
-                    if _valid_targets:
-                        if len(_valid_targets) < len(_envelope_targets):
+                    if _validated_ready_targets:
+                        if len(_validated_ready_targets) < len(_envelope_targets):
                             logger.warning(
                                 "_route_cross_device_envelope [SCHED-002]: "
                                 "filtered %d → %d target(s) after admissibility "
                                 "check; excluded: %s task_id=%s",
                                 len(_envelope_targets),
-                                len(_valid_targets),
-                                [t for t in _envelope_targets if t not in _valid_targets],
+                                len(_validated_ready_targets),
+                                [t for t in _envelope_targets if t not in _validated_ready_targets],
                                 envelope.task_id,
                             )
-                            envelope = envelope.model_copy(update={"targets": _valid_targets})
+                            envelope = envelope.model_copy(update={"targets": _validated_ready_targets})
                     else:
                         # All targets were checked and all failed readiness —
                         # warn loudly but proceed with original set to degrade
