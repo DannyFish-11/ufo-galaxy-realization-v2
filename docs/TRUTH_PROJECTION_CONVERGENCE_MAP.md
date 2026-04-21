@@ -166,46 +166,56 @@ UDM (identity + state)              UCM (connection)
 
 ## 4. Android-side truth: the reconciliation gap
 
-### 4.1 Current state
+### 4.1 Current state (updated PR-4V2)
 
-Android maintains local runtime state that is authoritative on-device but has no
-reconciliation protocol with V2 outward truth:
+Android maintains local runtime state that is authoritative on-device.
+**PR-4V2** (`core/android_participant_truth_ingress.py`) has closed the V2
+half of the Android runtime truth reconciliation loop.
 
-| Android state | V2 equivalent | Reconciliation |
-|---------------|--------------|----------------|
-| Session snapshot (local SQLite) | `BodyMeshRegistry` session record | **None** |
-| Target readiness assessment | `RegisteredRuntimeDevice.readiness_state` | **None** |
-| Current task phase | `TaskGraphRuntime` node state | **None** |
-| `AgentLocalRuntime` execution state | `CommandRouter` tracked task | **None** |
+| Android state | V2 equivalent | Reconciliation (PR-4V2) |
+|---------------|--------------|------------------------|
+| Session snapshot (local SQLite) | `AttachedSessionRegistry` entry | **Continuity validation** — Android session_id validated against active registry entry. V2 session fields are not overwritten. |
+| Target readiness assessment | `RegisteredRuntimeDevice.readiness_state` | **Advisory** — recorded to ReplayFoundation for audit; does not alter V2 dispatch eligibility. |
+| Current task phase | `DelegatedExecutionTrackingRuntime` record | **Reconciled** — Android-reported phase mapped to AcknowledgmentSignal and applied to V2 tracking record (V2 terminal state wins conflicts). |
+| `AgentLocalRuntime` execution state | `CommandRouter` tracked task | **Advisory** — recorded to ReplayFoundation for audit. |
+| cancel signal | `DelegatedExecutionTrackingRuntime` record | **Canonical update** — advances V2 tracking record to `cancelled` phase. Emitted to ReplayFoundation. |
+| failure/error signal | `DelegatedExecutionTrackingRuntime` record | **Canonical update** — advances V2 tracking record to `failed` phase. Emitted to ReplayFoundation. |
+| result signal | `DelegatedExecutionTrackingRuntime` record | **Canonical update** — advances V2 tracking record to `completed` (success) or `failed` (failure). Emitted to ReplayFoundation. |
+| status update | `DelegatedExecutionTrackingRuntime` record | **Canonical update** — advances V2 tracking record with progress acknowledgment. |
 
-### 4.2 Divergence risk
+### 4.2 Authority boundary (TRUTH-005 resolved)
 
-V2 may project a device as "active in task" while Android has already:
-- Completed the task locally
-- Failed the task locally
-- Cancelled the task locally (after `task_cancel` — see ANDROID_PROTOCOL_MATURITY_MATRIX)
-- Lost its WebSocket connection temporarily
+**TRUTH-005 design decision: V2 is the single canonical orchestration authority.**
 
-The Android side re-connects and re-registers, but there is no mechanism to reconcile
-local execution state with V2's in-flight task state after reconnection.
+- Android truth is authoritative only for the device-local execution scope.
+- Android signals (cancel / failure / result / status / task_phase) that reach
+  V2 via `ingest_android_participant_truth_message()` **materially update** V2
+  canonical tracking records — they are not merely logged or forwarded.
+- V2 terminal state wins all conflicts: if V2 has already recorded a terminal
+  outcome (completed / failed / timed_out / cancelled), subsequent Android
+  truth updates are rejected.
+- readiness_assessment and runtime_state truth remain Android-local (advisory
+  only); they do not alter V2 dispatch eligibility gates.
 
-### 4.3 Design decision required
+See policy sentinels in `core/android_participant_truth_ingress.py`:
+- `V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY`
+- `ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY`
+- `CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY`
+- `TERMINAL_V2_STATE_WINS_CONFLICT_POLICY`
 
-Before any implementation: **Does V2 outward truth supersede Android local state, or
-are they independent with explicit sync events?**
+### 4.3 Divergence risk (mitigated)
 
-Options:
-- **V2 authoritative**: Android local state is advisory; V2 drives the canonical view.
-  Android sync events update V2 but V2 truth gates all external queries.
-- **Android authoritative for device scope**: Android is authoritative for its own
-  device-local state; V2 is authoritative for multi-device coordination. Sync is
-  explicit via result uplink and signal emission.
-- **Explicit reconciliation protocol**: A heartbeat-like sync message carries task
-  phase, session state, and readiness deltas; both sides apply conflict resolution.
+V2 may still project a device as "active in task" while Android has already
+completed/failed/cancelled — but only if:
+- The Android device has not yet sent a reconciliation truth message to V2.
+- The Android device has lost WebSocket connectivity before the result/cancel
+  signal was sent.
 
-This decision is **TRUTH-005** and **Q4** in `DUAL_REPO_FULL_REAUDIT.md`.
+The reconnect path (`AttachedSessionRegistry.reconnect_session`) is handled
+by PR-19/PR-33. Upon reconnect the Android side should re-send any pending
+truth signals; these will be processed by the canonical ingress path.
 
----
+
 
 ## 5. Mesh / session / formation truth convergence
 
@@ -256,7 +266,7 @@ This is TRUTH-003 (MEDIUM).
 | Mesh session truth | **Low** | No live session engine |
 | Formation truth | **Medium** | Static; no dynamic rebalance |
 | Desktop display truth | **Medium** | Partially independent |
-| Android local truth | **Low** | No reconciliation protocol |
+| Android local truth | **Medium** | Reconciliation protocol implemented (PR-4V2); readiness/runtime_state remain advisory |
 | Multi-model topology truth | **Low** | No canonical authority |
 
 ---
@@ -265,8 +275,9 @@ This is TRUTH-003 (MEDIUM).
 
 **AC6 — How far has truth/projection convergence progressed?**
 
-> **Moderate progress on the center-side canonical chain; significant gaps remain
-> for Android local state, mesh session live truth, and multi-model topology.**
+> **Moderate progress on the center-side canonical chain; Android local state
+> reconciliation closed by PR-4V2; significant gaps remain for mesh session live
+> truth and multi-model topology.**
 >
 > The device identity + connection + capability path (UDM → UCM → TruthIntegrationLayer →
 > RegisteredRuntimeDevice) is the most mature and correctly structured. The top-level
@@ -277,6 +288,6 @@ This is TRUTH-003 (MEDIUM).
 > 1. Not all projection endpoints call `enrich_runtime_projection()` — some fallback paths return null truth.
 > 2. `MultiDeviceRuntimeProjection.merged_results` is partially populated.
 > 3. Desktop status board surfaces are partially independent from the canonical chain.
-> 4. Android local state (session, readiness, task phase) has no reconciliation protocol with V2 outward truth.
+> 4. ~~Android local state (session, readiness, task phase) has no reconciliation protocol with V2 outward truth.~~ **Closed by PR-4V2** — see `core/android_participant_truth_ingress.py` and §4.
 > 5. Mesh session truth is construction-time static, not live.
 > 6. Multi-model topology is not reflected in the unified truth surface.

@@ -1,0 +1,1129 @@
+"""core/android_participant_truth_ingress.py
+=============================================
+PR-4V2 (post-533 dual-repo runtime integration): Android Participant/Session/
+Runtime Truth Ingress and Canonical Reconciliation into V2 Orchestration State.
+
+Background
+----------
+The Android-side runtime maintains local participant/session/task/runtime truth
+that is authoritative on-device.  Previous PR packages (PR-13, PR-16, PR-18,
+PR-21) addressed the inbound *execution-signal* reconciliation path (ACK /
+PROGRESS / RESULT / ERROR / TIMEOUT / CANCELLED).  However, the broader
+*participant/session/runtime truth* surfaces — Android session snapshots,
+per-device readiness assessments, current task phase, and AgentLocalRuntime
+execution state — had no explicit reconciliation protocol with V2 canonical
+orchestration state (identified as gap TRUTH-005 in DUAL_REPO_FULL_REAUDIT.md
+and TRUTH_PROJECTION_CONVERGENCE_MAP.md §4).
+
+This module closes the V2 half of the Android runtime truth and protocol
+reconciliation loop by providing:
+
+1. :class:`AndroidParticipantTruthKind` — canonical enum for the kind of
+   Android-originated truth being reported:
+   ``session_snapshot`` / ``readiness_assessment`` / ``task_phase`` /
+   ``runtime_state`` / ``cancel`` / ``status`` / ``failure`` / ``result``.
+
+2. :class:`AndroidParticipantTruthEnvelope` — typed, immutable carrier that
+   harvests the structured Android-originated truth together with canonical
+   identity fields (``device_id``, ``session_id``, ``contract_id``,
+   ``task_id``, ``trace_id``) and an opaque ``payload`` snapshot.
+
+3. :class:`AndroidParticipantReconcileOutcome` — typed result of a
+   reconciliation attempt, carrying the updated canonical state snapshot,
+   a ``was_reconciled`` flag, an explicit ``canonical_update`` describing what
+   V2 state was affected, a ``local_only`` flag for truth that remains
+   Android-local, and a ``reject_reason`` when reconciliation was skipped.
+
+4. :func:`extract_participant_truth_envelope` — extracts an
+   :class:`AndroidParticipantTruthEnvelope` from a raw inbound message dict.
+
+5. :func:`reconcile_android_participant_truth` — canonical entry-point that
+   accepts an :class:`AndroidParticipantTruthEnvelope`, resolves V2 canonical
+   records via :class:`~core.delegated_runtime_execution_tracker.DelegatedExecutionTrackingRuntime`
+   and :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`,
+   applies the reconciliation behavior, emits terminal-state events to the
+   :mod:`~core.replay_foundation`, and returns a typed
+   :class:`AndroidParticipantReconcileOutcome`.
+
+6. :func:`ingest_android_participant_truth_message` — convenience wrapper
+   combining extraction + reconciliation in one call.
+
+7. Twelve policy sentinels documenting canonical reconciliation rules and the
+   authority boundary between Android local truth and V2 canonical orchestration
+   truth.
+
+8. One PR sentinel (``ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL``).
+
+Authority boundary
+------------------
+This module is the definitive statement of the authority decision for
+TRUTH-005:
+
+**V2 is the single canonical orchestration authority.**  Android truth is
+authoritative only for the device-local execution scope (what is happening
+*on the Android device*).  When Android truth enters V2 via this ingress path
+it is reconciled into V2 canonical state using the following rules:
+
+* ``cancel`` / ``failure`` / ``result`` signals **materially update** V2
+  canonical tracking records and emit to ReplayFoundation — they are not
+  merely logged.
+* ``task_phase`` truth is reconciled with the V2-side tracking record: if
+  V2 is already in a terminal state, the Android phase update is rejected
+  (V2 wins).  If V2 is not yet terminal and Android reports completion or
+  failure, the signal is applied.
+* ``session_snapshot`` truth is used to validate session continuity in the
+  :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+  but does NOT override V2-owned session fields.
+* ``readiness_assessment`` truth updates the ``last_android_readiness_ts``
+  advisory field on the tracking record but does not change V2 dispatch
+  eligibility gates (V2 admissibility chain remains authoritative).
+* ``runtime_state`` truth is advisory; it is recorded to ReplayFoundation for
+  audit purposes but does not alter V2 canonical state directly.
+* ``status`` truth emits a progress event to the tracking record and to
+  ReplayFoundation — same as a ``progress`` execution signal.
+
+Design principles
+-----------------
+- **Additive only** — does not modify any prior module.
+- **Explicit over implicit** — all authority decisions and conflict-resolution
+  rules are stated as policy sentinels.
+- **Single reconcile path** — all Android participant/session/runtime truth
+  is reconciled through :func:`reconcile_android_participant_truth`; no
+  other path may apply Android truth to V2 canonical state.
+- **Non-destructive on miss** — if no matching V2 record is found the
+  function returns an outcome with ``was_reconciled=False``; it never creates
+  phantom records.
+- **Terminal-blocking** — V2 tracking records in terminal state block further
+  phase updates from Android (V2 terminal truth wins).
+- **Audit-complete** — all reconciliations (accepted AND rejected) emit a
+  ReplayFoundation event so the canonical event stream is complete.
+
+PR package numbering
+--------------------
+PR-4V2 of the dual-repo Android runtime truth reconciliation closure.
+Companion Android-repo PR: ``Close Android runtime truth and protocol
+reconciliation gaps``.
+"""
+
+from __future__ import annotations
+
+import time
+import uuid
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
+
+logger_name = "Galaxy.AndroidParticipantTruthIngress"
+
+try:
+    import logging as _logging
+
+    _logger = _logging.getLogger(logger_name)
+except Exception:  # pragma: no cover
+    _logger = None  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Imports from prior PR packages — all guarded for loadability
+# ---------------------------------------------------------------------------
+
+try:
+    from core.delegated_runtime_execution_tracker import (
+        AcknowledgmentSignal,
+        DelegatedExecutionTrackingRecord,
+        DelegatedExecutionTrackingRuntime,
+        apply_acknowledgment_signal,
+        get_execution_tracking_runtime,
+    )
+
+    _TRACKER_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _TRACKER_AVAILABLE = False
+    AcknowledgmentSignal = None  # type: ignore[assignment,misc]
+    DelegatedExecutionTrackingRecord = None  # type: ignore[assignment,misc]
+    DelegatedExecutionTrackingRuntime = None  # type: ignore[assignment,misc]
+    apply_acknowledgment_signal = None  # type: ignore[assignment]
+    get_execution_tracking_runtime = None  # type: ignore[assignment]
+
+try:
+    from core.attached_runtime_session_registry import (
+        AttachedSessionRegistry,
+        get_session_registry,
+        lookup_active_session,
+    )
+
+    _REGISTRY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _REGISTRY_AVAILABLE = False
+    AttachedSessionRegistry = None  # type: ignore[assignment,misc]
+    get_session_registry = None  # type: ignore[assignment]
+    lookup_active_session = None  # type: ignore[assignment]
+
+try:
+    from core.replay_foundation import emit_runtime_event as _emit_runtime_event
+
+    _REPLAY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _REPLAY_AVAILABLE = False
+    _emit_runtime_event = None  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Module authority marker
+# ---------------------------------------------------------------------------
+
+ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY: str = (
+    "core.android_participant_truth_ingress::PR4V2::"
+    "android-participant-session-runtime-truth-ingress-and-canonical-"
+    "reconciliation-into-v2-orchestration-state"
+)
+
+# ---------------------------------------------------------------------------
+# Authority-boundary sentinel
+# ---------------------------------------------------------------------------
+
+V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL: str = (
+    "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY::"
+    "core.android_participant_truth_ingress::PR4V2::"
+    "windows-desktop-v2-holds-single-canonical-orchestration-authority::"
+    "android-truth-is-advisory-for-device-local-scope-only::"
+    "cancel+failure+result-signals-materially-update-v2-canonical-state::"
+    "v2-terminal-state-wins-conflict-resolution"
+)
+
+# ---------------------------------------------------------------------------
+# Policy sentinels — document canonical reconciliation rules
+# ---------------------------------------------------------------------------
+
+V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY: str = (
+    "POLICY::V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY: "
+    "Windows/Desktop V2 is the single canonical orchestration authority.  "
+    "Android truth enters V2 via this ingress path and is reconciled INTO "
+    "V2 canonical state.  Android does not own or override V2 canonical fields."
+)
+
+ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY: str = (
+    "POLICY::ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE: "
+    "Android local truth (session snapshot, readiness assessment, runtime state) "
+    "is authoritative for the device-local execution scope.  It becomes "
+    "canonical V2 state only when explicitly reconciled by this module.  "
+    "Android local fields that have no V2 equivalent remain local-only."
+)
+
+CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY: str = (
+    "POLICY::CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE: "
+    "Android-originated cancel, failure, and result signals MUST materially "
+    "update V2 canonical tracking records (via apply_acknowledgment_signal) "
+    "and emit to ReplayFoundation.  These signals are NOT merely logged or "
+    "forwarded — they change V2 canonical orchestration truth."
+)
+
+STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY: str = (
+    "POLICY::STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY: "
+    "Android-originated status signals emit a progress acknowledgment to the "
+    "V2 tracking record and a ReplayFoundation event.  They advance the "
+    "tracking record to in_progress if it is in acknowledged state."
+)
+
+TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY: str = (
+    "POLICY::TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD: "
+    "Android-reported task phase is reconciled with the V2 tracking record.  "
+    "If the V2 record is already terminal, the Android phase update is rejected "
+    "(V2 terminal state wins).  If V2 is not yet terminal and Android reports "
+    "completion or failure the corresponding signal is applied."
+)
+
+SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY: str = (
+    "POLICY::SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY: "
+    "Android session snapshot truth is used to validate session continuity in "
+    "the AttachedSessionRegistry.  It does NOT override V2-owned session fields "
+    "(session_id, device_id, state).  Mismatches are recorded as conflicts."
+)
+
+READINESS_ASSESSMENT_IS_ADVISORY_POLICY: str = (
+    "POLICY::READINESS_ASSESSMENT_IS_ADVISORY: "
+    "Android readiness assessment is advisory.  It does not change V2 dispatch "
+    "eligibility gates — those remain controlled by the V2 admissibility chain.  "
+    "The assessment timestamp is recorded in the reconcile outcome for "
+    "observability."
+)
+
+RUNTIME_STATE_IS_AUDIT_ONLY_POLICY: str = (
+    "POLICY::RUNTIME_STATE_IS_AUDIT_ONLY: "
+    "Android AgentLocalRuntime state truth is advisory.  It is emitted to "
+    "ReplayFoundation for audit purposes but does NOT directly alter V2 "
+    "canonical orchestration state."
+)
+
+TERMINAL_V2_STATE_WINS_CONFLICT_POLICY: str = (
+    "POLICY::TERMINAL_V2_STATE_WINS_CONFLICT: "
+    "When the V2 tracking record is already in a terminal phase (completed / "
+    "failed / timed_out / cancelled), any incoming Android truth update that "
+    "would alter the record is rejected.  V2 terminal truth is immutable from "
+    "the Android perspective."
+)
+
+RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY: str = (
+    "POLICY::RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS: "
+    "When no matching V2 tracking record or session registry entry is found "
+    "for the given identity keys, reconciliation returns was_reconciled=False "
+    "without creating phantom records or raising exceptions."
+)
+
+RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY: str = (
+    "POLICY::RECONCILE_EMITS_AUDIT_EVENT_ALWAYS: "
+    "All reconciliation attempts — accepted AND rejected — emit a "
+    "ReplayFoundation runtime event.  This ensures the canonical audit stream "
+    "is complete regardless of outcome."
+)
+
+IDENTITY_FIELDS_ARE_VERBATIM_POLICY: str = (
+    "POLICY::IDENTITY_FIELDS_ARE_VERBATIM: "
+    "device_id, session_id, contract_id, task_id, and trace_id are extracted "
+    "verbatim from the inbound Android truth message.  The ingress path MUST "
+    "NOT synthesise or overwrite identity fields."
+)
+
+_ALL_POLICY_SENTINELS: Tuple[str, ...] = (
+    V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
+    ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
+    CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+    STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY,
+    TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY,
+    SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY,
+    READINESS_ASSESSMENT_IS_ADVISORY_POLICY,
+    RUNTIME_STATE_IS_AUDIT_ONLY_POLICY,
+    TERMINAL_V2_STATE_WINS_CONFLICT_POLICY,
+    RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+    RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
+    IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
+)
+
+# ---------------------------------------------------------------------------
+# PR sentinel
+# ---------------------------------------------------------------------------
+
+ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL: str = (
+    "android_participant_truth_ingress::package=PR4V2::pr=android-runtime-truth-"
+    "reconciliation-into-v2-canonical-orchestration::"
+    "authority=ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY::"
+    "closes=TRUTH-005"
+)
+
+# ---------------------------------------------------------------------------
+# AndroidParticipantTruthKind enum
+# ---------------------------------------------------------------------------
+
+
+class AndroidParticipantTruthKind(str, Enum):
+    """Canonical enum for the kind of Android-originated truth being reported.
+
+    Values
+    ------
+    session_snapshot
+        Android-side local session state snapshot (e.g. SQLite session record).
+    readiness_assessment
+        Android-side per-device readiness assessment.
+    task_phase
+        Android-side current task lifecycle phase (pending / running /
+        completed / failed / cancelled).
+    runtime_state
+        Android-side AgentLocalRuntime execution state.
+    cancel
+        Android-originated explicit cancel signal for a delegated execution.
+    status
+        Android-originated task status update (maps to a progress signal on
+        the V2 tracking record).
+    failure
+        Android-originated explicit failure/error report for a delegated
+        execution.
+    result
+        Android-originated final result for a delegated execution (success or
+        failure outcome with payload).
+    unknown
+        Unrecognised truth kind; defaults to advisory/audit-only handling.
+    """
+
+    session_snapshot = "session_snapshot"
+    readiness_assessment = "readiness_assessment"
+    task_phase = "task_phase"
+    runtime_state = "runtime_state"
+    cancel = "cancel"
+    status = "status"
+    failure = "failure"
+    result = "result"
+    unknown = "unknown"
+
+    @classmethod
+    def from_string(cls, value: Optional[str]) -> "AndroidParticipantTruthKind":
+        """Return the matching kind or ``unknown`` for unrecognised values."""
+        if not value:
+            return cls.unknown
+        normalised = str(value).strip().lower()
+        for member in cls:
+            if member.value == normalised:
+                return member
+        return cls.unknown
+
+    def is_terminal_signal(self) -> bool:
+        """Return True iff this kind carries a terminal execution outcome."""
+        return self in (
+            AndroidParticipantTruthKind.cancel,
+            AndroidParticipantTruthKind.failure,
+            AndroidParticipantTruthKind.result,
+        )
+
+    def affects_canonical_state(self) -> bool:
+        """Return True iff this kind materially updates V2 canonical state."""
+        return self in (
+            AndroidParticipantTruthKind.cancel,
+            AndroidParticipantTruthKind.failure,
+            AndroidParticipantTruthKind.result,
+            AndroidParticipantTruthKind.status,
+            AndroidParticipantTruthKind.task_phase,
+        )
+
+
+# ---------------------------------------------------------------------------
+# AndroidParticipantTruthEnvelope dataclass
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AndroidParticipantTruthEnvelope:
+    """Typed, immutable carrier for an Android-originated participant/session/
+    runtime truth message.
+
+    Attributes
+    ----------
+    truth_kind
+        The :class:`AndroidParticipantTruthKind` identifying what aspect of
+        Android-local truth is being reported.
+    device_id
+        Android device identifier.
+    session_id
+        Attached runtime session identifier (may be empty for truth kinds that
+        are not session-scoped).
+    contract_id
+        Delegated execution contract identifier (may be empty).
+    task_id
+        Task identifier (may be empty).
+    trace_id
+        End-to-end trace identifier (may be empty).
+    envelope_id
+        UUID assigned by this ingress module to this specific envelope for
+        idempotency / audit purposes.
+    received_at
+        Unix timestamp (float) when this envelope was created.
+    payload
+        Opaque snapshot of the raw Android truth payload as received.
+    task_phase_value
+        For ``task_phase`` truths: the Android-reported phase string
+        (e.g. ``"running"``, ``"completed"``, ``"failed"``, ``"cancelled"``).
+    result_success
+        For ``result`` truths: whether Android reports success (True) or
+        failure (False).  None when not applicable.
+    result_payload
+        For ``result`` truths: optional result payload dict from Android.
+    """
+
+    truth_kind: AndroidParticipantTruthKind = AndroidParticipantTruthKind.unknown
+    device_id: str = ""
+    session_id: str = ""
+    contract_id: str = ""
+    task_id: str = ""
+    trace_id: str = ""
+    envelope_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    received_at: float = field(default_factory=time.time)
+    payload: Dict[str, Any] = field(default_factory=dict)
+    task_phase_value: str = ""
+    result_success: Optional[bool] = None
+    result_payload: Dict[str, Any] = field(default_factory=dict)
+
+    def has_lookup_key(self) -> bool:
+        """Return True iff at least one of contract_id or session_id is set."""
+        return bool(self.contract_id) or bool(self.session_id)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "truth_kind": self.truth_kind.value,
+            "device_id": self.device_id,
+            "session_id": self.session_id,
+            "contract_id": self.contract_id,
+            "task_id": self.task_id,
+            "trace_id": self.trace_id,
+            "envelope_id": self.envelope_id,
+            "received_at": self.received_at,
+            "payload": dict(self.payload),
+            "task_phase_value": self.task_phase_value,
+            "result_success": self.result_success,
+            "result_payload": dict(self.result_payload),
+        }
+
+
+# ---------------------------------------------------------------------------
+# AndroidParticipantReconcileOutcome dataclass
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AndroidParticipantReconcileOutcome:
+    """Typed result of a single Android participant truth reconciliation attempt.
+
+    Attributes
+    ----------
+    envelope
+        The :class:`AndroidParticipantTruthEnvelope` that was processed.
+    was_reconciled
+        True iff at least one V2 canonical record was materially updated.
+    canonical_update
+        Human-readable description of what V2 canonical state was updated.
+        Empty string when was_reconciled is False.
+    local_only
+        True iff the truth kind is advisory/audit-only and remains Android-local
+        with no V2 canonical state change.
+    reject_reason
+        Non-empty string when reconciliation was rejected (no matching record,
+        terminal state, missing identity keys, etc.).
+    replay_event_emitted
+        True iff a ReplayFoundation event was emitted for this reconciliation.
+    tracking_record_phase
+        String representation of the V2 tracking record phase after
+        reconciliation (empty if no record was found).
+    """
+
+    envelope: Optional[AndroidParticipantTruthEnvelope] = None
+    was_reconciled: bool = False
+    canonical_update: str = ""
+    local_only: bool = False
+    reject_reason: str = ""
+    replay_event_emitted: bool = False
+    tracking_record_phase: str = ""
+
+    def is_accepted(self) -> bool:
+        return self.was_reconciled and not self.reject_reason
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "was_reconciled": self.was_reconciled,
+            "canonical_update": self.canonical_update,
+            "local_only": self.local_only,
+            "reject_reason": self.reject_reason,
+            "replay_event_emitted": self.replay_event_emitted,
+            "tracking_record_phase": self.tracking_record_phase,
+            "envelope": self.envelope.to_dict() if self.envelope else None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Extraction helpers
+# ---------------------------------------------------------------------------
+
+_TRUTH_KIND_FIELD_ALIASES = ("truth_kind", "signal_kind", "kind", "type", "message_type")
+
+
+def _extract_str(
+    message: Dict[str, Any],
+    *keys: str,
+    default: str = "",
+) -> str:
+    """Extract first non-empty string value from top-level or payload sub-dict."""
+    payload: Dict[str, Any] = message.get("payload", {}) or {}
+    for key in keys:
+        v = message.get(key) or payload.get(key)
+        if v and isinstance(v, str):
+            return v.strip()
+    return default
+
+
+def extract_participant_truth_envelope(
+    message: Dict[str, Any],
+) -> AndroidParticipantTruthEnvelope:
+    """Extract an :class:`AndroidParticipantTruthEnvelope` from a raw message dict.
+
+    Identity field extraction rules
+    --------------------------------
+    * ``device_id``, ``task_id`` — top-level first, then ``payload`` sub-dict.
+    * ``contract_id``, ``session_id``, ``trace_id`` — ``payload`` sub-dict
+      first, then top-level (delegated routing fields Android sends in payload).
+    * ``truth_kind`` — checked under several alias keys.
+    * ``task_phase_value`` — extracted from ``payload.task_phase`` or
+      ``payload.phase`` or ``payload.status``.
+    * ``result_success`` — extracted from ``payload.success`` (bool) or
+      inferred from ``payload.result_kind`` / ``payload.status``.
+    * ``result_payload`` — extracted from ``payload.result`` or ``payload.data``.
+    """
+    if not isinstance(message, dict):
+        message = {}
+
+    payload: Dict[str, Any] = message.get("payload", {}) or {}
+
+    # truth_kind — check multiple aliases
+    raw_kind: str = ""
+    for alias in _TRUTH_KIND_FIELD_ALIASES:
+        v = message.get(alias) or payload.get(alias)
+        if v and isinstance(v, str):
+            raw_kind = v
+            break
+    truth_kind = AndroidParticipantTruthKind.from_string(raw_kind)
+
+    # device_id / task_id: top-level takes precedence, fallback to payload
+    device_id = str(message.get("device_id") or payload.get("device_id") or "")
+    task_id = str(message.get("task_id") or payload.get("task_id") or "")
+
+    # contract_id / session_id / trace_id: payload takes precedence over top-level
+    contract_id = str(payload.get("contract_id") or message.get("contract_id") or "")
+    session_id = str(payload.get("session_id") or message.get("session_id") or "")
+    trace_id = str(payload.get("trace_id") or message.get("trace_id") or "")
+
+    # task_phase_value
+    task_phase_value = str(
+        payload.get("task_phase") or payload.get("phase") or payload.get("status") or ""
+    )
+
+    # result_success
+    result_success: Optional[bool] = None
+    raw_success = payload.get("success")
+    if isinstance(raw_success, bool):
+        result_success = raw_success
+    else:
+        rk = str(payload.get("result_kind") or "").lower()
+        if rk == "success":
+            result_success = True
+        elif rk in ("failure", "failed", "error"):
+            result_success = False
+
+    # result_payload
+    raw_result = payload.get("result") or payload.get("data")
+    result_payload: Dict[str, Any] = {}
+    if isinstance(raw_result, dict):
+        result_payload = raw_result
+
+    return AndroidParticipantTruthEnvelope(
+        truth_kind=truth_kind,
+        device_id=device_id,
+        session_id=session_id,
+        contract_id=contract_id,
+        task_id=task_id,
+        trace_id=trace_id,
+        payload=dict(payload),
+        task_phase_value=task_phase_value,
+        result_success=result_success,
+        result_payload=result_payload,
+    )
+
+
+# ---------------------------------------------------------------------------
+# _emit_audit_event — internal helper
+# ---------------------------------------------------------------------------
+
+_TERMINAL_TRUTH_KINDS = frozenset(
+    {
+        AndroidParticipantTruthKind.cancel.value,
+        AndroidParticipantTruthKind.failure.value,
+        AndroidParticipantTruthKind.result.value,
+    }
+)
+
+
+def _emit_audit_event(
+    *,
+    truth_kind: str,
+    envelope: AndroidParticipantTruthEnvelope,
+    was_reconciled: bool,
+    canonical_update: str,
+    reject_reason: str,
+) -> bool:
+    """Emit a ReplayFoundation runtime event for this reconciliation attempt.
+
+    Returns True iff the event was successfully emitted.
+    """
+    if not _REPLAY_AVAILABLE or _emit_runtime_event is None:
+        return False
+    try:
+        _emit_runtime_event(
+            kind="android_participant_truth_reconciled",
+            task_id=envelope.task_id or "",
+            trace_id=envelope.trace_id or "",
+            source="android_participant_truth_ingress",
+            message=(
+                f"Android participant truth reconciled: "
+                f"truth_kind={truth_kind} "
+                f"device_id={envelope.device_id or ''} "
+                f"session_id={envelope.session_id or ''} "
+                f"contract_id={envelope.contract_id or ''} "
+                f"was_reconciled={was_reconciled}"
+            ),
+            payload={
+                "truth_kind": truth_kind,
+                "device_id": envelope.device_id,
+                "session_id": envelope.session_id,
+                "contract_id": envelope.contract_id,
+                "task_id": envelope.task_id,
+                "trace_id": envelope.trace_id,
+                "was_reconciled": was_reconciled,
+                "canonical_update": canonical_update,
+                "reject_reason": reject_reason,
+                "policy": CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+            },
+        )
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ---------------------------------------------------------------------------
+# _map_phase_to_ack_signal — internal helper
+# ---------------------------------------------------------------------------
+
+_PHASE_TO_ACK: Dict[str, Any] = {}  # populated lazily below
+
+
+def _get_phase_to_ack_map() -> Dict[str, Any]:
+    """Return lazy-initialised mapping from Android phase string to AcknowledgmentSignal."""
+    global _PHASE_TO_ACK
+    if _PHASE_TO_ACK or not _TRACKER_AVAILABLE or AcknowledgmentSignal is None:
+        return _PHASE_TO_ACK
+    _PHASE_TO_ACK = {
+        "pending": AcknowledgmentSignal.ack,
+        "ack": AcknowledgmentSignal.ack,
+        "acknowledged": AcknowledgmentSignal.ack,
+        "running": AcknowledgmentSignal.progress,
+        "in_progress": AcknowledgmentSignal.progress,
+        "progress": AcknowledgmentSignal.progress,
+        "continue": AcknowledgmentSignal.progress,
+        "completed": AcknowledgmentSignal.final_result,
+        "done": AcknowledgmentSignal.final_result,
+        "success": AcknowledgmentSignal.final_result,
+        "finished": AcknowledgmentSignal.final_result,
+        "failed": AcknowledgmentSignal.error,
+        "error": AcknowledgmentSignal.error,
+        "failure": AcknowledgmentSignal.error,
+        "cancelled": AcknowledgmentSignal.cancelled,
+        "cancel": AcknowledgmentSignal.cancelled,
+        "timed_out": AcknowledgmentSignal.timeout,
+        "timeout": AcknowledgmentSignal.timeout,
+    }
+    return _PHASE_TO_ACK
+
+
+# ---------------------------------------------------------------------------
+# _is_terminal_phase — internal helper
+# ---------------------------------------------------------------------------
+
+_TERMINAL_PHASES = frozenset({"completed", "failed", "timed_out", "cancelled"})
+
+
+def _is_record_terminal(record: Any) -> bool:
+    """Return True iff the tracking record is in a terminal phase."""
+    try:
+        phase = getattr(record, "phase", None)
+        if phase is None:
+            return False
+        # Prefer the enum's is_terminal() method if available
+        if hasattr(phase, "is_terminal"):
+            return bool(phase.is_terminal())
+        # Fallback: string check against phase value
+        phase_val = str(phase).lower()
+        return any(t in phase_val for t in _TERMINAL_PHASES)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ---------------------------------------------------------------------------
+# reconcile_android_participant_truth — canonical entry-point
+# ---------------------------------------------------------------------------
+
+
+def reconcile_android_participant_truth(
+    envelope: AndroidParticipantTruthEnvelope,
+    *,
+    runtime: Optional[Any] = None,
+    registry: Optional[Any] = None,
+) -> AndroidParticipantReconcileOutcome:
+    """Canonical entry-point for Android participant/session/runtime truth reconciliation.
+
+    Accepts an :class:`AndroidParticipantTruthEnvelope`, resolves the V2
+    canonical records, applies reconciliation behavior per the policy sentinels,
+    emits a ReplayFoundation audit event, and returns a typed
+    :class:`AndroidParticipantReconcileOutcome`.
+
+    Reconciliation steps
+    --------------------
+    1. Emit an early audit event (RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY).
+    2. For terminal truth kinds (cancel / failure / result):
+       a. Resolve the tracking record by ``contract_id`` (preferred) or
+          ``session_id`` (fallback).
+       b. If the record is already terminal, reject (V2 terminal wins).
+       c. Map truth_kind → AcknowledgmentSignal and apply to the tracker.
+       d. Emit to ReplayFoundation with terminal signal recorded sentinel.
+    3. For ``status``:
+       Apply progress AcknowledgmentSignal to the tracker if a record is found.
+    4. For ``task_phase``:
+       Map the phase string to an AcknowledgmentSignal and apply (if non-terminal
+       V2 record found, and the Android phase maps to a terminal signal).
+    5. For ``session_snapshot``:
+       Validate session continuity in AttachedSessionRegistry; record conflicts.
+    6. For ``readiness_assessment`` and ``runtime_state``:
+       Advisory only; emit to ReplayFoundation as audit event.
+    7. Return a typed :class:`AndroidParticipantReconcileOutcome`.
+
+    Parameters
+    ----------
+    envelope:
+        The AndroidParticipantTruthEnvelope to reconcile.
+    runtime:
+        Optional :class:`~core.delegated_runtime_execution_tracker.DelegatedExecutionTrackingRuntime`
+        instance.  If None the global singleton is used (when available).
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`
+        instance.  If None the global singleton is used (when available).
+    """
+    truth_kind_str: str = envelope.truth_kind.value
+
+    # ------------------------------------------------------------------
+    # Resolve runtime and registry
+    # ------------------------------------------------------------------
+    _runtime: Any = runtime
+    if _runtime is None and _TRACKER_AVAILABLE and get_execution_tracking_runtime is not None:
+        try:
+            _runtime = get_execution_tracking_runtime()
+        except Exception:  # noqa: BLE001
+            _runtime = None
+
+    _registry: Any = registry
+    if _registry is None and _REGISTRY_AVAILABLE and get_session_registry is not None:
+        try:
+            _registry = get_session_registry()
+        except Exception:  # noqa: BLE001
+            _registry = None
+
+    # ------------------------------------------------------------------
+    # Route by truth_kind
+    # ------------------------------------------------------------------
+
+    was_reconciled = False
+    canonical_update = ""
+    local_only = False
+    reject_reason = ""
+    tracking_record_phase = ""
+
+    kind = envelope.truth_kind
+
+    if kind in (
+        AndroidParticipantTruthKind.cancel,
+        AndroidParticipantTruthKind.failure,
+        AndroidParticipantTruthKind.result,
+    ):
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_terminal_signal(envelope, _runtime, kind)
+        )
+
+    elif kind == AndroidParticipantTruthKind.status:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_status_signal(envelope, _runtime)
+        )
+
+    elif kind == AndroidParticipantTruthKind.task_phase:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_task_phase(envelope, _runtime)
+        )
+
+    elif kind == AndroidParticipantTruthKind.session_snapshot:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_session_snapshot(envelope, _registry)
+        )
+
+    elif kind in (
+        AndroidParticipantTruthKind.readiness_assessment,
+        AndroidParticipantTruthKind.runtime_state,
+        AndroidParticipantTruthKind.unknown,
+    ):
+        # Advisory / audit-only: local_only = True
+        local_only = True
+        canonical_update = ""
+        reject_reason = ""
+
+    # ------------------------------------------------------------------
+    # Emit ReplayFoundation audit event (always)
+    # ------------------------------------------------------------------
+    replay_event_emitted = _emit_audit_event(
+        truth_kind=truth_kind_str,
+        envelope=envelope,
+        was_reconciled=was_reconciled,
+        canonical_update=canonical_update,
+        reject_reason=reject_reason,
+    )
+
+    return AndroidParticipantReconcileOutcome(
+        envelope=envelope,
+        was_reconciled=was_reconciled,
+        canonical_update=canonical_update,
+        local_only=local_only,
+        reject_reason=reject_reason,
+        replay_event_emitted=replay_event_emitted,
+        tracking_record_phase=tracking_record_phase,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Internal reconcile helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_tracking_record(
+    envelope: AndroidParticipantTruthEnvelope,
+    runtime: Any,
+) -> Optional[Any]:
+    """Resolve the V2 tracking record for the given envelope identity keys.
+
+    Prefers ``contract_id`` lookup; falls back to ``session_id``.
+    Returns None if not found or runtime unavailable.
+    """
+    if runtime is None or not _TRACKER_AVAILABLE:
+        return None
+    try:
+        if envelope.contract_id:
+            record = runtime.get_latest_for_contract(envelope.contract_id)
+            if record is not None:
+                return record
+        if envelope.session_id:
+            return runtime.get_latest_for_session(envelope.session_id)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _reconcile_terminal_signal(
+    envelope: AndroidParticipantTruthEnvelope,
+    runtime: Any,
+    kind: AndroidParticipantTruthKind,
+) -> Tuple[bool, str, str, str]:
+    """Reconcile a terminal Android signal (cancel / failure / result).
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not envelope.has_lookup_key():
+        return False, "", "missing_lookup_key", ""
+
+    record = _resolve_tracking_record(envelope, runtime)
+    if record is None:
+        return False, "", "no_matching_tracking_record", ""
+
+    if _is_record_terminal(record):
+        phase_str = str(getattr(record, "phase", "") or "")
+        return (
+            False,
+            "",
+            f"v2_terminal_state_wins:record_already_in_{phase_str}",
+            phase_str,
+        )
+
+    # Map kind → AcknowledgmentSignal
+    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None or apply_acknowledgment_signal is None:
+        return False, "", "tracker_unavailable", ""
+
+    if kind == AndroidParticipantTruthKind.cancel:
+        ack_signal = AcknowledgmentSignal.cancelled
+        update_desc = "cancel_signal_applied→tracking_record_cancelled"
+    elif kind == AndroidParticipantTruthKind.failure:
+        ack_signal = AcknowledgmentSignal.error
+        update_desc = "failure_signal_applied→tracking_record_failed"
+    else:
+        # result — determine success vs failure
+        if envelope.result_success is False:
+            ack_signal = AcknowledgmentSignal.error
+            update_desc = "result_failure_signal_applied→tracking_record_failed"
+        else:
+            ack_signal = AcknowledgmentSignal.final_result
+            update_desc = "result_success_signal_applied→tracking_record_completed"
+
+    try:
+        updated = apply_acknowledgment_signal(record, ack_signal, runtime=runtime)
+        phase_str = str(getattr(updated, "phase", "") or "")
+        return True, update_desc, "", phase_str
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"apply_signal_error:{exc}", ""
+
+
+def _reconcile_status_signal(
+    envelope: AndroidParticipantTruthEnvelope,
+    runtime: Any,
+) -> Tuple[bool, str, str, str]:
+    """Reconcile an Android status (progress) signal.
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not envelope.has_lookup_key():
+        return False, "", "missing_lookup_key", ""
+
+    record = _resolve_tracking_record(envelope, runtime)
+    if record is None:
+        return False, "", "no_matching_tracking_record", ""
+
+    if _is_record_terminal(record):
+        phase_str = str(getattr(record, "phase", "") or "")
+        return False, "", f"v2_terminal_state_wins:record_already_in_{phase_str}", phase_str
+
+    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None or apply_acknowledgment_signal is None:
+        return False, "", "tracker_unavailable", ""
+
+    try:
+        updated = apply_acknowledgment_signal(record, AcknowledgmentSignal.progress, runtime=runtime)
+        phase_str = str(getattr(updated, "phase", "") or "")
+        return True, "status_progress_signal_applied→tracking_record_in_progress", "", phase_str
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"apply_signal_error:{exc}", ""
+
+
+def _reconcile_task_phase(
+    envelope: AndroidParticipantTruthEnvelope,
+    runtime: Any,
+) -> Tuple[bool, str, str, str]:
+    """Reconcile Android-reported task phase into the V2 tracking record.
+
+    Only applies the phase if:
+    - A matching record exists and is non-terminal (TERMINAL_V2_STATE_WINS_CONFLICT_POLICY).
+    - The Android phase maps to a meaningful AcknowledgmentSignal.
+    - The mapped signal advances the record (non-trivial transition).
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not envelope.has_lookup_key():
+        return False, "", "missing_lookup_key", ""
+
+    record = _resolve_tracking_record(envelope, runtime)
+    if record is None:
+        return False, "", "no_matching_tracking_record", ""
+
+    if _is_record_terminal(record):
+        phase_str = str(getattr(record, "phase", "") or "")
+        return False, "", f"v2_terminal_state_wins:record_already_in_{phase_str}", phase_str
+
+    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None or apply_acknowledgment_signal is None:
+        return False, "", "tracker_unavailable", ""
+
+    phase_map = _get_phase_to_ack_map()
+    normalised_phase = (envelope.task_phase_value or "").strip().lower()
+    ack_signal = phase_map.get(normalised_phase)
+    if ack_signal is None:
+        return False, "", f"unmapped_android_phase:{normalised_phase}", ""
+
+    try:
+        updated = apply_acknowledgment_signal(record, ack_signal, runtime=runtime)
+        phase_str = str(getattr(updated, "phase", "") or "")
+        return (
+            True,
+            f"task_phase_reconciled:android={normalised_phase}→v2_ack={ack_signal}→v2_phase={phase_str}",
+            "",
+            phase_str,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"apply_signal_error:{exc}", ""
+
+
+def _reconcile_session_snapshot(
+    envelope: AndroidParticipantTruthEnvelope,
+    registry: Any,
+) -> Tuple[bool, str, str, str]:
+    """Validate Android session snapshot against AttachedSessionRegistry.
+
+    Checks session continuity: if Android reports a session_id that is
+    present in the registry but NOT in active state, this constitutes a
+    conflict (V2 may have superseded or invalidated the session).
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not envelope.session_id:
+        return False, "", "missing_session_id", ""
+
+    if not _REGISTRY_AVAILABLE or registry is None or lookup_active_session is None:
+        # Registry unavailable — treat as advisory only, no conflict recorded
+        return False, "", "registry_unavailable", ""
+
+    try:
+        active_entry = lookup_active_session(envelope.session_id, registry=registry)
+        if active_entry is not None:
+            # Session is active in V2 registry — continuity confirmed
+            return (
+                True,
+                "session_snapshot_continuity_confirmed:session_active_in_v2_registry",
+                "",
+                "active",
+            )
+        else:
+            # Session not found or not active — conflict
+            return (
+                False,
+                "",
+                f"session_snapshot_conflict:session_id={envelope.session_id}_not_active_in_v2",
+                "",
+            )
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"registry_lookup_error:{exc}", ""
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrapper
+# ---------------------------------------------------------------------------
+
+
+def ingest_android_participant_truth_message(
+    message: Dict[str, Any],
+    *,
+    runtime: Optional[Any] = None,
+    registry: Optional[Any] = None,
+) -> AndroidParticipantReconcileOutcome:
+    """Convenience wrapper: extract envelope from raw message and reconcile.
+
+    This is the single-call entry-point for gateway handlers that receive
+    Android participant/session/runtime truth messages and want to ingest
+    them into V2 canonical orchestration state.
+
+    Parameters
+    ----------
+    message:
+        Raw inbound Android truth message as a dict.
+    runtime:
+        Optional :class:`~core.delegated_runtime_execution_tracker.DelegatedExecutionTrackingRuntime`.
+    registry:
+        Optional :class:`~core.attached_runtime_session_registry.AttachedSessionRegistry`.
+
+    Returns
+    -------
+    AndroidParticipantReconcileOutcome
+    """
+    envelope = extract_participant_truth_envelope(message)
+    return reconcile_android_participant_truth(envelope, runtime=runtime, registry=registry)
+
+
+# ---------------------------------------------------------------------------
+# __all__
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    # Authority and sentinel constants
+    "ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY",
+    "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL",
+    "ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL",
+    # Policy sentinels
+    "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY",
+    "ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY",
+    "CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY",
+    "STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY",
+    "TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY",
+    "SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY",
+    "READINESS_ASSESSMENT_IS_ADVISORY_POLICY",
+    "RUNTIME_STATE_IS_AUDIT_ONLY_POLICY",
+    "TERMINAL_V2_STATE_WINS_CONFLICT_POLICY",
+    "RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY",
+    "RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY",
+    "IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+    # Enums
+    "AndroidParticipantTruthKind",
+    # Dataclasses
+    "AndroidParticipantTruthEnvelope",
+    "AndroidParticipantReconcileOutcome",
+    # Functions
+    "extract_participant_truth_envelope",
+    "reconcile_android_participant_truth",
+    "ingest_android_participant_truth_message",
+]

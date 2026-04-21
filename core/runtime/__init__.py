@@ -31,6 +31,11 @@ side): exports canonical persistent attached-runtime session semantics from
 PR package 9 (post-533 dual-repo runtime unification master plan, MAIN repo
 side): exports canonical delegated-runtime handoff contract foundations from
 ``core.delegated_runtime_handoff_contract``.
+
+PR-4V2 (Android runtime truth reconciliation into V2 canonical orchestration):
+exports Android participant/session/runtime truth ingress and canonical
+reconciliation helpers from ``core.android_participant_truth_ingress``.
+Closes TRUTH-005.
 """
 
 from core.runtime.target_takeover import (
@@ -741,6 +746,34 @@ from core.webrtc_task_lifecycle import (  # noqa: E402
     reset_webrtc_task_session_registry,
 )
 
+# PR-4V2: Android Participant/Session/Runtime Truth Ingress and Canonical
+# Reconciliation into V2 Orchestration State.
+# Re-exported here so callers can reach the Android participant truth ingress
+# API from core.runtime without importing the module directly.
+from core.android_participant_truth_ingress import (  # noqa: E402
+    ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY,
+    V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL,
+    ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL,
+    V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
+    ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
+    CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+    STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY,
+    TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY,
+    SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY,
+    READINESS_ASSESSMENT_IS_ADVISORY_POLICY,
+    RUNTIME_STATE_IS_AUDIT_ONLY_POLICY,
+    TERMINAL_V2_STATE_WINS_CONFLICT_POLICY,
+    RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+    RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
+    IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
+    AndroidParticipantTruthKind,
+    AndroidParticipantTruthEnvelope,
+    AndroidParticipantReconcileOutcome,
+    extract_participant_truth_envelope,
+    reconcile_android_participant_truth,
+    ingest_android_participant_truth_message,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -1334,4 +1367,27 @@ __all__ = [
     "build_webrtc_task_binding_snapshot",
     "get_webrtc_task_session_registry",
     "reset_webrtc_task_session_registry",
+    # PR-4V2: Android Participant/Session/Runtime Truth Ingress and Canonical
+    # Reconciliation into V2 Orchestration State — closes TRUTH-005.
+    "ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY",
+    "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL",
+    "ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL",
+    "V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY",
+    "ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY",
+    "CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY",
+    "STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY",
+    "TASK_PHASE_RECONCILED_WITH_TRACKING_RECORD_POLICY",
+    "SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY",
+    "READINESS_ASSESSMENT_IS_ADVISORY_POLICY",
+    "RUNTIME_STATE_IS_AUDIT_ONLY_POLICY",
+    "TERMINAL_V2_STATE_WINS_CONFLICT_POLICY",
+    "RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY",
+    "RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY",
+    "IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+    "AndroidParticipantTruthKind",
+    "AndroidParticipantTruthEnvelope",
+    "AndroidParticipantReconcileOutcome",
+    "extract_participant_truth_envelope",
+    "reconcile_android_participant_truth",
+    "ingest_android_participant_truth_message",
 ]
