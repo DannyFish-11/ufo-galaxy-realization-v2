@@ -54,8 +54,8 @@
 
 | Gap ID | Severity | Status | Module | Description | Recommended PR |
 |--------|----------|--------|--------|-------------|----------------|
-| MESH-001 | HIGH | OPEN | `contracts/mesh_session_coordinator.py` | `MeshSessionCoordinatorState` contract exists (PR-37) but no live coordinator engine evolves its state as session executes. Barrier wait, assignment progress, and merge trigger are not runtime-driven. | Multi-device runtime systemization PR |
-| MESH-002 | HIGH | OPEN | `contracts/mesh_session.py` | `MeshSessionStatus` transitions are not driven by any live engine. `subtask_assignments` statuses are not updated from `TaskGraphRuntime` events. | Multi-device runtime systemization PR |
+| MESH-001 | HIGH | RESOLVED | `contracts/mesh_session_coordinator.py` | `MeshSessionCoordinatorState` contract is now backed by a live runtime engine. `LiveMeshRuntimeEngine` (batch) and `LiveMeshSessionCoordinator` (incremental event-driven) drive barrier wait, assignment progress, and merge trigger in `core/mesh/live_mesh_runtime_engine.py` and `core/mesh/live_mesh_session_coordinator.py`. 147 tests verify live progression. | Resolved in live mesh coordinator PR |
+| MESH-002 | HIGH | RESOLVED | `contracts/mesh_session.py` | `MeshSessionStatus` transitions and `subtask_assignments.status` are now driven by `MeshSessionProgressionDriver` (`core/mesh/mesh_session_progression_driver.py`). The driver advances `MeshSession.status` (PENDING→ACTIVE→MERGING→COMPLETED/FAILED) and `MeshSubtaskAssignment.status` (pending→running→success/failed) in lock-step with participant lifecycle events. 60 tests verify live session progression. | Resolved in live mesh session progression PR |
 | MESH-003 | MEDIUM | OPEN | `core/mesh/body_mesh_registry.py` | `BodyMeshRegistry` is in-process only; no persistence across restarts. Not automatically wired to device connect/disconnect events from UDM/UCM. | Multi-device runtime systemization PR |
 | MESH-004 | MEDIUM | OPEN | `core/mesh/device_role_allocator.py` | `DeviceRoleAllocator.allocate()` does not consult `CapabilityAssimilationLayer` for capability-aware role allocation. | Role allocation intelligence PR |
 | MESH-005 | MEDIUM | OPEN | `galaxy_gateway/session_roaming.py` + `core/routes/sessions.py` | Two separate session migration implementations exist with different semantics and different persistence paths. No single canonical session migration entry. | Session migration unification PR |
@@ -131,36 +131,33 @@
 |--------|----------|------|--------|-----|-------|
 | 1. Scheduling | 0 | 0 | 1 | 2 | 3 |
 | 2. Admission chain | 0 | 0 | 2 | 2 | 4 |
-| 3. Multi-device runtime | 0 | 2 | 3 | 3 | 8 |
-| 4. Android protocol | 0 | 2 | 3 | 2 | 7 |
+| 3. Multi-device runtime | 0 | 0 (was 2, MESH-001/002 now RESOLVED) | 3 | 3 | 6 |
+| 4. Android protocol | 0 | 1 (PROTO-001; PROTO-002 RESOLVED) | 3 | 2 | 6 |
 | 5. WebRTC | 0 | 0 | 2 | 1 | 3 |
 | 6. Truth/projection | 0 | 0 | 3 | 2 | 5 |
 | 7. Compatibility | 0 | 0 | 3 (all FENCED) | 3 (all FENCED) | 6 |
 | 8. Cross-repo | 0 | 1 | 2 | 1 | 4 |
-| **Total** | **0** | **5** | **19** | **16** | **40** |
+| **Total** | **0** | **2** | **19** | **16** | **37** |
 
-No CRITICAL gaps. 5 HIGH gaps (MESH-001, MESH-002, PROTO-001, PROTO-002, CROSS-001) require priority attention.
-Domain 7 (Compatibility): all 6 gaps are now FENCED via `core.center_side_compat_closure` (PR-5).
+No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002, PROTO-002 resolved.
 
 ---
 
 ## Prioritized follow-up PR sequence
 
 ### Immediate (HIGH gaps)
-1. **Multi-device runtime systemization PR** — MESH-001, MESH-002: live coordinator engine, session status transitions
-2. **Session protocol unification PR** — PROTO-001: SESSION_MIGRATE to AIP v3 JSON, unified center-side path
-3. **Task control protocol PR** — PROTO-002: task_cancel / task_status canonical handlers
-4. **Android canonical chain audit** — CROSS-001: verify Android-side admission chain
+1. **Session protocol unification PR** — PROTO-001: SESSION_MIGRATE to AIP v3 JSON, unified center-side path
+2. **Android canonical chain audit** — CROSS-001: verify Android-side admission chain
 
 ### Short-term (MEDIUM gaps)
-5. **PR-514 targets** — SCHED-001, TRUTH-001: CommandRouter capability query, projection enrichment
-6. **Formation + body mesh wiring** — MESH-003, MESH-004, MESH-006
-7. **Android protocol promotion** — PROTO-003, PROTO-004, PROTO-005: wake events, action handlers, AIP v2 binary migration
-8. **WebRTC-task lifecycle integration** — WEBRTC-001, WEBRTC-002
-9. **Truth / projection completeness** — TRUTH-002, TRUTH-003: desktop projection, model topology
+3. **PR-514 targets** — SCHED-001, TRUTH-001: CommandRouter capability query, projection enrichment
+4. **Formation + body mesh wiring** — MESH-003, MESH-004, MESH-006
+5. **Android protocol promotion** — PROTO-003, PROTO-004, PROTO-005: wake events, action handlers, AIP v2 binary migration
+6. **WebRTC-task lifecycle integration** — WEBRTC-001, WEBRTC-002
+7. **Truth / projection completeness** — TRUTH-002, TRUTH-003: desktop projection, model topology
 
 ### Longer-term
-10. **Staged mesh execution** — MESH-008
-11. **Mesh result merge engine** — MESH-007
-12. **Android-V2 truth reconciliation** — CROSS-002, TRUTH-005
-13. **Compat retirement (physical deletion)** — COMPAT-001 through COMPAT-006, PROTO-007 — all FENCED in PR-5; physical deletion pending retirement conditions (see `core.center_side_compat_closure` for each gap's retirement_condition)
+8. **Staged mesh execution** — MESH-008
+9. **Mesh result merge engine** — MESH-007
+10. **Android-V2 truth reconciliation** — CROSS-002, TRUTH-005
+11. **Compat retirement (physical deletion)** — COMPAT-001 through COMPAT-006, PROTO-007 — all FENCED in PR-5; physical deletion pending retirement conditions (see `core.center_side_compat_closure` for each gap's retirement_condition)

@@ -597,6 +597,20 @@ def drop_participant(
 
 
 # ---------------------------------------------------------------------------
+# MESH-002 closure: MeshSession progression driver
+# ---------------------------------------------------------------------------
+
+from core.mesh.mesh_session_progression_driver import (  # noqa: E402
+    MESH_SESSION_PROGRESSION_DRIVER_SENTINEL,
+    SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY,
+    SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY,
+    MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
+    MeshSessionProgressionFinalResult,
+    MeshSessionProgressionDriver,
+    create_progression_driver,
+)
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -610,4 +624,12 @@ __all__ = [
     "register_participant",
     "update_participant_status",
     "drop_participant",
+    # MESH-002 closure: progression driver
+    "MESH_SESSION_PROGRESSION_DRIVER_SENTINEL",
+    "SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY",
+    "SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY",
+    "MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY",
+    "MeshSessionProgressionFinalResult",
+    "MeshSessionProgressionDriver",
+    "create_progression_driver",
 ]

@@ -161,6 +161,14 @@ from core.mesh.mesh_session_coordinator import (  # noqa: E402
     update_participant_status,
     drop_participant,
     MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
+    # MESH-002 closure: MeshSession progression driver
+    MESH_SESSION_PROGRESSION_DRIVER_SENTINEL,
+    SESSION_STATUS_DRIVEN_BY_COORDINATOR_POLICY,
+    SUBTASK_ASSIGNMENT_STATUS_DRIVEN_BY_PARTICIPANT_POLICY,
+    MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY,
+    MeshSessionProgressionFinalResult,
+    MeshSessionProgressionDriver,
+    create_progression_driver,
 )
 
 # PR-J: Live MeshSession Coordinator — incremental event-driven runtime driver.
