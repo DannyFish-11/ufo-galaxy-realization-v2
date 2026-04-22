@@ -96,6 +96,7 @@ __all__ = [
     "WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY",
     "RUNTIME_RESTART_RECOVERY_PR5_SENTINEL",
     "INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY",
+    "HYBRID_CONTINUITY_RECONSTRUCTION_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -165,6 +166,19 @@ INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY: str = (
     "The disposition drives how callers handle each recovered record. (PR-D1)"
 )
 
+# PR-6: hybrid continuity reconstruction from durable persistence
+HYBRID_CONTINUITY_RECONSTRUCTION_POLICY: str = (
+    "POLICY::HYBRID_CONTINUITY_RECONSTRUCTION: On process restart, "
+    "RuntimeRestartRecoveryCoordinator can reconstruct non-terminal hybrid "
+    "execution records from the HybridContinuityPersistenceStore via "
+    "HybridOrchestrationContinuityRegistry.restore_from_persistence().  "
+    "Records whose execution_id already exists in the live registry are "
+    "skipped (in-process state takes precedence).  Remote partial results "
+    "are automatically invalidated via invalidate_remote_partial_results() "
+    "because the underlying transport is gone after restart.  Terminal "
+    "records are not restored — they remain on disk for audit only. (PR-6)"
+)
+
 
 # ---------------------------------------------------------------------------
 # RuntimeRecoveryReport
@@ -205,6 +219,8 @@ class RuntimeRecoveryReport:
     body_mesh_entries_restored: int = 0
     webrtc_bindings_cleared: bool = True
     hybrid_executions_interrupted: int = 0
+    hybrid_executions_restored: int = 0
+    hybrid_remote_partial_invalidated: int = 0
     inflight_tasks_recovered: int = 0
     inflight_tasks_resumable: int = 0
     inflight_tasks_replay_only: int = 0
@@ -224,6 +240,8 @@ class RuntimeRecoveryReport:
             "body_mesh_entries_restored": self.body_mesh_entries_restored,
             "webrtc_bindings_cleared": self.webrtc_bindings_cleared,
             "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
+            "hybrid_executions_restored": self.hybrid_executions_restored,
+            "hybrid_remote_partial_invalidated": self.hybrid_remote_partial_invalidated,
             "inflight_tasks_recovered": self.inflight_tasks_recovered,
             "inflight_tasks_resumable": self.inflight_tasks_resumable,
             "inflight_tasks_replay_only": self.inflight_tasks_replay_only,
@@ -282,12 +300,14 @@ class RuntimeRestartRecoveryCoordinator:
         body_mesh_store=None,
         body_mesh_registry=None,
         hybrid_continuity_registry=None,
+        hybrid_continuity_store=None,
         task_lifecycle_store=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
         self._body_mesh_registry = body_mesh_registry
         self._hybrid_continuity_registry = hybrid_continuity_registry
+        self._hybrid_continuity_store = hybrid_continuity_store
         self._task_lifecycle_store = task_lifecycle_store
 
     def run_recovery(self) -> RuntimeRecoveryReport:
@@ -298,6 +318,11 @@ class RuntimeRestartRecoveryCoordinator:
         1. Recover non-terminal MeshSession coordinator states.
         2. Restore BodyMeshRegistry entries from the durable snapshot.
         3. Clear in-memory WebRTC bindings (intentional — transport is gone).
+        4. Mark in-flight hybrid executions as interrupted (PR-59); restore
+           non-terminal records from durable persistence store and invalidate
+           remote partial results (PR-6).
+        5. Recover in-flight task lifecycle records from durable snapshot
+           (PR-D1).
 
         Returns
         -------
@@ -352,7 +377,8 @@ class RuntimeRestartRecoveryCoordinator:
 
         # ----------------------------------------------------------------
         # Step 4: Mark in-flight hybrid orchestration executions as
-        #         interrupted (PR-59)
+        #         interrupted (PR-59); restore from durable persistence
+        #         store and invalidate remote partial results (PR-6).
         # ----------------------------------------------------------------
         try:
             self._recover_hybrid_orchestration(report)
@@ -375,13 +401,16 @@ class RuntimeRestartRecoveryCoordinator:
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
-            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d "
+            "mesh_sessions=%d body_entries=%d "
+            "hybrid_interrupted=%d hybrid_restored=%d hybrid_invalidated=%d "
             "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
             "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
             report.body_mesh_entries_restored,
             report.hybrid_executions_interrupted,
+            report.hybrid_executions_restored,
+            report.hybrid_remote_partial_invalidated,
             report.inflight_tasks_recovered,
             report.inflight_tasks_resumable,
             report.inflight_tasks_replay_only,
@@ -459,14 +488,16 @@ class RuntimeRestartRecoveryCoordinator:
             report.webrtc_bindings_cleared = False
 
     def _recover_hybrid_orchestration(self, report: RuntimeRecoveryReport) -> None:
-        """Mark in-flight hybrid orchestration executions as interrupted (PR-59).
+        """Mark in-flight hybrid executions as interrupted; restore from store (PR-59 / PR-6).
 
-        This step transitions all non-terminal, non-interrupted hybrid
+        Step 4a (PR-59): Transition all non-terminal, non-interrupted hybrid
         executions in the :class:`~core.hybrid_orchestration_continuity
-        .HybridOrchestrationContinuityRegistry` to the ``interrupted`` state,
-        making restart disruption observable and enabling replay/resumption.
+        .HybridOrchestrationContinuityRegistry` to the ``interrupted`` state.
 
-        Terminal executions are left unchanged (idempotency invariant).
+        Step 4b (PR-6): If a :class:`~core.hybrid_orchestration_continuity
+        .HybridContinuityPersistenceStore` is available, restore non-terminal
+        records from disk into the registry (records already present take
+        precedence) and invalidate remote partial results.
         """
         from core.hybrid_orchestration_continuity import (
             get_continuity_registry,
@@ -476,6 +507,8 @@ class RuntimeRestartRecoveryCoordinator:
             if self._hybrid_continuity_registry is not None
             else get_continuity_registry()
         )
+
+        # 4a: mark running executions as interrupted
         count = registry.mark_all_running_as_interrupted(
             reason="process_restart"
         )
@@ -485,6 +518,33 @@ class RuntimeRestartRecoveryCoordinator:
             "interrupted",
             count,
         )
+
+        # 4b: restore non-terminal records from the durable persistence store
+        if self._hybrid_continuity_store is not None:
+            restored = registry.restore_from_persistence(
+                self._hybrid_continuity_store
+            )
+            report.hybrid_executions_restored = restored
+            logger.info(
+                "RuntimeRestartRecovery: restored %d hybrid executions "
+                "from persistence store",
+                restored,
+            )
+            # Mark any newly-restored running/dispatched records as interrupted —
+            # they were in-flight when the process died and must be interrupted
+            # even though they were not present in the live registry during step 4a.
+            extra_interrupted = registry.mark_all_running_as_interrupted(
+                reason="process_restart_from_store"
+            )
+            report.hybrid_executions_interrupted += extra_interrupted
+            # Invalidate remote partial results — transport is gone after restart
+            invalidated = registry.invalidate_remote_partial_results()
+            report.hybrid_remote_partial_invalidated = invalidated
+            logger.info(
+                "RuntimeRestartRecovery: invalidated %d remote partial "
+                "results",
+                invalidated,
+            )
 
     def _recover_inflight_tasks(self, report: RuntimeRecoveryReport) -> None:
         """Recover in-flight task lifecycle records from the durable snapshot (PR-D1).
@@ -560,6 +620,7 @@ def run_startup_recovery(
     body_mesh_store=None,
     body_mesh_registry=None,
     hybrid_continuity_registry=None,
+    hybrid_continuity_store=None,
     task_lifecycle_store=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
@@ -583,6 +644,11 @@ def run_startup_recovery(
         Optional explicit hybrid orchestration continuity registry.  When
         provided, its ``mark_all_running_as_interrupted`` method is called
         during recovery step 4 (PR-59).
+    hybrid_continuity_store:
+        Optional explicit :class:`~core.hybrid_orchestration_continuity
+        .HybridContinuityPersistenceStore`.  When provided, non-terminal
+        hybrid execution records are restored from disk into the registry
+        and remote partial results are invalidated during step 4 (PR-6).
     task_lifecycle_store:
         Optional explicit :class:`~core.task_lifecycle_persistence
         .TaskLifecyclePersistenceStore`.  When provided, in-flight task
@@ -597,6 +663,7 @@ def run_startup_recovery(
         body_mesh_store=body_mesh_store,
         body_mesh_registry=body_mesh_registry,
         hybrid_continuity_registry=hybrid_continuity_registry,
+        hybrid_continuity_store=hybrid_continuity_store,
         task_lifecycle_store=task_lifecycle_store,
     )
     return coordinator.run_recovery()
