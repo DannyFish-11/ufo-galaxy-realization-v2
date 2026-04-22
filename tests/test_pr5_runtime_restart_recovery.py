@@ -52,6 +52,7 @@ from core.runtime_restart_recovery import (
     BODY_MESH_RECOVERY_IS_DURABLE_POLICY,
     WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY,
     RUNTIME_RESTART_RECOVERY_PR5_SENTINEL,
+    INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY,
     RuntimeRecoveryReport,
     RuntimeRestartRecoveryCoordinator,
     run_startup_recovery,
@@ -133,6 +134,11 @@ class TestSentinels:
         assert isinstance(RUNTIME_RESTART_RECOVERY_PR5_SENTINEL, str)
         assert RUNTIME_RESTART_RECOVERY_PR5_SENTINEL
 
+    def test_inflight_task_lifecycle_recovery_policy(self):
+        assert isinstance(INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY, str)
+        assert "RESUMABLE" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY or \
+               "resumable" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY.lower()
+
 
 # ---------------------------------------------------------------------------
 # B–J — RuntimeRecoveryReport
@@ -153,6 +159,10 @@ class TestRuntimeRecoveryReport:
         for key in ("recovery_id", "started_at", "completed_at",
                     "mesh_sessions_recovered", "mesh_sessions_skipped",
                     "body_mesh_entries_restored", "webrtc_bindings_cleared",
+                    "hybrid_executions_interrupted",
+                    "inflight_tasks_recovered", "inflight_tasks_resumable",
+                    "inflight_tasks_replay_only", "inflight_tasks_reissuable",
+                    "inflight_tasks_terminal",
                     "errors", "non_goals"):
             assert key in d, f"Missing key: {key}"
 
@@ -407,3 +417,44 @@ class TestFullRoundTrip:
         device_ids = [e["device_id"] for e in target._entries]
         assert "rt-dev-1" in device_ids
         assert "rt-dev-2" in device_ids
+
+
+# ---------------------------------------------------------------------------
+# AC — PR-D1: inflight_tasks_* defaults are 0 on fresh report
+# ---------------------------------------------------------------------------
+
+class TestInflightTaskDefaults:
+    def test_inflight_fields_default_to_zero(self):
+        r = RuntimeRecoveryReport()
+        assert r.inflight_tasks_recovered == 0
+        assert r.inflight_tasks_resumable == 0
+        assert r.inflight_tasks_replay_only == 0
+        assert r.inflight_tasks_reissuable == 0
+        assert r.inflight_tasks_terminal == 0
+
+    def test_run_recovery_inflight_tasks_non_negative(self, tmp_path):
+        from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
+        tl_store = TaskLifecyclePersistenceStore(
+            store_path=os.path.join(str(tmp_path), "tl.json")
+        )
+        coord = RuntimeRestartRecoveryCoordinator(
+            mesh_session_store=_make_mesh_session_store(str(tmp_path)),
+            body_mesh_store=_make_body_mesh_store(str(tmp_path)),
+            body_mesh_registry=FakeRegistry(),
+            task_lifecycle_store=tl_store,
+        )
+        report = coord.run_recovery()
+        assert report.inflight_tasks_recovered >= 0
+
+    def test_non_goals_no_longer_say_inflight_not_recovered(self, tmp_path):
+        """The old 'In-flight task queues are NOT recovered' non-goal is gone."""
+        coord = RuntimeRestartRecoveryCoordinator(
+            mesh_session_store=_make_mesh_session_store(str(tmp_path)),
+            body_mesh_store=_make_body_mesh_store(str(tmp_path)),
+            body_mesh_registry=FakeRegistry(),
+        )
+        report = coord.run_recovery()
+        non_goal_text = " ".join(report.non_goals).lower()
+        # The old "in-flight task queues are NOT recovered" non-goal must NOT
+        # appear in non-goals since we now durably recover them.
+        assert "in-flight task queues are not recovered" not in non_goal_text
