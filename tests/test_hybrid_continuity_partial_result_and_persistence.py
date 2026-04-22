@@ -867,5 +867,4 @@ class TestDurableRecoveryPolicyImportability:
     def test_72_importable_from_runtime_restart_recovery(self):
         from core.runtime_restart_recovery import HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY
         assert isinstance(HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY, str)
-        assert "durable" in HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY.lower() \
-            or "DURABLE" in HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY
+        assert "durable" in HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY.lower()
