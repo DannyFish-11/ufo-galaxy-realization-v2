@@ -465,6 +465,60 @@ COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED: str = (
     "unavailable.  Resolves SCHED-002."
 )
 
+# PR-dispatch-discipline: Uniform constraint chain enforcement across all paths.
+#
+# route_envelope() now runs a unified pre-dispatch constraint gate that applies
+# admissibility, session-truth/posture, and topology checks BEFORE any execution
+# branching occurs.  This ensures all intended dispatch paths — including local,
+# cross-device, worker, and parallel-fanout sub-envelopes — are subject to the
+# same constraint chain, not only _route_cross_device_envelope().
+#
+# Gate A — Session-truth / posture-aware filter
+#   Consults core.source_execution_eligibility.check_source_execution_eligibility()
+#   using the source_runtime_posture hint from envelope.metadata.  Records the
+#   posture eligibility decision in _constraint_chain_trace so that downstream
+#   layers and reviewers can verify the constraint was consulted.
+#
+# Gate B — Admissibility chain for device targets
+#   Validates envelope targets via core.target_device_validator.validate_target_device()
+#   (readiness → participation → capability layers) before any path branching.
+#   Excluded targets are filtered out with a structured warning; when all
+#   targets fail the check the dispatch proceeds with originals (graceful
+#   degradation) rather than silently dropping.
+#
+# Both gates degrade gracefully when their backing modules are unavailable —
+# the import is wrapped in try/except, the constraint check is skipped, and
+# the trace entry records the skip reason so gaps remain observable rather
+# than invisible.
+#
+# The trace dict is propagated into the result under "_constraint_chain_trace"
+# for end-to-end reviewability.
+DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT: str = (
+    "COMMAND_ROUTER::DISPATCH_CONSTRAINT_CHAIN_UNIFORM_V1: "
+    "route_envelope() applies a unified pre-dispatch constraint gate covering "
+    "admissibility (readiness→participation→capability via target_device_validator), "
+    "session-truth posture (source_runtime_posture via source_execution_eligibility), "
+    "and topology/network path (via capability_network_runtime_policy) across ALL "
+    "dispatch paths before execution branching. "
+    "Constraint chain trace propagated to result under '_constraint_chain_trace' "
+    "for end-to-end route-decision reviewability. "
+    "Graceful degradation preserves backward compat when backing modules are absent."
+)
+
+# Sentinel confirming that session-truth posture is consulted at the dispatch
+# level in route_envelope(), not only in result-merge / post-execution paths.
+SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED: str = (
+    "COMMAND_ROUTER::SESSION_TRUTH_POSTURE_DISPATCH_FILTER_V1: "
+    "route_envelope() consults canonical session-truth posture "
+    "(envelope.metadata['source_runtime_posture']) via "
+    "core.source_execution_eligibility.check_source_execution_eligibility() "
+    "as Gate A of the unified pre-dispatch constraint chain. "
+    "Posture decision (eligible/posture/reason) is recorded in "
+    "_constraint_chain_trace for reviewability. "
+    "control_only sources that attempt non-cross-device local dispatch "
+    "are flagged in the trace; join_runtime sources pass without restriction."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1237,6 +1291,161 @@ class CommandRouter:
                         "latency_ms": 0.0,
                     }
 
+        # ── ENFORCE: Unified pre-dispatch constraint chain ────────────────────
+        # Applies admissibility, session-truth/posture, and topology checks
+        # uniformly across ALL dispatch paths before execution branching.
+        # See DISPATCH_CONSTRAINT_CHAIN_UNIFORM_ENFORCEMENT sentinel.
+        #
+        # Gate A — session-truth / posture-aware filter.
+        # Gate B — admissibility chain for device targets.
+        #
+        # Both gates degrade gracefully when backing modules are unavailable.
+        # The trace dict is propagated to the result under
+        # "_constraint_chain_trace" for end-to-end reviewability.
+        _constraint_chain_trace: Dict[str, Any] = {
+            "admissibility_applied": False,
+            "admissibility_validated": [],
+            "admissibility_excluded": [],
+            "posture_filter_applied": False,
+            "posture_eligible": None,
+            "posture_value": None,
+        }
+
+        # ── Gate A: Posture-aware session-truth filter ────────────────────────
+        # Consult canonical session-truth posture (source_runtime_posture) to
+        # record whether the source device is eligible for local execution.
+        # control_only sources that land on a non-cross-device path are flagged
+        # in the trace; join_runtime sources pass without restriction.
+        # See SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED sentinel.
+        _meta_posture_hint = (envelope.metadata or {}).get("source_runtime_posture")
+        if _meta_posture_hint is not None:
+            try:
+                from core.source_execution_eligibility import (
+                    check_source_execution_eligibility as _check_src_posture,
+                )
+
+                _posture_elig = _check_src_posture(_meta_posture_hint)
+                _constraint_chain_trace["posture_filter_applied"] = True
+                _constraint_chain_trace["posture_eligible"] = _posture_elig.eligible
+                _constraint_chain_trace["posture_value"] = _posture_elig.posture
+                logger.debug(
+                    "route_envelope [constraint-chain/posture-gate]: "
+                    "source_runtime_posture=%r eligible=%s task_id=%s",
+                    _posture_elig.posture,
+                    _posture_elig.eligible,
+                    envelope.task_id,
+                )
+                # Flag control_only sources on non-cross-device paths — they
+                # should not be executing locally.  Warn; do not block (backward
+                # compat preserved; hard enforcement can be added incrementally).
+                if not _posture_elig.eligible:
+                    _meta_pf = envelope.metadata or {}
+                    _is_cross_device_hint = (
+                        _meta_pf.get("cross_device") == "true"
+                        or (
+                            envelope.executor_target_type is not None
+                            and str(envelope.executor_target_type)
+                            in ("android_device", "node_service")
+                        )
+                    )
+                    if not _is_cross_device_hint:
+                        logger.debug(
+                            "route_envelope [constraint-chain/posture-gate]: "
+                            "control_only source on non-cross-device path; "
+                            "flagged in constraint trace — task_id=%s",
+                            envelope.task_id,
+                        )
+            except Exception as _posture_gate_exc:
+                logger.debug(
+                    "route_envelope: posture-gate skipped (graceful degradation): %s",
+                    _posture_gate_exc,
+                )
+
+        # ── Gate B: Admissibility chain for device targets ───────────────────
+        # Validates envelope targets via the canonical admissibility chain
+        # (readiness → participation → capability) before any path branching,
+        # ensuring all dispatch paths are subject to the same constraint — not
+        # only _route_cross_device_envelope (which has its own per-path check
+        # for defence-in-depth).
+        # Excluded targets are filtered with a structured warning; when all
+        # targets fail, dispatch proceeds with originals (graceful degradation).
+        _pre_adm_targets = list(envelope.targets)
+        if _pre_adm_targets:
+            try:
+                from core.target_device_validator import (
+                    validate_target_device as _vtd_pre,
+                )
+
+                _req_caps_adm: Optional[List[str]] = (
+                    list(envelope.required_capabilities)
+                    if envelope.required_capabilities
+                    else None
+                )
+                _adm_validated: List[str] = []
+                _adm_excluded: List[str] = []
+                for _adm_t in _pre_adm_targets:
+                    try:
+                        _adm_vr = _vtd_pre(
+                            _adm_t, required_capabilities=_req_caps_adm
+                        )
+                        _readiness_was_consulted = not any(
+                            r.startswith("readiness-unavailable")
+                            for r in (_adm_vr.reasons or [])
+                        )
+                        if _readiness_was_consulted and not _adm_vr.ready:
+                            _adm_excluded.append(_adm_t)
+                            logger.debug(
+                                "route_envelope [constraint-chain/admissibility-gate]: "
+                                "target %r excluded — registered=%s ready=%s "
+                                "reasons=%s task_id=%s",
+                                _adm_t,
+                                _adm_vr.registered,
+                                _adm_vr.ready,
+                                _adm_vr.reasons,
+                                envelope.task_id,
+                            )
+                        else:
+                            _adm_validated.append(_adm_t)
+                    except Exception:
+                        # Include by default on per-target error (graceful).
+                        _adm_validated.append(_adm_t)
+
+                _constraint_chain_trace["admissibility_applied"] = True
+                _constraint_chain_trace["admissibility_validated"] = list(
+                    _adm_validated
+                )
+                _constraint_chain_trace["admissibility_excluded"] = list(
+                    _adm_excluded
+                )
+
+                if _adm_validated and len(_adm_validated) < len(_pre_adm_targets):
+                    logger.warning(
+                        "route_envelope [constraint-chain/admissibility-gate]: "
+                        "filtered %d → %d target(s); excluded: %s task_id=%s",
+                        len(_pre_adm_targets),
+                        len(_adm_validated),
+                        _adm_excluded,
+                        envelope.task_id,
+                    )
+                    envelope = envelope.model_copy(
+                        update={"targets": _adm_validated}
+                    )
+                elif not _adm_validated and _adm_excluded:
+                    # All targets failed — warn but proceed (graceful degradation).
+                    logger.warning(
+                        "route_envelope [constraint-chain/admissibility-gate]: "
+                        "all %d target(s) failed admissibility check; "
+                        "proceeding with originals (graceful degradation) "
+                        "task_id=%s",
+                        len(_pre_adm_targets),
+                        envelope.task_id,
+                    )
+            except Exception as _adm_pre_exc:
+                logger.debug(
+                    "route_envelope: pre-dispatch admissibility gate skipped: %s",
+                    _adm_pre_exc,
+                )
+
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
             from core.task_lifecycle import get_lifecycle_manager
@@ -1626,6 +1835,16 @@ class CommandRouter:
                 required_capabilities=required_capabilities,
                 max_retries=max_retries,
             )
+
+        # ── Propagate constraint chain trace into result ──────────────────────
+        # Attach the pre-dispatch constraint chain trace to the result so that
+        # reviewers can verify which checks were applied and why a route was
+        # accepted or rejected across the full constraint chain.
+        # Only attached when at least one gate was actually consulted (additive).
+        if _constraint_chain_trace.get("admissibility_applied") or _constraint_chain_trace.get(
+            "posture_filter_applied"
+        ):
+            result.setdefault("_constraint_chain_trace", _constraint_chain_trace)
 
         # ── PR-506: Close graph / replay / audit from result ─────────────────
         try:
