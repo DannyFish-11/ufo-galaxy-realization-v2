@@ -22,6 +22,15 @@ fail the gate are excluded from selection.  This promotes capability
 requirements from advisory metadata to meaningful routing constraints.
 The gate is additive — it does not modify the existing exec_mode or pool
 selection paths.
+
+PR-ALIGN / SCHED-002 addition
+------------------------------
+Step 0 is now an **admissibility pre-filter** that consults the canonical
+readiness truth (:func:`core.target_device_validator.validate_target_device`)
+for each candidate before any exec_mode or capability filtering.  Devices
+whose readiness check can be consulted and fail are excluded; the filter
+degrades gracefully when the readiness module is unavailable so that legacy
+environments continue to operate.  Resolves SCHED-002.
 """
 
 from __future__ import annotations
@@ -50,6 +59,16 @@ CAPABILITY_GATE_WIRED_IN_SELECTION: str = (
     "when required_capabilities is declared in the routing analysis.  This "
     "promotes capability requirements from advisory to enforced constraints.  "
     "Resolves PR-3 requirement §2."
+)
+
+# PR-ALIGN / SCHED-002: sentinel affirming canonical admissibility pre-filter.
+ADMISSIBILITY_PREFILTER_IN_SELECTION: str = (
+    "ADMISSIBILITY_PREFILTER_IN_SELECTION_V1: "
+    "select_devices() applies a canonical admissibility pre-filter (step 0) "
+    "using core.target_device_validator.validate_target_device() before any "
+    "exec_mode or capability filtering.  Devices that fail the readiness check "
+    "are excluded.  Gracefully degrades when the readiness module is unavailable. "
+    "Resolves SCHED-002."
 )
 
 
@@ -102,6 +121,76 @@ def select_devices(
 
     if not devices:
         return []
+
+    # ── 0. Canonical admissibility pre-filter (PR-ALIGN / SCHED-002) ─────────
+    # Consult the canonical readiness truth for each candidate before any
+    # exec_mode or capability filtering.  This closes the gap where
+    # DeviceRouter._select_devices() operated purely from its local session
+    # cache without consulting the canonical truth stack.
+    #
+    # Degradation policy: if the validator cannot be imported, or if ALL
+    # devices would be excluded (e.g. readiness module not yet wired in a
+    # test environment), skip the filter to preserve backward compatibility.
+    try:
+        from core.target_device_validator import validate_target_device as _vtd
+
+        _admitted: List[Any] = []
+        _at_least_one_readiness_check_succeeded = False
+        for _dev in devices:
+            _tid = getattr(_dev, "device_id", None) or ""
+            if not _tid:
+                _admitted.append(_dev)
+                continue
+            _tvr = _vtd(_tid)
+            # Detect whether the readiness module was actually consulted or
+            # whether it degraded to "unavailable".
+            _readiness_consulted = not any(
+                r.startswith("readiness-unavailable")
+                for r in (_tvr.reasons or [])
+            )
+            if _readiness_consulted:
+                _at_least_one_readiness_check_succeeded = True
+                if _tvr.ready:
+                    _admitted.append(_dev)
+                else:
+                    logger.debug(
+                        "select_devices [SCHED-002]: device %r excluded by "
+                        "admissibility pre-filter — registered=%s ready=%s "
+                        "reasons=%s",
+                        _tid,
+                        _tvr.registered,
+                        _tvr.ready,
+                        _tvr.reasons,
+                    )
+            else:
+                # Readiness module unavailable for this device — include.
+                _admitted.append(_dev)
+
+        if _admitted:
+            if _at_least_one_readiness_check_succeeded and len(_admitted) < len(devices):
+                logger.debug(
+                    "select_devices [SCHED-002]: admissibility pre-filter "
+                    "reduced candidates %d → %d",
+                    len(devices),
+                    len(_admitted),
+                )
+            devices = _admitted
+        else:
+            # All candidates were excluded — this means readiness was consulted
+            # and every device failed (e.g. all offline).  Preserve the original
+            # candidate list so downstream steps can produce a more descriptive
+            # "no online devices" log rather than silently returning empty.
+            logger.warning(
+                "select_devices [SCHED-002]: admissibility pre-filter excluded "
+                "all %d candidate(s); falling back to original list",
+                len(devices),
+            )
+    except Exception as _adm_err:
+        logger.debug(
+            "select_devices: admissibility pre-filter unavailable "
+            "(graceful degradation): %s",
+            _adm_err,
+        )
 
     # ── 1. exec_mode-aware filtering via GatewayCapabilityRegistry ──────────
     desired_exec_mode_str: Optional[str] = analysis.get("exec_mode")

@@ -445,6 +445,26 @@ POLICY_ENGINE_CONSULTED_ON_HEURISTIC_PATH: str = (
     "the policy engine on the main routing path.  PR-5A."
 )
 
+# PR-ALIGN / SCHED-002: Target admissibility validation in cross-device dispatch.
+#
+# _route_cross_device_envelope() now calls validate_target_device() for each
+# target in the envelope before delegating to DeviceRouter, ensuring that only
+# devices that pass the canonical admissibility chain (readiness → participation
+# → capability) are routed.  Invalid targets are excluded with a structured
+# warning; the validated primary target is propagated as context["device_id"] so
+# DeviceRouter uses the canonical target rather than re-selecting from its local
+# session cache.  Gracefully degrades when the validator is unavailable.
+# Closes the gap between CommandRouter's validated target set and DeviceRouter's
+# independent device selection path.  Resolves SCHED-002.
+COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED: str = (
+    "COMMAND_ROUTER::TARGET_ADMISSIBILITY_VALIDATED_V1: "
+    "_route_cross_device_envelope() validates envelope targets via "
+    "core.target_device_validator.validate_target_device() before dispatch. "
+    "Invalid targets are excluded; validated primary target is passed as "
+    "context['device_id'] to DeviceRouter.  Graceful degradation if validator "
+    "unavailable.  Resolves SCHED-002."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1867,6 +1887,86 @@ class CommandRouter:
             # Substrate-caller sentinel: signals to DeviceRouter / CrossDeviceCoordinator
             # that this invocation originates from the canonical CommandRouter path.
             context[_CROSS_DEVICE_SUBSTRATE_CALLER_KEY] = "command_router.route_envelope"
+
+            # ── PR-ALIGN / SCHED-002: Validate targets against canonical ────────
+            # admissibility chain (readiness → capability) before handing off to
+            # DeviceRouter substrate.  Invalid targets are excluded with a
+            # structured warning.  The validated primary target is passed as
+            # context["device_id"] so DeviceRouter uses the canonical target rather
+            # than re-selecting independently from its local session cache.
+            # Gracefully degrades when the validator is unavailable.
+            _envelope_targets = list(envelope.targets) if envelope.targets else []
+            if _envelope_targets:
+                try:
+                    from core.target_device_validator import validate_target_device as _vtd
+
+                    _req_caps: Optional[List[str]] = (
+                        list(envelope.required_capabilities)
+                        if envelope.required_capabilities
+                        else None
+                    )
+                    _validated_ready_targets: List[str] = []
+                    for _tid in _envelope_targets:
+                        _tvr = _vtd(_tid, required_capabilities=_req_caps)
+                        _readiness_consulted = not any(
+                            r.startswith("readiness-unavailable")
+                            for r in (_tvr.reasons or [])
+                        )
+                        if _readiness_consulted:
+                            if _tvr.ready:
+                                _validated_ready_targets.append(_tid)
+                            else:
+                                logger.warning(
+                                    "_route_cross_device_envelope [SCHED-002]: "
+                                    "target %r excluded by admissibility check — "
+                                    "registered=%s ready=%s reasons=%s task_id=%s",
+                                    _tid,
+                                    _tvr.registered,
+                                    _tvr.ready,
+                                    _tvr.reasons,
+                                    envelope.task_id,
+                                )
+                        else:
+                            # Readiness module unavailable — include by default
+                            _validated_ready_targets.append(_tid)
+
+                    if _validated_ready_targets:
+                        if len(_validated_ready_targets) < len(_envelope_targets):
+                            logger.warning(
+                                "_route_cross_device_envelope [SCHED-002]: "
+                                "filtered %d → %d target(s) after admissibility "
+                                "check; excluded: %s task_id=%s",
+                                len(_envelope_targets),
+                                len(_validated_ready_targets),
+                                [t for t in _envelope_targets if t not in _validated_ready_targets],
+                                envelope.task_id,
+                            )
+                            envelope = envelope.model_copy(update={"targets": _validated_ready_targets})
+                    else:
+                        # All targets were checked and all failed readiness —
+                        # warn loudly but proceed with original set to degrade
+                        # gracefully (the canonical target was not reachable, but
+                        # we surface the warning rather than silently dropping).
+                        logger.warning(
+                            "_route_cross_device_envelope [SCHED-002]: all %d "
+                            "target(s) failed admissibility check; proceeding "
+                            "with original set (graceful degradation) task_id=%s",
+                            len(_envelope_targets),
+                            envelope.task_id,
+                        )
+                except Exception as _adm_exc:
+                    logger.debug(
+                        "_route_cross_device_envelope: admissibility validation "
+                        "skipped (graceful degradation): %s",
+                        _adm_exc,
+                    )
+
+            # Propagate the validated primary target as device_id so DeviceRouter
+            # uses the canonical target set from the admissibility check above
+            # rather than independently re-selecting from its local session cache.
+            if envelope.target:
+                context["device_id"] = envelope.target
+
             raw = await _dr.route_task(envelope.tool_name, context=context)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             return {

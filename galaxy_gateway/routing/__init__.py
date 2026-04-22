@@ -22,6 +22,7 @@ from galaxy_gateway.routing.health_policy import (
 )
 from galaxy_gateway.routing.device_selection import (
     DEVICE_SELECTION_AUTHORITY,
+    ADMISSIBILITY_PREFILTER_IN_SELECTION,
     select_devices,
 )
 from galaxy_gateway.routing.policy import (
@@ -42,6 +43,7 @@ __all__ = [
     "filter_eligible_devices",
     # device_selection
     "DEVICE_SELECTION_AUTHORITY",
+    "ADMISSIBILITY_PREFILTER_IN_SELECTION",
     "select_devices",
     # policy
     "ROUTING_POLICY_AUTHORITY",
