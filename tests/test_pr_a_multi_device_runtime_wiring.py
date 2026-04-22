@@ -27,9 +27,17 @@ Coverage
 from __future__ import annotations
 
 import asyncio
+import os
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
+# Node_71 directory — used by coordinator engine tests.
+_NODE71_DIR = str(
+    Path(__file__).resolve().parent.parent
+    / "nodes"
+    / "Node_71_MultiDeviceCoordination"
+)
 import pytest
 
 
@@ -738,24 +746,19 @@ class TestCoordinatorEngineHarnessWiring:
     def _load_n71_module(mod_name: str):
         """Load a Node_71 core submodule via importlib to avoid core namespace conflict."""
         import importlib.util
-        import os
         import sys
 
         full_name = f"core.{mod_name}"
         if full_name in sys.modules:
             return sys.modules[full_name]
 
-        node71_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "nodes", "Node_71_MultiDeviceCoordination",
-        )
-        node71_core = os.path.join(node71_dir, "core")
+        node71_core = os.path.join(_NODE71_DIR, "core")
         # Ensure repo root (for main core/) and Node_71 dir (for models/) are on path
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        repo_root = str(Path(__file__).resolve().parent.parent)
         if repo_root not in sys.path:
             sys.path.insert(0, repo_root)
-        if node71_dir not in sys.path:
-            sys.path.insert(1, node71_dir)
+        if _NODE71_DIR not in sys.path:
+            sys.path.insert(1, _NODE71_DIR)
 
         path = os.path.join(node71_core, f"{mod_name}.py")
         spec = importlib.util.spec_from_file_location(full_name, path)
@@ -854,14 +857,9 @@ class TestCoordinatorEngineHarnessWiring:
         engine = MultiDeviceCoordinatorEngine(config)
         engine._state = CoordinatorState.RUNNING
 
-        import os
         import sys
-        node71_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "nodes", "Node_71_MultiDeviceCoordination",
-        )
-        if node71_dir not in sys.path:
-            sys.path.insert(1, node71_dir)
+        if _NODE71_DIR not in sys.path:
+            sys.path.insert(1, _NODE71_DIR)
 
         from models.device import Device, DeviceType, DeviceState  # type: ignore[import]
 

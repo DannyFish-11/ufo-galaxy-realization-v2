@@ -37,6 +37,7 @@ from typing import Dict, List, Optional, Any, Callable, Set
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from datetime import datetime
+from pathlib import Path
 import traceback
 
 # 导入模型
@@ -72,6 +73,23 @@ from core.canonical_device_view_adapter import (
 )
 
 logger = logging.getLogger("Node71_MDCE")
+
+# ---------------------------------------------------------------------------
+# Harness integration helpers (PR-A)
+# ---------------------------------------------------------------------------
+
+# Node_71 lives 3 directories below the repo root:
+#   <repo_root>/nodes/Node_71_MultiDeviceCoordination/core/<this_file>
+# Path.parents[3] traverses: core → Node_71_MultiDeviceCoordination → nodes → <repo_root>
+_NODE71_PRJ_ROOT = str(Path(__file__).resolve().parents[3])
+
+
+def _ensure_harness_on_path() -> None:
+    """Ensure the Galaxy project root is on sys.path so ``core.multi_device_runtime_harness``
+    is importable from within the Node_71 subprocess context."""
+    import sys
+    if _NODE71_PRJ_ROOT not in sys.path:
+        sys.path.insert(0, _NODE71_PRJ_ROOT)
 
 
 class CoordinatorState(str, Enum):
@@ -324,11 +342,7 @@ class MultiDeviceCoordinatorEngine:
             # PR-A: Notify multi-device runtime harness of the coordinator-state
             # transition so that mesh session persistence reflects the new running state.
             try:
-                import os as _os, sys as _sys
-                _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
-                    _os.path.dirname(_os.path.abspath(__file__)))))
-                if _prj_root not in _sys.path:
-                    _sys.path.insert(0, _prj_root)
+                _ensure_harness_on_path()
                 from core.multi_device_runtime_harness import on_coordinator_state_updated
                 on_coordinator_state_updated({
                     "session_id": self.config.node_id,
@@ -395,11 +409,7 @@ class MultiDeviceCoordinatorEngine:
         # PR-A: Notify multi-device runtime harness of the coordinator-state
         # transition so that mesh session persistence reflects the stopped state.
         try:
-            import os as _os, sys as _sys
-            _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
-                _os.path.dirname(_os.path.abspath(__file__)))))
-            if _prj_root not in _sys.path:
-                _sys.path.insert(0, _prj_root)
+            _ensure_harness_on_path()
             from core.multi_device_runtime_harness import on_coordinator_state_updated
             on_coordinator_state_updated({
                 "session_id": self.config.node_id,
@@ -431,11 +441,7 @@ class MultiDeviceCoordinatorEngine:
                         self._emit_event("device_timeout", {"device_id": device.device_id})
                         # PR-A: Notify runtime harness of the device-timeout health event.
                         try:
-                            import os as _os, sys as _sys
-                            _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
-                                _os.path.dirname(_os.path.abspath(__file__)))))
-                            if _prj_root not in _sys.path:
-                                _sys.path.insert(0, _prj_root)
+                            _ensure_harness_on_path()
                             from core.multi_device_runtime_harness import (
                                 on_device_health_changed,
                                 on_participant_readiness_changed,
