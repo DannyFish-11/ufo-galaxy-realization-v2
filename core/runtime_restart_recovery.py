@@ -104,6 +104,17 @@ __all__ = [
     "reset_recovery_coordinator",
 ]
 
+# PR-59: hybrid orchestration recovery sentinel
+HYBRID_ORCHESTRATION_RECOVERY_POLICY: str = (
+    "POLICY::HYBRID_ORCHESTRATION_RECOVERY: On process restart, "
+    "HybridOrchestrationContinuityRegistry.mark_all_running_as_interrupted() "
+    "is called to transition all non-terminal hybrid executions to 'interrupted'. "
+    "Terminal executions are left as-is.  Live transport handles (A2A, GUI, VLM) "
+    "are intentionally ephemeral and are NOT recovered — see "
+    "HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY in "
+    "core.hybrid_orchestration_continuity."
+)
+
 # ---------------------------------------------------------------------------
 # Policy sentinels
 # ---------------------------------------------------------------------------
@@ -180,6 +191,7 @@ class RuntimeRecoveryReport:
     mesh_sessions_skipped: int = 0
     body_mesh_entries_restored: int = 0
     webrtc_bindings_cleared: bool = True
+    hybrid_executions_interrupted: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -193,6 +205,7 @@ class RuntimeRecoveryReport:
             "mesh_sessions_skipped": self.mesh_sessions_skipped,
             "body_mesh_entries_restored": self.body_mesh_entries_restored,
             "webrtc_bindings_cleared": self.webrtc_bindings_cleared,
+            "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -245,10 +258,12 @@ class RuntimeRestartRecoveryCoordinator:
         mesh_session_store=None,
         body_mesh_store=None,
         body_mesh_registry=None,
+        hybrid_continuity_registry=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
         self._body_mesh_registry = body_mesh_registry
+        self._hybrid_continuity_registry = hybrid_continuity_registry
 
     def run_recovery(self) -> RuntimeRecoveryReport:
         """Orchestrate a full recovery pass.
@@ -272,6 +287,9 @@ class RuntimeRestartRecoveryCoordinator:
             "by the task source.",
             "Device heartbeat state is NOT recovered. Devices re-register on "
             "reconnect.",
+            "Hybrid execution transport handles (A2A connections, GUI handles, "
+            "VLM context) are intentionally ephemeral and are NOT recovered. "
+            "See HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.",
         ]
 
         # ----------------------------------------------------------------
@@ -304,13 +322,25 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 4: Mark in-flight hybrid orchestration executions as
+        #         interrupted (PR-59)
+        # ----------------------------------------------------------------
+        try:
+            self._recover_hybrid_orchestration(report)
+        except Exception as exc:
+            err = f"Hybrid orchestration recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
-            "mesh_sessions=%d body_entries=%d errors=%d",
+            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
             report.body_mesh_entries_restored,
+            report.hybrid_executions_interrupted,
             len(report.errors),
         )
         return report
@@ -382,6 +412,34 @@ class RuntimeRestartRecoveryCoordinator:
             )
             report.webrtc_bindings_cleared = False
 
+    def _recover_hybrid_orchestration(self, report: RuntimeRecoveryReport) -> None:
+        """Mark in-flight hybrid orchestration executions as interrupted (PR-59).
+
+        This step transitions all non-terminal, non-interrupted hybrid
+        executions in the :class:`~core.hybrid_orchestration_continuity
+        .HybridOrchestrationContinuityRegistry` to the ``interrupted`` state,
+        making restart disruption observable and enabling replay/resumption.
+
+        Terminal executions are left unchanged (idempotency invariant).
+        """
+        from core.hybrid_orchestration_continuity import (
+            get_continuity_registry,
+        )
+        registry = (
+            self._hybrid_continuity_registry
+            if self._hybrid_continuity_registry is not None
+            else get_continuity_registry()
+        )
+        count = registry.mark_all_running_as_interrupted(
+            reason="process_restart"
+        )
+        report.hybrid_executions_interrupted = count
+        logger.info(
+            "RuntimeRestartRecovery: marked %d hybrid executions as "
+            "interrupted",
+            count,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Singleton management
@@ -413,6 +471,7 @@ def run_startup_recovery(
     mesh_session_store=None,
     body_mesh_store=None,
     body_mesh_registry=None,
+    hybrid_continuity_registry=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
 
@@ -431,6 +490,10 @@ def run_startup_recovery(
         Optional explicit body mesh persistence store.
     body_mesh_registry:
         Optional explicit body mesh registry to populate.
+    hybrid_continuity_registry:
+        Optional explicit hybrid orchestration continuity registry.  When
+        provided, its ``mark_all_running_as_interrupted`` method is called
+        during recovery step 4 (PR-59).
 
     Returns
     -------
@@ -440,5 +503,6 @@ def run_startup_recovery(
         mesh_session_store=mesh_session_store,
         body_mesh_store=body_mesh_store,
         body_mesh_registry=body_mesh_registry,
+        hybrid_continuity_registry=hybrid_continuity_registry,
     )
     return coordinator.run_recovery()
