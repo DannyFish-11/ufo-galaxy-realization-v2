@@ -524,7 +524,7 @@ class RuntimeRestartRecoveryCoordinator:
             restored = registry.restore_from_persistence(
                 self._hybrid_continuity_store
             )
-            report.hybrid_executions_restored = restored
+            report.hybrid_executions_restored += restored
             logger.info(
                 "RuntimeRestartRecovery: restored %d hybrid executions "
                 "from persistence store",

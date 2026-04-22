@@ -1078,7 +1078,7 @@ class HybridContinuityPersistenceStore:
                 exc,
             )
             try:
-                os.remove(path + ".tmp")
+                os.remove(tmp_path)
             except OSError:
                 pass
             return False

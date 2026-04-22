@@ -682,7 +682,14 @@ class TestFullContinuityScenario:
         _reset_store()
 
     def test_127_end_to_end_run_interrupt_persist_reconstruct_resume(self, tmp_path):
-        """Full lifecycle: run → interrupt → persist → reconstruct → resume."""
+        """Full lifecycle: run → interrupt → persist → reconstruct → resume.
+
+        Recovery sequence mirrors what RuntimeRestartRecoveryCoordinator does:
+        1. Restore non-terminal records from the durable store into the new registry.
+        2. Mark all running/dispatched records (including newly-restored ones) as
+           interrupted — they were in-flight when the process died.
+        3. Resume the interrupted execution.
+        """
         from core.hybrid_orchestration_continuity import HybridOrchestrationContinuityRegistry
 
         store = _make_store(str(tmp_path))
@@ -698,11 +705,10 @@ class TestFullContinuityScenario:
 
         # --- Phase 2: Simulated restart — process dies, new process starts ---
         reg_b = HybridOrchestrationContinuityRegistry()
-        # Recovery: restore from store first, then mark running → interrupted
-        reg_b.mark_all_running_as_interrupted(reason="process_restart")
+        # Step 1: Restore non-terminal records from durable store
         restored = reg_b.restore_from_persistence(store)
         assert restored >= 1
-        # Mark any running records that were just restored as interrupted
+        # Step 2: Mark all running records (including restored ones) as interrupted
         reg_b.mark_all_running_as_interrupted(reason="process_restart_from_store")
 
         # The record should now be in the new registry as interrupted
