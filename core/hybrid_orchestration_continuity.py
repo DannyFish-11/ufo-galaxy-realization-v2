@@ -128,9 +128,15 @@ __all__ = [
     "HYBRID_TERMINAL_STATE_IS_IMMUTABLE_POLICY",
     "HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY",
     "HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL",
+    # Partial-result sentinels
+    "HYBRID_PARTIAL_RESULT_PRESERVATION_POLICY",
+    "HYBRID_PARTIAL_RESULT_INVALIDATION_POLICY",
+    "HYBRID_PARTIAL_RESULT_MERGE_SEMANTICS_POLICY",
     # Enums
     "HybridOrchestrationLifecycleState",
+    "HybridPartialResultStatus",
     # Classes
+    "HybridPartialResult",
     "HybridOrchestrationRecord",
     "HybridOrchestrationContinuityRegistry",
     # Functions
@@ -191,6 +197,38 @@ HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY: str = (
 HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL: str = (
     "HYBRID_ORCHESTRATION_CONTINUITY_PR59::"
     "hybrid-orchestration-lifecycle-durability-recovery-closure-pr59-v1"
+)
+
+HYBRID_PARTIAL_RESULT_PRESERVATION_POLICY: str = (
+    "POLICY::HYBRID_PARTIAL_RESULT_PRESERVATION: When a hybrid execution is "
+    "interrupted, any partial result whose status is PRESERVED MAY be re-used "
+    "after recovery without re-running the corresponding executor level.  A "
+    "partial result is PRESERVED only when its payload is self-contained and "
+    "does not depend on ephemeral transport state (A2A connections, GUI handles, "
+    "VLM screenshot buffers).  Callers MUST check status == PRESERVED before "
+    "using a cached partial result."
+)
+
+HYBRID_PARTIAL_RESULT_INVALIDATION_POLICY: str = (
+    "POLICY::HYBRID_PARTIAL_RESULT_INVALIDATION: Partial results whose status "
+    "is INVALIDATED MUST NOT be reused after interruption.  Invalidation applies "
+    "when the result payload depends on live ephemeral transport state (e.g. a "
+    "streaming A2A response that was mid-transfer, an active GUI session, or a "
+    "VLM inference that referenced a screenshot taken during execution).  "
+    "Invalidated partial results are retained in the record for audit purposes "
+    "only and must not re-enter the execution merge path."
+)
+
+HYBRID_PARTIAL_RESULT_MERGE_SEMANTICS_POLICY: str = (
+    "POLICY::HYBRID_PARTIAL_RESULT_MERGE_SEMANTICS: Partial results whose status "
+    "is MERGEABLE may be combined with fresh results produced on resumption.  "
+    "The caller is responsible for merge logic; this module only classifies "
+    "and preserves the partial payload for retrieval.  A partial result from "
+    "one executor level (e.g. a local A2A response) may be merged with a fresh "
+    "result from a different level (e.g. a remote VLM fallback) if both are "
+    "MERGEABLE and their payloads are structurally compatible.  Terminal-state "
+    "authority remains with V2; merge decisions do not bypass canonical "
+    "orchestration authority."
 )
 
 
@@ -313,6 +351,121 @@ def _is_valid_transition(
 
 
 # ---------------------------------------------------------------------------
+# HybridPartialResultStatus
+# ---------------------------------------------------------------------------
+
+
+class HybridPartialResultStatus(str, Enum):
+    """Classification of a partial result captured during hybrid execution.
+
+    Used to determine whether a partial result can survive interruption and
+    participate in recovery or merge operations.
+
+    Values
+    ------
+    PRESERVED
+        The partial result payload is self-contained and does not depend on
+        ephemeral transport state.  It MAY be reused after recovery without
+        re-running the corresponding executor level.
+    INVALIDATED
+        The partial result depends on live ephemeral state (A2A streaming,
+        active GUI session, VLM inference context).  It MUST NOT be reused
+        after interruption; it is retained in the record for audit only.
+    MERGEABLE
+        The partial result can be combined with a fresh result produced on
+        resumption.  The caller is responsible for merge logic.
+    """
+
+    PRESERVED = "preserved"
+    INVALIDATED = "invalidated"
+    MERGEABLE = "mergeable"
+
+    @property
+    def can_be_reused(self) -> bool:
+        """True if this partial result may be reused after interruption."""
+        return self in (
+            HybridPartialResultStatus.PRESERVED,
+            HybridPartialResultStatus.MERGEABLE,
+        )
+
+
+# ---------------------------------------------------------------------------
+# HybridPartialResult
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class HybridPartialResult:
+    """A partial result captured from one executor level during hybrid execution.
+
+    Partial results are captured when a hybrid execution is interrupted mid-run.
+    They record what data was produced by a specific executor level (local A2A,
+    GUI, VLM, or a remote path) before the interruption, together with a
+    classification of whether that data can survive the restart.
+
+    Parameters
+    ----------
+    source:
+        The execution origin: ``"local"`` for on-device A2A/GUI/VLM or
+        ``"remote"`` for a cross-device or cloud-based execution path.
+    executor_level:
+        Human-readable label for the executor level that produced this result
+        (e.g. ``"a2a"``, ``"gui"``, ``"vlm"``, ``"remote_api"``).
+    status:
+        :class:`HybridPartialResultStatus` — whether this result is
+        PRESERVED, INVALIDATED, or MERGEABLE after interruption.
+    payload:
+        Optional dict snapshot of the partial data.  For INVALIDATED results
+        this should be ``None`` or an empty dict to avoid retaining references
+        to stale ephemeral data.
+    captured_at:
+        Unix epoch seconds when this partial result was captured.
+    reason:
+        Human-readable explanation of why this status was assigned.
+    """
+
+    source: str = "local"
+    executor_level: str = "a2a"
+    status: HybridPartialResultStatus = HybridPartialResultStatus.PRESERVED
+    payload: Optional[Dict[str, Any]] = None
+    captured_at: float = field(default_factory=time.time)
+    reason: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serialisable dict."""
+        return {
+            "source": self.source,
+            "executor_level": self.executor_level,
+            "status": self.status.value,
+            "payload": self.payload,
+            "captured_at": self.captured_at,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "HybridPartialResult":
+        """Reconstruct from *data*.  Raises ``ValueError`` for non-dict input."""
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"HybridPartialResult.from_dict expects a dict, "
+                f"got {type(data).__name__!r}"
+            )
+        raw_status = data.get("status", "preserved")
+        try:
+            status = HybridPartialResultStatus(raw_status)
+        except ValueError:
+            status = HybridPartialResultStatus.PRESERVED
+        return cls(
+            source=data.get("source", "local"),
+            executor_level=data.get("executor_level", "a2a"),
+            status=status,
+            payload=data.get("payload"),
+            captured_at=float(data.get("captured_at", time.time())),
+            reason=data.get("reason", ""),
+        )
+
+
+# ---------------------------------------------------------------------------
 # HybridOrchestrationRecord
 # ---------------------------------------------------------------------------
 
@@ -374,6 +527,69 @@ class HybridOrchestrationRecord:
     result_snapshot: Optional[Dict[str, Any]] = None
     interruption_reason: Optional[str] = None
     resume_count: int = 0
+    partial_results: List["HybridPartialResult"] = field(default_factory=list)
+
+    @property
+    def has_recoverable_partial_results(self) -> bool:
+        """True if any partial results can be reused or merged after interruption."""
+        return any(pr.status.can_be_reused for pr in self.partial_results)
+
+    def record_partial_result(
+        self,
+        *,
+        source: str = "local",
+        executor_level: str = "a2a",
+        status: "HybridPartialResultStatus",
+        payload: Optional[Dict[str, Any]] = None,
+        reason: str = "",
+    ) -> "HybridPartialResult":
+        """Capture a partial result from an executor level.
+
+        Parameters
+        ----------
+        source:
+            Execution origin: ``"local"`` or ``"remote"``.
+        executor_level:
+            Label for the executor that produced the result (e.g. ``"a2a"``).
+        status:
+            Classification of whether the partial result survives interruption.
+        payload:
+            Optional partial result dict.  For INVALIDATED results callers
+            should pass ``None`` or an empty dict.
+        reason:
+            Human-readable explanation of the status classification.
+
+        Returns
+        -------
+        :class:`HybridPartialResult`
+            The newly created partial result record.
+        """
+        pr = HybridPartialResult(
+            source=source,
+            executor_level=executor_level,
+            status=status,
+            payload=payload,
+            reason=reason,
+        )
+        self.partial_results.append(pr)
+        logger.debug(
+            "HybridOrchestrationRecord: captured partial result "
+            "execution_id=%s level=%s status=%s",
+            self.execution_id,
+            executor_level,
+            status.value,
+        )
+        return pr
+
+    def list_preserved_partial_results(self) -> List["HybridPartialResult"]:
+        """Return partial results with PRESERVED status."""
+        return [pr for pr in self.partial_results
+                if pr.status == HybridPartialResultStatus.PRESERVED]
+
+    def list_mergeable_partial_results(self) -> List["HybridPartialResult"]:
+        """Return partial results with MERGEABLE status."""
+        return [pr for pr in self.partial_results
+                if pr.status == HybridPartialResultStatus.MERGEABLE]
 
     @property
     def is_terminal(self) -> bool:
@@ -463,6 +679,7 @@ class HybridOrchestrationRecord:
             "interruption_reason": self.interruption_reason,
             "resume_count": self.resume_count,
             "is_terminal": self.is_terminal,
+            "partial_results": [pr.to_dict() for pr in self.partial_results],
         }
 
     @classmethod
@@ -482,6 +699,14 @@ class HybridOrchestrationRecord:
         except ValueError:
             state = HybridOrchestrationLifecycleState.created
 
+        raw_partial = data.get("partial_results", [])
+        partial_results: List[HybridPartialResult] = []
+        for pr_dict in (raw_partial if isinstance(raw_partial, list) else []):
+            try:
+                partial_results.append(HybridPartialResult.from_dict(pr_dict))
+            except Exception:
+                pass  # Degrade gracefully on corrupt partial result entries
+
         return cls(
             execution_id=data.get("execution_id", f"hexec_{uuid.uuid4().hex[:12]}"),
             session_id=data.get("session_id", ""),
@@ -494,6 +719,7 @@ class HybridOrchestrationRecord:
             result_snapshot=data.get("result_snapshot"),
             interruption_reason=data.get("interruption_reason"),
             resume_count=int(data.get("resume_count", 0)),
+            partial_results=partial_results,
         )
 
 
@@ -638,6 +864,22 @@ class HybridOrchestrationContinuityRegistry:
         return [
             r for r in self._records.values()
             if r.lifecycle_state == HybridOrchestrationLifecycleState.interrupted
+        ]
+
+    def list_interrupted_with_partial_results(self) -> List[HybridOrchestrationRecord]:
+        """Return interrupted records that have at least one recoverable partial result.
+
+        A recoverable partial result has status PRESERVED or MERGEABLE.
+        These records are candidates for partial-result-assisted resumption
+        (the caller may use the preserved payload instead of re-running the
+        corresponding executor level from scratch).
+        """
+        return [
+            r for r in self._records.values()
+            if (
+                r.lifecycle_state == HybridOrchestrationLifecycleState.interrupted
+                and r.has_recoverable_partial_results
+            )
         ]
 
     # ------------------------------------------------------------------

@@ -96,6 +96,8 @@ __all__ = [
     "WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY",
     "RUNTIME_RESTART_RECOVERY_PR5_SENTINEL",
     "INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY",
+    "HYBRID_ORCHESTRATION_RECOVERY_POLICY",
+    "HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -114,6 +116,20 @@ HYBRID_ORCHESTRATION_RECOVERY_POLICY: str = (
     "are intentionally ephemeral and are NOT recovered — see "
     "HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY in "
     "core.hybrid_orchestration_continuity."
+)
+
+# PR-59 v2: durable hybrid continuity recovery sentinel
+HYBRID_CONTINUITY_DURABLE_RECOVERY_POLICY: str = (
+    "POLICY::HYBRID_CONTINUITY_DURABLE_RECOVERY: When a "
+    "HybridContinuityPersistenceStore is available (hybrid_continuity_store "
+    "parameter), RuntimeRestartRecoveryCoordinator first calls "
+    "restore_hybrid_continuity_from_snapshot() to re-populate the in-process "
+    "registry from the durable snapshot, THEN calls "
+    "mark_all_running_as_interrupted() to transition in-flight records.  "
+    "Partial results with status PRESERVED or MERGEABLE survive restart and "
+    "are available for recovery-assisted resumption.  This closes the gap "
+    "where the purely in-memory registry was empty at restart, leaving the "
+    "recovery coordinator with nothing to mark as interrupted."
 )
 
 # ---------------------------------------------------------------------------
@@ -205,6 +221,7 @@ class RuntimeRecoveryReport:
     body_mesh_entries_restored: int = 0
     webrtc_bindings_cleared: bool = True
     hybrid_executions_interrupted: int = 0
+    hybrid_records_restored: int = 0
     inflight_tasks_recovered: int = 0
     inflight_tasks_resumable: int = 0
     inflight_tasks_replay_only: int = 0
@@ -224,6 +241,7 @@ class RuntimeRecoveryReport:
             "body_mesh_entries_restored": self.body_mesh_entries_restored,
             "webrtc_bindings_cleared": self.webrtc_bindings_cleared,
             "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
+            "hybrid_records_restored": self.hybrid_records_restored,
             "inflight_tasks_recovered": self.inflight_tasks_recovered,
             "inflight_tasks_resumable": self.inflight_tasks_resumable,
             "inflight_tasks_replay_only": self.inflight_tasks_replay_only,
@@ -282,12 +300,14 @@ class RuntimeRestartRecoveryCoordinator:
         body_mesh_store=None,
         body_mesh_registry=None,
         hybrid_continuity_registry=None,
+        hybrid_continuity_store=None,
         task_lifecycle_store=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
         self._body_mesh_registry = body_mesh_registry
         self._hybrid_continuity_registry = hybrid_continuity_registry
+        self._hybrid_continuity_store = hybrid_continuity_store
         self._task_lifecycle_store = task_lifecycle_store
 
     def run_recovery(self) -> RuntimeRecoveryReport:
@@ -461,12 +481,21 @@ class RuntimeRestartRecoveryCoordinator:
     def _recover_hybrid_orchestration(self, report: RuntimeRecoveryReport) -> None:
         """Mark in-flight hybrid orchestration executions as interrupted (PR-59).
 
-        This step transitions all non-terminal, non-interrupted hybrid
-        executions in the :class:`~core.hybrid_orchestration_continuity
-        .HybridOrchestrationContinuityRegistry` to the ``interrupted`` state,
-        making restart disruption observable and enabling replay/resumption.
+        Step 4a — Durable restoration (when a HybridContinuityPersistenceStore
+        is available):
+            Calls :func:`~core.hybrid_continuity_persistence
+            .restore_hybrid_continuity_from_snapshot` to re-populate the
+            in-process registry from the most recent durable snapshot.  This
+            ensures that records that were in-flight at the time of the previous
+            process exit are re-hydrated before the interruption marking step.
+            Partial results with status PRESERVED or MERGEABLE are restored as
+            well and remain available for recovery-assisted resumption.
 
-        Terminal executions are left unchanged (idempotency invariant).
+        Step 4b — Interruption marking:
+            Transitions all non-terminal, non-interrupted hybrid executions to
+            the ``interrupted`` state, making restart disruption observable and
+            enabling replay/resumption.  Terminal executions are left unchanged
+            (idempotency invariant).
         """
         from core.hybrid_orchestration_continuity import (
             get_continuity_registry,
@@ -476,6 +505,31 @@ class RuntimeRestartRecoveryCoordinator:
             if self._hybrid_continuity_registry is not None
             else get_continuity_registry()
         )
+
+        # Step 4a: restore records from durable store if available
+        if self._hybrid_continuity_store is not None:
+            try:
+                from core.hybrid_continuity_persistence import (
+                    restore_hybrid_continuity_from_snapshot,
+                )
+                restored = restore_hybrid_continuity_from_snapshot(
+                    registry=registry,
+                    store=self._hybrid_continuity_store,
+                )
+                report.hybrid_records_restored = restored
+                logger.info(
+                    "RuntimeRestartRecovery: restored %d hybrid continuity "
+                    "records from durable store",
+                    restored,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "RuntimeRestartRecovery: hybrid continuity restore "
+                    "failed (continuing with in-memory state): %s",
+                    exc,
+                )
+
+        # Step 4b: mark in-flight records as interrupted
         count = registry.mark_all_running_as_interrupted(
             reason="process_restart"
         )
@@ -560,6 +614,7 @@ def run_startup_recovery(
     body_mesh_store=None,
     body_mesh_registry=None,
     hybrid_continuity_registry=None,
+    hybrid_continuity_store=None,
     task_lifecycle_store=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
@@ -583,6 +638,12 @@ def run_startup_recovery(
         Optional explicit hybrid orchestration continuity registry.  When
         provided, its ``mark_all_running_as_interrupted`` method is called
         during recovery step 4 (PR-59).
+    hybrid_continuity_store:
+        Optional explicit :class:`~core.hybrid_continuity_persistence
+        .HybridContinuityPersistenceStore`.  When provided, hybrid execution
+        records are first restored from this durable store into the continuity
+        registry before the interruption-marking step, enabling full durable
+        recovery of hybrid orchestration continuity across restarts.
     task_lifecycle_store:
         Optional explicit :class:`~core.task_lifecycle_persistence
         .TaskLifecyclePersistenceStore`.  When provided, in-flight task
@@ -597,6 +658,7 @@ def run_startup_recovery(
         body_mesh_store=body_mesh_store,
         body_mesh_registry=body_mesh_registry,
         hybrid_continuity_registry=hybrid_continuity_registry,
+        hybrid_continuity_store=hybrid_continuity_store,
         task_lifecycle_store=task_lifecycle_store,
     )
     return coordinator.run_recovery()
