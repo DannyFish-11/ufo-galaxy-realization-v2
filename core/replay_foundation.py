@@ -106,6 +106,7 @@ __all__ = [
     "REPLAY_FOUNDATION_LAYER_POSITION",
     "REPLAY_FOUNDATION_CONTRACT_VERSION",
     "REPLAY_ONLY_PRINCIPLE",
+    "REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL",
     # Enumerations
     "ReplayEventKind",
     # Record types
@@ -150,6 +151,15 @@ REPLAY_ONLY_PRINCIPLE: str = (
     "all execution-chain events must be recorded here for time-travel support."
 )
 """Principle: replay records are immutable; all key decisions are recorded."""
+
+REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL: str = (
+    "REPLAY_FOUNDATION_DURABLE_AUDIT::PR_B2_V1: "
+    "ReplayFoundation now supports an optional durable audit sink via "
+    "ReplayFoundation.set_audit_store().  When a DurableAuditStore is "
+    "attached, every appended record is also written to the JSONL store so "
+    "replay history survives process lifetime.  (PR-B2)"
+)
+"""Sentinel confirming durable audit sink support is active (PR-B2)."""
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +647,15 @@ class ReplayFoundation:
 
     Provides query APIs to reconstruct task lineage and replay execution
     timelines.  Does NOT perform any dispatch or mutation of canonical state.
+
+    Durable audit sink (PR-B2)
+    --------------------------
+    When :meth:`set_audit_store` has been called with a
+    :class:`~core.replay_audit_persistence.DurableAuditStore`, every record
+    appended to the ring buffers is **also** written to the durable JSONL
+    store.  The ring buffers remain the authoritative in-process read
+    surfaces; the durable store provides forensic reviewability across
+    process lifetimes.
     """
 
     _MAX_RING: int = 256
@@ -654,16 +673,50 @@ class ReplayFoundation:
         self._routes_by_task: Dict[str, List[RouteDecisionRecord]] = {}
         self._fallbacks_by_task: Dict[str, List[ReplayFallbackRecord]] = {}
         self._retries_by_task: Dict[str, List[ReplayRetryRecord]] = {}
+        # Optional durable audit sink (PR-B2)
+        self._audit_store: Optional[Any] = None
+
+    # ── Durable audit sink ───────────────────────────────────────────────
+
+    def set_audit_store(self, store: Any) -> None:
+        """Attach a :class:`~core.replay_audit_persistence.DurableAuditStore`.
+
+        Once attached, every record appended to this foundation is also
+        written to *store* for durable auditability (PR-B2).
+
+        Parameters
+        ----------
+        store:
+            A :class:`~core.replay_audit_persistence.DurableAuditStore`
+            instance.  Pass ``None`` to detach.
+        """
+        self._audit_store = store
+
+    def _durable_append(self, record_dict: Dict[str, Any], kind: str) -> None:
+        """Write *record_dict* to the durable audit store if one is attached."""
+        if self._audit_store is None:
+            return
+        try:
+            from core.replay_audit_persistence import append_replay_audit_record
+            append_replay_audit_record(record_dict, kind, store=self._audit_store)
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug(
+                "ReplayFoundation: durable audit append failed (kind=%s): %s",
+                kind,
+                _exc,
+            )
 
     # ── Execution Records ────────────────────────────────────────────────
 
     def record_execution(self, record: TaskExecutionRecord) -> TaskExecutionRecord:
         """Append a :class:`TaskExecutionRecord` to the foundation.
 
-        Idempotent by ``record_id``.
+        Idempotent by ``record_id``.  When a durable audit store is attached,
+        the record is also written to the store (PR-B2).
         """
         self._execution_records[record.record_id] = record
         self._execution_ring.append(record)
+        self._durable_append(record.to_dict(), "task_execution")
         return record
 
     def get_execution_record(self, task_id: str) -> Optional[TaskExecutionRecord]:
@@ -676,10 +729,15 @@ class ReplayFoundation:
     # ── Runtime Events ───────────────────────────────────────────────────
 
     def emit_event(self, event: RuntimeEventRecord) -> RuntimeEventRecord:
-        """Append a :class:`RuntimeEventRecord` to the event ring."""
+        """Append a :class:`RuntimeEventRecord` to the event ring.
+
+        When a durable audit store is attached, the event is also written to
+        the store for persistent auditability (PR-B2).
+        """
         self._event_ring.append(event)
         if event.task_id:
             self._events_by_task.setdefault(event.task_id, []).append(event)
+        self._durable_append(event.to_dict(), "runtime_event")
         return event
 
     def get_events_for_task(self, task_id: str) -> List[RuntimeEventRecord]:
@@ -689,9 +747,14 @@ class ReplayFoundation:
     # ── Route Decisions ──────────────────────────────────────────────────
 
     def record_route(self, record: RouteDecisionRecord) -> RouteDecisionRecord:
-        """Append a :class:`RouteDecisionRecord`."""
+        """Append a :class:`RouteDecisionRecord`.
+
+        When a durable audit store is attached, the record is also written to
+        the store for persistent auditability (PR-B2).
+        """
         if record.task_id:
             self._routes_by_task.setdefault(record.task_id, []).append(record)
+        self._durable_append(record.to_dict(), "route_decision")
         return record
 
     def get_route_decisions(self, task_id: str) -> List[RouteDecisionRecord]:
@@ -701,11 +764,16 @@ class ReplayFoundation:
     # ── Fallback Records ─────────────────────────────────────────────────
 
     def record_fallback(self, record: ReplayFallbackRecord) -> ReplayFallbackRecord:
-        """Append a :class:`ReplayFallbackRecord`."""
+        """Append a :class:`ReplayFallbackRecord`.
+
+        When a durable audit store is attached, the record is also written to
+        the store for persistent auditability (PR-B2).
+        """
         if record.primary_task_id:
             self._fallbacks_by_task.setdefault(
                 record.primary_task_id, []
             ).append(record)
+        self._durable_append(record.to_dict(), "fallback")
         return record
 
     def get_fallback_history(self, task_id: str) -> List[ReplayFallbackRecord]:
@@ -715,11 +783,16 @@ class ReplayFoundation:
     # ── Retry Records ────────────────────────────────────────────────────
 
     def record_retry(self, record: ReplayRetryRecord) -> ReplayRetryRecord:
-        """Append a :class:`ReplayRetryRecord`."""
+        """Append a :class:`ReplayRetryRecord`.
+
+        When a durable audit store is attached, the record is also written to
+        the store for persistent auditability (PR-B2).
+        """
         if record.original_task_id:
             self._retries_by_task.setdefault(
                 record.original_task_id, []
             ).append(record)
+        self._durable_append(record.to_dict(), "retry")
         return record
 
     def get_retry_history(self, task_id: str) -> List[ReplayRetryRecord]:

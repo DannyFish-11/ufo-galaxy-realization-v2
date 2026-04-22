@@ -32,7 +32,11 @@ Design principles
   ``control_only`` (the conservative default from PR-533 / PR-1).
 - **Policy-sentinel anchored** — every behavioural policy documented here is
   referenced by a named string sentinel for audit and observability.
-- **No persistence engine** — the ring-buffer runtime is in-process only.
+- **Durable audit sink (PR-B2)** — the ring-buffer runtime is still in-process
+  authoritative; when a :class:`~core.replay_audit_persistence.DurableAuditStore`
+  is attached via :meth:`CanonicalSessionTruthRuntime.set_audit_store`, each
+  :class:`CanonicalSessionTruthRecord` is also written to the store so truth
+  merge evidence survives process lifetime.
 
 Public surface
 --------------
@@ -42,6 +46,7 @@ Sentinels
 :data:`CONTROL_ONLY_EXCLUDED_FROM_MERGE_POLICY`
 :data:`POSTURE_AWARE_RESULT_FILTER_POLICY`
 :data:`CANONICAL_SESSION_TRUTH_PR4_SENTINEL`
+:data:`CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL`
 
 Data types
 ~~~~~~~~~~
@@ -82,6 +87,7 @@ __all__ = [
     "SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY",
     "PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY",
     "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
+    "CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL",
     # Data types
     "SessionTruthSource",
     "CanonicalSessionTruthRecord",
@@ -177,6 +183,17 @@ PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY: str = (
     "and MUST NOT be accepted as canonical truth authority origins."
 )
 """Policy: projection/interop/compat surfaces cannot act as truth-source authority."""
+
+CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL: str = (
+    "CANONICAL_SESSION_TRUTH_DURABLE_AUDIT::PR_B2_V1: "
+    "CanonicalSessionTruthRuntime now supports an optional durable audit sink "
+    "via set_audit_store().  When attached, every CanonicalSessionTruthRecord "
+    "is also written to a DurableAuditStore so truth merge evidence survives "
+    "process lifetime and is available for postmortem / forensic review.  "
+    "The in-memory ring buffer remains the authoritative runtime read surface.  "
+    "(PR-B2)"
+)
+"""Sentinel confirming durable audit sink support is active on CanonicalSessionTruthRuntime (PR-B2)."""
 
 # ---------------------------------------------------------------------------
 # Internal posture helpers
@@ -433,6 +450,15 @@ class CanonicalSessionTruthRuntime:
 
     Thread-safe.  Bounded to :data:`_RING_BUFFER_SIZE` entries.  New entries
     evict the oldest when the buffer is full.
+
+    Durable audit sink (PR-B2)
+    --------------------------
+    When :meth:`set_audit_store` has been called with a
+    :class:`~core.replay_audit_persistence.DurableAuditStore`, every
+    :class:`CanonicalSessionTruthRecord` appended to the ring buffer is
+    **also** written to the store.  The ring buffer remains the authoritative
+    runtime read surface; the durable store provides forensic reviewability
+    across process lifetimes.
     """
 
     def __init__(self, max_size: int = _RING_BUFFER_SIZE) -> None:
@@ -443,9 +469,31 @@ class CanonicalSessionTruthRuntime:
         self._join_runtime_count: int = 0
         self._success_count: int = 0
         self._lock: Lock = Lock()
+        # Optional durable audit sink (PR-B2)
+        self._audit_store: Any = None
+
+    # ── Durable audit sink ───────────────────────────────────────────────
+
+    def set_audit_store(self, store: Any) -> None:
+        """Attach a :class:`~core.replay_audit_persistence.DurableAuditStore`.
+
+        Once attached, every :class:`CanonicalSessionTruthRecord` recorded
+        here is also written to *store* for durable auditability (PR-B2).
+
+        Parameters
+        ----------
+        store:
+            A :class:`~core.replay_audit_persistence.DurableAuditStore`
+            instance.  Pass ``None`` to detach.
+        """
+        self._audit_store = store
 
     def record(self, rec: CanonicalSessionTruthRecord) -> CanonicalSessionTruthRecord:
-        """Add *rec* to the ring buffer and return it."""
+        """Add *rec* to the ring buffer and return it.
+
+        When a durable audit store is attached, the record is also written to
+        the store for persistent auditability (PR-B2).
+        """
         with self._lock:
             self._records.append(rec)
             self._total += 1
@@ -455,6 +503,20 @@ class CanonicalSessionTruthRuntime:
                 self._control_only_count += 1
             if rec.merge_success:
                 self._success_count += 1
+        # Write to durable store outside the lock to avoid potential deadlock
+        if self._audit_store is not None:
+            try:
+                from core.replay_audit_persistence import append_replay_audit_record
+                append_replay_audit_record(
+                    rec.to_dict(),
+                    "canonical_truth_merge",
+                    store=self._audit_store,
+                )
+            except Exception as _exc:  # noqa: BLE001
+                _logger.debug(
+                    "CanonicalSessionTruthRuntime: durable audit append failed: %s",
+                    _exc,
+                )
         return rec
 
     def snapshot(self, max_recent: int = 20) -> CanonicalSessionTruthSnapshot:

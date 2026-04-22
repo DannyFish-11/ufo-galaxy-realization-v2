@@ -155,6 +155,7 @@ __all__ = [
     "NO_SILENT_AUTHORITY_MASKING_POLICY",
     "RESIDUAL_GAP_ANNOTATION_POLICY",
     "CLOSURE_AUDIT_NO_NEW_TRUTH_SOURCE_POLICY",
+    "CONFLICT_ARTIFACTS_PERSISTED_POLICY",
     # Gap severity constants
     "GAP_SEVERITY_CRITICAL",
     "GAP_SEVERITY_HIGH",
@@ -179,6 +180,7 @@ __all__ = [
     "get_residual_gap_map",
     "get_runtime_closure_audit",
     "reset_runtime_closure_audit",
+    "persist_conflict_artifacts",
 ]
 
 # ===========================================================================
@@ -229,6 +231,15 @@ CLOSURE_AUDIT_NO_NEW_TRUTH_SOURCE_POLICY: str = (
     "CLOSURE_AUDIT_NO_NEW_TRUTH_SOURCE_POLICY_V1: "
     "ClosureAuditSnapshot is a derived view for inspection only.  It must not "
     "be used as a primary state source for routing, dispatch, or projection."
+)
+
+CONFLICT_ARTIFACTS_PERSISTED_POLICY: str = (
+    "CONFLICT_ARTIFACTS_PERSISTED_POLICY_V1: "
+    "Callers that need to durably record conflict detection outcomes should use "
+    "persist_conflict_artifacts() to write all AuthorityConflictEntry records "
+    "(both resolved and unresolved) to the DurableAuditStore.  This ensures "
+    "conflict-detection history survives process restart and is available for "
+    "postmortem forensics.  (PR-B2)"
 )
 
 # ===========================================================================
@@ -1252,3 +1263,63 @@ def get_residual_gap_map() -> List[ClosureGapEntry]:
     :meth:`RuntimeClosureAudit.get_residual_gap_map`.
     """
     return get_runtime_closure_audit().get_residual_gap_map()
+
+
+def persist_conflict_artifacts(
+    conflicts: Optional[List[AuthorityConflictEntry]] = None,
+    *,
+    audit_run_id: str = "",
+    store: Any = None,
+) -> int:
+    """Durably record conflict detection artifacts to the audit store.
+
+    Writes every :class:`AuthorityConflictEntry` in *conflicts* to the
+    :class:`~core.replay_audit_persistence.DurableAuditStore` so that
+    conflict-detection history survives process restart and is available for
+    postmortem forensics and incident review.
+
+    Policy: :data:`CONFLICT_ARTIFACTS_PERSISTED_POLICY`
+
+    Parameters
+    ----------
+    conflicts:
+        List of :class:`AuthorityConflictEntry` objects to persist.  When
+        ``None``, :func:`detect_parallel_truth_paths` is called to obtain the
+        current conflict list.
+    audit_run_id:
+        Optional identifier linking these records to a specific audit run.
+    store:
+        Optional explicit :class:`~core.replay_audit_persistence.DurableAuditStore`.
+        Defaults to the process-level singleton.
+
+    Returns
+    -------
+    int
+        Number of conflict records successfully persisted.
+    """
+    if conflicts is None:
+        conflicts = detect_parallel_truth_paths()
+    try:
+        from core.replay_audit_persistence import (
+            append_conflict_audit_record,
+            get_replay_audit_store,
+        )
+        _store = store or get_replay_audit_store()
+        count = 0
+        for conflict in conflicts:
+            if append_conflict_audit_record(
+                conflict, audit_run_id=audit_run_id, store=_store
+            ):
+                count += 1
+        logger.debug(
+            "RuntimeClosureAudit: persisted %d/%d conflict artifacts (run=%s)",
+            count,
+            len(conflicts),
+            audit_run_id or "<none>",
+        )
+        return count
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "RuntimeClosureAudit: failed to persist conflict artifacts: %s", exc
+        )
+        return 0
