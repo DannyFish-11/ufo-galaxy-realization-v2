@@ -26,6 +26,7 @@
 | **OPEN** | Not yet addressed |
 | **PARTIAL** | Partially addressed; residual gap remains |
 | **RESOLVED** | Fully addressed in a prior PR |
+| **CLOSED (PR-4V2)** | Closed by the Android participant truth reconciliation PR |
 
 ---
 
@@ -97,7 +98,7 @@
 | TRUTH-002 | MEDIUM | OPEN | `desktop_projection` / `status_board_v2` | Desktop projection surfaces maintain independent topology/route representations without consuming `NetworkTopologyRuntime`. Final presentation authority clarification deferred (GAP-512-008). | PR-515 target |
 | TRUTH-003 | MEDIUM | OPEN | `core/continuum` + model topology | Multi-model intelligent routing supply is expressed through `ContinuumState`/`TopologyRoutePlan` only, without a canonical runtime authority equivalent to `NetworkTopologyRuntime` for the model/provider domain (GAP-512-009). | PR-515 |
 | TRUTH-004 | LOW | OPEN | `contracts/multi_device_runtime_projection.py` | `MultiDeviceRuntimeProjection.merged_results` body is partially enriched from canonical chain state (PR-522) but not fully sourced. | Projection completeness PR |
-| TRUTH-005 | LOW | OPEN | Android-side | Android-side authoritative host-facing projections (runtime state / session snapshot / target readiness) exist as local state. Whether they converge into or are superseded by V2 outward truth is not explicitly defined. | Android truth alignment PR |
+| TRUTH-005 | LOW | CLOSED (PR-4V2) | `core/android_participant_truth_ingress.py` | **Closed by PR-4V2.** Android participant truth (session snapshot, readiness assessment, task phase, runtime state, cancel, status, failure, result) now has an explicit reconciliation protocol with V2 canonical orchestration state via `ingest_android_participant_truth_message()` / `reconcile_android_participant_truth()`. cancel/failure/result materially update V2 tracking records; readiness/runtime_state remain advisory. See `docs/ANDROID_TRUTH_RECONCILIATION_REVIEWER_GUIDE.md` and policy sentinels in `core/android_participant_truth_ingress.py`. | Closed — see `core/android_participant_truth_ingress.py` |
 
 ---
 
@@ -119,7 +120,7 @@
 | Gap ID | Severity | Status | Description | Recommended action |
 |--------|----------|--------|-------------|-------------------|
 | CROSS-001 | HIGH | OPEN | Android-side canonical execution chain: it is not confirmed that ALL Android message types walk the full canonical execution chain (`TaskEnvelope → CommandRouter analog → local execution → signal back`). The delegated execution signal path (PR-16) is well-defined for delegated tasks, but direct task_submit / task_execute Android-initiated flows may bypass canonical admission on the Android side. | Android canonical chain audit |
-| CROSS-002 | MEDIUM | OPEN | Android-side truth / projection: Android maintains local runtime state (session snapshot, target readiness, current task state) that may diverge from V2 outward truth. No explicit reconciliation protocol defined. | Android-V2 truth reconciliation design PR |
+| CROSS-002 | MEDIUM | CLOSED (PR-4V2) | Android-side truth / projection: **Closed by PR-4V2.** `core/android_participant_truth_ingress.py` defines the explicit reconciliation protocol between Android local runtime state and V2 canonical orchestration truth. cancel/failure/result signals materially update V2 canonical tracking records; session snapshots are validated against `AttachedSessionRegistry`; readiness/runtime_state are advisory. V2 terminal state wins all conflicts; no phantom records are created on miss. See `docs/ANDROID_TRUTH_RECONCILIATION_REVIEWER_GUIDE.md`. | Closed — see `core/android_participant_truth_ingress.py` |
 | CROSS-003 | MEDIUM | OPEN | No confirmed E2E test that runs across both repos with real connected Android devices. PR-523 acceptance tests are server-side only (99 tests, no Android device required). | Real-device E2E integration test suite |
 | CROSS-004 | LOW | OPEN | Capability report from Android (`device_capabilities` AIP type) is received by V2 but it is not confirmed that these capabilities are forwarded into `CapabilityAssimilationLayer.assimilate_device()` automatically at connection time. | Android capability ingress wiring PR |
 
@@ -134,12 +135,12 @@
 | 3. Multi-device runtime | 0 | 0 (was 2, MESH-001/002 now RESOLVED) | 3 | 3 | 6 |
 | 4. Android protocol | 0 | 1 (PROTO-001; PROTO-002 RESOLVED) | 3 | 2 | 6 |
 | 5. WebRTC | 0 | 0 | 2 | 1 | 3 |
-| 6. Truth/projection | 0 | 0 | 3 | 2 | 5 |
+| 6. Truth/projection | 0 | 0 | 3 | 1 (TRUTH-005 CLOSED) | 4 |
 | 7. Compatibility | 0 | 0 | 3 (all FENCED) | 3 (all FENCED) | 6 |
-| 8. Cross-repo | 0 | 1 | 2 | 1 | 4 |
-| **Total** | **0** | **2** | **19** | **16** | **37** |
+| 8. Cross-repo | 0 | 1 | 1 (CROSS-002 CLOSED) | 1 | 3 |
+| **Total** | **0** | **2** | **18** | **15** | **35** |
 
-No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002, PROTO-002 resolved.
+No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002, PROTO-002, TRUTH-005, CROSS-002 resolved.
 
 ---
 
@@ -159,5 +160,5 @@ No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002,
 ### Longer-term
 8. **Staged mesh execution** — MESH-008
 9. **Mesh result merge engine** — MESH-007
-10. **Android-V2 truth reconciliation** — CROSS-002, TRUTH-005
+10. ~~**Android-V2 truth reconciliation** — CROSS-002, TRUTH-005~~ **CLOSED by PR-4V2** — see `core/android_participant_truth_ingress.py` and `docs/ANDROID_TRUTH_RECONCILIATION_REVIEWER_GUIDE.md`
 11. **Compat retirement (physical deletion)** — COMPAT-001 through COMPAT-006, PROTO-007 — all FENCED in PR-5; physical deletion pending retirement conditions (see `core.center_side_compat_closure` for each gap's retirement_condition)
