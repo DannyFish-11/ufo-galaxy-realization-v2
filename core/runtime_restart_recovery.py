@@ -95,6 +95,7 @@ __all__ = [
     "BODY_MESH_RECOVERY_IS_DURABLE_POLICY",
     "WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY",
     "RUNTIME_RESTART_RECOVERY_PR5_SENTINEL",
+    "INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -152,6 +153,18 @@ RUNTIME_RESTART_RECOVERY_PR5_SENTINEL: str = (
     "RUNTIME_RESTART_RECOVERY_PR5::runtime-restart-recovery-coordinator-pr5-v1"
 )
 
+# PR-D1: in-flight task lifecycle durability sentinel
+INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY: str = (
+    "POLICY::INFLIGHT_TASK_LIFECYCLE_RECOVERY: On process restart, "
+    "RuntimeRestartRecoveryCoordinator recovers in-flight task lifecycle "
+    "records from the durable snapshot written by "
+    "core.task_lifecycle_persistence.TaskLifecyclePersistenceStore.  "
+    "Each record is classified by InFlightTaskDisposition: "
+    "RESUMABLE (device_dispatch/cross_device), REPLAY_ONLY (routing), "
+    "REISSUABLE (gateway_ingress), or TERMINAL_ON_INTERRUPT (result_completion). "
+    "The disposition drives how callers handle each recovered record. (PR-D1)"
+)
+
 
 # ---------------------------------------------------------------------------
 # RuntimeRecoveryReport
@@ -192,6 +205,11 @@ class RuntimeRecoveryReport:
     body_mesh_entries_restored: int = 0
     webrtc_bindings_cleared: bool = True
     hybrid_executions_interrupted: int = 0
+    inflight_tasks_recovered: int = 0
+    inflight_tasks_resumable: int = 0
+    inflight_tasks_replay_only: int = 0
+    inflight_tasks_reissuable: int = 0
+    inflight_tasks_terminal: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -206,6 +224,11 @@ class RuntimeRecoveryReport:
             "body_mesh_entries_restored": self.body_mesh_entries_restored,
             "webrtc_bindings_cleared": self.webrtc_bindings_cleared,
             "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
+            "inflight_tasks_recovered": self.inflight_tasks_recovered,
+            "inflight_tasks_resumable": self.inflight_tasks_resumable,
+            "inflight_tasks_replay_only": self.inflight_tasks_replay_only,
+            "inflight_tasks_reissuable": self.inflight_tasks_reissuable,
+            "inflight_tasks_terminal": self.inflight_tasks_terminal,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -259,11 +282,13 @@ class RuntimeRestartRecoveryCoordinator:
         body_mesh_store=None,
         body_mesh_registry=None,
         hybrid_continuity_registry=None,
+        task_lifecycle_store=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
         self._body_mesh_registry = body_mesh_registry
         self._hybrid_continuity_registry = hybrid_continuity_registry
+        self._task_lifecycle_store = task_lifecycle_store
 
     def run_recovery(self) -> RuntimeRecoveryReport:
         """Orchestrate a full recovery pass.
@@ -283,13 +308,16 @@ class RuntimeRestartRecoveryCoordinator:
         report.non_goals = [
             "WebRTC transport bindings are intentionally ephemeral and "
             "are NOT recovered. See WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.",
-            "In-flight task queues are NOT recovered. Tasks must be replayed "
-            "by the task source.",
             "Device heartbeat state is NOT recovered. Devices re-register on "
             "reconnect.",
             "Hybrid execution transport handles (A2A connections, GUI handles, "
             "VLM context) are intentionally ephemeral and are NOT recovered. "
             "See HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.",
+            "In-flight task RESULTS and partial execution state are NOT "
+            "recovered — only the task identity, ownership stage, and "
+            "disposition classification are restored from the lifecycle "
+            "snapshot.  Callers must re-dispatch or replay tasks to obtain "
+            "fresh results. See INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY.",
         ]
 
         # ----------------------------------------------------------------
@@ -333,14 +361,32 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 5: Recover in-flight task lifecycle state from durable
+        #         snapshot (PR-D1)
+        # ----------------------------------------------------------------
+        try:
+            self._recover_inflight_tasks(report)
+        except Exception as exc:
+            err = f"In-flight task lifecycle recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
-            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d errors=%d",
+            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d "
+            "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
+            "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
             report.body_mesh_entries_restored,
             report.hybrid_executions_interrupted,
+            report.inflight_tasks_recovered,
+            report.inflight_tasks_resumable,
+            report.inflight_tasks_replay_only,
+            report.inflight_tasks_reissuable,
+            report.inflight_tasks_terminal,
             len(report.errors),
         )
         return report
@@ -440,6 +486,48 @@ class RuntimeRestartRecoveryCoordinator:
             count,
         )
 
+    def _recover_inflight_tasks(self, report: RuntimeRecoveryReport) -> None:
+        """Recover in-flight task lifecycle records from the durable snapshot (PR-D1).
+
+        Calls :func:`~core.task_lifecycle_persistence
+        .restore_inflight_tasks_from_snapshot` to load all records that were
+        pending at the time of the previous process exit.  Each record is
+        classified by :class:`~core.task_lifecycle_persistence
+        .InFlightTaskDisposition`; the counts are recorded in the report so
+        operators can observe which tasks can be resumed, replayed, re-issued,
+        or treated as terminal.
+
+        This step does **not** automatically re-dispatch tasks; that is the
+        responsibility of the caller (e.g. the gateway startup logic) once it
+        has inspected the recovery report.
+        """
+        from core.task_lifecycle_persistence import (
+            InFlightTaskDisposition,
+            restore_inflight_tasks_from_snapshot,
+        )
+        restored = restore_inflight_tasks_from_snapshot(
+            store=self._task_lifecycle_store,
+        )
+        report.inflight_tasks_recovered = len(restored)
+        for rec in restored:
+            if rec.disposition == InFlightTaskDisposition.RESUMABLE:
+                report.inflight_tasks_resumable += 1
+            elif rec.disposition == InFlightTaskDisposition.REPLAY_ONLY:
+                report.inflight_tasks_replay_only += 1
+            elif rec.disposition == InFlightTaskDisposition.REISSUABLE:
+                report.inflight_tasks_reissuable += 1
+            elif rec.disposition == InFlightTaskDisposition.TERMINAL_ON_INTERRUPT:
+                report.inflight_tasks_terminal += 1
+        logger.info(
+            "RuntimeRestartRecovery: recovered %d in-flight tasks "
+            "(resumable=%d replay=%d reissue=%d terminal=%d)",
+            report.inflight_tasks_recovered,
+            report.inflight_tasks_resumable,
+            report.inflight_tasks_replay_only,
+            report.inflight_tasks_reissuable,
+            report.inflight_tasks_terminal,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Singleton management
@@ -472,6 +560,7 @@ def run_startup_recovery(
     body_mesh_store=None,
     body_mesh_registry=None,
     hybrid_continuity_registry=None,
+    task_lifecycle_store=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
 
@@ -494,6 +583,10 @@ def run_startup_recovery(
         Optional explicit hybrid orchestration continuity registry.  When
         provided, its ``mark_all_running_as_interrupted`` method is called
         during recovery step 4 (PR-59).
+    task_lifecycle_store:
+        Optional explicit :class:`~core.task_lifecycle_persistence
+        .TaskLifecyclePersistenceStore`.  When provided, in-flight task
+        lifecycle records are recovered from this store during step 5 (PR-D1).
 
     Returns
     -------
@@ -504,5 +597,6 @@ def run_startup_recovery(
         body_mesh_store=body_mesh_store,
         body_mesh_registry=body_mesh_registry,
         hybrid_continuity_registry=hybrid_continuity_registry,
+        task_lifecycle_store=task_lifecycle_store,
     )
     return coordinator.run_recovery()

@@ -81,6 +81,8 @@ __all__ = [
     "TaskEnvelopeLifecycleRegistry",
     "get_lifecycle_registry",
     "reset_lifecycle_registry",
+    # Persistence helpers re-exported for convenience
+    "persist_lifecycle_snapshot",
 ]
 
 # ---------------------------------------------------------------------------
@@ -617,6 +619,112 @@ class TaskEnvelopeLifecycleRegistry:
             snapshot_at=now,
         )
 
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def persist_snapshot(
+        self,
+        store: Optional[Any] = None,
+    ) -> bool:
+        """Write all currently pending records to the durable lifecycle store.
+
+        Called by the runtime at regular checkpoints (e.g. before graceful
+        shutdown, on SIGTERM) so that in-flight task state survives a process
+        restart.
+
+        Parameters
+        ----------
+        store:
+            Optional :class:`~core.task_lifecycle_persistence
+            .TaskLifecyclePersistenceStore`.  When ``None`` the process-level
+            singleton is used.
+
+        Returns
+        -------
+        bool
+            ``True`` on success; ``False`` if the write failed (error is
+            logged in the persistence layer).
+        """
+        try:
+            from core.task_lifecycle_persistence import save_task_lifecycle_snapshot
+            records = [r.to_dict() for r in self._pending.values()]
+            save_task_lifecycle_snapshot(records, store=store)
+            logger.debug(
+                "lifecycle_registry.persist_snapshot: saved %d pending records",
+                len(records),
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "lifecycle_registry.persist_snapshot: failed — %s", exc
+            )
+            return False
+
+    def restore_from_snapshot(
+        self,
+        store: Optional[Any] = None,
+    ) -> int:
+        """Re-populate the registry from the most recent durable snapshot.
+
+        Existing pending records are **not** overwritten — only records whose
+        ``task_id`` is not already registered are added.  Each restored record
+        has no associated :class:`asyncio.Future` (fire-and-forget semantics
+        after restart).
+
+        Intended to be called once at process startup, before the event loop
+        begins dispatching new work.
+
+        Parameters
+        ----------
+        store:
+            Optional :class:`~core.task_lifecycle_persistence
+            .TaskLifecyclePersistenceStore`.  When ``None`` the process-level
+            singleton is used.
+
+        Returns
+        -------
+        int
+            Number of records added to the registry from the snapshot.
+        """
+        try:
+            from core.task_lifecycle_persistence import (
+                restore_inflight_tasks_from_snapshot,
+            )
+            restored = restore_inflight_tasks_from_snapshot(store=store)
+            added = 0
+            for rec in restored:
+                if rec.task_id and rec.task_id not in self._pending:
+                    self._pending[rec.task_id] = PendingEnvelopeRecord(
+                        task_id=rec.task_id,
+                        trace_id=rec.trace_id,
+                        target_device_id=rec.target_device_id,
+                        tool_name=rec.tool_name,
+                        owner=LifecycleOwner(rec.owner)
+                        if rec.owner in {o.value for o in LifecycleOwner}
+                        else LifecycleOwner.GATEWAY_INGRESS,
+                        timeout=rec.timeout,
+                        registered_at=rec.registered_at,
+                        future=None,
+                        metadata={
+                            **rec.metadata,
+                            "restored_at": rec.interrupted_at,
+                            "disposition": rec.disposition.value,
+                            "snapshot_id": rec.snapshot_id,
+                        },
+                    )
+                    added += 1
+            logger.info(
+                "lifecycle_registry.restore_from_snapshot: restored %d records "
+                "(%d skipped — already pending)",
+                added,
+                len(restored) - added,
+            )
+            return added
+        except Exception as exc:
+            logger.warning(
+                "lifecycle_registry.restore_from_snapshot: failed — %s", exc
+            )
+            return 0
+
     # ── Cancellation ──────────────────────────────────────────────────────────
 
     def cancel_all(self) -> int:
@@ -656,3 +764,28 @@ def reset_lifecycle_registry() -> None:
     if _registry is not None:
         _registry.cancel_all()
     _registry = None
+
+
+# ---------------------------------------------------------------------------
+# Module-level persistence convenience
+# ---------------------------------------------------------------------------
+
+
+def persist_lifecycle_snapshot(store: Optional[Any] = None) -> bool:
+    """Persist the current lifecycle registry state to the durable store.
+
+    Convenience wrapper over :meth:`TaskEnvelopeLifecycleRegistry.persist_snapshot`
+    using the process-level registry singleton.
+
+    Parameters
+    ----------
+    store:
+        Optional explicit :class:`~core.task_lifecycle_persistence
+        .TaskLifecyclePersistenceStore`.
+
+    Returns
+    -------
+    bool
+        ``True`` on success.
+    """
+    return get_lifecycle_registry().persist_snapshot(store=store)
