@@ -313,6 +313,11 @@ class RuntimeRestartRecoveryCoordinator:
             "Hybrid execution transport handles (A2A connections, GUI handles, "
             "VLM context) are intentionally ephemeral and are NOT recovered. "
             "See HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.",
+            "In-flight task RESULTS and partial execution state are NOT "
+            "recovered — only the task identity, ownership stage, and "
+            "disposition classification are restored from the lifecycle "
+            "snapshot.  Callers must re-dispatch or replay tasks to obtain "
+            "fresh results. See INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY.",
         ]
 
         # ----------------------------------------------------------------
