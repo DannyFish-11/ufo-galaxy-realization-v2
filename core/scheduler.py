@@ -51,6 +51,19 @@ SCHEDULER_TASK_GRAPH_RELAY_MESH_INTEGRATED: str = (
     "dispatch (GAP-512-002)."
 )
 
+# PR-B: Legacy Ingress Convergence — spine routing sentinel.
+# Affirms that _exec_relay() and _exec_mesh_send() now attempt canonical
+# spine routing via CommandRouter.route_envelope() before falling back to
+# ProxyRelay / MeshCoordinator respectively.  This convergence ensures all
+# scheduler dispatch paths (send_to_device, relay_to_device, mesh_send) enter
+# the execution spine as the primary routing path.
+SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE: str = (
+    "SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE_V1: "
+    "_exec_relay() and _exec_mesh_send() attempt CommandRouter.route_envelope() "
+    "before ProxyRelay / MeshCoordinator fallback; "
+    "ingress is normalized via core.execution_spine."
+)
+
 # Phase-A consolidation: canonical tool naming is now the PRIMARY exposed
 # naming scheme for MCP and Skill tools injected by this scheduler.
 #
@@ -942,6 +955,8 @@ CROSS-DEVICE:
 
         PR-3: Ingress recorded in execution spine log.
         PR-513 / GAP-512-002: CanonicalTask registered in TaskGraphRuntime.
+        PR-B: Spine routing attempted via CommandRouter.route_envelope() before
+        falling back to the ProxyRelay path.
         """
         # PR-3: Record ingress in execution spine log.
         try:
@@ -981,6 +996,43 @@ CROSS-DEVICE:
             logger.debug(
                 "_exec_relay: TaskGraphRuntime registration skipped: %s", _relay_tgr_err
             )
+
+        # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
+        # before falling back to the ProxyRelay implementation.  This ensures
+        # relay_to_device participates in the execution spine rather than
+        # bypassing it entirely.
+        _cmd_router_relay = context.get("command_router") if context else None
+        if _cmd_router_relay is None:
+            try:
+                from core.command_router import get_command_router as _gcr_relay
+                _cmd_router_relay = _gcr_relay()
+            except Exception:
+                _cmd_router_relay = None
+
+        if _cmd_router_relay is not None:
+            try:
+                from core.execution_spine import (
+                    ExecutionIngressSource as _EIS_relay,
+                    normalize_ingress_to_envelope as _norm_relay,
+                )
+                _envelope_relay = _norm_relay(
+                    {
+                        "task_id": args.get("task_id") or "",
+                        "trace_id": args.get("trace_id") or "",
+                        "tool_name": "relay_to_device",
+                        "targets": [args.get("target_device", "")] if args.get("target_device") else [],
+                        "args": args,
+                    },
+                    source=_EIS_relay.SCHEDULER,
+                )
+                _relay_spine_result = await _cmd_router_relay.route_envelope(_envelope_relay)
+                return json.dumps(_relay_spine_result, ensure_ascii=False)
+            except Exception as _spine_relay_err:
+                logger.debug(
+                    "_exec_relay: spine routing failed (%s); falling back to ProxyRelay",
+                    _spine_relay_err,
+                )
+
         try:
             from core.proxy_relay import get_proxy_relay, RelayRequest
             relay = get_proxy_relay()
@@ -1013,6 +1065,8 @@ CROSS-DEVICE:
 
         PR-3: Ingress recorded in execution spine log.
         PR-513 / GAP-512-002: CanonicalTask registered in TaskGraphRuntime.
+        PR-B: Spine routing attempted via CommandRouter.route_envelope() before
+        falling back to the MeshCoordinator path.
         """
         # PR-3: Record ingress in execution spine log.
         try:
@@ -1051,6 +1105,40 @@ CROSS-DEVICE:
             logger.debug(
                 "_exec_mesh_send: TaskGraphRuntime registration skipped: %s", _mesh_tgr_err
             )
+
+        # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
+        # before falling back to the MeshCoordinator implementation.  This ensures
+        # mesh_send participates in the execution spine rather than bypassing it.
+        try:
+            from core.command_router import get_command_router as _gcr_mesh
+            _cmd_router_mesh = _gcr_mesh()
+        except Exception:
+            _cmd_router_mesh = None
+
+        if _cmd_router_mesh is not None:
+            try:
+                from core.execution_spine import (
+                    ExecutionIngressSource as _EIS_mesh,
+                    normalize_ingress_to_envelope as _norm_mesh,
+                )
+                _envelope_mesh = _norm_mesh(
+                    {
+                        "task_id": args.get("task_id") or "",
+                        "trace_id": args.get("trace_id") or "",
+                        "tool_name": "mesh_send",
+                        "targets": [args.get("target_device", "")] if args.get("target_device") else [],
+                        "args": args,
+                    },
+                    source=_EIS_mesh.SCHEDULER,
+                )
+                _mesh_spine_result = await _cmd_router_mesh.route_envelope(_envelope_mesh)
+                return json.dumps(_mesh_spine_result, ensure_ascii=False)
+            except Exception as _spine_mesh_err:
+                logger.debug(
+                    "_exec_mesh_send: spine routing failed (%s); falling back to MeshCoordinator",
+                    _spine_mesh_err,
+                )
+
         try:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()

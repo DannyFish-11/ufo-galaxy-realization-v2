@@ -451,3 +451,38 @@ def _bootstrap_known_entries(registry: LegacyDispatchRegistry) -> None:
         ),
         pr_origin="PR-A",
     )
+
+    # ── PR-B: Legacy Ingress Convergence demotions ──────────────────────
+    # These paths previously recorded legacy ingress but bypassed CommandRouter.
+    # They are now converged onto the execution spine (attempt route_envelope
+    # before falling back to their legacy implementation).
+    registry.register(
+        module="core.device_orchestrator.DeviceOrchestrator.send_command",
+        classification=_C.COMPAT_ONLY,
+        reason=(
+            "PR-B convergence: send_command now attempts CommandRouter.route_envelope() "
+            "before the NodeRegistry fallback path.  The NodeRegistry path is retained "
+            "only as a degraded fallback when CommandRouter is unavailable."
+        ),
+        pr_origin="PR-B",
+    )
+    registry.register(
+        module="core.scheduler.Scheduler._exec_relay",
+        classification=_C.COMPAT_ONLY,
+        reason=(
+            "PR-B convergence: _exec_relay now attempts CommandRouter.route_envelope() "
+            "before the ProxyRelay fallback path.  ProxyRelay is retained only as a "
+            "degraded fallback when CommandRouter is unavailable."
+        ),
+        pr_origin="PR-B",
+    )
+    registry.register(
+        module="core.scheduler.Scheduler._exec_mesh_send",
+        classification=_C.COMPAT_ONLY,
+        reason=(
+            "PR-B convergence: _exec_mesh_send now attempts CommandRouter.route_envelope() "
+            "before the MeshCoordinator fallback path.  MeshCoordinator is retained only "
+            "as a degraded fallback when CommandRouter is unavailable."
+        ),
+        pr_origin="PR-B",
+    )

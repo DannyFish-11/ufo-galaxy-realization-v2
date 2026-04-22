@@ -45,6 +45,19 @@ logger = logging.getLogger("Galaxy.DeviceOrchestrator")
 #: execution spine.  DeviceOrchestrator has no independent dispatch authority.
 DEVICE_ORCHESTRATOR_FACADE_AUTHORITY: str = "DEVICE_ORCHESTRATOR_FACADE_V1"
 
+# PR-B: Legacy Ingress Convergence — spine routing sentinel
+# ---------------------------------------------------------------------------
+
+#: Affirms that DeviceOrchestrator.send_command now attempts canonical spine
+#: routing via CommandRouter.route_envelope() before falling back to the
+#: NodeRegistry path.  This convergence was introduced in PR-B to ensure all
+#: device command dispatch enters the execution spine.
+DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE: str = (
+    "DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE_V1: "
+    "send_command attempts CommandRouter.route_envelope() before NodeRegistry fallback; "
+    "ingress is normalized via core.execution_spine."
+)
+
 
 # ---------------------------------------------------------------------------
 # Lazy imports — 避免循环依赖
@@ -264,6 +277,47 @@ class DeviceOrchestrator:
             )
         except Exception:
             pass
+
+        # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
+        # before falling back to the NodeRegistry path.  This ensures that
+        # DeviceOrchestrator.send_command participates in the execution spine
+        # rather than bypassing it entirely.
+        try:
+            from core.command_router import get_command_router as _gcr_do
+            _cmd_router_do = _gcr_do()
+        except Exception:
+            _cmd_router_do = None
+
+        if _cmd_router_do is not None:
+            try:
+                from core.execution_spine import (
+                    ExecutionIngressSource as _EIS_do,
+                    normalize_ingress_to_envelope as _norm_do,
+                )
+                _envelope_do = _norm_do(
+                    {
+                        "task_id": command_id,
+                        "trace_id": "",
+                        "tool_name": command,
+                        "targets": [device_id] if device_id else [],
+                        "args": params,
+                    },
+                    source=_EIS_do.DEVICE_ORCHESTRATOR,
+                )
+                _spine_result = await _cmd_router_do.route_envelope(_envelope_do)
+                elapsed_ms = (time.monotonic() - start) * 1000
+                return {
+                    "device_id": device_id,
+                    "command_id": command_id,
+                    "status": "success" if _spine_result.get("success") else "error",
+                    "result": _spine_result.get("data", _spine_result.get("error", _spine_result)),
+                    "execution_time_ms": round(elapsed_ms, 2),
+                }
+            except Exception as _spine_do_err:
+                logger.debug(
+                    "send_command: spine routing failed (%s); falling back to NodeRegistry",
+                    _spine_do_err,
+                )
 
         # 通过 NodeRegistry 调用
         node_registry = _get_node_registry()

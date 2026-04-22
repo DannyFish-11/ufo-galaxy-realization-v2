@@ -1409,6 +1409,69 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
+# PR-B: Legacy Ingress Convergence — demote paths that bypassed the spine.
+#
+# These paths previously recorded legacy ingress via record_legacy_ingress()
+# but then dispatched directly to their legacy substrate without first
+# attempting to route through CommandRouter.route_envelope().  This PR-B
+# block formally classifies them and records their convergence status.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="core.device_orchestrator.DeviceOrchestrator.send_command",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "DeviceOrchestrator.send_command is a LEGACY COMPAT FACADE (PR-B).  "
+            "It now attempts CommandRouter.route_envelope() via the execution spine "
+            "before falling back to the NodeRegistry path.  "
+            "New code should dispatch through CommandRouter.route_envelope() directly "
+            "via the canonical chain: CanonicalTask → TaskEnvelope → route_envelope()."
+        ),
+        pr_guardrail_added="PR-B",
+        notes=(
+            "send_command — converged onto execution spine in PR-B.  "
+            "CommandRouter.route_envelope() is attempted first; NodeRegistry is the "
+            "degraded fallback.  Do not extend the NodeRegistry path for new dispatch."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.scheduler.Scheduler._exec_relay",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Scheduler._exec_relay (relay_to_device) is a LEGACY COMPAT PATH (PR-B).  "
+            "It now attempts CommandRouter.route_envelope() via the execution spine "
+            "before falling back to the ProxyRelay path.  "
+            "New relay dispatch should enter through CommandRouter.route_envelope() "
+            "with tool_name=relay_to_device and appropriate targets."
+        ),
+        pr_guardrail_added="PR-B",
+        notes=(
+            "_exec_relay — converged onto execution spine in PR-B.  "
+            "CommandRouter.route_envelope() is attempted first; ProxyRelay is the "
+            "degraded fallback.  Ingress is recorded via record_legacy_ingress()."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.scheduler.Scheduler._exec_mesh_send",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "Scheduler._exec_mesh_send (mesh_send) is a LEGACY COMPAT PATH (PR-B).  "
+            "It now attempts CommandRouter.route_envelope() via the execution spine "
+            "before falling back to the MeshCoordinator path.  "
+            "New mesh dispatch should enter through CommandRouter.route_envelope() "
+            "with tool_name=mesh_send and appropriate targets."
+        ),
+        pr_guardrail_added="PR-B",
+        notes=(
+            "_exec_mesh_send — converged onto execution spine in PR-B.  "
+            "CommandRouter.route_envelope() is attempted first; MeshCoordinator is "
+            "the degraded fallback.  Ingress is recorded via record_legacy_ingress()."
+        ),
+    ),
+)
+
+# ---------------------------------------------------------------------------
 # Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
