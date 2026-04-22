@@ -140,7 +140,7 @@
 | 8. Cross-repo | 0 | 1 | 1 (CROSS-002 CLOSED) | 1 | 3 |
 | **Total** | **0** | **2** | **18** | **15** | **35** |
 
-No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002, PROTO-002, TRUTH-005, CROSS-002 resolved.
+No CRITICAL gaps. 2 HIGH gaps remain (PROTO-001, CROSS-001). MESH-001, MESH-002, PROTO-002, TRUTH-005, CROSS-002 closed.
 
 ---
 
