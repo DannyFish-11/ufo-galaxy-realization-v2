@@ -17,6 +17,11 @@ Coverage
 7.  CrossDeviceCoordinator.execute_cross_device_task (success path) → on_participant_readiness_changed "ready" called.
 8.  CrossDeviceCoordinator.execute_cross_device_task (error path) → on_participant_readiness_changed "degraded" called.
 9.  All wiring calls are non-fatal (harness import failure degrades gracefully).
+10. AndroidBridge._patch_disconnect_to_udm → on_device_health_changed + on_participant_readiness_changed called.
+11. AndroidBridge._patch_reconnect_to_udm → on_device_health_changed (reconnect) + on_participant_readiness_changed "ready" called.
+12. AndroidBridge wiring is non-fatal (harness import failure degrades gracefully).
+13. MultiDeviceCoordinatorEngine.start → on_coordinator_state_updated called with "running".
+14. MultiDeviceCoordinatorEngine._heartbeat_loop device timeout → on_device_health_changed + on_participant_readiness_changed called.
 """
 
 from __future__ import annotations
@@ -575,3 +580,320 @@ class TestHarnessGracefulDegradation:
                 asyncio.run(coordinator.dispatch_team(members=[member], task="t"))
             except Exception:
                 pass  # substrate failure expected; harness failure must not surface
+
+
+# ---------------------------------------------------------------------------
+# 10–12: AndroidBridge disconnect / reconnect wiring
+# ---------------------------------------------------------------------------
+
+class TestAndroidBridgeDisconnectWiring:
+    """AndroidBridge._patch_disconnect_to_udm() → harness hooks called."""
+
+    def _make_minimal_bridge(self):
+        """Return an AndroidBridge with mocked internal state."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        bridge = AndroidBridge.__new__(AndroidBridge)
+        bridge._devices = {}
+        bridge._pending_tasks = {}
+        return bridge
+
+    def test_patch_disconnect_calls_on_device_health_changed(self):
+        """_patch_disconnect_to_udm() must call on_device_health_changed with disconnect event."""
+        bridge = self._make_minimal_bridge()
+        health_called = []
+
+        def fake_health(event):
+            health_called.append(event)
+            return MagicMock()
+
+        def fake_readiness(device_id, readiness, **kwargs):
+            return MagicMock()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch("core.multi_device_runtime_harness.on_device_health_changed", fake_health), \
+             patch("core.multi_device_runtime_harness.on_participant_readiness_changed", fake_readiness):
+            bridge._patch_disconnect_to_udm("android-dev-01")
+
+        assert len(health_called) == 1
+        event = health_called[0]
+        assert event.device_id == "android-dev-01"
+        assert event.is_reachable is False
+        assert event.event_type == "disconnect"
+        assert event.health_score == 0.0
+
+    def test_patch_disconnect_calls_on_participant_readiness_changed_lost(self):
+        """_patch_disconnect_to_udm() must call on_participant_readiness_changed('lost')."""
+        bridge = self._make_minimal_bridge()
+        readiness_called = []
+
+        def fake_readiness(device_id, readiness, **kwargs):
+            readiness_called.append((device_id, readiness, kwargs))
+            return MagicMock()
+
+        def fake_health(event):
+            return MagicMock()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch("core.multi_device_runtime_harness.on_device_health_changed", fake_health), \
+             patch("core.multi_device_runtime_harness.on_participant_readiness_changed", fake_readiness):
+            bridge._patch_disconnect_to_udm("android-dev-02")
+
+        assert len(readiness_called) == 1
+        dev_id, readiness, kwargs = readiness_called[0]
+        assert dev_id == "android-dev-02"
+        assert readiness == "lost"
+        assert kwargs.get("reason") == "android_disconnect"
+
+    def test_patch_disconnect_harness_failure_is_silent(self):
+        """_patch_disconnect_to_udm() must not raise if harness import fails."""
+        bridge = self._make_minimal_bridge()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch(
+                 "core.multi_device_runtime_harness.on_device_health_changed",
+                 side_effect=ImportError("harness unavailable"),
+             ):
+            # Must not raise
+            bridge._patch_disconnect_to_udm("android-dev-03")
+
+
+class TestAndroidBridgeReconnectWiring:
+    """AndroidBridge._patch_reconnect_to_udm() → harness hooks called."""
+
+    def _make_minimal_bridge(self):
+        from galaxy_gateway.android_bridge import AndroidBridge
+        bridge = AndroidBridge.__new__(AndroidBridge)
+        bridge._devices = {}
+        bridge._pending_tasks = {}
+        return bridge
+
+    def test_patch_reconnect_calls_on_device_health_changed(self):
+        """_patch_reconnect_to_udm() must call on_device_health_changed with reconnect event."""
+        bridge = self._make_minimal_bridge()
+        health_called = []
+
+        def fake_health(event):
+            health_called.append(event)
+            return MagicMock()
+
+        def fake_readiness(device_id, readiness, **kwargs):
+            return MagicMock()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch("core.multi_device_runtime_harness.on_device_health_changed", fake_health), \
+             patch("core.multi_device_runtime_harness.on_participant_readiness_changed", fake_readiness):
+            bridge._patch_reconnect_to_udm("android-dev-04")
+
+        assert len(health_called) == 1
+        event = health_called[0]
+        assert event.device_id == "android-dev-04"
+        assert event.is_reachable is True
+        assert event.event_type == "reconnect"
+        assert event.health_score == 1.0
+
+    def test_patch_reconnect_calls_on_participant_readiness_changed_ready(self):
+        """_patch_reconnect_to_udm() must call on_participant_readiness_changed('ready')."""
+        bridge = self._make_minimal_bridge()
+        readiness_called = []
+
+        def fake_readiness(device_id, readiness, **kwargs):
+            readiness_called.append((device_id, readiness, kwargs))
+            return MagicMock()
+
+        def fake_health(event):
+            return MagicMock()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch("core.multi_device_runtime_harness.on_device_health_changed", fake_health), \
+             patch("core.multi_device_runtime_harness.on_participant_readiness_changed", fake_readiness):
+            bridge._patch_reconnect_to_udm("android-dev-05")
+
+        assert len(readiness_called) == 1
+        dev_id, readiness, kwargs = readiness_called[0]
+        assert dev_id == "android-dev-05"
+        assert readiness == "ready"
+        assert kwargs.get("reason") == "android_reconnect"
+
+    def test_patch_reconnect_harness_failure_is_silent(self):
+        """_patch_reconnect_to_udm() must not raise if harness import fails."""
+        bridge = self._make_minimal_bridge()
+
+        with patch("galaxy_gateway.android_bridge.AndroidBridge._patch_runtime_state_to_udm"), \
+             patch(
+                 "core.multi_device_runtime_harness.on_device_health_changed",
+                 side_effect=RuntimeError("harness exploded"),
+             ):
+            # Must not raise
+            bridge._patch_reconnect_to_udm("android-dev-06")
+
+
+# ---------------------------------------------------------------------------
+# 13–14: MultiDeviceCoordinatorEngine coordinator-state and heartbeat wiring
+# ---------------------------------------------------------------------------
+
+class TestCoordinatorEngineHarnessWiring:
+    """MultiDeviceCoordinatorEngine coordinator-state transitions → harness hooks."""
+
+    @staticmethod
+    def _load_n71_module(mod_name: str):
+        """Load a Node_71 core submodule via importlib to avoid core namespace conflict."""
+        import importlib.util
+        import os
+        import sys
+
+        full_name = f"core.{mod_name}"
+        if full_name in sys.modules:
+            return sys.modules[full_name]
+
+        node71_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "nodes", "Node_71_MultiDeviceCoordination",
+        )
+        node71_core = os.path.join(node71_dir, "core")
+        # Ensure repo root (for main core/) and Node_71 dir (for models/) are on path
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        if node71_dir not in sys.path:
+            sys.path.insert(1, node71_dir)
+
+        path = os.path.join(node71_core, f"{mod_name}.py")
+        spec = importlib.util.spec_from_file_location(full_name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[full_name] = module
+        try:
+            spec.loader.exec_module(module)
+            import core as _core_pkg
+            setattr(_core_pkg, mod_name, module)
+        except Exception:
+            sys.modules.pop(full_name, None)
+            raise
+        return module
+
+    def _ensure_n71_modules(self):
+        """Pre-load all Node_71 core submodules in dependency order."""
+        for mod in [
+            "canonical_device_view_adapter",
+            "fault_tolerance",
+            "device_discovery",
+            "state_synchronizer",
+            "task_scheduler",
+            "multi_device_coordinator_engine",
+        ]:
+            try:
+                self._load_n71_module(mod)
+            except Exception:
+                pass
+
+    def test_coordinator_start_calls_on_coordinator_state_updated(self):
+        """MultiDeviceCoordinatorEngine.start() must call on_coordinator_state_updated
+        with overall_status='running' after successfully starting."""
+        from unittest.mock import AsyncMock
+        self._ensure_n71_modules()
+
+        from core.multi_device_coordinator_engine import (  # type: ignore[import]
+            MultiDeviceCoordinatorEngine,
+            CoordinatorConfig,
+        )
+
+        coord_called = []
+
+        def fake_coord_updated(state):
+            coord_called.append(state)
+            return MagicMock()
+
+        config = CoordinatorConfig(node_id="test-coord-01")
+        engine = MultiDeviceCoordinatorEngine(config)
+
+        async def run():
+            engine._discovery = MagicMock()
+            engine._discovery.start = AsyncMock()
+            engine._synchronizer = MagicMock()
+            engine._synchronizer.start = AsyncMock()
+            engine._scheduler = MagicMock()
+            engine._scheduler.start = AsyncMock()
+            engine._fault_tolerance = MagicMock()
+            engine._fault_tolerance.start = AsyncMock()
+            with patch("core.multi_device_runtime_harness.on_coordinator_state_updated", fake_coord_updated), \
+                 patch("asyncio.create_task", return_value=MagicMock()):
+                await engine.start()
+
+        asyncio.run(run())
+
+        running_calls = [c for c in coord_called if c.get("overall_status") == "running"]
+        assert len(running_calls) >= 1
+        assert running_calls[0].get("coordinator_id") == "test-coord-01"
+
+    def test_coordinator_heartbeat_timeout_calls_on_device_health_changed(self):
+        """_heartbeat_loop() device timeout must call on_device_health_changed with heartbeat_miss."""
+        from unittest.mock import AsyncMock
+        self._ensure_n71_modules()
+
+        from core.multi_device_coordinator_engine import (  # type: ignore[import]
+            MultiDeviceCoordinatorEngine,
+            CoordinatorConfig,
+            CoordinatorState,
+        )
+
+        health_called = []
+        readiness_called = []
+
+        def fake_health(event):
+            health_called.append(event)
+            return MagicMock()
+
+        def fake_readiness(device_id, readiness, **kwargs):
+            readiness_called.append((device_id, readiness, kwargs))
+            return MagicMock()
+
+        config = CoordinatorConfig(
+            node_id="test-coord-02",
+            heartbeat_interval=0.01,
+            heartbeat_timeout=0.01,
+        )
+        engine = MultiDeviceCoordinatorEngine(config)
+        engine._state = CoordinatorState.RUNNING
+
+        import os
+        import sys
+        node71_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "nodes", "Node_71_MultiDeviceCoordination",
+        )
+        if node71_dir not in sys.path:
+            sys.path.insert(1, node71_dir)
+
+        from models.device import Device, DeviceType, DeviceState  # type: ignore[import]
+
+        stale_device = Device(
+            device_id="stale-d-01",
+            name="Stale Device",
+            device_type=DeviceType.ANDROID,
+            state=DeviceState.IDLE,
+            last_heartbeat=0.0,
+        )
+        engine._registry.devices["stale-d-01"] = stale_device
+
+        async def run_one_loop_iteration():
+            engine._synchronizer = MagicMock()
+            engine._synchronizer.update_state = AsyncMock()
+            engine._state = CoordinatorState.RUNNING
+            with patch("core.multi_device_runtime_harness.on_device_health_changed", fake_health), \
+                 patch("core.multi_device_runtime_harness.on_participant_readiness_changed", fake_readiness):
+                try:
+                    await asyncio.wait_for(engine._heartbeat_loop(), timeout=0.5)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+
+        asyncio.run(run_one_loop_iteration())
+
+        assert len(health_called) >= 1
+        event = health_called[0]
+        assert event.device_id == "stale-d-01"
+        assert event.event_type == "heartbeat_miss"
+        assert event.is_reachable is False
+
+        assert len(readiness_called) >= 1
+        dev_id, readiness, kwargs = readiness_called[0]
+        assert dev_id == "stale-d-01"
+        assert readiness == "lost"

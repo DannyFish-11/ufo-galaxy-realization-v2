@@ -320,7 +320,28 @@ class MultiDeviceCoordinatorEngine:
                 "node_id": self.config.node_id,
                 "node_name": self.config.node_name
             })
-            
+
+            # PR-A: Notify multi-device runtime harness of the coordinator-state
+            # transition so that mesh session persistence reflects the new running state.
+            try:
+                import os as _os, sys as _sys
+                _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+                    _os.path.dirname(_os.path.abspath(__file__)))))
+                if _prj_root not in _sys.path:
+                    _sys.path.insert(0, _prj_root)
+                from core.multi_device_runtime_harness import on_coordinator_state_updated
+                on_coordinator_state_updated({
+                    "session_id": self.config.node_id,
+                    "coordinator_id": self.config.node_id,
+                    "overall_status": "running",
+                    "node_name": self.config.node_name,
+                })
+            except Exception as _harn_exc:
+                logger.debug(
+                    "MultiDeviceCoordinatorEngine.start: harness notification failed (non-fatal): %s",
+                    _harn_exc,
+                )
+
             return True
             
         except Exception as e:
@@ -370,6 +391,27 @@ class MultiDeviceCoordinatorEngine:
 
         logger.info("MultiDeviceCoordinatorEngine stopped")
         self._emit_event("coordinator_stopped", {"node_id": self.config.node_id})
+
+        # PR-A: Notify multi-device runtime harness of the coordinator-state
+        # transition so that mesh session persistence reflects the stopped state.
+        try:
+            import os as _os, sys as _sys
+            _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+                _os.path.dirname(_os.path.abspath(__file__)))))
+            if _prj_root not in _sys.path:
+                _sys.path.insert(0, _prj_root)
+            from core.multi_device_runtime_harness import on_coordinator_state_updated
+            on_coordinator_state_updated({
+                "session_id": self.config.node_id,
+                "coordinator_id": self.config.node_id,
+                "overall_status": "stopped",
+                "node_name": self.config.node_name,
+            })
+        except Exception as _harn_exc:
+            logger.debug(
+                "MultiDeviceCoordinatorEngine.stop: harness notification failed (non-fatal): %s",
+                _harn_exc,
+            )
     
     async def _heartbeat_loop(self) -> None:
         """心跳循环"""
@@ -387,6 +429,35 @@ class MultiDeviceCoordinatorEngine:
                         # 设备超时
                         device.state = DeviceState.OFFLINE
                         self._emit_event("device_timeout", {"device_id": device.device_id})
+                        # PR-A: Notify runtime harness of the device-timeout health event.
+                        try:
+                            import os as _os, sys as _sys
+                            _prj_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+                                _os.path.dirname(_os.path.abspath(__file__)))))
+                            if _prj_root not in _sys.path:
+                                _sys.path.insert(0, _prj_root)
+                            from core.multi_device_runtime_harness import (
+                                on_device_health_changed,
+                                on_participant_readiness_changed,
+                                DeviceHealthEvent,
+                            )
+                            on_device_health_changed(
+                                DeviceHealthEvent(
+                                    device_id=device.device_id,
+                                    health_score=0.0,
+                                    is_reachable=False,
+                                    event_type="heartbeat_miss",
+                                )
+                            )
+                            on_participant_readiness_changed(
+                                device.device_id, "lost", reason="coordinator_heartbeat_miss"
+                            )
+                        except Exception as _harn_exc:
+                            logger.debug(
+                                "MultiDeviceCoordinatorEngine._heartbeat_loop: "
+                                "harness notification failed (non-fatal): %s",
+                                _harn_exc,
+                            )
                 
             except asyncio.CancelledError:
                 break

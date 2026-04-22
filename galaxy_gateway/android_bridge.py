@@ -376,6 +376,32 @@ class AndroidBridge:
                 device_id, _asr_exc,
             )
 
+        # PR-A: Notify multi-device runtime harness of the device disconnect so
+        # that formation rebalance evaluation and readiness tracking are active.
+        try:
+            from core.multi_device_runtime_harness import (
+                on_device_health_changed,
+                on_participant_readiness_changed,
+                DeviceHealthEvent,
+            )
+            on_device_health_changed(
+                DeviceHealthEvent(
+                    device_id=device_id,
+                    health_score=0.0,
+                    is_reachable=False,
+                    event_type="disconnect",
+                )
+            )
+            on_participant_readiness_changed(
+                device_id, "lost", reason="android_disconnect"
+            )
+        except Exception as _harn_exc:
+            logger.debug(
+                "android_bridge: harness disconnect notification failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, _harn_exc,
+            )
+
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created)."""
         self._patch_runtime_state_to_udm(
@@ -392,6 +418,32 @@ class AndroidBridge:
             logger.debug(
                 "android_bridge: UCM reconnect patch failed (non-fatal): device_id=%s error=%s",
                 device_id, exc,
+            )
+
+        # PR-A: Notify multi-device runtime harness of the device reconnect so
+        # that formation readiness tracking reflects the restored participant.
+        try:
+            from core.multi_device_runtime_harness import (
+                on_device_health_changed,
+                on_participant_readiness_changed,
+                DeviceHealthEvent,
+            )
+            on_device_health_changed(
+                DeviceHealthEvent(
+                    device_id=device_id,
+                    health_score=1.0,
+                    is_reachable=True,
+                    event_type="reconnect",
+                )
+            )
+            on_participant_readiness_changed(
+                device_id, "ready", reason="android_reconnect"
+            )
+        except Exception as _harn_exc:
+            logger.debug(
+                "android_bridge: harness reconnect notification failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, _harn_exc,
             )
 
     def _sync_device_router_session(
