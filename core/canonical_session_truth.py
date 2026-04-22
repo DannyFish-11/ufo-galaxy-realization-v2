@@ -77,6 +77,13 @@ from typing import Any, Deque, Dict, List, Optional, Sequence
 
 from core.ugcp_truth_event_model import build_session_truth_authoritative_event
 
+try:
+    from core.replay_audit_persistence import (
+        append_replay_audit_record as _append_truth_audit_record,
+    )
+except ImportError:  # noqa: BLE001
+    _append_truth_audit_record = None  # type: ignore[assignment]
+
 __all__ = [
     # Authority / policy sentinels
     "CANONICAL_SESSION_TRUTH_AUTHORITY",
@@ -504,10 +511,9 @@ class CanonicalSessionTruthRuntime:
             if rec.merge_success:
                 self._success_count += 1
         # Write to durable store outside the lock to avoid potential deadlock
-        if self._audit_store is not None:
+        if self._audit_store is not None and _append_truth_audit_record is not None:
             try:
-                from core.replay_audit_persistence import append_replay_audit_record
-                append_replay_audit_record(
+                _append_truth_audit_record(
                     rec.to_dict(),
                     "canonical_truth_merge",
                     store=self._audit_store,

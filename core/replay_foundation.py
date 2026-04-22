@@ -98,6 +98,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
+try:
+    from core.replay_audit_persistence import append_replay_audit_record as _append_audit_record
+except ImportError:  # noqa: BLE001
+    _append_audit_record = None  # type: ignore[assignment]
+
 logger = logging.getLogger("Galaxy.ReplayFoundation")
 
 __all__ = [
@@ -696,9 +701,10 @@ class ReplayFoundation:
         """Write *record_dict* to the durable audit store if one is attached."""
         if self._audit_store is None:
             return
+        if _append_audit_record is None:
+            return
         try:
-            from core.replay_audit_persistence import append_replay_audit_record
-            append_replay_audit_record(record_dict, kind, store=self._audit_store)
+            _append_audit_record(record_dict, kind, store=self._audit_store)
         except Exception as _exc:  # noqa: BLE001
             logger.debug(
                 "ReplayFoundation: durable audit append failed (kind=%s): %s",
