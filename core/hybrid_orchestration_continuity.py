@@ -110,7 +110,10 @@ Functions:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -120,7 +123,7 @@ from typing import Any, Dict, List, Optional, Set
 logger = logging.getLogger("Galaxy.HybridOrchestrationContinuity")
 
 __all__ = [
-    # Sentinels
+    # Sentinels — PR-59
     "HYBRID_ORCHESTRATION_CONTINUITY_IS_AUTHORITY",
     "HYBRID_LIFECYCLE_IS_CANONICAL_ORCHESTRATION_PATH_POLICY",
     "HYBRID_RECORD_IS_SERIALISABLE_POLICY",
@@ -128,14 +131,26 @@ __all__ = [
     "HYBRID_TERMINAL_STATE_IS_IMMUTABLE_POLICY",
     "HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY",
     "HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL",
+    # Sentinels — PR-6
+    "HYBRID_PARTIAL_RESULT_MERGE_POLICY",
+    "HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY",
+    "HYBRID_CONTINUITY_PR6_SENTINEL",
     # Enums
     "HybridOrchestrationLifecycleState",
+    "HybridPartialResultDisposition",
     # Classes
     "HybridOrchestrationRecord",
     "HybridOrchestrationContinuityRegistry",
-    # Functions
+    "HybridContinuityPersistenceStore",
+    # Functions — registry
     "get_continuity_registry",
     "reset_continuity_registry",
+    # Functions — persistence
+    "save_hybrid_execution",
+    "load_hybrid_execution",
+    "recover_hybrid_executions",
+    "get_hybrid_persistence_store",
+    "reset_hybrid_persistence_store",
 ]
 
 # ---------------------------------------------------------------------------
@@ -191,6 +206,43 @@ HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY: str = (
 HYBRID_ORCHESTRATION_CONTINUITY_PR59_SENTINEL: str = (
     "HYBRID_ORCHESTRATION_CONTINUITY_PR59::"
     "hybrid-orchestration-lifecycle-durability-recovery-closure-pr59-v1"
+)
+
+# ---------------------------------------------------------------------------
+# PR-6 sentinels — partial-result merge and durable persistence
+# ---------------------------------------------------------------------------
+
+HYBRID_PARTIAL_RESULT_MERGE_POLICY: str = (
+    "POLICY::HYBRID_PARTIAL_RESULT_MERGE: After interruption, partial local "
+    "results are classified as PRESERVED (available for resume/merge) because "
+    "the local execution context may still be valid.  Partial remote results "
+    "are classified as INVALIDATED by the recovery coordinator because the "
+    "underlying transport (A2A, GUI, VLM) is gone after a restart and the "
+    "partial remote data can no longer be trusted.  A MERGED disposition is "
+    "recorded when local and remote partial results are combined under V2 "
+    "canonical orchestration authority before interruption completes.  A "
+    "RESUMED disposition is recorded when the execution was re-started from "
+    "preserved partial result state.  No partial-result operation may "
+    "transition a terminal-state record (idempotency invariant)."
+)
+
+HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY: str = (
+    "POLICY::HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE: "
+    "HybridContinuityPersistenceStore provides file-backed durable storage "
+    "for HybridOrchestrationRecord instances.  Non-terminal records (created, "
+    "dispatched, running, interrupted, resuming) are restored after process "
+    "restart via recover_hybrid_executions() and can be re-registered into "
+    "the live HybridOrchestrationContinuityRegistry for continued tracking. "
+    "Terminal records (completed, failed, cancelled) are saved for audit "
+    "purposes but are NOT restored into the live registry by default. "
+    "Live transport handles (A2A connections, GUI handles, VLM context) are "
+    "NEVER persisted — only execution identity, lifecycle state, mode, "
+    "timestamps, resume_count, and partial result snapshots are written."
+)
+
+HYBRID_CONTINUITY_PR6_SENTINEL: str = (
+    "HYBRID_CONTINUITY_PR6::"
+    "hybrid-execution-continuity-interruption-restart-partial-result-closure-pr6-v1"
 )
 
 
@@ -313,6 +365,42 @@ def _is_valid_transition(
 
 
 # ---------------------------------------------------------------------------
+# HybridPartialResultDisposition (PR-6)
+# ---------------------------------------------------------------------------
+
+
+class HybridPartialResultDisposition(str, Enum):
+    """Classification of a partial local/remote execution result after interruption.
+
+    Used to express how the hybrid orchestration runtime should treat a
+    partial result that existed at the time of an interruption or restart.
+
+    Values
+    ------
+    preserved
+        The partial result is from a local execution leg.  It is retained
+        and available for merge or resume because the local execution context
+        may still be valid.
+    invalidated
+        The partial result is from a remote execution leg.  It is dropped
+        because the underlying transport (A2A connection, GUI handle, VLM
+        session) is gone after a restart and the partial remote data can no
+        longer be trusted without re-verification.
+    merged
+        Local and remote partial results were combined under V2 canonical
+        orchestration authority before or during interruption handling.
+    resumed
+        The execution was re-started from preserved partial result state.
+        The partial result was used as the starting point for the resumed run.
+    """
+
+    preserved = "preserved"
+    invalidated = "invalidated"
+    merged = "merged"
+    resumed = "resumed"
+
+
+# ---------------------------------------------------------------------------
 # HybridOrchestrationRecord
 # ---------------------------------------------------------------------------
 
@@ -328,7 +416,8 @@ class HybridOrchestrationRecord:
     Durable fields (survive restart)
     ---------------------------------
     execution_id, session_id, task_id, mode, lifecycle_state,
-    started_at, updated_at, resume_count
+    started_at, updated_at, resume_count, partial_result_snapshot,
+    partial_result_origin, partial_result_disposition
 
     Ephemeral fields (NOT recovered — intentional)
     -----------------------------------------------
@@ -359,6 +448,19 @@ class HybridOrchestrationRecord:
         Human-readable reason for interruption (populated on ``interrupted``).
     resume_count:
         Number of times this execution has been resumed from ``interrupted``.
+    partial_result_snapshot:
+        Optional partial result dict recorded when execution is interrupted
+        before completion.  Local partial results (``partial_result_origin``
+        == ``"local"``) are classified as ``preserved``; remote partial
+        results (``partial_result_origin`` == ``"remote"``) are classified
+        as ``invalidated`` by the recovery coordinator on restart.
+    partial_result_origin:
+        Origin of the partial result: ``"local"``, ``"remote"``, or ``""``
+        when no partial result is recorded.
+    partial_result_disposition:
+        How the partial result is handled after interruption.  One of the
+        :class:`HybridPartialResultDisposition` values: ``"preserved"``,
+        ``"invalidated"``, ``"merged"``, ``"resumed"``, or ``None``.
     """
 
     execution_id: str = field(default_factory=lambda: f"hexec_{uuid.uuid4().hex[:12]}")
@@ -374,6 +476,9 @@ class HybridOrchestrationRecord:
     result_snapshot: Optional[Dict[str, Any]] = None
     interruption_reason: Optional[str] = None
     resume_count: int = 0
+    partial_result_snapshot: Optional[Dict[str, Any]] = None
+    partial_result_origin: str = ""
+    partial_result_disposition: Optional[str] = None
 
     @property
     def is_terminal(self) -> bool:
@@ -448,6 +553,46 @@ class HybridOrchestrationRecord:
         )
         return True
 
+    def set_partial_result(
+        self,
+        snapshot: Dict[str, Any],
+        origin: str,
+        *,
+        disposition: Optional[str] = None,
+    ) -> None:
+        """Record a partial execution result (PR-6).
+
+        This should be called when partial local or remote work has produced
+        output that must survive interruption.  The *origin* controls default
+        disposition semantics (local → preserved; remote → invalidated by the
+        recovery coordinator on restart).
+
+        Terminal records are silently ignored.
+
+        Parameters
+        ----------
+        snapshot:
+            The partial result dict.  Must be JSON-serialisable.
+        origin:
+            ``"local"`` or ``"remote"``.  Drives disposition classification
+            by the recovery coordinator.
+        disposition:
+            Optional explicit :class:`HybridPartialResultDisposition` value.
+            When ``None`` the disposition is left unset for the recovery
+            coordinator to classify.
+        """
+        if self.lifecycle_state.is_terminal:
+            logger.debug(
+                "HybridOrchestrationRecord: set_partial_result ignored for "
+                "terminal execution_id=%s",
+                self.execution_id,
+            )
+            return
+        self.partial_result_snapshot = snapshot
+        self.partial_result_origin = origin
+        if disposition is not None:
+            self.partial_result_disposition = disposition
+
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict representation."""
         return {
@@ -462,6 +607,9 @@ class HybridOrchestrationRecord:
             "result_snapshot": self.result_snapshot,
             "interruption_reason": self.interruption_reason,
             "resume_count": self.resume_count,
+            "partial_result_snapshot": self.partial_result_snapshot,
+            "partial_result_origin": self.partial_result_origin,
+            "partial_result_disposition": self.partial_result_disposition,
             "is_terminal": self.is_terminal,
         }
 
@@ -494,6 +642,9 @@ class HybridOrchestrationRecord:
             result_snapshot=data.get("result_snapshot"),
             interruption_reason=data.get("interruption_reason"),
             resume_count=int(data.get("resume_count", 0)),
+            partial_result_snapshot=data.get("partial_result_snapshot"),
+            partial_result_origin=data.get("partial_result_origin", ""),
+            partial_result_disposition=data.get("partial_result_disposition"),
         )
 
 
@@ -722,9 +873,98 @@ class HybridOrchestrationContinuityRegistry:
         """Return the total number of registered records."""
         return len(self._records)
 
+    # ------------------------------------------------------------------
+    # PR-6: partial-result and persistence integration
+    # ------------------------------------------------------------------
+
+    def invalidate_remote_partial_results(self) -> int:
+        """Mark all remote partial results as ``invalidated`` (PR-6).
+
+        Called by the recovery coordinator at process startup to classify
+        any partial results whose origin is ``"remote"`` as ``invalidated``.
+        Remote transport (A2A connections, GUI handles, VLM context) is gone
+        after a restart so remote partial data can no longer be trusted.
+
+        Local partial results (``partial_result_origin`` == ``"local"``) are
+        left as-is; they are implicitly ``preserved`` for resume or merge.
+
+        Terminal records are not modified.
+
+        Returns
+        -------
+        int
+            Number of records whose ``partial_result_disposition`` was set to
+            ``"invalidated"``.
+        """
+        count = 0
+        for record in self._records.values():
+            if record.is_terminal:
+                continue
+            if (
+                record.partial_result_snapshot is not None
+                and record.partial_result_origin == "remote"
+                and record.partial_result_disposition
+                != HybridPartialResultDisposition.invalidated.value
+            ):
+                record.partial_result_disposition = (
+                    HybridPartialResultDisposition.invalidated.value
+                )
+                count += 1
+        logger.info(
+            "HybridOrchestrationContinuityRegistry: invalidated %d remote "
+            "partial results",
+            count,
+        )
+        return count
+
+    def restore_from_persistence(
+        self,
+        store: "HybridContinuityPersistenceStore",
+        *,
+        skip_terminal: bool = True,
+    ) -> int:
+        """Re-register records loaded from the durable persistence store (PR-6).
+
+        This should be called once during restart recovery, after
+        :meth:`mark_all_running_as_interrupted`, to reconstruct the registry
+        with records that were durably saved before the restart.
+
+        Records whose ``execution_id`` already exists in the registry are
+        silently skipped (the in-process record takes precedence).
+
+        Parameters
+        ----------
+        store:
+            The :class:`HybridContinuityPersistenceStore` from which to load
+            records.
+        skip_terminal:
+            When ``True`` (default), terminal records are not restored into
+            the registry.  They remain on disk for audit.
+
+        Returns
+        -------
+        int
+            Number of records newly registered from the persistence store.
+        """
+        restored = store.list_recoverable() if skip_terminal else store.list_all()
+        count = 0
+        for record in restored:
+            if record.execution_id in self._records:
+                # In-process record takes precedence; skip
+                continue
+            self._records[record.execution_id] = record
+            count += 1
+        logger.info(
+            "HybridOrchestrationContinuityRegistry: restored %d records "
+            "from persistence store (skip_terminal=%s)",
+            count,
+            skip_terminal,
+        )
+        return count
+
 
 # ---------------------------------------------------------------------------
-# Singleton management
+# Singleton management — registry
 # ---------------------------------------------------------------------------
 
 _registry_instance: Optional[HybridOrchestrationContinuityRegistry] = None
@@ -742,3 +982,295 @@ def reset_continuity_registry() -> None:
     """Reset the singleton (for testing)."""
     global _registry_instance
     _registry_instance = None
+
+
+# ---------------------------------------------------------------------------
+# HybridContinuityPersistenceStore (PR-6)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_HYBRID_STORE_DIR = os.path.join(
+    os.environ.get(
+        "GALAXY_DATA_DIR",
+        os.path.join(os.path.dirname(__file__), "..", "data"),
+    ),
+    "hybrid_executions",
+)
+
+
+class HybridContinuityPersistenceStore:
+    """Thread-safe, file-backed durable store for :class:`HybridOrchestrationRecord`.
+
+    Each execution's record is stored as a single JSON file in *store_dir*.
+    The filename is ``<execution_id>.json``.
+
+    This store follows the same structural pattern as
+    :class:`~core.mesh.mesh_session_persistence.MeshSessionPersistenceStore`:
+    ``save`` writes atomically, ``load`` reads by key, ``list_recoverable``
+    returns non-terminal records, and ``list_all`` returns every record on
+    disk regardless of lifecycle state.
+
+    Design principles
+    -----------------
+    - **Additive only** — does not modify any existing module.
+    - **Terminal records are auditable** — terminal records are saved to disk
+      but not returned by :meth:`list_recoverable`.  They remain for audit.
+    - **Live transport handles NEVER persisted** — only JSON-serialisable
+      fields from :meth:`HybridOrchestrationRecord.to_dict` are written.
+    - **Atomic writes** — uses a ``.tmp`` file + ``os.replace`` for
+      crash-safe updates.
+    - **Thread-safe** — a per-store :class:`threading.Lock` guards all I/O.
+
+    Parameters
+    ----------
+    store_dir:
+        Directory in which to persist JSON files.  Created automatically
+        if it does not exist.  Defaults to ``data/hybrid_executions/``
+        relative to the repository root.
+    """
+
+    def __init__(self, store_dir: Optional[str] = None) -> None:
+        self._store_dir = store_dir or _DEFAULT_HYBRID_STORE_DIR
+        self._lock = threading.Lock()
+        self._ensure_dir()
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def save(self, record: HybridOrchestrationRecord) -> bool:
+        """Persist *record* to disk.
+
+        Parameters
+        ----------
+        record:
+            The :class:`HybridOrchestrationRecord` to save.
+
+        Returns
+        -------
+        bool
+            ``True`` on success; ``False`` if the write failed.
+        """
+        if not record.execution_id:
+            logger.warning(
+                "HybridContinuityPersistenceStore: save skipped — empty execution_id"
+            )
+            return False
+        try:
+            data = record.to_dict()
+            path = self._record_path(record.execution_id)
+            tmp_path = path + ".tmp"
+            with self._lock:
+                with open(tmp_path, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, indent=2, default=str)
+                os.replace(tmp_path, path)
+            logger.debug(
+                "HybridContinuityPersistenceStore: saved execution_id=%s "
+                "state=%s",
+                record.execution_id,
+                record.lifecycle_state.value,
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "HybridContinuityPersistenceStore: save failed "
+                "execution_id=%s: %s",
+                record.execution_id,
+                exc,
+            )
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            return False
+
+    def load(self, execution_id: str) -> Optional[HybridOrchestrationRecord]:
+        """Load a single record by *execution_id*.
+
+        Returns ``None`` if not found or if the file is corrupt.
+        """
+        path = self._record_path(execution_id)
+        with self._lock:
+            if not os.path.exists(path):
+                return None
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                return HybridOrchestrationRecord.from_dict(data)
+            except Exception as exc:
+                logger.warning(
+                    "HybridContinuityPersistenceStore: load failed "
+                    "execution_id=%s: %s",
+                    execution_id,
+                    exc,
+                )
+                return None
+
+    def list_recoverable(self) -> List[HybridOrchestrationRecord]:
+        """Return all non-terminal records from the store.
+
+        Non-terminal states: created, dispatched, running, interrupted,
+        resuming.  These are the records that can be restored into the live
+        :class:`HybridOrchestrationContinuityRegistry` after restart.
+        """
+        return [r for r in self.list_all() if not r.is_terminal]
+
+    def list_all(self) -> List[HybridOrchestrationRecord]:
+        """Return all records from the store (terminal and non-terminal)."""
+        records: List[HybridOrchestrationRecord] = []
+        with self._lock:
+            try:
+                for fname in os.listdir(self._store_dir):
+                    if not fname.endswith(".json"):
+                        continue
+                    path = os.path.join(self._store_dir, fname)
+                    try:
+                        with open(path, "r", encoding="utf-8") as fh:
+                            data = json.load(fh)
+                        records.append(HybridOrchestrationRecord.from_dict(data))
+                    except Exception as exc:
+                        logger.warning(
+                            "HybridContinuityPersistenceStore: skipping "
+                            "corrupt file %s: %s",
+                            fname,
+                            exc,
+                        )
+            except OSError as exc:
+                logger.warning(
+                    "HybridContinuityPersistenceStore: list_all failed: %s",
+                    exc,
+                )
+        return records
+
+    def delete(self, execution_id: str) -> bool:
+        """Remove the persisted record for *execution_id*.
+
+        Returns ``True`` if deleted, ``False`` if not found.
+        """
+        path = self._record_path(execution_id)
+        with self._lock:
+            if not os.path.exists(path):
+                return False
+            try:
+                os.remove(path)
+                logger.debug(
+                    "HybridContinuityPersistenceStore: deleted execution_id=%s",
+                    execution_id,
+                )
+                return True
+            except OSError as exc:
+                logger.warning(
+                    "HybridContinuityPersistenceStore: delete failed "
+                    "execution_id=%s: %s",
+                    execution_id,
+                    exc,
+                )
+                return False
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_dir(self) -> None:
+        try:
+            os.makedirs(self._store_dir, exist_ok=True)
+        except OSError as exc:
+            logger.warning(
+                "HybridContinuityPersistenceStore: could not create "
+                "store_dir=%s: %s",
+                self._store_dir,
+                exc,
+            )
+
+    def _record_path(self, execution_id: str) -> str:
+        return os.path.join(self._store_dir, f"{execution_id}.json")
+
+
+# ---------------------------------------------------------------------------
+# Singleton management — persistence store
+# ---------------------------------------------------------------------------
+
+_persistence_store_instance: Optional[HybridContinuityPersistenceStore] = None
+_persistence_store_lock = threading.Lock()
+
+
+def get_hybrid_persistence_store(
+    store_dir: Optional[str] = None,
+) -> HybridContinuityPersistenceStore:
+    """Return the process-level :class:`HybridContinuityPersistenceStore`."""
+    global _persistence_store_instance
+    with _persistence_store_lock:
+        if _persistence_store_instance is None:
+            _persistence_store_instance = HybridContinuityPersistenceStore(
+                store_dir=store_dir
+            )
+    return _persistence_store_instance
+
+
+def reset_hybrid_persistence_store() -> None:
+    """Reset the persistence store singleton (for testing)."""
+    global _persistence_store_instance
+    with _persistence_store_lock:
+        _persistence_store_instance = None
+
+
+# ---------------------------------------------------------------------------
+# Module-level persistence convenience functions
+# ---------------------------------------------------------------------------
+
+
+def save_hybrid_execution(
+    record: HybridOrchestrationRecord,
+    *,
+    store: Optional[HybridContinuityPersistenceStore] = None,
+) -> bool:
+    """Persist *record* to the durable store.
+
+    Parameters
+    ----------
+    record:
+        The :class:`HybridOrchestrationRecord` to save.
+    store:
+        Optional explicit store.  Defaults to the process-level singleton.
+
+    Returns
+    -------
+    bool
+        ``True`` on success.
+    """
+    effective_store = store if store is not None else get_hybrid_persistence_store()
+    return effective_store.save(record)
+
+
+def load_hybrid_execution(
+    execution_id: str,
+    *,
+    store: Optional[HybridContinuityPersistenceStore] = None,
+) -> Optional[HybridOrchestrationRecord]:
+    """Load a record by *execution_id* from the durable store.
+
+    Returns ``None`` if not found.
+    """
+    effective_store = store if store is not None else get_hybrid_persistence_store()
+    return effective_store.load(execution_id)
+
+
+def recover_hybrid_executions(
+    *,
+    store: Optional[HybridContinuityPersistenceStore] = None,
+) -> List[HybridOrchestrationRecord]:
+    """Return all non-terminal records from the durable store.
+
+    Convenience entry-point for startup recovery::
+
+        from core.hybrid_orchestration_continuity import recover_hybrid_executions
+        records = recover_hybrid_executions()
+        for r in records:
+            registry.register(r)
+
+    Returns
+    -------
+    list of :class:`HybridOrchestrationRecord`
+        Records in non-terminal states that are eligible for restoration.
+    """
+    effective_store = store if store is not None else get_hybrid_persistence_store()
+    return effective_store.list_recoverable()
