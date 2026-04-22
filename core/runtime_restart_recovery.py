@@ -94,6 +94,7 @@ __all__ = [
     "MESH_SESSION_RECOVERY_IS_DURABLE_POLICY",
     "BODY_MESH_RECOVERY_IS_DURABLE_POLICY",
     "WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY",
+    "IN_FLIGHT_TASK_RECOVERY_POLICY",
     "RUNTIME_RESTART_RECOVERY_PR5_SENTINEL",
     # Classes
     "RuntimeRecoveryReport",
@@ -152,6 +153,20 @@ RUNTIME_RESTART_RECOVERY_PR5_SENTINEL: str = (
     "RUNTIME_RESTART_RECOVERY_PR5::runtime-restart-recovery-coordinator-pr5-v1"
 )
 
+IN_FLIGHT_TASK_RECOVERY_POLICY: str = (
+    "POLICY::IN_FLIGHT_TASK_RECOVERY: On process restart, "
+    "RuntimeRestartRecoveryCoordinator calls "
+    "TaskEnvelopeLifecycleRegistry.restore_from_store() to reconstruct "
+    "interrupted in-flight task records from the durable lifecycle store.  "
+    "Records that have exceeded their declared timeout at recovery time are "
+    "treated as terminal and are NOT re-registered.  Non-timed-out records "
+    "are re-inserted into the in-memory registry with a recovery_classification "
+    "metadata field that indicates whether the task is resumable_if_device_reconnects "
+    "(device_dispatch / cross_device stages) or replay_required "
+    "(gateway_ingress / routing stages).  This replaces the previous policy of "
+    "silently discarding all in-flight task state on restart."
+)
+
 
 # ---------------------------------------------------------------------------
 # RuntimeRecoveryReport
@@ -192,6 +207,8 @@ class RuntimeRecoveryReport:
     body_mesh_entries_restored: int = 0
     webrtc_bindings_cleared: bool = True
     hybrid_executions_interrupted: int = 0
+    in_flight_tasks_recovered: int = 0
+    in_flight_tasks_timed_out: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -206,6 +223,8 @@ class RuntimeRecoveryReport:
             "body_mesh_entries_restored": self.body_mesh_entries_restored,
             "webrtc_bindings_cleared": self.webrtc_bindings_cleared,
             "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
+            "in_flight_tasks_recovered": self.in_flight_tasks_recovered,
+            "in_flight_tasks_timed_out": self.in_flight_tasks_timed_out,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -259,11 +278,15 @@ class RuntimeRestartRecoveryCoordinator:
         body_mesh_store=None,
         body_mesh_registry=None,
         hybrid_continuity_registry=None,
+        lifecycle_registry=None,
+        lifecycle_persistence_store=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
         self._body_mesh_registry = body_mesh_registry
         self._hybrid_continuity_registry = hybrid_continuity_registry
+        self._lifecycle_registry = lifecycle_registry
+        self._lifecycle_persistence_store = lifecycle_persistence_store
 
     def run_recovery(self) -> RuntimeRecoveryReport:
         """Orchestrate a full recovery pass.
@@ -283,8 +306,6 @@ class RuntimeRestartRecoveryCoordinator:
         report.non_goals = [
             "WebRTC transport bindings are intentionally ephemeral and "
             "are NOT recovered. See WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.",
-            "In-flight task queues are NOT recovered. Tasks must be replayed "
-            "by the task source.",
             "Device heartbeat state is NOT recovered. Devices re-register on "
             "reconnect.",
             "Hybrid execution transport handles (A2A connections, GUI handles, "
@@ -333,14 +354,28 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 5: Reconstruct in-flight task lifecycle state from durable
+        #         persistence store (PR-durable-lifecycle)
+        # ----------------------------------------------------------------
+        try:
+            self._recover_in_flight_task_lifecycle(report)
+        except Exception as exc:
+            err = f"In-flight task lifecycle recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
-            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d errors=%d",
+            "mesh_sessions=%d body_entries=%d hybrid_interrupted=%d "
+            "in_flight_recovered=%d in_flight_timed_out=%d errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
             report.body_mesh_entries_restored,
             report.hybrid_executions_interrupted,
+            report.in_flight_tasks_recovered,
+            report.in_flight_tasks_timed_out,
             len(report.errors),
         )
         return report
@@ -440,6 +475,41 @@ class RuntimeRestartRecoveryCoordinator:
             count,
         )
 
+    def _recover_in_flight_task_lifecycle(self, report: RuntimeRecoveryReport) -> None:
+        """Reconstruct in-flight task lifecycle records from the durable store.
+
+        Uses :meth:`~core.task_envelope_lifecycle_registry
+        .TaskEnvelopeLifecycleRegistry.restore_from_store` to re-populate the
+        in-memory registry from the file-backed persistence store.
+
+        Records that have timed out since they were last persisted are
+        discarded (not re-inserted).  Non-timed-out records are annotated with
+        a ``recovery_classification`` metadata field that describes whether the
+        task is ``resumable_if_device_reconnects`` or ``replay_required``.
+
+        See
+        :data:`~core.task_lifecycle_persistence.IN_FLIGHT_TASK_LIFECYCLE_IS_DURABLE_POLICY`
+        and
+        :data:`~core.task_lifecycle_persistence.TASK_STATE_RECOVERY_CLASSIFICATION`
+        for the full policy.
+        """
+        from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
+        registry = (
+            self._lifecycle_registry
+            if self._lifecycle_registry is not None
+            else get_lifecycle_registry()
+        )
+        result = registry.restore_from_store(store=self._lifecycle_persistence_store)
+        report.in_flight_tasks_recovered = len(result.get("recovered", []))
+        report.in_flight_tasks_timed_out = len(result.get("timed_out", []))
+        logger.info(
+            "RuntimeRestartRecovery: in-flight tasks recovered=%d timed_out=%d skipped=%d",
+            report.in_flight_tasks_recovered,
+            report.in_flight_tasks_timed_out,
+            len(result.get("skipped", [])),
+        )
+
 
 # ---------------------------------------------------------------------------
 # Singleton management
@@ -472,6 +542,8 @@ def run_startup_recovery(
     body_mesh_store=None,
     body_mesh_registry=None,
     hybrid_continuity_registry=None,
+    lifecycle_registry=None,
+    lifecycle_persistence_store=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
 
@@ -494,6 +566,16 @@ def run_startup_recovery(
         Optional explicit hybrid orchestration continuity registry.  When
         provided, its ``mark_all_running_as_interrupted`` method is called
         during recovery step 4 (PR-59).
+    lifecycle_registry:
+        Optional explicit
+        :class:`~core.task_envelope_lifecycle_registry.TaskEnvelopeLifecycleRegistry`
+        to populate during in-flight task recovery (step 5).  Defaults to the
+        process-level singleton.
+    lifecycle_persistence_store:
+        Optional explicit
+        :class:`~core.task_lifecycle_persistence.TaskLifecyclePersistenceStore`
+        to read in-flight task records from.  Defaults to the process-level
+        singleton.
 
     Returns
     -------
@@ -504,5 +586,7 @@ def run_startup_recovery(
         body_mesh_store=body_mesh_store,
         body_mesh_registry=body_mesh_registry,
         hybrid_continuity_registry=hybrid_continuity_registry,
+        lifecycle_registry=lifecycle_registry,
+        lifecycle_persistence_store=lifecycle_persistence_store,
     )
     return coordinator.run_recovery()

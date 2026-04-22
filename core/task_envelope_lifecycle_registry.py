@@ -81,7 +81,24 @@ __all__ = [
     "TaskEnvelopeLifecycleRegistry",
     "get_lifecycle_registry",
     "reset_lifecycle_registry",
+    "LIFECYCLE_REGISTRY_DURABILITY_POLICY",
 ]
+
+# ---------------------------------------------------------------------------
+# Durability policy sentinel
+# ---------------------------------------------------------------------------
+
+LIFECYCLE_REGISTRY_DURABILITY_POLICY: str = (
+    "POLICY::LIFECYCLE_REGISTRY_DURABILITY: "
+    "TaskEnvelopeLifecycleRegistry optionally accepts a "
+    "core.task_lifecycle_persistence.TaskLifecyclePersistenceStore.  "
+    "When present, every register() call persists the record to the durable "
+    "store; complete(), fail(), and cancel_timed_out() remove it.  "
+    "On process restart, RuntimeRestartRecoveryCoordinator calls "
+    "restore_from_store() to re-populate the registry from durable state.  "
+    "See core.task_lifecycle_persistence.TASK_RECOVERY_POLICY for the "
+    "post-interruption classification of each lifecycle stage."
+)
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -294,11 +311,18 @@ class TaskEnvelopeLifecycleRegistry:
 
     CANONICAL_AUTHORITY = "core.task_envelope_lifecycle_registry.TaskEnvelopeLifecycleRegistry"
 
-    def __init__(self, max_records: int = _MAX_RECORDS) -> None:
+    def __init__(
+        self,
+        max_records: int = _MAX_RECORDS,
+        persistence_store: Optional[Any] = None,
+    ) -> None:
         self._pending: Dict[str, PendingEnvelopeRecord] = {}
         self._completed: int = 0
         self._failed: int = 0
         self._max_records = max_records
+        # Optional durable backing store
+        # (core.task_lifecycle_persistence.TaskLifecyclePersistenceStore)
+        self._persistence_store: Optional[Any] = persistence_store
 
     # ── Registration ─────────────────────────────────────────────────────────
 
@@ -356,6 +380,15 @@ class TaskEnvelopeLifecycleRegistry:
             "tool=%s target=%s timeout=%.1fs",
             task_id, trace_id, owner.value, tool_name, target_device_id, _timeout,
         )
+        # Durable backing: persist the record so it survives a process restart.
+        if self._persistence_store is not None:
+            try:
+                self._persistence_store.save(record.to_dict())
+            except Exception as _pe:
+                logger.warning(
+                    "lifecycle_registry.register: persistence save failed for "
+                    "task_id=%s: %s", task_id, _pe
+                )
         return record
 
     # ── Ownership transfer ────────────────────────────────────────────────────
@@ -429,6 +462,16 @@ class TaskEnvelopeLifecycleRegistry:
             task_id, record.trace_id, record.elapsed(),
         )
 
+        # Durable backing: remove from store on successful completion.
+        if self._persistence_store is not None:
+            try:
+                self._persistence_store.delete(task_id)
+            except Exception as _pe:
+                logger.warning(
+                    "lifecycle_registry.complete: persistence delete failed "
+                    "for task_id=%s: %s", task_id, _pe
+                )
+
         fut = record.future
         if fut is not None and not fut.done():
             fut.set_result(result)
@@ -469,6 +512,16 @@ class TaskEnvelopeLifecycleRegistry:
             "lifecycle_registry.fail | task_id=%s trace_id=%s error=%r elapsed=%.2fs",
             task_id, record.trace_id, error[:200], record.elapsed(),
         )
+
+        # Durable backing: remove from store on terminal failure.
+        if self._persistence_store is not None:
+            try:
+                self._persistence_store.delete(task_id)
+            except Exception as _pe:
+                logger.warning(
+                    "lifecycle_registry.fail: persistence delete failed "
+                    "for task_id=%s: %s", task_id, _pe
+                )
 
         fut = record.future
         if fut is not None and not fut.done():
@@ -511,6 +564,15 @@ class TaskEnvelopeLifecycleRegistry:
                 del self._pending[task_id]
                 self._failed += 1
                 cancelled_ids.append(task_id)
+                # Durable backing: remove timed-out records from the store.
+                if self._persistence_store is not None:
+                    try:
+                        self._persistence_store.delete(task_id)
+                    except Exception as _pe:
+                        logger.warning(
+                            "lifecycle_registry.timeout: persistence delete "
+                            "failed for task_id=%s: %s", task_id, _pe
+                        )
         return cancelled_ids
 
     # ── Reconnect / resume ────────────────────────────────────────────────────
@@ -580,6 +642,122 @@ class TaskEnvelopeLifecycleRegistry:
                         record.task_id, _cb_exc,
                     )
         return surfaced
+
+    # ── Recovery ──────────────────────────────────────────────────────────────
+
+    def restore_from_store(
+        self,
+        store: Optional[Any] = None,
+        *,
+        now: Optional[float] = None,
+    ) -> Dict[str, List[str]]:
+        """Reconstruct interrupted in-flight records from the durable store.
+
+        Called once at process startup by
+        :class:`~core.runtime_restart_recovery.RuntimeRestartRecoveryCoordinator`
+        to re-populate the registry with records that were live when the
+        process last exited.
+
+        Each record is classified according to
+        :data:`~core.task_lifecycle_persistence.TASK_STATE_RECOVERY_CLASSIFICATION`
+        and split into three buckets:
+
+        ``recovered``
+            Records re-inserted into the in-memory ``_pending`` dict.  These
+            are eligible tasks that have not yet timed out.
+        ``timed_out``
+            Records that exceeded their declared timeout at recovery time.
+            They are **not** re-inserted and are removed from the durable
+            store so they do not appear on the next restart.
+        ``skipped``
+            Records whose ``task_id`` was already present in ``_pending``
+            (duplicate-resume guard).
+
+        Parameters
+        ----------
+        store:
+            Explicit :class:`~core.task_lifecycle_persistence
+            .TaskLifecyclePersistenceStore` to read from.  If ``None`` the
+            registry's own ``_persistence_store`` is used; if that is also
+            ``None`` the process-level singleton is loaded lazily.
+        now:
+            Wall-clock reference time for timeout evaluation.  Defaults to
+            :func:`time.time`.
+
+        Returns
+        -------
+        dict with keys ``"recovered"``, ``"timed_out"``, ``"skipped"``
+            Each value is a list of task_id strings.
+        """
+        from core.task_lifecycle_persistence import (
+            get_task_lifecycle_persistence_store,
+            TASK_STATE_RECOVERY_CLASSIFICATION,
+        )
+
+        _store = store or self._persistence_store or get_task_lifecycle_persistence_store()
+        _now = now if now is not None else time.time()
+
+        recovered: List[str] = []
+        timed_out: List[str] = []
+        skipped: List[str] = []
+
+        raw_records = _store.load_all()
+        for raw in raw_records:
+            task_id = raw.get("task_id", "")
+            if not task_id:
+                continue
+
+            # Duplicate-resume guard
+            if task_id in self._pending:
+                skipped.append(task_id)
+                continue
+
+            record = PendingEnvelopeRecord.from_dict(raw)
+
+            # Timed-out at recovery time → terminal; clean from store
+            if record.is_timed_out(_now):
+                timed_out.append(task_id)
+                try:
+                    _store.delete(task_id)
+                except Exception:
+                    pass
+                logger.debug(
+                    "lifecycle_registry.restore: task_id=%s timed out at "
+                    "recovery time; skipping",
+                    task_id,
+                )
+                continue
+
+            # Classify the recovery action (informational; stored in metadata)
+            # record.owner is a LifecycleOwner enum, but use .value defensively
+            # since records deserialized via from_dict() always produce enum instances.
+            owner_val = record.owner.value
+            classification = TASK_STATE_RECOVERY_CLASSIFICATION.get(
+                owner_val,
+                TASK_STATE_RECOVERY_CLASSIFICATION["_unknown"],
+            )
+            updated_metadata = dict(record.metadata)
+            updated_metadata.setdefault("recovery_classification", classification)
+            updated_metadata.setdefault("recovered_at", _now)
+            record = dataclasses.replace(record, metadata=updated_metadata)
+
+            self._pending[task_id] = record
+            recovered.append(task_id)
+            logger.info(
+                "lifecycle_registry.restore | task_id=%s owner=%s "
+                "classification=%s",
+                task_id, owner_val, classification,
+            )
+
+        logger.info(
+            "lifecycle_registry.restore: recovered=%d timed_out=%d skipped=%d",
+            len(recovered), len(timed_out), len(skipped),
+        )
+        return {
+            "recovered": recovered,
+            "timed_out": timed_out,
+            "skipped": skipped,
+        }
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
