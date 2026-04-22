@@ -33,6 +33,13 @@ try:
 except ImportError:
     _reconcile_inbound_message = None  # type: ignore[assignment]
 
+# PR-4V2: Android participant/session/runtime truth ingress — top-level import
+# so tests can patch() it and import failures are handled gracefully.
+try:
+    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_participant_truth
+except ImportError:
+    _ingest_participant_truth = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Compat lifecycle path signal guard
 # ---------------------------------------------------------------------------
@@ -131,6 +138,47 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
         logger.debug("PR-13 reconcile failed (non-fatal): %s", exc)
 
 
+def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> None:
+    """Best-effort ingest *message* as Android participant truth into V2 canonical state.
+
+    Calls :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
+    when the ingress module is available.  The *message* dict is enriched with
+    the caller-supplied *truth_kind* value (which maps to
+    :class:`~core.android_participant_truth_ingress.AndroidParticipantTruthKind`)
+    before passing to the ingress function.
+
+    Failures are logged at DEBUG level and never propagated — this is an
+    additive PR-4V2 path that complements the existing PR-13 ``_try_reconcile``
+    path; it must not disrupt existing handler behaviour.
+    """
+    if _ingest_participant_truth is None:
+        return
+    try:
+        enriched = dict(message)
+        # Inject truth_kind so the ingress envelope extractor classifies it
+        # correctly even if the raw Android message does not carry the field.
+        enriched.setdefault("truth_kind", truth_kind)
+        outcome = _ingest_participant_truth(enriched)
+        if outcome.was_reconciled:
+            logger.debug(
+                "PR-4V2 participant truth ingested: truth_kind=%s contract_id=%r "
+                "session_id=%r was_reconciled=True canonical_update=%r phase=%r",
+                truth_kind,
+                outcome.envelope.contract_id if outcome.envelope else "",
+                outcome.envelope.session_id if outcome.envelope else "",
+                outcome.canonical_update,
+                outcome.tracking_record_phase,
+            )
+        elif outcome.reject_reason:
+            logger.debug(
+                "PR-4V2 participant truth skipped: truth_kind=%s reason=%r",
+                truth_kind,
+                outcome.reject_reason,
+            )
+    except Exception as exc:
+        logger.debug("PR-4V2 participant truth ingest failed (non-fatal): %s", exc)
+
+
 async def handle_task_result(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> None:
@@ -147,6 +195,8 @@ async def handle_task_result(
 
     # PR-13: reconcile inbound signal against host-side execution tracker
     _try_reconcile(message)
+    # PR-4V2: ingest Android participant truth into V2 canonical orchestration
+    _try_ingest_participant_truth(message, "result")
 
     # 完成等待的 Future
     if task_id in bridge._pending_responses:
@@ -194,6 +244,8 @@ async def handle_task_end(
 
     # PR-13: reconcile inbound signal against host-side execution tracker
     _try_reconcile(message)
+    # PR-4V2: ingest Android task_phase truth into V2 canonical orchestration
+    _try_ingest_participant_truth(message, "task_phase")
 
     # 清理残余 pending future
     if task_id and task_id in bridge._pending_responses:
@@ -226,6 +278,8 @@ async def handle_task_progress(
 
     # PR-13: reconcile inbound signal against host-side execution tracker
     _try_reconcile(message)
+    # PR-4V2: ingest Android progress as status truth into V2 canonical orchestration
+    _try_ingest_participant_truth(message, "status")
 
 
 async def handle_command_result(
@@ -257,6 +311,8 @@ async def handle_error(
 
     # PR-13: reconcile inbound error signal against host-side execution tracker
     _try_reconcile(message)
+    # PR-4V2: ingest Android failure truth into V2 canonical orchestration
+    _try_ingest_participant_truth(message, "failure")
 
 
 async def handle_task_cancel(
@@ -307,6 +363,9 @@ async def handle_task_cancel(
             if bridge._devices[device_id].current_task_id == task_id:
                 bridge._devices[device_id].current_task_id = None
 
+    # PR-4V2: ingest Android cancel truth into V2 canonical orchestration
+    _try_ingest_participant_truth(message, "cancel")
+
     return MessageBuilder.task_cancel_ack(
         device_id=device_id or "",
         task_id=task_id,
@@ -355,6 +414,13 @@ async def handle_task_status(
         "Task status resolved: task_id=%s device_id=%s status=%s",
         task_id, device_id, status,
     )
+
+    # PR-4V2: ingest Android status truth into V2 canonical orchestration.
+    # Enrich the message with the resolved status so the ingress extractor
+    # can read it as task_phase_value via payload.status.
+    _status_enriched = dict(message)
+    _status_enriched["payload"] = {**(message.get("payload") or {}), "status": status}
+    _try_ingest_participant_truth(_status_enriched, "status")
 
     return MessageBuilder.task_status_response(
         device_id=device_id or "",
