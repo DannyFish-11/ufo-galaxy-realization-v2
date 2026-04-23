@@ -176,14 +176,34 @@ class TestDeviceRouterWritesToUDM:
         assert udm.get_device("gw_dev_001") is not None, "UDM must contain the gateway-registered device"
 
     def test_unregister_device_writes_to_udm(self):
+        """DeviceRouter.unregister_device marks device OFFLINE in UDM.
+
+        PR-3 / PR-E design intent: ``DeviceRouter.unregister_device`` handles
+        *session teardown*, not full device deregistration.  The device
+        registration record is preserved in UDM so the system retains history
+        and the device can re-attach without a full re-registration cycle.
+        Only the runtime connection state is patched to OFFLINE.
+
+        Full deregistration (physical removal from UDM) is the responsibility of
+        the ``DELETE /api/v1/devices/{device_id}`` REST endpoint, which calls
+        ``UnifiedDeviceManager.unregister_device`` explicitly.
+        """
         udm = _fresh_udm()
         from galaxy_gateway.device_router import DeviceRouter
+        from core.unified.models import UnifiedDeviceStatus
         router = DeviceRouter()
 
         router.register_device("gw_dev_002", "android", ["screen"])
         router.unregister_device("gw_dev_002")
 
-        assert udm.get_device("gw_dev_002") is None, "UDM must NOT contain the unregistered device"
+        device = udm.get_device("gw_dev_002")
+        assert device is not None, (
+            "UDM must still contain the device after DeviceRouter.unregister_device: "
+            "session teardown must not erase canonical device registration."
+        )
+        assert device.status == UnifiedDeviceStatus.OFFLINE, (
+            f"UDM device must be OFFLINE after DeviceRouter.unregister_device, got {device.status}"
+        )
 
 
 # ===========================================================================

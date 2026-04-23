@@ -167,12 +167,15 @@ class GatewayWSManager:
                 device_router.unregister_device(device_id)
                 del self.device_connections[device_id]
 
-                # 兼容层：同步到 core 的 registered_devices
+                # COMPAT_MIRROR_WRITE: sync offline state to core compat cache AFTER
+                # UDM write (udm_write_unregister already called above).
+                # registered_devices is a read-only compat surface — this write
+                # is a mirror only; UDM (SSOT) already reflects the offline state.
                 try:
                     from core.routes._shared import registered_devices as core_registered_devices
                     if device_id in core_registered_devices:
-                        core_registered_devices[device_id]["status"] = "offline"
-                        core_registered_devices[device_id]["online"] = False
+                        core_registered_devices[device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
+                        core_registered_devices[device_id]["online"] = False  # COMPAT_MIRROR_WRITE
                 except Exception:
                     pass
 
@@ -436,12 +439,13 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
 
         await websocket.send_json(response)
 
-        # 兼容层: read-only fallback write to core registered_devices
-        # (only after UDM write succeeds — this is a secondary cache, not truth)
+        # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write succeeds.
+        # registered_devices is a read-only compat surface (SSOT=UDM).
+        # This write is a mirror only — truth authority is UDM.
         if success and udm_success:
             try:
                 from core.routes._shared import registered_devices as core_registered_devices
-                core_registered_devices[device_id] = {
+                core_registered_devices[device_id] = {  # COMPAT_MIRROR_WRITE
                     "device_id": device_id,
                     "device_type": device_type_raw,
                     "device_name": device_name,
