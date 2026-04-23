@@ -743,6 +743,16 @@ class OrchestrationReviewSnapshot:
 # ---------------------------------------------------------------------------
 
 
+def _get_enum_value(obj: Any) -> str:
+    """Return obj.value if it is an Enum, otherwise str(obj).
+
+    Used to safely extract stable string values from enum-like objects
+    returned by upstream authority modules without importing their enum
+    types directly.
+    """
+    return obj.value if hasattr(obj, "value") else str(obj)
+
+
 def _assemble_execution_path_summary() -> tuple[ExecutionPathDecisionSummary, Optional[str]]:
     """Assemble an execution path summary from runtime_decision_observability.
 
@@ -817,9 +827,9 @@ def _assemble_fallback_cascade() -> tuple[FallbackCascadeReview, Optional[str]]:
                 ctx = FallbackContext.from_arbiter_attempt(attempt)
                 steps.append(FallbackCascadeStep(
                     step_index=idx,
-                    from_tier=ctx.from_level.value if hasattr(ctx.from_level, "value") else str(ctx.from_level),
-                    to_tier=ctx.to_level.value if hasattr(ctx.to_level, "value") else str(ctx.to_level),
-                    reason=ctx.reason.value if hasattr(ctx.reason, "value") else str(ctx.reason),
+                    from_tier=_get_enum_value(ctx.from_level),
+                    to_tier=_get_enum_value(ctx.to_level),
+                    reason=_get_enum_value(ctx.reason),
                     raw_reason=ctx.raw_reason,
                     authority="core.windows_execution_arbiter",
                 ))

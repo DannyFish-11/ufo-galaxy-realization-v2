@@ -107,6 +107,7 @@ reconciliation gaps``.
 
 from __future__ import annotations
 
+import threading as _threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -1102,9 +1103,10 @@ def ingest_android_participant_truth_message(
 # PR-10: Last reconciliation outcome — operator review surface support
 # ---------------------------------------------------------------------------
 
-import threading as _threading
+# Advisory-only field names that are never applied to V2 canonical state.
+_ADVISORY_ONLY_RECONCILE_FIELDS = ("readiness_assessment", "runtime_state")
 
-_last_reconciliation_lock: "_threading.Lock" = _threading.Lock()
+_last_reconciliation_lock: _threading.Lock = _threading.Lock()
 _last_reconciliation_outcome: Optional[Dict[str, Any]] = None
 
 
@@ -1125,7 +1127,7 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
             "v2_terminal_state_blocked": bool(
                 outcome.reject_reason and "terminal" in outcome.reject_reason.lower()
             ),
-            "advisory_only_fields_skipped": ["readiness_assessment", "runtime_state"]
+            "advisory_only_fields_skipped": list(_ADVISORY_ONLY_RECONCILE_FIELDS)
             if outcome.local_only
             else [],
             "applied_signal_types": [outcome.canonical_update] if outcome.was_reconciled else [],

@@ -485,7 +485,6 @@ def test_get_last_reconciliation_outcome_import():
 def test_get_last_reconciliation_outcome_returns_none_before_call():
     """get_last_reconciliation_outcome returns None or dict (not raises)."""
     from core.android_participant_truth_ingress import (
-        _last_reconciliation_outcome,
         get_last_reconciliation_outcome,
     )
 
