@@ -200,6 +200,16 @@ __all__ = [
 logger = logging.getLogger("Galaxy.DelegatedFlowPersistence")
 
 # ---------------------------------------------------------------------------
+# Deferred module-level imports (domain objects)
+# ---------------------------------------------------------------------------
+# Imported here rather than inside _from_dict methods to avoid repeated import
+# overhead during bulk deserialization, while keeping the module load-safe.
+from core.attached_runtime_session_registry import AttachedSessionRegistryEntry as _SessionEntry  # noqa: E402
+from core.delegated_runtime_handoff_contract import DelegatedHandoffContractRecord as _ContractRecord  # noqa: E402
+from core.android_runtime_dispatch_binding import AndroidRuntimeDispatchBindingRecord as _BindingRecord  # noqa: E402
+from core.delegated_flow_entity import DelegatedFlowEntity as _FlowEntity  # noqa: E402
+
+# ---------------------------------------------------------------------------
 # Sentinels
 # ---------------------------------------------------------------------------
 
@@ -408,8 +418,9 @@ class _GenericDurableStore(Generic[_T]):
             )
         except Exception as exc:  # pragma: no cover
             logger.warning(
-                "DurableStore[%s]: could not create store directory: %s",
+                "DurableStore[%s]: could not create store directory for path %s: %s",
                 self._SCHEMA_KIND,
+                self._store_path,
                 exc,
             )
 
@@ -418,10 +429,10 @@ class _GenericDurableStore(Generic[_T]):
     # ------------------------------------------------------------------
 
     def _to_dict(self, obj: _T) -> Dict[str, Any]:  # pragma: no cover
-        raise NotImplementedError
+        raise NotImplementedError("Subclasses must implement _to_dict")
 
     def _from_dict(self, d: Dict[str, Any]) -> _T:  # pragma: no cover
-        raise NotImplementedError
+        raise NotImplementedError("Subclasses must implement _from_dict")
 
     # ------------------------------------------------------------------
     # Write
@@ -601,8 +612,7 @@ class SessionDurableStore(
         return obj.to_dict()
 
     def _from_dict(self, d: Dict[str, Any]) -> Any:
-        from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
-        return AttachedSessionRegistryEntry.from_dict(d)
+        return _SessionEntry.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -626,8 +636,7 @@ class ContractDurableStore(
         return obj.to_dict()
 
     def _from_dict(self, d: Dict[str, Any]) -> Any:
-        from core.delegated_runtime_handoff_contract import DelegatedHandoffContractRecord
-        return DelegatedHandoffContractRecord.from_dict(d)
+        return _ContractRecord.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -651,8 +660,7 @@ class BindingDurableStore(
         return obj.to_dict()
 
     def _from_dict(self, d: Dict[str, Any]) -> Any:
-        from core.android_runtime_dispatch_binding import AndroidRuntimeDispatchBindingRecord
-        return AndroidRuntimeDispatchBindingRecord.from_dict(d)
+        return _BindingRecord.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -676,8 +684,7 @@ class FlowEntityDurableStore(
         return obj.to_dict()
 
     def _from_dict(self, d: Dict[str, Any]) -> Any:
-        from core.delegated_flow_entity import DelegatedFlowEntity
-        return DelegatedFlowEntity.from_dict(d)
+        return _FlowEntity.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -762,17 +769,17 @@ class DelegatedFlowPersistenceBundle:
             Mapping from category name to success flag.
         """
         if sessions is None:
-            from core.attached_runtime_session_registry import get_session_registry
-            sessions = get_session_registry().list_all()
+            from core.attached_runtime_session_registry import get_session_registry as _gsr
+            sessions = _gsr().list_all()
         if contracts is None:
-            from core.delegated_runtime_handoff_contract import get_handoff_contract_runtime
-            contracts = get_handoff_contract_runtime().list_all()
+            from core.delegated_runtime_handoff_contract import get_handoff_contract_runtime as _ghcr
+            contracts = _ghcr().list_all()
         if bindings is None:
-            from core.android_runtime_dispatch_binding import get_dispatch_binding_runtime
-            bindings = get_dispatch_binding_runtime().list_all()
+            from core.android_runtime_dispatch_binding import get_dispatch_binding_runtime as _gdbr
+            bindings = _gdbr().list_all()
         if flow_entities is None:
-            from core.delegated_flow_entity import get_delegated_flow_entity_runtime
-            flow_entities = get_delegated_flow_entity_runtime().list_all()
+            from core.delegated_flow_entity import get_delegated_flow_entity_runtime as _gfer
+            flow_entities = _gfer().list_all()
 
         return {
             "session": self.session_store.save(sessions),
