@@ -239,7 +239,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Policy sentinels
@@ -635,7 +635,7 @@ class DelegatedFlowOwnerKind(str, Enum):
 # Phase transition table
 # ---------------------------------------------------------------------------
 
-_PHASE_TRANSITION_TABLE: Dict[tuple, DelegatedFlowPhase] = {
+_PHASE_TRANSITION_TABLE: Dict[Tuple[DelegatedFlowPhase, DelegatedFlowSignal], DelegatedFlowPhase] = {
     # dispatch signal: created → dispatched
     (DelegatedFlowPhase.created, DelegatedFlowSignal.dispatch): DelegatedFlowPhase.dispatched,
     # ack signal: dispatched → executing

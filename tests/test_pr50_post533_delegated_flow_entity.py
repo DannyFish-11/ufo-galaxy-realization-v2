@@ -241,12 +241,12 @@ def test_A04_all_14_policy_sentinels_non_empty():
 
 @skip_if_unavailable
 def test_A05_v2_canonical_truth_policy_mentions_v2():
-    assert "V2" in V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY or "v2" in V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY.lower()
+    assert "v2" in V2_HOLDS_CANONICAL_FLOW_TRUTH_POLICY.lower()
 
 
 @skip_if_unavailable
 def test_A06_android_execution_truth_policy_mentions_android():
-    assert "Android" in ANDROID_HOLDS_EXECUTION_TRUTH_POLICY or "android" in ANDROID_HOLDS_EXECUTION_TRUTH_POLICY.lower()
+    assert "android" in ANDROID_HOLDS_EXECUTION_TRUTH_POLICY.lower()
 
 
 # ===========================================================================
