@@ -97,6 +97,7 @@ __all__ = [
     "RUNTIME_RESTART_RECOVERY_PR5_SENTINEL",
     "INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY",
     "HYBRID_CONTINUITY_RECONSTRUCTION_POLICY",
+    "RECOVERED_LIFECYCLE_DISPATCH_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -179,10 +180,28 @@ HYBRID_CONTINUITY_RECONSTRUCTION_POLICY: str = (
     "records are not restored — they remain on disk for audit only. (PR-6)"
 )
 
+# Recovered lifecycle dispatch — converts documentary recovery into
+# operational execution behavior.
+RECOVERED_LIFECYCLE_DISPATCH_POLICY: str = (
+    "POLICY::RECOVERED_LIFECYCLE_DISPATCH: After loading in-flight task "
+    "records from the durable snapshot, RuntimeRestartRecoveryCoordinator "
+    "converts each recovered record into a concrete registry action based on "
+    "its InFlightTaskDisposition: "
+    "RESUMABLE (device_dispatch/cross_device) → registered in "
+    "TaskEnvelopeLifecycleRegistry under DEVICE_DISPATCH ownership so that "
+    "resume_for_device() can re-dispatch when the device reconnects; "
+    "REPLAY_ONLY (routing) → registered under ROUTING ownership so the task "
+    "is available for a fresh routing pass; "
+    "REISSUABLE (gateway_ingress) → registered under GATEWAY_INGRESS "
+    "ownership so the source can re-issue or the gateway can detect the "
+    "outstanding request; "
+    "TERMINAL_ON_INTERRUPT (result_completion) → NOT registered in the "
+    "pending registry — the result may already have been delivered and "
+    "re-adding would risk duplicate completion.  Records already present in "
+    "the registry (same task_id) are never overwritten.  This step is the "
+    "canonical conversion from descriptive recovery to operational execution."
+)
 
-# ---------------------------------------------------------------------------
-# RuntimeRecoveryReport
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -205,6 +224,11 @@ class RuntimeRecoveryReport:
         Number of BodyMeshRegistry entries restored from the durable snapshot.
     webrtc_bindings_cleared
         True — WebRTC bindings are always cleared on restart (intentional).
+    inflight_tasks_dispatch_actions_taken
+        Number of recovered in-flight task records that were converted into
+        concrete runtime registry actions (i.e. non-terminal records that were
+        added to the lifecycle registry under their disposition-appropriate
+        ownership stage).  Terminal records are excluded from this count.
     errors
         List of non-fatal error strings encountered during recovery.
     non_goals
@@ -226,6 +250,7 @@ class RuntimeRecoveryReport:
     inflight_tasks_replay_only: int = 0
     inflight_tasks_reissuable: int = 0
     inflight_tasks_terminal: int = 0
+    inflight_tasks_dispatch_actions_taken: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -247,6 +272,7 @@ class RuntimeRecoveryReport:
             "inflight_tasks_replay_only": self.inflight_tasks_replay_only,
             "inflight_tasks_reissuable": self.inflight_tasks_reissuable,
             "inflight_tasks_terminal": self.inflight_tasks_terminal,
+            "inflight_tasks_dispatch_actions_taken": self.inflight_tasks_dispatch_actions_taken,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -321,8 +347,20 @@ class RuntimeRestartRecoveryCoordinator:
         4. Mark in-flight hybrid executions as interrupted (PR-59); restore
            non-terminal records from durable persistence store and invalidate
            remote partial results (PR-6).
-        5. Recover in-flight task lifecycle records from durable snapshot
-           (PR-D1).
+        5. Recover in-flight task lifecycle records from durable snapshot and
+           convert each recovered disposition into a concrete registry action
+           (see :data:`RECOVERED_LIFECYCLE_DISPATCH_POLICY`):
+
+           * **RESUMABLE** → registered under ``DEVICE_DISPATCH`` ownership so
+             :meth:`~core.task_envelope_lifecycle_registry
+             .TaskEnvelopeLifecycleRegistry.resume_for_device` can re-dispatch
+             when the device reconnects.
+           * **REPLAY_ONLY** → registered under ``ROUTING`` ownership so a
+             fresh routing pass can be triggered.
+           * **REISSUABLE** → registered under ``GATEWAY_INGRESS`` ownership
+             so the source can re-issue.
+           * **TERMINAL_ON_INTERRUPT** → NOT registered; result may already
+             have been delivered (PR-D1).
 
         Returns
         -------
@@ -553,13 +591,11 @@ class RuntimeRestartRecoveryCoordinator:
         .restore_inflight_tasks_from_snapshot` to load all records that were
         pending at the time of the previous process exit.  Each record is
         classified by :class:`~core.task_lifecycle_persistence
-        .InFlightTaskDisposition`; the counts are recorded in the report so
-        operators can observe which tasks can be resumed, replayed, re-issued,
-        or treated as terminal.
+        .InFlightTaskDisposition`; the counts are recorded in the report.
 
-        This step does **not** automatically re-dispatch tasks; that is the
-        responsibility of the caller (e.g. the gateway startup logic) once it
-        has inspected the recovery report.
+        After counting, this method calls :meth:`_dispatch_recovered_tasks` to
+        convert each recovered disposition into a concrete registry action
+        (see :data:`RECOVERED_LIFECYCLE_DISPATCH_POLICY`).
         """
         from core.task_lifecycle_persistence import (
             InFlightTaskDisposition,
@@ -585,6 +621,186 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_resumable,
             report.inflight_tasks_replay_only,
             report.inflight_tasks_reissuable,
+            report.inflight_tasks_terminal,
+        )
+        # Convert documentary recovery into operational execution behavior.
+        self._dispatch_recovered_tasks(restored, report)
+
+    def _dispatch_recovered_tasks(
+        self,
+        restored: "List[Any]",
+        report: RuntimeRecoveryReport,
+    ) -> None:
+        """Convert recovered lifecycle records into concrete registry actions.
+
+        This is the operational conversion step described by
+        :data:`RECOVERED_LIFECYCLE_DISPATCH_POLICY`.  Each non-terminal
+        record is added to the :class:`~core.task_envelope_lifecycle_registry
+        .TaskEnvelopeLifecycleRegistry` under the ownership stage that
+        corresponds to its :class:`~core.task_lifecycle_persistence
+        .InFlightTaskDisposition`:
+
+        * **RESUMABLE** → :attr:`~core.task_envelope_lifecycle_registry
+          .LifecycleOwner.DEVICE_DISPATCH` — the task was dispatched to a
+          device; it is placed back under DEVICE_DISPATCH ownership so that
+          :meth:`~core.task_envelope_lifecycle_registry
+          .TaskEnvelopeLifecycleRegistry.resume_for_device` will find it and
+          re-dispatch when the device reconnects.
+
+        * **REPLAY_ONLY** → :attr:`~core.task_envelope_lifecycle_registry
+          .LifecycleOwner.ROUTING` — the task was in routing; it is placed
+          under ROUTING ownership so a fresh routing pass can be triggered.
+
+        * **REISSUABLE** → :attr:`~core.task_envelope_lifecycle_registry
+          .LifecycleOwner.GATEWAY_INGRESS` — the task was at ingress; it is
+          placed under GATEWAY_INGRESS ownership so the source can re-issue
+          or the gateway can detect the outstanding request.
+
+        * **TERMINAL_ON_INTERRUPT** → **not registered** — the result may
+          already have been delivered; re-adding would risk duplicate
+          completion.
+
+        Duplicate prevention
+        --------------------
+        Records whose ``task_id`` is already present in the registry are
+        **not** overwritten — the live (in-process) record takes precedence.
+        This prevents duplicate ownership after a partial restart.
+
+        Parameters
+        ----------
+        restored:
+            List of :class:`~core.task_lifecycle_persistence.RestoredTaskRecord`
+            instances from :func:`~core.task_lifecycle_persistence
+            .restore_inflight_tasks_from_snapshot`.
+        report:
+            The :class:`RuntimeRecoveryReport` being built; updated with
+            ``inflight_tasks_dispatch_actions_taken``.
+        """
+        if not restored:
+            return
+
+        try:
+            from core.task_lifecycle_persistence import InFlightTaskDisposition
+            from core.task_envelope_lifecycle_registry import (
+                get_lifecycle_registry,
+                LifecycleOwner,
+                PendingEnvelopeRecord,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                "import failed — %s",
+                exc,
+            )
+            return
+
+        # Disposition → canonical registry ownership stage
+        _disposition_to_owner = {
+            InFlightTaskDisposition.RESUMABLE: LifecycleOwner.DEVICE_DISPATCH,
+            InFlightTaskDisposition.REPLAY_ONLY: LifecycleOwner.ROUTING,
+            InFlightTaskDisposition.REISSUABLE: LifecycleOwner.GATEWAY_INGRESS,
+        }
+
+        try:
+            registry = get_lifecycle_registry()
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                "could not obtain lifecycle registry — %s",
+                exc,
+            )
+            return
+
+        actions_taken = 0
+        import time as _time_mod
+
+        for rec in restored:
+            if rec.disposition == InFlightTaskDisposition.TERMINAL_ON_INTERRUPT:
+                # Terminal records are intentionally excluded from the pending
+                # registry — the result may already have been delivered.
+                logger.debug(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "task_id=%s is TERMINAL_ON_INTERRUPT — not re-registered",
+                    rec.task_id,
+                )
+                continue
+
+            target_owner = _disposition_to_owner.get(rec.disposition)
+            if target_owner is None:
+                logger.warning(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "unknown disposition %r for task_id=%s — skipping",
+                    rec.disposition,
+                    rec.task_id,
+                )
+                continue
+
+            if not rec.task_id:
+                logger.debug(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "skipping record with empty task_id"
+                )
+                continue
+
+            # Duplicate guard — never overwrite a live in-process record.
+            if registry.is_pending(rec.task_id):
+                logger.debug(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "task_id=%s already pending — skipping (live record takes "
+                    "precedence)",
+                    rec.task_id,
+                )
+                continue
+
+            # Reconstruct a PendingEnvelopeRecord and insert it directly.
+            try:
+                owner = LifecycleOwner(rec.owner) if rec.owner in {
+                    o.value for o in LifecycleOwner
+                } else target_owner
+                # Always use the disposition-mapped owner as the authoritative
+                # post-restart stage — the snapshot owner tells us where the
+                # task *was*, the disposition tells us where it needs to *be*.
+                pending_record = PendingEnvelopeRecord(
+                    task_id=rec.task_id,
+                    trace_id=rec.trace_id,
+                    target_device_id=rec.target_device_id,
+                    tool_name=rec.tool_name,
+                    owner=target_owner,
+                    timeout=rec.timeout,
+                    registered_at=rec.registered_at,
+                    future=None,
+                    metadata={
+                        **rec.metadata,
+                        "recovered_at": _time_mod.time(),
+                        "recovered_disposition": rec.disposition.value,
+                        "snapshot_owner": rec.owner,
+                        "snapshot_id": rec.snapshot_id,
+                        "recovery_action": "dispatched_by_coordinator",
+                    },
+                )
+                # pylint: disable=protected-access
+                registry._pending[rec.task_id] = pending_record
+                actions_taken += 1
+                logger.info(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "task_id=%s disposition=%s → owner=%s (operational)",
+                    rec.task_id,
+                    rec.disposition.value,
+                    target_owner.value,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+                    "failed to register task_id=%s — %s",
+                    rec.task_id,
+                    exc,
+                )
+
+        report.inflight_tasks_dispatch_actions_taken = actions_taken
+        logger.info(
+            "RuntimeRestartRecovery._dispatch_recovered_tasks: "
+            "%d dispatch action(s) taken (%d terminal skipped)",
+            actions_taken,
             report.inflight_tasks_terminal,
         )
 
