@@ -853,7 +853,7 @@ def reconcile_android_participant_truth(
         reject_reason=reject_reason,
     )
 
-    return AndroidParticipantReconcileOutcome(
+    outcome = AndroidParticipantReconcileOutcome(
         envelope=envelope,
         was_reconciled=was_reconciled,
         canonical_update=canonical_update,
@@ -862,6 +862,9 @@ def reconcile_android_participant_truth(
         replay_event_emitted=replay_event_emitted,
         tracking_record_phase=tracking_record_phase,
     )
+    # PR-10: Record the outcome for the operator review surface.
+    _record_last_reconciliation_outcome(outcome)
+    return outcome
 
 
 # ---------------------------------------------------------------------------
@@ -1096,6 +1099,72 @@ def ingest_android_participant_truth_message(
 
 
 # ---------------------------------------------------------------------------
+# PR-10: Last reconciliation outcome — operator review surface support
+# ---------------------------------------------------------------------------
+
+import threading as _threading
+
+_last_reconciliation_lock: "_threading.Lock" = _threading.Lock()
+_last_reconciliation_outcome: Optional[Dict[str, Any]] = None
+
+
+def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutcome) -> None:
+    """Record the last reconciliation outcome for operator review surface access.
+
+    Called internally after every reconcile_android_participant_truth() call.
+    Stores a serialisable snapshot for the PR-10 orchestration review surface.
+
+    This function is **observational only** and MUST NOT influence canonical
+    reconciliation logic.
+    """
+    global _last_reconciliation_outcome  # noqa: PLW0603
+    try:
+        envelope = outcome.envelope
+        snapshot: Dict[str, Any] = {
+            "was_reconciled": outcome.was_reconciled,
+            "v2_terminal_state_blocked": bool(
+                outcome.reject_reason and "terminal" in outcome.reject_reason.lower()
+            ),
+            "advisory_only_fields_skipped": ["readiness_assessment", "runtime_state"]
+            if outcome.local_only
+            else [],
+            "applied_signal_types": [outcome.canonical_update] if outcome.was_reconciled else [],
+            "device_id": envelope.device_id if envelope else None,
+            "task_id": envelope.task_id if envelope else None,
+            "reject_reason": outcome.reject_reason,
+        }
+        with _last_reconciliation_lock:
+            _last_reconciliation_outcome = snapshot
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def get_last_reconciliation_outcome() -> Optional[Dict[str, Any]]:
+    """Return the most recent Android/V2 reconciliation outcome as a dict.
+
+    This is a **read-only observability accessor** for the PR-10 operator
+    review surface.  It returns the outcome of the last call to
+    :func:`reconcile_android_participant_truth` in this process.
+
+    Returns ``None`` when no reconciliation has been performed since startup.
+
+    The returned dict keys are:
+
+    - ``was_reconciled`` — bool
+    - ``v2_terminal_state_blocked`` — bool
+    - ``advisory_only_fields_skipped`` — list[str]
+    - ``applied_signal_types`` — list[str]
+    - ``device_id`` — str or None
+    - ``task_id`` — str or None
+    - ``reject_reason`` — str
+    """
+    with _last_reconciliation_lock:
+        if _last_reconciliation_outcome is None:
+            return None
+        return dict(_last_reconciliation_outcome)
+
+
+# ---------------------------------------------------------------------------
 # __all__
 # ---------------------------------------------------------------------------
 
@@ -1126,4 +1195,6 @@ __all__ = [
     "extract_participant_truth_envelope",
     "reconcile_android_participant_truth",
     "ingest_android_participant_truth_message",
+    # PR-10: operator review surface support
+    "get_last_reconciliation_outcome",
 ]
