@@ -94,27 +94,27 @@ def _do_reset():
         from core.canonical_task import reset_canonical_task_runtime
         reset_canonical_task_runtime()
     except Exception:
-        pass
+        pass  # module may not be loaded in all test environments
     try:
         from core.hybrid_orchestration_continuity import reset_continuity_registry
         reset_continuity_registry()
     except Exception:
-        pass
+        pass  # module may not be loaded in all test environments
     try:
         from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
         reset_lifecycle_registry()
     except Exception:
-        pass
+        pass  # module may not be loaded in all test environments
     try:
         from core.task_lifecycle_persistence import reset_task_lifecycle_store
         reset_task_lifecycle_store()
     except Exception:
-        pass
+        pass  # module may not be loaded in all test environments
     try:
         from core.replay_audit_persistence import reset_replay_audit_store
         reset_replay_audit_store()
     except Exception:
-        pass
+        pass  # module may not be loaded in all test environments
 
 
 def _build_canonical_task(goal: str = "test goal", lifecycle: str = "completed"):
