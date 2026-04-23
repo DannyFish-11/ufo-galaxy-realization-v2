@@ -40,16 +40,12 @@ Integration points in ``CommandRouter.route_envelope``
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .decision_basis import (
     DecisionBasis,
     DecisionFactor,
     make_decision_basis,
-    basis_from_availability,
-    basis_from_capability,
-    basis_from_health_score,
-    basis_from_policy_posture,
 )
 from .route_explanation import (
     RejectedCandidate,

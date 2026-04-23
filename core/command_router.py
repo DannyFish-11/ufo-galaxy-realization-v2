@@ -1169,7 +1169,7 @@ class CommandRouter:
                 ROUTE_PATH_PARALLEL_FANOUT as _P_FANOUT,
             )
 
-            _live_expl_builder: Optional[Any] = _LRDBuilder(
+            _live_expl_builder: Optional[object] = _LRDBuilder(
                 task_id=envelope.task_id,
                 trace_id=envelope.trace_id or "",
             )
@@ -1518,6 +1518,11 @@ class CommandRouter:
             _cap_query_caps = list(envelope.required_capabilities)
         elif isinstance(_meta_for_cap_query.get("required_capabilities"), list):
             _cap_query_caps = [str(c) for c in _meta_for_cap_query["required_capabilities"]]
+        # PR-H: pre-initialize capability tracking variables so they are always
+        # in scope for the live explanation wiring block below, regardless of
+        # whether the capability enforcement try block was entered or completed.
+        _cap_confirmed_targets: Optional[List[str]] = None
+        _cap_unconfirmed_targets: Optional[List[str]] = None
         try:
             from core.capability_network_runtime_policy import (
                 query_routable_executors as _query_exec,
@@ -1538,6 +1543,9 @@ class CommandRouter:
                 _current_targets = list(envelope.targets)
                 _confirmed_targets = [t for t in _current_targets if t in _canonical_ids]
                 _unconfirmed_targets = [t for t in _current_targets if t not in _canonical_ids]
+                # PR-H: expose to outer scope for live explanation wiring
+                _cap_confirmed_targets = _confirmed_targets
+                _cap_unconfirmed_targets = _unconfirmed_targets
 
                 if _confirmed_targets:
                     if _unconfirmed_targets:
@@ -1594,17 +1602,11 @@ class CommandRouter:
         # ── PR-H: Record capability enforcement into live explanation ─────────
         if _live_expl_builder is not None:
             try:
-                # Capture confirmed/unconfirmed from the local scope if available.
-                # Variables are set inside the try block above; use getattr-style
-                # locals() lookup so we don't fail if the block was skipped.
-                _cap_confirmed = locals().get("_confirmed_targets")
-                _cap_unconfirmed = locals().get("_unconfirmed_targets")
-                _cap_query_caps_hint = locals().get("_cap_query_caps")
-                if _cap_confirmed is not None or _cap_unconfirmed is not None:
+                if _cap_confirmed_targets is not None or _cap_unconfirmed_targets is not None:
                     _live_expl_builder.record_capability_enforcement(
-                        confirmed=list(_cap_confirmed or []),
-                        unconfirmed=list(_cap_unconfirmed or []),
-                        required_caps=_cap_query_caps_hint,
+                        confirmed=list(_cap_confirmed_targets or []),
+                        unconfirmed=list(_cap_unconfirmed_targets or []),
+                        required_caps=_cap_query_caps,
                     )
             except Exception:
                 pass

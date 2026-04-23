@@ -58,7 +58,6 @@ Test coverage
 from __future__ import annotations
 
 import json
-import pytest
 
 # ---------------------------------------------------------------------------
 # 1. LiveRoutingDecisionBuilder — import and instantiation
