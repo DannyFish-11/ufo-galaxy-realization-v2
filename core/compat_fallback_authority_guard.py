@@ -681,6 +681,108 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
         ),
         pr_addressed="PR-10",
     ),
+    # -------------------------------------------------------------------------
+    # INFL-009: Device truth compat cache write path (registered_devices)
+    # -------------------------------------------------------------------------
+    # PR-J: Hardened from SCOPE_LIMITED to EXPLICITLY_BOUNDED.  The
+    # registered_devices compat cache receives mirror writes from
+    # core.routes.devices and core.routes.compat.  These writes are bounded by
+    # the COMPAT_MIRROR_WRITE sentinel and must always be preceded by a UDM
+    # write.  The canonical write authority is UDM (INV-011).
+    CompatInfluenceRecord(
+        influence_id="INFL-009",
+        decision_site=(
+            "Device truth write (registration, heartbeat, unregistration) — "
+            "compat cache (registered_devices) mirror write path"
+        ),
+        canonical_path=(
+            "core.unified.device_manager.UnifiedDeviceManager (UDM) — "
+            "sole canonical device truth write authority"
+        ),
+        compat_path=(
+            "core.routes._shared.registered_devices dict — "
+            "COMPAT_MIRROR_WRITE sites in core.routes.devices and "
+            "core.routes.compat"
+        ),
+        influence_role=CompatInfluenceRole.bounded_assist,
+        bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
+        bounding_evidence=(
+            "PR-J INV-011: UDM is the sole device truth write authority; "
+            "compat writes are mirror-only and must follow a successful UDM write.  "
+            "core.routes._shared.COMPAT_MIRROR_WRITE sentinel is imported and "
+            "applied as an inline comment at every registered_devices write site "
+            "in core/routes/devices.py and core/routes/compat.py.  "
+            "core.routes._shared.REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY is "
+            "'COMPAT_CACHE_READ_ONLY'.  "
+            "core.truth_source_lock.DEVICE_WRITE_SSOT declares UDM.  "
+            "core.truth_conflict_enforcement.TruthOwnershipRecord for "
+            "TruthSurface.device catalogs allowed_compat_mirror_paths and "
+            "prohibited_write_paths.  "
+            "assert_canonical_write_precedes_compat_write() can be called at "
+            "write sites for active runtime enforcement."
+        ),
+        reviewer_note=(
+            "A reviewer can confirm bounded mirror-only status by checking that "
+            "every write to registered_devices in core/routes/devices.py and "
+            "core/routes/compat.py is preceded by a UDM write in the same "
+            "request handler (look for UDM write attempt before the "
+            "COMPAT_MIRROR_WRITE comment).  No site should write to "
+            "registered_devices without a prior UDM write attempt.  "
+            "truth_conflict_enforcement.build_truth_conflict_enforcement_snapshot() "
+            "reports the convergence health for this surface."
+        ),
+        pr_addressed="PR-J",
+    ),
+    # -------------------------------------------------------------------------
+    # INFL-010: Session truth compat write path via stale session context
+    # -------------------------------------------------------------------------
+    # PR-J: Hardened.  Stale session context and legacy session store writes
+    # that bypass AttachedSessionRegistry or CanonicalSessionTruthRuntime are
+    # explicitly bounded by INFL-007 (takeover routing gate) and INV-003
+    # (session transition ownership).  This record extends the catalog to
+    # cover direct session-state writes outside the canonical session path.
+    CompatInfluenceRecord(
+        influence_id="INFL-010",
+        decision_site=(
+            "Session truth write (session state, continuity, result merge) — "
+            "legacy/stale session context write path"
+        ),
+        canonical_path=(
+            "core.canonical_session_truth.CanonicalSessionTruthRuntime."
+            "record_session_truth() — sole canonical session truth writer; "
+            "session lifecycle transitions via "
+            "core.attached_runtime_session.AttachedRuntimeSession"
+        ),
+        compat_path=(
+            "Stale session context writes or legacy session store mutations "
+            "that bypass CanonicalSessionTruthRuntime/AttachedRuntimeSession "
+            "(e.g. expired session registry entries asserting session state)"
+        ),
+        influence_role=CompatInfluenceRole.degraded_fallback,
+        bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
+        bounding_evidence=(
+            "PR-J INV-012: CanonicalSessionTruthRuntime is the sole session "
+            "truth write authority.  "
+            "INFL-007: stale session context is explicitly prohibited from "
+            "altering the takeover/fallback routing gate "
+            "(STALE_EXECUTION_CONTEXT_CANNOT_ALTER_TAKEOVER_DECISION_PR23_POLICY).  "
+            "INV-003: AttachedRuntimeSession owns session state transitions.  "
+            "canonical_session_truth.SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY "
+            "enforces truth_source vocabulary governance.  "
+            "core.truth_conflict_enforcement.TruthOwnershipRecord for "
+            "TruthSurface.session catalogs prohibited_write_paths."
+        ),
+        reviewer_note=(
+            "A reviewer can confirm bounded status by checking that all "
+            "session state writes go through record_session_truth() and that "
+            "AttachedRuntimeSession.attach/detach/reconnect are the only "
+            "session lifecycle transition callers.  Any code that directly "
+            "mutates session state outside these paths is a policy violation.  "
+            "truth_conflict_enforcement.build_truth_conflict_enforcement_snapshot() "
+            "exposes session surface convergence health."
+        ),
+        pr_addressed="PR-J",
+    ),
 ]
 
 
