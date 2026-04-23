@@ -17,9 +17,11 @@ Routes owned by this module:
   GET /api/v1/monitoring/health       - 健康检查聚合
   GET /api/v1/monitoring/alerts       - 告警列表
   GET /api/v1/monitoring/metrics      - 系统指标
-  GET /metrics                        - Prometheus 指标
+  GET /metrics                        - Prometheus 指标 (includes SLO + operational SLO)
   GET /health/metrics                 - Prometheus 指标 (别名)
   GET /api/v1/monitoring/performance  - 性能指标
+  GET /api/v1/slo/metrics             - SLO 指标 JSON (PR-G2)
+  GET /api/v1/slo/operational         - Operational SLO 指标 JSON (PR-I)
 """
 
 import logging
@@ -111,6 +113,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception:
             pass
 
+        # PR-G2: SLO metrics (startup, heartbeat, reconnect, command latency)
+        try:
+            from core.slo_metrics import get_slo_metrics
+            lines.append(get_slo_metrics().prometheus_text().rstrip("\n"))
+        except Exception:
+            pass
+
+        # PR-I: Operational SLO metrics (dispatch, recovery, fallback, audit persistence)
+        try:
+            from core.operational_slo_metrics import get_operational_slo_metrics
+            lines.append(get_operational_slo_metrics().prometheus_text().rstrip("\n"))
+        except Exception:
+            pass
+
         return Response(content="\n".join(lines) + "\n", media_type="text/plain; charset=utf-8")
 
     @router.get("/api/v1/monitoring/performance")
@@ -119,5 +135,30 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         from core.performance import PerformanceMonitor
         perf = PerformanceMonitor.instance()
         return JSONResponse(perf.get_dashboard())
+
+    # PR-G2: SLO metrics JSON endpoint
+    @router.get("/api/v1/slo/metrics")
+    async def slo_metrics():
+        """SLO metrics JSON endpoint (PR-G2).
+
+        Returns a JSON snapshot of the process-level SLO indicators:
+        startup duration, heartbeat loss rate, reconnect total, and
+        command latency percentiles.
+        """
+        from core.slo_metrics import get_slo_metrics
+        return JSONResponse(get_slo_metrics().snapshot())
+
+    # PR-I: Operational SLO metrics JSON endpoint
+    @router.get("/api/v1/slo/operational")
+    async def operational_slo_metrics():
+        """Operational SLO metrics JSON endpoint (PR-I).
+
+        Returns a JSON snapshot of runtime orchestration counters so
+        operators can inspect dispatch, recovery, fallback, routing
+        rejection, startup recovery scan, and durable-audit persistence
+        outcomes without ad-hoc log inspection.
+        """
+        from core.operational_slo_metrics import get_operational_slo_metrics
+        return JSONResponse(get_operational_slo_metrics().snapshot())
 
     return router
