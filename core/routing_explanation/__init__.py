@@ -144,6 +144,14 @@ from .explanation_summary import (
     resolve_explanation_from_projection,
     IDLE_EXPLANATION_SUMMARY,
 )
+from .live_decision import (
+    LiveRoutingDecisionBuilder,
+    live_explanation_to_record_str,
+    ROUTE_PATH_CROSS_DEVICE,
+    ROUTE_PATH_WORKER,
+    ROUTE_PATH_LOCAL,
+    ROUTE_PATH_PARALLEL_FANOUT,
+)
 
 __all__ = [
     # Decision factor
@@ -175,4 +183,11 @@ __all__ = [
     "get_explanation_hints",
     "resolve_explanation_from_projection",
     "IDLE_EXPLANATION_SUMMARY",
+    # Live decision wiring (PR-H)
+    "LiveRoutingDecisionBuilder",
+    "live_explanation_to_record_str",
+    "ROUTE_PATH_CROSS_DEVICE",
+    "ROUTE_PATH_WORKER",
+    "ROUTE_PATH_LOCAL",
+    "ROUTE_PATH_PARALLEL_FANOUT",
 ]

@@ -1156,6 +1156,27 @@ class CommandRouter:
 
         PR-5: ACL check + lifecycle state transitions applied here.
         """
+        # ── PR-H: Instantiate live routing explanation collector ──────────────
+        # One builder per route_envelope call.  Signals are recorded at each
+        # decision point below and assembled into a RouteExplanation at the end.
+        try:
+            from core.routing_explanation.live_decision import (
+                LiveRoutingDecisionBuilder as _LRDBuilder,
+                live_explanation_to_record_str as _expl_to_str,
+                ROUTE_PATH_CROSS_DEVICE as _P_CROSS,
+                ROUTE_PATH_WORKER as _P_WORKER,
+                ROUTE_PATH_LOCAL as _P_LOCAL,
+                ROUTE_PATH_PARALLEL_FANOUT as _P_FANOUT,
+            )
+
+            _live_expl_builder: Optional[object] = _LRDBuilder(
+                task_id=envelope.task_id,
+                trace_id=envelope.trace_id or "",
+            )
+        except Exception as _lrdb_exc:
+            logger.debug("route_envelope: LiveRoutingDecisionBuilder unavailable: %s", _lrdb_exc)
+            _live_expl_builder = None
+
         # ── Canonical chain: stamp COMMAND_ROUTER_ORCHESTRATION stage ────────
         # Emit a MainlineChainStage.COMMAND_ROUTER_ORCHESTRATION event so
         # observability and tests can verify the canonical chain is traversed.
@@ -1361,6 +1382,16 @@ class CommandRouter:
                     _posture_gate_exc,
                 )
 
+            # ── PR-H: Record posture gate result into live explanation ────────
+            if _live_expl_builder is not None and _constraint_chain_trace.get("posture_filter_applied"):
+                try:
+                    _live_expl_builder.record_posture_gate(
+                        posture=str(_constraint_chain_trace.get("posture_value") or ""),
+                        eligible=bool(_constraint_chain_trace.get("posture_eligible", True)),
+                    )
+                except Exception:
+                    pass
+
         # ── Gate B: Admissibility chain for device targets ───────────────────
         # Validates envelope targets via the canonical admissibility chain
         # (readiness → participation → capability) before any path branching,
@@ -1446,6 +1477,20 @@ class CommandRouter:
                     _adm_pre_exc,
                 )
 
+            # ── PR-H: Record admissibility gate into live explanation ─────────
+            if _live_expl_builder is not None and _constraint_chain_trace.get("admissibility_applied"):
+                try:
+                    _adm_excl_pairs = [
+                        (dev_id, ["failed admissibility check"])
+                        for dev_id in (_constraint_chain_trace.get("admissibility_excluded") or [])
+                    ]
+                    _live_expl_builder.record_admissibility_gate(
+                        validated=list(_constraint_chain_trace.get("admissibility_validated") or []),
+                        excluded=_adm_excl_pairs,
+                    )
+                except Exception:
+                    pass
+
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:
             from core.task_lifecycle import get_lifecycle_manager
@@ -1473,6 +1518,11 @@ class CommandRouter:
             _cap_query_caps = list(envelope.required_capabilities)
         elif isinstance(_meta_for_cap_query.get("required_capabilities"), list):
             _cap_query_caps = [str(c) for c in _meta_for_cap_query["required_capabilities"]]
+        # PR-H: pre-initialize capability tracking variables so they are always
+        # in scope for the live explanation wiring block below, regardless of
+        # whether the capability enforcement try block was entered or completed.
+        _cap_confirmed_targets: Optional[List[str]] = None
+        _cap_unconfirmed_targets: Optional[List[str]] = None
         try:
             from core.capability_network_runtime_policy import (
                 query_routable_executors as _query_exec,
@@ -1493,6 +1543,9 @@ class CommandRouter:
                 _current_targets = list(envelope.targets)
                 _confirmed_targets = [t for t in _current_targets if t in _canonical_ids]
                 _unconfirmed_targets = [t for t in _current_targets if t not in _canonical_ids]
+                # PR-H: expose to outer scope for live explanation wiring
+                _cap_confirmed_targets = _confirmed_targets
+                _cap_unconfirmed_targets = _unconfirmed_targets
 
                 if _confirmed_targets:
                     if _unconfirmed_targets:
@@ -1546,6 +1599,18 @@ class CommandRouter:
         except Exception as _cap_exc:
             logger.debug("route_envelope: capability/network canonical query skipped: %s", _cap_exc)
 
+        # ── PR-H: Record capability enforcement into live explanation ─────────
+        if _live_expl_builder is not None:
+            try:
+                if _cap_confirmed_targets is not None or _cap_unconfirmed_targets is not None:
+                    _live_expl_builder.record_capability_enforcement(
+                        confirmed=list(_cap_confirmed_targets or []),
+                        unconfirmed=list(_cap_unconfirmed_targets or []),
+                        required_caps=_cap_query_caps,
+                    )
+            except Exception:
+                pass
+
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:
             from core.task_graph_runtime import (
@@ -1598,6 +1663,16 @@ class CommandRouter:
             )
 
         # ── PR-506: Record route decision in ReplayFoundation ────────────────
+        # PR-H: Build a partial live explanation from signals collected so far
+        # (posture gate, admissibility gate, capability enforcement) and use it
+        # as the route_explanation instead of the static placeholder string.
+        _pre_dispatch_expl_str = "canonical dispatch via CommandRouter.route_envelope"
+        if _live_expl_builder is not None:
+            try:
+                _pre_dispatch_expl = _live_expl_builder.build()
+                _pre_dispatch_expl_str = _expl_to_str(_pre_dispatch_expl)
+            except Exception:
+                pass
         try:
             from core.replay_foundation import (
                 record_route_decision as _record_route,
@@ -1610,7 +1685,7 @@ class CommandRouter:
                 trace_id=envelope.trace_id or "",
                 selected_targets=list(envelope.targets),
                 effective_path="command_router",
-                route_explanation=("canonical dispatch via CommandRouter.route_envelope"),
+                route_explanation=_pre_dispatch_expl_str,
             )
             _emit_ev(
                 ReplayEventKind.ROUTE_DECISION,
@@ -1701,6 +1776,19 @@ class CommandRouter:
                 _ETT.node_service,
             ):
                 # Android device or node service — route via cross-device substrate.
+                # PR-H: record path selection
+                if _live_expl_builder is not None:
+                    try:
+                        _live_expl_builder.record_route_path_selection(
+                            _P_CROSS,
+                            selected_target=envelope.target,
+                            reason=(
+                                f"explicit executor_target_type='{_explicit_target_type}' "
+                                "→ cross-device substrate (DeviceRouter)"
+                            ),
+                        )
+                    except Exception:
+                        pass
                 result = await self._route_cross_device_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -1708,6 +1796,19 @@ class CommandRouter:
                 )
             elif _ETT is not None and _explicit_target_type == _ETT.go_worker:
                 # Go worker — delegate to MasterBrain/worker dispatch boundary.
+                # PR-H: record path selection
+                if _live_expl_builder is not None:
+                    try:
+                        _live_expl_builder.record_route_path_selection(
+                            _P_WORKER,
+                            selected_target=envelope.target,
+                            reason=(
+                                "explicit executor_target_type='go_worker' "
+                                "→ MasterBrain worker domain"
+                            ),
+                        )
+                    except Exception:
+                        pass
                 result = await self._route_worker_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -1715,6 +1816,19 @@ class CommandRouter:
                 )
             else:
                 # local (or unknown explicit type) — local runtime execution.
+                # PR-H: record path selection
+                if _live_expl_builder is not None:
+                    try:
+                        _live_expl_builder.record_route_path_selection(
+                            _P_LOCAL,
+                            selected_target=envelope.target,
+                            reason=(
+                                f"explicit executor_target_type='{_explicit_target_type}' "
+                                "→ local runtime execution"
+                            ),
+                        )
+                    except Exception:
+                        pass
                 result = await self._execute_command(
                     device_id=envelope.target,
                     command=envelope.tool_name,
@@ -1758,12 +1872,32 @@ class CommandRouter:
                     )
             except Exception:  # noqa: BLE001
                 pass
+            # PR-H: record heuristic cross-device path selection
+            if _live_expl_builder is not None:
+                try:
+                    _live_expl_builder.record_route_path_selection(
+                        _P_CROSS,
+                        selected_target=envelope.target,
+                        reason="metadata cross_device=true → cross-device substrate (DeviceRouter)",
+                    )
+                except Exception:
+                    pass
             result = await self._route_cross_device_envelope(
                 envelope=envelope,
                 command_id=command_id,
                 request_id=request_id,
             )
         elif meta.get("parallel_fanout") == "true":
+            # PR-H: record parallel fanout path selection
+            if _live_expl_builder is not None:
+                try:
+                    _live_expl_builder.record_route_path_selection(
+                        _P_FANOUT,
+                        selected_target=None,
+                        reason="metadata parallel_fanout=true → canonical parallel fan-out",
+                    )
+                except Exception:
+                    pass
             result = await self._route_parallel_fanout_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -1822,6 +1956,19 @@ class CommandRouter:
                     )
             except Exception:  # noqa: BLE001
                 pass
+            # PR-H: record local path selection
+            if _live_expl_builder is not None:
+                try:
+                    _live_expl_builder.record_route_path_selection(
+                        _P_LOCAL,
+                        selected_target=envelope.target,
+                        reason=(
+                            "no explicit executor_target_type or cross-device/fanout metadata; "
+                            "dispatching via local execution runtime"
+                        ),
+                    )
+                except Exception:
+                    pass
             result = await self._execute_command(
                 device_id=envelope.target,
                 command=envelope.tool_name,
@@ -1845,6 +1992,28 @@ class CommandRouter:
             "posture_filter_applied"
         ):
             result.setdefault("_constraint_chain_trace", _constraint_chain_trace)
+
+        # ── PR-H: Finalise live routing explanation and attach to result ───────
+        # Now that the dispatch path has been selected and the result is known,
+        # record the outcome and produce the full RouteExplanation + summary.
+        # Attach it to the result dict so operators and reviewers can inspect
+        # actual decision causality without re-running routing logic.
+        if _live_expl_builder is not None:
+            try:
+                _live_expl_builder.record_result_outcome(
+                    success=bool(result.get("success")),
+                    error_code=str(result.get("error_code") or ""),
+                    via=str(result.get("via") or ""),
+                )
+                _final_explanation = _live_expl_builder.build()
+                _final_summary = _live_expl_builder.build_summary()
+                result.setdefault("routing_explanation", _final_explanation.to_dict())
+                result.setdefault("routing_explanation_summary", _final_summary.to_dict())
+            except Exception as _expl_fin_exc:
+                logger.debug(
+                    "route_envelope: live explanation finalisation skipped (non-fatal): %s",
+                    _expl_fin_exc,
+                )
 
         # ── PR-506: Close graph / replay / audit from result ─────────────────
         try:
