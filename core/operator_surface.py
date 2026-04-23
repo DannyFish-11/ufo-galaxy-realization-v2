@@ -1115,6 +1115,7 @@ class OperatorSurface:
             from core.task_lifecycle_persistence import (
                 classify_disposition,
                 get_task_lifecycle_store,
+                InFlightTaskDisposition,
             )
             store = get_task_lifecycle_store()
             snapshot = store.load()
@@ -1127,7 +1128,9 @@ class OperatorSurface:
                         owner_str = raw_rec.get("owner", "")
                         disp = classify_disposition(owner_str)
                         recovery_disposition = disp.value
-                        recovery_action_taken = disp.value != "terminal_on_interrupt"
+                        recovery_action_taken = (
+                            disp != InFlightTaskDisposition.TERMINAL_ON_INTERRUPT
+                        )
                         recovery_note = (
                             f"Recovered from snapshot {snapshot_id}: "
                             f"disposition={recovery_disposition}, "
@@ -1213,6 +1216,34 @@ class OperatorSurface:
             logger.warning("inspect_partial_result(%s) failed: %s", task_id, exc)
             return None
 
+    # ── Private helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_task_id_from_payload(payload: Dict[str, Any]) -> Optional[str]:
+        """Return the task_id from an audit payload dict, trying canonical field names.
+
+        Checks ``task_id``, ``canonical_task_id``, and ``execution_task_id``
+        in order, returning the first truthy value found.
+        """
+        return (
+            payload.get("task_id")
+            or payload.get("canonical_task_id")
+            or payload.get("execution_task_id")
+        )
+
+    @staticmethod
+    def _is_reviewable(
+        task_insp: Optional["TaskInspection"],
+        audit_insp: "AuditEvidenceInspection",
+        recovery_insp: Optional["RecoveryInspection"],
+    ) -> bool:
+        """Return True when sufficient evidence exists for a postmortem review."""
+        return (
+            task_insp is not None
+            or audit_insp.has_evidence
+            or recovery_insp is not None
+        )
+
     # ── Audit Evidence Inspection ────────────────────────────────────────
 
     def inspect_audit_evidence(self, task_id: str) -> AuditEvidenceInspection:
@@ -1237,13 +1268,7 @@ class OperatorSurface:
             by_kind: Dict[str, int] = {}
             timestamps: List[float] = []
             for audit_rec in all_records:
-                payload = audit_rec.payload
-                # Match by task_id in payload fields
-                payload_task_id = (
-                    payload.get("task_id")
-                    or payload.get("canonical_task_id")
-                    or payload.get("execution_task_id")
-                )
+                payload_task_id = self._extract_task_id_from_payload(audit_rec.payload)
                 if payload_task_id == task_id:
                     kind = audit_rec.kind
                     by_kind[kind] = by_kind.get(kind, 0) + 1
@@ -1320,11 +1345,7 @@ class OperatorSurface:
             summary.trace_id = lineage_insp.trace_id or ""
 
         # Reviewability: enough data to reason about what happened
-        summary.reviewable = (
-            task_insp is not None
-            or audit_insp.has_evidence
-            or recovery_insp is not None
-        )
+        summary.reviewable = self._is_reviewable(task_insp, audit_insp, recovery_insp)
         if not summary.reviewable:
             notes.append(
                 "Task not found in canonical runtime, lifecycle registry, "
