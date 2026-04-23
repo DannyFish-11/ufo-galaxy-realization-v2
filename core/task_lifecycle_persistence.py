@@ -112,6 +112,9 @@ __all__ = [
     "TASK_LIFECYCLE_PERSISTENCE_GAP_CLOSURE_SENTINEL",
     "DISPOSITION_POLICY_IS_EXPLICIT",
     "RECOVERY_RESTORES_INTERRUPTED_RECORDS_POLICY",
+    "TERMINAL_DISPOSITION_IS_FINAL_POLICY",
+    "SNAPSHOT_DEDUPLICATION_POLICY",
+    "INTERRUPTION_CLASS_VS_DISPOSITION_POLICY",
     # Enums
     "InFlightTaskDisposition",
     # Data classes
@@ -163,6 +166,46 @@ RECOVERY_RESTORES_INTERRUPTED_RECORDS_POLICY: str = (
     "most recent durable snapshot and annotates each with 'interrupted_at' and "
     "its InFlightTaskDisposition.  Records are NOT silently discarded; callers "
     "can decide per-disposition whether to resume, replay, re-issue, or terminate."
+)
+
+TERMINAL_DISPOSITION_IS_FINAL_POLICY: str = (
+    "POLICY::TERMINAL_DISPOSITION_IS_FINAL: "
+    "InFlightTaskDisposition.TERMINAL_ON_INTERRUPT is a delivery-sensitive "
+    "terminal state that MUST NOT be re-activated or re-registered in the "
+    "pending lifecycle registry after restart.  A task that was in "
+    "'result_completion' ownership at the time of interruption may have already "
+    "delivered its result to the caller.  Re-registering it would risk duplicate "
+    "completion, duplicate delivery, or ambiguous finalization.  "
+    "TERMINAL_ON_INTERRUPT is distinct from ExecutionInterruptionClass.terminal: "
+    "the interruption class describes the interruption event; the disposition "
+    "describes the safe post-restart handling.  A recoverable interruption "
+    "(interruption_class=recoverable) may still produce a TERMINAL_ON_INTERRUPT "
+    "disposition if the task had already reached result_completion ownership. "
+    "(PR-G)"
+)
+
+SNAPSHOT_DEDUPLICATION_POLICY: str = (
+    "POLICY::SNAPSHOT_DEDUPLICATION: When restore_inflight_tasks_from_snapshot() "
+    "processes a snapshot, it deduplicates records by task_id, keeping the "
+    "first occurrence.  Subsequent records with the same task_id are dropped "
+    "with a warning.  This prevents a malformed or double-written snapshot "
+    "from producing duplicate registry insertions, duplicate ownership "
+    "assignments, or duplicate dispatch actions during recovery.  (PR-G)"
+)
+
+INTERRUPTION_CLASS_VS_DISPOSITION_POLICY: str = (
+    "POLICY::INTERRUPTION_CLASS_VS_DISPOSITION: "
+    "ExecutionInterruptionClass (recoverable/terminal) and "
+    "InFlightTaskDisposition (RESUMABLE/REPLAY_ONLY/REISSUABLE/TERMINAL_ON_INTERRUPT) "
+    "are orthogonal concepts that must not be conflated.  "
+    "ExecutionInterruptionClass describes the nature of the execution interruption "
+    "event (was the transport recoverable?).  InFlightTaskDisposition describes "
+    "the safe post-restart handling of a persisted lifecycle record based on the "
+    "ownership stage it held at the time of interruption.  A task may have a "
+    "recoverable interruption_class but still be classified as TERMINAL_ON_INTERRUPT "
+    "if it was in result_completion ownership — the result may have been delivered "
+    "before the transport failed.  Callers MUST use InFlightTaskDisposition (not "
+    "ExecutionInterruptionClass) to decide recovery dispatch semantics.  (PR-G)"
 )
 
 # ---------------------------------------------------------------------------
@@ -616,6 +659,15 @@ def restore_inflight_tasks_from_snapshot(
     * ``interrupted_at`` set to *now* (the restart observation time).
     * ``disposition`` assigned according to :func:`classify_disposition`.
 
+    Intra-snapshot deduplication
+    ----------------------------
+    Records are deduplicated by ``task_id`` within the snapshot before being
+    returned.  When the same ``task_id`` appears more than once (e.g. from a
+    malformed or double-written snapshot), only the **first** occurrence is
+    kept; subsequent duplicates are dropped with a warning.  This prevents
+    duplicate registry insertions and duplicate dispatch actions during
+    recovery.  See :data:`SNAPSHOT_DEDUPLICATION_POLICY`. (PR-G)
+
     The snapshot file is **not** deleted after loading — it remains on disk
     until :class:`TaskEnvelopeLifecycleRegistry` writes a new (empty) snapshot
     after the registry reinitialises.  This prevents a partial recovery from
@@ -632,8 +684,8 @@ def restore_inflight_tasks_from_snapshot(
     Returns
     -------
     list of RestoredTaskRecord
-        All records from the snapshot.  Returns an empty list if no snapshot
-        exists or the file is unreadable.
+        All records from the snapshot, deduplicated by ``task_id``.  Returns
+        an empty list if no snapshot exists or the file is unreadable.
     """
     _store = store or get_task_lifecycle_store()
     _now = now if now is not None else time.time()
@@ -647,6 +699,9 @@ def restore_inflight_tasks_from_snapshot(
         return []
 
     restored: List[RestoredTaskRecord] = []
+    seen_task_ids: Dict[str, int] = {}  # task_id → index of first occurrence
+    duplicate_count = 0
+
     for raw in snapshot.records:
         try:
             rec = RestoredTaskRecord.from_record_dict(
@@ -654,7 +709,6 @@ def restore_inflight_tasks_from_snapshot(
                 interrupted_at=_now,
                 snapshot_id=snapshot.snapshot_id,
             )
-            restored.append(rec)
         except Exception as exc:
             logger.warning(
                 "TaskLifecyclePersistence: skipping malformed record in "
@@ -662,13 +716,34 @@ def restore_inflight_tasks_from_snapshot(
                 snapshot.snapshot_id,
                 exc,
             )
+            continue
+
+        # Intra-snapshot deduplication — keep first occurrence only.
+        if rec.task_id and rec.task_id in seen_task_ids:
+            duplicate_count += 1
+            logger.warning(
+                "TaskLifecyclePersistence: duplicate task_id=%s in snapshot "
+                "%s (first seen at index %d, current index %d) — "
+                "dropping duplicate to prevent double dispatch. "
+                "See SNAPSHOT_DEDUPLICATION_POLICY.",
+                rec.task_id,
+                snapshot.snapshot_id,
+                seen_task_ids[rec.task_id],
+                len(restored) + duplicate_count - 1,
+            )
+            continue
+
+        if rec.task_id:
+            seen_task_ids[rec.task_id] = len(restored)
+        restored.append(rec)
 
     logger.info(
         "TaskLifecyclePersistence: restored %d in-flight task records from "
-        "snapshot %s (written by pid=%d at %.0f)",
+        "snapshot %s (written by pid=%d at %.0f; %d intra-snapshot duplicates dropped)",
         len(restored),
         snapshot.snapshot_id,
         snapshot.process_pid,
         snapshot.created_at,
+        duplicate_count,
     )
     return restored

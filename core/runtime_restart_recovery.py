@@ -98,6 +98,8 @@ __all__ = [
     "INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY",
     "HYBRID_CONTINUITY_RECONSTRUCTION_POLICY",
     "RECOVERED_LIFECYCLE_DISPATCH_POLICY",
+    "RECOVERY_DUPLICATE_SAFETY_POLICY",
+    "RECOVERY_IDEMPOTENCY_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -202,6 +204,38 @@ RECOVERED_LIFECYCLE_DISPATCH_POLICY: str = (
     "canonical conversion from descriptive recovery to operational execution."
 )
 
+# PR-G: duplicate-safety for recovery dispatch
+RECOVERY_DUPLICATE_SAFETY_POLICY: str = (
+    "POLICY::RECOVERY_DUPLICATE_SAFETY: "
+    "RuntimeRestartRecoveryCoordinator enforces three layers of duplicate "
+    "suppression during recovery-to-execution transitions to prevent duplicate "
+    "ownership, duplicate completion, and ambiguous finalization: "
+    "(1) TERMINAL_ON_INTERRUPT records are never registered in the pending "
+    "registry — the result may already have been delivered; "
+    "(2) records whose task_id is already present in the live registry are "
+    "skipped — in-process state takes precedence over snapshot state; "
+    "(3) intra-snapshot duplicates (same task_id appearing more than once in "
+    "a single snapshot) are deduplicated by restore_inflight_tasks_from_snapshot(), "
+    "keeping the first occurrence.  All three layers are counted separately in "
+    "RuntimeRecoveryReport (inflight_tasks_terminal, "
+    "inflight_tasks_already_pending_skipped) and are logged for reviewability. "
+    "(PR-G)"
+)
+
+# PR-G: recovery idempotency
+RECOVERY_IDEMPOTENCY_POLICY: str = (
+    "POLICY::RECOVERY_IDEMPOTENCY: "
+    "Running RuntimeRestartRecoveryCoordinator.run_recovery() more than once "
+    "is safe.  The duplicate guard in _dispatch_recovered_tasks() ensures that "
+    "tasks already registered in the lifecycle registry by an earlier recovery "
+    "pass are skipped on subsequent passes.  The intra-snapshot deduplication "
+    "in restore_inflight_tasks_from_snapshot() ensures that each task_id from "
+    "the snapshot is processed at most once per pass.  Together these two guards "
+    "make repeated recovery runs idempotent with respect to registry state: "
+    "the set of pending records after N recovery passes is identical to the set "
+    "after one pass. (PR-G)"
+)
+
 
 
 @dataclass
@@ -251,6 +285,7 @@ class RuntimeRecoveryReport:
     inflight_tasks_reissuable: int = 0
     inflight_tasks_terminal: int = 0
     inflight_tasks_dispatch_actions_taken: int = 0
+    inflight_tasks_already_pending_skipped: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -273,6 +308,7 @@ class RuntimeRecoveryReport:
             "inflight_tasks_reissuable": self.inflight_tasks_reissuable,
             "inflight_tasks_terminal": self.inflight_tasks_terminal,
             "inflight_tasks_dispatch_actions_taken": self.inflight_tasks_dispatch_actions_taken,
+            "inflight_tasks_already_pending_skipped": self.inflight_tasks_already_pending_skipped,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -712,6 +748,7 @@ class RuntimeRestartRecoveryCoordinator:
             return
 
         actions_taken = 0
+        already_pending_skipped = 0
         import time as _time_mod
 
         for rec in restored:
@@ -744,10 +781,11 @@ class RuntimeRestartRecoveryCoordinator:
 
             # Duplicate guard — never overwrite a live in-process record.
             if registry.is_pending(rec.task_id):
+                already_pending_skipped += 1
                 logger.debug(
                     "RuntimeRestartRecovery._dispatch_recovered_tasks: "
                     "task_id=%s already pending — skipping (live record takes "
-                    "precedence)",
+                    "precedence). See RECOVERY_DUPLICATE_SAFETY_POLICY.",
                     rec.task_id,
                 )
                 continue
@@ -797,11 +835,14 @@ class RuntimeRestartRecoveryCoordinator:
                 )
 
         report.inflight_tasks_dispatch_actions_taken = actions_taken
+        report.inflight_tasks_already_pending_skipped = already_pending_skipped
         logger.info(
             "RuntimeRestartRecovery._dispatch_recovered_tasks: "
-            "%d dispatch action(s) taken (%d terminal skipped)",
+            "%d dispatch action(s) taken (%d terminal skipped, %d already-pending skipped). "
+            "See RECOVERY_DUPLICATE_SAFETY_POLICY.",
             actions_taken,
             report.inflight_tasks_terminal,
+            already_pending_skipped,
         )
 
 
