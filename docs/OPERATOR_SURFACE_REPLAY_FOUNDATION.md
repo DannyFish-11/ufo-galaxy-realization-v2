@@ -86,10 +86,72 @@ failure_view = surface.inspect_failure_domain("task_abc123")
 lineage_view = surface.inspect_lineage("task_abc123")
 # → LineageInspection | None
 
+# Inspect recovery disposition (PR-K)
+recovery_view = surface.inspect_recovery("task_abc123")
+# → RecoveryInspection | None
+
+# Inspect hybrid partial-result outcome (PR-K)
+partial_view = surface.inspect_partial_result("task_abc123")
+# → PartialResultInspection | None
+
+# Inspect durable audit evidence coverage (PR-K)
+audit_view = surface.inspect_audit_evidence("task_abc123")
+# → AuditEvidenceInspection  (always non-None)
+
+# Unified end-to-end postmortem review (PR-K)
+review = surface.end_to_end_review("task_abc123")
+# → EndToEndReviewSummary  (always non-None)
+
 # Compact operator snapshot (all dimensions)
 snap = surface.operator_snapshot()
 # → OperatorSnapshot
 ```
+
+### End-to-End Review (PR-K)
+
+`end_to_end_review(task_id)` returns an `EndToEndReviewSummary` containing:
+
+| Field | Type | Description |
+|---|---|---|
+| `task` | `TaskInspection \| None` | Core lifecycle, intent, result |
+| `route` | `RouteInspection \| None` | Routing decision details |
+| `recovery` | `RecoveryInspection \| None` | Recovery disposition after interruption |
+| `partial_result` | `PartialResultInspection \| None` | Hybrid partial-result outcome |
+| `audit_evidence` | `AuditEvidenceInspection` | Durable evidence coverage |
+| `lineage` | `LineageInspection \| None` | Task lineage / timeline |
+| `reviewable` | `bool` | True when sufficient data exists for postmortem |
+| `review_notes` | `List[str]` | Evidence gaps and notable findings |
+
+This single API replaces the need to manually assemble data from multiple
+surfaces for postmortem and operational diagnosis.
+
+### Recovery Inspection (PR-K)
+
+`inspect_recovery(task_id)` returns a `RecoveryInspection` showing:
+
+- `recovery_disposition` — `"resumable"`, `"replay_only"`, `"reissuable"`, or `"terminal_on_interrupt"`
+- `current_owner` — current lifecycle ownership stage from the live registry
+- `recovery_action_taken` — whether a concrete registry action was taken (False for terminal records)
+- `recovery_note` — human-readable summary of what happened during recovery
+
+### Partial-Result Inspection (PR-K)
+
+`inspect_partial_result(task_id)` returns a `PartialResultInspection` showing:
+
+- `partial_result_disposition` — `"preserved"`, `"invalidated"`, `"merged"`, or `"resumed"`
+- `partial_result_origin` — `"local"` or `"remote"`
+- `resume_count` — number of times the hybrid execution was resumed
+- `has_partial_result` — whether a partial result snapshot exists
+
+### Audit Evidence Inspection (PR-K)
+
+`inspect_audit_evidence(task_id)` returns an `AuditEvidenceInspection` showing:
+
+- `has_evidence` — True when at least one durable audit record references this task
+- `evidence_count` — total number of matching durable audit records
+- `by_kind` — dict mapping audit record kind to count
+- `audit_kinds_present` — sorted list of audit kinds present
+- `earliest_record_at` / `latest_record_at` — timestamp range of matching records
 
 ### Projection Data Types
 
@@ -103,6 +165,9 @@ runtime layer provided the data:
 | `ExecutorInspection` | `"capability_assimilation"` |
 | `FailureDomainInspection` | `"task_graph_runtime"` |
 | `LineageInspection` | `"task_graph_runtime"` |
+| `RecoveryInspection` | `"task_lifecycle_registry"` |
+| `PartialResultInspection` | `"hybrid_orchestration_continuity_registry"` |
+| `AuditEvidenceInspection` | `"durable_audit_store"` |
 | `DevicePresenceSummary` | `"network_topology_runtime"` |
 
 ---
@@ -275,7 +340,7 @@ subsystem internals or legacy caches directly.
 
 ---
 
-## Files Added by PR-E
+## Files Added by PR-E / PR-K
 
 | File | Purpose |
 |---|---|
@@ -283,6 +348,7 @@ subsystem internals or legacy caches directly.
 | `core/replay_foundation.py` | Replay/audit foundation |
 | `core/audit_event_semantics.py` | Unified audit event vocabulary |
 | `tests/test_operator_surface_contracts.py` | Operator surface contract tests |
+| `tests/test_operator_surface_review.py` | PR-K: recovery/audit/review inspection tests |
 | `tests/test_projection_reads_runtime_only.py` | Projection discipline tests |
 | `tests/test_replay_foundation.py` | Replay foundation tests |
 | `tests/test_audit_event_semantics.py` | Audit event semantics tests |
@@ -295,7 +361,9 @@ subsystem internals or legacy caches directly.
 
 - ✅ Operator surface based on canonical runtime, not ad-hoc data assembly.
 - ✅ Task / route / provider / failure / fallback can be inspected and explained.
+- ✅ Recovery disposition, routing causality, partial-result outcomes, and audit evidence are reviewable from a single surface (`end_to_end_review`).
 - ✅ Replay/audit foundation supports reviewing execution chain and key decisions.
 - ✅ UI/surface follows projection-only principle (`_source` fields declared).
 - ✅ Unified audit vocabulary prevents parallel audit formats.
 - ✅ All records are serialisable (JSON) for future persistence and time-travel.
+- ✅ Operator inspection no longer depends on manual reconstruction from scattered log/JSONL sources.

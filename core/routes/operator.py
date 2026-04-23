@@ -40,6 +40,25 @@ Routes
       Task lineage / timeline projection.
       Returns 404 when no lineage data is available for the task.
 
+  GET /api/v1/operator/inspect/recovery/{task_id}
+      Recovery disposition projection for a single task: whether work was
+      resumed, replayed, re-dispatched, or treated as terminal after
+      interruption.  Returns 404 when no recovery record is available.
+
+  GET /api/v1/operator/inspect/partial-result/{task_id}
+      Hybrid orchestration partial-result outcome: preserved, invalidated,
+      merged, or resumed.  Returns 404 when no hybrid execution record is
+      found for the task.
+
+  GET /api/v1/operator/inspect/audit-evidence/{task_id}
+      Durable audit evidence coverage for a single task — record counts
+      by kind, timestamp range.  Always returns a valid payload.
+
+  GET /api/v1/operator/review/{task_id}
+      Unified end-to-end postmortem review: combines task lifecycle, routing
+      decision, recovery disposition, partial-result outcome, audit evidence,
+      and lineage in one response.  Always returns a valid payload.
+
 Design constraints
 ------------------
 - **Read-only** — no writes, no side-effects.
@@ -241,6 +260,120 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content=result.to_dict())
         except Exception as exc:
             logger.error("inspect_lineage(%s) endpoint error: %s", task_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/inspect/recovery/{task_id}
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/inspect/recovery/{task_id}")
+    async def inspect_recovery(task_id: str) -> JSONResponse:
+        """Return a :class:`~core.operator_surface.RecoveryInspection` for *task_id*.
+
+        Surfaces recovery disposition: whether the task was resumed,
+        replayed, re-dispatched, or treated as terminal after an
+        interruption.
+
+        Returns HTTP 404 when no recovery record is available for the task.
+        """
+        try:
+            from core.operator_surface import get_operator_surface
+            surface = get_operator_surface()
+            result = surface.inspect_recovery(task_id)
+            if result is None:
+                return JSONResponse(
+                    content={"detail": f"recovery record for task '{task_id}' not found"},
+                    status_code=404,
+                )
+            return JSONResponse(content=result.to_dict())
+        except Exception as exc:
+            logger.error("inspect_recovery(%s) endpoint error: %s", task_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/inspect/partial-result/{task_id}
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/inspect/partial-result/{task_id}")
+    async def inspect_partial_result(task_id: str) -> JSONResponse:
+        """Return a :class:`~core.operator_surface.PartialResultInspection` for *task_id*.
+
+        Surfaces the hybrid orchestration partial-result disposition:
+        whether partial work was preserved, invalidated, merged, or used
+        for resumption.
+
+        Returns HTTP 404 when no hybrid execution record is found for the task.
+        """
+        try:
+            from core.operator_surface import get_operator_surface
+            surface = get_operator_surface()
+            result = surface.inspect_partial_result(task_id)
+            if result is None:
+                return JSONResponse(
+                    content={"detail": f"partial result record for task '{task_id}' not found"},
+                    status_code=404,
+                )
+            return JSONResponse(content=result.to_dict())
+        except Exception as exc:
+            logger.error("inspect_partial_result(%s) endpoint error: %s", task_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/inspect/audit-evidence/{task_id}
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/inspect/audit-evidence/{task_id}")
+    async def inspect_audit_evidence(task_id: str) -> JSONResponse:
+        """Return an :class:`~core.operator_surface.AuditEvidenceInspection` for *task_id*.
+
+        Surfaces durable audit evidence coverage: how many audit records
+        of each kind exist for this task in the durable store.
+
+        Always returns a valid payload (zero counts when no evidence exists).
+        """
+        try:
+            from core.operator_surface import get_operator_surface
+            surface = get_operator_surface()
+            result = surface.inspect_audit_evidence(task_id)
+            return JSONResponse(content=result.to_dict())
+        except Exception as exc:
+            logger.error("inspect_audit_evidence(%s) endpoint error: %s", task_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/review/{task_id}
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/review/{task_id}")
+    async def end_to_end_review(task_id: str) -> JSONResponse:
+        """Return an :class:`~core.operator_surface.EndToEndReviewSummary` for *task_id*.
+
+        Unified postmortem-ready view combining task lifecycle, routing
+        decision, recovery disposition, partial-result outcome, audit
+        evidence, and lineage for a single task.
+
+        Always returns a valid payload; missing dimensions produce ``null``
+        fields rather than errors.
+        """
+        try:
+            from core.operator_surface import get_operator_surface
+            surface = get_operator_surface()
+            result = surface.end_to_end_review(task_id)
+            return JSONResponse(content=result.to_dict())
+        except Exception as exc:
+            logger.error("end_to_end_review(%s) endpoint error: %s", task_id, exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,

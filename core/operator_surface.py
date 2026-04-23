@@ -31,6 +31,10 @@ Architecture role
     │    • inspect_executor(node_id)      → ExecutorInspection        │
     │    • inspect_failure_domain(task_id)→ FailureDomainInspection   │
     │    • inspect_lineage(task_id)       → LineageInspection         │
+    │    • inspect_recovery(task_id)      → RecoveryInspection        │
+    │    • inspect_partial_result(task_id)→ PartialResultInspection   │
+    │    • inspect_audit_evidence(task_id)→ AuditEvidenceInspection   │
+    │    • end_to_end_review(task_id)     → EndToEndReviewSummary     │
     │    • operator_snapshot()            → OperatorSnapshot          │
     │                                                                  │
     │  Role boundaries:                                               │
@@ -74,6 +78,10 @@ Dataclasses::
     ExecutorInspection
     FailureDomainInspection
     LineageInspection
+    RecoveryInspection
+    PartialResultInspection
+    AuditEvidenceInspection
+    EndToEndReviewSummary
     DevicePresenceSummary
     OperatorSnapshot
 
@@ -114,6 +122,10 @@ __all__ = [
     "ExecutorInspection",
     "FailureDomainInspection",
     "LineageInspection",
+    "RecoveryInspection",
+    "PartialResultInspection",
+    "AuditEvidenceInspection",
+    "EndToEndReviewSummary",
     "DevicePresenceSummary",
     "OperatorSnapshot",
     # Class
@@ -410,6 +422,249 @@ class LineageInspection:
             "fallback_chain": self.fallback_chain,
             "timeline": self.timeline,
             "_source": self._source,
+        }
+
+
+@dataclass
+class RecoveryInspection:
+    """Canonical read-only projection of recovery disposition for a task.
+
+    Surfaces how a task was handled after an interruption or restart, derived
+    from the canonical lifecycle registry and the durable task lifecycle
+    snapshot.  This is the primary operator-facing surface for recovery
+    disposition reviewability.
+
+    Attributes
+    ----------
+    task_id:
+        The canonical task identifier.
+    trace_id:
+        Distributed trace identifier.
+    is_recovered:
+        ``True`` when this task was present in a lifecycle snapshot and had
+        a recovery action taken on it.
+    recovery_disposition:
+        One of ``"resumable"``, ``"replay_only"``, ``"reissuable"``,
+        ``"terminal_on_interrupt"``, or ``""`` when not recovered.
+    current_owner:
+        Current lifecycle ownership stage from the live registry, e.g.
+        ``"device_dispatch"``, ``"routing"``, ``"gateway_ingress"``.
+        Empty when the task is not currently pending.
+    snapshot_id:
+        Identifier of the lifecycle snapshot that sourced this recovery, if any.
+    interrupted_at:
+        Wall-clock timestamp of the interruption, if available.
+    recovery_action_taken:
+        Whether a concrete runtime registry action was taken for this task
+        (i.e. it was registered in the lifecycle registry under its disposition
+        ownership stage).  ``False`` for terminal records that are excluded
+        from the pending registry.
+    recovery_note:
+        Human-readable summary of what happened during recovery.
+    """
+
+    task_id: str = ""
+    trace_id: str = ""
+    is_recovered: bool = False
+    recovery_disposition: str = ""
+    current_owner: str = ""
+    snapshot_id: str = ""
+    interrupted_at: Optional[float] = None
+    recovery_action_taken: bool = False
+    recovery_note: str = ""
+
+    _source: str = "task_lifecycle_registry"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "trace_id": self.trace_id,
+            "is_recovered": self.is_recovered,
+            "recovery_disposition": self.recovery_disposition,
+            "current_owner": self.current_owner,
+            "snapshot_id": self.snapshot_id,
+            "interrupted_at": self.interrupted_at,
+            "recovery_action_taken": self.recovery_action_taken,
+            "recovery_note": self.recovery_note,
+            "_source": self._source,
+        }
+
+
+@dataclass
+class PartialResultInspection:
+    """Canonical read-only projection of partial-result outcome for a task.
+
+    Surfaces the hybrid orchestration partial-result disposition for a task,
+    derived from :class:`~core.hybrid_orchestration_continuity.HybridOrchestrationRecord`.
+
+    Attributes
+    ----------
+    task_id:
+        The canonical task identifier.
+    execution_id:
+        The hybrid execution identifier (from HybridOrchestrationRecord).
+    lifecycle_state:
+        Current hybrid lifecycle state (e.g. ``"completed"``, ``"interrupted"``).
+    partial_result_disposition:
+        How the partial result was handled: ``"preserved"``, ``"invalidated"``,
+        ``"merged"``, ``"resumed"``, or ``""`` when no partial result exists.
+    partial_result_origin:
+        Origin of the partial result: ``"local"``, ``"remote"``, or ``""``.
+    resume_count:
+        Number of times this hybrid execution has been resumed.
+    has_partial_result:
+        ``True`` when a partial result snapshot is present.
+    interruption_reason:
+        Human-readable reason for interruption, if available.
+    """
+
+    task_id: str = ""
+    execution_id: str = ""
+    lifecycle_state: str = ""
+    partial_result_disposition: str = ""
+    partial_result_origin: str = ""
+    resume_count: int = 0
+    has_partial_result: bool = False
+    interruption_reason: str = ""
+
+    _source: str = "hybrid_orchestration_continuity_registry"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "execution_id": self.execution_id,
+            "lifecycle_state": self.lifecycle_state,
+            "partial_result_disposition": self.partial_result_disposition,
+            "partial_result_origin": self.partial_result_origin,
+            "resume_count": self.resume_count,
+            "has_partial_result": self.has_partial_result,
+            "interruption_reason": self.interruption_reason,
+            "_source": self._source,
+        }
+
+
+@dataclass
+class AuditEvidenceInspection:
+    """Canonical read-only projection of durable audit evidence for a task.
+
+    Derived from the :class:`~core.replay_audit_persistence.DurableAuditStore`.
+    Surfaces whether durable audit evidence exists for a task so operators
+    can assess postmortem evidence completeness without raw JSONL spelunking.
+
+    Attributes
+    ----------
+    task_id:
+        The canonical task identifier.
+    has_evidence:
+        ``True`` when at least one durable audit record references this task.
+    evidence_count:
+        Total number of durable audit records referencing this task.
+    by_kind:
+        Dict mapping :class:`~core.replay_audit_persistence.AuditRecordKind`
+        string values to counts of records of that kind.
+    earliest_record_at:
+        Timestamp of the earliest matching audit record, or ``None``.
+    latest_record_at:
+        Timestamp of the most recent matching audit record, or ``None``.
+    audit_kinds_present:
+        Sorted list of audit record kind strings present for this task.
+    """
+
+    task_id: str = ""
+    has_evidence: bool = False
+    evidence_count: int = 0
+    by_kind: Dict[str, int] = field(default_factory=dict)
+    earliest_record_at: Optional[float] = None
+    latest_record_at: Optional[float] = None
+    audit_kinds_present: List[str] = field(default_factory=list)
+
+    _source: str = "durable_audit_store"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "has_evidence": self.has_evidence,
+            "evidence_count": self.evidence_count,
+            "by_kind": dict(self.by_kind),
+            "earliest_record_at": self.earliest_record_at,
+            "latest_record_at": self.latest_record_at,
+            "audit_kinds_present": list(self.audit_kinds_present),
+            "_source": self._source,
+        }
+
+
+@dataclass
+class EndToEndReviewSummary:
+    """Unified end-to-end operator review summary for a single task.
+
+    Combines all inspection dimensions into a single postmortem-ready view
+    so operators can determine what happened across routing, recovery,
+    partial-result handling, and audit evidence without manually assembling
+    data from multiple surfaces.
+
+    Attributes
+    ----------
+    task_id:
+        The canonical task identifier.
+    trace_id:
+        Distributed trace identifier.
+    generated_at:
+        Wall-clock timestamp when this summary was generated.
+    task:
+        :class:`TaskInspection` for core lifecycle/intent/result fields.
+        ``None`` if the task is not known to the canonical runtime.
+    route:
+        :class:`RouteInspection` for routing decision details.
+        ``None`` if no routing data is available.
+    recovery:
+        :class:`RecoveryInspection` for recovery disposition.
+        ``None`` if the task has no recovery record.
+    partial_result:
+        :class:`PartialResultInspection` for partial-result outcome.
+        ``None`` if no hybrid execution record is found.
+    audit_evidence:
+        :class:`AuditEvidenceInspection` for durable evidence coverage.
+        Always present (zero counts when no evidence exists).
+    lineage:
+        :class:`LineageInspection` for task lineage / timeline.
+        ``None`` if lineage is unavailable.
+    reviewable:
+        ``True`` when sufficient data exists to perform a meaningful
+        postmortem review (at least a task record or audit evidence).
+    review_notes:
+        List of human-readable notes about evidence gaps or notable findings.
+    """
+
+    task_id: str = ""
+    trace_id: str = ""
+    generated_at: float = field(default_factory=time.time)
+
+    task: Optional["TaskInspection"] = None
+    route: Optional["RouteInspection"] = None
+    recovery: Optional["RecoveryInspection"] = None
+    partial_result: Optional["PartialResultInspection"] = None
+    audit_evidence: Optional["AuditEvidenceInspection"] = None
+    lineage: Optional["LineageInspection"] = None
+
+    reviewable: bool = False
+    review_notes: List[str] = field(default_factory=list)
+
+    authority: str = OPERATOR_SURFACE_AUTHORITY
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "trace_id": self.trace_id,
+            "generated_at": self.generated_at,
+            "task": self.task.to_dict() if self.task is not None else None,
+            "route": self.route.to_dict() if self.route is not None else None,
+            "recovery": self.recovery.to_dict() if self.recovery is not None else None,
+            "partial_result": self.partial_result.to_dict() if self.partial_result is not None else None,
+            "audit_evidence": self.audit_evidence.to_dict() if self.audit_evidence is not None else None,
+            "lineage": self.lineage.to_dict() if self.lineage is not None else None,
+            "reviewable": self.reviewable,
+            "review_notes": list(self.review_notes),
+            "authority": self.authority,
         }
 
 
@@ -816,6 +1071,289 @@ class OperatorSurface:
 
         logger.warning("inspect_lineage(%s): task not found in any runtime", task_id)
         return None
+
+    # ── Recovery Inspection ──────────────────────────────────────────────
+
+    def inspect_recovery(self, task_id: str) -> Optional[RecoveryInspection]:
+        """Return a read-only :class:`RecoveryInspection` for *task_id*.
+
+        Derives recovery disposition from the live
+        :class:`~core.task_envelope_lifecycle_registry.TaskEnvelopeLifecycleRegistry`
+        (current ownership stage) and the durable lifecycle snapshot
+        (whether this task appeared in a recovery pass).
+
+        Returns ``None`` if the task has no current pending lifecycle record
+        and no recovered snapshot record.
+        """
+        try:
+            from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+        except Exception:
+            return None
+
+        trace_id = ""
+
+        # ── Check live lifecycle registry ─────────────────────────────────
+        current_owner = ""
+        try:
+            registry = get_lifecycle_registry()
+            record = registry.get_record(task_id)
+            if record is not None:
+                current_owner = record.owner.value if hasattr(record.owner, "value") else str(record.owner)
+                trace_id = getattr(record, "trace_id", "")
+        except Exception as exc:
+            logger.debug("inspect_recovery(%s): registry query failed: %s", task_id, exc)
+
+        # ── Check durable snapshot for recovery history ───────────────────
+        snapshot_id = ""
+        interrupted_at = None
+        recovery_disposition = ""
+        recovery_action_taken = False
+        is_recovered = False
+        recovery_note = ""
+
+        try:
+            from core.task_lifecycle_persistence import (
+                classify_disposition,
+                get_task_lifecycle_store,
+                InFlightTaskDisposition,
+            )
+            store = get_task_lifecycle_store()
+            snapshot = store.load()
+            if snapshot is not None:
+                for raw_rec in snapshot.records:
+                    if raw_rec.get("task_id") == task_id:
+                        is_recovered = True
+                        snapshot_id = snapshot.snapshot_id
+                        interrupted_at = snapshot.created_at
+                        owner_str = raw_rec.get("owner", "")
+                        disp = classify_disposition(owner_str)
+                        recovery_disposition = disp.value
+                        recovery_action_taken = (
+                            disp != InFlightTaskDisposition.TERMINAL_ON_INTERRUPT
+                        )
+                        recovery_note = (
+                            f"Recovered from snapshot {snapshot_id}: "
+                            f"disposition={recovery_disposition}, "
+                            f"prior_owner={owner_str!r}"
+                        )
+                        if not current_owner:
+                            current_owner = owner_str
+                        break
+        except Exception as exc:
+            logger.debug(
+                "inspect_recovery(%s): snapshot query failed: %s", task_id, exc
+            )
+
+        if not current_owner and not is_recovered:
+            return None
+
+        # Derive trace_id from canonical task if still empty
+        if not trace_id:
+            try:
+                from core.canonical_task import get_canonical_task_runtime
+                ct = get_canonical_task_runtime().get_by_task_id(task_id)
+                if ct is not None:
+                    trace_id = ct.identity.trace_id
+            except Exception:
+                pass
+
+        if not recovery_note and current_owner:
+            recovery_note = f"Task currently pending under owner={current_owner!r}."
+
+        return RecoveryInspection(
+            task_id=task_id,
+            trace_id=trace_id,
+            is_recovered=is_recovered,
+            recovery_disposition=recovery_disposition,
+            current_owner=current_owner,
+            snapshot_id=snapshot_id,
+            interrupted_at=interrupted_at,
+            recovery_action_taken=recovery_action_taken,
+            recovery_note=recovery_note,
+        )
+
+    # ── Partial-Result Inspection ────────────────────────────────────────
+
+    def inspect_partial_result(self, task_id: str) -> Optional[PartialResultInspection]:
+        """Return a read-only :class:`PartialResultInspection` for *task_id*.
+
+        Derived from
+        :class:`~core.hybrid_orchestration_continuity.HybridOrchestrationContinuityRegistry`.
+        Returns ``None`` if no hybrid execution record is associated with
+        *task_id*.
+        """
+        try:
+            from core.hybrid_orchestration_continuity import (
+                get_continuity_registry,
+            )
+        except Exception:
+            return None
+
+        try:
+            registry = get_continuity_registry()
+            records = registry.list_all()
+            # Find the most-recently-updated record for this task_id
+            matching = [r for r in records if r.task_id == task_id]
+            if not matching:
+                return None
+            rec = max(matching, key=lambda r: r.updated_at)
+            lifecycle_val = ""
+            try:
+                lifecycle_val = rec.lifecycle_state.value
+            except Exception:
+                lifecycle_val = str(rec.lifecycle_state)
+            return PartialResultInspection(
+                task_id=task_id,
+                execution_id=rec.execution_id,
+                lifecycle_state=lifecycle_val,
+                partial_result_disposition=rec.partial_result_disposition or "",
+                partial_result_origin=rec.partial_result_origin or "",
+                resume_count=rec.resume_count,
+                has_partial_result=rec.partial_result_snapshot is not None,
+                interruption_reason=rec.interruption_reason or "",
+            )
+        except Exception as exc:
+            logger.warning("inspect_partial_result(%s) failed: %s", task_id, exc)
+            return None
+
+    # ── Private helpers ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_task_id_from_payload(payload: Dict[str, Any]) -> Optional[str]:
+        """Return the task_id from an audit payload dict, trying canonical field names.
+
+        Checks ``task_id``, ``canonical_task_id``, and ``execution_task_id``
+        in order, returning the first truthy value found.
+        """
+        return (
+            payload.get("task_id")
+            or payload.get("canonical_task_id")
+            or payload.get("execution_task_id")
+        )
+
+    @staticmethod
+    def _is_reviewable(
+        task_insp: Optional["TaskInspection"],
+        audit_insp: "AuditEvidenceInspection",
+        recovery_insp: Optional["RecoveryInspection"],
+    ) -> bool:
+        """Return True when sufficient evidence exists for a postmortem review."""
+        return (
+            task_insp is not None
+            or audit_insp.has_evidence
+            or recovery_insp is not None
+        )
+
+    # ── Audit Evidence Inspection ────────────────────────────────────────
+
+    def inspect_audit_evidence(self, task_id: str) -> AuditEvidenceInspection:
+        """Return an :class:`AuditEvidenceInspection` for *task_id*.
+
+        Scans the :class:`~core.replay_audit_persistence.DurableAuditStore`
+        for all records whose payload contains *task_id* and aggregates
+        evidence counts by kind.
+
+        Always returns a valid :class:`AuditEvidenceInspection` (empty
+        counts when no evidence exists or the store is unavailable).
+        """
+        insp = AuditEvidenceInspection(task_id=task_id)
+        try:
+            from core.replay_audit_persistence import get_replay_audit_store
+        except Exception:
+            return insp
+
+        try:
+            store = get_replay_audit_store()
+            all_records = store.load_all()
+            by_kind: Dict[str, int] = {}
+            timestamps: List[float] = []
+            for audit_rec in all_records:
+                payload_task_id = self._extract_task_id_from_payload(audit_rec.payload)
+                if payload_task_id == task_id:
+                    kind = audit_rec.kind
+                    by_kind[kind] = by_kind.get(kind, 0) + 1
+                    timestamps.append(audit_rec.recorded_at)
+            insp.evidence_count = sum(by_kind.values())
+            insp.by_kind = by_kind
+            insp.has_evidence = insp.evidence_count > 0
+            insp.audit_kinds_present = sorted(by_kind.keys())
+            if timestamps:
+                insp.earliest_record_at = min(timestamps)
+                insp.latest_record_at = max(timestamps)
+        except Exception as exc:
+            logger.debug("inspect_audit_evidence(%s) failed: %s", task_id, exc)
+        return insp
+
+    # ── End-to-End Review ────────────────────────────────────────────────
+
+    def end_to_end_review(self, task_id: str) -> EndToEndReviewSummary:
+        """Return a unified :class:`EndToEndReviewSummary` for *task_id*.
+
+        Aggregates all inspection dimensions — task lifecycle, routing decision,
+        recovery disposition, partial-result outcome, audit evidence, and lineage
+        — into a single postmortem-ready view.
+
+        Always returns a valid :class:`EndToEndReviewSummary` (fields are
+        ``None`` or empty when individual dimensions are unavailable).
+        """
+        summary = EndToEndReviewSummary(task_id=task_id)
+        notes: List[str] = []
+
+        # Task
+        task_insp = self.inspect_task(task_id)
+        summary.task = task_insp
+        if task_insp is not None:
+            summary.trace_id = task_insp.trace_id or ""
+
+        # Route
+        route_insp = self.inspect_route(task_id)
+        summary.route = route_insp
+
+        # Recovery
+        recovery_insp = self.inspect_recovery(task_id)
+        summary.recovery = recovery_insp
+        if recovery_insp is not None and recovery_insp.is_recovered:
+            notes.append(
+                f"Recovery: disposition={recovery_insp.recovery_disposition!r}, "
+                f"action_taken={recovery_insp.recovery_action_taken}"
+            )
+
+        # Partial result
+        partial_insp = self.inspect_partial_result(task_id)
+        summary.partial_result = partial_insp
+        if partial_insp is not None and partial_insp.has_partial_result:
+            notes.append(
+                f"Partial result: disposition={partial_insp.partial_result_disposition!r}, "
+                f"origin={partial_insp.partial_result_origin!r}, "
+                f"resume_count={partial_insp.resume_count}"
+            )
+
+        # Audit evidence
+        audit_insp = self.inspect_audit_evidence(task_id)
+        summary.audit_evidence = audit_insp
+        if not audit_insp.has_evidence:
+            notes.append(
+                "Audit evidence: no durable audit records found for this task_id."
+            )
+
+        # Lineage
+        lineage_insp = self.inspect_lineage(task_id)
+        summary.lineage = lineage_insp
+
+        # Populate trace_id from lineage if still empty
+        if not summary.trace_id and lineage_insp is not None:
+            summary.trace_id = lineage_insp.trace_id or ""
+
+        # Reviewability: enough data to reason about what happened
+        summary.reviewable = self._is_reviewable(task_insp, audit_insp, recovery_insp)
+        if not summary.reviewable:
+            notes.append(
+                "Task not found in canonical runtime, lifecycle registry, "
+                "or durable audit store — insufficient evidence for review."
+            )
+
+        summary.review_notes = notes
+        return summary
 
     # ── Operator Snapshot ────────────────────────────────────────────────
 
