@@ -837,6 +837,134 @@ _INVARIANT_REGISTRY: List[RuntimeInvariantRecord] = [
         violation_log_prefix="INVARIANT_VIOLATION::INV-010",
         notes="ENFORCED.  Source posture vocabulary is frozen.",
     ),
+    # -------------------------------------------------------------------------
+    # INV-011: UDM is the sole device truth write authority; compat writes
+    # must be mirror-only and must follow a successful UDM write
+    # -------------------------------------------------------------------------
+    RuntimeInvariantRecord(
+        invariant_id="INV-011",
+        domain=InvariantDomain.source_of_truth,
+        severity=InvariantSeverity.HIGH,
+        status=InvariantStatus.ENFORCED,
+        description=(
+            "UnifiedDeviceManager (UDM) is the sole canonical write authority "
+            "for device truth (registered, online, capabilities, device_id, "
+            "platform).  Any write to the registered_devices compat cache "
+            "(core.routes._shared) must be preceded by a successful UDM write "
+            "in the same operation.  The compat cache is a read-only mirror "
+            "surface; it must not carry device state that UDM does not recognise.  "
+            "Established by PR-1 (truth_source_lock), PR-3 (compat demotion), "
+            "and hardened by PR-J (truth_conflict_enforcement)."
+        ),
+        enforcement_mechanism=(
+            "core.truth_source_lock.DEVICE_WRITE_SSOT declares "
+            "'core.unified.device_manager.UnifiedDeviceManager' as SSOT.  "
+            "core.routes._shared.COMPAT_MIRROR_WRITE sentinel is imported at "
+            "every compat write site to make mirror intent explicit.  "
+            "core.routes._shared.REGISTERED_DEVICES_COMPAT_CACHE_AUTHORITY "
+            "sentinel marks the cache as 'COMPAT_CACHE_READ_ONLY'.  "
+            "core.truth_conflict_enforcement provides "
+            "assert_canonical_write_precedes_compat_write() for call-site "
+            "enforcement.  TruthOwnershipRecord for TruthSurface.device "
+            "catalogs prohibited write paths."
+        ),
+        prior_pr_reference=(
+            "PR-1 truth_source_lock, PR-3 compat_cache_demotion, PR-J truth_conflict_enforcement"
+        ),
+        violation_log_prefix="INVARIANT_VIOLATION::INV-011",
+        notes=(
+            "ENFORCED.  Compat cache writes are annotated with COMPAT_MIRROR_WRITE "
+            "sentinel at every write site.  truth_conflict_enforcement module "
+            "provides active runtime guards.  Regression risk: any write to "
+            "registered_devices that is not preceded by a UDM write in the same "
+            "handler is a policy violation."
+        ),
+    ),
+    # -------------------------------------------------------------------------
+    # INV-012: CanonicalSessionTruthRuntime is the sole session truth write
+    # authority; stale session context must not alter session state transitions
+    # -------------------------------------------------------------------------
+    RuntimeInvariantRecord(
+        invariant_id="INV-012",
+        domain=InvariantDomain.session_transport,
+        severity=InvariantSeverity.HIGH,
+        status=InvariantStatus.ENFORCED,
+        description=(
+            "CanonicalSessionTruthRuntime.record_session_truth() is the sole "
+            "authority for writing canonical session truth records.  Session "
+            "state transitions must go through "
+            "AttachedRuntimeSession.attach/detach/reconnect.  Stale session "
+            "context (e.g. expired session registries) must not assert "
+            "canonical session state or alter session truth independently of "
+            "AttachedRuntimeSession/CanonicalSessionTruthRuntime.  "
+            "Established by PR-4 (canonical_session_truth) and PR-8 INV-003, "
+            "hardened by PR-J."
+        ),
+        enforcement_mechanism=(
+            "core.canonical_session_truth.CANONICAL_SESSION_TRUTH_AUTHORITY "
+            "sentinel declares authority.  "
+            "SESSION_TRUTH_SOURCE_MUST_BE_CANONICAL_POLICY enforces "
+            "truth_source vocabulary governance.  "
+            "INV-003 enforces AttachedRuntimeSession/WebRTCTaskBinding "
+            "session transition ownership.  "
+            "INFL-007 (compat_fallback_authority_guard) explicitly bounds "
+            "stale session context from altering takeover/fallback routing.  "
+            "core.truth_conflict_enforcement.TruthOwnershipRecord for "
+            "TruthSurface.session catalogs prohibited write paths."
+        ),
+        prior_pr_reference=(
+            "PR-4 canonical_session_truth, PR-8 INV-003, PR-J truth_conflict_enforcement"
+        ),
+        violation_log_prefix="INVARIANT_VIOLATION::INV-012",
+        notes=(
+            "ENFORCED.  CanonicalSessionTruthRuntime is the authoritative session "
+            "truth writer.  Regression risk: any code that writes session state "
+            "outside CanonicalSessionTruthRuntime/AttachedRuntimeSession is a "
+            "policy violation."
+        ),
+    ),
+    # -------------------------------------------------------------------------
+    # INV-013: CanonicalTask / CanonicalTaskRuntime owns task truth writes;
+    # the legacy task_queue must not be used as a task truth source
+    # -------------------------------------------------------------------------
+    RuntimeInvariantRecord(
+        invariant_id="INV-013",
+        domain=InvariantDomain.task_lifecycle,
+        severity=InvariantSeverity.HIGH,
+        status=InvariantStatus.ENFORCED,
+        description=(
+            "CanonicalTask and CanonicalTaskRuntime are the canonical write "
+            "authorities for task lifecycle truth (state, dispatch history, "
+            "results).  adapt_to_canonical_task() must be called at every "
+            "API ingress before any routing or status decision.  "
+            "The legacy task_queue (core.routes._shared.task_queue) is a "
+            "compat routing surface only; it must not be read as a truth "
+            "source for task state and must not receive task state writes "
+            "outside the compat_mirror_write pattern.  "
+            "Established by PR-507 (canonical task) and PR-8 INV-001, "
+            "hardened by PR-J."
+        ),
+        enforcement_mechanism=(
+            "INV-001 enforces CommandRouter as the sole canonical task ingress.  "
+            "INFL-006 (compat_fallback_authority_guard) explicitly bounds the "
+            "legacy task_queue as compat routing only.  "
+            "adapt_to_canonical_task() is the required canonical boundary "
+            "normalization.  "
+            "core.truth_conflict_enforcement.TruthOwnershipRecord for "
+            "TruthSurface.task catalogs the canonical authority and "
+            "prohibited write paths."
+        ),
+        prior_pr_reference=(
+            "PR-507 canonical_task, PR-8 INV-001, PR-J truth_conflict_enforcement"
+        ),
+        violation_log_prefix="INVARIANT_VIOLATION::INV-013",
+        notes=(
+            "ENFORCED.  CanonicalTask/CanonicalTaskRuntime are the authoritative "
+            "task truth writers.  Regression risk: any code that reads task "
+            "state from the legacy task_queue for routing/status decisions "
+            "instead of CanonicalTaskRuntime is a policy violation."
+        ),
+    ),
 ]
 
 
