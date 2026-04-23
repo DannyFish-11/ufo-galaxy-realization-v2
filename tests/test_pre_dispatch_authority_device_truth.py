@@ -44,7 +44,7 @@ import pytest
 # 1. Sentinel exported
 # ---------------------------------------------------------------------------
 
-class TestTaskIngressCanonicalDispineSentinel:
+class TestTaskIngressCanonicalDispatchSentinel:
     """TASK_INGRESS_CANONICAL_DISPATCH_SPINE sentinel is declared."""
 
     def test_sentinel_exported(self):

@@ -150,7 +150,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     source="api_tasks",
                 )
                 result = await cmd_router.route_envelope(envelope)
-                if result is not None:
+                # Treat the dispatch as successful when the router returns any
+                # non-None, non-error result.  An explicit error result (a dict
+                # with status="error" or similar) is treated as a failure so
+                # the compat fallback can still run.
+                if result is not None and (
+                    not isinstance(result, dict)
+                    or result.get("status") != "error"
+                ):
                     task["status"] = "sent"
                     task["dispatch_authority"] = "canonical_command_router"
                     canonical_dispatched = True
