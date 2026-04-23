@@ -546,9 +546,20 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
         await connection_manager.connect_device(websocket, device_id)
 
+        # ── SSOT: propagate connection-online state to UDM first ──────────
+        # PR-E: device presence/state is governed by UDM (SSOT).
+        # The compat cache (registered_devices) is updated only as a
+        # read-only mirror AFTER the UDM write, and only if the entry
+        # already exists there.
+        try:
+            from core.unified.device_manager import get_unified_device_manager as _get_udm
+            _get_udm().patch_device(device_id, {"status": "online"})
+        except Exception as _udm_err:
+            logger.debug("compat_ws: UDM online patch failed for %s — %s", device_id, _udm_err)
+        # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write (non-authoritative)
         if device_id in registered_devices:
-            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
-            registered_devices[device_id]["status"] = "online"
+            registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
+            registered_devices[device_id]["status"] = "online"  # COMPAT_MIRROR_WRITE
 
         try:
             while True:
@@ -556,17 +567,25 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 msg_type = data.get("type", "")
 
                 if msg_type == "heartbeat":
+                    # SSOT: write heartbeat to UDM first
+                    try:
+                        from core.unified.device_manager import get_unified_device_manager as _get_udm
+                        _get_udm().heartbeat(device_id)
+                    except Exception as _udm_hb_err:
+                        logger.debug("compat_ws: UDM heartbeat failed for %s — %s", device_id, _udm_hb_err)
+                    # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM heartbeat
                     if device_id in registered_devices:
-                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
+                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
                     await websocket.send_json({
                         "type": "heartbeat_ack",
                         "timestamp": datetime.now().isoformat()
                     })
 
                 elif msg_type == "status_update":
+                    # COMPAT_MIRROR_WRITE: registered_devices is not truth source; update after UDM
                     if device_id in registered_devices:
-                        registered_devices[device_id]["status_detail"] = data.get("status", {})
-                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()
+                        registered_devices[device_id]["status_detail"] = data.get("status", {})  # COMPAT_MIRROR_WRITE
+                        registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
                     await connection_manager.broadcast_status({
                         "type": "device_status_update",
                         "device_id": device_id,
@@ -782,8 +801,15 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
         except WebSocketDisconnect:
             connection_manager.disconnect_device(device_id)
+            # SSOT: propagate offline state to UDM first
+            try:
+                from core.unified.device_manager import get_unified_device_manager as _get_udm
+                _get_udm().patch_device(device_id, {"status": "offline"})
+            except Exception as _udm_off_err:
+                logger.debug("compat_ws: UDM offline patch failed for %s — %s", device_id, _udm_off_err)
+            # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write (non-authoritative)
             if device_id in registered_devices:
-                registered_devices[device_id]["status"] = "offline"
+                registered_devices[device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
             await connection_manager.broadcast_status({
                 "type": "device_disconnected",
                 "device_id": device_id,

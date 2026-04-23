@@ -128,7 +128,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as _udm_err:
             logger.debug("Legacy UDM write-through 异常（不影响注册）: %s", _udm_err)
 
-        registered_devices[req.device_id] = device_info
+        registered_devices[req.device_id] = device_info  # COMPAT_MIRROR_WRITE
 
         # 同步设备能力到 CapabilityRegistry，与 /api/v1/devices/register 保持一致
         synced_caps = 0
@@ -190,15 +190,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         Legacy heartbeat shim — maps to /api/v1/devices/status update.
 
-        PR5: Also propagates heartbeat to UDM to keep unified registry in sync.
+        PR-E: SSOT write path — UDM heartbeat is attempted first; the compat
+        cache (registered_devices) is updated only as a read-only mirror AFTER
+        the UDM write, and only if the entry already exists there.
         """
         logger.info(
             "Legacy /api/devices/heartbeat called for device %s", req.device_id
         )
+
+        # PR-E: SSOT — UDM heartbeat write first
+        try:
+            from galaxy_gateway.ssot import udm_write_heartbeat
+            udm_write_heartbeat(req.device_id)
+        except Exception as _udm_err:
+            logger.debug("Legacy UDM heartbeat write-through 失败（不影响响应）: %s", _udm_err)
+
+        # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write (non-authoritative)
         if req.device_id in registered_devices:
-            registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()
+            registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
             if req.status:
-                registered_devices[req.device_id]["status_detail"] = req.status
+                registered_devices[req.device_id]["status_detail"] = req.status  # COMPAT_MIRROR_WRITE
             await connection_manager.broadcast_status({
                 "type": "device_status_update",
                 "device_id": req.device_id,
@@ -206,26 +217,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "timestamp": datetime.now().isoformat(),
             })
 
-        # PR5: UDM heartbeat write-through (best-effort)
-        try:
-            from galaxy_gateway.ssot import udm_write_heartbeat
-            udm_write_heartbeat(req.device_id)
-        except Exception as _udm_err:
-            logger.debug("Legacy UDM heartbeat write-through 失败（不影响响应）: %s", _udm_err)
-
         return JSONResponse({"success": True, "device_id": req.device_id})
 
     @router.post("/api/devices/unregister")
     async def legacy_unregister_device(req: _LegacyUnregisterRequest):
         """
         Legacy unregister shim — marks device offline (safe no-op if unknown).
+
+        PR-E: SSOT write path — UDM offline patch is attempted first; the compat
+        cache (registered_devices) is updated only as a read-only mirror AFTER
+        the UDM write.
         """
         logger.info(
             "Legacy /api/devices/unregister called for device %s", req.device_id
         )
+
+        # PR-E: SSOT — UDM offline patch first (best-effort)
+        try:
+            from core.unified.device_manager import get_unified_device_manager as _get_udm
+            _get_udm().patch_device(req.device_id, {"status": "offline"})
+        except Exception as _udm_err:
+            logger.debug("Legacy UDM offline patch failed for %s: %s", req.device_id, _udm_err)
+
+        # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write (non-authoritative)
         if req.device_id in registered_devices:
-            registered_devices[req.device_id]["status"] = "offline"
-            registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()
+            registered_devices[req.device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
+            registered_devices[req.device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
         return JSONResponse({"success": True, "device_id": req.device_id})
 
     return router

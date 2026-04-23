@@ -60,6 +60,16 @@ TASK_INGRESS_REPLAY_FOUNDATION_INTEGRATED: str = (
     "front-load so API-ingressed tasks have complete audit lineage (GAP-512-001)."
 )
 
+# PR-E: API task dispatch now attempts CommandRouter.route_envelope() first,
+# falling back to the compat send_to_device path only when the canonical
+# router is unavailable.  This converges the API task entry path onto the
+# canonical dispatch spine (OpenClawd → CommandRouter → DeviceRouter).
+TASK_INGRESS_CANONICAL_DISPATCH_SPINE: str = (
+    "TASK_INGRESS_CANONICAL_DISPATCH_V1: core/routes/tasks.py create_task() "
+    "attempts CommandRouter.route_envelope() before falling back to compat "
+    "send_to_device, so the API task path converges on the canonical spine."
+)
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create task management routes router."""
@@ -122,32 +132,71 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         task_queue[task_id] = task
 
         if req.device_id and req.device_id in connection_manager.active_devices:
-            # PR-3 convergence: this route remains a thin compat adapter and is
-            # not canonical dispatch authority; emit structured guardrail.
+            # PR-E: attempt canonical dispatch via CommandRouter.route_envelope()
+            # before falling back to the compat send_to_device path.
+            # This ensures major live task entry paths converge on the canonical
+            # dispatch spine (OpenClawd → CommandRouter → DeviceRouter).
+            canonical_dispatched = False
             try:
-                from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
-
-                emit_legacy_guardrail(
-                    caller="core.routes.tasks.create_task",
+                from core.command_router import get_command_router
+                from core.schemas.task_envelope import TaskEnvelope
+                cmd_router = get_command_router()
+                envelope = TaskEnvelope(
+                    task_id=task_id,
                     trace_id=trace_id,
-                    override_recommendation=(
-                        "Use POST /api/v1/command/unified or "
-                        "CommandRouter.route_envelope() for canonical control-plane "
-                        "routing."
-                    ),
+                    tool_name=req.task_type,
+                    args=req.payload or {},
+                    targets=[req.device_id],
+                    source="api_tasks",
                 )
-            except Exception as _guardrail_exc:
-                logger.debug("create_task: legacy guardrail emission skipped - %s", _guardrail_exc)
+                result = await cmd_router.route_envelope(envelope)
+                # Treat the dispatch as successful when the router returns any
+                # non-None, non-error result.  An explicit error result (a dict
+                # with status="error" or similar) is treated as a failure so
+                # the compat fallback can still run.
+                if result is not None and (
+                    not isinstance(result, dict)
+                    or result.get("status") != "error"
+                ):
+                    task["status"] = "sent"
+                    task["dispatch_authority"] = "canonical_command_router"
+                    canonical_dispatched = True
+                    logger.debug(
+                        "create_task: routed via CommandRouter.route_envelope task_id=%s", task_id
+                    )
+            except Exception as _router_err:
+                logger.debug(
+                    "create_task: CommandRouter.route_envelope unavailable (%s), "
+                    "falling back to compat send_to_device",
+                    _router_err,
+                )
 
-            await connection_manager.send_to_device(req.device_id, {
-                "type": "task",
-                "task_id": task_id,
-                "trace_id": trace_id,
-                "task_type": req.task_type,
-                "payload": req.payload
-            })
-            task["status"] = "sent"
-            task["dispatch_authority"] = "compat_route_adapter"
+            if not canonical_dispatched:
+                # Compat fallback: direct send_to_device — emit structured guardrail
+                try:
+                    from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
+                    emit_legacy_guardrail(
+                        caller="core.routes.tasks.create_task",
+                        trace_id=trace_id,
+                        override_recommendation=(
+                            "Use POST /api/v1/command/unified or "
+                            "CommandRouter.route_envelope() for canonical control-plane "
+                            "routing."
+                        ),
+                    )
+                except Exception as _guardrail_exc:
+                    logger.debug("create_task: legacy guardrail emission skipped - %s", _guardrail_exc)
+
+                await connection_manager.send_to_device(req.device_id, {
+                    "type": "task",
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                    "task_type": req.task_type,
+                    "payload": req.payload
+                })
+                task["status"] = "sent"
+                task["dispatch_authority"] = "compat_route_adapter"
 
         return JSONResponse({
             "success": True,
