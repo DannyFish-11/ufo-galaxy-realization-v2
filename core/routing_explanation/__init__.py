@@ -144,6 +144,11 @@ from .explanation_summary import (
     resolve_explanation_from_projection,
     IDLE_EXPLANATION_SUMMARY,
 )
+from .spine_explanation_builder import (
+    SpineDecisionCollector,
+    build_spine_explanation,
+    LIVE_ROUTING_EXPLANATION_WIRED,
+)
 
 __all__ = [
     # Decision factor
@@ -175,4 +180,8 @@ __all__ = [
     "get_explanation_hints",
     "resolve_explanation_from_projection",
     "IDLE_EXPLANATION_SUMMARY",
+    # Live spine explanation builder
+    "SpineDecisionCollector",
+    "build_spine_explanation",
+    "LIVE_ROUTING_EXPLANATION_WIRED",
 ]

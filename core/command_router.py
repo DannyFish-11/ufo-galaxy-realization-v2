@@ -519,6 +519,22 @@ SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED: str = (
     "are flagged in the trace; join_runtime sources pass without restriction."
 )
 
+# PR-H: Live routing explanation sentinel.
+# route_envelope() now generates a live RouteExplanation via
+# SpineDecisionCollector at each dispatch call and attaches it to the result
+# under "routing_explanation" for operator review and postmortem analysis.
+LIVE_ROUTING_EXPLANATION_WIRED: str = (
+    "COMMAND_ROUTER::LIVE_ROUTING_EXPLANATION_V1: "
+    "route_envelope() generates live routing explanations via "
+    "core.routing_explanation.spine_explanation_builder.SpineDecisionCollector. "
+    "Explanation captures: path branch (cross_device/fanout/worker/local), "
+    "posture gate (session-truth eligibility), admissibility gate "
+    "(validated/excluded targets), capability graph (confirmed/unconfirmed), "
+    "policy engine decision, and dispatch outcome. "
+    "Attached to result under 'routing_explanation' as a structured "
+    "RouteExplanation summary for operator review and postmortem analysis."
+)
+
 
 class CommandMode(str, Enum):
     """命令执行模式"""
@@ -1182,6 +1198,25 @@ class CommandRouter:
                 _mc_exc,
             )
 
+        # ── PR-H: Create live routing explanation collector ───────────────────
+        # SpineDecisionCollector accumulates live decision signals from each
+        # gate so a structured RouteExplanation can be built at dispatch end.
+        try:
+            from core.routing_explanation.spine_explanation_builder import (
+                SpineDecisionCollector as _SpineCollector,
+            )
+            _spine_collector = _SpineCollector(
+                task_id=envelope.task_id,
+                trace_id=envelope.trace_id,
+            )
+            _spine_collector.record_initial_targets(list(envelope.targets))
+        except Exception as _sc_init_exc:
+            logger.debug(
+                "route_envelope: SpineDecisionCollector init skipped (non-fatal): %s",
+                _sc_init_exc,
+            )
+            _spine_collector = None  # type: ignore[assignment]
+
         # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
         try:
             from core.acl_enforcer import get_acl_enforcer
@@ -1335,6 +1370,12 @@ class CommandRouter:
                     _posture_elig.eligible,
                     envelope.task_id,
                 )
+                # PR-H: record posture gate result in explanation collector
+                if _spine_collector is not None:
+                    _spine_collector.record_posture_gate(
+                        posture=str(_posture_elig.posture or _meta_posture_hint),
+                        eligible=bool(_posture_elig.eligible),
+                    )
                 # Flag control_only sources on non-cross-device paths — they
                 # should not be executing locally.  Warn; do not block (backward
                 # compat preserved; hard enforcement can be added incrementally).
@@ -1418,6 +1459,13 @@ class CommandRouter:
                     _adm_excluded
                 )
 
+                # PR-H: record admissibility results in explanation collector
+                if _spine_collector is not None:
+                    _spine_collector.record_admissibility(
+                        validated=list(_adm_validated),
+                        excluded=list(_adm_excluded),
+                    )
+
                 if _adm_validated and len(_adm_validated) < len(_pre_adm_targets):
                     logger.warning(
                         "route_envelope [constraint-chain/admissibility-gate]: "
@@ -1493,6 +1541,14 @@ class CommandRouter:
                 _current_targets = list(envelope.targets)
                 _confirmed_targets = [t for t in _current_targets if t in _canonical_ids]
                 _unconfirmed_targets = [t for t in _current_targets if t not in _canonical_ids]
+
+                # PR-H: record capability check results in explanation collector
+                if _spine_collector is not None:
+                    _spine_collector.record_capability_check(
+                        confirmed=list(_confirmed_targets),
+                        unconfirmed=list(_unconfirmed_targets),
+                        required_caps=list(_cap_query_caps) if _cap_query_caps else None,
+                    )
 
                 if _confirmed_targets:
                     if _unconfirmed_targets:
@@ -1701,6 +1757,12 @@ class CommandRouter:
                 _ETT.node_service,
             ):
                 # Android device or node service — route via cross-device substrate.
+                # PR-H: record path branch
+                if _spine_collector is not None:
+                    _spine_collector.record_path_branch(
+                        "cross_device",
+                        reason=f"explicit executor_target_type={_explicit_target_type}",
+                    )
                 result = await self._route_cross_device_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -1708,6 +1770,12 @@ class CommandRouter:
                 )
             elif _ETT is not None and _explicit_target_type == _ETT.go_worker:
                 # Go worker — delegate to MasterBrain/worker dispatch boundary.
+                # PR-H: record path branch
+                if _spine_collector is not None:
+                    _spine_collector.record_path_branch(
+                        "worker",
+                        reason="explicit executor_target_type=go_worker",
+                    )
                 result = await self._route_worker_envelope(
                     envelope=envelope,
                     command_id=command_id,
@@ -1715,6 +1783,12 @@ class CommandRouter:
                 )
             else:
                 # local (or unknown explicit type) — local runtime execution.
+                # PR-H: record path branch
+                if _spine_collector is not None:
+                    _spine_collector.record_path_branch(
+                        "local",
+                        reason=f"explicit executor_target_type={_explicit_target_type} mapped to local",
+                    )
                 result = await self._execute_command(
                     device_id=envelope.target,
                     command=envelope.tool_name,
@@ -1756,14 +1830,33 @@ class CommandRouter:
                         getattr(_tsp_cd, "policy_kind", None),
                         envelope.task_id,
                     )
+                    # PR-H: record policy engine decision
+                    if _spine_collector is not None:
+                        _spine_collector.record_policy_engine_decision(
+                            policy_kind=str(getattr(_tsp_cd, "policy_kind", None) or ""),
+                            decision_reason=str(getattr(_tsp_cd, "decision_reason", None) or ""),
+                            candidates=list(envelope.targets),
+                        )
             except Exception:  # noqa: BLE001
                 pass
+            # PR-H: record path branch
+            if _spine_collector is not None:
+                _spine_collector.record_path_branch(
+                    "cross_device",
+                    reason="cross_device=true metadata heuristic",
+                )
             result = await self._route_cross_device_envelope(
                 envelope=envelope,
                 command_id=command_id,
                 request_id=request_id,
             )
         elif meta.get("parallel_fanout") == "true":
+            # PR-H: record path branch
+            if _spine_collector is not None:
+                _spine_collector.record_path_branch(
+                    "fanout",
+                    reason="parallel_fanout=true metadata",
+                )
             result = await self._route_parallel_fanout_envelope(
                 envelope=envelope,
                 command_id=command_id,
@@ -1820,8 +1913,21 @@ class CommandRouter:
                             }
                         }
                     )
+                    # PR-H: record policy engine decision
+                    if _spine_collector is not None:
+                        _spine_collector.record_policy_engine_decision(
+                            policy_kind=str(getattr(_ps_decision, "policy_kind", None) or ""),
+                            decision_reason=str(getattr(_ps_decision, "decision_reason", None) or ""),
+                            candidates=_ps_candidate_ids,
+                        )
             except Exception:  # noqa: BLE001
                 pass
+            # PR-H: record path branch
+            if _spine_collector is not None:
+                _spine_collector.record_path_branch(
+                    "local",
+                    reason="no cross_device/fanout/worker signals — local heuristic",
+                )
             result = await self._execute_command(
                 device_id=envelope.target,
                 command=envelope.tool_name,
@@ -2002,6 +2108,89 @@ class CommandRouter:
                 "success": result.get("success"),
             },
         )
+
+        # ── PR-H: Assemble and attach live routing explanation ────────────────
+        # Build a structured RouteExplanation from the signals collected by
+        # SpineDecisionCollector during this dispatch, then attach it to the
+        # result dict under "routing_explanation" so callers, operator tools,
+        # and replay/audit consumers can inspect actual decision causality.
+        if _spine_collector is not None:
+            try:
+                from core.routing_explanation.spine_explanation_builder import (
+                    build_spine_explanation as _build_spine_expl,
+                )
+                from core.routing_explanation.explanation_summary import (
+                    build_explanation_summary as _build_expl_summary,
+                )
+
+                # Record dispatch outcome into the collector
+                _spine_collector.record_result(
+                    success=bool(result.get("success")),
+                    error_code=result.get("error_code") or None,
+                    failure_domain=result.get("failure_domain") or None,
+                    selected_target=(
+                        list(envelope.targets)[0] if envelope.targets else None
+                    ),
+                )
+
+                _live_explanation = _build_spine_expl(
+                    _spine_collector,
+                    owner_component="command_router.route_envelope",
+                )
+                _live_summary = _build_expl_summary(_live_explanation)
+
+                # Attach structured live explanation to result (additive)
+                result.setdefault("routing_explanation", _live_summary.to_dict())
+
+                # Update replay foundation record with structured explanation text
+                try:
+                    from core.replay_foundation import record_route_decision as _rrd2
+
+                    _expl_text = (
+                        f"branch={_spine_collector._branch_kind or 'local'}; "
+                        f"selected={_live_explanation.selected_target}; "
+                        f"posture={_live_explanation.policy_posture}; "
+                        f"bases={len(_live_explanation.decision_bases)}; "
+                        f"rejected={len(_live_explanation.rejected_candidates)}"
+                    )
+                    _rrd2(
+                        task_id=envelope.task_id,
+                        trace_id=envelope.trace_id or "",
+                        selected_targets=list(envelope.targets),
+                        effective_path="command_router",
+                        route_explanation=_expl_text,
+                        capability_fit=bool(_spine_collector._cap_confirmed),
+                        admissibility_verdict=(
+                            "admitted"
+                            if _spine_collector._adm_validated
+                            else (
+                                "degraded"
+                                if _spine_collector._adm_excluded and not _spine_collector._adm_validated
+                                else ""
+                            )
+                        ),
+                        fallback_available=_spine_collector._fallback_triggered,
+                    )
+                except Exception as _rrd_exc:
+                    logger.debug(
+                        "route_envelope: live explanation replay record skipped: %s",
+                        _rrd_exc,
+                    )
+
+                logger.debug(
+                    "route_envelope [PR-H]: live routing explanation assembled — "
+                    "branch=%s selected=%s bases=%d rejected=%d task_id=%s",
+                    _spine_collector._branch_kind or "local",
+                    _live_explanation.selected_target,
+                    len(_live_explanation.decision_bases),
+                    len(_live_explanation.rejected_candidates),
+                    envelope.task_id,
+                )
+            except Exception as _expl_exc:
+                logger.debug(
+                    "route_envelope: live routing explanation assembly skipped (non-fatal): %s",
+                    _expl_exc,
+                )
 
         return result
 
