@@ -85,8 +85,8 @@ class TestSpineDecisionCollectorSignals:
         c = SpineDecisionCollector()
         c.record_admissibility(validated=["dev-a"], excluded=["dev-b"])
         assert c._adm_applied is True
-        assert c._adm_validated == ["dev-a"]
-        assert c._adm_excluded == ["dev-b"]
+        assert c.adm_validated == ["dev-a"]
+        assert c.adm_excluded == ["dev-b"]
         assert c._selected_target == "dev-a"
 
     def test_record_capability_check(self):
@@ -96,7 +96,7 @@ class TestSpineDecisionCollectorSignals:
             confirmed=["dev-a"], unconfirmed=["dev-c"], required_caps=["screen"]
         )
         assert c._cap_applied is True
-        assert c._cap_confirmed == ["dev-a"]
+        assert c.cap_confirmed == ["dev-a"]
         assert c._cap_unconfirmed == ["dev-c"]
         assert c._cap_required == ["screen"]
         assert c._selected_target == "dev-a"
@@ -105,7 +105,7 @@ class TestSpineDecisionCollectorSignals:
         from core.routing_explanation.spine_explanation_builder import SpineDecisionCollector
         c = SpineDecisionCollector()
         c.record_path_branch("local", reason="no cross-device signal")
-        assert c._branch_kind == "local"
+        assert c.branch_kind == "local"
         assert c._branch_reason == "no cross-device signal"
 
     def test_record_policy_engine_decision(self):
@@ -144,7 +144,7 @@ class TestSpineDecisionCollectorSignals:
         from core.routing_explanation.spine_explanation_builder import SpineDecisionCollector
         c = SpineDecisionCollector()
         c.record_fallback(triggered=True, reason="primary route failed")
-        assert c._fallback_triggered is True
+        assert c.fallback_triggered is True
         assert c._fallback_reason == "primary route failed"
 
 

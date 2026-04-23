@@ -49,6 +49,7 @@ Design rules
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Dict, List, Optional
 
@@ -66,6 +67,8 @@ from .route_explanation import (
     build_route_explanation,
     EMPTY_ROUTE_EXPLANATION,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "SpineDecisionCollector",
@@ -161,8 +164,8 @@ class SpineDecisionCollector:
             self._original_targets = list(targets)
             if targets:
                 self._selected_target = targets[0]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_initial_targets skipped: %s", exc)
 
     def record_posture_gate(
         self,
@@ -180,8 +183,8 @@ class SpineDecisionCollector:
                 self._policy_posture = posture
             if reason:
                 self._policy_reason = reason
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_posture_gate skipped: %s", exc)
 
     def record_admissibility(
         self,
@@ -195,8 +198,8 @@ class SpineDecisionCollector:
             self._adm_excluded = list(excluded)
             if validated:
                 self._selected_target = validated[0]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_admissibility skipped: %s", exc)
 
     def record_capability_check(
         self,
@@ -212,8 +215,8 @@ class SpineDecisionCollector:
             self._cap_required = list(required_caps) if required_caps else None
             if confirmed:
                 self._selected_target = confirmed[0]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_capability_check skipped: %s", exc)
 
     def record_path_branch(
         self,
@@ -230,8 +233,8 @@ class SpineDecisionCollector:
         try:
             self._branch_kind = branch_kind
             self._branch_reason = reason
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_path_branch skipped: %s", exc)
 
     def record_policy_engine_decision(
         self,
@@ -251,8 +254,8 @@ class SpineDecisionCollector:
                 self._policy_posture = policy_posture
             if candidates:
                 self._policy_candidates = list(candidates)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_policy_engine_decision skipped: %s", exc)
 
     def record_result(
         self,
@@ -268,8 +271,8 @@ class SpineDecisionCollector:
             self._failure_domain = failure_domain
             if selected_target:
                 self._selected_target = selected_target
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_result skipped: %s", exc)
 
     def record_fallback(
         self,
@@ -280,8 +283,38 @@ class SpineDecisionCollector:
         try:
             self._fallback_triggered = triggered
             self._fallback_reason = reason
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("SpineDecisionCollector.record_fallback skipped: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Public read-only properties for external access
+    # ------------------------------------------------------------------
+
+    @property
+    def branch_kind(self) -> Optional[str]:
+        """The dispatch branch chosen (``"cross_device"``, ``"fanout"``,
+        ``"worker"``, or ``"local"``). ``None`` if not yet recorded."""
+        return self._branch_kind
+
+    @property
+    def adm_validated(self) -> List[str]:
+        """Targets that passed the admissibility gate."""
+        return list(self._adm_validated)
+
+    @property
+    def adm_excluded(self) -> List[str]:
+        """Targets that were excluded by the admissibility gate."""
+        return list(self._adm_excluded)
+
+    @property
+    def cap_confirmed(self) -> List[str]:
+        """Targets confirmed in the capability graph."""
+        return list(self._cap_confirmed)
+
+    @property
+    def fallback_triggered(self) -> bool:
+        """Whether a fallback path was triggered during this dispatch."""
+        return self._fallback_triggered
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +343,13 @@ def build_spine_explanation(
     """
     try:
         return _build_impl(collector, owner_component)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "build_spine_explanation: explanation assembly failed — "
+            "returning EMPTY_ROUTE_EXPLANATION (task_id=%s): %s",
+            collector.task_id,
+            exc,
+        )
         return EMPTY_ROUTE_EXPLANATION
 
 

@@ -1201,6 +1201,7 @@ class CommandRouter:
         # ── PR-H: Create live routing explanation collector ───────────────────
         # SpineDecisionCollector accumulates live decision signals from each
         # gate so a structured RouteExplanation can be built at dispatch end.
+        _spine_collector: Optional[Any] = None
         try:
             from core.routing_explanation.spine_explanation_builder import (
                 SpineDecisionCollector as _SpineCollector,
@@ -1215,7 +1216,6 @@ class CommandRouter:
                 "route_envelope: SpineDecisionCollector init skipped (non-fatal): %s",
                 _sc_init_exc,
             )
-            _spine_collector = None  # type: ignore[assignment]
 
         # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
         try:
@@ -2147,7 +2147,7 @@ class CommandRouter:
                     from core.replay_foundation import record_route_decision as _rrd2
 
                     _expl_text = (
-                        f"branch={_spine_collector._branch_kind or 'local'}; "
+                        f"branch={_spine_collector.branch_kind or 'local'}; "
                         f"selected={_live_explanation.selected_target}; "
                         f"posture={_live_explanation.policy_posture}; "
                         f"bases={len(_live_explanation.decision_bases)}; "
@@ -2159,17 +2159,17 @@ class CommandRouter:
                         selected_targets=list(envelope.targets),
                         effective_path="command_router",
                         route_explanation=_expl_text,
-                        capability_fit=bool(_spine_collector._cap_confirmed),
+                        capability_fit=bool(_spine_collector.cap_confirmed),
                         admissibility_verdict=(
                             "admitted"
-                            if _spine_collector._adm_validated
+                            if _spine_collector.adm_validated
                             else (
                                 "degraded"
-                                if _spine_collector._adm_excluded and not _spine_collector._adm_validated
+                                if _spine_collector.adm_excluded and not _spine_collector.adm_validated
                                 else ""
                             )
                         ),
-                        fallback_available=_spine_collector._fallback_triggered,
+                        fallback_available=_spine_collector.fallback_triggered,
                     )
                 except Exception as _rrd_exc:
                     logger.debug(
@@ -2180,7 +2180,7 @@ class CommandRouter:
                 logger.debug(
                     "route_envelope [PR-H]: live routing explanation assembled — "
                     "branch=%s selected=%s bases=%d rejected=%d task_id=%s",
-                    _spine_collector._branch_kind or "local",
+                    _spine_collector.branch_kind or "local",
                     _live_explanation.selected_target,
                     len(_live_explanation.decision_bases),
                     len(_live_explanation.rejected_candidates),
