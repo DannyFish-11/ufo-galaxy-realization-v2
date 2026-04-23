@@ -549,4 +549,139 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             logger.warning("execution/trace error: %s", exc)
             return JSONResponse({"error": str(exc), "found": False}, status_code=500)
 
+    # ── PR-10: Orchestration Review Surface ───────────────────────────────
+
+    @router.get("/api/v1/observability/orchestration-review")
+    async def orchestration_review():
+        """Return the V2 orchestration operator review snapshot (PR-10).
+
+        Closes the observability and operator-review gaps described in PR-10
+        by exposing a unified, read-only review surface that consolidates:
+
+        - **execution_path_summary** — why the current execution path was
+          chosen or rejected (sourced from
+          ``core.runtime_decision_observability``).
+        - **fallback_cascade** — full ordered degradation trace showing each
+          fallback step, its reason, and the final execution tier (sourced from
+          ``core.execution_observability.fallback_schema`` and
+          ``core.windows_execution_arbiter``).
+        - **recovery_review** — how the most recent interrupted execution was
+          handled: decision kind, resumability, interruption class/reason, and
+          resume attempt count (sourced from
+          ``core.runtime.runtime_observability_sink``).
+        - **reconciliation_review** — whether the most recent Android advisory
+          truth update was accepted, rejected (V2 terminal state wins), or
+          partially applied (sourced from
+          ``core.android_participant_truth_ingress``).
+        - **legacy_dispatch** — counters for LEGACY_DISPATCH compat surface
+          invocations (closes COMPAT-007).
+
+        **Authority boundary**
+
+        This endpoint is **read-only and observational**.  It does not
+        re-compute or replace any canonical decision logic.  Fields are
+        annotated with ``source_authority`` to identify the originating
+        canonical module.
+
+        See ``docs/ORCHESTRATION_OBSERVABILITY_REVIEW.md`` for the full
+        operator guide.
+        """
+        try:
+            from core.orchestration_review_surface import (
+                build_orchestration_review_snapshot,
+            )
+
+            snapshot = build_orchestration_review_snapshot()
+            return JSONResponse(snapshot.to_dict())
+        except Exception as exc:
+            logger.warning("orchestration-review error: %s", exc)
+            return JSONResponse(
+                {
+                    "error": str(exc),
+                    "_partial": True,
+                    "_partial_reasons": [f"assembly_error: {exc}"],
+                },
+                status_code=200,
+            )
+
+    @router.get("/api/v1/observability/execution-legibility")
+    async def execution_legibility():
+        """Return a compact legibility summary for the current execution state (PR-10).
+
+        Provides a single-page operator view covering the four highest-value
+        legibility dimensions:
+
+        1. **path** — which execution path is active and why.
+        2. **fallback** — whether a fallback occurred and how many steps.
+        3. **recovery** — whether the last interruption is resumable.
+        4. **legacy_usage** — whether legacy dispatch surfaces are being invoked.
+
+        This endpoint is a **compact projection** of
+        ``GET /api/v1/observability/orchestration-review``.  For the full
+        structured snapshot, use the orchestration-review endpoint.
+
+        **Authority boundary**: read-only, observational surface only.
+        """
+        try:
+            from core.orchestration_review_surface import (
+                build_orchestration_review_snapshot,
+            )
+
+            snapshot = build_orchestration_review_snapshot()
+
+            # Build compact legibility dict
+            path_info: dict = {}
+            if snapshot.execution_path_summary is not None:
+                ps = snapshot.execution_path_summary
+                path_info = {
+                    "execution_path": ps.execution_path,
+                    "outcome": ps.outcome,
+                    "primary_reason": ps.primary_reason,
+                    "hard_gate_active": ps.hard_gate_active,
+                }
+
+            fallback_info: dict = {}
+            if snapshot.fallback_cascade is not None:
+                fc = snapshot.fallback_cascade
+                fallback_info = {
+                    "had_fallback": fc.had_fallback,
+                    "total_steps": fc.total_steps,
+                    "final_tier": fc.final_tier,
+                    "degraded_from_preferred": fc.degraded_from_preferred,
+                }
+
+            recovery_info: dict = {}
+            if snapshot.recovery_review is not None:
+                rr = snapshot.recovery_review
+                recovery_info = {
+                    "decision_kind": rr.decision_kind,
+                    "is_resumable": rr.is_resumable,
+                    "interruption_class": rr.interruption_class,
+                    "resume_attempt_count": rr.resume_attempt_count,
+                }
+
+            legacy_info: dict = {}
+            if snapshot.legacy_dispatch is not None:
+                ld = snapshot.legacy_dispatch
+                legacy_info = {
+                    "total_legacy_dispatch_count": ld.total_legacy_dispatch_count,
+                    "per_surface_counts": ld.per_surface_counts,
+                }
+
+            return JSONResponse({
+                "schema_version": "pr10-v1",
+                "assembled_at": snapshot.assembled_at,
+                "path": path_info,
+                "fallback": fallback_info,
+                "recovery": recovery_info,
+                "legacy_usage": legacy_info,
+                "_partial": snapshot._partial,
+            })
+        except Exception as exc:
+            logger.warning("execution-legibility error: %s", exc)
+            return JSONResponse(
+                {"error": str(exc), "_partial": True, "schema_version": "pr10-v1"},
+                status_code=200,
+            )
+
     return router

@@ -964,3 +964,32 @@ def reset_windows_arbiter() -> None:
     """Reset the singleton (intended for test isolation)."""
     global _arbiter_instance
     _arbiter_instance = None
+
+
+# ---------------------------------------------------------------------------
+# PR-10: Last attempt log — operator review surface support
+# ---------------------------------------------------------------------------
+
+
+def get_last_attempt_log() -> List[Dict[str, Any]]:
+    """Return the attempt list from the most recent arbiter execution.
+
+    This is a **read-only observability accessor** for the PR-10
+    operator review surface (fallback cascade traceability).
+
+    Returns the ``attempts`` list from the most recent
+    :class:`WinExecResult`, or an empty list if the arbiter has not
+    been invoked in this process lifetime.
+
+    Each entry is a dict with keys:
+    ``level``, ``status``, ``error``, ``fallback_reason``, ``latency_ms``.
+    """
+    try:
+        arbiter = get_windows_arbiter()
+        history = arbiter.get_history(limit=1)
+        if not history:
+            return []
+        latest = history[-1]
+        return list(latest.get("attempts") or [])
+    except Exception:  # noqa: BLE001
+        return []
