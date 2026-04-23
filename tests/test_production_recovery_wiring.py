@@ -163,10 +163,11 @@ class TestPhase4InFlightTaskCount:
 class TestPhase4RecoveryNonFatal:
     def test_phase4_ok_when_recovery_raises(self, monkeypatch):
         """Phase 4 must not hard-fail when run_startup_recovery() raises."""
+        def _raise_error(**kwargs):
+            raise RuntimeError("store unavailable")
+
         import core.runtime_restart_recovery as _rr_mod
-        monkeypatch.setattr(
-            _rr_mod, "run_startup_recovery", lambda **kw: (_ for _ in ()).throw(RuntimeError("store unavailable"))
-        )
+        monkeypatch.setattr(_rr_mod, "run_startup_recovery", _raise_error)
 
         orch = SystemOrchestrator()
         result = orch._run_phase_4_background_subsystems()
@@ -185,10 +186,12 @@ class TestShutdownPersistsLifecycleSnapshot:
         """async_shutdown must call persist_lifecycle_snapshot before subsystem teardown."""
         persist_called = {}
 
+        def _fake_persist(store=None):
+            persist_called["ok"] = True
+            return True
+
         import core.task_envelope_lifecycle_registry as _lr_mod
-        monkeypatch.setattr(
-            _lr_mod, "persist_lifecycle_snapshot", lambda store=None: persist_called.update({"ok": True}) or True
-        )
+        monkeypatch.setattr(_lr_mod, "persist_lifecycle_snapshot", _fake_persist)
 
         import launcher.shutdown as _sd_mod
 
@@ -206,12 +209,12 @@ class TestShutdownPersistsLifecycleSnapshot:
         """persist_lifecycle_snapshot must be called before shutdown_subsystems."""
         call_order = []
 
+        def _fake_persist(store=None):
+            call_order.append("persist")
+            return True
+
         import core.task_envelope_lifecycle_registry as _lr_mod
-        monkeypatch.setattr(
-            _lr_mod,
-            "persist_lifecycle_snapshot",
-            lambda store=None: call_order.append("persist") or True,
-        )
+        monkeypatch.setattr(_lr_mod, "persist_lifecycle_snapshot", _fake_persist)
 
         import launcher.shutdown as _sd_mod
         import unittest.mock as _mock
@@ -237,12 +240,11 @@ class TestShutdownPersistsLifecycleSnapshot:
 class TestShutdownPersistFailureNonFatal:
     def test_async_shutdown_continues_when_persist_raises(self, monkeypatch):
         """async_shutdown must continue (not raise) when persist_lifecycle_snapshot fails."""
+        def _failing_persist(store=None):
+            raise IOError("disk full")
+
         import core.task_envelope_lifecycle_registry as _lr_mod
-        monkeypatch.setattr(
-            _lr_mod,
-            "persist_lifecycle_snapshot",
-            lambda store=None: (_ for _ in ()).throw(IOError("disk full")),
-        )
+        monkeypatch.setattr(_lr_mod, "persist_lifecycle_snapshot", _failing_persist)
 
         import launcher.shutdown as _sd_mod
         import unittest.mock as _mock
