@@ -117,6 +117,7 @@ __all__ = [
     "AUDIT_EVENT_SEMANTICS_AUTHORITY",
     "AUDIT_EVENT_SEMANTICS_CONTRACT_VERSION",
     "AUDIT_UNIFIED_VOCABULARY_POLICY",
+    "AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL",
     # Enumerations
     "AuditEventKind",
     # Constants
@@ -158,6 +159,18 @@ AUDIT_UNIFIED_VOCABULARY_POLICY: str = (
     "all audit trail entries must flow through AuditEventSemantics."
 )
 """Policy: single canonical audit vocabulary; no parallel audit formats."""
+
+AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL: str = (
+    "AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT::DISPATCH_SPINE_V1: "
+    "AuditEventSemantics now supports an optional durable audit sink via "
+    "AuditEventSemantics.set_audit_store().  When a DurableAuditStore is "
+    "attached, every AuditEventRecord appended to the ring buffer is also "
+    "written to the JSONL store so that canonical dispatch-spine audit "
+    "events (accepted/dispatched/completed/failed/route/fallback) are "
+    "durably reviewable across process lifetimes.  The ring buffer remains "
+    "the authoritative in-process read surface; the store is observational."
+)
+"""Sentinel confirming AuditEventSemantics supports durable audit storage."""
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +485,15 @@ class AuditEventSemantics:
     Bridges :class:`~core.replay_foundation.ReplayFoundation` (execution
     replay) and the operator surface (observability) with a unified audit
     vocabulary.
+
+    Durable audit sink
+    ------------------
+    When :meth:`set_audit_store` has been called with a
+    :class:`~core.replay_audit_persistence.DurableAuditStore`, every
+    :class:`AuditEventRecord` appended to the ring buffer is **also**
+    written to the durable JSONL store.  The ring buffer remains the
+    authoritative in-process read surface; the store provides forensic
+    reviewability of dispatch-spine events across process lifetimes.
     """
 
     _MAX_RING: int = 256
@@ -479,12 +501,41 @@ class AuditEventSemantics:
     def __init__(self) -> None:
         self._ring: Deque[AuditEventRecord] = deque(maxlen=self._MAX_RING)
         self._by_task: Dict[str, List[AuditEventRecord]] = {}
+        # Optional durable audit sink (wired by production bootstrap)
+        self._audit_store: Any = None
+
+    def set_audit_store(self, store: Any) -> None:
+        """Attach a :class:`~core.replay_audit_persistence.DurableAuditStore`.
+
+        Once attached, every :class:`AuditEventRecord` recorded here is also
+        written to *store* for durable auditability of dispatch-spine events.
+
+        Parameters
+        ----------
+        store:
+            A :class:`~core.replay_audit_persistence.DurableAuditStore`
+            instance.  Pass ``None`` to detach.
+        """
+        self._audit_store = store
 
     def record(self, record: AuditEventRecord) -> AuditEventRecord:
-        """Append an :class:`AuditEventRecord` to the ring."""
+        """Append an :class:`AuditEventRecord` to the ring and durable store."""
         self._ring.append(record)
         if record.task_id:
             self._by_task.setdefault(record.task_id, []).append(record)
+        # Write to durable store when attached
+        if self._audit_store is not None:
+            try:
+                from core.replay_audit_persistence import append_replay_audit_record
+                append_replay_audit_record(
+                    record.to_dict(),
+                    "audit_event",
+                    store=self._audit_store,
+                )
+            except Exception as _exc:  # noqa: BLE001
+                logger.debug(
+                    "AuditEventSemantics: durable write skipped: %s", _exc
+                )
         return record
 
     def get_by_task(self, task_id: str) -> List[AuditEventRecord]:
