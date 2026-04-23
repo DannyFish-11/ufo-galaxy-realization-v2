@@ -1558,6 +1558,9 @@ _register(
         ),
     ),
 )
+
+# ---------------------------------------------------------------------------
+# Compatibility shim: expose same symbol as constellation_runtime
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
 # _register() calls.  Moving it earlier would freeze the frozenset before

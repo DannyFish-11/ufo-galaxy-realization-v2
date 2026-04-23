@@ -91,8 +91,6 @@ class TestPRS7Status:
     batches advance the retirement tier.
     """
 
-    _RETIRED_STATUSES = None
-
     @staticmethod
     def _retired_statuses():
         from core.orchestration_authority.legacy_paths import LegacyPathStatus
