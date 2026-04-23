@@ -83,35 +83,48 @@ class TestPRS7RegistryEntries:
 # ===========================================================================
 
 class TestPRS7Status:
-    """All PR-S7 entries carry LEGACY_COMPATIBILITY status."""
+    """All PR-S7 entries carry at least LEGACY_COMPATIBILITY status.
+
+    Note: PR-516 subsequently upgraded these three entries from
+    LEGACY_COMPATIBILITY to DEPRECATED (a stricter retirement level).
+    The tests accept either status so they remain valid as PR-516 or later
+    batches advance the retirement tier.
+    """
+
+    _RETIRED_STATUSES = None
+
+    @staticmethod
+    def _retired_statuses():
+        from core.orchestration_authority.legacy_paths import LegacyPathStatus
+        return {LegacyPathStatus.LEGACY_COMPATIBILITY, LegacyPathStatus.DEPRECATED}
 
     def test_task_decomposer_is_legacy_compat(self):
-        from core.orchestration_authority.legacy_paths import (
-            LEGACY_PATH_REGISTRY,
-            LegacyPathStatus,
-        )
+        from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.TaskDecomposer"]
-        assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert entry.status in self._retired_statuses(), (
+            f"TaskDecomposer status {entry.status!r} must be at least "
+            "LEGACY_COMPATIBILITY (PR-516 upgraded it to DEPRECATED)"
+        )
 
     def test_intelligent_task_planner_is_legacy_compat(self):
-        from core.orchestration_authority.legacy_paths import (
-            LEGACY_PATH_REGISTRY,
-            LegacyPathStatus,
-        )
+        from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY[
             "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
         ]
-        assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert entry.status in self._retired_statuses(), (
+            f"IntelligentTaskPlanner status {entry.status!r} must be at least "
+            "LEGACY_COMPATIBILITY (PR-516 upgraded it to DEPRECATED)"
+        )
 
     def test_gateway_capability_registry_is_legacy_compat(self):
-        from core.orchestration_authority.legacy_paths import (
-            LEGACY_PATH_REGISTRY,
-            LegacyPathStatus,
-        )
+        from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY[
             "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
         ]
-        assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert entry.status in self._retired_statuses(), (
+            f"GatewayCapabilityRegistry status {entry.status!r} must be at least "
+            "LEGACY_COMPATIBILITY (PR-516 upgraded it to DEPRECATED)"
+        )
 
 
 # ===========================================================================
@@ -119,26 +132,42 @@ class TestPRS7Status:
 # ===========================================================================
 
 class TestPRS7GuardrailTag:
-    """All PR-S7 entries have pr_guardrail_added == 'PR-S7'."""
+    """All PR-S7 entries were guardrailed in PR-S7 or later upgraded by PR-516.
+
+    Note: PR-516 re-registered these paths with ``pr_guardrail_added="PR-516"``
+    and upgraded their status to DEPRECATED.  The tests accept either tag so
+    they remain valid as later batches further advance the retirement record.
+    """
+
+    _VALID_TAGS = {"PR-S7", "PR-516"}
 
     def test_task_decomposer_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.task_decomposer.TaskDecomposer"]
-        assert entry.pr_guardrail_added == "PR-S7"
+        assert entry.pr_guardrail_added in self._VALID_TAGS, (
+            f"TaskDecomposer pr_guardrail_added {entry.pr_guardrail_added!r} "
+            "must be 'PR-S7' or 'PR-516'"
+        )
 
     def test_intelligent_task_planner_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY[
             "galaxy_gateway.task_decomposer.IntelligentTaskPlanner"
         ]
-        assert entry.pr_guardrail_added == "PR-S7"
+        assert entry.pr_guardrail_added in self._VALID_TAGS, (
+            f"IntelligentTaskPlanner pr_guardrail_added {entry.pr_guardrail_added!r} "
+            "must be 'PR-S7' or 'PR-516'"
+        )
 
     def test_gateway_capability_registry_guardrail_tag(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
         entry = LEGACY_PATH_REGISTRY[
             "galaxy_gateway.capability_registry.GatewayCapabilityRegistry"
         ]
-        assert entry.pr_guardrail_added == "PR-S7"
+        assert entry.pr_guardrail_added in self._VALID_TAGS, (
+            f"GatewayCapabilityRegistry pr_guardrail_added {entry.pr_guardrail_added!r} "
+            "must be 'PR-S7' or 'PR-516'"
+        )
 
 
 # ===========================================================================

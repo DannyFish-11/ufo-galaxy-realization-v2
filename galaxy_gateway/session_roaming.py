@@ -1,5 +1,33 @@
 """
-Session Roaming Manager - 会话漫游管理器
+galaxy_gateway/session_roaming.py — Session Roaming Manager
+  (Legacy Compatibility Module — PR-M)
+
+.. deprecated:: PR-M
+    This module (``galaxy_gateway.session_roaming``) is a **legacy
+    compatibility surface** retained for backward compatibility only.
+
+    ``SessionRoamingManager`` manages session migration between devices by
+    directly instantiating ``CrossDeviceCoordinator`` (a legacy fallback
+    coordinator, PR-S3) and calling ``core.device_communication.send_command``
+    outside the canonical
+    ``CanonicalTask → TaskEnvelope → CommandRouter.route_envelope()`` spine.
+    This makes it a parallel session-migration authority that bypasses
+    canonical dispatch and truth ownership.
+
+    Canonical replacement::
+
+        core.canonical_session_axis  (canonical session ownership)
+        core.attached_runtime_session  (runtime session lifecycle)
+        → CommandRouter.route_envelope(TaskEnvelope)  (canonical dispatch)
+
+    New code must not use ``SessionRoamingManager`` as a primary session
+    migration authority.  Session continuity and cross-device handoff must
+    go through the canonical session axis and attached-runtime session layer.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entry
+    (``galaxy_gateway.session_roaming.SessionRoamingManager``).
+
+Session Roaming Manager - 会话漫游管理器（Legacy Compat — 仅保留向后兼容性）
 
 核心功能：
 - 会话创建与跟踪：在唤醒时创建会话，记录对话上下文、任务状态
@@ -116,8 +144,19 @@ class Session:
 # =============================================================================
 
 class SessionRoamingManager:
-    """
-    会话漫游管理器
+    """Legacy compatibility session migration manager (PR-M).
+
+    .. deprecated:: PR-M
+        ``SessionRoamingManager`` is a LEGACY COMPAT SESSION MANAGER.
+        It migrates sessions between devices by directly using
+        ``CrossDeviceCoordinator`` (a legacy fallback coordinator) and
+        ``core.device_communication.send_command``, bypassing the canonical
+        ``CanonicalTask → TaskEnvelope → CommandRouter.route_envelope()``
+        spine.  New session continuity and cross-device handoff must use the
+        canonical session axis (``core.canonical_session_axis``) and
+        attached-runtime session layer (``core.attached_runtime_session``).
+
+    会话漫游管理器（legacy compat — 仅保留向后兼容性）
 
     负责会话的完整生命周期管理，包括创建、跟踪、迁移和关闭。
     通过 cross_device_coordinator 的共享数据存储实现持久化快照。
@@ -130,6 +169,13 @@ class SessionRoamingManager:
     SNAPSHOT_KEY_PREFIX: str = "session_snapshot:"
 
     def __init__(self):
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                "galaxy_gateway.session_roaming.SessionRoamingManager"
+            )
+        except Exception:
+            pass
         self._sessions: Dict[str, Session] = {}
         # 设备 → 当前会话 ID 映射
         self._device_session_map: Dict[str, str] = {}
