@@ -26,8 +26,60 @@ core/routing_explanation/
 ├── decision_basis.py       # DecisionFactor enum + DecisionBasis dataclass
 ├── route_confidence.py     # ConfidenceBand enum + RouteConfidence dataclass
 ├── route_explanation.py    # RouteExplanation + RejectedCandidate dataclasses
-└── explanation_summary.py  # RoutingExplanationSummary + projection helpers
+├── explanation_summary.py  # RoutingExplanationSummary + projection helpers
+└── live_decision.py        # LiveRoutingDecisionBuilder — PR-H live wiring
 ```
+
+---
+
+## PR-H: Live Routing Explanation Wiring
+
+> **PR-H** wires live routing explanation and decision causality directly into
+> the canonical routing spine so that route selection, rejection, fallback, and
+> other routing outcomes are recorded as evidence-backed runtime decisions.
+
+### Where live explanations originate
+
+Live explanations are generated inside `CommandRouter.route_envelope`
+(`core/command_router.py`) using `LiveRoutingDecisionBuilder`
+(`core/routing_explanation/live_decision.py`).
+
+One builder instance is created **per `route_envelope` call**.  Signals are
+recorded at each decision checkpoint inside the routing flow:
+
+| Checkpoint | Method | What is captured |
+|---|---|---|
+| Session-truth posture gate (Gate A) | `record_posture_gate` | Posture string + eligibility flag |
+| Admissibility gate (Gate B) | `record_admissibility_gate` | Validated and excluded targets with reasons |
+| Capability-graph enforcement | `record_capability_enforcement` | Confirmed and unconfirmed targets + required caps |
+| Route path selection | `record_route_path_selection` | Branch chosen (cross-device / worker / local / fanout) |
+| Result outcome | `record_result_outcome` | Success or failure with error code |
+
+### How route selection, rejection, and fallback causes are exposed
+
+After dispatch completes, the builder calls `build()` to produce a
+`RouteExplanation`.  This explanation is:
+
+- **Attached to the result dict** under `result["routing_explanation"]` and
+  `result["routing_explanation_summary"]` for operator review.
+- **Serialised to JSON** and passed as `route_explanation` to
+  `ReplayFoundation.record_route_decision`, replacing the previous static
+  placeholder string.
+
+### Why rejected alternatives appear in the explanation
+
+Devices excluded by the admissibility gate appear as `RejectedCandidate`
+entries with `was_available=False` and a reason string (e.g.
+`"heartbeat-stale"`).  Devices excluded by the capability graph appear with
+`capability_match=False`.  Both also appear as `DecisionBasis` entries with
+`accepted=False` so the cause-and-effect chain is reviewable.
+
+### Fallback causality
+
+When `record_fallback` is called with fallback device IDs, a `FALLBACK`
+`DecisionBasis` is added and `RouteExplanation.fallback_plan` is set.
+`RoutingExplanationSummary.has_fallback` reflects this flag so consumers can
+detect fallback without parsing the full explanation tree.
 
 ---
 
