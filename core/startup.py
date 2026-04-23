@@ -208,7 +208,8 @@ def wire_durable_audit_store(store_path: Optional[str] = None) -> dict:
             _truth_wired = True
         except Exception as _truth_exc:  # noqa: BLE001
             logger.warning(
-                "wire_durable_audit_store: canonical truth runtime wiring skipped: %s",
+                "wire_durable_audit_store: CanonicalSessionTruthRuntime wiring skipped "
+                "(truth-merge evidence will not be durable this session): %s",
                 _truth_exc,
             )
 

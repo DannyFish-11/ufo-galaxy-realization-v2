@@ -1320,8 +1320,8 @@ class OpenClawd:
                     targets=[entry_mode or "local"],
                     transport=entry_mode or "local",
                 )
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as _aud_exc:  # noqa: BLE001
+                logger.debug("_run_execution: dispatch audit write skipped: %s", _aud_exc)
             result = executor.execute(
                 state_continuum,
                 entry_mode=entry_mode,
@@ -1363,9 +1363,8 @@ class OpenClawd:
                         error_code=result.skipped_reason or "execution_failed",
                         failure_domain="dispatch_spine",
                     )
-            except Exception:  # noqa: BLE001
-                pass
-            # PR-24: Emit a fallback decision trace for every execution result.
+            except Exception as _aud_exc:  # noqa: BLE001
+                logger.debug("_run_execution: outcome audit write skipped: %s", _aud_exc)
             _exec_dict["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _exec_dict)
             # PR-25: Emit a canonical execution trace envelope.
             _exec_dict["execution_trace"] = self._build_execution_trace(_intent_profile, _readiness, _exec_dict)
@@ -1389,9 +1388,8 @@ class OpenClawd:
                     error_code="internal_error",
                     failure_domain="dispatch_spine",
                 )
-            except Exception:  # noqa: BLE001
-                pass
-            # PR-24: Trace the internal-error fallback.
+            except Exception as _aud_exc:  # noqa: BLE001
+                logger.debug("_run_execution: error audit write skipped: %s", _aud_exc)
             _err_result["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _err_result)
             # PR-25: Emit a canonical execution trace envelope.
             _err_result["execution_trace"] = self._build_execution_trace(_intent_profile, _readiness, _err_result)
