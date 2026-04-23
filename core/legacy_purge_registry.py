@@ -522,6 +522,64 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "scripts/validate_runtime.py::check_callable_startup_integration()"
         ),
     ),
+
+    # ── PR-M: Legacy path retirement and canonical-only enforcement pass ──
+
+    PurgeDecision(
+        asset_path="galaxy_gateway/smart_transport_router.py::SmartTransportRouter",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-M",
+        rationale=(
+            "SmartTransportRouter is a legacy transport-selection helper that "
+            "chooses between WebRTC, Scrcpy, ADB, and HTTP outside the canonical "
+            "DeviceRouter → galaxy_gateway.routing.dispatch pipeline.  "
+            "PR-M adds a deprecation docstring, a LEGACY PATH GUARDRAIL in "
+            "__init__, and a LEGACY_PATH_REGISTRY entry.  The class is retained "
+            "for backward compatibility; new transport dispatch must use "
+            "DeviceRouter.route_task() → galaxy_gateway.routing.dispatch."
+        ),
+        canonical_replacement=(
+            "galaxy_gateway/device_router.py  (DeviceRouter.route_task)  "
+            "→  galaxy_gateway/routing/dispatch.py  (dispatch_to_websocket)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/enhanced_nlu_v2.py::EnhancedNLUEngineV2",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-M",
+        rationale=(
+            "EnhancedNLUEngineV2 is a legacy LLM+rule hybrid NLU engine that "
+            "resolves device intent outside the canonical OpenClawd → "
+            "CommandRouter → TaskEnvelope pipeline, maintaining its own device "
+            "registry and LLM client as parallel authorities.  "
+            "PR-M adds a deprecation docstring, a LEGACY PATH GUARDRAIL in "
+            "__init__, and a LEGACY_PATH_REGISTRY entry.  The class is retained "
+            "for backward compatibility; new intent processing must use "
+            "core.e2e_orchestrator.process_user_input()."
+        ),
+        canonical_replacement=(
+            "core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path="galaxy_gateway/session_roaming.py::SessionRoamingManager",
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-M",
+        rationale=(
+            "SessionRoamingManager is a legacy session migration manager that "
+            "directly uses CrossDeviceCoordinator (a legacy fallback coordinator) "
+            "and core.device_communication.send_command, bypassing the canonical "
+            "CanonicalTask → TaskEnvelope → CommandRouter.route_envelope() spine.  "
+            "PR-M adds a deprecation docstring, a LEGACY PATH GUARDRAIL in "
+            "__init__, and a LEGACY_PATH_REGISTRY entry.  The class is retained "
+            "for backward compatibility; new session continuity and cross-device "
+            "handoff must use the canonical session axis and attached-runtime "
+            "session layer."
+        ),
+        canonical_replacement=(
+            "core/canonical_session_axis.py  +  core/attached_runtime_session.py"
+        ),
+    ),
 )
 
 # ---------------------------------------------------------------------------

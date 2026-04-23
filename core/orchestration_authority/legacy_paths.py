@@ -1472,7 +1472,92 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
-# Compatibility shim: expose same symbol as constellation_runtime
+# PR-M: Legacy path retirement and canonical-only enforcement pass.
+#
+# The following paths are formally classified as LEGACY_COMPATIBILITY in
+# PR-M as part of the legacy path retirement and canonical-only enforcement
+# pass.  Each path acts as a practical live alternative to the canonical
+# execution spine and must be bounded so it cannot silently resume
+# authoritative decision-making.
+#
+# Canonical replacements:
+#   galaxy_gateway.smart_transport_router  → galaxy_gateway.routing.dispatch
+#                                            (via DeviceRouter.route_task)
+#   galaxy_gateway.enhanced_nlu_v2        → core.e2e_orchestrator.process_user_input
+#                                            (OpenClawd → CommandRouter pipeline)
+#   galaxy_gateway.session_roaming        → core.canonical_session_axis
+#                                            + core.attached_runtime_session
+#
+# Each class __init__ emits a LEGACY PATH GUARDRAIL via emit_legacy_guardrail()
+# so live invocations are observable in log-aggregation pipelines.
+# ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="galaxy_gateway.smart_transport_router.SmartTransportRouter",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "SmartTransportRouter is a LEGACY COMPAT TRANSPORT SELECTOR (PR-M).  "
+            "It selects between WebRTC, Scrcpy, ADB, and HTTP outside the canonical "
+            "DeviceRouter → galaxy_gateway.routing.dispatch pipeline and does not "
+            "produce a TaskEnvelope.  "
+            "New code must route through DeviceRouter.route_task() which delegates "
+            "to galaxy_gateway.routing.dispatch.dispatch_to_websocket.  "
+            "SmartTransportRouter is retained only so existing transport-selection "
+            "call sites do not immediately break."
+        ),
+        pr_guardrail_added="PR-M",
+        notes=(
+            "SmartTransportRouter — LEGACY COMPAT transport-selection helper (PR-M).  "
+            "Canonical transport dispatch authority is DeviceRouter.route_task() "
+            "→ galaxy_gateway.routing.dispatch.  "
+            "Not a primary entrypoint; must not be used for new transport work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "EnhancedNLUEngineV2 is a LEGACY COMPAT NLU ENGINE (PR-M).  "
+            "It processes natural-language commands outside the canonical "
+            "OpenClawd → CommandRouter → TaskEnvelope pipeline, maintaining "
+            "its own device registry and LLM client as parallel authorities.  "
+            "Canonical NLU and intent resolution: "
+            "core.e2e_orchestrator.process_user_input() → OpenClawd → "
+            "CommandRouter.route_envelope(TaskEnvelope) → DeviceRouter.route_task().  "
+            "EnhancedNLUEngineV2 is retained only for backward compatibility; "
+            "all new intent processing must route through core.e2e_orchestrator."
+        ),
+        pr_guardrail_added="PR-M",
+        notes=(
+            "EnhancedNLUEngineV2 — LEGACY COMPAT NLU engine (PR-M).  "
+            "Canonical intent-resolution authority is "
+            "core.e2e_orchestrator.process_user_input().  "
+            "Not a primary entrypoint; must not be used for new NLU work."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.session_roaming.SessionRoamingManager",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "SessionRoamingManager is a LEGACY COMPAT SESSION MANAGER (PR-M).  "
+            "It migrates sessions between devices by directly using CrossDeviceCoordinator "
+            "(a legacy fallback coordinator, PR-S3) and core.device_communication.send_command "
+            "outside the canonical CanonicalTask → TaskEnvelope → CommandRouter.route_envelope() "
+            "spine.  "
+            "Canonical session continuity and cross-device handoff: "
+            "core.canonical_session_axis + core.attached_runtime_session.  "
+            "SessionRoamingManager is retained only so existing session-roaming "
+            "call sites do not immediately break."
+        ),
+        pr_guardrail_added="PR-M",
+        notes=(
+            "SessionRoamingManager — LEGACY COMPAT session migration manager (PR-M).  "
+            "Canonical session axis: core.canonical_session_axis.  "
+            "Not a primary entrypoint; must not be used for new session work."
+        ),
+    ),
+)
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
 # _register() calls.  Moving it earlier would freeze the frozenset before

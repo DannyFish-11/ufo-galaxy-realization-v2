@@ -1,5 +1,34 @@
 """
-Galaxy - 增强版 NLU 引擎 v2.0
+galaxy_gateway/enhanced_nlu_v2.py — Enhanced NLU Engine v2
+  (Legacy Compatibility Module — PR-M)
+
+.. deprecated:: PR-M
+    This module (``galaxy_gateway.enhanced_nlu_v2``) is a **legacy
+    compatibility surface** retained for backward compatibility only.
+
+    ``EnhancedNLUEngineV2`` is a pre-canonical LLM+rule hybrid NLU engine
+    that processes natural-language commands and performs device-intent
+    resolution independently of the canonical
+    ``OpenClawd → CommandRouter → TaskEnvelope`` pipeline.  It maintains
+    its own device registry, conversation context, and LLM client, making
+    it a parallel authority that can silently produce dispatch decisions
+    outside the canonical spine.
+
+    Canonical replacement::
+
+        core.e2e_orchestrator.process_user_input()
+        → OpenClawd → CommandRouter.route_envelope(TaskEnvelope)
+        → DeviceRouter.route_task()
+
+    New code must not instantiate ``EnhancedNLUEngineV2`` as a primary
+    intent-resolution authority.  Route user input through
+    ``core.e2e_orchestrator.process_user_input()`` which integrates with
+    the canonical OpenClawd → CommandRouter → TaskGraph pipeline.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entry
+    (``galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2``).
+
+Galaxy - 增强版 NLU 引擎 v2.0（Legacy Compat — 仅保留向后兼容性）
 
 功能：
 1. 多设备精确识别（手机 A、手机 B、平板、电脑）
@@ -390,7 +419,18 @@ class VLMClient(LLMClient):
 # ============================================================================
 
 class EnhancedNLUEngineV2:
-    """增强版 NLU 引擎 v2.0"""
+    """Legacy compatibility NLU engine (PR-M).
+
+    .. deprecated:: PR-M
+        ``EnhancedNLUEngineV2`` is a LEGACY COMPAT NLU ENGINE.
+        It processes natural-language commands outside the canonical
+        ``OpenClawd → CommandRouter → TaskEnvelope`` pipeline.
+        New code must route user input through
+        ``core.e2e_orchestrator.process_user_input()`` which integrates
+        with the canonical OpenClawd → CommandRouter → TaskGraph pipeline.
+
+    增强版 NLU 引擎 v2.0（legacy compat — 仅保留向后兼容性）
+    """
     
     def __init__(
         self,
@@ -401,7 +441,7 @@ class EnhancedNLUEngineV2:
         confidence_threshold: float = 0.7
     ):
         """
-        初始化 NLU 引擎
+        初始化 NLU 引擎（Legacy Compat — PR-M）
         
         Args:
             device_registry: 设备注册表
@@ -409,6 +449,13 @@ class EnhancedNLUEngineV2:
             use_llm: 是否使用 LLM（False 则只用规则）
             confidence_threshold: 置信度阈值（低于此值会要求澄清）
         """
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                "galaxy_gateway.enhanced_nlu_v2.EnhancedNLUEngineV2"
+            )
+        except Exception:
+            pass
         self.device_registry = device_registry
         self.llm_client = llm_client
         self.vlm_client = vlm_client # 保存 VLM 客户端

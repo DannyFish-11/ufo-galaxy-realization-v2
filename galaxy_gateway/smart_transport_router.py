@@ -1,5 +1,31 @@
 """
-SmartTransportRouter - 智能传输路由
+galaxy_gateway/smart_transport_router.py — Smart Transport Router
+  (Legacy Compatibility Module — PR-M)
+
+.. deprecated:: PR-M
+    This module (``galaxy_gateway.smart_transport_router``) is a **legacy
+    compatibility surface** retained for backward compatibility only.
+
+    ``SmartTransportRouter`` is a pre-canonical transport-selection helper
+    that chooses between WebRTC, Scrcpy, ADB, and HTTP outside the
+    canonical ``DeviceRouter → galaxy_gateway.routing.dispatch`` pipeline.
+    It does not produce a ``TaskEnvelope`` and does not route through
+    ``CommandRouter.route_envelope()``, making it a parallel authority
+    that can silently bypass canonical dispatch decisions.
+
+    Canonical replacement::
+
+        galaxy_gateway.device_router.DeviceRouter.route_task()
+        → galaxy_gateway.routing.dispatch.dispatch_to_websocket()
+
+    New code must not instantiate ``SmartTransportRouter`` as a primary
+    transport-selection authority.  Route through ``DeviceRouter.route_task``
+    which delegates to the canonical ``galaxy_gateway.routing`` layer.
+
+    See ``core.orchestration_authority.legacy_paths`` for the registry entry
+    (``galaxy_gateway.smart_transport_router.SmartTransportRouter``).
+
+SmartTransportRouter - 智能传输路由（Legacy Compat — 仅保留向后兼容性）
 
 功能：
 1. 根据任务类型、网络状况和设备状态，自动选择最佳的屏幕内容传输方式
@@ -73,9 +99,26 @@ class TransportResponse(BaseModel):
 # ============================================================================
 
 class SmartTransportRouter:
-    """智能传输路由"""
+    """Legacy compatibility transport-selection helper (PR-M).
+
+    .. deprecated:: PR-M
+        ``SmartTransportRouter`` is a LEGACY COMPAT TRANSPORT SELECTOR.
+        It selects between WebRTC, Scrcpy, ADB, and HTTP outside the
+        canonical DeviceRouter → galaxy_gateway.routing.dispatch pipeline.
+        New code must route through ``DeviceRouter.route_task()`` which
+        delegates to ``galaxy_gateway.routing.dispatch.dispatch_to_websocket``.
+
+    智能传输路由（legacy compat — 仅保留向后兼容性）
+    """
     
     def __init__(self):
+        try:
+            from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+            emit_legacy_guardrail(
+                "galaxy_gateway.smart_transport_router.SmartTransportRouter"
+            )
+        except Exception:
+            pass
         # 节点端点配置
         self.nodes = {
             "webrtc": os.getenv("NODE_95_URL", "http://localhost:8095"),
