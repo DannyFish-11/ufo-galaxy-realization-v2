@@ -670,6 +670,21 @@ class TaskEnvelopeLifecycleRegistry:
         has no associated :class:`asyncio.Future` (fire-and-forget semantics
         after restart).
 
+        Disposition-aware filtering
+        ---------------------------
+        Records with a :attr:`~core.task_lifecycle_persistence
+        .InFlightTaskDisposition.TERMINAL_ON_INTERRUPT` disposition are
+        **silently excluded** — their result may already have been delivered
+        and re-adding them to the pending registry risks duplicate completion.
+
+        Ownership is resolved from the record's ``disposition`` field (not
+        the raw ``owner`` string) so that the post-restart ownership stage
+        always matches the recovery intent:
+
+        * RESUMABLE → DEVICE_DISPATCH
+        * REPLAY_ONLY → ROUTING
+        * REISSUABLE → GATEWAY_INGRESS
+
         Intended to be called once at process startup, before the event loop
         begins dispatching new work.
 
@@ -687,36 +702,72 @@ class TaskEnvelopeLifecycleRegistry:
         """
         try:
             from core.task_lifecycle_persistence import (
+                InFlightTaskDisposition,
                 restore_inflight_tasks_from_snapshot,
             )
+
+            # Disposition → canonical post-restart ownership stage.
+            _disp_to_owner = {
+                InFlightTaskDisposition.RESUMABLE: LifecycleOwner.DEVICE_DISPATCH,
+                InFlightTaskDisposition.REPLAY_ONLY: LifecycleOwner.ROUTING,
+                InFlightTaskDisposition.REISSUABLE: LifecycleOwner.GATEWAY_INGRESS,
+            }
+
             restored = restore_inflight_tasks_from_snapshot(store=store)
             added = 0
+            terminal_skipped = 0
+            already_pending_skipped = 0
             for rec in restored:
-                if rec.task_id and rec.task_id not in self._pending:
-                    self._pending[rec.task_id] = PendingEnvelopeRecord(
-                        task_id=rec.task_id,
-                        trace_id=rec.trace_id,
-                        target_device_id=rec.target_device_id,
-                        tool_name=rec.tool_name,
-                        owner=LifecycleOwner(rec.owner)
-                        if rec.owner in {o.value for o in LifecycleOwner}
-                        else LifecycleOwner.GATEWAY_INGRESS,
-                        timeout=rec.timeout,
-                        registered_at=rec.registered_at,
-                        future=None,
-                        metadata={
-                            **rec.metadata,
-                            "restored_at": rec.interrupted_at,
-                            "disposition": rec.disposition.value,
-                            "snapshot_id": rec.snapshot_id,
-                        },
+                # Terminal records are excluded — result may already be delivered.
+                if rec.disposition == InFlightTaskDisposition.TERMINAL_ON_INTERRUPT:
+                    terminal_skipped += 1
+                    logger.debug(
+                        "lifecycle_registry.restore_from_snapshot: "
+                        "task_id=%s is TERMINAL_ON_INTERRUPT — excluded from "
+                        "pending registry",
+                        rec.task_id,
                     )
-                    added += 1
+                    continue
+
+                if not rec.task_id:
+                    continue
+
+                if rec.task_id in self._pending:
+                    already_pending_skipped += 1
+                    continue
+
+                # Use disposition-mapped owner for authoritative post-restart
+                # ownership; fall back to raw owner if disposition unknown.
+                target_owner = _disp_to_owner.get(rec.disposition)
+                if target_owner is None:
+                    target_owner = (
+                        LifecycleOwner(rec.owner)
+                        if rec.owner in {o.value for o in LifecycleOwner}
+                        else LifecycleOwner.GATEWAY_INGRESS
+                    )
+                self._pending[rec.task_id] = PendingEnvelopeRecord(
+                    task_id=rec.task_id,
+                    trace_id=rec.trace_id,
+                    target_device_id=rec.target_device_id,
+                    tool_name=rec.tool_name,
+                    owner=target_owner,
+                    timeout=rec.timeout,
+                    registered_at=rec.registered_at,
+                    future=None,
+                    metadata={
+                        **rec.metadata,
+                        "restored_at": rec.interrupted_at,
+                        "disposition": rec.disposition.value,
+                        "snapshot_id": rec.snapshot_id,
+                    },
+                )
+                added += 1
             logger.info(
                 "lifecycle_registry.restore_from_snapshot: restored %d records "
-                "(%d skipped — already pending)",
+                "(%d skipped — already pending; %d skipped — terminal)",
                 added,
-                len(restored) - added,
+                already_pending_skipped,
+                terminal_skipped,
             )
             return added
         except Exception as exc:
