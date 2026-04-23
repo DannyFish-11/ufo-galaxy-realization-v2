@@ -252,7 +252,10 @@ class OperationalSLOMetrics:
         """
         with self._lock:
             self._dispatch_failures += 1
-            if reason and len(self._dispatch_failure_reasons) < self._failure_reasons_max:
+            if reason and (
+                len(self._dispatch_failure_reasons) < self._failure_reasons_max
+                or reason in self._dispatch_failure_reasons
+            ):
                 self._dispatch_failure_reasons[reason] = (
                     self._dispatch_failure_reasons.get(reason, 0) + 1
                 )
@@ -275,7 +278,10 @@ class OperationalSLOMetrics:
         """
         with self._lock:
             self._route_rejections += 1
-            if reason and len(self._route_rejection_reasons) < self._rejection_reasons_max:
+            if reason and (
+                len(self._route_rejection_reasons) < self._rejection_reasons_max
+                or reason in self._route_rejection_reasons
+            ):
                 self._route_rejection_reasons[reason] = (
                     self._route_rejection_reasons.get(reason, 0) + 1
                 )
@@ -301,7 +307,10 @@ class OperationalSLOMetrics:
         with self._lock:
             self._fallback_triggers += 1
             kind = fallback_kind or "other"
-            if len(self._fallback_kind_counts) < self._fallback_kinds_max:
+            if (
+                len(self._fallback_kind_counts) < self._fallback_kinds_max
+                or kind in self._fallback_kind_counts
+            ):
                 self._fallback_kind_counts[kind] = (
                     self._fallback_kind_counts.get(kind, 0) + 1
                 )
@@ -341,7 +350,10 @@ class OperationalSLOMetrics:
         """
         with self._lock:
             self._recovery_failed += 1
-            if reason and len(self._recovery_failure_reasons) < self._failure_reasons_max:
+            if reason and (
+                len(self._recovery_failure_reasons) < self._failure_reasons_max
+                or reason in self._recovery_failure_reasons
+            ):
                 self._recovery_failure_reasons[reason] = (
                     self._recovery_failure_reasons.get(reason, 0) + 1
                 )
@@ -391,7 +403,10 @@ class OperationalSLOMetrics:
         """
         with self._lock:
             self._audit_persist_failures += 1
-            if reason and len(self._audit_persist_failure_reasons) < self._audit_failure_reasons_max:
+            if reason and (
+                len(self._audit_persist_failure_reasons) < self._audit_failure_reasons_max
+                or reason in self._audit_persist_failure_reasons
+            ):
                 self._audit_persist_failure_reasons[reason] = (
                     self._audit_persist_failure_reasons.get(reason, 0) + 1
                 )

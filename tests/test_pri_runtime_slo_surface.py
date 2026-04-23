@@ -767,6 +767,19 @@ class TestBoundsEnforcement(unittest.TestCase):
         snap = m.snapshot()
         self.assertLessEqual(len(snap["route_rejection"]["rejection_reason_counts"]), 5)
 
+    def test_existing_rejection_reason_increments_after_cap(self):
+        from core.operational_slo_metrics import OperationalSLOMetrics
+        m = OperationalSLOMetrics(rejection_reasons_max=2)
+        m.record_route_rejection(reason="known_reason")
+        m.record_route_rejection(reason="other_reason")
+        # Cap reached; new distinct reason is rejected but known_reason still counts
+        m.record_route_rejection(reason="new_distinct")
+        m.record_route_rejection(reason="known_reason")
+        snap = m.snapshot()
+        counts = snap["route_rejection"]["rejection_reason_counts"]
+        self.assertEqual(counts["known_reason"], 2)
+        self.assertLessEqual(len(counts), 2)
+
     def test_fallback_kinds_not_exceeded(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
         m = OperationalSLOMetrics(fallback_kinds_max=3)
