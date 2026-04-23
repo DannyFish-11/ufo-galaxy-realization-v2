@@ -25,6 +25,28 @@ For *cross-device* dispatch, the canonical chain is::
 
 HYBRID_EXECUTOR_ROLE sentinel: "fallback_execution_helper"
 
+Continuity wiring (HYBRID_EXECUTOR_CONTINUITY_WIRED)
+-----------------------------------------------------
+``HybridExecutionArbiter.execute()`` is wired into
+:class:`~core.hybrid_orchestration_continuity.HybridOrchestrationContinuityRegistry`
+so that every execution participates in live restart-aware continuity
+tracking.  The lifecycle state transitions are::
+
+    created → dispatched → running → completed   (success)
+    created → dispatched → running → failed       (all levels exhausted)
+    created → dispatched → running → interrupted  (asyncio.CancelledError or
+                                                   unhandled exception)
+
+Partial results from individual successful level attempts are preserved on
+the :class:`~core.hybrid_orchestration_continuity.HybridOrchestrationRecord`
+whenever execution is interrupted before a terminal state is reached.  Local
+partial results are classified as ``preserved``; the recovery coordinator
+marks remote partial results as ``invalidated`` on restart.
+
+The continuity registry is injected via ``__init__(continuity_registry=…)``
+for testability.  Production code uses the process-level singleton via
+:func:`~core.hybrid_orchestration_continuity.get_continuity_registry`.
+
 Phase 3 Matrix OS 核心组件。
 
 三级降级执行链:
@@ -69,6 +91,17 @@ HYBRID_EXECUTOR_ROLE: str = "fallback_execution_helper"
 helper within OpenClawd's local execution path.  It MUST NOT act as a
 parallel top-level dispatch authority or bypass the canonical execution chain
 (OpenClawd → CommandRouter → DeviceRouter) for cross-device tasks."""
+
+HYBRID_EXECUTOR_CONTINUITY_WIRED: str = (
+    "HYBRID_EXECUTOR_CONTINUITY_WIRED::"
+    "HybridExecutionArbiter.execute() is wired into "
+    "HybridOrchestrationContinuityRegistry so every execution participates "
+    "in live restart-aware continuity tracking.  Lifecycle state transitions "
+    "(created→dispatched→running→completed/failed/interrupted) are applied "
+    "to a HybridOrchestrationRecord that survives process restart.  Partial "
+    "results from individual successful level attempts are preserved on "
+    "interruption.  The continuity_registry parameter allows test injection."
+)
 
 #: Phase-A consolidation sentinel.  The former ``CapabilityRegistry`` class in
 #: this module has been renamed to :class:`AppExecutionCapabilityRegistry` to
@@ -255,6 +288,7 @@ class HybridExecutionArbiter:
         gui_executor: GUIExecutor = None,
         vlm_executor: VLMExecutor = None,
         screenshot_getter: ScreenshotGetter = None,
+        continuity_registry=None,
     ):
         self._a2a = a2a_executor
         self._gui = gui_executor
@@ -269,6 +303,9 @@ class HybridExecutionArbiter:
             "vlm_success": 0,
             "all_failed": 0,
         }
+        # Continuity registry: injected for testing, or resolved lazily from
+        # the process-level singleton on first use.  None means "use singleton".
+        self._continuity_registry = continuity_registry
 
     def set_executors(
         self,
@@ -285,6 +322,16 @@ class HybridExecutionArbiter:
             self._vlm = vlm
         if screenshot:
             self._screenshot = screenshot
+
+    def _get_continuity_registry(self):
+        """Return the active continuity registry (injected or process singleton)."""
+        if self._continuity_registry is not None:
+            return self._continuity_registry
+        try:
+            from core.hybrid_orchestration_continuity import get_continuity_registry
+            return get_continuity_registry()
+        except Exception:
+            return None
 
     @staticmethod
     def _is_windows_device(device_id: str) -> bool:
@@ -317,6 +364,8 @@ class HybridExecutionArbiter:
         force_level: ExecutionLevel = None,
         windows_arbiter=None,
         decision_authority: str = "",
+        session_id: str = "",
+        task_id: str = "",
     ) -> HybridResult:
         """
         混合执行入口
@@ -335,6 +384,8 @@ class HybridExecutionArbiter:
                 it is logged so the trace shows who owns the decision.
                 HybridExecutor itself never *makes* a primary decision; it
                 only executes what it receives.
+            session_id: Optional session identifier for continuity tracking.
+            task_id: Optional canonical task identifier for continuity tracking.
         """
         params = params or {}
         request_id = str(uuid.uuid4())[:12]
@@ -355,6 +406,40 @@ class HybridExecutionArbiter:
             )
 
         # ------------------------------------------------------------------
+        # Continuity wiring: register this execution in the continuity
+        # registry so it participates in restart-aware lifecycle tracking.
+        # The record survives process restart; live transport handles do not.
+        # ------------------------------------------------------------------
+        continuity_record = None
+        try:
+            from core.hybrid_orchestration_continuity import (
+                HybridOrchestrationLifecycleState,
+            )
+            _registry = self._get_continuity_registry()
+            if _registry is not None:
+                continuity_record = _registry.create_and_register(
+                    session_id=session_id,
+                    task_id=task_id,
+                    mode="sequential_degrade",
+                )
+                _registry.transition(
+                    continuity_record.execution_id,
+                    HybridOrchestrationLifecycleState.dispatched,
+                )
+                logger.debug(
+                    "hybrid_executor | continuity_registered | "
+                    "execution_id=%s device=%s app=%s action=%s",
+                    continuity_record.execution_id,
+                    device_id,
+                    app_id,
+                    action,
+                )
+        except Exception as _creg_exc:
+            logger.debug(
+                "hybrid_executor | continuity_register_skipped | %s", _creg_exc
+            )
+
+        # ------------------------------------------------------------------
         # Windows fast-path: delegate to WindowsExecutionArbiter which
         # enforces the strict System API → UIA → GUI → VLM fallback chain.
         # Only skip when the caller explicitly passes windows_arbiter=False.
@@ -369,6 +454,7 @@ class HybridExecutionArbiter:
                 request_id=request_id,
                 start=start,
                 windows_arbiter=windows_arbiter,
+                continuity_record=continuity_record,
             )
 
         # 确定执行级别序列
@@ -381,46 +467,171 @@ class HybridExecutionArbiter:
             levels = self.registry.get_preferred_levels(app_id)
 
         attempts = []
+        # Track the last successful partial result for interruption preservation.
+        last_partial_result: Optional[Dict[str, Any]] = None
+        last_partial_origin: str = "local"
 
-        for level in levels:
-            attempt = await self._try_level(
-                level, device_id, app_id, action, params, instruction
-            )
-            attempts.append(attempt)
-
-            if attempt.status == ExecutionStatus.SUCCESS:
-                self._stats[f"{level.value}_success"] += 1
-                result = HybridResult(
-                    request_id=request_id,
-                    success=True,
-                    final_level=level,
-                    result=attempt.result,
-                    attempts=[self._attempt_to_dict(a) for a in attempts],
-                    total_latency_ms=(time.time() - start) * 1000,
+        # Transition to running once we start attempting levels.
+        if continuity_record is not None:
+            try:
+                from core.hybrid_orchestration_continuity import (
+                    HybridOrchestrationLifecycleState,
                 )
-                self._record(result)
-                return result
+                self._get_continuity_registry().transition(
+                    continuity_record.execution_id,
+                    HybridOrchestrationLifecycleState.running,
+                )
+            except Exception as _tr_exc:
+                logger.debug(
+                    "hybrid_executor | continuity_running_transition_failed | %s",
+                    _tr_exc,
+                )
 
-            logger.info(
-                f"Level {level.value} failed for {app_id}.{action}: "
-                f"{attempt.error}. Trying next level..."
+        try:
+            for level in levels:
+                attempt = await self._try_level(
+                    level, device_id, app_id, action, params, instruction
+                )
+                attempts.append(attempt)
+
+                if attempt.status == ExecutionStatus.SUCCESS:
+                    # Preserve the successful attempt result as a partial result
+                    # in case execution is interrupted before returning.
+                    last_partial_result = attempt.result
+                    last_partial_origin = "local"
+
+                    self._stats[f"{level.value}_success"] += 1
+                    result = HybridResult(
+                        request_id=request_id,
+                        success=True,
+                        final_level=level,
+                        result=attempt.result,
+                        attempts=[self._attempt_to_dict(a) for a in attempts],
+                        total_latency_ms=(time.time() - start) * 1000,
+                    )
+                    self._record(result)
+                    # Transition to completed in the continuity registry.
+                    if continuity_record is not None:
+                        try:
+                            from core.hybrid_orchestration_continuity import (
+                                HybridOrchestrationLifecycleState,
+                            )
+                            self._get_continuity_registry().transition(
+                                continuity_record.execution_id,
+                                HybridOrchestrationLifecycleState.completed,
+                                result=result.to_dict(),
+                            )
+                        except Exception as _tc_exc:
+                            logger.debug(
+                                "hybrid_executor | continuity_completed_transition_failed | %s",
+                                _tc_exc,
+                            )
+                    return result
+
+                logger.info(
+                    f"Level {level.value} failed for {app_id}.{action}: "
+                    f"{attempt.error}. Trying next level..."
+                )
+
+            # 所有级别都失败
+            # PR-2: Fallback exhaustion — this is a transport-level failure, NOT
+            # a re-decision.  We return a failed result without altering the
+            # original action or intent received from the primary authority.
+            self._stats["all_failed"] += 1
+            result = HybridResult(
+                request_id=request_id,
+                success=False,
+                final_level=levels[-1] if levels else ExecutionLevel.A2A,
+                result={"error": "All execution levels failed"},
+                attempts=[self._attempt_to_dict(a) for a in attempts],
+                total_latency_ms=(time.time() - start) * 1000,
             )
+            self._record(result)
+            # Transition to failed in the continuity registry.
+            if continuity_record is not None:
+                try:
+                    from core.hybrid_orchestration_continuity import (
+                        HybridOrchestrationLifecycleState,
+                    )
+                    self._get_continuity_registry().transition(
+                        continuity_record.execution_id,
+                        HybridOrchestrationLifecycleState.failed,
+                        result=result.to_dict(),
+                    )
+                except Exception as _tf_exc:
+                    logger.debug(
+                        "hybrid_executor | continuity_failed_transition_failed | %s",
+                        _tf_exc,
+                    )
+            return result
 
-        # 所有级别都失败
-        # PR-2: Fallback exhaustion — this is a transport-level failure, NOT
-        # a re-decision.  We return a failed result without altering the
-        # original action or intent received from the primary authority.
-        self._stats["all_failed"] += 1
-        result = HybridResult(
-            request_id=request_id,
-            success=False,
-            final_level=levels[-1] if levels else ExecutionLevel.A2A,
-            result={"error": "All execution levels failed"},
-            attempts=[self._attempt_to_dict(a) for a in attempts],
-            total_latency_ms=(time.time() - start) * 1000,
-        )
-        self._record(result)
-        return result
+        except asyncio.CancelledError:
+            # Execution was cancelled (e.g. device disconnect / process shutdown).
+            # Preserve any partial result and mark the continuity record as
+            # interrupted so restart recovery can classify and resume it.
+            if continuity_record is not None:
+                try:
+                    from core.hybrid_orchestration_continuity import (
+                        HybridOrchestrationLifecycleState,
+                        HybridPartialResultDisposition,
+                    )
+                    if last_partial_result is not None:
+                        continuity_record.set_partial_result(
+                            last_partial_result,
+                            last_partial_origin,
+                            disposition=HybridPartialResultDisposition.preserved.value,
+                        )
+                    self._get_continuity_registry().transition(
+                        continuity_record.execution_id,
+                        HybridOrchestrationLifecycleState.interrupted,
+                        reason="asyncio_cancelled",
+                    )
+                    logger.info(
+                        "hybrid_executor | execution_interrupted | "
+                        "execution_id=%s partial_result=%s",
+                        continuity_record.execution_id,
+                        last_partial_result is not None,
+                    )
+                except Exception as _ti_exc:
+                    logger.debug(
+                        "hybrid_executor | continuity_interrupted_transition_failed | %s",
+                        _ti_exc,
+                    )
+            raise
+
+        except Exception as _exc:
+            # Unexpected exception: treat as interrupted so restart recovery
+            # can decide whether to resume or re-issue.
+            if continuity_record is not None:
+                try:
+                    from core.hybrid_orchestration_continuity import (
+                        HybridOrchestrationLifecycleState,
+                        HybridPartialResultDisposition,
+                    )
+                    if last_partial_result is not None:
+                        continuity_record.set_partial_result(
+                            last_partial_result,
+                            last_partial_origin,
+                            disposition=HybridPartialResultDisposition.preserved.value,
+                        )
+                    self._get_continuity_registry().transition(
+                        continuity_record.execution_id,
+                        HybridOrchestrationLifecycleState.interrupted,
+                        reason=f"exception:{type(_exc).__name__}",
+                    )
+                    logger.info(
+                        "hybrid_executor | execution_interrupted_by_exception | "
+                        "execution_id=%s exc=%s partial_result=%s",
+                        continuity_record.execution_id,
+                        _exc,
+                        last_partial_result is not None,
+                    )
+                except Exception as _ti2_exc:
+                    logger.debug(
+                        "hybrid_executor | continuity_exception_transition_failed | %s",
+                        _ti2_exc,
+                    )
+            raise
 
     async def _execute_windows(
         self,
@@ -432,6 +643,7 @@ class HybridExecutionArbiter:
         request_id: str,
         start: float,
         windows_arbiter=None,
+        continuity_record=None,
     ) -> "HybridResult":
         """Delegate a Windows execution request to the WindowsExecutionArbiter.
 
@@ -441,6 +653,22 @@ class HybridExecutionArbiter:
         The result is mapped back to a :class:`HybridResult` so callers do
         not need to know which arbiter handled the request.
         """
+        # Transition to running for the Windows path.
+        if continuity_record is not None:
+            try:
+                from core.hybrid_orchestration_continuity import (
+                    HybridOrchestrationLifecycleState,
+                )
+                self._get_continuity_registry().transition(
+                    continuity_record.execution_id,
+                    HybridOrchestrationLifecycleState.running,
+                )
+            except Exception as _trw_exc:
+                logger.debug(
+                    "hybrid_executor | continuity_windows_running_transition_failed | %s",
+                    _trw_exc,
+                )
+
         try:
             from core.windows_execution_arbiter import (  # type: ignore[import]
                 get_windows_arbiter,
@@ -488,6 +716,27 @@ class HybridExecutionArbiter:
                 total_latency_ms=(time.time() - start) * 1000,
             )
             self._record(hybrid)
+            # Apply terminal continuity transition for Windows path.
+            if continuity_record is not None:
+                try:
+                    from core.hybrid_orchestration_continuity import (
+                        HybridOrchestrationLifecycleState,
+                    )
+                    terminal = (
+                        HybridOrchestrationLifecycleState.completed
+                        if hybrid.success
+                        else HybridOrchestrationLifecycleState.failed
+                    )
+                    self._get_continuity_registry().transition(
+                        continuity_record.execution_id,
+                        terminal,
+                        result=hybrid.to_dict(),
+                    )
+                except Exception as _ttw_exc:
+                    logger.debug(
+                        "hybrid_executor | continuity_windows_terminal_transition_failed | %s",
+                        _ttw_exc,
+                    )
             return hybrid
 
         except Exception as exc:
@@ -508,6 +757,22 @@ class HybridExecutionArbiter:
                 total_latency_ms=(time.time() - start) * 1000,
             )
             self._record(fallback)
+            # Mark the continuity record as interrupted on unexpected exception.
+            if continuity_record is not None:
+                try:
+                    from core.hybrid_orchestration_continuity import (
+                        HybridOrchestrationLifecycleState,
+                    )
+                    self._get_continuity_registry().transition(
+                        continuity_record.execution_id,
+                        HybridOrchestrationLifecycleState.interrupted,
+                        reason=f"windows_exception:{type(exc).__name__}",
+                    )
+                except Exception as _twf_exc:
+                    logger.debug(
+                        "hybrid_executor | continuity_windows_interrupted_failed | %s",
+                        _twf_exc,
+                    )
             return fallback
 
     async def _try_level(
