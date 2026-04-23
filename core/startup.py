@@ -150,6 +150,80 @@ async def _handle_signal(sig):
     logger.info("优雅关闭完成")
 
 
+def wire_durable_audit_store(store_path: Optional[str] = None) -> dict:
+    """Wire the process-level :class:`DurableAuditStore` to all audit sinks.
+
+    Attaches the singleton :class:`~core.replay_audit_persistence.DurableAuditStore`
+    to:
+
+    * :class:`~core.replay_foundation.ReplayFoundation` — replay / execution /
+      route / fallback records become durably stored.
+    * :class:`~core.audit_event_semantics.AuditEventSemantics` — canonical
+      dispatch-spine audit events become durably stored.
+    * :class:`~core.canonical_session_truth.CanonicalSessionTruthRuntime` —
+      truth-merge evidence becomes durably stored (best-effort; skipped when
+      the import is unavailable).
+
+    The store is **observational only** and does NOT alter any runtime
+    authority or routing decisions.  In-memory ring buffers remain the
+    authoritative live read surfaces.
+
+    This function is idempotent: calling it multiple times re-attaches the
+    same singleton store.
+
+    Parameters
+    ----------
+    store_path:
+        Optional path override forwarded to
+        :func:`~core.replay_audit_persistence.get_replay_audit_store`.
+        Respected only before the singleton is first created.
+
+    Returns
+    -------
+    dict
+        A status dict suitable for inclusion in the ``bootstrap_subsystems``
+        results.  Keys: ``status``, ``store_path``,
+        ``replay_foundation_wired``, ``audit_event_semantics_wired``,
+        ``canonical_truth_wired``.  On failure: ``status="degraded"`` with
+        ``error``.
+    """
+    try:
+        from core.replay_audit_persistence import get_replay_audit_store
+        from core.replay_foundation import get_replay_foundation
+        from core.audit_event_semantics import get_audit_event_semantics
+
+        _store = get_replay_audit_store(store_path=store_path)
+
+        # Wire ReplayFoundation (execution / route / fallback / retry records)
+        get_replay_foundation().set_audit_store(_store)
+
+        # Wire AuditEventSemantics (canonical dispatch-spine audit vocabulary)
+        get_audit_event_semantics().set_audit_store(_store)
+
+        # Wire CanonicalSessionTruthRuntime (truth merge / conflict evidence)
+        _truth_wired = False
+        try:
+            from core.canonical_session_truth import get_canonical_session_truth_runtime
+            get_canonical_session_truth_runtime().set_audit_store(_store)
+            _truth_wired = True
+        except Exception as _truth_exc:  # noqa: BLE001
+            logger.warning(
+                "wire_durable_audit_store: canonical truth runtime wiring skipped: %s",
+                _truth_exc,
+            )
+
+        return {
+            "status": "ok",
+            "store_path": _store.store_path,
+            "replay_foundation_wired": True,
+            "audit_event_semantics_wired": True,
+            "canonical_truth_wired": _truth_wired,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("wire_durable_audit_store failed: %s", exc)
+        return {"status": "degraded", "error": str(exc)}
+
+
 async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     """
     启动所有核心子系统并挂载中间件
@@ -738,6 +812,26 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         except Exception as e:
             results["orchestrator"] = {"status": "degraded", "error": str(e)}
             logger.warning(f"编排器降级: {e}")
+
+    # ====================================================================
+    # 19. 持久化审计存储挂载（Durable Audit Store wiring）
+    # Attach the process-level DurableAuditStore to ReplayFoundation,
+    # CanonicalSessionTruthRuntime, and AuditEventSemantics so that all
+    # key runtime paths emit durable audit evidence across process lifetimes.
+    # The store is observational only; it does NOT alter runtime authority.
+    # ====================================================================
+    results["durable_audit_store"] = wire_durable_audit_store()
+    if results["durable_audit_store"]["status"] == "ok":
+        logger.info(
+            "持久化审计存储已挂载: path=%s truth_wired=%s",
+            results["durable_audit_store"].get("store_path"),
+            results["durable_audit_store"].get("canonical_truth_wired"),
+        )
+    else:
+        logger.warning(
+            "持久化审计存储挂载失败（降级到内存 ring buffer）: %s",
+            results["durable_audit_store"].get("error"),
+        )
 
     # ====================================================================
     # 汇总

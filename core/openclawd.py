@@ -1306,6 +1306,22 @@ class OpenClawd:
                 _meta = state_continuum.get("metadata") or {}
                 if isinstance(_meta, dict):
                     _force = bool(_meta.get("force_local_execution", False))
+            # ── Dispatch-spine audit: record dispatch attempt ─────────────────
+            _spine_task_id = getattr(_intent_profile, "intent_id", "") or ""
+            _spine_trace_id = ""
+            if state_continuum and isinstance(state_continuum, dict):
+                _spine_trace_id = str(state_continuum.get("trace_id") or "")
+            try:
+                from core.audit_event_semantics import audit_task_dispatched
+                audit_task_dispatched(
+                    _spine_task_id,
+                    trace_id=_spine_trace_id,
+                    source="openclawd._run_execution",
+                    targets=[entry_mode or "local"],
+                    transport=entry_mode or "local",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             result = executor.execute(
                 state_continuum,
                 entry_mode=entry_mode,
@@ -1328,6 +1344,27 @@ class OpenClawd:
                 "execution_intent": _intent_profile.compact_summary(),
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
+            # ── Dispatch-spine audit: record execution outcome ────────────────
+            try:
+                if result.success:
+                    from core.audit_event_semantics import audit_task_completed
+                    audit_task_completed(
+                        _spine_task_id,
+                        trace_id=_spine_trace_id,
+                        source="openclawd._run_execution",
+                        success=True,
+                    )
+                elif result.action_taken not in ("noop", "none", "error"):
+                    from core.audit_event_semantics import audit_task_failed
+                    audit_task_failed(
+                        _spine_task_id,
+                        trace_id=_spine_trace_id,
+                        source="openclawd._run_execution",
+                        error_code=result.skipped_reason or "execution_failed",
+                        failure_domain="dispatch_spine",
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             # PR-24: Emit a fallback decision trace for every execution result.
             _exec_dict["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _exec_dict)
             # PR-25: Emit a canonical execution trace envelope.
@@ -1342,6 +1379,18 @@ class OpenClawd:
                 "execution_intent": _intent_profile.compact_summary(),
                 "readiness": _readiness.governance_summary() if _readiness else None,
             }
+            # ── Dispatch-spine audit: record internal error ───────────────────
+            try:
+                from core.audit_event_semantics import audit_task_failed
+                _err_task_id = getattr(_intent_profile, "intent_id", "") or ""
+                audit_task_failed(
+                    _err_task_id,
+                    source="openclawd._run_execution",
+                    error_code="internal_error",
+                    failure_domain="dispatch_spine",
+                )
+            except Exception:  # noqa: BLE001
+                pass
             # PR-24: Trace the internal-error fallback.
             _err_result["fallback_trace"] = self._build_fallback_trace(_intent_profile, _readiness, _err_result)
             # PR-25: Emit a canonical execution trace envelope.
