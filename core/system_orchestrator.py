@@ -327,6 +327,77 @@ class SystemOrchestrator:
             diagnostics["checks"]["mesh_sessions_recovered"] = 0
             logger.debug("[Phase 4] Multi-device session recovery skipped — %s", exc)
 
+        # PR-RECOVERY: Run the canonical full startup recovery coordinator.
+        # This wires RuntimeRestartRecoveryCoordinator into the production
+        # startup path, ensuring that all durable lifecycle state
+        # (BodyMeshRegistry, WebRTC binding reset, hybrid orchestration
+        # continuity, and in-flight task lifecycle records) is recovered
+        # before the runtime begins processing new work.
+        try:
+            from core.runtime_restart_recovery import run_startup_recovery
+
+            _recovery_report = run_startup_recovery()
+            diagnostics["checks"]["startup_recovery_completed"] = True
+            diagnostics["startup_recovery"] = {
+                "recovery_id": _recovery_report.recovery_id,
+                "mesh_sessions_recovered": _recovery_report.mesh_sessions_recovered,
+                "body_mesh_entries_restored": _recovery_report.body_mesh_entries_restored,
+                "hybrid_executions_interrupted": _recovery_report.hybrid_executions_interrupted,
+                "hybrid_executions_restored": _recovery_report.hybrid_executions_restored,
+                "inflight_tasks_recovered": _recovery_report.inflight_tasks_recovered,
+                "inflight_tasks_resumable": _recovery_report.inflight_tasks_resumable,
+                "inflight_tasks_replay_only": _recovery_report.inflight_tasks_replay_only,
+                "inflight_tasks_reissuable": _recovery_report.inflight_tasks_reissuable,
+                "inflight_tasks_terminal": _recovery_report.inflight_tasks_terminal,
+                "has_errors": _recovery_report.has_errors,
+                "errors": list(_recovery_report.errors),
+            }
+            if _recovery_report.has_errors:
+                logger.warning(
+                    "[Phase 4] Startup recovery completed with errors: %s",
+                    _recovery_report.errors,
+                )
+            else:
+                logger.info(
+                    "[Phase 4] Startup recovery completed: recovery_id=%s "
+                    "mesh=%d body=%d hybrid_interrupted=%d hybrid_restored=%d "
+                    "inflight=%d (resumable=%d replay=%d reissue=%d terminal=%d)",
+                    _recovery_report.recovery_id,
+                    _recovery_report.mesh_sessions_recovered,
+                    _recovery_report.body_mesh_entries_restored,
+                    _recovery_report.hybrid_executions_interrupted,
+                    _recovery_report.hybrid_executions_restored,
+                    _recovery_report.inflight_tasks_recovered,
+                    _recovery_report.inflight_tasks_resumable,
+                    _recovery_report.inflight_tasks_replay_only,
+                    _recovery_report.inflight_tasks_reissuable,
+                    _recovery_report.inflight_tasks_terminal,
+                )
+        except Exception as exc:
+            diagnostics["checks"]["startup_recovery_completed"] = False
+            diagnostics["startup_recovery"] = {"error": str(exc)}
+            logger.warning("[Phase 4] Startup recovery skipped — %s", exc)
+
+        # PR-RECOVERY: Restore the in-memory task lifecycle registry from the
+        # durable snapshot so that previously in-flight task records are
+        # re-populated before the runtime begins accepting new work.  Records
+        # whose task_id is already pending are not overwritten.
+        try:
+            from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+
+            _registry = get_lifecycle_registry()
+            _restored_count = _registry.restore_from_snapshot()
+            diagnostics["checks"]["lifecycle_registry_restored"] = True
+            diagnostics["lifecycle_registry_restored_count"] = _restored_count
+            logger.info(
+                "[Phase 4] Lifecycle registry restored %d record(s) from durable snapshot.",
+                _restored_count,
+            )
+        except Exception as exc:
+            diagnostics["checks"]["lifecycle_registry_restored"] = False
+            diagnostics["lifecycle_registry_restored_count"] = 0
+            logger.debug("[Phase 4] Lifecycle registry restore skipped — %s", exc)
+
         if issues:
             return PhaseResult(
                 phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
