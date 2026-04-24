@@ -249,11 +249,15 @@ class MessageBuilder:
         priority: int = 5,
         timeout: int = 300,
     ) -> Dict[str, Any]:
-        """Build an AIP v3 ``handoff_dispatch`` message for Android (PR-H).
+        """Build an AIP v3 ``handoff_envelope_v2`` message for Android (PR-H).
 
-        Wraps :meth:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2.to_android_native_payload`
+        Wraps :meth:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2.to_android_task_assign_payload`
         in an AIP message frame so the caller can pass the result directly to
         the WebSocket send path.
+
+        The canonical downlink wire type emitted is ``handoff_envelope_v2``,
+        aligned with the Android ``AipModels.kt`` enum.  This method is kept
+        under the legacy name ``handoff_dispatch`` for call-site compatibility.
 
         Parameters
         ----------
@@ -269,7 +273,7 @@ class MessageBuilder:
         Returns
         -------
         dict
-            AIP v3 ``handoff_dispatch`` message.
+            AIP v3 ``handoff_envelope_v2`` message.
         """
         return envelope.to_android_task_assign_payload(
             device_id,

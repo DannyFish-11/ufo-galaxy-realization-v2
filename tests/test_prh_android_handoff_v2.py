@@ -153,6 +153,16 @@ class TestMessageTypeEnum:
         from galaxy_gateway.protocol.aip_v3 import MessageType
         assert MessageType.HANDOFF_FAILURE.value == "handoff_failure"
 
+    def test_B05_handoff_envelope_v2_canonical_downlink(self):
+        """HANDOFF_ENVELOPE_V2 is the canonical downlink wire type (Android-aligned)."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        assert MessageType.HANDOFF_ENVELOPE_V2.value == "handoff_envelope_v2"
+
+    def test_B06_handoff_envelope_v2_result_canonical_uplink(self):
+        """HANDOFF_ENVELOPE_V2_RESULT is the canonical uplink wire type (Android-aligned)."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        assert MessageType.HANDOFF_ENVELOPE_V2_RESULT.value == "handoff_envelope_v2_result"
+
 
 # ============================================================================
 # C–J. HandoffEnvelopeV2.to_android_native_payload
@@ -323,10 +333,10 @@ class TestToAndroidTaskAssignPayload:
         msg = env.to_android_task_assign_payload("tablet_k")
         assert msg["version"] == "3.0"
 
-    def test_K04_type_is_handoff_dispatch(self):
+    def test_K04_type_is_handoff_envelope_v2(self):
         env = self._make_envelope()
         msg = env.to_android_task_assign_payload("tablet_k")
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_K05_device_id_set(self):
         env = self._make_envelope()
@@ -391,11 +401,11 @@ class TestMessageBuilderHandoffDispatch:
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["handoff_id"] == env.handoff_id
 
-    def test_O01_message_type_is_handoff_dispatch(self):
+    def test_O01_message_type_is_handoff_envelope_v2(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_O02_default_priority_5(self):
         from galaxy_gateway.android.message_builder import MessageBuilder

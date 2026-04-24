@@ -262,6 +262,10 @@ class MessageType(str, Enum):
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 
     # === Android Native Handoff V2 (PR-H) ===
+    # Canonical downlink / uplink wire types (aligned with Android AipModels.kt)
+    HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"
+    HANDOFF_ENVELOPE_V2_RESULT = "handoff_envelope_v2_result"
+    # Legacy compat — preserved as recognised input aliases; no longer canonical output
     HANDOFF_DISPATCH = "handoff_dispatch"
     HANDOFF_ACK = "handoff_ack"
     HANDOFF_RESULT = "handoff_result"
