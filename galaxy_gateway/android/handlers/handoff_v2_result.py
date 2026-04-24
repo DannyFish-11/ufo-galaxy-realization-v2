@@ -45,6 +45,14 @@ try:
 except ImportError:  # pragma: no cover
     _ingest_handoff_response = None  # type: ignore[assignment]
 
+# PR-10-V2: unified Android delegated runtime audit recorder.
+try:
+    from core.android_delegated_runtime_audit import (
+        record_handoff_v2_result as _audit_handoff_v2_result,
+    )
+except ImportError:  # pragma: no cover
+    _audit_handoff_v2_result = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Public handler
@@ -106,6 +114,21 @@ async def handle_handoff_v2_result(
                     device_id,
                     outcome.callback_invoked,
                 )
+                # PR-10-V2: unified audit record.
+                if _audit_handoff_v2_result is not None:
+                    try:
+                        _audit_handoff_v2_result(
+                            task_id=env.task_id if hasattr(env, "task_id") else "",
+                            session_id=env.session_id if hasattr(env, "session_id") else "",
+                            trace_id=env.trace_id if hasattr(env, "trace_id") else "",
+                            device_id=device_id,
+                            handoff_id=env.handoff_id if hasattr(env, "handoff_id") else "",
+                            response_kind=str(env.response_kind),
+                            was_correlated=True,
+                            callback_invoked=outcome.callback_invoked,
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
             else:
                 logger.warning(
                     "PR-02-V2 handoff_v2 ingress miss: device=%s type=%s reason=%s",
@@ -113,6 +136,22 @@ async def handle_handoff_v2_result(
                     msg_type,
                     outcome.reject_reason,
                 )
+                # PR-10-V2: record correlation misses so missing responses are traceable.
+                if _audit_handoff_v2_result is not None:
+                    try:
+                        _env = outcome.envelope
+                        _audit_handoff_v2_result(
+                            task_id=_env.task_id if _env and hasattr(_env, "task_id") else "",
+                            session_id=_env.session_id if _env and hasattr(_env, "session_id") else "",
+                            trace_id=_env.trace_id if _env and hasattr(_env, "trace_id") else "",
+                            device_id=device_id,
+                            handoff_id=_env.handoff_id if _env and hasattr(_env, "handoff_id") else "",
+                            response_kind=str(_env.response_kind) if _env and hasattr(_env, "response_kind") else "",
+                            was_correlated=False,
+                            reject_reason=outcome.reject_reason or "",
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
         except Exception as exc:  # pragma: no cover
             logger.debug(
                 "PR-02-V2 handoff_v2 ingestion failed (non-fatal): "

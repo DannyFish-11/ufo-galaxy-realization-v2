@@ -42,6 +42,14 @@ try:
 except ImportError:  # pragma: no cover
     _ingest_participant_truth = None  # type: ignore[assignment]
 
+# PR-10-V2: unified Android delegated runtime audit recorder.
+try:
+    from core.android_delegated_runtime_audit import (
+        record_reconciliation_signal as _audit_reconciliation_signal,
+    )
+except ImportError:  # pragma: no cover
+    _audit_reconciliation_signal = None  # type: ignore[assignment]
+
 
 async def handle_reconciliation_signal(
     bridge: "AndroidBridge",
@@ -77,23 +85,57 @@ async def handle_reconciliation_signal(
             outcome = _ingest_participant_truth(message)
             if outcome.was_reconciled:
                 env = outcome.envelope
+                _truth_kind = env.truth_kind.value if env and hasattr(env.truth_kind, "value") else "?"
                 logger.debug(
                     "PR-7-V2 reconciliation signal ingested: truth_kind=%s "
                     "contract_id=%r session_id=%r device_id=%r "
                     "canonical_update=%r → phase=%s",
-                    env.truth_kind.value if env else "?",
+                    _truth_kind,
                     env.contract_id if env else "",
                     env.session_id if env else "",
                     device_id,
                     outcome.canonical_update,
                     outcome.tracking_record_phase,
                 )
+                # PR-10-V2: unified audit record.
+                if _audit_reconciliation_signal is not None:
+                    try:
+                        _audit_reconciliation_signal(
+                            task_id=env.task_id if env and hasattr(env, "task_id") else "",
+                            session_id=env.session_id if env else "",
+                            trace_id=env.trace_id if env and hasattr(env, "trace_id") else "",
+                            device_id=device_id,
+                            contract_id=env.contract_id if env else "",
+                            truth_kind=_truth_kind,
+                            phase=outcome.tracking_record_phase or "",
+                            was_reconciled=True,
+                            canonical_update=outcome.canonical_update or "",
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
             elif outcome.reject_reason:
                 logger.debug(
                     "PR-7-V2 reconciliation signal skipped: device_id=%s reason=%s",
                     device_id,
                     outcome.reject_reason,
                 )
+                # PR-10-V2: record rejected signals.
+                if _audit_reconciliation_signal is not None:
+                    try:
+                        _env = outcome.envelope
+                        _truth_kind = _env.truth_kind.value if _env and hasattr(_env.truth_kind, "value") else ""
+                        _audit_reconciliation_signal(
+                            task_id=_env.task_id if _env and hasattr(_env, "task_id") else "",
+                            session_id=_env.session_id if _env else "",
+                            trace_id=_env.trace_id if _env and hasattr(_env, "trace_id") else "",
+                            device_id=device_id,
+                            contract_id=_env.contract_id if _env else "",
+                            truth_kind=_truth_kind,
+                            was_reconciled=False,
+                            reject_reason=outcome.reject_reason or "",
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
         except Exception as exc:  # pragma: no cover  # noqa: BLE001
             logger.warning(
                 "PR-7-V2 reconciliation signal ingestion failed: "
