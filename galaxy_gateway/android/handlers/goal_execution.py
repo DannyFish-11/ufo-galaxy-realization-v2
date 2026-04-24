@@ -37,6 +37,56 @@ try:
 except ImportError:
     _get_goal_result_aggregator = None  # type: ignore[assignment]
 
+# PR-8V2: Android participant/session/runtime truth ingress — top-level import
+# so tests can patch() it and import failures are handled gracefully.
+# goal_execution_result carries a user-visible business result and must be
+# reconciled into V2 canonical participant truth (truth_kind="result") just
+# like task_result in task_lifecycle.py.
+try:
+    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_goal_result_truth
+except ImportError:
+    _ingest_goal_result_truth = None  # type: ignore[assignment]
+
+
+def _try_ingest_goal_result_truth(message: Dict[str, Any]) -> None:
+    """Best-effort ingest *message* as Android participant truth (result kind).
+
+    Calls :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
+    when the ingress module is available, injecting ``truth_kind="result"`` so
+    the envelope extractor classifies the goal_execution_result as a canonical
+    result signal.
+
+    Failures are logged at DEBUG level and never propagated — this is an
+    additive PR-8V2 path that complements the existing PR-13 reconcile call.
+    """
+    if _ingest_goal_result_truth is None:
+        return
+    try:
+        enriched = dict(message)
+        enriched.setdefault("truth_kind", "result")
+        outcome = _ingest_goal_result_truth(enriched)
+        if outcome.was_reconciled:
+            logger.debug(
+                "PR-8V2 goal_execution_result participant truth ingested: "
+                "contract_id=%r session_id=%r was_reconciled=True "
+                "canonical_update=%r phase=%r",
+                outcome.envelope.contract_id if outcome.envelope else "",
+                outcome.envelope.session_id if outcome.envelope else "",
+                outcome.canonical_update,
+                outcome.tracking_record_phase,
+            )
+        elif outcome.reject_reason:
+            logger.debug(
+                "PR-8V2 goal_execution_result participant truth skipped: "
+                "reason=%r",
+                outcome.reject_reason,
+            )
+    except Exception as exc:
+        logger.debug(
+            "PR-8V2 goal_execution_result participant truth ingest failed (non-fatal): %s",
+            exc,
+        )
+
 
 async def handle_goal_execution(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
@@ -392,6 +442,12 @@ async def handle_goal_execution_result(
                 )
         except Exception as rec_err:
             logger.debug("PR-13 reconcile goal_execution_result failed (non-fatal): %s", rec_err)
+
+    # PR-8V2: ingest goal_execution_result into V2 canonical participant truth.
+    # goal_execution_result is a user-visible business result and MUST be
+    # reconciled into participant truth (truth_kind="result") so that V2
+    # canonical tracking records reflect the final state.
+    _try_ingest_goal_result_truth(message)
 
     # PR-D: parallel/group subtask aggregation
     # If this result carries a group_id, feed it into the canonical aggregator.
