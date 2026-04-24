@@ -49,6 +49,14 @@ try:
 except Exception:  # pragma: no cover  # noqa: BLE001
     _android_result_consumer = None  # type: ignore[assignment]
 
+# PR-10-V2: unified Android delegated runtime audit recorder.
+try:
+    from core.android_delegated_runtime_audit import (
+        record_delegated_execution_signal as _audit_delegated_signal,
+    )
+except ImportError:  # pragma: no cover
+    _audit_delegated_signal = None  # type: ignore[assignment]
+
 
 async def handle_delegated_execution_signal(
     bridge: "AndroidBridge",
@@ -89,23 +97,41 @@ async def handle_delegated_execution_signal(
             outcome = _ingest_delegated_signal(message)
             if outcome.was_updated:
                 env = outcome.envelope
+                _sk_val = env.signal_kind.value if hasattr(env.signal_kind, "value") else str(env.signal_kind)
+                _phase = outcome.record.phase.value if outcome.record and hasattr(outcome.record.phase, "value") else "?"
                 logger.debug(
                     "PR-16 delegated signal ingested: signal_kind=%s "
                     "contract_id=%r session_id=%r signal_id=%r emission_seq=%s "
                     "→ phase=%s",
-                    env.signal_kind.value,
+                    _sk_val,
                     env.contract_id,
                     env.session_id,
                     env.signal_id,
                     env.emission_seq,
-                    outcome.record.phase.value if outcome.record else "?",
+                    _phase,
                 )
+
+                # PR-10-V2: unified audit record.
+                if _audit_delegated_signal is not None:
+                    try:
+                        _audit_delegated_signal(
+                            task_id=env.task_id if hasattr(env, "task_id") else "",
+                            session_id=env.session_id,
+                            trace_id=env.trace_id if hasattr(env, "trace_id") else "",
+                            device_id=device_id,
+                            contract_id=env.contract_id,
+                            signal_kind=_sk_val,
+                            signal_id=env.signal_id if hasattr(env, "signal_id") else "",
+                            emission_seq=env.emission_seq if hasattr(env, "emission_seq") else None,
+                            phase=_phase,
+                            was_updated=True,
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
 
                 # PR-5A: Forward result-kind signals to the stable consumer.
                 if _android_result_consumer is not None:
                     try:
-                        _sk = getattr(env, "signal_kind", None)
-                        _sk_val = _sk.value if hasattr(_sk, "value") else str(_sk) if _sk else ""
                         if _sk_val == "result":
                             _android_result_consumer.consume_android_behavioral_result(
                                 outcome,
@@ -123,6 +149,23 @@ async def handle_delegated_execution_signal(
                     device_id,
                     outcome.reject_reason,
                 )
+                # PR-10-V2: record rejected signals too so the audit trail is complete.
+                if _audit_delegated_signal is not None:
+                    try:
+                        _env = outcome.envelope
+                        _sk_val = _env.signal_kind.value if _env and hasattr(_env.signal_kind, "value") else ""
+                        _audit_delegated_signal(
+                            task_id=_env.task_id if _env and hasattr(_env, "task_id") else "",
+                            session_id=_env.session_id if _env else "",
+                            trace_id=_env.trace_id if _env and hasattr(_env, "trace_id") else "",
+                            device_id=device_id,
+                            contract_id=_env.contract_id if _env else "",
+                            signal_kind=_sk_val,
+                            was_updated=False,
+                            reject_reason=outcome.reject_reason,
+                        )
+                    except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+                        logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
         except Exception as exc:  # pragma: no cover
             logger.debug(
                 "PR-16 delegated signal ingestion failed (non-fatal): device_id=%s exc=%s",

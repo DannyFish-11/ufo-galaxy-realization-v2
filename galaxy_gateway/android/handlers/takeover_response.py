@@ -63,6 +63,14 @@ try:
 except ImportError:  # pragma: no cover
     _record_takeover_response = None  # type: ignore[assignment]
 
+# PR-10-V2: unified Android delegated runtime audit recorder.
+try:
+    from core.android_delegated_runtime_audit import (
+        record_takeover_response as _audit_takeover_response,
+    )
+except ImportError:  # pragma: no cover
+    _audit_takeover_response = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Public handler
@@ -107,6 +115,21 @@ async def handle_takeover_response(
         decision_label,
         reason,
     )
+
+    # PR-10-V2: unified audit record.
+    if _audit_takeover_response is not None:
+        try:
+            _audit_takeover_response(
+                task_id=message.get("task_id") or message.get("payload", {}).get("task_id") or "",
+                session_id=session_id,
+                trace_id=message.get("trace_id") or "",
+                device_id=device_id,
+                takeover_id=takeover_id,
+                accepted=accepted,
+                reason=reason,
+            )
+        except Exception as _ae:  # pragma: no cover  # noqa: BLE001
+            logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
 
     # Feed into tracking state when the integration module is available.
     if _record_takeover_response is not None:

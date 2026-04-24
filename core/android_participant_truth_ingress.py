@@ -167,6 +167,17 @@ except ImportError:  # pragma: no cover
     _REPLAY_AVAILABLE = False
     _emit_runtime_event = None  # type: ignore[assignment]
 
+# PR-10-V2: unified Android delegated runtime audit recorder.
+try:
+    from core.android_delegated_runtime_audit import (
+        record_participant_truth_terminal_update as _audit_terminal_update,
+    )
+
+    _DELEGATED_AUDIT_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _DELEGATED_AUDIT_AVAILABLE = False
+    _audit_terminal_update = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -874,6 +885,29 @@ def reconcile_android_participant_truth(
         canonical_update=canonical_update,
         reject_reason=reject_reason,
     )
+
+    # PR-10-V2: Emit to the unified Android delegated runtime audit recorder
+    # for terminal truth updates so the handoff→takeover→reconciliation chain
+    # is fully traceable by task_id / session_id.
+    if (
+        was_reconciled
+        and tracking_record_phase
+        and _audit_terminal_update is not None
+        and truth_kind_str in _TERMINAL_TRUTH_KINDS
+    ):
+        try:
+            _audit_terminal_update(
+                task_id=envelope.task_id or "",
+                session_id=envelope.session_id or "",
+                trace_id=envelope.trace_id or "",
+                device_id=envelope.device_id or "",
+                contract_id=envelope.contract_id or "",
+                truth_kind=truth_kind_str,
+                terminal_phase=tracking_record_phase,
+                canonical_update=canonical_update,
+            )
+        except Exception:  # noqa: BLE001
+            pass  # audit is non-fatal
 
     outcome = AndroidParticipantReconcileOutcome(
         envelope=envelope,
