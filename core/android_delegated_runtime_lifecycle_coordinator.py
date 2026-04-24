@@ -264,6 +264,33 @@ class AndroidLifecycleCoordinatorOutcome:
 
 
 # ---------------------------------------------------------------------------
+# Private module-level helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_session_id(message: Dict[str, Any], default: str = "") -> str:
+    """Extract ``session_id`` from a raw message dict.
+
+    Checks top-level ``session_id``, then the nested ``payload`` sub-dict.
+    Returns *default* when neither is present.
+    """
+    return (
+        message.get("session_id")
+        or (message.get("payload") or {}).get("session_id")
+        or default
+    )
+
+
+def _safe_enum_value(obj: Any) -> str:
+    """Return ``obj.value`` if *obj* has a ``value`` attribute, else ``str(obj)``."""
+    if obj is None:
+        return ""
+    if hasattr(obj, "value"):
+        return obj.value
+    return str(obj)
+
+
+# ---------------------------------------------------------------------------
 # Coordinator
 # ---------------------------------------------------------------------------
 
@@ -591,7 +618,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Optional session_id override (extracted from *message* if absent).
         """
         try:
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            _session_id = session_id or _extract_session_id(message)
             device_id = message.get("device_id", "")
             phase_before = ""
             phase_after = ""
@@ -611,7 +638,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     reject_reason = outcome.reject_reason or ""
                     env = outcome.envelope
                     if env:
-                        truth_kind = env.truth_kind.value if hasattr(env.truth_kind, "value") else str(env.truth_kind)
+                        truth_kind = _safe_enum_value(env.truth_kind)
                         task_id = env.task_id or ""
                         trace_id = env.trace_id or ""
                         contract_id = env.contract_id or ""
@@ -703,7 +730,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Optional session_id override.
         """
         try:
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            _session_id = session_id or _extract_session_id(message)
             phase_before = ""
             phase_after = ""
             was_transitioned = False
@@ -719,7 +746,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     reject_reason = outcome.reject_reason if hasattr(outcome, "reject_reason") else ""
                     env = outcome.envelope if hasattr(outcome, "envelope") else None
                     if env:
-                        signal_kind = env.signal_kind.value if hasattr(env.signal_kind, "value") else str(getattr(env, "signal_kind", ""))
+                        signal_kind = _safe_enum_value(getattr(env, "signal_kind", None))
                         _session_id = _session_id or (env.session_id or "")
                 except Exception as _ie:  # noqa: BLE001
                     logger.debug("on_execution_signal: ingress failed (non-fatal): %s", _ie)
@@ -788,7 +815,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Optional session_id override.
         """
         try:
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            _session_id = session_id or _extract_session_id(message)
             phase_before = ""
             phase_after = ""
             was_transitioned = False
@@ -804,7 +831,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     reject_reason = outcome.reject_reason or ""
                     env = outcome.envelope
                     if env:
-                        truth_kind = env.truth_kind.value if hasattr(env.truth_kind, "value") else str(env.truth_kind)
+                        truth_kind = _safe_enum_value(env.truth_kind)
                         _session_id = _session_id or (env.session_id or "")
                 except Exception as _ie:  # noqa: BLE001
                     logger.debug("on_participant_truth_update: ingress failed (non-fatal): %s", _ie)
