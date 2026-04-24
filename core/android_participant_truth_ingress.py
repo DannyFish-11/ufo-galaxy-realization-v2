@@ -283,6 +283,17 @@ IDENTITY_FIELDS_ARE_VERBATIM_POLICY: str = (
     "NOT synthesise or overwrite identity fields."
 )
 
+RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY: str = (
+    "POLICY::RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED: "
+    "Android reconciliation_signal is an explicit state reconciliation push from "
+    "the Android RuntimeController and is distinct from delegated_execution_signal. "
+    "reconciliation_signal carries a 'phase' or 'status' field in its payload "
+    "that is mapped to an AcknowledgmentSignal via the phase-to-ack map and "
+    "applied to the V2 tracking record.  V2 terminal state still wins if the "
+    "record is already in a terminal phase.  reconciliation_signal MUST NOT "
+    "duplicate terminal event processing already applied by delegated_execution_signal."
+)
+
 _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
     ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
@@ -296,6 +307,7 @@ _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
     RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
     IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
+    RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY,
 )
 
 # ---------------------------------------------------------------------------
@@ -351,6 +363,7 @@ class AndroidParticipantTruthKind(str, Enum):
     status = "status"
     failure = "failure"
     result = "result"
+    reconciliation_signal = "reconciliation_signal"
     unknown = "unknown"
 
     @classmethod
@@ -370,6 +383,7 @@ class AndroidParticipantTruthKind(str, Enum):
             AndroidParticipantTruthKind.cancel,
             AndroidParticipantTruthKind.failure,
             AndroidParticipantTruthKind.result,
+            AndroidParticipantTruthKind.reconciliation_signal,
         )
 
     def affects_canonical_state(self) -> bool:
@@ -380,6 +394,7 @@ class AndroidParticipantTruthKind(str, Enum):
             AndroidParticipantTruthKind.result,
             AndroidParticipantTruthKind.status,
             AndroidParticipantTruthKind.task_phase,
+            AndroidParticipantTruthKind.reconciliation_signal,
         )
 
 
@@ -621,6 +636,7 @@ _TERMINAL_TRUTH_KINDS = frozenset(
         AndroidParticipantTruthKind.cancel.value,
         AndroidParticipantTruthKind.failure.value,
         AndroidParticipantTruthKind.result.value,
+        AndroidParticipantTruthKind.reconciliation_signal.value,
     }
 )
 
@@ -831,6 +847,11 @@ def reconcile_android_participant_truth(
     elif kind == AndroidParticipantTruthKind.session_snapshot:
         was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
             _reconcile_session_snapshot(envelope, _registry)
+        )
+
+    elif kind == AndroidParticipantTruthKind.reconciliation_signal:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_reconciliation_signal(envelope, _runtime)
         )
 
     elif kind in (
@@ -1063,6 +1084,80 @@ def _reconcile_session_snapshot(
             )
     except Exception as exc:  # noqa: BLE001
         return False, "", f"registry_lookup_error:{exc}", ""
+
+
+def _reconcile_reconciliation_signal(
+    envelope: AndroidParticipantTruthEnvelope,
+    runtime: Any,
+) -> Tuple[bool, str, str, str]:
+    """Reconcile an Android explicit reconciliation_signal into V2 canonical state.
+
+    The reconciliation_signal carries a ``phase`` or ``status`` field in its
+    payload that represents the Android RuntimeController's current view of
+    the execution state.  This is distinct from ``delegated_execution_signal``
+    in that it is an explicit push from Android to reconcile V2 state rather
+    than a lifecycle event.
+
+    Phase-to-AcknowledgmentSignal mapping
+    --------------------------------------
+    1. ``task_phase_value`` (extracted from ``payload.phase`` / ``payload.status``)
+       is looked up in the ``_get_phase_to_ack_map()`` table.
+    2. **Fallback**: if the phase map produces no match (empty or unrecognised
+       ``task_phase_value``), the ``result_success`` field is used to infer the
+       signal: ``True`` → ``final_result``, ``False`` → ``error``.
+    3. If neither source provides a mapping the reconciliation is rejected with
+       ``unmapped_reconciliation_phase``.
+
+    Per RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY:
+    - V2 terminal state still wins (TERMINAL_V2_STATE_WINS_CONFLICT_POLICY).
+    - Missing lookup key or missing record → was_reconciled=False.
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not envelope.has_lookup_key():
+        return False, "", "missing_lookup_key", ""
+
+    record = _resolve_tracking_record(envelope, runtime)
+    if record is None:
+        return False, "", "no_matching_tracking_record", ""
+
+    if _is_record_terminal(record):
+        phase_str = str(getattr(record, "phase", "") or "")
+        return False, "", f"v2_terminal_state_wins:record_already_in_{phase_str}", phase_str
+
+    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None or apply_acknowledgment_signal is None:
+        return False, "", "tracker_unavailable", ""
+
+    phase_map = _get_phase_to_ack_map()
+    # Prefer task_phase_value (extracted from payload.phase / payload.status),
+    # falling back to result_success to infer terminal signal.
+    normalised_phase = (envelope.task_phase_value or "").strip().lower()
+    ack_signal = phase_map.get(normalised_phase)
+
+    if ack_signal is None and envelope.result_success is not None:
+        # Infer from result_success when no explicit phase was provided
+        ack_signal = (
+            AcknowledgmentSignal.final_result
+            if envelope.result_success
+            else AcknowledgmentSignal.error
+        )
+        normalised_phase = "success" if envelope.result_success else "failure"
+
+    if ack_signal is None:
+        return False, "", f"unmapped_reconciliation_phase:{normalised_phase}", ""
+
+    try:
+        updated = apply_acknowledgment_signal(record, ack_signal, runtime=runtime)
+        phase_str = str(getattr(updated, "phase", "") or "")
+        return (
+            True,
+            f"reconciliation_signal_applied:android_phase={normalised_phase}"
+            f"→v2_ack={ack_signal}→v2_phase={phase_str}",
+            "",
+            phase_str,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"apply_signal_error:{exc}", ""
 
 
 # ---------------------------------------------------------------------------

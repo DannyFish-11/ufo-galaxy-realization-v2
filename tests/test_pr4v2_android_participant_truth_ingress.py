@@ -66,6 +66,7 @@ try:
         READINESS_ASSESSMENT_IS_ADVISORY_POLICY,
         RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
         RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
+        RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY,
         RUNTIME_STATE_IS_AUDIT_ONLY_POLICY,
         SESSION_SNAPSHOT_VALIDATES_REGISTRY_CONTINUITY_POLICY,
         STATUS_SIGNAL_EMITS_PROGRESS_EVENT_POLICY,
@@ -208,10 +209,11 @@ class TestGroupA_AuthorityChain:
             RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY,
             RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
             IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
+            RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY,
         ]
         for p in policies:
             assert p, f"Policy sentinel must be non-empty: {p!r}"
-        assert len(policies) == 12, "Expected 12 policy sentinels"
+        assert len(policies) == 13, "Expected 13 policy sentinels"
 
     def test_a6_cancel_failure_result_policy_mentions_canonical(self) -> None:
         """AC3: cancel/failure/result policy must state they affect canonical state."""
@@ -235,6 +237,7 @@ class TestGroupB_TruthKindEnum:
         expected = {
             "session_snapshot", "readiness_assessment", "task_phase",
             "runtime_state", "cancel", "status", "failure", "result", "unknown",
+            "reconciliation_signal",
         }
         actual = {m.value for m in AndroidParticipantTruthKind}
         assert expected == actual
