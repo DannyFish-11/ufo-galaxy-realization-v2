@@ -94,8 +94,6 @@ class TestHandlerRegistration:
 
     def test_C05_handlers_are_not_handle_unregistered(self):
         """All four uplink types must NOT fall back to handle_unregistered."""
-        from galaxy_gateway.android.handlers.registration import handle_unregistered
-        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
         from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = self._make_bridge()
@@ -106,11 +104,6 @@ class TestHandlerRegistration:
             MessageType.HANDOFF_ENVELOPE_V2_RESULT,
         ]
         for mt in uplink_types:
-            # The wrapped handler is a closure, so we call __closure__ to peek
-            # at the wrapped function.  A simpler check: invoke it with a mock
-            # message and verify the response type is handoff_v2_result_ack
-            # (done in groups D-G), but we can at least check the handler is
-            # registered (not the catch-all).
             assert bridge._message_handlers[mt] is not None
 
 
@@ -204,7 +197,7 @@ class TestHandlerAck:
         assert resp["type"] == "handoff_v2_result_ack"
 
     def test_D02_ack_does_not_clear_pending_entry(self):
-        """After an ack the pending entry must still be registered (terminal pending)."""
+        """After an ack the pending entry must still be registered (awaiting terminal response)."""
         from core.android_handoff_v2_response_ingress import (
             HandoffV2ResponseRuntime,
             ingest_android_handoff_response,
