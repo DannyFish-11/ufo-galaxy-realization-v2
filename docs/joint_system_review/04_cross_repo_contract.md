@@ -80,14 +80,16 @@
 | `rag_result` | 模型存在，send path 存在，但 RAG pipeline TODO |
 | `code_result` | 模型存在，send path 存在，但 sandbox TODO |
 
-### 2.3 Android 侧有 artifact 生成但上报路径不明确
+### 2.3 Android 侧有 artifact 生成但上报路径已确认断层
 
 | Artifact | 生成模块 | 上报路径状态 |
 |----------|---------|------------|
-| `DeviceReadinessArtifact` | `DelegatedRuntimeReadinessEvaluator` | ❓ AipModels 中无专用消息类型，可能通过 truth ingress 路径上报 |
-| `DeviceAcceptanceArtifact` | `DelegatedRuntimeAcceptanceEvaluator` | ❓ 同上 |
-| `DeviceGovernanceArtifact` | `DelegatedRuntimePostGraduationGovernanceEvaluator` | ❓ 同上 |
-| `DeviceStrategyArtifact` | `DelegatedRuntimeStrategyEvaluator` | ❓ 同上 |
+| `DeviceReadinessArtifact` | `DelegatedRuntimeReadinessEvaluator` | ❌ 设计通过 `ReconciliationSignal.PARTICIPANT_STATE` → `RuntimeController` 转发，但 `AipModels.kt` MsgType enum 中**无对应消息类型**，wire 传输层缺失 |
+| `DeviceAcceptanceArtifact` | `DelegatedRuntimeAcceptanceEvaluator` | ❌ 同上 |
+| `DeviceGovernanceArtifact` | `DelegatedRuntimePostGraduationGovernanceEvaluator` | ❌ 同上 |
+| `DeviceStrategyArtifact` | `DelegatedRuntimeStrategyEvaluator` | ❌ 同上 |
+
+**具体断层原因（代码验证）**：`ReconciliationSignal.kt`（PR-51）定义了完整的 Android→V2 reconciliation signal 内部模型，并在 `DelegatedRuntimeReadinessEvaluator` 中明确声明了"forwarded via reconciliation signal channel"的设计意图，但 `AipModels.kt` 的 `MsgType` enum 在最新代码中**不包含 `reconciliation_signal` 或 `participant_state` 消息类型**，这意味着 `ReconciliationSignal` 尚未被序列化到 AIP v3 wire 格式并通过 `GalaxyWebSocketClient` 发送到 V2。
 
 ---
 
@@ -100,8 +102,9 @@
 | 心跳（heartbeat / heartbeat_ack） | ✅ 完整闭环 | 双向有发送和处理代码 |
 | 基础任务执行（task_submit/assign/result） | ✅ 完整闭环 | 双端代码完整，是最成熟的路径 |
 | Goal 执行（goal_execution/result） | ✅ 完整闭环 | 双端代码完整 |
-| Delegated execution signal（新格式） | ✅ 完整闭环 | PR-16 双端接通：Android 发 DelegatedExecutionSignal → V2 android_delegated_signal_ingress 接收 |
-| HandoffEnvelopeV2 native 消费 | ✅ 完整闭环 | PR-H 双端接通：V2 发 handoff_dispatch → Android 接收执行 → 回报 handoff_result |
+| Delegated execution signal（新格式） | ✅ 完整闭环 | PR-16 双端接通（已代码验证）：Android → GalaxyWebSocketClient → V2 android_bridge.py（94行 import handle_delegated_execution_signal）→ galaxy_gateway/android/handlers/delegated_signal.py → core/android_delegated_signal_ingress.py → DelegatedExecutionTrackingRecord phase 推进 → SourceDispatchOrchestrator |
+| HandoffEnvelopeV2 native 消费（下行） | ✅ 完整闭环 | PR-H 下行接通：V2 发 handoff_envelope_v2 → Android GalaxyConnectionService 接收执行 |
+| HandoffEnvelopeV2 native 消费（上行 response） | ❌ 已确认断层 | Android 有 handoff_envelope_v2_result 消息（AipModels.kt），V2 有 android_handoff_v2_response_ingress.py，但 gateway android/handlers/ 中无对应 handler 文件，V2 gateway 路由层未挂接此 handler |
 | Takeover request/response 协议 | ✅ 基本接通 | V2 发 takeover_request → Android DelegatedTakeoverExecutor 处理 → 回报 takeover_response；PR-5 注明"full takeover executor deferred"，核心路径已接通 |
 | 离线任务队列（offline replay） | ✅ Android 侧完整 | OfflineTaskQueue 缓冲 + 重连 flush；V2 侧接收同上述路径 |
 | 指数退避重连策略 | ✅ Android 侧完整 | GalaxyWebSocketClient 有完整重连实现 |
@@ -111,15 +114,25 @@
 
 ## 4. 名字相似但未真正接通的地方
 
-### 4.1 readiness/acceptance/governance/strategy — "评估存在，信号流不明确"
+### 4.1 readiness/acceptance/governance/strategy — "评估存在，AIP 传输层断层"
 
 | 现象 | 细节 |
 |------|------|
-| V2 有 `DelegatedFlowReadinessGate`，Android 有 `DelegatedRuntimeReadinessEvaluator` | 双端都叫 readiness，但 V2 gate 读取的"五维度 signal"是从 V2 内部模块读取，不是从 Android artifact 读取 |
-| Android 有 `DeviceReadinessArtifact` 但 AipModels 中无对应消息类型 | 无法确认 artifact 有实际上报路径 |
-| **判断**：这是双端"各自建了评估器"但还未形成信号流闭环的状态 | |
+| Android 有四层评估器和 artifact 结构 | `DelegatedRuntimeReadinessEvaluator` 等生成完整 artifact |
+| 设计意图明确 | 评估器代码注明 "forwarded via reconciliation signal channel" + `INTEGRATION_RUNTIME_CONTROLLER` |
+| `ReconciliationSignal.kt`（PR-51）已定义结构 | 7 种 signal kind，含 `PARTICIPANT_STATE` 和 `RUNTIME_TRUTH_SNAPSHOT` |
+| **AipModels.kt MsgType enum 无对应消息类型（已验证）** | 翻查 `AipModels.kt` 全文，`MsgType` enum 最后一个条目是 `HANDOFF_ENVELOPE_V2`，无 `reconciliation_signal` 类型 |
+| **判断**：`ReconciliationSignal` 是完整设计好的内部 DTO，但其 AIP wire 层序列化和发送代码尚未建立 | |
 
-### 4.2 compat/legacy blocking — "双端都有 participant，但 V2 阻断决策是否基于 Android 信号待确认"
+### 4.2 HandoffEnvelopeV2 response — "下行接通，上行 response 断层"
+
+| 现象 | 细节 |
+|------|------|
+| 下行（V2→Android）已接通 | V2 发 `handoff_envelope_v2`，Android 在 `GalaxyConnectionService` 有专用 handler（AipModels 注明 "pr-h — promoted"） |
+| 上行 response（Android→V2）断层（已验证） | `AipModels.kt` 有 `HANDOFF_ENVELOPE_V2_RESULT` 和 `HandoffEnvelopeV2ResultPayload`；`core/android_handoff_v2_response_ingress.py` 有处理器；但 `galaxy_gateway/android/handlers/` 目录中无对应 handler 文件，gateway 路由层未挂接 |
+| **判断**：这是一个清晰的单向接通、上行 response 缺失的断层 | |
+
+### 4.3 compat/legacy blocking — "双端都有 participant，但 V2 阻断决策是否基于 Android 信号待确认"
 
 | 现象 | 细节 |
 |------|------|
@@ -171,12 +184,12 @@
 - 心跳保活
 - 离线任务队列
 
-### 部分接通（一侧完整，另一侧需验证触发机制）
-- Truth reconciliation（处理器完整，触发链待验证）
+### 部分接通（一侧完整，gateway 挂接缺失）
+- HandoffEnvelopeV2 上行 response（android_handoff_v2_response_ingress 存在，但 gateway handler 缺失）
 - Takeover execution（协议已接通，takeover executor 标注部分延迟）
-- Continuity/recovery（双端均有骨架，协调消息待验证）
+- Continuity/recovery（双端均有骨架，协调消息触发时机待验证）
 
-### 骨架对齐但信号流未闭合（需要专门 PR 打通）
-- Readiness/acceptance/governance/strategy artifact 上报路径
-- Android → V2 compat influence 上报路径
-- 双端 cross-repo consistency gate 的运行时集成
+### 骨架对齐但 AIP wire 层断层（需要专门 PR 建立传输路径）
+- ReconciliationSignal AIP wire 层（影响所有 readiness/acceptance/governance/strategy artifact 上报）
+- Android → V2 compat influence 上报路径（依赖 ReconciliationSignal 解决）
+- 双端 cross-repo consistency gate 的运行时集成（CrossRepoConsistencyGate 有实现，但无运行时挂接）

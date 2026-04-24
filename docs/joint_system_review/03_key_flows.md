@@ -39,14 +39,15 @@ V2 侧（回流）：
 
 ### 链路完整性判断
 
-**✅ 已在代码中完整**：
-- V2 侧：模块 1-5、13-16 均有完整实现
-- Android 侧：模块 6-12 均有完整实现
-- 消息格式（AIP v3 handoff_dispatch/handoff_ack/handoff_result）双端对齐
+**✅ 已在代码中完整（下行链路：V2 → Android）**：
+- V2 侧：模块 1-5 均有完整实现
+- Android 侧：模块 6-12 均有完整实现；`AipModels.kt` 对 `handoff_envelope_v2` 状态注明 "pr-h — promoted; dedicated stateful handler in GalaxyConnectionService"
 
-**⚠️ 待验证**：
-- `handoff_dispatch` 消息的发送代码在 V2 gateway 中的具体调用点（需检查 `galaxy_gateway/` 目录的 handler 代码是否已挂接到 `android_handoff_v2_response_ingress.py`）
-- Android 的 `handoff_envelope_v2` handler 在 `RuntimeController.kt` 中的具体绑定方式
+**❌ 已确认缺口（上行链路：Android → V2 handoff 响应）**：
+通过检查 `galaxy_gateway/android/handlers/` 目录，确认其中**没有** `handoff_ack`、`handoff_result`、`handoff_failure` 的专用 handler 文件。虽然 V2 侧有 `core/android_handoff_v2_response_ingress.py` 处理模块，但它尚未被 gateway 路由层挂接。Android 发出的 `handoff_envelope_v2_result` 消息（在 `AipModels.kt` 中定义）在 V2 gateway 中找不到对应的路由 handler。这是一个**已确认的断层**：
+- V2 的 `android_handoff_v2_response_ingress.py` 入站处理器存在但未被 gateway 调用
+- `galaxy_gateway/websocket_handler.py` 的 dispatch table 仅覆盖 `DEVICE_REGISTER`、`DEVICE_HEARTBEAT`、`TASK_RESULT`、`COMMAND_RESULT`、`COMMAND`、`DEVICE_STATUS`、`WAKE_EVENT` 七种类型，其他类型由 `android_bridge.py` 的分发器处理
+- `android_bridge.py` 中导入了 `handle_delegated_execution_signal` 但未见 `handle_handoff_response`
 
 ---
 
@@ -76,13 +77,19 @@ V2 侧（接收并对账）：
 
 ### 链路完整性判断
 
-**✅ 代码结构完整**：
-- V2 侧入站处理器（模块 6-8）完整
-- Android 侧真值持有模块（1-4）完整
+**✅ V2 侧入站处理完整**：
+- V2 `android_participant_truth_ingress.py` 中 8 种 truth kind 处理逻辑完整
+- V2 gateway `android_bridge.py` 中的 `handle_response` → 触发 `reconcile_inbound_message` → 路由至 `android_participant_truth_ingress`
 
-**⚠️ 弱连接点**：
-- 模块 5（上报触发）：`LocalTruthEmitDecision.kt` 存在，但触发它的时机（什么情况下上报哪种 truth）在 `AutonomousExecutionPipeline.kt` 和 `RuntimeController.kt` 中的具体集成代码需进一步验证
-- V2 的 `android_participant_truth_ingress.py` 是否被 gateway handler 正确挂接（需检查 gateway handler 对应的路由注册）
+**✅ Android 侧状态上报机制已建立**：
+- `ReconciliationSignal.kt`（PR-51）定义了 Android→V2 的 7 种 signal kind，包括 `PARTICIPANT_STATE`（状态变化，含 readiness）和 `RUNTIME_TRUTH_SNAPSHOT`（完整真值快照）
+- `DelegatedRuntimeReadinessEvaluator` 文档注明：artifacts "forwarded via reconciliation signal channel"（RuntimeController 负责推送）
+
+**❌ 已确认断层（ReconciliationSignal 的 AIP 消息类型映射缺失）**：
+- `AipModels.kt` 的 `MsgType` enum 中**没有** `reconciliation_signal` 或 `participant_state` 消息类型
+- `ReconciliationSignal.kt` 是 Android 内部数据结构，其 wire key 常量（`KEY_KIND = "reconciliation_signal_kind"`）定义在类中，但无对应的 AIP message type 封装
+- 推断：readiness artifact 可能通过 `PARTICIPANT_STATE` kind 作为 `task_result` payload 附带字段上报，但这个路径在代码中未能找到明确的序列化和发送代码
+- 这是一个**已确认的结构性断层**：`ReconciliationSignal` 作为 Android 内部 DTO 存在，但其 wire 格式传输路径尚未完整建立
 
 ---
 
@@ -110,13 +117,16 @@ V2 侧：
 
 ### 链路完整性判断
 
-**✅ 已在代码中完整**：
-- 新格式信号路径（delegated_execution_signal → android_delegated_signal_ingress）完整
-- V2 侧的并行聚合和 duplicate 抑制逻辑完整
+**✅ delegated_execution_signal 链路完整接通（已代码验证）**：
+通过检查 V2 gateway 代码，确认完整路由路径：
+1. Android → `GalaxyWebSocketClient.sendJson()` → V2 WebSocket
+2. V2 `android_bridge.py` 第 94 行：`from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal`
+3. `galaxy_gateway/android/handlers/delegated_signal.py` 调用 `core.android_delegated_signal_ingress.ingest_delegated_execution_signal()`
+4. 结果转发至 `SourceDispatchOrchestrator.consume_android_behavioral_result()`
 
 **⚠️ 旧格式路径残留**：
 - 旧 `goal_execution_result` / `task_result` 路径通过 `android_execution_signal_reconciler.py` 中的 compat 推断处理
-- 两条路径并存（新旧），需确认 Android 当前默认使用哪条路径上报
+- 两条路径并存（新旧），Android 当前哪条路径为默认路径需在 `RuntimeController.kt` 中确认
 
 ---
 
@@ -251,15 +261,16 @@ V2 侧（聚合并裁决）：
 
 ### 链路完整性判断
 
-**⚠️ 框架双端对齐，实时信号流待验证**：
+**⚠️ 框架双端对齐，实时信号流存在已确认断层**：
 
-这是当前系统最重要的未完全闭合链路：
+这是当前系统最重要的未完全闭合链路，通过代码验证：
 
-1. Android 评估器（4个）生成 artifact 的**触发时机**代码未在代码中找到明确的主动推送触发器
-2. V2 门控从"哪个信号源"读取 Android 侧 dimension signal 未完全明确（`delegated_flow_readiness_gate.py` 读取现有 5 个 dimension 模块，但这些模块如何获得 Android 侧的 readiness 输入尚不完全清晰）
-3. **推断**：Android artifacts 可能通过 `android_participant_truth_ingress.py` 的 `readiness_assessment` 类型进入 V2，但这一路径的完整接通需要进一步确认
+1. **推送机制已设计**：`DelegatedRuntimeReadinessEvaluator.INTEGRATION_RUNTIME_CONTROLLER` 注明 "readiness artifacts forwarded via reconciliation signal channel"，表明设计意图是通过 `ReconciliationSignal.Kind.PARTICIPANT_STATE` 由 `RuntimeController` 转发
+2. **AIP 消息类型断层（已确认）**：`AipModels.kt` 的 `MsgType` enum 中**不包含** `reconciliation_signal` 或 `participant_state` 消息类型，`ReconciliationSignal.kt` 是 Android 内部 DTO，其 wire key (`reconciliation_signal_kind`) 无对应 AIP 封装，说明 **ReconciliationSignal 的 AIP 传输层尚未建立**
+3. **V2 gate 维度输入来源**：`delegated_flow_readiness_gate.py` 读取内部五维度模块，这些模块通过 `android_participant_truth_ingress.py` 的 `readiness_assessment` truth kind 获得 Android 输入，但该 truth kind 的 AIP 消息 mapping 同样依赖 `ReconciliationSignal` 路径，形成循环依赖
 
 **✅ 结构已对齐**：
 - 双端评估器维度对齐（readiness/acceptance/governance/strategy 四层）
 - V2 gate 的 verdict 类型完整
 - Android artifact 结构完整
+- `ReconciliationSignal.Kind.PARTICIPANT_STATE` 语义明确（设计意图清晰）
