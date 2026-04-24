@@ -599,7 +599,7 @@ class TestSnapshot:
 # ===========================================================================
 
 
-class TestCompatFallbackAuthorityGuardPR8:
+class TestCompatFallbackAuthorityGuardPr8:
     def test_AA_pr8_sentinel_importable(self):
         from core.compat_fallback_authority_guard import (
             COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL,
@@ -667,7 +667,7 @@ class TestCompatFallbackAuthorityGuardPR8:
 # ===========================================================================
 
 
-class TestLegacyDispatchRegistryPR8:
+class TestLegacyDispatchRegistryPr8:
     @pytest.fixture(autouse=True)
     def reset_registry(self):
         from core.legacy_dispatch_registry import reset_registry
