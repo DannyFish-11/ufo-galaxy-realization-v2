@@ -107,6 +107,16 @@ class IngressEventKind:
     MESH_TOPOLOGY: str = "mesh_topology"
     WAKE_EVENT: str = "wake_event"
 
+    # Goal execution results (Android uplink)
+    GOAL_EXECUTION_RESULT: str = "goal_execution_result"
+
+    # Handoff protocol uplink wire types (Android → V2 gateway)
+    # PR-02-V2 / PR-03-V2: these are canonical Android business result messages.
+    HANDOFF_ACK: str = "handoff_ack"
+    HANDOFF_RESULT: str = "handoff_result"
+    HANDOFF_FAILURE: str = "handoff_failure"
+    HANDOFF_ENVELOPE_V2_RESULT: str = "handoff_envelope_v2_result"
+
     # Unknown / unrecognised
     UNKNOWN: str = "unknown"
 
@@ -117,6 +127,8 @@ class IngressEventKind:
         GOAL_EXECUTION, PARALLEL_SUBTASK, PARALLEL_RESULT,
         CAPABILITY_REPORT, AGENT_STATUS, DELEGATED_EXECUTION_SIGNAL,
         FILE_TRANSFER, PEER_ANNOUNCE, PEER_EXCHANGE, MESH_TOPOLOGY, WAKE_EVENT,
+        GOAL_EXECUTION_RESULT,
+        HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE, HANDOFF_ENVELOPE_V2_RESULT,
         UNKNOWN,
     }
 

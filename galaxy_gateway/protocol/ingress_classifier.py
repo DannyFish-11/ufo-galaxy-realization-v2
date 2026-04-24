@@ -128,6 +128,17 @@ _KIND_TO_CLASS: Dict[str, str] = {
     IngressEventKind.PEER_ANNOUNCE:     IngressMessageClass.TRANSPORT,
     IngressEventKind.PEER_EXCHANGE:     IngressMessageClass.TRANSPORT,
     IngressEventKind.MESH_TOPOLOGY:     IngressMessageClass.TRANSPORT,
+
+    # Android business result messages — PR-03-V2
+    # goal_execution_result is the Android uplink result for goal_execution tasks.
+    IngressEventKind.GOAL_EXECUTION_RESULT:      IngressMessageClass.EXECUTION,
+    # Handoff protocol uplink result types (PR-02-V2 / PR-03-V2).
+    # All three status variants plus the unified envelope result share the
+    # EXECUTION class: they carry terminal Android task execution outcomes.
+    IngressEventKind.HANDOFF_ACK:                IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_RESULT:             IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_FAILURE:            IngressMessageClass.EXECUTION,
+    IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT: IngressMessageClass.EXECUTION,
 }
 
 

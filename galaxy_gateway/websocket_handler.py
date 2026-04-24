@@ -32,12 +32,20 @@ Responsibilities
 - Accept and close WebSocket connections (device ingress/egress).
 - Enforce AIP v3+ protocol framing; auto-inject missing trace_id/route_mode.
 - Normalize accepted messages to NormalizedIngressEvent before dispatch.
-- Dispatch parsed messages to register / heartbeat / command / response handlers.
+- Dispatch transport-class messages (register, heartbeat, status, wake, session_migrate).
+- **Delegate Android business messages** — identify Android-domain message kinds
+  (task_result, goal_execution_result, delegated_execution_signal, handoff_*,
+  etc.) and delegate them to :data:`~galaxy_gateway.android_bridge.android_bridge`
+  (the canonical Android business ingress) rather than handling them independently.
+  This is the PR-03-V2 delegation boundary; see ``ANDROID_INGRESS_DELEGATION_AUTHORITY``.
 - Delegate authoritative online/routable state to
   :class:`~core.unified.connection_manager.UnifiedConnectionManager` (UCM).
 
 NOT responsible for
 ~~~~~~~~~~~~~~~~~~~~
+- **Android-specific business dispatch** — Android business messages are
+  canonically handled by :class:`~galaxy_gateway.android_bridge.AndroidBridge`.
+  This module only identifies and delegates them.
 - **Global readiness truth** — whether the full stack is ready to serve requests.
   That is owned by :mod:`core.system_orchestrator`.
 - **Entry-mode decisioning** — which mode a session starts in.
@@ -76,11 +84,23 @@ INGRESS_NORMALIZATION_AUTHORITY = (
     "WEBSOCKET_HANDLER::INGRESS_NORMALIZED_TO_AIP_V3_CANONICAL_BEFORE_DISPATCH"
 )
 
+# ---------------------------------------------------------------------------
+# PR-03-V2 Android business ingress delegation authority sentinel
+# This sentinel declares that this module delegates all Android-specific
+# business messages to android_bridge (the canonical Android ingress) rather
+# than independently maintaining a parallel Android dispatch table.
+# websocket_handler is responsible for: transport, normalization, delegation.
+# It is NOT responsible for Android-specific business dispatch semantics.
+# ---------------------------------------------------------------------------
+ANDROID_INGRESS_DELEGATION_AUTHORITY = (
+    "WEBSOCKET_HANDLER::ANDROID_BUSINESS_MESSAGES_DELEGATED_TO_ANDROID_BRIDGE_CANONICAL_INGRESS"
+)
+
 import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Set
+from typing import Dict, FrozenSet, Set
 import uuid
 from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
@@ -98,6 +118,47 @@ from galaxy_gateway.protocol.ingress_classifier import (
 from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# PR-03-V2: Android business domain kinds
+#
+# These IngressEventKind values identify Android-specific business messages
+# that must be delegated to android_bridge.handle_message() — the single
+# canonical Android business ingress.  websocket_handler does NOT maintain
+# independent dispatch logic for these kinds; it only identifies and delegates.
+#
+# Kinds NOT in this set (DEVICE_REGISTER, DEVICE_HEARTBEAT, DEVICE_STATUS,
+# WAKE_EVENT, COMMAND) remain handled by websocket_handler as transport-level
+# or routing concerns.
+# ---------------------------------------------------------------------------
+_ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset({
+    # Task lifecycle results
+    IngressEventKind.TASK_RESULT,
+    IngressEventKind.COMMAND_RESULT,
+    IngressEventKind.PARALLEL_RESULT,
+    # Goal execution results
+    IngressEventKind.GOAL_EXECUTION_RESULT,
+    # Android-initiated control messages
+    IngressEventKind.TASK_SUBMIT,
+    IngressEventKind.TASK_CANCEL,
+    IngressEventKind.GOAL_EXECUTION,
+    IngressEventKind.PARALLEL_SUBTASK,
+    # Delegated execution lifecycle
+    IngressEventKind.DELEGATED_EXECUTION_SIGNAL,
+    # Handoff protocol uplink results (PR-02-V2 / PR-03-V2)
+    IngressEventKind.HANDOFF_ACK,
+    IngressEventKind.HANDOFF_RESULT,
+    IngressEventKind.HANDOFF_FAILURE,
+    IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT,
+    # Capability / diagnostics reporting
+    IngressEventKind.CAPABILITY_REPORT,
+    IngressEventKind.AGENT_STATUS,
+    # P2P mesh overlay
+    IngressEventKind.FILE_TRANSFER,
+    IngressEventKind.PEER_ANNOUNCE,
+    IngressEventKind.PEER_EXCHANGE,
+    IngressEventKind.MESH_TOPOLOGY,
+})
 
 
 class GatewayWSManager:
@@ -325,12 +386,29 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
 
         # ── Step 4: dispatch via canonical IngressEventKind ──────────────────
         # Branch on event.kind (stable canonical strings), not raw type values.
-        if event.kind == IngressEventKind.DEVICE_REGISTER:
+        #
+        # PR-03-V2: Android business domain messages are DELEGATED to
+        # android_bridge (the canonical Android ingress) rather than handled
+        # independently here.  Transport-class messages (register, heartbeat,
+        # status, wake, command) remain handled by this module.
+        if event.kind in _ANDROID_DOMAIN_KINDS:
+            # Delegate to android_bridge — the canonical Android business ingress.
+            # Pass the original raw message dict; android_bridge normalizes it
+            # independently (double-normalisation is idempotent for v3 dicts).
+            try:
+                from galaxy_gateway.android_bridge import android_bridge as _android_bridge
+                bridge_response = await _android_bridge.handle_message(websocket, message)
+                if bridge_response:
+                    await websocket.send_json(bridge_response)
+            except Exception as _bridge_err:
+                logger.error(
+                    "android_bridge delegation failed: kind=%s error=%s",
+                    event.kind, _bridge_err,
+                )
+        elif event.kind == IngressEventKind.DEVICE_REGISTER:
             await handle_register(connection_id, aip_msg, websocket)
         elif event.kind == IngressEventKind.DEVICE_HEARTBEAT:
             await handle_heartbeat(connection_id, aip_msg)
-        elif event.kind in (IngressEventKind.TASK_RESULT, IngressEventKind.COMMAND_RESULT):
-            await handle_response(connection_id, aip_msg)
         elif event.kind == IngressEventKind.COMMAND:
             await handle_command(connection_id, aip_msg)
         elif event.kind == IngressEventKind.DEVICE_STATUS:
