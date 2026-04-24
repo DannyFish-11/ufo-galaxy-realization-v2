@@ -261,6 +261,11 @@ class MessageType(str, Enum):
     # === Android Delegated Execution Signals (PR-16) ===
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 
+    # === Android Reconciliation Signal (PR-7-V2 / PR-06-Android) ===
+    # Uplink: Android → V2 — explicit state reconciliation signal emitted by
+    # Android RuntimeController to push participant/task/runtime truth into V2.
+    RECONCILIATION_SIGNAL = "reconciliation_signal"
+
     # === Android Takeover Protocol ===
     # Downlink: V2 → Android — request Android to accept takeover
     TAKEOVER_REQUEST = "takeover_request"
