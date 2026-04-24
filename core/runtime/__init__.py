@@ -826,6 +826,32 @@ from core.android_participant_truth_ingress import (  # noqa: E402
     ingest_android_participant_truth_message,
 )
 
+# PR-5V2: Flow-Level Truth Ownership and Local/Central Truth Alignment.
+# Re-exported here so callers can reach the flow-level truth ownership API
+# from core.runtime without importing the module directly.
+from core.flow_level_truth_ownership import (  # noqa: E402
+    FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY,
+    FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL,
+    FLOW_TRUTH_OWNERSHIP_IS_CENTRALLY_COORDINATED_POLICY,
+    AUTHORITATIVE_TRUTH_MUST_BE_ABSORBED_POLICY,
+    ADVISORY_TRUTH_DOES_NOT_ALTER_CANONICAL_STATE_POLICY,
+    EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
+    CANONICAL_TERMINAL_DECISION_IS_V2_EXCLUSIVE_POLICY,
+    PARTIAL_RESULT_TRUTH_HAS_DEDICATED_STORE_POLICY,
+    POSTURE_CHANGE_REQUIRES_EVIDENCE_REVALIDATION_POLICY,
+    V2_TERMINAL_BLOCKS_ALL_SUBSEQUENT_ANDROID_TRUTH_POLICY,
+    COMPAT_INFLUENCE_IS_BLOCKABLE_AT_TRUTH_LAYER_POLICY,
+    PARTIAL_THEN_FINAL_MERGE_RULE_POLICY,
+    ANDROID_TRUTH_ADVANCED_BUT_V2_UNCONFIRMED_POLICY,
+    FlowTruthSemantics,
+    FlowTruthDecisionArtifact,
+    FlowTruthAlignmentDecision,
+    FlowLevelTruthOwnershipCoordinator,
+    evaluate_android_truth_alignment,
+    get_default_coordinator,
+    reset_default_coordinator,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
@@ -1480,4 +1506,25 @@ __all__ = [
     "build_delegated_flow_snapshot",
     "get_delegated_flow_entity_runtime",
     "reset_delegated_flow_entity_runtime",
+    # PR-5V2: Flow-Level Truth Ownership and Local/Central Truth Alignment
+    "FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY",
+    "FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL",
+    "FLOW_TRUTH_OWNERSHIP_IS_CENTRALLY_COORDINATED_POLICY",
+    "AUTHORITATIVE_TRUTH_MUST_BE_ABSORBED_POLICY",
+    "ADVISORY_TRUTH_DOES_NOT_ALTER_CANONICAL_STATE_POLICY",
+    "EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY",
+    "CANONICAL_TERMINAL_DECISION_IS_V2_EXCLUSIVE_POLICY",
+    "PARTIAL_RESULT_TRUTH_HAS_DEDICATED_STORE_POLICY",
+    "POSTURE_CHANGE_REQUIRES_EVIDENCE_REVALIDATION_POLICY",
+    "V2_TERMINAL_BLOCKS_ALL_SUBSEQUENT_ANDROID_TRUTH_POLICY",
+    "COMPAT_INFLUENCE_IS_BLOCKABLE_AT_TRUTH_LAYER_POLICY",
+    "PARTIAL_THEN_FINAL_MERGE_RULE_POLICY",
+    "ANDROID_TRUTH_ADVANCED_BUT_V2_UNCONFIRMED_POLICY",
+    "FlowTruthSemantics",
+    "FlowTruthDecisionArtifact",
+    "FlowTruthAlignmentDecision",
+    "FlowLevelTruthOwnershipCoordinator",
+    "evaluate_android_truth_alignment",
+    "get_default_coordinator",
+    "reset_default_coordinator",
 ]
