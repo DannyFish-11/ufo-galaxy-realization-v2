@@ -393,7 +393,7 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
         # status, wake, command) remain handled by this module.
         if event.kind in _ANDROID_DOMAIN_KINDS:
             # Delegate to android_bridge — the canonical Android business ingress.
-            # Pass the original raw message dict; android_bridge normalises it
+            # Pass the original raw message dict; android_bridge normalizes it
             # independently (double-normalisation is idempotent for v3 dicts).
             try:
                 from galaxy_gateway.android_bridge import android_bridge as _android_bridge

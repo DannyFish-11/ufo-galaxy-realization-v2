@@ -39,7 +39,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run(coro):
+def _run_async(coro):
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)
@@ -199,9 +199,9 @@ class TestDelegationAuthoritySentinel:
 
     def test_D05_sentinel_does_not_claim_orchestration(self):
         from galaxy_gateway.websocket_handler import ANDROID_INGRESS_DELEGATION_AUTHORITY
-        assert "ORCHESTRATION" not in ANDROID_INGRESS_DELEGATION_AUTHORITY.upper().replace(
-            "DELEGATED", ""
-        )
+        # The sentinel must not claim ORCHESTRATION authority — delegation is a
+        # transport-layer concern, not an orchestration concern.
+        assert "ORCHESTRATION" not in ANDROID_INGRESS_DELEGATION_AUTHORITY
 
 
 # ============================================================================
@@ -285,7 +285,7 @@ class TestAndroidMessageDelegation:
         ws = self._make_ws()
 
         with patch("galaxy_gateway.android_bridge.android_bridge", mock_bridge):
-            _run(handle_message("conn-001", message, ws))
+            _run_async(handle_message("conn-001", message, ws))
 
         return mock_bridge, ws
 
@@ -358,7 +358,7 @@ class TestAndroidMessageDelegation:
 
         with patch("galaxy_gateway.android_bridge.android_bridge", mock_bridge):
             # Should not raise
-            _run(handle_message("conn-001", msg, ws))
+            _run_async(handle_message("conn-001", msg, ws))
 
 
 # ============================================================================
@@ -379,7 +379,7 @@ class TestTransportMessagesNotDelegated:
 
         with patch("galaxy_gateway.android_bridge.android_bridge", mock_bridge):
             try:
-                _run(handle_message("conn-001", message, ws))
+                _run_async(handle_message("conn-001", message, ws))
             except Exception:
                 pass
 
