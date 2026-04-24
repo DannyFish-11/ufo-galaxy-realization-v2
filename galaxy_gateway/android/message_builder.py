@@ -241,7 +241,7 @@ class MessageBuilder:
         )
 
     @classmethod
-    def handoff_dispatch(
+    def handoff_envelope_v2(
         cls,
         device_id: str,
         envelope: Any,
@@ -249,11 +249,11 @@ class MessageBuilder:
         priority: int = 5,
         timeout: int = 300,
     ) -> Dict[str, Any]:
-        """Build an AIP v3 ``handoff_dispatch`` message for Android (PR-H).
+        """Build the canonical AIP v3 ``handoff_envelope_v2`` message for Android.
 
-        Wraps :meth:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2.to_android_native_payload`
-        in an AIP message frame so the caller can pass the result directly to
-        the WebSocket send path.
+        This is the **canonical downlink builder** for Handoff V2.  The returned
+        message carries ``"type": "handoff_envelope_v2"`` which aligns with
+        Android's ``AipModels.HANDOFF_ENVELOPE_V2`` handler path.
 
         Parameters
         ----------
@@ -269,11 +269,54 @@ class MessageBuilder:
         Returns
         -------
         dict
-            AIP v3 ``handoff_dispatch`` message.
+            AIP v3 ``handoff_envelope_v2`` message.
         """
         return envelope.to_android_task_assign_payload(
             device_id,
             task_type="handoff_v2",
+            priority=priority,
+            timeout=timeout,
+        )
+
+    @classmethod
+    def handoff_dispatch(
+        cls,
+        device_id: str,
+        envelope: Any,
+        *,
+        priority: int = 5,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """Build an AIP v3 handoff message for Android (PR-H).
+
+        .. deprecated:: v3.1
+            ``handoff_dispatch`` is retained as a backward-compatible method
+            alias and will be removed in a future release.  The canonical
+            downlink wire type is now ``"handoff_envelope_v2"`` (see
+            :meth:`handoff_envelope_v2`).  Callers should migrate to
+            :meth:`handoff_envelope_v2` at their earliest convenience.
+            This method delegates to :meth:`handoff_envelope_v2` and therefore
+            also produces ``"type": "handoff_envelope_v2"`` on output.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        envelope:
+            A :class:`~contracts.handoff_envelope_v2.HandoffEnvelopeV2` instance.
+        priority:
+            AIP message priority (1-10).  Defaults to 5.
+        timeout:
+            Expected execution timeout in seconds.  Defaults to 300.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``handoff_envelope_v2`` message.
+        """
+        return cls.handoff_envelope_v2(
+            device_id,
+            envelope,
             priority=priority,
             timeout=timeout,
         )
