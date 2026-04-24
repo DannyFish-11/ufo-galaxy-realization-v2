@@ -191,6 +191,19 @@ except ImportError:  # pragma: no cover
     _audit_takeover_request = None  # type: ignore[assignment]
     _audit_takeover_response = None  # type: ignore[assignment]
 
+# PR-5A: Android behavioral result stable consumer — the SourceDispatchOrchestrator
+# is the canonical consumer of result-kind delegated execution signals.
+try:
+    from core.runtime.source_dispatch_orchestrator import (
+        SourceDispatchOrchestrator as _SourceDispatchOrchestrator,
+    )
+
+    _android_result_consumer = _SourceDispatchOrchestrator()
+    _RESULT_CONSUMER_AVAILABLE: bool = True
+except Exception:  # pragma: no cover  # noqa: BLE001
+    _android_result_consumer = None  # type: ignore[assignment]
+    _RESULT_CONSUMER_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -687,6 +700,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
         *,
         message: Dict[str, Any],
         session_id: str = "",
+        device_id: str = "",
     ) -> AndroidLifecycleCoordinatorOutcome:
         """Handle an inbound ``delegated_execution_signal`` message.
 
@@ -694,6 +708,9 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
         1. Delegates to delegated signal ingress to reconcile the signal.
         2. Reduces the session phase.
         3. Persists the updated session record.
+        4. PR-5A: For ``result``-kind signals, forwards the ingress outcome to
+           :meth:`~core.runtime.source_dispatch_orchestrator.SourceDispatchOrchestrator.consume_android_behavioral_result`
+           so the source-side orchestrator is the stable consumer.
 
         Parameters
         ----------
@@ -701,8 +718,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Raw inbound ``delegated_execution_signal`` message dict.
         session_id:
             Optional session_id override.
+        device_id:
+            Android device identifier (used for PR-5A source attribution).
         """
         try:
+            _device_id = device_id or message.get("device_id", "")
             _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
             phase_before = ""
             phase_after = ""
@@ -710,14 +730,16 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             signal_kind = ""
             was_updated = False
             reject_reason = ""
+            result_consumer_called = False
+            _raw_ingress_outcome = None
 
             # Step 1: delegated signal ingress
             if _EXECUTION_SIGNAL_AVAILABLE and _ingest_execution_signal is not None:
                 try:
-                    outcome = _ingest_execution_signal(message)
-                    was_updated = outcome.was_updated if hasattr(outcome, "was_updated") else False
-                    reject_reason = outcome.reject_reason if hasattr(outcome, "reject_reason") else ""
-                    env = outcome.envelope if hasattr(outcome, "envelope") else None
+                    _raw_ingress_outcome = _ingest_execution_signal(message)
+                    was_updated = _raw_ingress_outcome.was_updated if hasattr(_raw_ingress_outcome, "was_updated") else False
+                    reject_reason = _raw_ingress_outcome.reject_reason if hasattr(_raw_ingress_outcome, "reject_reason") else ""
+                    env = _raw_ingress_outcome.envelope if hasattr(_raw_ingress_outcome, "envelope") else None
                     if env:
                         signal_kind = env.signal_kind.value if hasattr(env.signal_kind, "value") else str(getattr(env, "signal_kind", ""))
                         _session_id = _session_id or (env.session_id or "")
@@ -740,6 +762,26 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     was_transitioned = result.was_transitioned
                     record_participant_session(result.record)
 
+            # Step 3: PR-5A — forward result-kind signals to the stable consumer.
+            if (
+                _RESULT_CONSUMER_AVAILABLE
+                and _android_result_consumer is not None
+                and was_updated
+                and signal_kind == "result"
+                and _raw_ingress_outcome is not None
+            ):
+                try:
+                    _android_result_consumer.consume_android_behavioral_result(
+                        _raw_ingress_outcome,
+                        source=f"android_bridge:{_device_id}",
+                    )
+                    result_consumer_called = True
+                except Exception as _consumer_exc:  # noqa: BLE001
+                    logger.debug(
+                        "on_execution_signal: PR-5A result consumer skipped (non-fatal): %s",
+                        _consumer_exc,
+                    )
+
             return AndroidLifecycleCoordinatorOutcome(
                 was_handled=True,
                 event_type="execution_signal",
@@ -751,7 +793,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     f"execution_signal: kind={signal_kind!r} "
                     f"updated={was_updated} session={_session_id!r}"
                 ),
-                extra={"signal_kind": signal_kind, "was_updated": was_updated},
+                extra={
+                    "signal_kind": signal_kind,
+                    "was_updated": was_updated,
+                    "result_consumer_called": result_consumer_called,
+                },
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("on_execution_signal failed (non-fatal): %s", exc)
