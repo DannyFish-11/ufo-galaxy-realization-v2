@@ -150,18 +150,30 @@
        "payload": HandoffEnvelopeV2ResultPayload
      })
 
-─── ⚠️ 断层：V2 网关无法识别此消息 ───────────────────────────────────────
+---
 
-[断层 1] galaxy_gateway/protocol/aip_v3.py MessageType 枚举：
-   # 有：HANDOFF_DISPATCH, HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE
-   # 无：HANDOFF_ENVELOPE_V2, HANDOFF_ENVELOPE_V2_RESULT  ← 缺失
-   → msg_type = MessageType("handoff_envelope_v2_result")
-   → ValueError: "handoff_envelope_v2_result" is not a valid MessageType
-   → 消息进入 "Unknown message type" 分支，被 AndroidBridge 丢弃
+> ⚠️ **断层：V2 网关无法识别此消息**
 
-[断层 2] galaxy_gateway/android_bridge.py _message_handlers：
-   # 没有注册 MessageType.HANDOFF_ENVELOPE_V2_RESULT → handler 的映射
-   → 即使 MessageType 存在，也没有 handler 处理
+**[断层 1] `galaxy_gateway/protocol/aip_v3.py` MessageType 枚举**：
+
+`V2` 收到 `type = "handoff_envelope_v2_result"` 时执行：
+
+```python
+msg_type = MessageType("handoff_envelope_v2_result")
+# → ValueError: "handoff_envelope_v2_result" is not a valid MessageType
+# → 消息进入 "Unknown message type" 分支，被 AndroidBridge 丢弃
+```
+
+原因：V2 枚举当前仅有 `HANDOFF_DISPATCH / HANDOFF_ACK / HANDOFF_RESULT / HANDOFF_FAILURE`，缺少 `HANDOFF_ENVELOPE_V2_RESULT`。
+
+**[断层 2] `galaxy_gateway/android_bridge.py` `_message_handlers` 注册表**：
+
+即使补全 MessageType 枚举，`_message_handlers` 中也没有注册对应 handler：
+
+```python
+# 当前缺失（需要补充）：
+# self._message_handlers[MessageType.HANDOFF_ENVELOPE_V2_RESULT] = _wrap(handle_handoff_envelope_v2_result)
+```
 
 [已实现但未接通] core/android_handoff_v2_response_ingress.py:
    ingest_android_handoff_response(message) → HandoffV2ResponseOutcome

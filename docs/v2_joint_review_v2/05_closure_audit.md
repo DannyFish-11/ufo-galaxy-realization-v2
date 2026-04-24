@@ -174,14 +174,19 @@
 **断层类型**：protocol message type 缺失 + gateway handler 未注册
 
 **具体位置**：
-1. **`galaxy_gateway/protocol/aip_v3.py` MessageType 枚举**：
+
+1. **`galaxy_gateway/protocol/aip_v3.py` MessageType 枚举（当前状态 vs 缺失条目）**：
+
    ```python
-   # 当前只有：
+   # 当前存在（Android Handoff V2 区块末尾）：
    HANDOFF_DISPATCH = "handoff_dispatch"
    HANDOFF_ACK = "handoff_ack"
    HANDOFF_RESULT = "handoff_result"
    HANDOFF_FAILURE = "handoff_failure"
-   # 缺失：HANDOFF_ENVELOPE_V2_RESULT = "handoff_envelope_v2_result"
+
+   # ❌ 缺失（需要补充）：
+   # HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"
+   # HANDOFF_ENVELOPE_V2_RESULT = "handoff_envelope_v2_result"
    ```
 
 2. **`galaxy_gateway/android_bridge.py` handler 注册表**：

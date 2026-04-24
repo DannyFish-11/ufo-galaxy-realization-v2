@@ -144,18 +144,21 @@
 
 **具体工作**：
 
-**a. V2 侧补 MessageType**：
+**a. V2 侧补 MessageType**（目标文件：`galaxy_gateway/protocol/aip_v3.py`，在 `MessageType` 枚举末尾的 Android Handoff V2 区块补充以下三个条目）：
+
 ```python
-# galaxy_gateway/protocol/aip_v3.py MessageType 枚举中补充：
+# === Android Native Handoff V2 (PR-H) — 补充 wire 消息类型 ===
 HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"
 HANDOFF_ENVELOPE_V2_RESULT = "handoff_envelope_v2_result"
 RECONCILIATION_SIGNAL = "reconciliation_signal"  # 或选择其他命名
 ```
 
-**b. Android 侧补 MsgType**：
+**b. Android 侧补 MsgType**（目标文件：`protocol/AipModels.kt`，在 `MsgType` 枚举的 `HANDOFF_ENVELOPE_V2_RESULT` 条目后、分号前补充）：
+
 ```kotlin
-// protocol/AipModels.kt MsgType 枚举中补充：
-RECONCILIATION_SIGNAL("reconciliation_signal")
+// 在 enum class MsgType 末尾、HANDOFF_ENVELOPE_V2_RESULT 之后添加：
+RECONCILIATION_SIGNAL("reconciliation_signal"),
+HANDOFF_ENVELOPE_V2_RESULT("handoff_envelope_v2_result");  // 此条目已存在，保持不动
 ```
 
 ---
@@ -166,15 +169,21 @@ RECONCILIATION_SIGNAL("reconciliation_signal")
 
 **具体工作**：
 
-**a. 新增 `galaxy_gateway/android/handlers/handoff_v2_result.py`**：
+**a. 新增 `galaxy_gateway/android/handlers/handoff_v2_result.py`**（伪代码，展示关键结构）：
+
 ```python
+# galaxy_gateway/android/handlers/handoff_v2_result.py
+# 伪代码：展示 handler 结构和关键调用路径
+# 实际实现需补全 bridge / tracker 交互细节
+
 from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
 
 async def handle_handoff_envelope_v2_result(bridge, websocket, message):
+    # 步骤 1：通过已有 ingress 解析并关联 handoff 响应
     outcome = await ingest_android_handoff_response(message)
-    # 更新 AndroidRuntimeDispatchBindingRuntime
-    # 推进 delegated_flow_entity phase
-    return {"type": "ack", ...}
+    # 步骤 2：根据 outcome 更新 AndroidRuntimeDispatchBindingRuntime
+    # 步骤 3：推进 delegated_flow_entity 到下一 phase
+    # 步骤 4：返回 ACK（具体格式参考其他 handler）
 ```
 
 **b. 在 `galaxy_gateway/android_bridge.py` 注册 handler**：
@@ -192,14 +201,19 @@ self._message_handlers[MessageType.HANDOFF_ENVELOPE_V2_RESULT] = _wrap(
 
 **具体工作**：
 
-在 `service/GalaxyConnectionService.kt` 中启动协程收集 `RuntimeController.reconciliationSignals`：
+在 `service/GalaxyConnectionService.kt` 中启动协程收集 `RuntimeController.reconciliationSignals`（伪代码，实际 JSON 序列化方式参考该文件现有消息发送逻辑）：
+
 ```kotlin
+// 伪代码：展示关键逻辑，实际 JSON 构建方式应与 GalaxyConnectionService 现有代码保持一致
+// 例如使用 Gson 序列化，参考 sendHandoffEnvelopeV2Result() 的实现模式
 scope.launch {
     runtimeController.reconciliationSignals.collect { signal ->
-        wsClient.send(json {
-            "type" to MsgType.RECONCILIATION_SIGNAL.value
-            "payload" to signal.toWireMap()
-        })
+        val payload = signal.toWireMap()  // ReconciliationSignal 需补充此方法
+        val wireMessage = mapOf(
+            "type" to MsgType.RECONCILIATION_SIGNAL.value,
+            "payload" to payload
+        )
+        wsClient.sendJson(wireMessage)  // 与现有发送方法保持一致
     }
 }
 ```
