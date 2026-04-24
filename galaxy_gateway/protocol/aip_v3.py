@@ -264,6 +264,11 @@ class MessageType(str, Enum):
     # === Android Native Handoff V2 (PR-H) ===
     # Canonical downlink wire type — matches Android AipModels.kt HANDOFF_ENVELOPE_V2
     HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"
+    # Canonical uplink wire type — Android sends this as the top-level result envelope
+    # (PR-02-V2).  Individual ack/result/failure messages are routed through the same
+    # handler; this type is kept as a first-class enum entry so future Android clients
+    # may emit it directly.
+    HANDOFF_ENVELOPE_V2_RESULT = "handoff_envelope_v2_result"
     # Legacy/compat input alias — kept for backward-compatible ingestion only;
     # no longer emitted as canonical output.
     HANDOFF_DISPATCH = "handoff_dispatch"
