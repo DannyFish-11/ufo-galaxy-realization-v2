@@ -77,9 +77,9 @@
 ### 缺口 1：ReconciliationSignal AIP wire 层缺失（最关键）
 
 **问题描述（已通过代码验证）**：
-Android 侧有完整的四层评估器（readiness/acceptance/governance/strategy），`ReconciliationSignal.kt`（PR-51）定义了 Android→V2 的 7 种 signal kind（含 `PARTICIPANT_STATE` 用于上报 readiness 变化），`DelegatedRuntimeReadinessEvaluator` 注明 artifacts 通过 "reconciliation signal channel" 转发。但：
-- `AipModels.kt` 的 `MsgType` enum 中**无 `reconciliation_signal` 消息类型**（最后一个是 `HANDOFF_ENVELOPE_V2`）
-- `ReconciliationSignal` 的 wire key 常量（`KEY_KIND = "reconciliation_signal_kind"`）有了，但没有对应的 AIP message 封装
+Android 侧有完整的四层评估器（readiness/acceptance/governance/strategy），`ReconciliationSignal.kt`（PR-51）定义了 Android→V2 的 7 种 signal kind（含 `PARTICIPANT_STATE` 用于上报 readiness 变化），`DelegatedRuntimeReadinessEvaluator.kt` 第 `INTEGRATION_RUNTIME_CONTROLLER` 常量注明 artifacts 通过 "reconciliation signal channel" 转发。但：
+- `AipModels.kt` 的 `MsgType` enum 最后一个条目是 `HANDOFF_ENVELOPE_V2`（代码末尾的 companion object 之前），**无 `reconciliation_signal` 消息类型**（搜索全文确认）
+- `ReconciliationSignal.kt` 中的 wire key 常量（`KEY_KIND = "reconciliation_signal_kind"` 等）有了，但没有对应的 AipMessage 封装，`GalaxyWebSocketClient.sendJson()` 无调用路径
 - V2 gate 无法接收 Android 的 readiness/governance artifact，导致发布决策缺少 Android 端维度
 
 **影响**：V2 的 readiness/governance verdict 是在没有 Android 端评估输入的情况下做出的，准确性存疑。
@@ -89,7 +89,7 @@ Android 侧有完整的四层评估器（readiness/acceptance/governance/strateg
 ### 缺口 2：HandoffEnvelopeV2 上行 response gateway 未挂接（中等关键）
 
 **问题描述（已通过代码验证）**：
-Android 有 `handoff_envelope_v2_result` 消息类型（`AipModels.kt`）和 `HandoffEnvelopeV2ResultPayload`。V2 有 `core/android_handoff_v2_response_ingress.py`。但 `galaxy_gateway/android/handlers/` 目录中**无 handoff response handler 文件**，gateway 路由层未挂接，Android 的 handoff result 到达 V2 后进入 `else` 分支被丢弃。
+Android 有 `handoff_envelope_v2_result` 消息类型（`AipModels.kt` MsgType enum）和 `HandoffEnvelopeV2ResultPayload` data class。V2 有 `core/android_handoff_v2_response_ingress.py`。但 `galaxy_gateway/android/handlers/` 目录中列举的 handler 文件（`delegated_signal.py`、`diagnostics.py`、`file_transfer.py`、`generic.py`、`goal_execution.py`、`heartbeat.py`、`mesh_topology.py`、`peer_exchange.py`、`registration.py`、`task_lifecycle.py`、`task_submit.py`、`vision.py`）**无 handoff response handler**，`android_bridge.py` 也无 `handle_handoff_response` 的 import 语句，Android 的 handoff result 到达 V2 后会进入 `else` 分支被记录为未处理。
 
 **影响**：V2 无法跟踪 handoff 执行结果，handoff 链路形成单向信道（V2 发出但不接收反馈）。
 
@@ -105,7 +105,7 @@ V2 的 `CompatLegacyPathBlockingCanonicalization` 需要识别所有 compat/lega
 ### 缺口 4：Takeover executor 部分功能延迟（低优先级）
 
 **问题描述**：
-`AipModels.kt` 中对 `TAKEOVER_REQUEST` 的状态注明："payload parsed; ack sent; full takeover executor deferred to PR-5"。说明基础协议路径已接通，但 takeover 的完整执行器实现被延迟到后续 PR。
+`AipModels.kt` `MsgType.TAKEOVER_REQUEST` 的 KDoc 注明："payload parsed; ack sent; full takeover executor deferred to PR-5"。说明基础协议路径已接通，但 takeover 的完整执行器实现被延迟到后续 PR。
 
 ---
 
@@ -114,17 +114,17 @@ V2 的 `CompatLegacyPathBlockingCanonicalization` 需要识别所有 compat/lega
 ### 方向 1：建立 ReconciliationSignal 的 AIP 传输层（紧迫度：最高）
 
 具体工作：
-1. 在 `AipModels.kt` 中新增 `MsgType.RECONCILIATION_SIGNAL("reconciliation_signal")` 消息类型
-2. 新建 `ReconciliationSignalPayload` data class 封装 `ReconciliationSignal` 字段
+1. 在 `AipModels.kt` 中新增 `MsgType.RECONCILIATION_SIGNAL("reconciliation_signal")`（向后兼容：新增不影响现有 MsgType 处理逻辑，旧版 V2 通过 `else` 分支忽略未知类型，无 breaking change）
+2. 新建 `ReconciliationSignalPayload` data class 封装 `ReconciliationSignal` 已有字段（复用现有 `KEY_KIND` 等 wire key 常量）
 3. 在 `RuntimeController.kt` 中实现 `ReconciliationSignal → AipMessage → GalaxyWebSocketClient.sendJson()` 的发送路径
-4. 在 V2 `galaxy_gateway/android/handlers/` 中新增 `reconciliation_signal.py` handler
-5. 在 V2 `android_participant_truth_ingress.py` 中增加对 `PARTICIPANT_STATE` 和 `RUNTIME_TRUTH_SNAPSHOT` kind 的处理，将 readiness artifact 接入 `delegated_flow_readiness_gate.py` 的维度输入
+4. 在 V2 `galaxy_gateway/android/handlers/` 中新增 `reconciliation_signal.py` handler（参考 `delegated_signal.py` 结构）
+5. 在 V2 `android_participant_truth_ingress.py` 中增加对 `PARTICIPANT_STATE` kind 的处理，将 readiness artifact 接入 `delegated_flow_readiness_gate.py` 的维度输入
 
 ### 方向 2：挂接 HandoffEnvelopeV2 response handler（紧迫度：高）
 
-具体工作：
-1. 在 V2 `galaxy_gateway/android/handlers/` 新增 `handoff_response.py` handler（参考 `delegated_signal.py` 的结构）
-2. 在 `android_bridge.py` 中导入并注册该 handler
+具体工作（无 AIP 协议变动，仅 V2 gateway 侧工作）：
+1. 在 V2 `galaxy_gateway/android/handlers/` 新增 `handoff_response.py` handler（参考 `delegated_signal.py` 结构）
+2. 在 `android_bridge.py` 中导入并注册该 handler，匹配 `MsgType.HANDOFF_ENVELOPE_V2_RESULT`
 3. 确保 handler 调用 `core/android_handoff_v2_response_ingress.py` 的入站处理逻辑
 
 ### 方向 3：打通 compat influence 上报路径（紧迫度：中）
