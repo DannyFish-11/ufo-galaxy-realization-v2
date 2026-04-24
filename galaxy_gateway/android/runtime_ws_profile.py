@@ -123,6 +123,14 @@ _MAPPINGS: Dict[str, AndroidRuntimeWSMapping] = {
         truth_path="transport_coordination_input",
         handling_level="compat-forwarded",
     ),
+    MessageType.TAKEOVER_RESPONSE.value: AndroidRuntimeWSMapping(
+        message_type=MessageType.TAKEOVER_RESPONSE.value,
+        semantic_family="transfer_delegated_execution",
+        normalization_kind="takeover_response",
+        routing_path="android_bridge.takeover_response_handler",
+        truth_path="takeover_response_registry+udm.upsert_device_state",
+        handling_level="canonical",
+    ),
 }
 
 

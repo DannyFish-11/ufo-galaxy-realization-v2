@@ -47,6 +47,7 @@ from galaxy_gateway.android.handlers.peer_exchange import (
     handle_peer_exchange,
 )
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
+from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
 __all__ = [
     "handle_device_register",
@@ -77,4 +78,5 @@ __all__ = [
     "handle_peer_announce",
     "handle_peer_exchange",
     "handle_mesh_topology",
+    "handle_takeover_response",
 ]

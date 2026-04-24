@@ -276,6 +276,12 @@ class MessageType(str, Enum):
     HANDOFF_RESULT = "handoff_result"
     HANDOFF_FAILURE = "handoff_failure"
 
+    # === Android Takeover Protocol ===
+    # Downlink: V2 sends this to request Android accept a runtime takeover.
+    TAKEOVER_REQUEST = "takeover_request"
+    # Uplink: Android sends this to accept or reject the takeover request.
+    TAKEOVER_RESPONSE = "takeover_response"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

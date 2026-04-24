@@ -96,6 +96,7 @@ from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
+from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
 # =============================================================================
@@ -667,6 +668,9 @@ class AndroidBridge:
             handle_handoff_v2_result
         )
 
+        # Takeover protocol: Android takeover response uplink
+        self._message_handlers[MessageType.TAKEOVER_RESPONSE] = _wrap(handle_takeover_response)
+
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:
             if msg_type not in self._message_handlers:
@@ -905,6 +909,79 @@ class AndroidBridge:
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
         """获取设备的传输/会话层缓存条目（transport cache view）."""
         return self._devices.get(device_id)
+
+    async def send_takeover_request(
+        self,
+        device_id: str,
+        takeover_id: str,
+        task_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        capabilities_required: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        wait_response: bool = False,
+        timeout: float = 30.0,
+    ) -> Optional[Dict[str, Any]]:
+        """Send a ``takeover_request`` to an Android device.
+
+        Builds a canonical AIP v3 ``takeover_request`` message via
+        :meth:`~galaxy_gateway.android.message_builder.MessageBuilder.takeover_request`
+        and dispatches it to the target device via :meth:`send_to_device`.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        takeover_id:
+            Stable unique identifier for this takeover request.
+            Used as the primary correlation key when receiving the response.
+        task_id:
+            Optional task identifier for end-to-end correlation.
+        session_id:
+            Optional session identifier for context binding.
+        trace_id:
+            Optional distributed trace identifier for observability.
+        reason:
+            Human-readable reason supplied to Android for the takeover request.
+        capabilities_required:
+            Optional list of capability strings Android must satisfy.
+        metadata:
+            Optional additional metadata dict.
+        wait_response:
+            When ``True``, the call blocks until a ``takeover_response`` is
+            received or *timeout* elapses.  Defaults to ``False``.
+        timeout:
+            Maximum seconds to wait for a response when ``wait_response=True``.
+
+        Returns
+        -------
+        dict or None
+            ``{"success": True}`` on successful send (no wait), the response
+            message dict when ``wait_response=True``, or ``None`` on failure /
+            timeout.
+        """
+        msg = MessageBuilder.takeover_request(
+            device_id=device_id,
+            takeover_id=takeover_id,
+            task_id=task_id,
+            session_id=session_id,
+            trace_id=trace_id,
+            reason=reason,
+            capabilities_required=capabilities_required,
+            metadata=metadata,
+        )
+        logger.debug(
+            "AndroidBridge.send_takeover_request: device_id=%s takeover_id=%s "
+            "task_id=%s trace_id=%s",
+            device_id,
+            takeover_id,
+            task_id,
+            trace_id,
+        )
+        return await self.send_to_device(
+            device_id, msg, wait_response=wait_response, timeout=timeout
+        )
 
     def get_all_devices(self) -> List[AndroidDevice]:
         """获取所有设备的传输/会话层缓存列表（transport cache view）."""

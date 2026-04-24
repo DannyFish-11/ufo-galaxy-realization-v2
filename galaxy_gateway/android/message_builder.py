@@ -279,6 +279,71 @@ class MessageBuilder:
         )
 
     @classmethod
+    def takeover_request(
+        cls,
+        device_id: str,
+        takeover_id: str,
+        task_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        capabilities_required: Optional[list] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build the canonical AIP v3 ``takeover_request`` message for Android.
+
+        This is the **canonical downlink builder** for the Takeover protocol.
+        The returned message carries ``"type": "takeover_request"`` which aligns
+        with Android's ``DelegatedTakeoverExecutor`` / ``GalaxyConnectionService``
+        handler path.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        takeover_id:
+            Stable unique identifier for this takeover request.
+            Used as the primary correlation key in the response.
+        task_id:
+            Optional task identifier propagated for end-to-end correlation.
+        session_id:
+            Optional session identifier for context binding.
+        trace_id:
+            Optional distributed trace identifier for observability.
+        reason:
+            Human-readable reason for requesting the takeover.
+        capabilities_required:
+            Optional list of capability strings Android must satisfy.
+        metadata:
+            Optional additional metadata dict.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``takeover_request`` message.
+        """
+        msg = cls._base_message(MessageType.TAKEOVER_REQUEST, device_id)
+        msg["takeover_id"] = takeover_id
+        payload: Dict[str, Any] = {"takeover_id": takeover_id}
+        if task_id:
+            msg["task_id"] = task_id
+            payload["task_id"] = task_id
+        if session_id:
+            msg["session_id"] = session_id
+            payload["session_id"] = session_id
+        if trace_id:
+            msg["trace_id"] = trace_id
+            payload["trace_id"] = trace_id
+        if reason:
+            payload["reason"] = reason
+        if capabilities_required is not None:
+            payload["capabilities_required"] = capabilities_required
+        if metadata:
+            payload["metadata"] = metadata
+        msg["payload"] = payload
+        return msg
+
+    @classmethod
     def handoff_dispatch(
         cls,
         device_id: str,
