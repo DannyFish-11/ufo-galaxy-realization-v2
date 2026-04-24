@@ -20,12 +20,12 @@ The payload shape expected from Android::
         "session_id": "<optional>",
     }
 
-Processing:
-1.  Extracts ``takeover_id`` and ``accepted`` from the message.
-2.  Updates the takeover tracking state (via
-    :func:`~core.takeover_tracking.record_takeover_response` when available).
-3.  Logs the accept/reject decision at DEBUG/INFO level.
-4.  Returns a typed ACK back to the Android runtime.
+Processing delegates to the lifecycle coordinator which performs:
+1.  Persists the takeover decision to :mod:`core.takeover_tracking`.
+2.  Reduces the participant session phase via the transition reducer.
+3.  Persists the updated session record.
+4.  Records a unified audit event.
+5.  Returns a typed ACK back to the Android runtime.
 """
 
 from __future__ import annotations
@@ -39,37 +39,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Tracking integration — optional; degrades gracefully when unavailable.
-#
-# ``core.takeover_tracking`` is the intended future integration point for
-# recording takeover accept/reject decisions into a persistent tracking state.
-# The module does not yet exist in the codebase; the try/except block ensures
-# the handler degrades gracefully until it is implemented.  When the module is
-# available it is expected to expose::
-#
-#     def record_takeover_response(
-#         *,
-#         takeover_id: str,
-#         device_id: str,
-#         accepted: bool,
-#         reason: str,
-#         session_id: Optional[str],
-#     ) -> None: ...
-# ---------------------------------------------------------------------------
-
+# PR-11-V2: lifecycle coordinator — all tracking, state, and audit logic is
+# performed by the coordinator.  This handler extracts wire fields and
+# delegates to the coordinator rather than wiring individual modules directly.
 try:
-    from core.takeover_tracking import record_takeover_response as _record_takeover_response
-except ImportError:  # pragma: no cover
-    _record_takeover_response = None  # type: ignore[assignment]
-
-# PR-10-V2: unified Android delegated runtime audit recorder.
-try:
-    from core.android_delegated_runtime_audit import (
-        record_takeover_response as _audit_takeover_response,
+    from core.android_delegated_runtime_lifecycle_coordinator import (
+        get_lifecycle_coordinator as _get_lifecycle_coordinator,
     )
 except ImportError:  # pragma: no cover
-    _audit_takeover_response = None  # type: ignore[assignment]
+    _get_lifecycle_coordinator = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +63,9 @@ async def handle_takeover_response(
 
     Registered for :attr:`~galaxy_gateway.protocol.aip_v3.MessageType.TAKEOVER_RESPONSE`
     in :meth:`~galaxy_gateway.android_bridge.AndroidBridge._register_default_handlers`.
+
+    All lifecycle processing (tracking, session state reduction, audit) is
+    performed by the lifecycle coordinator.
 
     Parameters
     ----------
@@ -116,39 +97,28 @@ async def handle_takeover_response(
         reason,
     )
 
-    # PR-10-V2: unified audit record.
-    if _audit_takeover_response is not None:
+    if _get_lifecycle_coordinator is not None:
         try:
-            _audit_takeover_response(
-                task_id=message.get("task_id") or message.get("payload", {}).get("task_id") or "",
+            outcome = _get_lifecycle_coordinator().on_takeover_response(
                 session_id=session_id,
+                takeover_id=takeover_id,
+                device_id=device_id,
+                accepted=accepted,
+                reason=reason,
+                task_id=message.get("task_id") or message.get("payload", {}).get("task_id") or "",
                 trace_id=message.get("trace_id") or "",
-                device_id=device_id,
-                takeover_id=takeover_id,
-                accepted=accepted,
-                reason=reason,
-            )
-        except Exception as _ae:  # pragma: no cover  # noqa: BLE001
-            logger.debug("PR-10-V2 audit skip (non-fatal): %s", _ae)
-
-    # Feed into tracking state when the integration module is available.
-    if _record_takeover_response is not None:
-        try:
-            _record_takeover_response(
-                takeover_id=takeover_id,
-                device_id=device_id,
-                accepted=accepted,
-                reason=reason,
-                session_id=session_id or None,
             )
             logger.debug(
-                "takeover_response: tracking updated takeover_id=%r accepted=%s",
-                takeover_id,
-                accepted,
+                "takeover_response: coordinator outcome was_handled=%s "
+                "phase_before=%r phase_after=%r was_transitioned=%s",
+                outcome.was_handled,
+                outcome.phase_before,
+                outcome.phase_after,
+                outcome.was_transitioned,
             )
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:  # pragma: no cover  # noqa: BLE001
             logger.debug(
-                "takeover_response: tracking update failed (non-fatal): "
+                "takeover_response: coordinator call failed (non-fatal): "
                 "takeover_id=%r device_id=%s exc=%s",
                 takeover_id,
                 device_id,
@@ -156,8 +126,8 @@ async def handle_takeover_response(
             )
     else:  # pragma: no cover
         logger.debug(
-            "takeover_response: tracking unavailable (import failed): "
-            "takeover_id=%r device_id=%s",
+            "takeover_response: lifecycle coordinator unavailable "
+            "(import failed): takeover_id=%r device_id=%s",
             takeover_id,
             device_id,
         )
