@@ -130,6 +130,18 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DelegatedFlowReadinessGate")
 
+_POLICY_EXCERPT_LEN: int = 80
+"""Maximum characters of a policy sentinel to embed in a gap description."""
+
+
+def _policy_excerpt(policy: str) -> str:
+    """Return the first ``_POLICY_EXCERPT_LEN`` characters of *policy* with an
+    ellipsis appended when truncated."""
+    if len(policy) <= _POLICY_EXCERPT_LEN:
+        return policy
+    return policy[:_POLICY_EXCERPT_LEN] + "…"
+
+
 __all__ = [
     # Authority sentinels
     "DELEGATED_FLOW_READINESS_GATE_AUTHORITY",
@@ -774,10 +786,9 @@ class DelegatedFlowReadinessGate:
                         "been exercised or that the Android/V2 contract "
                         "signal is absent.  "
                         "Policy: "
-                        + ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY[
-                            :80
-                        ]
-                        + "…"
+                        + _policy_excerpt(
+                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
+                        )
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
@@ -856,10 +867,9 @@ class DelegatedFlowReadinessGate:
                         "V2 canonical state.  This indicates a missing "
                         "Android/V2 truth alignment contract signal.  "
                         "Policy: "
-                        + ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY[
-                            :80
-                        ]
-                        + "…"
+                        + _policy_excerpt(
+                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
+                        )
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
@@ -937,10 +947,9 @@ class DelegatedFlowReadinessGate:
                         "through the flow-aware convergence path.  "
                         "This indicates a missing Android/V2 result signal.  "
                         "Policy: "
-                        + ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY[
-                            :80
-                        ]
-                        + "…"
+                        + _policy_excerpt(
+                            ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY
+                        )
                     ),
                     signal_source=signal_source,
                     evidence=evidence,
