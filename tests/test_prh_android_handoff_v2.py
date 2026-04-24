@@ -11,8 +11,9 @@ upstream protocol support that V2 must provide.
 Coverage groups
 ---------------
 A.  Sentinel / policy constants are importable from new modules.
-B.  MessageType enum — HANDOFF_DISPATCH / HANDOFF_ACK / HANDOFF_RESULT /
-    HANDOFF_FAILURE are present.
+B.  MessageType enum — HANDOFF_ENVELOPE_V2 / HANDOFF_ENVELOPE_V2_RESULT are
+    present as the canonical types; HANDOFF_DISPATCH / HANDOFF_ACK /
+    HANDOFF_RESULT / HANDOFF_FAILURE remain for backward compatibility.
 C.  HandoffEnvelopeV2.to_android_native_payload — field presence and values.
 D.  HandoffEnvelopeV2.to_android_native_payload — correlation identity
     fields preserved (handoff_id, trace_id, task_id, session_id).
@@ -25,12 +26,13 @@ G.  HandoffEnvelopeV2.to_android_native_payload — nested task spec flattened
 H.  HandoffEnvelopeV2.to_android_native_payload — return_contract embedded.
 I.  HandoffEnvelopeV2.to_android_native_payload — schema_version is "v2".
 J.  HandoffEnvelopeV2.to_android_native_payload — JSON serialisable.
-K.  HandoffEnvelopeV2.to_android_task_assign_payload — message frame fields.
+K.  HandoffEnvelopeV2.to_android_task_assign_payload — message frame fields,
+    canonical wire type is ``handoff_envelope_v2``.
 L.  HandoffEnvelopeV2.to_android_task_assign_payload — payload contains
     android native payload.
 M.  HandoffEnvelopeV2.to_android_task_assign_payload — handoff_id at top level.
-N.  MessageBuilder.handoff_dispatch — delegates to envelope method.
-O.  MessageBuilder.handoff_dispatch — correct message type.
+N.  MessageBuilder.handoff_dispatch — delegates to envelope method (legacy compat).
+    MessageBuilder.handoff_envelope_v2 — canonical builder, correct message type.
 P.  HandoffResponseKind — all expected enum values present.
 Q.  HandoffResponseKind.from_string — known values round-trip.
 R.  HandoffResponseKind.from_string — unknown values → HandoffResponseKind.unknown.
@@ -138,6 +140,7 @@ class TestSentinels:
 class TestMessageTypeEnum:
 
     def test_B01_handoff_dispatch_present(self):
+        """HANDOFF_DISPATCH kept for backward-compatible input (not canonical output)."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
         assert MessageType.HANDOFF_DISPATCH.value == "handoff_dispatch"
 
@@ -152,6 +155,16 @@ class TestMessageTypeEnum:
     def test_B04_handoff_failure_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
         assert MessageType.HANDOFF_FAILURE.value == "handoff_failure"
+
+    def test_B05_handoff_envelope_v2_canonical_downlink(self):
+        """HANDOFF_ENVELOPE_V2 is the canonical downlink wire type."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        assert MessageType.HANDOFF_ENVELOPE_V2.value == "handoff_envelope_v2"
+
+    def test_B06_handoff_envelope_v2_result_canonical_uplink(self):
+        """HANDOFF_ENVELOPE_V2_RESULT is the canonical uplink wire type."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        assert MessageType.HANDOFF_ENVELOPE_V2_RESULT.value == "handoff_envelope_v2_result"
 
 
 # ============================================================================
@@ -323,10 +336,11 @@ class TestToAndroidTaskAssignPayload:
         msg = env.to_android_task_assign_payload("tablet_k")
         assert msg["version"] == "3.0"
 
-    def test_K04_type_is_handoff_dispatch(self):
+    def test_K04_type_is_handoff_envelope_v2(self):
+        """Canonical downlink wire type must be ``handoff_envelope_v2``."""
         env = self._make_envelope()
         msg = env.to_android_task_assign_payload("tablet_k")
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_K05_device_id_set(self):
         env = self._make_envelope()
@@ -391,11 +405,12 @@ class TestMessageBuilderHandoffDispatch:
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["handoff_id"] == env.handoff_id
 
-    def test_O01_message_type_is_handoff_dispatch(self):
+    def test_O01_message_type_is_handoff_envelope_v2(self):
+        """handoff_dispatch (legacy) now emits canonical ``handoff_envelope_v2`` type."""
         from galaxy_gateway.android.message_builder import MessageBuilder
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_O02_default_priority_5(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
@@ -408,6 +423,63 @@ class TestMessageBuilderHandoffDispatch:
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env, priority=9)
         assert msg["priority"] == 9
+
+
+# ============================================================================
+# O-canonical. MessageBuilder.handoff_envelope_v2 (canonical method)
+# ============================================================================
+
+class TestMessageBuilderHandoffEnvelopeV2:
+    """Tests for the canonical ``handoff_envelope_v2`` builder method."""
+
+    def _make_envelope(self):
+        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+        return build_handoff_envelope_v2(
+            trace_id="trace_oc",
+            task={"tool_name": "screenshot"},
+            source_device_id="phone_oc",
+            target_device_id="tablet_oc",
+        )
+
+    def test_OC01_method_exists(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        assert hasattr(MessageBuilder, "handoff_envelope_v2")
+
+    def test_OC02_message_type_is_handoff_envelope_v2(self):
+        """Canonical builder must emit ``handoff_envelope_v2`` wire type."""
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_oc", env)
+        assert msg["type"] == "handoff_envelope_v2"
+
+    def test_OC03_handoff_id_preserved(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_oc", env)
+        assert msg["handoff_id"] == env.handoff_id
+
+    def test_OC04_default_priority_5(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_oc", env)
+        assert msg["priority"] == 5
+
+    def test_OC05_priority_override(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_oc", env, priority=7)
+        assert msg["priority"] == 7
+
+    def test_OC06_canonical_and_legacy_produce_same_output(self):
+        """handoff_envelope_v2() and handoff_dispatch() must produce identical output."""
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        canonical = MessageBuilder.handoff_envelope_v2("tablet_oc", env)
+        legacy = MessageBuilder.handoff_dispatch("tablet_oc", env)
+        # message_id and timestamp are generated freshly each call; exclude those
+        for key in ("type", "version", "device_id", "handoff_id", "trace_id",
+                    "priority", "timeout", "task_type", "payload"):
+            assert canonical[key] == legacy[key], f"Mismatch on key {key!r}"
 
 
 # ============================================================================
