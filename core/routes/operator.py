@@ -59,6 +59,11 @@ Routes
       decision, recovery disposition, partial-result outcome, audit evidence,
       and lineage in one response.  Always returns a valid payload.
 
+  GET /api/v1/operator/inspect/flow/{flow_id}
+      Flow-level canonical projection for a delegated flow: identity, lineage,
+      Android execution phase, blocking reason, recovery/truth/result status.
+      Returns 404 when the flow is unknown.
+
 Design constraints
 ------------------
 - **Read-only** — no writes, no side-effects.
@@ -374,6 +379,49 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content=result.to_dict())
         except Exception as exc:
             logger.error("end_to_end_review(%s) endpoint error: %s", task_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/inspect/flow/{flow_id}
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/inspect/flow/{flow_id}")
+    async def inspect_flow(flow_id: str) -> JSONResponse:
+        """Return a :class:`~core.flow_level_operator_surface.FlowOperatorProjection` for *flow_id*.
+
+        Provides the canonical flow-level operator projection for a
+        delegated flow, covering:
+
+        * Flow identity, lineage, and delegated object bindings
+          (canonical_task_id, contract_id, binding_id, device_id).
+        * Current Android canonical execution phase
+          (planning / grounding / execution / replan / stagnation /
+          gate_decision / takeover / collaboration / completed / failed /
+          unknown).
+        * Most recent Android canonical execution event absorbed from the
+          Android runtime.
+        * Current blocking reason (gate, stagnation, etc.), if any.
+        * Recovery, truth alignment, and result convergence status summaries.
+        * Operator review notes about evidence gaps.
+
+        Returns HTTP 404 when the delegated flow is not known to the
+        DelegatedFlowEntityRuntime.
+        """
+        try:
+            from core.operator_surface import get_operator_surface
+            surface = get_operator_surface()
+            result = surface.inspect_flow(flow_id)
+            if result is None:
+                return JSONResponse(
+                    content={"detail": f"flow '{flow_id}' not found"},
+                    status_code=404,
+                )
+            return JSONResponse(content=result.to_dict())
+        except Exception as exc:
+            logger.error("inspect_flow(%s) endpoint error: %s", flow_id, exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,

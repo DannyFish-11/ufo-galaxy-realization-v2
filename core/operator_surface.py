@@ -106,6 +106,21 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.OperatorSurface")
 
+# ---------------------------------------------------------------------------
+# Flow-level surface re-exports
+# ---------------------------------------------------------------------------
+# These are re-exported here so that code that only imports from
+# core.operator_surface can access the flow-level types without a separate
+# import of core.flow_level_operator_surface.
+try:
+    from core.flow_level_operator_surface import (  # noqa: F401
+        AndroidExecutionPhase,
+        AndroidCanonicalExecutionEvent,
+        FlowOperatorProjection,
+    )
+except Exception:  # pragma: no cover
+    pass  # graceful degradation if module is unavailable
+
 __all__ = [
     # Authority sentinels
     "OPERATOR_SURFACE_AUTHORITY",
@@ -128,6 +143,10 @@ __all__ = [
     "EndToEndReviewSummary",
     "DevicePresenceSummary",
     "OperatorSnapshot",
+    # Flow-level surface re-exports
+    "AndroidExecutionPhase",
+    "AndroidCanonicalExecutionEvent",
+    "FlowOperatorProjection",
     # Class
     "OperatorSurface",
     # Helpers
@@ -1354,6 +1373,28 @@ class OperatorSurface:
 
         summary.review_notes = notes
         return summary
+
+    # ── Flow-Level Inspection ────────────────────────────────────────────
+
+    def inspect_flow(self, flow_id: str) -> Optional["FlowOperatorProjection"]:
+        """Return a read-only :class:`~core.flow_level_operator_surface.FlowOperatorProjection` for *flow_id*.
+
+        Delegates to :class:`~core.flow_level_operator_surface.FlowLevelOperatorSurface`
+        which aggregates flow identity, lineage, Android execution phase,
+        recovery status, truth alignment, and result convergence into a
+        single canonical projection.
+
+        Returns ``None`` if *flow_id* is not known to the delegated flow
+        entity runtime.
+        """
+        try:
+            from core.flow_level_operator_surface import (
+                get_flow_level_operator_surface,
+            )
+            return get_flow_level_operator_surface().inspect_flow(flow_id)
+        except Exception as exc:
+            logger.warning("inspect_flow(%s) failed: %s", flow_id, exc)
+            return None
 
     # ── Operator Snapshot ────────────────────────────────────────────────
 
