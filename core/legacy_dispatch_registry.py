@@ -77,6 +77,8 @@ __all__ = [
     # Authority
     "LEGACY_DISPATCH_REGISTRY_AUTHORITY",
     "LEGACY_DISPATCH_REGISTRY_POLICY",
+    "LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY",
+    "LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL",
     # Enum
     "LegacyDispatchClassification",
     # Dataclasses
@@ -89,6 +91,7 @@ __all__ = [
     "get_legacy_dispatch_registry",
     "snapshot_registry",
     "reset_registry",
+    "check_dispatch_blocked",
 ]
 
 # ---------------------------------------------------------------------------
@@ -104,6 +107,33 @@ LEGACY_DISPATCH_REGISTRY_POLICY: str = (
     "classification (compat-only/deprecated/facade-only)."
 )
 """Policy: all legacy dispatch shortcuts must be formally registered."""
+
+# ---------------------------------------------------------------------------
+# PR-8: Blocking-first enforcement sentinels
+# ---------------------------------------------------------------------------
+
+LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL: str = (
+    "LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL::"
+    "package=PR8::profile=blocking-canonicalization-v1::"
+    "module=core.legacy_dispatch_registry::"
+    "upgrade=observability-to-blocking-first"
+)
+"""PR-8 sentinel: marks the upgrade of this module from observability-only
+to blocking-first enforcement via :func:`check_dispatch_blocked`."""
+
+LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY: str = (
+    "POLICY::LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_V1: "
+    "As of PR-8, registration of a module in this registry as FACADE_ONLY, "
+    "COMPAT_ONLY, or DEPRECATED is no longer sufficient to bound its "
+    "dispatch influence.  Every registered legacy dispatch path that is "
+    "actively invoked at a canonical decision surface MUST also be evaluated "
+    "by the PR-8 blocking gate in "
+    "core.compat_legacy_path_blocking_canonicalization.  "
+    "check_dispatch_blocked() is the convenience helper that connects "
+    "this registry to the blocking gate.  Observability-only (logging "
+    "without a formal blocking artifact) is insufficient for canonical "
+    "routing, dispatch, recovery, and handoff surfaces."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -485,4 +515,93 @@ def _bootstrap_known_entries(registry: LegacyDispatchRegistry) -> None:
             "as a degraded fallback when CommandRouter is unavailable."
         ),
         pr_origin="PR-B",
+    )
+
+
+# ---------------------------------------------------------------------------
+# PR-8: Blocking-first enforcement helper
+# ---------------------------------------------------------------------------
+
+
+def check_dispatch_blocked(
+    module: str,
+    *,
+    calling_site: str = "",
+    canonical_path: str = (
+        "core.command_router.CommandRouter.route_envelope() "
+        "(canonical dispatch spine)"
+    ),
+    operator_note: str = "",
+    raise_on_block: bool = False,
+) -> "Any":
+    """Check whether a legacy dispatch module should be blocked at the canonical gate.
+
+    PR-8 integration helper that connects :class:`LegacyDispatchRegistry`
+    observability to the blocking-first enforcement layer in
+    ``core.compat_legacy_path_blocking_canonicalization``.
+
+    If *module* is registered in the legacy dispatch registry, the PR-8
+    blocking gate is invoked with ``path_kind=legacy_dispatch``.
+    If *module* is not registered, the gate is invoked with
+    ``path_kind=observation_candidate`` (quarantine for ambiguous contract).
+
+    Parameters
+    ----------
+    module:
+        Python module path of the legacy dispatch path being evaluated
+        (e.g. ``"galaxy_gateway.task_router"``).
+    calling_site:
+        Human-readable description of the decision site.  Defaults to
+        ``module`` if not provided.
+    canonical_path:
+        Identifier of the canonical dispatch authority at this site.
+    operator_note:
+        Optional note for operator visibility.
+    raise_on_block:
+        When ``True``, raise
+        :class:`~core.compat_legacy_path_blocking_canonicalization.CompatLegacyBlockingError`
+        if the gate blocks or quarantines.
+
+    Returns
+    -------
+    CompatLegacyBlockingRecord
+        The blocking decision artifact.
+    """
+    from core.compat_legacy_path_blocking_canonicalization import (
+        CompatLegacyPathKind,
+        enforce_canonical_gate,
+    )
+
+    registry = get_legacy_dispatch_registry()
+    entry = registry.get(module)
+    site = calling_site or module
+
+    if entry is not None:
+        path_kind = CompatLegacyPathKind.legacy_dispatch
+        op_note = operator_note or (
+            f"Registered legacy dispatch path: {entry.classification.value} "
+            f"({entry.reason}).  PR: {entry.pr_origin}."
+        )
+    else:
+        path_kind = CompatLegacyPathKind.observation_candidate
+        op_note = operator_note or (
+            f"Module {module!r} is not registered in legacy_dispatch_registry.  "
+            "Treating as observation_candidate (quarantine pending classification)."
+        )
+
+    logger.debug(
+        "check_dispatch_blocked | module=%s registered=%s path_kind=%s",
+        module,
+        entry is not None,
+        path_kind.value,
+    )
+
+    return enforce_canonical_gate(
+        calling_site=site,
+        compat_path=module,
+        canonical_path=canonical_path,
+        path_kind=path_kind,
+        compat_influence_active=True,
+        operator_note=op_note,
+        raise_on_block=raise_on_block,
     )

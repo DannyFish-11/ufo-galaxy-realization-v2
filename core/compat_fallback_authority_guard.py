@@ -97,10 +97,12 @@ __all__ = [
     # Sentinels
     "COMPAT_FALLBACK_AUTHORITY_GUARD_IS_AUTHORITY",
     "COMPAT_FALLBACK_AUTHORITY_GUARD_PR9_SENTINEL",
+    "COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL",
     "CANONICAL_AUTHORITY_MUST_BE_PRIMARY_DECISION_MAKER_POLICY",
     "COMPAT_FALLBACK_MAY_ONLY_OBSERVE_OR_ASSIST_WITHIN_EXPLICIT_SCOPE_POLICY",
     "UNBOUND_COMPAT_INFLUENCE_IS_POLICY_VIOLATION_POLICY",
     "FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY",
+    "BLOCKING_FIRST_ENFORCEMENT_ACTIVE_POLICY",
     # Enums
     "CompatInfluenceRole",
     "CompatInfluenceBoundingStatus",
@@ -115,6 +117,7 @@ __all__ = [
     "check_canonical_authority_at_decision_site",
     "assert_canonical_is_decision_authority",
     "build_authority_hardening_snapshot",
+    "block_compat_influence_at_decision_site",
 ]
 
 # ===========================================================================
@@ -171,6 +174,32 @@ FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY: str = (
     "canonical path recovers.  Fallback activation and deactivation events "
     "must be logged.  The system must re-consult the canonical path as soon "
     "as it becomes available again."
+)
+
+# ---------------------------------------------------------------------------
+# PR-8: Blocking-first enforcement sentinels
+# ---------------------------------------------------------------------------
+
+COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL: str = (
+    "COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL::"
+    "package=PR8::profile=blocking-canonicalization-v1::"
+    "module=core.compat_fallback_authority_guard::"
+    "upgrade=logging-to-blocking-first"
+)
+"""PR-8 sentinel: marks the upgrade of this module from logging-only to
+blocking-first enforcement via integration with
+``core.compat_legacy_path_blocking_canonicalization``."""
+
+BLOCKING_FIRST_ENFORCEMENT_ACTIVE_POLICY: str = (
+    "POLICY::BLOCKING_FIRST_ENFORCEMENT_ACTIVE_V1: "
+    "As of PR-8, compat/fallback influence must not remain logging-only.  "
+    "Every compat/legacy influence at a canonical decision site MUST be "
+    "evaluated by the CompatLegacyPathBlockingEnforcer gate in "
+    "core.compat_legacy_path_blocking_canonicalization.  "
+    "Non-blocking observability mode is insufficient for canonical routing, "
+    "truth ingress, handoff, and dispatch surfaces.  "
+    "block_compat_influence_at_decision_site() is the PR-8 integration "
+    "helper that connects this module to the blocking gate."
 )
 
 
@@ -783,6 +812,165 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
         ),
         pr_addressed="PR-J",
     ),
+    # -------------------------------------------------------------------------
+    # INFL-011: Truth ingress / canonical truth alignment — PR-8 blocking gate
+    # -------------------------------------------------------------------------
+    # PR-8: Blocking-first enforcement.  Any compat or legacy path that
+    # attempts to write, assert, or influence canonical truth at the truth
+    # ingress boundary must be evaluated by the PR-8 blocking gate before
+    # reaching CanonicalTask / CanonicalSessionTruthRuntime.
+    CompatInfluenceRecord(
+        influence_id="INFL-011",
+        decision_site=(
+            "Truth ingress / canonical truth alignment — compat/legacy "
+            "truth write or assertion path at API or handoff boundary"
+        ),
+        canonical_path=(
+            "core.canonical_task.CanonicalTask (task truth) / "
+            "core.canonical_session_truth.CanonicalSessionTruthRuntime "
+            "(session truth) / core.canonical_result.CanonicalResultRecord "
+            "(result truth) — sole canonical truth write authorities"
+        ),
+        compat_path=(
+            "Any compat or legacy path that attempts to assert, write, or "
+            "override canonical truth outside the canonical truth authority "
+            "chain (e.g. legacy task_queue truth assertions, stale session "
+            "context writes, Android compat contract truth injections)"
+        ),
+        influence_role=CompatInfluenceRole.unbound_influence,
+        bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
+        bounding_evidence=(
+            "PR-8: core.compat_legacy_path_blocking_canonicalization "
+            "enforce_canonical_gate() with path_kind=compat_truth is the "
+            "PR-8 blocking gate for truth ingress.  "
+            "block_compat_influence_at_decision_site() integrates this guard "
+            "with the PR-8 blocking layer.  "
+            "COMPAT_TRUTH_INFLUENCE_BLOCKING_FIRST_POLICY mandates that any "
+            "compat truth path produces a block_due_to_compat_truth_influence "
+            "artifact before reaching the canonical truth surface.  "
+            "INV-001 (runtime_invariant_enforcement) requires "
+            "adapt_to_canonical_task() at every API ingress; PR-J INV-012 "
+            "assigns sole truth write authority to CanonicalSessionTruthRuntime."
+        ),
+        reviewer_note=(
+            "A reviewer can confirm PR-8 blocking is active by checking that "
+            "any compat/legacy truth write attempt produces a "
+            "CompatLegacyBlockingRecord with decision="
+            "block_due_to_compat_truth_influence in the blocking enforcer "
+            "snapshot.  build_blocking_canonicalization_snapshot() in "
+            "core.compat_legacy_path_blocking_canonicalization exposes the "
+            "blocked_compat_truth_count field.  A non-zero count with "
+            "unresolved quarantines indicates residual compat truth influence."
+        ),
+        pr_addressed="PR-8",
+    ),
+    # -------------------------------------------------------------------------
+    # INFL-012: Delegated-flow handoff path — PR-8 blocking gate
+    # -------------------------------------------------------------------------
+    # PR-8: Blocking-first enforcement.  Compat/legacy paths that bypass the
+    # canonical HandoffContract / AgentBridge handoff chain must be blocked by
+    # the PR-8 gate before reaching the handoff surface.
+    CompatInfluenceRecord(
+        influence_id="INFL-012",
+        decision_site=(
+            "Delegated-flow handoff path — compat/legacy handoff bypass "
+            "at galaxy_gateway.agent_bridge.AgentBridge.handoff() boundary"
+        ),
+        canonical_path=(
+            "core.canonical_handoff_path canonical chain: "
+            "galaxy_gateway.device_router.DeviceRouter.route_task() → "
+            "galaxy_gateway.agent_bridge.AgentBridge.handoff(HandoffContract) — "
+            "sole canonical handoff authority (PR-3 / PR-538)"
+        ),
+        compat_path=(
+            "Compat/legacy paths that bypass HandoffContract or AgentBridge "
+            "(e.g. direct galaxy_gateway.cross_device_coordinator invocation, "
+            "Android compat handoff contracts that skip HandoffContract "
+            "source_runtime_posture / coordination_role fields, legacy "
+            "delegated-flow shortcuts)"
+        ),
+        influence_role=CompatInfluenceRole.degraded_fallback,
+        bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
+        bounding_evidence=(
+            "PR-8: core.compat_legacy_path_blocking_canonicalization "
+            "enforce_canonical_gate() with path_kind=handoff_bypass is the "
+            "PR-8 blocking gate for handoff path bypass.  "
+            "CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED sentinel in "
+            "core.canonical_handoff_path mandates all new handoff code goes "
+            "through the canonical chain.  "
+            "NO_POSTURE_SILENT_DROP_POLICY and NO_AUTHORITY_SILENT_DROP_POLICY "
+            "in core.canonical_handoff_path prohibit field drops at bridge "
+            "boundaries.  INFL-004 (cross-device compat coordinator) is "
+            "bounded as EXPLICITLY_BOUNDED with LEGACY_DISPATCH warnings."
+        ),
+        reviewer_note=(
+            "A reviewer can confirm PR-8 handoff blocking by checking that "
+            "any bypass of AgentBridge.handoff(HandoffContract) produces a "
+            "CompatLegacyBlockingRecord with decision="
+            "block_due_to_legacy_dispatch (path_kind=handoff_bypass) in the "
+            "blocking enforcer snapshot.  "
+            "core.canonical_handoff_path.CANONICAL_HANDOFF_PATH_PR3 sentinel "
+            "confirms the canonical handoff chain is in effect."
+        ),
+        pr_addressed="PR-8",
+    ),
+    # -------------------------------------------------------------------------
+    # INFL-013: Route / dispatch / recovery paths — PR-8 blocking gate
+    # -------------------------------------------------------------------------
+    # PR-8: Blocking-first enforcement.  Legacy route, dispatch, and recovery
+    # paths that attempt to bypass CommandRouter.route_envelope() or the
+    # canonical recovery spine must be evaluated and blocked by the PR-8 gate.
+    CompatInfluenceRecord(
+        influence_id="INFL-013",
+        decision_site=(
+            "Route / dispatch / recovery — legacy path attempting to bypass "
+            "CommandRouter.route_envelope() or the canonical recovery spine"
+        ),
+        canonical_path=(
+            "core.command_router.CommandRouter.route_envelope() — sole "
+            "canonical dispatch authority (PR-3 / PR-A / PR-B).  "
+            "Recovery via core.hybrid_orchestration_continuity canonical "
+            "continuity path."
+        ),
+        compat_path=(
+            "Any legacy module registered in core.legacy_dispatch_registry "
+            "as FACADE_ONLY, COMPAT_ONLY, or DEPRECATED that attempts to "
+            "dispatch outside the canonical spine, including: "
+            "core.device_orchestrator legacy NodeRegistry path, "
+            "core.scheduler legacy ProxyRelay / MeshCoordinator fallback, "
+            "galaxy_gateway.task_router legacy surface, "
+            "fusion.unified_orchestrator legacy dispatch, "
+            "and any recovery injection that bypasses the canonical "
+            "continuity path"
+        ),
+        influence_role=CompatInfluenceRole.degraded_fallback,
+        bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
+        bounding_evidence=(
+            "PR-8: core.compat_legacy_path_blocking_canonicalization "
+            "enforce_canonical_gate() with path_kind=legacy_dispatch (or "
+            "route_bypass / recovery_injection) is the PR-8 blocking gate "
+            "for route/dispatch/recovery paths.  "
+            "LEGACY_DISPATCH_BLOCKING_FIRST_POLICY mandates that legacy "
+            "dispatch paths produce block_due_to_legacy_dispatch artifacts.  "
+            "core.legacy_dispatch_registry LEGACY_DISPATCH_BLOCKING_FIRST_"
+            "ENFORCEMENT_POLICY and check_dispatch_blocked() extend "
+            "observability-only to blocking-first for registered entries.  "
+            "PR-B convergence already required CommandRouter pre-attempt "
+            "before legacy NodeRegistry / ProxyRelay / MeshCoordinator "
+            "fallback; PR-8 adds a formal blocking artifact at that gate."
+        ),
+        reviewer_note=(
+            "A reviewer can confirm PR-8 dispatch/route blocking is active "
+            "by checking that any legacy dispatch bypass produces a "
+            "CompatLegacyBlockingRecord with decision="
+            "block_due_to_legacy_dispatch in the blocking enforcer snapshot.  "
+            "build_blocking_canonicalization_snapshot() exposes "
+            "blocked_legacy_dispatch_count.  "
+            "snapshot_registry() in core.legacy_dispatch_registry provides "
+            "the full legacy dispatch catalog for cross-reference."
+        ),
+        pr_addressed="PR-8",
+    ),
 ]
 
 
@@ -1073,4 +1261,95 @@ def build_authority_hardening_snapshot() -> AuthorityHardeningSnapshot:
             FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY,
         ],
         influence_summaries=[r.to_dict() for r in registry],
+    )
+
+
+# ===========================================================================
+# PR-8: Blocking-first enforcement integration helper
+# ===========================================================================
+
+
+def block_compat_influence_at_decision_site(
+    influence_id: str,
+    *,
+    calling_site: str,
+    compat_path: str,
+    canonical_path: str,
+    path_kind: str = "legacy_dispatch",
+    compat_influence_active: bool = True,
+    operator_note: str = "",
+    raise_on_block: bool = False,
+) -> "Any":
+    """Evaluate a compat/legacy influence using the PR-8 blocking gate.
+
+    This is the PR-8 integration helper that connects the existing
+    ``compat_fallback_authority_guard`` catalog to the blocking-first
+    enforcement layer in
+    ``core.compat_legacy_path_blocking_canonicalization``.
+
+    It performs two steps:
+
+    1. Calls :func:`check_canonical_authority_at_decision_site` to log the
+       verdict using the existing PR-9 influence catalog.
+    2. Calls ``enforce_canonical_gate()`` in
+       ``core.compat_legacy_path_blocking_canonicalization`` to produce a
+       formal :class:`CompatLegacyBlockingRecord` artifact and (optionally)
+       raise :class:`CompatLegacyBlockingError`.
+
+    Parameters
+    ----------
+    influence_id:
+        The influence point ID from the PR-9 catalog (e.g. ``"INFL-011"``).
+    calling_site:
+        Human-readable description of the decision site.
+    compat_path:
+        Identifier of the compat/legacy path being evaluated.
+    canonical_path:
+        Identifier of the canonical authority at this site.
+    path_kind:
+        String name of :class:`~core.compat_legacy_path_blocking_canonicalization.CompatLegacyPathKind`
+        (e.g. ``"legacy_dispatch"``, ``"compat_truth"``, ``"handoff_bypass"``,
+        ``"route_bypass"``, ``"recovery_injection"``, ``"observation_candidate"``).
+        Default: ``"legacy_dispatch"``.
+    compat_influence_active:
+        Whether the compat influence is actively present.
+    operator_note:
+        Optional note for operator visibility.
+    raise_on_block:
+        When ``True``, raise :class:`~core.compat_legacy_path_blocking_canonicalization.CompatLegacyBlockingError`
+        if the gate blocks or quarantines.
+
+    Returns
+    -------
+    CompatLegacyBlockingRecord
+        The blocking decision artifact.
+    """
+    from core.compat_legacy_path_blocking_canonicalization import (
+        CompatLegacyPathKind,
+        enforce_canonical_gate,
+    )
+
+    # Step 1: log via existing PR-9 catalog
+    check_canonical_authority_at_decision_site(
+        influence_id,
+        canonical_is_active=not compat_influence_active,
+        compat_path_invoked=compat_influence_active,
+        strict=False,
+    )
+
+    # Step 2: enforce via PR-8 blocking gate
+    try:
+        pk = CompatLegacyPathKind(path_kind)
+    except ValueError:
+        pk = CompatLegacyPathKind.observation_candidate
+
+    return enforce_canonical_gate(
+        calling_site=calling_site,
+        compat_path=compat_path,
+        canonical_path=canonical_path,
+        path_kind=pk,
+        compat_influence_active=compat_influence_active,
+        influence_id=influence_id,
+        operator_note=operator_note,
+        raise_on_block=raise_on_block,
     )
