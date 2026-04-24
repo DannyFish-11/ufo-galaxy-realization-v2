@@ -279,6 +279,54 @@ class MessageBuilder:
         )
 
     @classmethod
+    def takeover_request(
+        cls,
+        device_id: str,
+        takeover_id: str,
+        session_id: Optional[str] = None,
+        task_context: Optional[Dict[str, Any]] = None,
+        reason: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        timeout: int = 60,
+    ) -> Dict[str, Any]:
+        """Build a ``takeover_request`` AIP v3 message (V2 → Android downlink).
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        takeover_id:
+            Unique identifier for this takeover request (for correlation).
+        session_id:
+            Optional session to associate the takeover with.
+        task_context:
+            Optional dict carrying the task or goal context for the takeover.
+        reason:
+            Human-readable reason for the takeover request.
+        trace_id:
+            Optional distributed trace identifier for end-to-end observability.
+        timeout:
+            How long (seconds) Android should wait before auto-rejecting.
+
+        Returns
+        -------
+        dict
+            AIP v3 ``takeover_request`` message.
+        """
+        msg = cls._base_message(MessageType.TAKEOVER_REQUEST, device_id)
+        msg["takeover_id"] = takeover_id
+        msg["timeout"] = timeout
+        if session_id:
+            msg["session_id"] = session_id
+        if task_context:
+            msg["payload"] = task_context
+        if reason:
+            msg["reason"] = reason
+        if trace_id:
+            msg["trace_id"] = trace_id
+        return msg
+
+    @classmethod
     def handoff_dispatch(
         cls,
         device_id: str,

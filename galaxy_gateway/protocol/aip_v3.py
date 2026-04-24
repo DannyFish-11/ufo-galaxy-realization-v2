@@ -261,6 +261,12 @@ class MessageType(str, Enum):
     # === Android Delegated Execution Signals (PR-16) ===
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 
+    # === Android Takeover Protocol ===
+    # Downlink: V2 → Android — request Android to accept takeover
+    TAKEOVER_REQUEST = "takeover_request"
+    # Uplink: Android → V2 — Android response (accepted / rejected)
+    TAKEOVER_RESPONSE = "takeover_response"
+
     # === Android Native Handoff V2 (PR-H) ===
     # Canonical downlink wire type — matches Android AipModels.kt HANDOFF_ENVELOPE_V2
     HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"

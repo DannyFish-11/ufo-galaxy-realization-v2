@@ -93,6 +93,7 @@ from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
+from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
@@ -667,6 +668,9 @@ class AndroidBridge:
             handle_handoff_v2_result
         )
 
+        # Android Takeover Protocol: uplink takeover_response from Android
+        self._message_handlers[MessageType.TAKEOVER_RESPONSE] = _wrap(handle_takeover_response)
+
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:
             if msg_type not in self._message_handlers:
@@ -901,6 +905,68 @@ class AndroidBridge:
             trace_id=_trace_id,
         )
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
+
+    async def send_takeover_request(
+        self,
+        device_id: str,
+        takeover_id: str,
+        *,
+        session_id: Optional[str] = None,
+        task_context: Optional[Dict[str, Any]] = None,
+        reason: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        timeout: int = 60,
+    ) -> Optional[Dict[str, Any]]:
+        """Send a ``takeover_request`` downlink to an Android device.
+
+        V2 calls this to ask Android to accept a takeover.  Android will reply
+        with a ``takeover_response`` uplink (accepted / rejected) which is
+        processed by
+        :func:`~galaxy_gateway.android.handlers.takeover_response.handle_takeover_response`.
+
+        Parameters
+        ----------
+        device_id:
+            Target Android device identifier.
+        takeover_id:
+            Unique identifier for this takeover request, used to correlate the
+            incoming ``takeover_response``.
+        session_id:
+            Optional session to associate the takeover with.
+        task_context:
+            Optional dict carrying the task or goal context for the takeover.
+        reason:
+            Human-readable reason for the takeover request.
+        trace_id:
+            Optional distributed trace identifier for end-to-end observability.
+        timeout:
+            How long (seconds) Android should wait before auto-rejecting.
+            This value is embedded in the message payload for Android's own
+            timeout logic; it is not used as the network send timeout (sends
+            are fire-and-forget: ``wait_response=False``).
+
+        Returns
+        -------
+        dict or None
+            ``{"success": True}`` on successful send, or ``None`` when the
+            device is not connected / send fails.
+        """
+        msg = MessageBuilder.takeover_request(
+            device_id=device_id,
+            takeover_id=takeover_id,
+            session_id=session_id,
+            task_context=task_context,
+            reason=reason,
+            trace_id=trace_id,
+            timeout=timeout,
+        )
+        logger.debug(
+            "AndroidBridge.send_takeover_request: device_id=%s takeover_id=%s trace_id=%s",
+            device_id,
+            takeover_id,
+            trace_id,
+        )
+        return await self.send_to_device(device_id, msg, wait_response=False)
 
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
         """获取设备的传输/会话层缓存条目（transport cache view）."""
