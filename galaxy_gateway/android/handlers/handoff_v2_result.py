@@ -1,0 +1,138 @@
+"""
+galaxy_gateway/android/handlers/handoff_v2_result.py
+
+PR-02-V2: Canonical gateway handler for Android HandoffEnvelopeV2 uplink responses.
+
+This handler is the **single authoritative entry-point** for every inbound
+Android handoff v2 response message:
+
+- ``handoff_ack``              — receipt confirmed; execution starting
+- ``handoff_result``           — execution completed successfully
+- ``handoff_failure``          — execution failed; error detail supplied
+- ``handoff_envelope_v2_result`` — future unified uplink wire type
+
+Without this handler the response messages fell into the ``handle_unregistered``
+catch-all and the handoff chain had no uplink — V2 dispatched but never learned
+the outcome.
+
+This module closes the gap by wiring the three uplink message types to:
+
+1. :func:`~core.android_handoff_v2_response_ingress.ingest_android_handoff_response`
+   — correlates the response to the originating dispatch via handoff_id / task_id /
+   session_id, resolves any waiting Future, invokes the registered callback, and
+   advances the binding / tracking / delegated flow state.
+2. Logs the outcome at DEBUG / WARNING level.
+3. Returns a typed ACK response to the Android runtime.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from typing import TYPE_CHECKING, Any, Dict
+
+if TYPE_CHECKING:
+    from galaxy_gateway.android_bridge import AndroidBridge
+
+logger = logging.getLogger(__name__)
+
+# PR-02-V2: canonical ingress binding — top-level import so tests can patch() it
+# and so an import failure degrades gracefully without crashing the gateway.
+try:
+    from core.android_handoff_v2_response_ingress import (
+        ingest_android_handoff_response as _ingest_handoff_response,
+    )
+except ImportError:  # pragma: no cover
+    _ingest_handoff_response = None  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# Public handler
+# ---------------------------------------------------------------------------
+
+async def handle_handoff_v2_result(
+    bridge: "AndroidBridge",
+    websocket: Any,
+    message: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Handle an inbound Android HandoffEnvelopeV2 uplink response.
+
+    Registered for ``handoff_ack``, ``handoff_result``, ``handoff_failure``,
+    and ``handoff_envelope_v2_result`` message types in the
+    :class:`~galaxy_gateway.android_bridge.AndroidBridge` default handler table.
+
+    The handler delegates all processing to
+    :func:`~core.android_handoff_v2_response_ingress.ingest_android_handoff_response`
+    which:
+
+    - Extracts a typed
+      :class:`~contracts.android_handoff_response.AndroidHandoffResponseEnvelope`.
+    - Correlates the response to the originating dispatch via ``handoff_id``
+      (preferred), ``task_id`` (fallback), or ``session_id`` (last resort).
+    - For **terminal** responses (result / failure / timeout / cancelled):
+      resolves and removes the pending registry entry, invokes the callback.
+    - For **ack** responses: resolves the pending registry entry without
+      removing it (a terminal response is still expected).
+    - Returns a :class:`~core.android_handoff_v2_response_ingress.HandoffV2ResponseOutcome`.
+
+    Parameters
+    ----------
+    bridge:
+        The :class:`~galaxy_gateway.android_bridge.AndroidBridge` instance.
+    websocket:
+        The WebSocket connection (unused; reserved for future use).
+    message:
+        Raw inbound message dict for the handoff response.
+
+    Returns
+    -------
+    dict
+        ACK response sent back to the Android runtime.
+    """
+    device_id = message.get("device_id", "unknown")
+    message_id = message.get("message_id") or str(uuid.uuid4())
+    msg_type = message.get("type", "unknown")
+
+    if _ingest_handoff_response is not None:
+        try:
+            outcome = _ingest_handoff_response(message)
+            if outcome.was_correlated:
+                env = outcome.envelope
+                logger.debug(
+                    "PR-02-V2 handoff_v2 ingress: correlated kind=%s "
+                    "handoff_id=%r device=%s callback_invoked=%s",
+                    env.response_kind,
+                    env.handoff_id,
+                    device_id,
+                    outcome.callback_invoked,
+                )
+            else:
+                logger.warning(
+                    "PR-02-V2 handoff_v2 ingress miss: device=%s type=%s reason=%s",
+                    device_id,
+                    msg_type,
+                    outcome.reject_reason,
+                )
+        except Exception as exc:  # pragma: no cover
+            logger.debug(
+                "PR-02-V2 handoff_v2 ingestion failed (non-fatal): "
+                "device_id=%s type=%s exc=%s",
+                device_id,
+                msg_type,
+                exc,
+            )
+    else:  # pragma: no cover
+        logger.warning(
+            "PR-02-V2 handoff_v2 ingress unavailable (import failed): "
+            "device_id=%s type=%s",
+            device_id,
+            msg_type,
+        )
+
+    return {
+        "version": "3.0",
+        "type": "handoff_v2_result_ack",
+        "device_id": device_id,
+        "message_id": str(uuid.uuid4()),
+        "correlation_id": message_id,
+    }

@@ -92,6 +92,7 @@ from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_paylo
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
+from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
@@ -653,6 +654,17 @@ class AndroidBridge:
         # PR-16: Android delegated execution signal canonical ingress
         self._message_handlers[MessageType.DELEGATED_EXECUTION_SIGNAL] = _wrap(
             handle_delegated_execution_signal
+        )
+
+        # PR-02-V2: Android HandoffEnvelopeV2 uplink responses — canonical ingress
+        # All three uplink wire types (ack / result / failure) plus the unified
+        # envelope result type are routed through the same handler, which delegates
+        # to core.android_handoff_v2_response_ingress.ingest_android_handoff_response().
+        self._message_handlers[MessageType.HANDOFF_ACK] = _wrap(handle_handoff_v2_result)
+        self._message_handlers[MessageType.HANDOFF_RESULT] = _wrap(handle_handoff_v2_result)
+        self._message_handlers[MessageType.HANDOFF_FAILURE] = _wrap(handle_handoff_v2_result)
+        self._message_handlers[MessageType.HANDOFF_ENVELOPE_V2_RESULT] = _wrap(
+            handle_handoff_v2_result
         )
 
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
