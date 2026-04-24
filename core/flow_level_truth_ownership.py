@@ -851,7 +851,7 @@ def decide_flow_truth_alignment(
     )
 
     # Detect intermediate pending: Android has advanced to terminal but V2
-    # is still in a non-terminal phase (executing / reconciling)
+    # is still in a non-terminal phase (executing / reconciling / dispatched)
     is_intermediate_pending = kind_str in _TERMINAL_KIND_STRINGS and flow_phase in {
         "executing",
         "reconciling",

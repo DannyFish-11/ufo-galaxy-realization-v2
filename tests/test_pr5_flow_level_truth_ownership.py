@@ -605,7 +605,7 @@ class TestDecideFlowTruthAlignment:
         decision = decide_flow_truth_alignment(ctx)
         assert decision.is_intermediate_pending is True
 
-    def test_intermediate_pending_false_when_reconciling(self):
+    def test_intermediate_pending_true_when_reconciling(self):
         from core.flow_level_truth_ownership import decide_flow_truth_alignment
         ctx = self._make_ctx(
             android_truth_kind="result",
