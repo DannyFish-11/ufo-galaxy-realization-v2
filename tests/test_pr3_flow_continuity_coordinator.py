@@ -879,7 +879,7 @@ class TestDecideStaleIdentity:
 # ---------------------------------------------------------------------------
 
 
-class TestDeduceDuplicateSignal:
+class TestDecideDuplicateSignal:
     def test_no_signal_key_gives_continuity_resume(self):
         from core.flow_continuity_coordinator import (
             ContinuityEventContext,
