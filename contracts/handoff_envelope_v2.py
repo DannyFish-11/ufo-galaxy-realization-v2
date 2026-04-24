@@ -741,11 +741,17 @@ class HandoffEnvelopeV2(BaseModel):
         priority: int = 5,
         timeout: int = 300,
     ) -> Dict[str, Any]:
-        """Build a complete AIP ``handoff_dispatch`` message for Android (PR-H).
+        """Build a complete AIP ``handoff_envelope_v2`` message for Android (PR-H).
 
-        Wraps :meth:`to_android_native_payload` inside an AIP v3 message frame
-        so the caller can pass the dict directly to the WebSocket send path
-        without further transformation.
+        Produces the **canonical downlink wire message** for Handoff V2.  The
+        ``type`` field is set to ``"handoff_envelope_v2"`` so that Android's
+        native ``HANDOFF_ENVELOPE_V2`` handler (``AipModels.kt``) can
+        consistently route the message without ambiguity.
+
+        .. note::
+            The previous wire type ``"handoff_dispatch"`` is no longer emitted
+            as canonical output.  It is retained only as a backward-compatible
+            *input* alias on the ingress normalisation layer.
 
         Parameters
         ----------
@@ -762,14 +768,14 @@ class HandoffEnvelopeV2(BaseModel):
         Returns
         -------
         dict
-            AIP v3 ``handoff_dispatch`` message with the full Android-native
+            AIP v3 ``handoff_envelope_v2`` message with the full Android-native
             handoff payload embedded in the ``payload`` field.
         """
         import time as _time
         import uuid as _uuid
         return {
             "version": "3.0",
-            "type": "handoff_dispatch",
+            "type": "handoff_envelope_v2",
             "message_id": str(_uuid.uuid4()),
             "device_id": device_id,
             "timestamp": int(_time.time() * 1000),

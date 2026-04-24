@@ -153,6 +153,11 @@ class TestMessageTypeEnum:
         from galaxy_gateway.protocol.aip_v3 import MessageType
         assert MessageType.HANDOFF_FAILURE.value == "handoff_failure"
 
+    def test_B05_handoff_envelope_v2_present(self):
+        """Canonical downlink wire type must be present in the protocol enum."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        assert MessageType.HANDOFF_ENVELOPE_V2.value == "handoff_envelope_v2"
+
 
 # ============================================================================
 # C–J. HandoffEnvelopeV2.to_android_native_payload
@@ -323,10 +328,11 @@ class TestToAndroidTaskAssignPayload:
         msg = env.to_android_task_assign_payload("tablet_k")
         assert msg["version"] == "3.0"
 
-    def test_K04_type_is_handoff_dispatch(self):
+    def test_K04_type_is_handoff_envelope_v2(self):
+        """Canonical downlink wire type must be handoff_envelope_v2 (not handoff_dispatch)."""
         env = self._make_envelope()
         msg = env.to_android_task_assign_payload("tablet_k")
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_K05_device_id_set(self):
         env = self._make_envelope()
@@ -391,11 +397,12 @@ class TestMessageBuilderHandoffDispatch:
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["handoff_id"] == env.handoff_id
 
-    def test_O01_message_type_is_handoff_dispatch(self):
+    def test_O01_message_type_is_handoff_envelope_v2(self):
+        """handoff_dispatch compat alias must now emit canonical handoff_envelope_v2 wire type."""
         from galaxy_gateway.android.message_builder import MessageBuilder
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
-        assert msg["type"] == "handoff_dispatch"
+        assert msg["type"] == "handoff_envelope_v2"
 
     def test_O02_default_priority_5(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
@@ -408,6 +415,88 @@ class TestMessageBuilderHandoffDispatch:
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env, priority=9)
         assert msg["priority"] == 9
+
+
+# ============================================================================
+# O2. MessageBuilder.handoff_envelope_v2 — canonical builder
+# ============================================================================
+
+class TestMessageBuilderHandoffEnvelopeV2:
+    """Validate the canonical handoff_envelope_v2 builder method."""
+
+    def _make_envelope(self):
+        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+        return build_handoff_envelope_v2(
+            trace_id="trace_o2",
+            task={"tool_name": "screenshot"},
+            source_device_id="phone_o2",
+            target_device_id="tablet_o2",
+        )
+
+    def test_O2_01_method_exists(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        assert hasattr(MessageBuilder, "handoff_envelope_v2")
+
+    def test_O2_02_returns_dict(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        assert isinstance(msg, dict)
+
+    def test_O2_03_canonical_wire_type(self):
+        """Canonical builder must emit handoff_envelope_v2 wire type."""
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        assert msg["type"] == MessageType.HANDOFF_ENVELOPE_V2.value
+        assert msg["type"] == "handoff_envelope_v2"
+
+    def test_O2_04_handoff_id_at_top_level(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        assert msg["handoff_id"] == env.handoff_id
+
+    def test_O2_05_device_id_set(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        assert msg["device_id"] == "tablet_o2"
+
+    def test_O2_06_default_priority_5(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        assert msg["priority"] == 5
+
+    def test_O2_07_priority_override(self):
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env, priority=8)
+        assert msg["priority"] == 8
+
+    def test_O2_08_canonical_and_compat_alias_produce_same_output(self):
+        """handoff_dispatch (compat) and handoff_envelope_v2 (canonical) must be equivalent."""
+        from galaxy_gateway.android.message_builder import MessageBuilder
+        env = self._make_envelope()
+        canonical = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
+        compat = MessageBuilder.handoff_dispatch("tablet_o2", env)
+        # Both must emit the canonical wire type
+        assert canonical["type"] == "handoff_envelope_v2"
+        assert compat["type"] == "handoff_envelope_v2"
+        # Top-level routing / correlation fields must be identical
+        assert canonical["handoff_id"] == compat["handoff_id"]
+        assert canonical["device_id"] == compat["device_id"]
+        assert canonical["priority"] == compat["priority"]
+        assert canonical["timeout"] == compat["timeout"]
+        assert canonical["task_id"] == compat["task_id"]
+        assert canonical["trace_id"] == compat["trace_id"]
+        # Nested Android-native payload must be structurally identical
+        assert canonical["payload"]["handoff_id"] == compat["payload"]["handoff_id"]
+        assert canonical["payload"]["source_device_id"] == compat["payload"]["source_device_id"]
+        assert canonical["payload"]["target_device_id"] == compat["payload"]["target_device_id"]
+        assert canonical["payload"]["schema_version"] == compat["payload"]["schema_version"]
 
 
 # ============================================================================
