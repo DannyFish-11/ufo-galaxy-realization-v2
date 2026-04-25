@@ -6467,10 +6467,11 @@ class OpenClawd:
         """
         import asyncio as _asyncio
         import time as _time
-        from core.multi_llm_router import get_llm_router
         from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
 
-        router = get_llm_router()
+        # PR-3: Use self._get_router() (UnifiedLLMRouter first, MultiLLMRouter fallback)
+        # instead of directly calling get_llm_router() which bypasses the unified entry.
+        router = self._get_router()
 
         tool_records: List[ToolCallRecord] = []
         last_response = None
@@ -6487,7 +6488,10 @@ class OpenClawd:
             nonlocal _total_tool_calls, _last_tool_name
 
             for iteration in range(max_iterations):
-                response = await router.chat(
+                # PR-3: Use chat_with_tools() which is defined on both UnifiedLLMRouter
+                # and MultiLLMRouter, ensuring the unified policy layer is applied
+                # regardless of which router type _get_router() returns.
+                response = await router.chat_with_tools(
                     messages=messages,
                     tools=tools if tools else None,
                     task_type=task_type,
@@ -6628,11 +6632,11 @@ class OpenClawd:
             响应 dict
         """
         try:
-            from core.multi_llm_router import get_llm_router
+            # PR-3: Use self._get_router() (UnifiedLLMRouter first, MultiLLMRouter fallback)
+            # instead of directly calling get_llm_router() which bypasses the unified entry.
+            router = self._get_router()
 
-            router = get_llm_router()
-
-            if not router.is_available():
+            if router is None or not router.is_available():
                 return {
                     "success": False,
                     "response": (
@@ -6697,8 +6701,13 @@ class OpenClawd:
             # 收集可用工具
             tools = self._collect_tools()
 
-            # 计算复杂度 (结构化向量)
-            cv = router._compute_complexity_vector(messages, tools if tools else None)
+            # PR-3: 计算复杂度向量 — 通过统一入口代理 compute_complexity_vector()，
+            # 避免直接访问 _backend._compute_complexity_vector()。
+            cv = None
+            if hasattr(router, "compute_complexity_vector"):
+                cv = router.compute_complexity_vector(messages, tools if tools else None)
+            elif hasattr(router, "_compute_complexity_vector"):
+                cv = router._compute_complexity_vector(messages, tools if tools else None)
 
             # 使用 ReAct 循环
             result = await self._react_loop(messages, tools)
@@ -6717,9 +6726,9 @@ class OpenClawd:
                     "tool_calls": len(result.get("tool_calls_log", [])),
                     "tool_calls_log": result.get("tool_calls_log", []),
                     "total_tokens": result.get("total_tokens", 0),
-                    "complexity_score": cv.weighted_score,
-                    "model_tier": cv.tier.value,
-                    "complexity_vector": cv.model_dump(),
+                    "complexity_score": cv.weighted_score if cv else 0.5,
+                    "model_tier": (cv.tier.value if (cv and getattr(cv, "tier", None)) else "medium"),
+                    "complexity_vector": cv.model_dump() if cv else {},
                     "layers_used": layers_used,
                     "hit_max_iterations": result.get("hit_max_iterations", False),
                 },
@@ -6836,9 +6845,10 @@ class OpenClawd:
         """
         try:
             from core.agent_factory import get_agent_factory
-            from core.multi_llm_router import get_llm_router
 
-            router = get_llm_router()
+            # PR-3: Use self._get_router() instead of directly calling get_llm_router().
+            # This ensures agent tasks also go through the unified provider routing entry.
+            router = self._get_router()
             factory = get_agent_factory(router)
 
             # PR-2: 在入口立即构造 TaskEnvelope，task_id/trace_id 贯穿整条执行链路。
@@ -6981,15 +6991,22 @@ class OpenClawd:
 
             # 收集工具 & 计算复杂度向量
             tools = self._collect_tools()
-            cv = router._compute_complexity_vector(
-                [{"role": "user", "content": message}],
-                tools if tools else None,
-            )
+            # PR-3: 通过统一接口计算复杂度向量，避免直接调用 _backend._compute_complexity_vector()。
+            # compute_complexity_vector() 在 UnifiedLLMRouter 中已做代理委派；
+            # MultiLLMRouter（降级场景）直接提供 _compute_complexity_vector()。
+            _msgs_for_cv = [{"role": "user", "content": message}]
+            if hasattr(router, "compute_complexity_vector"):
+                cv = router.compute_complexity_vector(_msgs_for_cv, tools if tools else None)
+            elif hasattr(router, "_compute_complexity_vector"):
+                cv = router._compute_complexity_vector(_msgs_for_cv, tools if tools else None)
+            else:
+                cv = None
 
             # 复杂度驱动策略选择
-            if cv.weighted_score >= 0.7:
+            _cv_score = getattr(cv, "weighted_score", 0.5) if cv is not None else 0.5
+            if _cv_score >= 0.7:
                 strategy = "specialized"
-            elif cv.weighted_score >= 0.4:
+            elif _cv_score >= 0.4:
                 strategy = "parallel"
             else:
                 strategy = "parallel"
@@ -7004,7 +7021,7 @@ class OpenClawd:
             team = await manager.create_team(
                 strategy=strategy,
                 task_hint=message,
-                complexity_score=cv.weighted_score,
+                complexity_score=_cv_score,
             )
 
             # 注入工具能力
@@ -7235,17 +7252,21 @@ class OpenClawd:
 
         # LLM Router 状态
         try:
-            from core.multi_llm_router import get_llm_router
-
-            router = get_llm_router()
-            router_status = router.get_status()
-            status["llm_router"] = {
-                "available": router.is_available(),
-                "total_providers": router_status.get("total_providers", 0),
-                "healthy_providers": router_status.get("healthy_providers", 0),
-                "total_calls": router_status.get("total_calls", 0),
-                "providers": list(router_status.get("providers", {}).keys()),
-            }
+            # PR-3: Use self._get_router() to get status via the unified entry,
+            # instead of directly calling get_llm_router() (MultiLLMRouter bypass).
+            router = self._get_router()
+            if router is not None:
+                router_status = router.get_status()
+                status["llm_router"] = {
+                    "available": router.is_available(),
+                    "total_providers": router_status.get("total_providers", 0),
+                    "healthy_providers": router_status.get("healthy_providers", 0),
+                    "total_calls": router_status.get("total_calls", 0),
+                    "providers": list(router_status.get("providers", {}).keys()),
+                    "router_type": type(router).__name__,
+                }
+            else:
+                status["llm_router"] = {"available": False, "error": "router not initialized"}
         except Exception as e:
             status["llm_router"] = {"available": False, "error": str(e)}
 
