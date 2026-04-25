@@ -178,6 +178,23 @@ except ImportError:  # pragma: no cover
     _DELEGATED_AUDIT_AVAILABLE = False
     _audit_terminal_update = None  # type: ignore[assignment]
 
+# PR-4V2-GOV: FlowTruthAlignmentRuntime (PR-5V2) — governance_artifact alignment.
+# When a governance_artifact truth kind arrives we call align_and_record() so that
+# FlowTruthAlignmentRuntime accumulates a FlowTruthDecisionArtifact.  This makes
+# Android governance/readiness/acceptance/strategy evaluator outputs visible to
+# DelegatedFlowReadinessGate._evaluate_truth_ownership() as canonical gate inputs.
+try:
+    from core.flow_level_truth_ownership import (
+        FlowTruthAlignmentContext as _FlowTruthAlignmentContext,
+        align_and_record as _align_and_record,
+    )
+
+    _FLOW_TRUTH_ALIGNMENT_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _FLOW_TRUTH_ALIGNMENT_AVAILABLE = False
+    _FlowTruthAlignmentContext = None  # type: ignore[assignment,misc]
+    _align_and_record = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -305,6 +322,19 @@ RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY: str = (
     "duplicate terminal event processing already applied by delegated_execution_signal."
 )
 
+GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY: str = (
+    "POLICY::GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT: "
+    "Android-originated evaluator artifacts (governance, readiness, acceptance, "
+    "strategy) that arrive via the governance_artifact truth kind are FIRST-CLASS "
+    "canonical gate inputs, not advisory-only signals.  They MUST be aligned via "
+    "align_and_record() from core.flow_level_truth_ownership so that the "
+    "FlowTruthAlignmentRuntime accumulates a decision artifact.  This makes them "
+    "visible to DelegatedFlowReadinessGate.truth_ownership dimension evaluation.  "
+    "The distinction: readiness_assessment remains advisory (READINESS_ASSESSMENT_IS_ADVISORY_POLICY); "
+    "governance_artifact is authoritative upward and reaches the canonical gate.  "
+    "PR-4V2-GOV: wire Android evaluator artifacts into canonical readiness/governance flow."
+)
+
 _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
     ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
@@ -319,6 +349,7 @@ _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY,
     IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
     RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY,
+    GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY,
 )
 
 # ---------------------------------------------------------------------------
@@ -375,6 +406,7 @@ class AndroidParticipantTruthKind(str, Enum):
     failure = "failure"
     result = "result"
     reconciliation_signal = "reconciliation_signal"
+    governance_artifact = "governance_artifact"
     unknown = "unknown"
 
     @classmethod
@@ -406,6 +438,7 @@ class AndroidParticipantTruthKind(str, Enum):
             AndroidParticipantTruthKind.status,
             AndroidParticipantTruthKind.task_phase,
             AndroidParticipantTruthKind.reconciliation_signal,
+            AndroidParticipantTruthKind.governance_artifact,
         )
 
 
@@ -865,6 +898,11 @@ def reconcile_android_participant_truth(
             _reconcile_reconciliation_signal(envelope, _runtime)
         )
 
+    elif kind == AndroidParticipantTruthKind.governance_artifact:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_governance_artifact(envelope)
+        )
+
     elif kind in (
         AndroidParticipantTruthKind.readiness_assessment,
         AndroidParticipantTruthKind.runtime_state,
@@ -1194,9 +1232,64 @@ def _reconcile_reconciliation_signal(
         return False, "", f"apply_signal_error:{exc}", ""
 
 
-# ---------------------------------------------------------------------------
-# Convenience wrapper
-# ---------------------------------------------------------------------------
+def _reconcile_governance_artifact(
+    envelope: AndroidParticipantTruthEnvelope,
+) -> Tuple[bool, str, str, str]:
+    """Reconcile an Android evaluator governance/readiness/acceptance/strategy artifact.
+
+    This is the canonical entry-point for Android-originated evaluator artifacts
+    (DeviceReadinessArtifact, DeviceGovernanceArtifact, DeviceAcceptanceArtifact,
+    DeviceStrategyArtifact) that have been forwarded via the ``governance_artifact``
+    truth kind.
+
+    Unlike advisory truth kinds (``readiness_assessment``, ``runtime_state``), a
+    ``governance_artifact`` is a **first-class canonical gate input**.  It is
+    reconciled by calling ``align_and_record()`` from
+    :mod:`~core.flow_level_truth_ownership`, which writes a
+    :class:`~core.flow_level_truth_ownership.FlowTruthDecisionArtifact` to
+    :class:`~core.flow_level_truth_ownership.FlowTruthAlignmentRuntime`.  This
+    ensures the artifact is visible to
+    :meth:`~core.delegated_flow_readiness_gate.DelegatedFlowReadinessGate._evaluate_truth_ownership`
+    as a canonical dimension input.
+
+    Policy: GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY (defined above).
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not _FLOW_TRUTH_ALIGNMENT_AVAILABLE or _align_and_record is None or _FlowTruthAlignmentContext is None:
+        # flow_level_truth_ownership unavailable — treat as audit-only with no gate visibility
+        return (
+            False,
+            "",
+            "flow_truth_alignment_unavailable:governance_artifact_not_aligned",
+            "",
+        )
+
+    try:
+        ctx = _FlowTruthAlignmentContext(
+            truth_kind="governance_artifact",
+            task_phase_value=envelope.task_phase_value or "",
+            v2_canonical_flow_phase="",  # no specific flow phase required
+            device_posture="",
+            posture_changed=False,
+            compat_influence_active=False,
+            delegated_flow_id=envelope.contract_id or envelope.session_id or "",
+            session_id=envelope.session_id or "",
+            contract_id=envelope.contract_id or "",
+            task_id=envelope.task_id or "",
+            trace_id=envelope.trace_id or "",
+            truth_payload=dict(envelope.payload),
+        )
+        artifact = _align_and_record(ctx)
+        canonical_update = (
+            f"governance_artifact_aligned:"
+            f"device_id={envelope.device_id or ''}"
+            f"→decision={artifact.decision.value}"
+            f"→semantic={artifact.semantic_kind.value}"
+        )
+        return True, canonical_update, "", ""
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"governance_artifact_align_error:{exc}", ""
 
 
 def ingest_android_participant_truth_message(
@@ -1317,6 +1410,7 @@ __all__ = [
     "RECONCILE_IS_NON_DESTRUCTIVE_ON_MISS_POLICY",
     "RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY",
     "IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
+    "GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY",
     # Enums
     "AndroidParticipantTruthKind",
     # Dataclasses
