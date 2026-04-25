@@ -7506,6 +7506,7 @@ class OpenClawd:
         task_id: Optional[str] = None,
         session_id: Optional[str] = None,
         source_runtime_posture: Optional[str] = None,
+        required_capabilities: Optional[List[str]] = None,
     ) -> Dict:
         """统一网关命令路径（带 trace ID）。
 
@@ -7513,6 +7514,11 @@ class OpenClawd:
 
         构造 TaskEnvelope 并经由 CommandRouter.route_envelope() 进入内部路由链路。
         保留所有原入口参数与返回字段，与旧调用者完全兼容。
+
+        PR-1 P0: ``required_capabilities`` is now forwarded to the TaskEnvelope so
+        that capability verification runs even when an explicit ``device_id`` is
+        provided.  This closes the silent-bypass gap where explicit device_id could
+        skip the capability graph check entirely.
         """
         command_id = uuid.uuid4().hex
         task_id = task_id or uuid.uuid4().hex
@@ -7557,7 +7563,17 @@ class OpenClawd:
             from core.schemas.remote_execution import RemoteExecutionMode
 
             cr = get_command_router()
-            # 构造 TaskEnvelope，携带 session_id 和 command_id 进入统一链路
+            # PR-1 P0: resolve effective required_capabilities — prefer the
+            # explicit argument; fall back to the instance-level hint stored by
+            # process() when a capability-aware request is in flight.
+            _effective_caps: Optional[List[str]] = (
+                required_capabilities
+                or getattr(self, "_current_required_capabilities", None)
+                or None
+            )
+            # 构造 TaskEnvelope，携带 session_id、command_id 和 required_capabilities
+            # 进入统一链路.  PR-1 P0: required_capabilities is always forwarded so
+            # that capability verification runs even when device_id is explicit.
             envelope = TaskEnvelope(
                 task_id=task_id,
                 trace_id=trace_id,
@@ -7566,6 +7582,7 @@ class OpenClawd:
                 tool_name=command,
                 args=payload or {},
                 remote_execution_mode=RemoteExecutionMode.command_only,
+                required_capabilities=_effective_caps,
                 metadata={
                     "command_id": command_id,
                     "session_id": session_id,
