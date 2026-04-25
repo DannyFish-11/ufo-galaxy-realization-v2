@@ -30,6 +30,8 @@ Local VLM / multimodal provider 当前作为扩展能力（非主链），
 提供强类型接口（LLMRequest / LLMResponse）和结构化日志。
 """
 
+from __future__ import annotations
+
 # PR-3: Unified provider routing closure authority sentinel.
 UNIFIED_LLM_ROUTER_AUTHORITY: str = (
     "UNIFIED_LLM_ROUTER::PR3_PROVIDER_ROUTING_CLOSURE: "
@@ -45,8 +47,6 @@ UNIFIED_LLM_ROUTER_AUTHORITY: str = (
     "providers are extension-layer capabilities (non-main-chain), not "
     "governed by this router.  Closes PR-3."
 )
-
-from __future__ import annotations
 
 import asyncio
 import collections

@@ -2110,6 +2110,32 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10_UNAVAILABLE"
     )
 
+# PR-5 Final: Final Cleanup and Invariant Tightening integration sentinel.
+# Importing the authority sentinel and PR-5 final sentinel ties the projection
+# route layer to the canonical no-bypass guard surface, enabling projection
+# endpoints to confirm that the five closure-area guards (completion ingress,
+# capability routing, runtime truth ingress, provider routing, validation gate)
+# are active and that the semantic capability tier registry is present.
+try:
+    from core.final_cleanup_invariant_tightening import (  # noqa: F401
+        FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY as _FCIT_AUTHORITY,
+        FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL as _FCIT_PR5,
+        is_final_cleanup_posture_acceptable as _is_final_cleanup_posture_acceptable,
+    )
+
+    FINAL_CLEANUP_INVARIANT_TIGHTENING_ALIGNED_PR5_FINAL: str = (
+        "PROJECTION_ROUTES::FINAL_CLEANUP_INVARIANT_TIGHTENING_ALIGNED_PR5_FINAL_V1: "
+        "core.final_cleanup_invariant_tightening is available and aligned with "
+        "projection routes.  No-bypass guards for completion ingress, capability "
+        "routing, runtime truth ingress, provider routing, and validation gate are "
+        "active.  Semantic capability tier registry is present.  "
+        "is_final_cleanup_posture_acceptable() is callable for CI/release checks."
+    )
+except ImportError:  # pragma: no cover
+    FINAL_CLEANUP_INVARIANT_TIGHTENING_ALIGNED_PR5_FINAL: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::FINAL_CLEANUP_INVARIANT_TIGHTENING_ALIGNED_PR5_FINAL_UNAVAILABLE"
+    )
+
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the projection router.
