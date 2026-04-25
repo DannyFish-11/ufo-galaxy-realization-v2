@@ -238,7 +238,14 @@ class TestGroupD_Handler:
 
     @pytest.mark.asyncio
     async def test_d4_calls_participant_truth_ingress(self) -> None:
-        """Handler must call ingest_android_participant_truth_message."""
+        """Handler must invoke the lifecycle coordinator which calls participant truth ingress.
+
+        The handler was refactored in PR-11-V2 to delegate all ingress / truth /
+        state-reduction / audit logic to
+        ``AndroidDelegatedRuntimeLifecycleCoordinator.on_reconciliation_signal()``.
+        This test verifies that the coordinator's ``on_reconciliation_signal``
+        method is called (which internally calls participant truth ingress).
+        """
         bridge = MagicMock()
         websocket = MagicMock()
         message = {
@@ -246,24 +253,19 @@ class TestGroupD_Handler:
             "device_id": "dev_ingest",
             "payload": {"phase": "completed", "contract_id": "cx", "session_id": "sx"},
         }
-        mock_outcome = MagicMock()
-        mock_outcome.was_reconciled = True
-        mock_env = MagicMock()
-        mock_env.truth_kind = MagicMock()
-        mock_env.truth_kind.value = "reconciliation_signal"
-        mock_env.contract_id = "cx"
-        mock_env.session_id = "sx"
-        mock_outcome.envelope = mock_env
-        mock_outcome.canonical_update = "test_update"
-        mock_outcome.tracking_record_phase = "completed"
-        mock_outcome.reject_reason = ""
+
+        mock_coord_outcome = MagicMock()
+        mock_coord_outcome.was_handled = True
+        mock_coord_outcome.description = "reconciliation_signal: truth_kind='reconciliation_signal' reconciled=True session='sx'"
+        mock_coordinator = MagicMock()
+        mock_coordinator.on_reconciliation_signal.return_value = mock_coord_outcome
 
         with patch(
-            "galaxy_gateway.android.handlers.reconciliation_signal._ingest_participant_truth",
-            return_value=mock_outcome,
-        ) as mock_ingest:
+            "galaxy_gateway.android.handlers.reconciliation_signal._get_lifecycle_coordinator",
+            return_value=mock_coordinator,
+        ):
             response = await handle_reconciliation_signal(bridge, websocket, message)
-            mock_ingest.assert_called_once_with(message)
+            mock_coordinator.on_reconciliation_signal.assert_called_once_with(message=message)
         assert response["type"] == "reconciliation_signal_ack"
 
 
