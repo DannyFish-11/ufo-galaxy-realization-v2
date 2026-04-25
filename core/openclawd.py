@@ -1024,14 +1024,18 @@ class OpenClawd:
             logger.info("OpenClawd 就绪 — 所有模块将按需懒加载")
 
     def _get_router(self):
-        """获取 OpenClawd 持有的 LLM 路由器（单例，Dashboard > ENV > defaults）"""
+        """获取 OpenClawd 持有的 LLM 路由器（UnifiedLLMRouter 统一入口）"""
         if self._router is None:
             try:
-                from core.multi_llm_router import get_llm_router
-
-                self._router = get_llm_router()
+                from core.unified.llm_router import get_unified_llm_router
+                self._router = get_unified_llm_router()
             except Exception as e:
-                logger.warning(f"LLM 路由器加载失败: {e}")
+                logger.warning(f"UnifiedLLMRouter 加载失败，降级到 MultiLLMRouter: {e}")
+                try:
+                    from core.multi_llm_router import get_llm_router
+                    self._router = get_llm_router()
+                except Exception as e2:
+                    logger.warning(f"LLM 路由器加载失败: {e2}")
         return self._router
 
     def _get_kernel(self):
