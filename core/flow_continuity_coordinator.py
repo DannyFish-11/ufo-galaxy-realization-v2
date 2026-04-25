@@ -1634,7 +1634,7 @@ class FlowContinuityCoordinator:
         if bundle is not None and (ctx.flow_lineage_id or ctx.contract_id or ctx.flow_id):
             try:
                 restored = bundle.restore_all()
-                flow_entities = restored.get("flow_entities", [])
+                flow_entities = restored.get("flow_entity", [])
                 _terminal_flow = frozenset({"completed", "failed", "cancelled"})
                 for entity in flow_entities:
                     entity_flow_id = getattr(entity, "identity", None)

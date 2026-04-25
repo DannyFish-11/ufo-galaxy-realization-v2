@@ -100,6 +100,7 @@ __all__ = [
     "RECOVERED_LIFECYCLE_DISPATCH_POLICY",
     "RECOVERY_DUPLICATE_SAFETY_POLICY",
     "RECOVERY_IDEMPOTENCY_POLICY",
+    "DELEGATED_FLOW_STATE_RECOVERY_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -236,6 +237,21 @@ RECOVERY_IDEMPOTENCY_POLICY: str = (
     "after one pass. (PR-G)"
 )
 
+# PR-5: delegated flow state recovery from DelegatedFlowPersistenceBundle
+DELEGATED_FLOW_STATE_RECOVERY_POLICY: str = (
+    "POLICY::DELEGATED_FLOW_STATE_RECOVERY: On process restart, "
+    "RuntimeRestartRecoveryCoordinator (Step 6) restores the four delegated "
+    "flow state categories — session, contract, binding, and flow_entity — "
+    "from their durable file-backed stores via DelegatedFlowPersistenceBundle.restore_all(). "
+    "Restored objects are returned to the caller via RuntimeRecoveryReport; "
+    "callers are responsible for re-populating the corresponding runtime "
+    "ring-buffers (AttachedSessionRegistry, DelegatedHandoffContractRuntime, "
+    "AndroidRuntimeDispatchBindingRuntime, DelegatedFlowEntityRuntime).  "
+    "This step is load-only and never mutates the durable store.  "
+    "Failure in this step is non-fatal — recovery continues and the error "
+    "is recorded in RuntimeRecoveryReport.errors. (PR-5)"
+)
+
 
 
 @dataclass
@@ -286,6 +302,10 @@ class RuntimeRecoveryReport:
     inflight_tasks_terminal: int = 0
     inflight_tasks_dispatch_actions_taken: int = 0
     inflight_tasks_already_pending_skipped: int = 0
+    delegated_flow_sessions_restored: int = 0
+    delegated_flow_contracts_restored: int = 0
+    delegated_flow_bindings_restored: int = 0
+    delegated_flow_entities_restored: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -309,6 +329,10 @@ class RuntimeRecoveryReport:
             "inflight_tasks_terminal": self.inflight_tasks_terminal,
             "inflight_tasks_dispatch_actions_taken": self.inflight_tasks_dispatch_actions_taken,
             "inflight_tasks_already_pending_skipped": self.inflight_tasks_already_pending_skipped,
+            "delegated_flow_sessions_restored": self.delegated_flow_sessions_restored,
+            "delegated_flow_contracts_restored": self.delegated_flow_contracts_restored,
+            "delegated_flow_bindings_restored": self.delegated_flow_bindings_restored,
+            "delegated_flow_entities_restored": self.delegated_flow_entities_restored,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -354,6 +378,13 @@ class RuntimeRestartRecoveryCoordinator:
         Optional :class:`~core.mesh.body_mesh_registry.BodyMeshRegistry` to
         populate during body mesh recovery.  Defaults to the process-level
         singleton returned by :func:`~core.mesh.body_mesh_registry.get_body_mesh_registry`.
+    delegated_flow_persistence_bundle:
+        Optional :class:`~core.delegated_flow_persistence.DelegatedFlowPersistenceBundle`
+        to use for delegated flow state recovery (Step 6).  When provided,
+        session, contract, binding, and flow-entity records are restored from
+        the bundle's durable stores during recovery.  Defaults to None
+        (delegated flow recovery is skipped if not provided and the bundle
+        singleton cannot be imported).
     """
 
     def __init__(
@@ -364,6 +395,7 @@ class RuntimeRestartRecoveryCoordinator:
         hybrid_continuity_registry=None,
         hybrid_continuity_store=None,
         task_lifecycle_store=None,
+        delegated_flow_persistence_bundle=None,
     ) -> None:
         self._mesh_session_store = mesh_session_store
         self._body_mesh_store = body_mesh_store
@@ -371,6 +403,7 @@ class RuntimeRestartRecoveryCoordinator:
         self._hybrid_continuity_registry = hybrid_continuity_registry
         self._hybrid_continuity_store = hybrid_continuity_store
         self._task_lifecycle_store = task_lifecycle_store
+        self._delegated_flow_persistence_bundle = delegated_flow_persistence_bundle
 
     def run_recovery(self) -> RuntimeRecoveryReport:
         """Orchestrate a full recovery pass.
@@ -397,6 +430,12 @@ class RuntimeRestartRecoveryCoordinator:
              so the source can re-issue.
            * **TERMINAL_ON_INTERRUPT** → NOT registered; result may already
              have been delivered (PR-D1).
+
+        6. Restore delegated flow state (session, contract, binding,
+           flow_entity) from the durable :class:`~core.delegated_flow_persistence
+           .DelegatedFlowPersistenceBundle` (PR-5).  Counts are recorded in the
+           report; callers are responsible for re-populating the runtime
+           ring-buffers from the returned records.
 
         Returns
         -------
@@ -472,12 +511,23 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 6: Restore delegated flow state from durable bundle (PR-5)
+        # ----------------------------------------------------------------
+        try:
+            self._recover_delegated_flow_state(report)
+        except Exception as exc:
+            err = f"Delegated flow state recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
             "mesh_sessions=%d body_entries=%d "
             "hybrid_interrupted=%d hybrid_restored=%d hybrid_invalidated=%d "
             "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
+            "delegated_flow=sessions:%d contracts:%d bindings:%d entities:%d "
             "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
@@ -490,6 +540,10 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_replay_only,
             report.inflight_tasks_reissuable,
             report.inflight_tasks_terminal,
+            report.delegated_flow_sessions_restored,
+            report.delegated_flow_contracts_restored,
+            report.delegated_flow_bindings_restored,
+            report.delegated_flow_entities_restored,
             len(report.errors),
         )
         return report
@@ -845,6 +899,67 @@ class RuntimeRestartRecoveryCoordinator:
             already_pending_skipped,
         )
 
+    def _recover_delegated_flow_state(self, report: RuntimeRecoveryReport) -> None:
+        """Restore delegated flow state from the durable persistence bundle (Step 6, PR-5).
+
+        Calls :meth:`~core.delegated_flow_persistence.DelegatedFlowPersistenceBundle.restore_all`
+        to load session, contract, binding, and flow-entity records written by
+        prior checkpoint calls.  The restored counts are recorded in the report.
+
+        This method is **load-only** — it never mutates the durable store.
+        Callers are responsible for re-populating the corresponding runtime
+        ring-buffers from the returned records.  Failure in this step is
+        non-fatal; the error is appended to ``report.errors`` and recovery
+        continues.
+
+        See :data:`DELEGATED_FLOW_STATE_RECOVERY_POLICY`.
+        """
+        bundle = self._delegated_flow_persistence_bundle
+        if bundle is None:
+            try:
+                from core.delegated_flow_persistence import (
+                    get_delegated_flow_persistence_bundle,
+                )
+                bundle = get_delegated_flow_persistence_bundle()
+            except Exception as exc:
+                logger.debug(
+                    "RuntimeRestartRecovery: delegated flow persistence bundle "
+                    "unavailable — skipping Step 6: %s",
+                    exc,
+                )
+                return
+
+        try:
+            restored = bundle.restore_all()
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery: DelegatedFlowPersistenceBundle.restore_all() "
+                "failed — %s",
+                exc,
+            )
+            report.errors.append(f"DelegatedFlowPersistenceBundle.restore_all() failed: {exc}")
+            return
+
+        sessions = restored.get("session", [])
+        contracts = restored.get("contract", [])
+        bindings = restored.get("binding", [])
+        flow_entities = restored.get("flow_entity", [])
+
+        report.delegated_flow_sessions_restored = len(sessions)
+        report.delegated_flow_contracts_restored = len(contracts)
+        report.delegated_flow_bindings_restored = len(bindings)
+        report.delegated_flow_entities_restored = len(flow_entities)
+
+        logger.info(
+            "RuntimeRestartRecovery: delegated flow state restored — "
+            "sessions=%d contracts=%d bindings=%d flow_entities=%d. "
+            "See DELEGATED_FLOW_STATE_RECOVERY_POLICY.",
+            report.delegated_flow_sessions_restored,
+            report.delegated_flow_contracts_restored,
+            report.delegated_flow_bindings_restored,
+            report.delegated_flow_entities_restored,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Singleton management
@@ -879,6 +994,7 @@ def run_startup_recovery(
     hybrid_continuity_registry=None,
     hybrid_continuity_store=None,
     task_lifecycle_store=None,
+    delegated_flow_persistence_bundle=None,
 ) -> RuntimeRecoveryReport:
     """Run a full startup recovery pass.
 
@@ -910,6 +1026,11 @@ def run_startup_recovery(
         Optional explicit :class:`~core.task_lifecycle_persistence
         .TaskLifecyclePersistenceStore`.  When provided, in-flight task
         lifecycle records are recovered from this store during step 5 (PR-D1).
+    delegated_flow_persistence_bundle:
+        Optional explicit :class:`~core.delegated_flow_persistence
+        .DelegatedFlowPersistenceBundle`.  When provided, session, contract,
+        binding, and flow-entity records are restored from the bundle's durable
+        stores during step 6 (PR-5).
 
     Returns
     -------
@@ -922,5 +1043,6 @@ def run_startup_recovery(
         hybrid_continuity_registry=hybrid_continuity_registry,
         hybrid_continuity_store=hybrid_continuity_store,
         task_lifecycle_store=task_lifecycle_store,
+        delegated_flow_persistence_bundle=delegated_flow_persistence_bundle,
     )
     return coordinator.run_recovery()

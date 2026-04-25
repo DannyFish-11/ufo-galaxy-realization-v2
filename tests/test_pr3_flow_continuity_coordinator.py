@@ -1125,7 +1125,7 @@ class TestDecideV2RestartRecovery:
 
         class _MockBundle:
             def restore_all(self):
-                return {"flow_entities": [_MockEntity()]}
+                return {"flow_entity": [_MockEntity()]}
 
         c = FlowContinuityCoordinator()
         c._get_persistence_bundle = lambda: _MockBundle()
