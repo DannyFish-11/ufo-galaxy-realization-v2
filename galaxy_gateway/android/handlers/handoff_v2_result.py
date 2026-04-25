@@ -21,8 +21,13 @@ This module closes the gap by wiring the three uplink message types to:
    — correlates the response to the originating dispatch via handoff_id / task_id /
    session_id, resolves any waiting Future, invokes the registered callback, and
    advances the binding / tracking / delegated flow state.
-2. Logs the outcome at DEBUG / WARNING level.
-3. Returns a typed ACK response to the Android runtime.
+2. **PR-1 P0 Completion Closure**: For terminal responses (result / failure), calls
+   :meth:`~galaxy_gateway.device_router.DeviceRouter.handle_task_result` to set
+   ``task_events[task_id]``, waking any ``dispatch_to_websocket`` awaiter.  This
+   ensures that cross-device handoff completions drive orchestration continuation
+   rather than relying on a 30-second timeout.
+3. Logs the outcome at DEBUG / WARNING level.
+4. Returns a typed ACK response to the Android runtime.
 """
 
 from __future__ import annotations
@@ -114,6 +119,43 @@ async def handle_handoff_v2_result(
                     device_id,
                     outcome.callback_invoked,
                 )
+                # PR-1 P0 Completion Closure: for terminal responses (result /
+                # failure / timeout / cancelled), wake the dispatch_to_websocket
+                # awaiter by calling DeviceRouter.handle_task_result().  Without
+                # this call the awaiter blocked on task_events[task_id].wait()
+                # would only complete via a 30-second timeout — never via real
+                # completion.
+                _env_task_id = env.task_id if hasattr(env, "task_id") else ""
+                _is_terminal = getattr(env, "is_terminal", False)
+                if _env_task_id and _is_terminal:
+                    try:
+                        from galaxy_gateway.device_router import (
+                            device_router as _device_router,
+                        )
+
+                        _completion_result = {
+                            "success": str(getattr(env, "response_kind", "")).endswith("result"),
+                            "result": message.get("payload") or message.get("result"),
+                            "task_id": _env_task_id,
+                            "handoff_id": env.handoff_id if hasattr(env, "handoff_id") else "",
+                            "device_id": device_id,
+                            "response_kind": str(getattr(env, "response_kind", "")),
+                            "via": "handoff_v2_result",
+                        }
+                        await _device_router.handle_task_result(_env_task_id, _completion_result)
+                        logger.debug(
+                            "PR-1 P0: handoff_v2 terminal → device_router.handle_task_result "
+                            "task_id=%r kind=%s",
+                            _env_task_id,
+                            getattr(env, "response_kind", ""),
+                        )
+                    except Exception as _dr_exc:
+                        logger.debug(
+                            "PR-1 P0: device_router.handle_task_result skipped "
+                            "(non-fatal): task_id=%r exc=%s",
+                            _env_task_id,
+                            _dr_exc,
+                        )
                 # PR-10-V2: unified audit record.
                 if _audit_handoff_v2_result is not None:
                     try:

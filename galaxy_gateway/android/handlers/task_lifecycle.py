@@ -209,6 +209,31 @@ async def handle_task_result(
         if device_id in bridge._devices:
             bridge._devices[device_id].current_task_id = None
 
+    # PR-1 P0 Completion Closure: notify DeviceRouter so that any
+    # dispatch_to_websocket awaiter blocked on task_events[task_id].wait()
+    # is woken immediately by a real completion event rather than a timeout.
+    if task_id:
+        try:
+            from galaxy_gateway.device_router import device_router as _device_router
+
+            _dr_result = {
+                **message,
+                "success": result_status not in ("failed", "error", "cancelled"),
+                "via": "task_lifecycle.handle_task_result",
+            }
+            await _device_router.handle_task_result(task_id, _dr_result)
+            logger.debug(
+                "PR-1 P0: task_result → device_router.handle_task_result task_id=%r",
+                task_id,
+            )
+        except Exception as _dr_exc:
+            logger.debug(
+                "PR-1 P0: device_router.handle_task_result skipped (non-fatal): "
+                "task_id=%r exc=%s",
+                task_id,
+                _dr_exc,
+            )
+
     # OpenClawd 记忆回流
     if task_id and device_id and store_task_result is not None:
         try:
@@ -256,6 +281,31 @@ async def handle_task_end(
     async with bridge._lock:
         if device_id and device_id in bridge._devices:
             bridge._devices[device_id].current_task_id = None
+
+    # PR-1 P0 Completion Closure: notify DeviceRouter so that any
+    # dispatch_to_websocket awaiter blocked on task_events[task_id].wait()
+    # is woken immediately by a real completion event rather than a timeout.
+    if task_id:
+        try:
+            from galaxy_gateway.device_router import device_router as _device_router
+
+            _dr_result = {
+                **message,
+                "success": final_status not in ("failed", "error", "cancelled"),
+                "via": "task_lifecycle.handle_task_end",
+            }
+            await _device_router.handle_task_result(task_id, _dr_result)
+            logger.debug(
+                "PR-1 P0: task_end → device_router.handle_task_result task_id=%r",
+                task_id,
+            )
+        except Exception as _dr_exc:
+            logger.debug(
+                "PR-1 P0: device_router.handle_task_result (task_end) skipped "
+                "(non-fatal): task_id=%r exc=%s",
+                task_id,
+                _dr_exc,
+            )
 
     return {
         "version": "3.0",

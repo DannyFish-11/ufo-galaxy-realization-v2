@@ -126,6 +126,7 @@ class GatewayErrorCode(str, Enum):
     INTERNAL_ERROR = "INTERNAL_ERROR"  # 未分类内部错误
     HITL_TIMEOUT = "HITL_TIMEOUT"  # HITL approval window elapsed
     HITL_DENIED = "HITL_DENIED"  # HITL approval denied by operator
+    CAPABILITY_MISMATCH = "CAPABILITY_MISMATCH"  # PR-1 P0: target lacks required capabilities
 
 
 @dataclass
@@ -384,6 +385,28 @@ CAPABILITY_GRAPH_SELECTION_ENFORCED: str = (
     "when capabilities are specified. Unconfirmed targets emit structured "
     "warnings; routing falls back gracefully if the layer is unavailable. "
     "Closes GAP-512-004."
+)
+
+# PR-1 P0: Capability-Aware Scheduling Closure sentinel.
+#
+# When required_capabilities is set and an explicit device_id target is NOT
+# confirmed in the capability graph:
+#   - If the capability graph contains alternative routable executors, the
+#     envelope targets are replaced with those alternatives (controlled
+#     fallback — not silent bypass).
+#   - If no routable alternatives exist, routing is rejected with a
+#     structured CAPABILITY_MISMATCH error rather than proceeding blindly.
+# In both cases the decision is logged at WARNING level so routing choices
+# remain observable and auditable.  Explicit device_id can no longer
+# silently bypass capability verification.
+CAPABILITY_MISMATCH_CONTROLLED_DECISION: str = (
+    "COMMAND_ROUTER::CAPABILITY_MISMATCH_CONTROLLED_DECISION_V1: "
+    "When required_capabilities is set and all explicit targets fail the "
+    "capability graph check, route_envelope() falls back to confirmed-capable "
+    "alternatives from query_routable_executors() when available, or rejects "
+    "the dispatch with CAPABILITY_MISMATCH when no capable executor exists. "
+    "Explicit device_id no longer silently bypasses capability verification. "
+    "PR-1 P0 closure."
 )
 
 # PR-E: Explicit executor target typing — first-class dispatch routing.
@@ -1568,22 +1591,117 @@ class CommandRouter:
                             _cap_query_caps,
                         )
                 elif _current_targets:
-                    # Targets specified but none are confirmed in the capability graph.
-                    # Warn but proceed — the capability graph may not have registered
-                    # these executors yet (e.g. direct-connected devices not yet assimilated).
+                    # PR-1 P0 Capability-Aware Scheduling Closure:
+                    # Targets specified but NONE are confirmed in the capability
+                    # graph.  This is a capability mismatch — the explicit
+                    # device_id(s) cannot serve the requested capabilities.
+                    # Controlled decision semantics:
+                    #   1. Fallback: use the routable alternatives from the
+                    #      capability graph (_routable already populated).
+                    #   2. Reject: if no routable alternatives, return a
+                    #      structured CAPABILITY_MISMATCH error.
+                    # Neither path silently bypasses capability verification.
+                    _fallback_targets = [e.node_id for e in _routable if hasattr(e, "node_id")]
+                    if _fallback_targets:
+                        logger.warning(
+                            "route_envelope [PR-1-P0 capability-mismatch/fallback]: "
+                            "target(s) %s not confirmed in capability graph for "
+                            "caps=%s; falling back to capable alternative(s) %s",
+                            _current_targets,
+                            _cap_query_caps,
+                            _fallback_targets,
+                        )
+                        _cap_confirmed_targets = _fallback_targets
+                        _cap_unconfirmed_targets = _current_targets
+                        envelope = envelope.model_copy(update={"targets": _fallback_targets})
+                        envelope = envelope.model_copy(
+                            update={
+                                "metadata": {
+                                    **(envelope.metadata or {}),
+                                    "capability_mismatch_override": True,
+                                    "original_targets": _current_targets,
+                                    "fallback_reason": "capability_mismatch",
+                                }
+                            }
+                        )
+                    else:
+                        logger.warning(
+                            "route_envelope [PR-1-P0 capability-mismatch/reject]: "
+                            "target(s) %s not confirmed in capability graph for "
+                            "caps=%s and no capable alternatives found; "
+                            "rejecting dispatch",
+                            _current_targets,
+                            _cap_query_caps,
+                        )
+                        _cap_unconfirmed_targets = _current_targets
+                        _t0_val = locals().get("_t0_val") or 0.0
+                        return {
+                            "request_id": envelope.task_id,
+                            "task_id": envelope.task_id,
+                            "trace_id": envelope.trace_id,
+                            "command_id": (envelope.metadata or {}).get(
+                                "command_id", envelope.task_id
+                            ),
+                            "device_id": _current_targets[0] if _current_targets else "",
+                            "command": envelope.tool_name,
+                            "via": "command_router",
+                            "success": False,
+                            "result": None,
+                            "error_code": GatewayErrorCode.CAPABILITY_MISMATCH.value,
+                            "error_message": (
+                                f"Target device(s) {_current_targets} do not satisfy "
+                                f"required capabilities {_cap_query_caps} and no "
+                                f"capable alternatives are available"
+                            ),
+                            "latency_ms": 0.0,
+                        }
+            elif _cap_query_caps and not _routable:
+                # PR-1 P0 Capability-Aware Scheduling Closure:
+                # The capability graph returned ZERO capable executors for the
+                # requested capabilities AND the envelope has explicit targets.
+                # When explicit targets are present, this is a capability mismatch
+                # with no fallback — reject with a structured error rather than
+                # silently proceeding.
+                # When there are no explicit targets (selection was left to
+                # automatic resolution), log and proceed so the fallback resolution
+                # path can still try (graceful degradation for target-less requests).
+                _current_targets_for_empty = list(envelope.targets)
+                if _current_targets_for_empty:
                     logger.warning(
-                        "route_envelope [GAP-512-004]: target(s) %s not confirmed in "
-                        "capability graph for caps=%s; proceeding with original targets "
-                        "(assimilate devices to close this gap)",
-                        _current_targets,
+                        "route_envelope [PR-1-P0 capability-mismatch/reject]: "
+                        "capability graph has no executors for caps=%s and "
+                        "explicit target(s) %s cannot be verified; "
+                        "rejecting dispatch",
+                        _cap_query_caps,
+                        _current_targets_for_empty,
+                    )
+                    _cap_unconfirmed_targets = _current_targets_for_empty
+                    return {
+                        "request_id": envelope.task_id,
+                        "task_id": envelope.task_id,
+                        "trace_id": envelope.trace_id,
+                        "command_id": (envelope.metadata or {}).get(
+                            "command_id", envelope.task_id
+                        ),
+                        "device_id": _current_targets_for_empty[0] if _current_targets_for_empty else "",
+                        "command": envelope.tool_name,
+                        "via": "command_router",
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.CAPABILITY_MISMATCH.value,
+                        "error_message": (
+                            f"No executor found in capability graph for capabilities "
+                            f"{_cap_query_caps}; target device(s) "
+                            f"{_current_targets_for_empty} cannot be verified"
+                        ),
+                        "latency_ms": 0.0,
+                    }
+                else:
+                    logger.debug(
+                        "route_envelope: capability graph returned no executors for caps=%s; "
+                        "proceeding with existing targets (no explicit target, graceful degradation)",
                         _cap_query_caps,
                     )
-            elif _cap_query_caps and not _routable:
-                logger.debug(
-                    "route_envelope: capability graph returned no executors for caps=%s; "
-                    "proceeding with existing targets",
-                    _cap_query_caps,
-                )
 
             # ── Canonical path observability ─────────────────────────────────
             _target_list = list(envelope.targets)
