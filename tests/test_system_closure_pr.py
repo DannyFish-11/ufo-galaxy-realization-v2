@@ -312,6 +312,8 @@ class TestUnifiedLLMRouterPrimary:
         except Exception as exc:
             pytest.skip(f"OpenClawd unavailable: {exc}")
 
+        # Use object.__new__ to bypass OpenClawd.__init__ dependencies;
+        # _get_router() only requires self._router to be set to None.
         oc = object.__new__(OpenClawd)
         oc._router = None
 
@@ -333,6 +335,8 @@ class TestUnifiedLLMRouterPrimary:
         except Exception as exc:
             pytest.skip(f"OpenClawd unavailable: {exc}")
 
+        # Use object.__new__ to bypass OpenClawd.__init__ dependencies;
+        # _get_router() only requires self._router to be set to None.
         oc = object.__new__(OpenClawd)
         oc._router = None
 
@@ -363,8 +367,9 @@ class TestUnifiedLLMRouterPrimary:
             else:
                 sys.modules["core.multi_llm_router"] = original_multi
 
-        # Result should be the multi router (or None if graceful fail-open)
-        assert result is mock_multi_router or result is None
+        # When UnifiedLLMRouter raises, _get_router() must fall back to
+        # MultiLLMRouter's get_llm_router() and return mock_multi_router.
+        assert result is mock_multi_router
 
     def test_get_router_returns_cached_instance(self):
         """_get_router() returns same instance on subsequent calls."""
@@ -374,6 +379,8 @@ class TestUnifiedLLMRouterPrimary:
         except Exception as exc:
             pytest.skip(f"Dependencies unavailable: {exc}")
 
+        # Use object.__new__ to bypass OpenClawd.__init__ dependencies;
+        # _get_router() only requires self._router to be set to None.
         oc = object.__new__(OpenClawd)
         oc._router = None
 

@@ -1358,7 +1358,10 @@ class CommandRouter:
                 if _pool_selected:
                     _update: Dict[str, Any] = {"targets": [_pool_selected]}
                     if _cap_graph_fallbacks:
-                        _merged_meta = dict(envelope.metadata or {})
+                        # Use _early_meta as base to preserve any updates made
+                        # during capability graph selection (e.g. existing fallbacks
+                        # already stamped into _early_meta at line above).
+                        _merged_meta = dict(_early_meta)
                         _merged_meta["_capability_graph_fallbacks"] = _cap_graph_fallbacks
                         _update["metadata"] = _merged_meta
                     envelope = envelope.model_copy(update=_update)
@@ -2915,11 +2918,12 @@ class CommandRouter:
                 return result
 
         # ── Async security interceptor HITL gate ─────────────────────────────
-        # This gate is only reached when _hitl_approved is True (early gate above
-        # handles the non-approved case by returning immediately).  The interceptor
-        # provides additional policy enforcement (e.g., time-bounded approval windows)
-        # for contexts where pre-approval tokens are managed externally.
-        if self._is_high_risk_command(command) and not payload.get("_hitl_approved"):
+        # This gate runs ONLY for high-risk commands that have already passed the
+        # fast-path gate above (i.e., _hitl_approved=True was provided).
+        # It provides additional policy enforcement via an external interceptor
+        # (e.g., time-bounded approval windows managed by a security service).
+        # If the interceptor is unavailable the gate degrades gracefully (fail-open).
+        if self._is_high_risk_command(command) and payload.get("_hitl_approved") is True:
             try:
                 from core.control_plane._globals import get_security_interceptor
                 from core.control_plane.security_interceptor import (
