@@ -5,11 +5,18 @@
 >
 > 审查依据：基于两个仓库的真实代码，不以文档为主要依据。
 >
-> 生成日期：2026-04-24
+> 最新综合审查日期：2026-04-25（见下方主审查报告）  
+> 前版分项审查日期：2026-04-24
 
 ---
 
-## 文件清单
+## 主审查报告（推荐阅读）
+
+| 文件 | 内容 |
+|------|------|
+| **[COMPREHENSIVE_JOINT_REVIEW.md](./COMPREHENSIVE_JOINT_REVIEW.md)** | **【主报告】更系统、更联合、更完整的双仓系统认知与综合审查。覆盖所有层次：transport/ingress、runtime lifecycle、handoff/takeover、delegation、continuity/recovery、offline queue、observability/audit、truth/reconciliation、capability/readiness gate、task execution、memory backflow。** |
+
+## 分项审查文档（2026-04-24 版本，仍有参考价值）
 
 | 文件 | 内容 |
 |------|------|
