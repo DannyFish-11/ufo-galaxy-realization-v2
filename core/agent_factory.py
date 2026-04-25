@@ -965,6 +965,15 @@ class AgentFactory:
 
             for iteration in range(max_react_iterations):
                 async def _llm_call():
+                    # PR-3: Use chat_with_tools() which is defined on both
+                    # UnifiedLLMRouter and MultiLLMRouter, ensuring the unified
+                    # policy layer is applied regardless of which router type is held.
+                    if hasattr(self.llm_router, "chat_with_tools"):
+                        return await self.llm_router.chat_with_tools(
+                            messages=messages,
+                            tools=tools if tools else None,
+                            task_type="agent_control",
+                        )
                     return await self.llm_router.chat(
                         messages=messages,
                         tools=tools if tools else None,

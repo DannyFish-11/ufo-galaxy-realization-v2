@@ -3,14 +3,48 @@ core/unified/llm_router.py
 ===========================
 Galaxy 系统统一 LLM 路由器入口（单例门面）。
 
+PR-3 Provider-Routing-Closure 扩展：
+  - 主编排层唯一合法模型访问入口（OpenClawd 及所有内部路径必须经由此处）
+  - chat_with_tools() — 工具感知聊天统一入口（替代直接调用 MultiLLMRouter.chat()）
+  - compute_complexity_vector() — 复杂度分析代理（避免主链穿透访问 _backend）
+  - get_execution_backend() — 暴露底层 MultiLLMRouter，仅限极少数必要内部调用
+
 Block-6 扩展：
   - 策略驱动路由（config/llm_routing_policy.yaml）
   - 路由遥测（成功率、延迟、fallback 率、成本）
   - 成本预算 / SLO 阈值执行（超限优雅降级）
 
+Provider 层级（PR-3 明确）：
+  UnifiedLLMRouter (本模块)          ← 唯一策略 + 遥测入口
+    └─ MultiLLMRouter (_backend)     ← 执行层：provider 选择、故障转移
+         ├─ OpenAI / Claude / Gemini ← 远程 API provider
+         ├─ DeepSeek / Mistral / Groq ← 远程 API provider
+         ├─ Ollama                    ← Local LLM provider（已纳入策略层治理）
+         └─ OneAPI                    ← 聚合 / 代理 provider
+
+Local VLM / multimodal provider 当前作为扩展能力（非主链），
+通过 MultimodalBus 在 OpenClawd 感知层接入，不经由此路由器，
+角色已在 core/openclawd.py 中明确为"host-perception 扩展层"。
+
 委托 core.multi_llm_router.MultiLLMRouter 处理实际的模型路由，
 提供强类型接口（LLMRequest / LLMResponse）和结构化日志。
 """
+
+# PR-3: Unified provider routing closure authority sentinel.
+UNIFIED_LLM_ROUTER_AUTHORITY: str = (
+    "UNIFIED_LLM_ROUTER::PR3_PROVIDER_ROUTING_CLOSURE: "
+    "core/unified/llm_router.py (UnifiedLLMRouter) is the sole legitimate "
+    "model-access entry point for the main orchestration layer (OpenClawd "
+    "and all paths originating from it).  Direct calls to "
+    "core.multi_llm_router.get_llm_router() from the orchestration layer "
+    "are prohibited; use self._get_router() / get_unified_llm_router() "
+    "and call chat_with_tools() / chat_raw() / chat() through the unified "
+    "router.  MultiLLMRouter is the execution backend; it is not a peer "
+    "entry point.  Local LLM (Ollama) is governed by the unified policy "
+    "layer as a registered backend provider.  Local VLM / multimodal "
+    "providers are extension-layer capabilities (non-main-chain), not "
+    "governed by this router.  Closes PR-3."
+)
 
 from __future__ import annotations
 
@@ -660,6 +694,145 @@ class UnifiedLLMRouter:
             model=llm_resp.model,
             usage=llm_resp.usage,
         )
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        task_type: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        工具感知聊天统一入口（PR-3 provider routing closure）。
+
+        接受与 MultiLLMRouter.chat() 相同的关键字参数，通过统一策略层和
+        遥测层透明委派到 _backend.chat()，返回 MultiLLMRouter.LLMResponse。
+
+        这是主编排层（OpenClawd / AgentFactory / _react_loop 等）调用带工具
+        的 LLM 时应使用的**唯一合法入口**，以确保所有调用都经过统一路由策略和
+        遥测记录，不可绕过。
+
+        设计原则：
+        - 统一策略层负责决定**首选 provider**（来自 llm_routing_policy.yaml 或默认偏好）
+        - 执行层（MultiLLMRouter._backend）负责**故障转移**（auto_failover=True 默认行为）
+        - 避免在统一层和执行层之间出现双重 fallback 循环
+
+        Args:
+            messages:     对话消息列表
+            task_type:    任务类型字符串（与 MultiLLMRouter.TaskType 值对齐）
+            provider:     强制指定提供商（可选，覆盖策略选择）
+            model:        强制指定模型名（可选）
+            tools:        工具函数定义列表（OpenAI function-calling 格式）
+            temperature:  采样温度
+            max_tokens:   最大生成 token 数
+            **kwargs:     其余参数透传给 _backend.chat()
+
+        Returns:
+            MultiLLMRouter.LLMResponse  —— 保持与既有调用方的向后兼容。
+
+        Raises:
+            NoAvailableProviderError: 没有可用后端。
+        """
+        if self._backend is None:
+            raise NoAvailableProviderError(task_type=task_type)
+
+        # 应用策略层：获取首选 provider（统一策略层职责）
+        task_type_str = task_type or "general"
+        _provider_order, _slo = self._get_provider_order(
+            task_type_str,
+            preferred_provider=provider,
+        )
+        # 取策略层最优先 provider；若无策略顺序则使用调用方明确指定的（可为 None）
+        _effective_provider = _provider_order[0] if _provider_order else provider
+
+        start = time.monotonic()
+        try:
+            # 执行层（MultiLLMRouter）负责 provider 内部故障转移（auto_failover 默认 True）
+            result = await self._backend.chat(
+                messages=messages,
+                task_type=task_type_str,
+                provider=_effective_provider,
+                model=model,
+                tools=tools,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs,
+            )
+            latency_ms = (time.monotonic() - start) * 1000
+            _actual_provider = getattr(result, "provider", _effective_provider or "unknown")
+            is_fallback = bool(_effective_provider and _actual_provider != _effective_provider)
+            self._telemetry.record(
+                provider=_actual_provider,
+                success=True,
+                latency_ms=latency_ms,
+                is_fallback=is_fallback,
+            )
+            logger.info(
+                "chat_with_tools completed",
+                extra={
+                    "event": "chat_with_tools_done",
+                    "task_type": task_type_str,
+                    "preferred_provider": _effective_provider,
+                    "actual_provider": _actual_provider,
+                    "model": getattr(result, "model", "unknown"),
+                    "latency_ms": round(latency_ms, 2),
+                    "is_fallback": is_fallback,
+                    "has_tools": bool(tools),
+                },
+            )
+            return result
+        except Exception as exc:
+            latency_ms = (time.monotonic() - start) * 1000
+            self._telemetry.record(
+                _effective_provider or "unknown",
+                success=False,
+                latency_ms=latency_ms,
+            )
+            raise
+
+    def compute_complexity_vector(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
+        """
+        任务复杂度向量计算（PR-3 统一入口代理）。
+
+        委派到 _backend._compute_complexity_vector()（若可用），否则返回
+        一个静态默认 ComplexityVector（中等复杂度）。
+
+        统一层提供此方法，使得调用方无需直接访问 _backend 来计算复杂度，
+        从而避免主编排层内部出现 `router._backend._compute_complexity_vector()`
+        等穿透性调用。
+        """
+        if self._backend is not None and hasattr(self._backend, "_compute_complexity_vector"):
+            return self._backend._compute_complexity_vector(messages, tools)
+        # 降级：无后端时返回中等复杂度占位对象
+        try:
+            from core.schemas.routing import ComplexityVector
+            return ComplexityVector(
+                context_length=0.5,
+                logic_depth=0.5,
+                domain_expertise=0.5,
+                precision_requirement=0.5,
+                tool_needs=0.5,
+            )
+        except Exception:
+            return None
+
+    def get_execution_backend(self) -> Any:
+        """
+        返回底层执行后端（MultiLLMRouter）。
+
+        仅用于极少数需要直接访问执行层（如复杂度分析、断路器状态检查等）
+        的内部调用。主编排层的模型访问必须通过 chat_with_tools() / chat_raw()
+        / chat() 进行，而不是直接调用 _backend.chat()。
+        """
+        return self._backend
 
 
 # ============================================================================

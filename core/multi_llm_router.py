@@ -91,7 +91,27 @@ class LLMResponse:
 
 # ───────────────────── 路由策略 ─────────────────────
 
+# PR-3: Local LLM provider role clarification.
+# Ollama is a first-class local provider registered in the unified policy
+# layer via MultiLLMRouter._discover_providers().  It participates in the
+# provider selection logic when OLLAMA_URL is configured.  Its role in the
+# routing preferences is as a low-priority fallback for GENERAL tasks,
+# reflecting that local models typically have lower capability ceilings than
+# remote API providers but do not require network access or API keys.
+# Local VLM / multimodal providers (e.g. LLaVA served via Ollama) are
+# NOT governed by this router; they are extension-layer capabilities handled
+# via core/multimodal/* and are not part of the main-chain model supply.
+LOCAL_LLM_PROVIDER_ROLE: str = (
+    "MULTI_LLM_ROUTER::LOCAL_LLM_PROVIDER_ROLE_PR3: "
+    "ollama is a registered local LLM provider in the unified routing policy "
+    "layer.  It is eligible for GENERAL task fallback when OLLAMA_URL is set. "
+    "Local VLM / multimodal providers are extension-layer capabilities, "
+    "NOT governed by this router.  Closes PR-3 local-provider role clarity."
+)
+
 # 任务类型 → 提供商优先级
+# Ollama is placed at the end of GENERAL preferences as a local-last fallback.
+# Remote API providers are preferred for higher-quality results.
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     TaskType.REASONING:      ["anthropic", "openai", "google", "deepseek", "xai"],
     TaskType.FAST_RESPONSE:  ["deepseek", "groq", "google", "openai", "moonshot"],
@@ -100,7 +120,7 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     TaskType.ANALYSIS:       ["anthropic", "openai", "google", "perplexity", "deepseek"],
     TaskType.PLANNING:       ["anthropic", "openai", "xai", "deepseek"],
     TaskType.AGENT_CONTROL:  ["anthropic", "openai", "deepseek"],
-    TaskType.GENERAL:        ["openai", "anthropic", "deepseek", "google"],
+    TaskType.GENERAL:        ["openai", "anthropic", "deepseek", "google", "ollama"],
 }
 
 # 提供商 → 推荐模型
@@ -1740,6 +1760,38 @@ class MultiLLMRouter:
                 "completion_tokens": resp.output_tokens,
             },
         }, resp.model)
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict],
+        task_type: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        tools: Optional[List[Dict]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        **kwargs,
+    ) -> LLMResponse:
+        """
+        工具感知聊天统一入口别名（PR-3 向后兼容）。
+
+        与 UnifiedLLMRouter.chat_with_tools() 签名对齐，使调用方无论持有
+        UnifiedLLMRouter 还是 MultiLLMRouter（降级场景）都可通过同一方法名
+        发起工具感知聊天请求，无需在调用方做类型判断。
+
+        直接委派到 self.chat()，保持与现有路由逻辑（provider 选择、故障转移）
+        完全一致。
+        """
+        return await self.chat(
+            messages=messages,
+            task_type=task_type,
+            provider=provider,
+            model=model,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
 
     async def refresh_providers(self) -> Dict[str, Any]:
         """热刷新所有提供商 — 重新从环境变量/CredentialVault 扫描 Key
