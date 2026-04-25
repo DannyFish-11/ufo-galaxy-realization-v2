@@ -1231,7 +1231,27 @@ class CommandRouter:
         except Exception as _acl_exc:
             logger.debug("ACL check skipped (fail-open): %s", _acl_exc)
 
-        # ── PR-5 Cap 3: inject TaskMemory context before execution ───────────
+        # ── HITL pre-check in route_envelope ──────────────────────────────────
+        # Detect high-risk tool names before dispatch; stamp _hitl_required in
+        # the result so callers know they must provide _hitl_approved in payload.
+        _tool_name_for_hitl = (envelope.tool_name or "").lower()
+        if self._is_high_risk_command(_tool_name_for_hitl):
+            _env_meta = envelope.metadata or {}
+            if not _env_meta.get("_hitl_approved"):
+                logger.debug(
+                    "route_envelope: high-risk tool_name=%r detected; "
+                    "_hitl_required will be stamped if not pre-approved",
+                    envelope.tool_name,
+                )
+                # stamp _hitl_required into metadata so downstream can detect it
+                envelope = envelope.model_copy(
+                    update={
+                        "metadata": {
+                            **_env_meta,
+                            "_hitl_required": True,
+                        }
+                    }
+                )
         try:
             from core.task_memory import get_task_memory
 
@@ -1276,26 +1296,75 @@ class CommandRouter:
 
                 _pool_selected: Optional[str] = None
                 if _caps_for_pool is not None:
+                    # PR-CC: Try capability_graph_selection first (scoring-aware).
+                    _cap_graph_selected: Optional[str] = None
+                    _cap_graph_fallbacks: List[str] = []
                     try:
-                        from core.device_pool_manager import get_device_pool_manager
+                        from core.capability_graph_selection import (
+                            select_best_provider as _cgraph_best,
+                            select_fallback_providers as _cgraph_fallback,
+                        )
 
-                        _pool_selected = get_device_pool_manager().select_device(
+                        _cgraph_record = _cgraph_best(required_capabilities=_caps_for_pool)
+                        if _cgraph_record is not None:
+                            _cap_graph_selected = getattr(_cgraph_record, "node_id", None)
+                            if _cap_graph_selected:
+                                logger.debug(
+                                    "PR-CC: capability_graph_selection selected %s for caps=%s",
+                                    _cap_graph_selected,
+                                    _caps_for_pool,
+                                )
+                        _cgraph_fb_records = _cgraph_fallback(
                             required_capabilities=_caps_for_pool,
+                            exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
                         )
-                        if _pool_selected:
-                            logger.debug(
-                                "PR-3: DevicePoolManager selected %s for caps=%s",
-                                _pool_selected,
-                                _caps_for_pool,
+                        _cap_graph_fallbacks = [
+                            getattr(r, "node_id", None)
+                            for r in _cgraph_fb_records
+                            if getattr(r, "node_id", None)
+                        ]
+                    except Exception as _cgraph_exc:
+                        logger.debug(
+                            "PR-CC: capability_graph_selection unavailable (fail-open): %s",
+                            _cgraph_exc,
+                        )
+
+                    if _cap_graph_selected:
+                        _pool_selected = _cap_graph_selected
+                        # Store fallback candidates in envelope metadata for retry logic.
+                        if _cap_graph_fallbacks:
+                            _early_meta = dict(_early_meta)
+                            _early_meta["_capability_graph_fallbacks"] = _cap_graph_fallbacks
+                    else:
+                        # Fallback: DevicePoolManager
+                        try:
+                            from core.device_pool_manager import get_device_pool_manager
+
+                            _pool_selected = get_device_pool_manager().select_device(
+                                required_capabilities=_caps_for_pool,
                             )
-                    except Exception as _pool_exc:
-                        logger.warning(
-                            "PR-3: DevicePoolManager.select_device failed (fail-open): %s",
-                            _pool_exc,
-                        )
+                            if _pool_selected:
+                                logger.debug(
+                                    "PR-3: DevicePoolManager selected %s for caps=%s",
+                                    _pool_selected,
+                                    _caps_for_pool,
+                                )
+                        except Exception as _pool_exc:
+                            logger.warning(
+                                "PR-3: DevicePoolManager.select_device failed (fail-open): %s",
+                                _pool_exc,
+                            )
 
                 if _pool_selected:
-                    envelope = envelope.model_copy(update={"targets": [_pool_selected]})
+                    _update: Dict[str, Any] = {"targets": [_pool_selected]}
+                    if _cap_graph_fallbacks:
+                        # Use _early_meta as base to preserve any updates made
+                        # during capability graph selection (e.g. existing fallbacks
+                        # already stamped into _early_meta at line above).
+                        _merged_meta = dict(_early_meta)
+                        _merged_meta["_capability_graph_fallbacks"] = _cap_graph_fallbacks
+                        _update["metadata"] = _merged_meta
+                    envelope = envelope.model_copy(update=_update)
                 else:
                     return {
                         "request_id": envelope.task_id,
@@ -2804,8 +2873,57 @@ class CommandRouter:
         except Exception:
             pass
 
-        # ── Phase 2: HITL gate for high-risk commands ────────────────────────
+        # ── Early HITL gate: _hitl_approved payload flag ─────────────────────
+        # Fast-path check: block high-risk commands that lack pre-approval.
+        # If payload carries _hitl_approved=True, emit an approval audit event
+        # and skip the full interceptor.  Otherwise return HITL_APPROVAL_REQUIRED
+        # immediately so callers know they must obtain approval first.
         if self._is_high_risk_command(command):
+            if payload.get("_hitl_approved") is True:
+                self._emit_audit(
+                    "HITL_PRE_APPROVED",
+                    trace_id=trace_id,
+                    task_id=task_id,
+                    device_id=device_id,
+                    message=(
+                        f"HITL pre-approved via payload flag for high-risk command '{command}'"
+                    ),
+                    payload={"command": command},
+                )
+            else:
+                latency_ms = (time.monotonic() - t0) * 1000
+                self._emit_audit(
+                    "HITL_REQUIRED",
+                    trace_id=trace_id,
+                    task_id=task_id,
+                    device_id=device_id,
+                    message=(
+                        f"HITL approval required for high-risk command '{command}'"
+                    ),
+                    payload={"command": command},
+                )
+                result = {
+                    **trace_base,
+                    "success": False,
+                    "result": None,
+                    "error_code": "HITL_APPROVAL_REQUIRED",
+                    "error_message": (
+                        f"High-risk command '{command}' requires HITL approval. "
+                        "Include _hitl_approved=True in payload after obtaining approval."
+                    ),
+                    "requires_hitl": True,
+                    "latency_ms": round(latency_ms, 1),
+                }
+                _get_gateway_trace_store().record(result)
+                return result
+
+        # ── Async security interceptor HITL gate ─────────────────────────────
+        # This gate runs ONLY for high-risk commands that have already passed the
+        # fast-path gate above (i.e., _hitl_approved=True was provided).
+        # It provides additional policy enforcement via an external interceptor
+        # (e.g., time-bounded approval windows managed by a security service).
+        # If the interceptor is unavailable the gate degrades gracefully (fail-open).
+        if self._is_high_risk_command(command) and payload.get("_hitl_approved") is True:
             try:
                 from core.control_plane._globals import get_security_interceptor
                 from core.control_plane.security_interceptor import (

@@ -157,6 +157,16 @@ HANDOFF_V2_RESPONSE_INGRESS_IS_ADDITIVE_POLICY: str = (
     "path that sits alongside the existing delegated_execution_signal path."
 )
 
+COMPLETION_RESULT_DRIVEN_POLICY: str = (
+    "POLICY::COMPLETION_RESULT_DRIVEN: "
+    "All terminal handoff responses (result / failure / timeout / cancelled) "
+    "ingested by ingest_android_handoff_response MUST also be forwarded to "
+    "CanonicalCompletionIngress.notify() so that asyncio.Future awaiters "
+    "registered via register_pending_dispatch() are resolved.  This policy "
+    "ensures result-to-orchestration closure without requiring callers to "
+    "manually wire up the completion ingress."
+)
+
 
 # ---------------------------------------------------------------------------
 # HandoffV2ResponseRuntime
@@ -431,6 +441,18 @@ def ingest_android_handoff_response(
             exc,
         )
 
+    # COMPLETION_RESULT_DRIVEN_POLICY: forward terminal responses to
+    # CanonicalCompletionIngress so asyncio.Future awaiters are resolved.
+    if is_terminal:
+        try:
+            from core.canonical_completion_ingress import get_canonical_completion_ingress
+            get_canonical_completion_ingress().notify(envelope)
+        except Exception as _cci_exc:
+            logger.debug(
+                "handoff_v2 ingress: canonical_completion_ingress.notify failed (non-fatal): %s",
+                _cci_exc,
+            )
+
     return HandoffV2ResponseOutcome(
         envelope=envelope,
         was_correlated=True,
@@ -451,6 +473,7 @@ __all__ = [
     "INGRESS_IS_EXCEPTION_SAFE_POLICY",
     "RESPONSE_ENVELOPE_IS_ALWAYS_RETURNED_POLICY",
     "HANDOFF_V2_RESPONSE_INGRESS_IS_ADDITIVE_POLICY",
+    "COMPLETION_RESULT_DRIVEN_POLICY",
     # Runtime
     "HandoffV2ResponseRuntime",
     "get_handoff_v2_response_runtime",
