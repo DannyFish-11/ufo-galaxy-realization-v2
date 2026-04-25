@@ -887,6 +887,43 @@ from core.flow_aware_result_convergence import (  # noqa: E402
     build_flow_convergence_snapshot,
 )
 
+# PR-5 Final: Final Cleanup and Invariant Tightening.
+# Re-exported here so callers can reach the cleanup/guard API from
+# core.runtime without importing the module directly.
+from core.final_cleanup_invariant_tightening import (  # noqa: E402
+    FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY,
+    FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL,
+    NO_BYPASS_COMPLETION_INGRESS_POLICY,
+    NO_BYPASS_CAPABILITY_ROUTING_POLICY,
+    NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY,
+    NO_BYPASS_PROVIDER_ROUTING_POLICY,
+    NO_BYPASS_VALIDATION_GATE_POLICY,
+    SEMANTIC_CAPABILITY_TIER_POLICY,
+    LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY,
+    CANONICAL_COMPLETION_INGRESS_PATH,
+    CANONICAL_CAPABILITY_ROUTING_PATH,
+    CANONICAL_RUNTIME_TRUTH_INGRESS_PATH,
+    CANONICAL_PROVIDER_ROUTING_PATH,
+    CANONICAL_VALIDATION_GATE_PATH,
+    ClosureArea,
+    CapabilityTier as FinalCleanupCapabilityTier,
+    BypassGuardVerdict,
+    BypassGuardResult,
+    CapabilityTierRecord,
+    FinalCleanupPostureSnapshot,
+    BypassInvariantViolation,
+    assert_completion_ingress_is_canonical,
+    assert_capability_routing_is_canonical,
+    assert_runtime_truth_ingress_is_canonical,
+    assert_provider_routing_is_canonical,
+    assert_validation_gate_is_canonical,
+    get_capability_tier_registry,
+    get_capability_tier,
+    build_final_cleanup_posture_snapshot,
+    is_final_cleanup_posture_acceptable,
+    run_all_no_bypass_guards,
+)
+
 __all__ = [
     # PR-34: Target Runtime Local Takeover Path
     "TargetTakeoverHandler",
