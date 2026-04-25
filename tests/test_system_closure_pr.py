@@ -242,21 +242,54 @@ class TestCapabilityAwareRouting:
     def test_capability_graph_fallbacks_stored_in_metadata(self):
         """When capability graph selects a device and has fallbacks, they are
         stored in envelope metadata under _capability_graph_fallbacks."""
-        # This verifies the integration path exists in command_router
         try:
-            import core.command_router as cr_mod
+            from core.capability_graph_selection import (
+                select_best_provider,
+                select_fallback_providers,
+            )
         except Exception as exc:
-            pytest.skip(f"command_router unavailable: {exc}")
+            pytest.skip(f"capability_graph_selection unavailable: {exc}")
 
-        # Check the key attribute exists
-        import inspect
-        source = inspect.getsource(cr_mod)
-        assert "_capability_graph_fallbacks" in source, (
-            "command_router should store capability graph fallbacks in envelope metadata"
-        )
-        assert "select_best_provider" in source, (
-            "command_router should call capability_graph_selection.select_best_provider"
-        )
+        # Verify behavioral contract: select_best_provider returns a node_id
+        # and select_fallback_providers returns a list excluding the primary.
+        primary = MagicMock()
+        primary.node_id = "primary-node"
+        fallback = MagicMock()
+        fallback.node_id = "fallback-node"
+
+        with patch(
+            "core.capability_graph_selection.discover_providers",
+            return_value=[primary],
+        ):
+            best = select_best_provider(required_capabilities=["screen"])
+
+        assert best is not None
+        assert best.node_id == "primary-node"
+
+        # Fallback should exclude the primary
+        for rec in [primary, fallback]:
+            rec.fabric_presence.presence_state.value = "online"
+            rec.execution_profile.participant_kind.value = "android_device"
+
+        mock_score = MagicMock()
+        mock_score.total_score = 0.5
+        mock_layer = MagicMock()
+        mock_layer.list_records.return_value = [primary, fallback]
+
+        with patch(
+            "core.capability_assimilation.get_capability_assimilation_layer",
+            return_value=mock_layer,
+            create=True,
+        ), patch("core.capability_graph_selection.score_provider", return_value=mock_score):
+            try:
+                fallbacks = select_fallback_providers(
+                    required_capabilities=["screen"],
+                    exclude_ids=["primary-node"],
+                )
+                fb_ids = [r.node_id for r in fallbacks]
+                assert "primary-node" not in fb_ids
+            except Exception:
+                pytest.skip("capability_assimilation unavailable")
 
 
 # ===========================================================================

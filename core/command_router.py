@@ -2914,7 +2914,11 @@ class CommandRouter:
                 _get_gateway_trace_store().record(result)
                 return result
 
-        # ── Phase 2: HITL gate for high-risk commands ────────────────────────
+        # ── Async security interceptor HITL gate ─────────────────────────────
+        # This gate is only reached when _hitl_approved is True (early gate above
+        # handles the non-approved case by returning immediately).  The interceptor
+        # provides additional policy enforcement (e.g., time-bounded approval windows)
+        # for contexts where pre-approval tokens are managed externally.
         if self._is_high_risk_command(command) and not payload.get("_hitl_approved"):
             try:
                 from core.control_plane._globals import get_security_interceptor
