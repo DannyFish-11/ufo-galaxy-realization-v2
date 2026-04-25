@@ -3,9 +3,9 @@
 """
 tests/test_pr534_continuity_recovery_durability_closure.py
 ==========================================================
-PR-534 / PR-5 (post-533 dual-repo runtime-unification master plan, V2 side):
-Continuity Recovery and Offline Durability Closure — end-to-end validation
-test suite.
+PR-534 (test file number) / Package-5 (post-533 dual-repo runtime-unification
+master plan, V2 side): Continuity Recovery and Offline Durability Closure —
+end-to-end validation test suite.
 
 Problem addressed
 -----------------

@@ -3,8 +3,10 @@
 """
 core/recovery_durability_closure_validator.py
 =============================================
-PR-5 (post-533 dual-repo runtime-unification master plan, V2 side):
+Package-5 (post-533 dual-repo runtime-unification master plan, V2 side):
 Continuity Recovery and Offline Durability Closure Validator.
+
+Companion test file: tests/test_pr534_continuity_recovery_durability_closure.py
 
 Problem addressed
 -----------------
