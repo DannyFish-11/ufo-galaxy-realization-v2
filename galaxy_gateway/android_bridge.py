@@ -108,6 +108,18 @@ try:
 except ImportError:
     store_task_result = None  # type: ignore[assignment]
 
+# =============================================================================
+# PR-11-V2-takeover: Lifecycle coordinator — module-level reference so callers
+# can patch it in tests.  Used by send_takeover_request to record the
+# outbound request as a canonical orchestrated lifecycle event.
+# =============================================================================
+try:
+    from core.android_delegated_runtime_lifecycle_coordinator import (
+        get_lifecycle_coordinator as _get_lifecycle_coordinator,
+    )
+except ImportError:  # pragma: no cover
+    _get_lifecycle_coordinator = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -972,7 +984,28 @@ class AndroidBridge:
             takeover_id,
             trace_id,
         )
-        return await self.send_to_device(device_id, msg, wait_response=False)
+        result = await self.send_to_device(device_id, msg, wait_response=False)
+
+        # Notify the lifecycle coordinator so the takeover request is recorded
+        # as a canonical orchestrated lifecycle event (session state transition
+        # + audit) — not just a raw message send.
+        if _get_lifecycle_coordinator is not None:
+            try:
+                _ctx_task_id = task_context.get("task_id", "") if isinstance(task_context, dict) else ""
+                _get_lifecycle_coordinator().on_takeover_requested(
+                    session_id=session_id or "",
+                    takeover_id=takeover_id,
+                    device_id=device_id,
+                    task_id=_ctx_task_id,
+                    trace_id=trace_id or "",
+                )
+            except Exception as _exc:  # noqa: BLE001
+                logger.debug(
+                    "send_takeover_request: coordinator notification failed "
+                    "(non-fatal): takeover_id=%s exc=%s", takeover_id, _exc
+                )
+
+        return result
 
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
         """获取设备的传输/会话层缓存条目（transport cache view）."""
