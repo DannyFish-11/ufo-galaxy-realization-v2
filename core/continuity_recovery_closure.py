@@ -1220,5 +1220,3 @@ def run_recovery_closure_validation() -> RecoveryClosureReport:
     return get_recovery_closure_report()
 
 
-# Tuple type alias used in the recovery decision matrix definition
-from typing import Tuple  # noqa: E402 — needed after dataclass definitions

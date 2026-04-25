@@ -555,7 +555,7 @@ class OfflineQueueRecoveryBoundary:
         sorted_entries = sorted(valid_entries, key=lambda e: e.sequence)
 
         # 4. Deduplication by idempotency_key (first-wins)
-        seen_keys: set = set()
+        seen_keys: set[str] = set()
         for entry in sorted_entries:
             if entry.idempotency_key in seen_keys:
                 rec = OfflineQueueEntryRecord(

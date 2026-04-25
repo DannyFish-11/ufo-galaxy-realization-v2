@@ -506,8 +506,8 @@ class TestReplayOrderedFirstWins:
     def test_first_wins_across_all_sequences(self):
         b = _fresh_boundary()
         entries = [
-            _entry("shared_key", 5),   # higher sequence but inserted first (loses)
-            _entry("shared_key", 1),   # lower sequence — wins in sorted order
+            _entry("shared_key", 5),   # higher sequence; after sorting, appears second → rejected as duplicate
+            _entry("shared_key", 1),   # lower sequence; after sorting, appears first → accepted
         ]
         result = list(b.replay_ordered(entries))
         assert len(result) == 1
