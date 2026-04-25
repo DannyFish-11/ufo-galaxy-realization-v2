@@ -720,9 +720,11 @@ class TestHandoffEnvelopeV2RoundTrip:
     def test_J01_full_lifecycle_dispatch_ack_result(self):
         """Full round-trip: register → ack (callback fired, pending alive) → result (cleared, callback fired again).
 
-        Per ACK_DOES_NOT_CLEAR_PENDING_POLICY: ack invokes the registered callback
-        so callers can advance their lifecycle state machine, but the pending entry
-        is kept so the terminal response (result/failure) can still be correlated.
+        Per ACK_DOES_NOT_CLEAR_PENDING_POLICY (defined in
+        ``core/android_handoff_v2_response_ingress.py``): ack invokes the
+        registered callback so callers can advance their lifecycle state machine,
+        but the pending registry entry is kept so the terminal response
+        (result/failure) can still be correlated.
         """
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
@@ -1106,10 +1108,16 @@ class TestAndroidArtifactReadinessGateVisibility:
     def test_U01_readiness_assessment_truth_is_local_only(self):
         """readiness_assessment Android truth must be advisory / local_only per policy.
 
-        The truth_kind is determined by the first matching alias from
-        _TRUTH_KIND_FIELD_ALIASES = ("truth_kind", "signal_kind", "kind", "type", ...).
-        To reach the readiness_assessment branch the message must carry
-        ``truth_kind`` or ``signal_kind`` = "readiness_assessment".
+        Validates ``READINESS_ASSESSMENT_IS_ADVISORY_POLICY`` (defined in
+        ``core/android_participant_truth_ingress.py``): readiness_assessment is
+        device-scope advisory only; it does not change V2 dispatch eligibility
+        gates and does not write FlowTruthDecisionArtifacts.
+
+        Note: truth_kind is determined by _TRUTH_KIND_FIELD_ALIASES order:
+        ("truth_kind", "signal_kind", "kind", "type", ...). The message must
+        carry ``truth_kind`` or ``signal_kind`` set to "readiness_assessment" to
+        reach the advisory branch (using ``type`` alone would resolve to
+        "reconciliation_signal" kind from the message type field).
         """
         msg = {
             "type": "reconciliation_signal",
@@ -1157,21 +1165,20 @@ class TestAndroidArtifactReadinessGateVisibility:
     def test_V04_android_truth_ingress_path_to_gate_is_documented(self):
         """Evidence that the Android → V2 truth ingress → readiness gate chain exists.
 
-        This test documents the current path completeness:
-        1. Android emits reconciliation_signal (authoritative kinds: cancel/failure/result)
-        2. V2 gateway handler receives it → coordinator.on_reconciliation_signal()
-        3. Coordinator calls ingest_android_participant_truth_message()
-        4. Authoritative truth kinds write FlowTruthDecisionArtifacts via
-           FlowTruthAlignmentRuntime (when flow_level_truth_ownership is available)
-        5. DelegatedFlowReadinessGate._evaluate_truth_ownership() reads the
-           FlowTruthAlignmentRuntime snapshot
-        6. If total_decisions > 0 and no quarantines → dimension status = ready
+        This test proves the import chain from truth ingress to readiness gate is
+        intact and that the ``truth_ownership`` dimension appears in every gate
+        report. Architectural details are in:
+        ``docs/CROSS_REPO_SIGNAL_CLOSURE_VALIDATION_MATRIX.md`` §5.
 
-        Current gap (documented, not blocking):
-        - readiness_assessment / runtime_state / session_snapshot remain advisory
-          and do NOT contribute FlowTruthDecisionArtifacts.
-        - The truth_ownership dimension requires authoritative terminal signals
-          (cancel/failure/result) to leave 'unknown' status.
+        Current chain:
+        1. Android emits reconciliation_signal (authoritative kinds: cancel/failure/result)
+        2. V2 gateway → coordinator.on_reconciliation_signal() → truth ingress
+        3. Authoritative kinds write FlowTruthDecisionArtifacts
+        4. DelegatedFlowReadinessGate._evaluate_truth_ownership() reads snapshot
+
+        Current gap (documented in validation matrix):
+        - readiness_assessment / runtime_state / session_snapshot are advisory;
+          they do NOT write FlowTruthDecisionArtifacts.
         """
         # Prove the path exists by importing each module in the chain
         from core.android_participant_truth_ingress import (

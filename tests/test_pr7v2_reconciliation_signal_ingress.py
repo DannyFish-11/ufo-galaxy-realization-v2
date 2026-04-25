@@ -243,8 +243,10 @@ class TestGroupD_Handler:
         The handler was refactored in PR-11-V2 to delegate all ingress / truth /
         state-reduction / audit logic to
         ``AndroidDelegatedRuntimeLifecycleCoordinator.on_reconciliation_signal()``.
-        This test verifies that the coordinator's ``on_reconciliation_signal``
-        method is called (which internally calls participant truth ingress).
+        This is a regression test ensuring the handler-to-coordinator delegation
+        remains intact after the PR-11-V2 refactoring: it verifies that the
+        coordinator's ``on_reconciliation_signal`` method is called (which
+        internally calls participant truth ingress).
         """
         bridge = MagicMock()
         websocket = MagicMock()

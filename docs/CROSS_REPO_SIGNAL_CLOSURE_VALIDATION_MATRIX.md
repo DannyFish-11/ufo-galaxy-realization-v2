@@ -64,7 +64,7 @@ Android RuntimeController
 
 | Gap | Severity | Notes |
 |-----|----------|-------|
-| `readiness_assessment` / `runtime_state` truth kinds are advisory | 📝 Known, by design | These kinds set `local_only=True` in truth ingress; they do **not** write `FlowTruthDecisionArtifacts` and therefore do not advance the `truth_ownership` readiness dimension. This is the documented policy (`READINESS_ASSESSMENT_IS_ADVISORY_POLICY`). Only authoritative terminal kinds (cancel/failure/result) feed the readiness gate's truth dimension. |
+| `readiness_assessment` / `runtime_state` truth kinds are advisory | 📝 Known, by design | These kinds set `local_only=True` in truth ingress; they do **not** write `FlowTruthDecisionArtifacts` and therefore do not advance the `truth_ownership` readiness dimension. This is the documented policy `READINESS_ASSESSMENT_IS_ADVISORY_POLICY` (defined in `core/android_participant_truth_ingress.py`). Only authoritative terminal kinds (cancel/failure/result) feed the readiness gate's truth dimension. |
 
 ---
 
@@ -231,7 +231,7 @@ Android evaluator produces readiness/acceptance/governance artifact
 
 | Gap | Severity | Path to Close |
 |-----|----------|---------------|
-| `readiness_assessment` / `runtime_state` do not feed `truth_ownership` gate | 📝 Known, by design | Per `READINESS_ASSESSMENT_IS_ADVISORY_POLICY`: these are device-scope advisory only. V2 admissibility chain remains authoritative. To close this gap for readiness artifacts, Android would need to emit a terminal/result truth kind carrying the evaluator outcome, or a dedicated protocol extension (e.g., a new truth kind for governance artifact upload). |
+| `readiness_assessment` / `runtime_state` do not feed `truth_ownership` gate | 📝 Known, by design | Per `READINESS_ASSESSMENT_IS_ADVISORY_POLICY` (defined in `core/android_participant_truth_ingress.py`): these are device-scope advisory only. V2 admissibility chain remains authoritative. To close this gap for readiness artifacts, Android would need to emit a terminal/result truth kind carrying the evaluator outcome, or a dedicated protocol extension (e.g., a new truth kind for governance artifact upload). |
 | `truth_ownership` dimension returns `unknown` when no alignment history | 📝 Expected on fresh start | `ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY` governs this — absence of signal is itself a readiness gap indicator. |
 
 ---
