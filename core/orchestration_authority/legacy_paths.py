@@ -1558,6 +1558,192 @@ _register(
         ),
     ),
 )
+# ---------------------------------------------------------------------------
+# PR-convergence: Enforce single authoritative path and default-off legacy
+# behavior.
+#
+# The following entries formalize the authority boundary for Android-side
+# compat/legacy participant signal ingress paths, and explicitly classify the
+# remaining compat_allowed and observation-only paths that were previously
+# unclassified in this registry.
+#
+# Key design decisions:
+#   1. Android participant truth ingress gate (ingest_android_participant_truth_message)
+#      is the sole canonical V2 write authority for Android-originated truth.
+#      All Android compat signals MUST pass through it; direct writes are blocked.
+#   2. Android delegated execution signal ingress (ingest_delegated_execution_signal)
+#      is the canonical ingress; the compat inference path (compat_extract_signal_kind)
+#      is bounded to pre-PR-16 clients only.
+#   3. Delegated flow acceptance gate and readiness gate are canonical surfaces;
+#      legacy dispatch paths must not bypass them.
+#   4. Audit / observation-only surfaces (AndroidDelegatedRuntimeAuditRecord,
+#      OperatorSurface, ReplayFoundation) are explicitly classified as
+#      non-authoritative so audit code cannot be mistaken for canonical state.
+# ---------------------------------------------------------------------------
+
+_register(
+    # ── Android participant truth ingress ─────────────────────────────────
+    LegacyPathEntry(
+        module_path=(
+            "core.android_participant_truth_ingress"
+            ".ingest_android_participant_truth_message"
+        ),
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "ingest_android_participant_truth_message() is the CANONICAL Android "
+            "participant truth ingress (PR-convergence).  "
+            "All Android-originated session/runtime/readiness truth MUST enter V2 "
+            "canonical state through this function.  "
+            "Direct writes from Android compat signals that bypass this gate are "
+            "BLOCKED by the PR-8 blocking gate."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Canonical Android truth ingress.  Sole write authority for "
+            "Android → V2 participant truth reconciliation.  "
+            "Android compat influence must pass this gate; direct bypass is blocked."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path=(
+            "core.android_participant_truth_ingress"
+            ".reconcile_android_participant_truth"
+        ),
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "reconcile_android_participant_truth() is the CANONICAL reconciliation "
+            "function for Android → V2 participant truth (PR-convergence).  "
+            "It is the sole V2 write authority for Android session/runtime truth.  "
+            "Do not call canonical-state writes from Android compat paths directly."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Canonical reconciler.  Closes TRUTH-005.  "
+            "Write authority for AndroidParticipantTruthKind reconciliation."
+        ),
+    ),
+    # ── Android delegated signal ingress ─────────────────────────────────
+    LegacyPathEntry(
+        module_path=(
+            "core.android_delegated_signal_ingress"
+            ".ingest_delegated_execution_signal"
+        ),
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "ingest_delegated_execution_signal() is the CANONICAL ingress for "
+            "delegated_execution_signal messages from Android (PR-convergence).  "
+            "Use this path for all post-PR-16 Android clients.  "
+            "The compat inference path (compat_extract_signal_kind) is bounded "
+            "to pre-PR-16 clients only and must not be the default path."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Canonical delegated execution signal ingress (post-PR-16).  "
+            "Delegates to reconcile_android_execution_signal(); no compat inference."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path=(
+            "core.android_execution_signal_reconciler"
+            ".compat_extract_signal_kind"
+        ),
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "compat_extract_signal_kind() is a LEGACY COMPAT INFERENCE PATH "
+            "(PR-convergence).  "
+            "It infers AndroidSignalKind from legacy message types (task_result, "
+            "task_end, goal_execution_result).  "
+            "Permitted only as a bounded fallback for pre-PR-16 Android clients.  "
+            "Post-PR-16 clients MUST emit delegated_execution_signal messages and "
+            "use ingest_delegated_execution_signal() as the canonical ingress.  "
+            "This path must not be the default ingress choice for new clients."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Compat inference fallback.  Default-off for post-PR-16 clients.  "
+            "Bounded to pre-PR-16 backward compat only."
+        ),
+    ),
+    # ── Delegated flow canonical gates ───────────────────────────────────
+    LegacyPathEntry(
+        module_path="core.delegated_flow_acceptance_gate.DelegatedFlowAcceptanceGate",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "DelegatedFlowAcceptanceGate is the CANONICAL delegated flow "
+            "accept/reject gate (PR-convergence).  "
+            "All delegated flow accept/reject decisions MUST pass through this gate.  "
+            "Legacy dispatch paths must not bypass it."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes="Canonical accept/reject gate for delegated execution flows.",
+    ),
+    LegacyPathEntry(
+        module_path="core.delegated_flow_readiness_gate.DelegatedFlowReadinessGate",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "DelegatedFlowReadinessGate is the CANONICAL readiness gate for "
+            "delegated flows (PR-convergence).  "
+            "Readiness verdicts from this gate are the sole authoritative readiness "
+            "input for delegated flows.  Legacy paths must not produce competing "
+            "readiness verdicts."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Canonical readiness gate.  Android artifact integration via "
+            "participant truth ingress (TRUTH-005)."
+        ),
+    ),
+    # ── Observation-only audit and operator surfaces ──────────────────────
+    LegacyPathEntry(
+        module_path="core.android_delegated_runtime_audit.AndroidDelegatedRuntimeAuditRecord",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "AndroidDelegatedRuntimeAuditRecord is an OBSERVATION-ONLY audit "
+            "surface (PR-convergence).  "
+            "It records lifecycle milestones for delegated Android runtime events.  "
+            "It MUST NOT write to canonical task truth, session truth, readiness "
+            "verdict, or delegated-flow state.  Audit records are artifacts, not "
+            "canonical state."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Observation-only audit record.  Non-authoritative.  "
+            "Must not be used as a canonical state write path."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.replay_foundation.ReplayFoundation",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "ReplayFoundation is an OBSERVATION-ONLY recovery foundation "
+            "(PR-convergence).  "
+            "It records canonical state transitions for audit and replay purposes.  "
+            "Non-authoritative in normal flow.  In recovery context, replay inputs "
+            "MUST be validated by the canonical acceptance gate before re-applying "
+            "state."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Observation-only replay/audit foundation.  "
+            "Replay inputs in recovery context must pass canonical acceptance gate."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.operator_surface.OperatorSurface",
+        status=LegacyPathStatus.ACTIVE,
+        recommendation=(
+            "OperatorSurface is an OBSERVATION-ONLY operator monitoring surface "
+            "(PR-convergence).  "
+            "It exposes canonical state for monitoring; it MUST NOT influence "
+            "routing, truth, or delegated-flow decisions."
+        ),
+        pr_guardrail_added="PR-convergence",
+        notes=(
+            "Observation-only operator surface.  Reads canonical state; does not write."
+        ),
+    ),
+)
+
 #
 # NOTE: This definition MUST remain at the end of the module, after ALL
 # _register() calls.  Moving it earlier would freeze the frozenset before

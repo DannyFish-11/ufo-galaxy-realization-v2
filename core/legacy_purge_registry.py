@@ -582,6 +582,95 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
     ),
 )
 
+# ── PR-convergence: Enforce single authoritative path and default-off legacy ──
+
+PURGE_REGISTRY = PURGE_REGISTRY + (
+    PurgeDecision(
+        asset_path=(
+            "core/canonical_authoritative_path_convergence.py"
+            "::CANONICAL_PATH_INVENTORY"
+        ),
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-convergence",
+        rationale=(
+            "PR-convergence establishes CANONICAL_PATH_INVENTORY as the single "
+            "machine-readable surface classifying every runtime path by its "
+            "authoritative role (canonical / compat_allowed / observation_only / "
+            "deprecated_live / fully_blocked).  "
+            "Prior PRs (PR-8 through PR-M) defined blocking machinery and legacy "
+            "registries but had no single module that proved the canonical path was "
+            "actually the default and that legacy paths were default-off.  "
+            "This entry records that the convergence inventory is now hardened and "
+            "verifiable by tests and operator tooling."
+        ),
+        canonical_replacement=(
+            "core/canonical_authoritative_path_convergence.py"
+            "  (CANONICAL_PATH_INVENTORY + enforce_canonical_selection)"
+        ),
+    ),
+    PurgeDecision(
+        asset_path=(
+            "core/canonical_authoritative_path_convergence.py"
+            "::DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY"
+        ),
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-convergence",
+        rationale=(
+            "PR-convergence introduces DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY and "
+            "is_legacy_default_off() as the formal machine-checkable gate for "
+            "default-off legacy behavior.  "
+            "Legacy paths classified as deprecated_live or fully_blocked in "
+            "CANONICAL_PATH_INVENTORY return True from is_legacy_default_off(), "
+            "proving they are not the default runtime choice."
+        ),
+        canonical_replacement=(
+            "core/canonical_authoritative_path_convergence.py::is_legacy_default_off()"
+        ),
+    ),
+    PurgeDecision(
+        asset_path=(
+            "core/canonical_authoritative_path_convergence.py"
+            "::ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY"
+        ),
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-convergence",
+        rationale=(
+            "PR-convergence formally documents and enforces the Android compat "
+            "influence boundary: all Android-originated compat/legacy participant "
+            "signals MUST pass through "
+            "core.android_participant_truth_ingress.ingest_android_participant_truth_message "
+            "before reaching V2 canonical state.  Direct writes from Android compat "
+            "signals bypassing this gate are blocked.  "
+            "This policy was implicit before PR-convergence; it is now machine-readable "
+            "and verifiable in tests."
+        ),
+        canonical_replacement=(
+            "core/android_participant_truth_ingress.py"
+            "::ingest_android_participant_truth_message()"
+        ),
+    ),
+    PurgeDecision(
+        asset_path=(
+            "core/orchestration_authority/legacy_paths.py"
+            "::PR-convergence entries"
+        ),
+        status=PurgeStatus.WRAPPER_HARDENED,
+        pr="PR-convergence",
+        rationale=(
+            "PR-convergence adds formal LEGACY_PATH_REGISTRY entries for: "
+            "(1) Android participant truth ingress canonical gate, "
+            "(2) Android delegated signal ingress canonical gate, "
+            "(3) compat_extract_signal_kind compat-allowed boundary, "
+            "(4) DelegatedFlowAcceptanceGate and DelegatedFlowReadinessGate canonical surfaces, "
+            "(5) observation-only audit surfaces (AndroidDelegatedRuntimeAuditRecord, "
+            "ReplayFoundation, OperatorSurface).  "
+            "These entries complete the registry classification so every path "
+            "that can reach a canonical surface has an explicit role record."
+        ),
+        canonical_replacement=None,
+    ),
+)
+
 # ---------------------------------------------------------------------------
 # Lookup helpers
 # ---------------------------------------------------------------------------
