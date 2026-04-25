@@ -64,7 +64,7 @@ Android RuntimeController
 
 | Gap | Severity | Notes |
 |-----|----------|-------|
-| `readiness_assessment` / `runtime_state` truth kinds are advisory | 📝 Known, by design | These kinds set `local_only=True` in truth ingress; they do **not** write `FlowTruthDecisionArtifacts` and therefore do not advance the `truth_ownership` readiness dimension. This is the documented policy `READINESS_ASSESSMENT_IS_ADVISORY_POLICY` (defined in `core/android_participant_truth_ingress.py`). Only authoritative terminal kinds (cancel/failure/result) feed the readiness gate's truth dimension. |
+| `readiness_assessment` / `runtime_state` truth kinds are advisory | 📝 Known, by design | These kinds set `local_only=True` in truth ingress; they do **not** write `FlowTruthDecisionArtifacts` and therefore do not advance the `truth_ownership` readiness dimension. This is the documented policy `READINESS_ASSESSMENT_IS_ADVISORY_POLICY`. The new `governance_artifact` truth kind (PR-4V2-GOV) is the canonical path for evaluator artifacts that need gate visibility; `readiness_assessment` remains advisory by design. |
 
 ---
 
@@ -198,6 +198,7 @@ Android evaluator produces readiness/acceptance/governance artifact
 | `failure` | ✅ Yes | ✅ Yes | ✅ Yes | ✅ CLOSED |
 | `result` (success) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ CLOSED |
 | `reconciliation_signal` kind | ✅ Yes | ✅ Yes | ✅ Yes | ✅ CLOSED |
+| `governance_artifact` kind | ✅ Yes | ✅ Yes (`align_and_record()`) | ✅ Yes (truth_ownership) | ✅ CLOSED (PR-4V2-GOV) |
 | `task_phase` | ✅ Yes | Depends on tracking record lookup | ⚠️ Indirect | ⚠️ Partial |
 | `session_snapshot` | ✅ Yes | No (session registry validation) | No (advisory) | 📝 Advisory only |
 | `readiness_assessment` | ✅ Yes (`local_only=True`) | No (advisory) | No (advisory) | 📝 Advisory / local-only |
@@ -216,6 +217,11 @@ Android evaluator produces readiness/acceptance/governance artifact
 | `test_V02` | gate report summary is non-empty |
 | `test_V03` | `report.is_ready_for_release == report.verdict.is_ready` |
 | `test_V04` | import chain from truth ingress to readiness gate exists; `truth_ownership` dimension is present in every report |
+| `test_F01` – `test_F05` (PR-4V2-GOV) | `governance_artifact` truth kind exists and is NOT advisory; policy sentinel importable |
+| `test_G02` – `test_G03` (PR-4V2-GOV) | `governance_artifact` writes to `FlowTruthAlignmentRuntime`; classified `accept_as_authoritative` |
+| `test_H01` (PR-4V2-GOV) | `readiness_assessment` remains `accept_as_advisory` (advisory distinction preserved) |
+| `test_I01` – `test_I03` (PR-4V2-GOV) | `DelegatedFlowReadinessGate` `truth_ownership` dimension reflects governance artifacts |
+| `test_J01` – `test_J03` (PR-4V2-GOV) | End-to-end chain: `ingest_android_evaluator_artifact()` → registry + FlowTruthAlignmentRuntime → gate |
 
 ### Readiness Gate Dimensions
 
@@ -231,7 +237,7 @@ Android evaluator produces readiness/acceptance/governance artifact
 
 | Gap | Severity | Path to Close |
 |-----|----------|---------------|
-| `readiness_assessment` / `runtime_state` do not feed `truth_ownership` gate | 📝 Known, by design | Per `READINESS_ASSESSMENT_IS_ADVISORY_POLICY` (defined in `core/android_participant_truth_ingress.py`): these are device-scope advisory only. V2 admissibility chain remains authoritative. To close this gap for readiness artifacts, Android would need to emit a terminal/result truth kind carrying the evaluator outcome, or a dedicated protocol extension (e.g., a new truth kind for governance artifact upload). |
+| `readiness_assessment` / `runtime_state` remain advisory by design | 📝 Known, by design | Per `READINESS_ASSESSMENT_IS_ADVISORY_POLICY`: these are device-scope advisory only.  The new `governance_artifact` truth kind (PR-4V2-GOV) is the canonical path for evaluator artifacts that need gate visibility. |
 | `truth_ownership` dimension returns `unknown` when no alignment history | 📝 Expected on fresh start | `ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY` governs this — absence of signal is itself a readiness gap indicator. |
 
 ---
@@ -246,13 +252,13 @@ Android evaluator produces readiness/acceptance/governance artifact
 | 2 | `HandoffEnvelopeV2` round-trip | `tests/test_e2e_cross_repo_signal_closure.py::Groups F–J` + `tests/test_pr02_v2_handoff_v2_result_gateway.py` | ✅ CLOSED |
 | 3 | Delegated execution full loop | `tests/test_e2e_cross_repo_signal_closure.py::Groups K–R` + `tests/test_pr16_post533_android_delegated_signal_ingress.py` + `tests/test_pr21_post533_delegated_execution_ingress_reconciliation_closure.py` | ✅ CLOSED |
 | 4a | Android authoritative truth → readiness gate | `tests/test_e2e_cross_repo_signal_closure.py::Groups S–V` | ✅ CLOSED (for terminal truth kinds) |
+| 4b | Android evaluator artifacts → governance gate (PR-4V2-GOV) | `tests/test_pr4v2_android_evaluator_artifact_governance_flow.py::Groups F–J` | ✅ CLOSED |
 
 ### Known Open Gaps (Non-Blocking)
 
 | # | Gap | Impact | Priority |
 |---|-----|--------|----------|
-| 1 | `readiness_assessment` / `runtime_state` advisory kinds do not feed truth_ownership gate | readiness/governance verdict computed without device-scope advisory signals | 📝 Low (by design; governance authority is V2-side) |
-| 2 | Android full takeover executor deferred | takeover protocol is wired; executor completion pending | 📝 Medium (Android-side PR-5 follow-up) |
+| 1 | `readiness_assessment` / `runtime_state` advisory kinds remain advisory by design | readiness_assessment = observation-only; governance_artifact (new kind) = canonical gate input | 📝 Low (by design; distinction is explicit per CANONICAL_VS_ADVISORY_DISTINCTION_MUST_BE_EXPLICIT_POLICY) || 2 | Android full takeover executor deferred | takeover protocol is wired; executor completion pending | 📝 Medium (Android-side PR-5 follow-up) |
 | 3 | Governance verdicts not wired into CI/release pipeline | governance gate evaluates but does not auto-block CI | 📝 Medium (CI/release integration is a later PR) |
 | 4 | Legacy path default-off not yet complete | compat gate exists but legacy flows still in runtime | 📝 Medium (requires legacy retirement PR) |
 
@@ -261,6 +267,6 @@ Android evaluator produces readiness/acceptance/governance artifact
 ## 7. How to Use This Matrix in Later PRs
 
 1. **Adding new signal kinds**: Check Section 5's truth kind table; ensure the new kind is handled in `reconcile_android_participant_truth()` and that you've added a test in `test_e2e_cross_repo_signal_closure.py`.
-2. **Closing governance gap**: When Android readiness/governance artifacts need to feed the V2 gate directly, extend `AndroidParticipantTruthKind` with a new kind (e.g., `governance_artifact`) routed to `_reconcile_terminal_signal()` and aligned via `FlowTruthAlignmentRuntime`.
+2. **Closing governance gap** ✅ DONE (PR-4V2-GOV): Extended `AndroidParticipantTruthKind` with `governance_artifact` kind routed via `_reconcile_governance_artifact()` → `align_and_record()` → `FlowTruthAlignmentRuntime`.  Added `core/android_evaluator_artifact_ingress.py` with `ingest_android_evaluator_artifact()` as dedicated ingress entry-point.  See `docs/ANDROID_EVALUATOR_ARTIFACT_GOVERNANCE_INTEGRATION.md`.
 3. **Wiring CI governance**: Add integration in `delegated_flow_readiness_gate.evaluate()` output to the release pipeline; blocked by gap #3 above.
 4. **Verifying chain stability**: Run `python -m pytest tests/test_e2e_cross_repo_signal_closure.py tests/test_pr7v2_reconciliation_signal_ingress.py tests/test_pr02_v2_handoff_v2_result_gateway.py tests/test_pr16_post533_android_delegated_signal_ingress.py` as the canonical cross-repo signal health check.

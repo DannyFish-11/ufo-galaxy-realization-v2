@@ -237,7 +237,7 @@ class TestGroupB_TruthKindEnum:
         expected = {
             "session_snapshot", "readiness_assessment", "task_phase",
             "runtime_state", "cancel", "status", "failure", "result", "unknown",
-            "reconciliation_signal",
+            "reconciliation_signal", "governance_artifact",
         }
         actual = {m.value for m in AndroidParticipantTruthKind}
         assert expected == actual

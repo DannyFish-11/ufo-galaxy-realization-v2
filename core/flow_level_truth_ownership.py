@@ -437,8 +437,11 @@ _V2_TERMINAL_PHASES: frozenset = frozenset(
 )
 
 # Android truth kinds that are authoritative upward when V2 is non-terminal
+# PR-4V2-GOV: governance_artifact is a first-class canonical gate input (not advisory).
+# Android evaluator governance/readiness/acceptance/strategy artifacts are authoritative
+# upward so that DelegatedFlowReadinessGate.truth_ownership dimension can reflect them.
 _AUTHORITATIVE_TRUTH_KINDS: frozenset = frozenset(
-    {"cancel", "failure", "result"}
+    {"cancel", "failure", "result", "governance_artifact"}
 )
 
 # Android truth kinds that are advisory (do not alter V2 canonical state)
