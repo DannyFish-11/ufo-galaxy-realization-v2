@@ -6727,7 +6727,7 @@ class OpenClawd:
                     "tool_calls_log": result.get("tool_calls_log", []),
                     "total_tokens": result.get("total_tokens", 0),
                     "complexity_score": cv.weighted_score if cv else 0.5,
-                    "model_tier": cv.tier.value if cv else "medium",
+                    "model_tier": (cv.tier.value if (cv and getattr(cv, "tier", None)) else "medium"),
                     "complexity_vector": cv.model_dump() if cv else {},
                     "layers_used": layers_used,
                     "hit_max_iterations": result.get("hit_max_iterations", False),
@@ -7003,7 +7003,7 @@ class OpenClawd:
                 cv = None
 
             # 复杂度驱动策略选择
-            _cv_score = cv.weighted_score if cv is not None else 0.5
+            _cv_score = getattr(cv, "weighted_score", 0.5) if cv is not None else 0.5
             if _cv_score >= 0.7:
                 strategy = "specialized"
             elif _cv_score >= 0.4:

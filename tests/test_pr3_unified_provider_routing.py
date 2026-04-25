@@ -125,7 +125,8 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         router = m.UnifiedLLMRouter()
         mock_be = MagicMock()
         mock_resp = MagicMock()
-        mock_resp.provider = "p"; mock_resp.model = "m"
+        mock_resp.provider = "p"
+        mock_resp.model = "m"
         mock_be.chat = AsyncMock(return_value=mock_resp)
         router._backend = mock_be
         loop = asyncio.new_event_loop()
@@ -186,7 +187,7 @@ class TestPR3ProviderRoutingClosure(unittest.TestCase):
         ollama_pos = snippet.rfind('"ollama"')
         self.assertGreater(ollama_pos, 0)
         after = snippet[ollama_pos + len('"ollama"'):]
-        others = re.findall(r'"[a-z_]+"', after)
+        others = re.findall(r'"[a-zA-Z0-9_-]+"', after)
         self.assertEqual(others, [], f"Found providers after ollama: {others}")
 
     # 15-18 ─ Routing closure: no direct get_llm_router() bypasses

@@ -746,7 +746,9 @@ class UnifiedLLMRouter:
             task_type_str,
             preferred_provider=provider,
         )
-        # 取策略层最优先 provider；若无策略顺序则使用调用方明确指定的（可为 None）
+        # 取策略层最优先 provider；若无策略顺序（空列表或 None）则使用调用方明确指定的（可为 None）。
+        # `_provider_order[0]` is safe here because we only access index 0 when the list is
+        # non-empty (truthy), which is guaranteed by the `if _provider_order` guard.
         _effective_provider = _provider_order[0] if _provider_order else provider
 
         start = time.monotonic()
