@@ -109,9 +109,10 @@ DesktopPresenceRuntime (shell)
 代码证据：
 ```python
 # galaxy_gateway/routing/dispatch.py — 终端 send+wait 模式
+# timeout 默认值 30.0 秒（send_command_to_device 调用时传入，可配置）
 event = asyncio.Event()
 task_events[task_id] = event
-await asyncio.wait_for(event.wait(), timeout=timeout)
+await asyncio.wait_for(event.wait(), timeout=timeout)  # 默认 30s
 result = task_results.pop(task_id)
 ```
 
@@ -191,7 +192,8 @@ except ImportError as _e:
 if _ingest_handoff_response is not None:
     outcome = _ingest_handoff_response(message)
     # 此处无 device_router.handle_task_result(task_id, result) 调用
-    # dispatch_to_websocket 中等待的 task_events[task_id] 永远不会被 set
+    # 因此 dispatch_to_websocket 中等待的 task_events[task_id] 不会被 set，
+    # 调用方将在 timeout 后（默认 30s）回退，而不是获得真实 handoff 结果
 ```
 
 **受影响的路径**：通过 `DeviceRouter.send_command_to_device()` → `dispatch_to_websocket()` 发送 handoff_dispatch 消息后等待 `handoff_result` 响应的所有调用方。
@@ -330,11 +332,12 @@ Ollama 在 `multi_llm_router.py` 中仅映射到 `TaskType.GENERAL`，不覆盖�
 
 **代码证据**：
 ```python
-# core/openclawd.py — 显式传入 device_id
+# core/openclawd.py:send_gateway_command() — 已知 device_id 被直接传入 targets，
+# required_capabilities 在此路径中未被设置（None 或空），导致能力图匹配被跳过
 envelope = TaskEnvelope(
     ...
-    targets=[device_id],  # 已有显式目标 → CommandRouter 直接使用
-    required_capabilities=...,  # 此处未设置 required_capabilities
+    targets=[device_id],       # 显式目标 → CommandRouter 优先使用，不查能力图
+    # required_capabilities 未传入，默认为 None，命令路径中不触发能力匹配逻辑
 )
 ```
 
