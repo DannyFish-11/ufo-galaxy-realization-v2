@@ -158,6 +158,13 @@ def _make_coordinator(tmp_path, bundle=None):
 
 # Domain object factories
 
+class _FakePhaseRecord:
+    """Minimal tracking record stub exposing a phase with a .value attribute."""
+
+    def __init__(self, phase_value: str) -> None:
+        self.phase = type("_P", (), {"value": phase_value})()
+
+
 def _make_session_entry(device_id: str = "dev-1"):
     from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
     return AttachedSessionRegistryEntry(device_id=device_id)
@@ -222,13 +229,13 @@ class TestSentinel:
 
     def test_B_sentinel_mentions_key_concepts(self):
         from core.runtime_restart_recovery import DELEGATED_FLOW_STATE_RECOVERY_POLICY
-        policy = DELEGATED_FLOW_STATE_RECOVERY_POLICY
-        assert "bundle" in policy.lower() or "Bundle" in policy
-        assert "session" in policy.lower()
-        assert "contract" in policy.lower()
-        assert "binding" in policy.lower()
+        policy = DELEGATED_FLOW_STATE_RECOVERY_POLICY.lower()
+        assert "bundle" in policy
+        assert "session" in policy
+        assert "contract" in policy
+        assert "binding" in policy
         assert "flow_entity" in policy or "flow-entity" in policy
-        assert "restart" in policy.lower()
+        assert "restart" in policy
 
 
 # ---------------------------------------------------------------------------
@@ -497,15 +504,19 @@ class TestV2RestartRecoveryDecision:
 
         bundle = _make_bundle(tmp_path)
         entity = _make_flow_entity("flow-S1")
-        # Mark the flow entity as terminal
+        # Mark the flow entity as terminal.  DelegatedFlowPhase assignment is
+        # attempted via direct attribute set; if the entity enforces phase
+        # transitions through a method, we fall back to entity.transition().
+        # Either path produces a terminal phase in the persisted snapshot.
         try:
             entity.phase = DelegatedFlowPhase.completed
         except Exception:
-            # If phase is not directly settable, use transition if available
             try:
                 entity.transition(DelegatedFlowPhase.completed)
             except Exception:
-                pass  # Best-effort; test remains valid if phase is already terminal
+                pass  # entity starts as DelegatedFlowPhase.created; if neither
+                      # path works the test assertion still covers new_attachment
+                      # or require_review (coordinator cannot confirm resume)
         bundle.flow_entity_store.save([entity])
 
         coord = FlowContinuityCoordinator(capacity=16)
@@ -720,15 +731,12 @@ class TestContinuityCoordinatorSignalScenarios:
             FlowContinuityCoordinator,
         )
 
-        class _Rec:
-            phase = type("_P", (), {"value": "completed"})()
-
         class _FakeTracker:
             def get_latest_for_session(self, session_id):
-                return _Rec()
+                return _FakePhaseRecord("completed")
 
             def get_latest_for_contract(self, contract_id):
-                return _Rec()
+                return _FakePhaseRecord("completed")
 
         coord = FlowContinuityCoordinator(capacity=16)
         coord._get_execution_tracking_runtime = lambda: _FakeTracker()
@@ -749,15 +757,12 @@ class TestContinuityCoordinatorSignalScenarios:
             FlowContinuityCoordinator,
         )
 
-        class _Rec:
-            phase = type("_P", (), {"value": "dispatched"})()
-
         class _FakeTracker:
             def get_latest_for_session(self, session_id):
-                return _Rec()
+                return _FakePhaseRecord("dispatched")
 
             def get_latest_for_contract(self, contract_id):
-                return _Rec()
+                return _FakePhaseRecord("dispatched")
 
         coord = FlowContinuityCoordinator(capacity=16)
         coord._get_execution_tracking_runtime = lambda: _FakeTracker()
