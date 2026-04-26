@@ -210,6 +210,20 @@ class ExplicitRouteCapabilityAudit:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_capability_value(cap: object) -> str:
+    """Normalise a raw capability entry to a plain string.
+
+    Capabilities stored in device registries may be plain strings, dicts with
+    a ``"name"`` key, or other objects.  This helper normalises them so
+    comparisons always work against plain strings.
+    """
+    if isinstance(cap, str):
+        return cap
+    if isinstance(cap, dict):
+        return cap.get("name", "")
+    return str(cap)
+
+
 def audit_explicit_device_capabilities(
     device_id: str,
     required_capabilities: Sequence[str],
@@ -263,8 +277,7 @@ def audit_explicit_device_capabilities(
                 raw_caps = info.get("capabilities", [])
                 if isinstance(raw_caps, list):
                     resolved_caps = [
-                        c if isinstance(c, str) else (c.get("name", "") if isinstance(c, dict) else str(c))
-                        for c in raw_caps
+                        _normalize_capability_value(c) for c in raw_caps
                     ]
                 else:
                     resolved_caps = []
@@ -425,10 +438,12 @@ def enforce_explicit_route_capability_gate(
             audit.missing_capabilities,
             NO_SILENT_CAPABILITY_BYPASS_POLICY,
         )
+        if raise_on_mismatch:
+            # Raise with original MISMATCH verdict so the caller receives
+            # the real verdict, not the post-mutation AUDITED_BYPASS.
+            raise CapabilityMismatchError(audit)
         audit.verdict = ExplicitRouteVerdict.AUDITED_BYPASS
         audit.reason = f"Audited bypass: {audit.reason}"
-        if raise_on_mismatch:
-            raise CapabilityMismatchError(audit)
         return audit
 
     if audit.verdict == ExplicitRouteVerdict.INSUFFICIENT_DATA:

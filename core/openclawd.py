@@ -3733,8 +3733,11 @@ class OpenClawd:
                         _cap_audit.verdict.value,
                     )
                 except Exception as _cap_err:
-                    logger.debug(
-                        "process: explicit-route capability gate skipped (non-fatal): %s",
+                    logger.warning(
+                        "process: explicit-route capability gate raised unexpectedly "
+                        "for device=%s caps=%s — capability enforcement NOT completed: %s",
+                        effective_device_id,
+                        required_capabilities,
                         _cap_err,
                     )
 

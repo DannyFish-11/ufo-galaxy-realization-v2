@@ -306,6 +306,7 @@ class TestEnforceMismatchRaise:
     def test_raise_on_mismatch_raises_capability_mismatch_error(self):
         from core.mainline_routing_enforcement import (
             CapabilityMismatchError,
+            ExplicitRouteVerdict,
             enforce_explicit_route_capability_gate,
         )
 
@@ -318,6 +319,9 @@ class TestEnforceMismatchRaise:
             )
 
         assert "dev_lacking" in str(exc_info.value)
+        # The exception carries the original MISMATCH verdict, not AUDITED_BYPASS,
+        # so the caller receives the real verdict.
+        assert exc_info.value.audit.verdict == ExplicitRouteVerdict.MISMATCH
 
     def test_no_raise_when_confirmed(self):
         from core.mainline_routing_enforcement import (
