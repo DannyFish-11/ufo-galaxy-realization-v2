@@ -218,7 +218,7 @@ async def handle_task_result(
                 )
                 return
             record_result_idempotency(task_id)
-        except Exception as _idem_exc:
+        except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
             logger.debug(
                 "task_lifecycle: durable idempotency check skipped (non-fatal): %s",
                 _idem_exc,

@@ -1838,7 +1838,7 @@ class DeviceRouter:
                     )
                     return
                 record_result_idempotency(task_id)
-            except Exception as _idem_exc:
+            except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
                 logger.debug(
                     "device_router: durable idempotency check skipped (non-fatal): %s",
                     _idem_exc,
