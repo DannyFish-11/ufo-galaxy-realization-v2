@@ -55,7 +55,9 @@ def _record(description: str, passed: bool, detail: str = "") -> None:
 # ---------------------------------------------------------------------------
 def check_enforcement_module() -> None:
     try:
-        sys.path.insert(0, str(_REPO_ROOT))
+        _repo_root_str = str(_REPO_ROOT)
+        if _repo_root_str not in sys.path:
+            sys.path.insert(0, _repo_root_str)
         mod = importlib.import_module("core.mainline_routing_enforcement")
     except Exception as exc:
         _record(

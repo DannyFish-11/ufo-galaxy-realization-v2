@@ -269,7 +269,11 @@ def audit_explicit_device_capabilities(
     )
     if resolved_caps is None:
         try:
-            from core.routes._shared import connection_manager
+            # Lazy import: core.routes._shared uses FastAPI app state and may
+            # not be importable in all test environments or early-boot contexts.
+            # Keeping the import here avoids circular dependencies and silent
+            # import failures at module load time.
+            from core.routes._shared import connection_manager  # noqa: PLC0415
 
             all_devices = connection_manager.get_all_devices()
             info = all_devices.get(device_id)

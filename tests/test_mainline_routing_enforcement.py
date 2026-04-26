@@ -136,7 +136,7 @@ class TestAuditConfirmed:
 
         assert result.verdict == ExplicitRouteVerdict.CONFIRMED
         assert result.missing_capabilities == []
-        assert "screen" in result.confirmed_capabilities or result.confirmed_capabilities
+        assert result.confirmed_capabilities
 
     def test_single_cap_confirmed(self):
         from core.mainline_routing_enforcement import (
