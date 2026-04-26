@@ -443,12 +443,14 @@ class TestDuplicateResultDelivery:
         await bridge.handle_message(
             ws,
             _v3("task_result", device_id, task_id=task_id_b, status="completed",
-                result={"which": "B"}),
+                result={"which": "B"},
+                ),
         )
         await bridge.handle_message(
             ws,
             _v3("task_result", device_id, task_id=task_id_a, status="completed",
-                result={"which": "A"}),
+                result={"which": "A"},
+                ),
         )
 
         assert future_a.done(), "Future for task_id_a must be resolved"
