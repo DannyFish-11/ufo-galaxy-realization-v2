@@ -206,3 +206,38 @@ jobs:
         run: |
           python scripts/check_legacy_regression.py --warn-only
           echo "✅ Legacy regression guard complete (warning mode)."
+
+  # ---------------------------------------------------------------------------
+  # F. Mainline routing enforcement guard (STRICT — blocking)
+  #
+  # Verifies that:
+  #   1. core.mainline_routing_enforcement module and sentinels are present.
+  #   2. The audit function for explicit-device-id capability enforcement works.
+  #   3. core/openclawd.py contains the enforcement call site (no silent bypass).
+  #   4. Android local AI unavailable-by-default sentinel is present.
+  #
+  # This job runs in STRICT mode (exit 1 on failure) because it guards the
+  # canonical mainline routing enforcement boundary introduced to close the
+  # explicit-device-id capability gate bypass gap.
+  # ---------------------------------------------------------------------------
+  mainline-routing-enforcement:
+    name: Mainline Routing Enforcement Guard (STRICT)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal dependencies
+        run: |
+          pip install pydantic || true
+
+      - name: Run mainline routing enforcement guard (strict mode)
+        run: |
+          python scripts/check_mainline_routing_enforcement.py
+          echo "✅ Mainline routing enforcement guard passed."
