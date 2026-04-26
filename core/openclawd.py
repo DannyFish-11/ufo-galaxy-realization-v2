@@ -3701,9 +3701,11 @@ class OpenClawd:
                 handler_name = "_dispatch_chat"
             handler = getattr(self, handler_name)
 
-            # Phase 2: if no device_id provided but required_capabilities given, auto-select
+            # Phase 2: capability-aware routing
+            # PR-enforcement: explicit device_id does NOT silently bypass the capability gate.
             effective_device_id = device_id
             if not effective_device_id and required_capabilities and intent_type in ("device_control", "task_manage"):
+                # No explicit device_id — auto-select via capability-filtered scheduler.
                 selected = self._select_device_via_scheduler(required_capabilities)
                 if selected:
                     logger.info(
@@ -3712,6 +3714,32 @@ class OpenClawd:
                         required_capabilities,
                     )
                     effective_device_id = selected
+            elif effective_device_id and required_capabilities and intent_type in ("device_control", "task_manage"):
+                # Explicit device_id provided — enforce capability gate (no silent bypass).
+                # Policy: NO_SILENT_CAPABILITY_BYPASS_V1
+                try:
+                    from core.mainline_routing_enforcement import (
+                        enforce_explicit_route_capability_gate,
+                    )
+
+                    _cap_audit = enforce_explicit_route_capability_gate(
+                        device_id=effective_device_id,
+                        required_capabilities=required_capabilities,
+                        calling_site="openclawd.process",
+                    )
+                    logger.debug(
+                        "process: explicit-route capability audit device=%s verdict=%s",
+                        effective_device_id,
+                        _cap_audit.verdict.value,
+                    )
+                except Exception as _cap_err:
+                    logger.warning(
+                        "process: explicit-route capability gate raised unexpectedly "
+                        "for device=%s caps=%s — capability enforcement NOT completed: %s",
+                        effective_device_id,
+                        required_capabilities,
+                        _cap_err,
+                    )
 
             result = await handler(
                 message=f"{message}\n{_fusion_suffix}" if _fusion_suffix else message,
@@ -4140,11 +4168,17 @@ class OpenClawd:
                 }
         command = intent.command if intent else "device_control"
         params = intent.params if intent else {}
+        # PR-enforcement: forward required_capabilities from intent so that
+        # send_gateway_command → TaskEnvelope always carries the capability
+        # context even when device_id is explicit.  Without this forwarding,
+        # the TaskEnvelope capability gate in CommandRouter is unreachable.
+        required_caps = getattr(intent, "required_capabilities", None) if intent else None
         result = await self.send_gateway_command(
             device_id=device_id,
             command=command,
             payload=params,
             session_id=session_id,
+            required_capabilities=required_caps,
         )
         # 统一响应字段（send_gateway_command 返回 response/success，保持 handle_device_command 兼容）
         if "response" not in result:
