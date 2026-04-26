@@ -12,6 +12,8 @@ on:
       - "tests/integration/test_dual_repo_transport_harness.py"
       - "tests/integration/test_v2_android_protocol_regression.py"
       - "tests/integration/test_android_ci_baseline.py"
+      - "tests/integration/test_android_runtime_e2e.py"
+      - "tests/integration/test_runtime_readiness_matrix.py"
       - ".github/workflows/dual_repo_integration.yml"
   pull_request:
     branches: [main]
@@ -21,6 +23,8 @@ on:
       - "tests/integration/test_dual_repo_transport_harness.py"
       - "tests/integration/test_v2_android_protocol_regression.py"
       - "tests/integration/test_android_ci_baseline.py"
+      - "tests/integration/test_android_runtime_e2e.py"
+      - "tests/integration/test_runtime_readiness_matrix.py"
       - ".github/workflows/dual_repo_integration.yml"
   # Allow manual trigger so developers can run the suite on demand
   workflow_dispatch:
@@ -35,15 +39,6 @@ env:
 jobs:
   # =========================================================================
   # Job 1 — Transport-layer integration harness
-  #
-  # Tests the full canonical V2 ↔ Android path using the real FastAPI WS
-  # transport (FastAPI TestClient), not just mock function calls.
-  #
-  # Validates:
-  #   • device_register → device_register_ack (WS transport)
-  #   • capability_report → capability_report_ack (WS transport) + persistence
-  #   • V2 dispatch Future → task_result → waiter unblock (async roundtrip)
-  #   • Full canonical chain: register → capability → dispatch → result
   # =========================================================================
   transport-harness:
     name: Transport-Layer Integration Harness
@@ -52,35 +47,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-
       - name: Run transport-layer harness
         run: |
           python -m pytest \
             tests/integration/test_dual_repo_transport_harness.py \
-            -v --tb=short \
-            -p no:warnings
+            -v --tb=short -p no:warnings
           echo "✅ Transport-layer integration harness passed."
 
   # =========================================================================
   # Job 2 — Protocol regression tests
-  #
-  # Tests non-happy-path protocol behaviors that must remain stable across
-  # cross-repo changes.
-  #
-  # Validates:
-  #   • Reconnect path — device reconnects; V2 state continuity preserved
-  #   • Offline queue / replay — task_result for unknown task_ids: no crash
-  #   • Duplicate result delivery — double task_result: idempotent, no error
-  #   • Handoff signal path — handoff-style messages: reachable, not dead code
-  #   • Session identity continuity across protocol operations
   # =========================================================================
   protocol-regression:
     name: Protocol Regression Tests
@@ -89,35 +70,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-
       - name: Run protocol regression tests
         run: |
           python -m pytest \
             tests/integration/test_v2_android_protocol_regression.py \
-            -v --tb=short \
-            -p no:warnings
+            -v --tb=short -p no:warnings
           echo "✅ Protocol regression tests passed."
 
   # =========================================================================
   # Job 3 — Android CI baseline (V2-side protocol contract verification)
-  #
-  # Verifies the V2-side protocol contract surface that Android clients depend
-  # on.  Acts as a guardian for cross-repo contract drift.
-  #
-  # Validates:
-  #   • All canonical Android→V2 message types produce valid responses
-  #   • Handler coverage: no canonical type is unhandled (silent drop)
-  #   • Inbound normalisation for Android SDK version variations
-  #   • Contract stability: type strings, field names, version strings
-  #   • Build/dispatch module imports are not broken
   # =========================================================================
   android-ci-baseline:
     name: Android CI Baseline (V2-side contract)
@@ -126,57 +93,237 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-
       - name: Run Android CI baseline
         run: |
           python -m pytest \
             tests/integration/test_android_ci_baseline.py \
-            -v --tb=short \
-            -p no:warnings
+            -v --tb=short -p no:warnings
           echo "✅ Android CI baseline passed."
 
   # =========================================================================
-  # Job 4 — Full dual-repo integration suite (all three suites together)
+  # Job 4 — Android runtime-level E2E verification  [BLOCKING]
   #
-  # Runs all three test suites as a single composite check.
-  # This is the job that should be required to pass before merging to main.
+  # Validates the complete six-step canonical sequence at runtime level:
+  #   register → capability_report → task_assign → execution →
+  #   task_result → continuation / waiter resolution
+  #
+  # Also validates:
+  #   • STRICT capability enforcement: missing caps → hard reject
+  #   • Silent bypass is prohibited (override requires explicit audit reason)
+  #   • Session continuity after task_result
+  #   • Reconnect + full task roundtrip
+  #   • Canonical capability status classification
+  #
+  # This job is BLOCKING — must pass before merging to main.
   # =========================================================================
-  dual-repo-integration-full:
-    name: Full Dual-Repo Integration Suite
+  android-runtime-e2e:
+    name: Android Runtime E2E (Canonical Six-Step Sequence) [BLOCKING]
     runs-on: ubuntu-latest
-    needs: [transport-harness, protocol-regression, android-ci-baseline]
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Android runtime E2E suite
+        run: |
+          python -m pytest \
+            tests/integration/test_android_runtime_e2e.py \
+            -v --tb=short -p no:warnings \
+            --junitxml=android_runtime_e2e_report.xml
+          echo "✅ Android runtime E2E suite passed."
+      - name: Upload E2E test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-runtime-e2e-report
+          path: android_runtime_e2e_report.xml
+          retention-days: 30
 
+  # =========================================================================
+  # Job 5 — Capability enforcement hardening gate  [BLOCKING]
+  #
+  # Verifies that:
+  #   • STRICT mode raises CapabilityHardRejectError on missing capabilities
+  #   • Override path requires explicit audit reason (no silent bypass)
+  #   • Capability status registry classifies all capabilities correctly
+  #   • Structural-only / experimental capabilities are not misclassified
+  #
+  # This job is BLOCKING — must pass before merging to main.
+  # =========================================================================
+  capability-enforcement-gate:
+    name: Capability Enforcement Hardening Gate [BLOCKING]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Verify capability enforcement hardener
+        run: |
+          python - <<'EOF'
+          from core.capability_enforcement_hardener import (
+              CAPABILITY_ENFORCEMENT_HARDENER_AUTHORITY,
+              SILENT_BYPASS_PROHIBITED_ON_MAINLINE_POLICY,
+              enforce_mainline_capability_gate,
+              audit_capability_override,
+              CapabilityHardRejectError,
+              EnforcementMode,
+              HardenedVerdict,
+          )
+          assert CAPABILITY_ENFORCEMENT_HARDENER_AUTHORITY
+          assert SILENT_BYPASS_PROHIBITED_ON_MAINLINE_POLICY
+
+          # No-op on empty requirements
+          rec = enforce_mainline_capability_gate(
+              "smoke", [], [], mode=EnforcementMode.STRICT, calling_site="ci_gate"
+          )
+          assert rec.verdict == "no_requirements"
+
+          # Hard reject on missing capability (non-empty device caps, missing required)
+          rejected = False
+          try:
+              enforce_mainline_capability_gate(
+                  "smoke", ["screenshot"], ["tap"],
+                  mode=EnforcementMode.STRICT, calling_site="ci_gate"
+              )
+          except CapabilityHardRejectError as e:
+              rejected = True
+              assert "screenshot" in e.missing_capabilities
+              assert e.audit_id
+          assert rejected, "STRICT mode must raise CapabilityHardRejectError"
+
+          # Empty override reason must raise ValueError
+          try:
+              audit_capability_override("d", ["screenshot"], [], override_reason="")
+              assert False, "Should have raised ValueError"
+          except ValueError:
+              pass
+
+          print("✅ Capability enforcement hardener: all checks passed.")
+          EOF
+      - name: Verify canonical capability status registry
+        run: |
+          python - <<'EOF'
+          from core.canonical_capability_status import (
+              get_canonical_capability_status_registry,
+              is_mainline_active,
+              CapabilityRuntimeStatus,
+          )
+          registry = get_canonical_capability_status_registry()
+          assert len(registry) > 0
+
+          for cap in ["tap", "screenshot", "task_assign", "task_result", "register"]:
+              assert is_mainline_active(cap), f"{cap!r} should be ACTIVE_MAINLINE"
+
+          for cap in ["local_ai", "mesh", "federation"]:
+              assert not is_mainline_active(cap), f"{cap!r} should NOT be mainline"
+              rec = registry[cap]
+              assert rec.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY
+
+          for cap in ["webrtc", "advanced_handoff"]:
+              assert not is_mainline_active(cap), f"{cap!r} should NOT be mainline"
+
+          print(f"✅ Capability status registry: {len(registry)} capabilities classified correctly.")
+          EOF
+
+  # =========================================================================
+  # Job 6 — Runtime readiness matrix + release blocking gate  [BLOCKING]
+  #
+  # Evaluates the automated runtime readiness matrix across all critical
+  # dimensions and verifies that the release blocking gate approves.
+  #
+  # Critical blocking dimensions:
+  #   • Transport layer
+  #   • Canonical execution path
+  #   • Capability enforcement functional
+  #   • Protocol regression surface (handler coverage)
+  #   • Mainline enforcement call site (openclawd.py)
+  #   • AIP v3 version stability
+  #
+  # This job is BLOCKING — a BLOCKED matrix verdict or gate failure fails CI.
+  # =========================================================================
+  release-readiness-gate:
+    name: Runtime Readiness Matrix + Release Blocking Gate [BLOCKING]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run release blocking gate (exit 1 on BLOCKED)
+        run: |
+          python core/release_blocking_gate.py
+          echo "✅ Release blocking gate: APPROVED."
+      - name: Run readiness matrix tests
+        run: |
+          python -m pytest \
+            tests/integration/test_runtime_readiness_matrix.py \
+            -v --tb=short -p no:warnings \
+            --junitxml=readiness_matrix_report.xml
+          echo "✅ Readiness matrix tests passed."
+      - name: Upload readiness matrix report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: readiness-matrix-report
+          path: readiness_matrix_report.xml
+          retention-days: 30
+
+  # =========================================================================
+  # Job 7 — Full dual-repo integration suite (all suites together)
+  # =========================================================================
+  dual-repo-integration-full:
+    name: Full Dual-Repo Integration Suite
+    runs-on: ubuntu-latest
+    needs:
+      - transport-harness
+      - protocol-regression
+      - android-ci-baseline
+      - android-runtime-e2e
+      - capability-enforcement-gate
+      - release-readiness-gate
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run full dual-repo integration suite
         run: |
           python -m pytest \
             tests/integration/test_dual_repo_transport_harness.py \
             tests/integration/test_v2_android_protocol_regression.py \
             tests/integration/test_android_ci_baseline.py \
-            -v --tb=short \
-            -p no:warnings \
+            tests/integration/test_android_runtime_e2e.py \
+            tests/integration/test_runtime_readiness_matrix.py \
+            -v --tb=short -p no:warnings \
             --junitxml=dual_repo_integration_report.xml
           echo "✅ Full dual-repo integration suite passed."
-
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
@@ -186,10 +333,7 @@ jobs:
           retention-days: 30
 
   # =========================================================================
-  # Job 5 — Protocol contract drift guard
-  #
-  # Lightweight static checks that verify the protocol surface has not drifted.
-  # Runs fast (no network, no I/O) as a quick pre-check.
+  # Job 8 — Protocol contract drift guard
   # =========================================================================
   protocol-contract-drift-guard:
     name: Protocol Contract Drift Guard
@@ -198,25 +342,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-
       - name: Verify AIP v3 canonical ingress route exists
         run: |
           python - <<'EOF'
           from fastapi import FastAPI
           from galaxy_gateway.routes.websocket import register_websocket_routes
-
           app = FastAPI()
           register_websocket_routes(app)
           routes = [r.path for r in app.routes]
-
           required_routes = ["/ws/device/{device_id}"]
           missing = [r for r in required_routes if r not in routes]
           if missing:
@@ -224,35 +363,23 @@ jobs:
               exit(1)
           print(f"✅ Canonical device ingress routes present: {routes}")
           EOF
-
       - name: Verify canonical message types are registered in bridge
         run: |
           python - <<'EOF'
           from galaxy_gateway.android_bridge import AndroidBridge
-
           bridge = AndroidBridge()
           registered = {mt.value for mt in bridge._message_handlers}
-
-          required = {
-              "device_register",
-              "capability_report",
-              "heartbeat",
-              "task_result",
-              "task_end",
-          }
-
+          required = {"device_register", "capability_report", "heartbeat", "task_result", "task_end"}
           missing = required - registered
           if missing:
               print(f"❌ Bridge missing handlers for: {missing}")
               exit(1)
           print(f"✅ All canonical message types have handlers: {sorted(required)}")
           EOF
-
       - name: Verify AIP v3 version string stability
         run: |
           python - <<'EOF'
           from galaxy_gateway.android.message_builder import MessageBuilder
-
           ack = MessageBuilder.device_register_ack("test", True, "ok")
           version = ack.get("version")
           if version != "3.0":
@@ -260,13 +387,11 @@ jobs:
               exit(1)
           print(f"✅ AIP v3 version string stable: '{version}'")
           EOF
-
       - name: Verify dispatch module is importable
         run: |
           python - <<'EOF'
           from galaxy_gateway.routing.dispatch import build_aip_message, dispatch_to_websocket
-          import uuid, time
-
+          import uuid
           msg = build_aip_message(
               device_id="smoke-test",
               task_id=str(uuid.uuid4()),
@@ -277,30 +402,29 @@ jobs:
           assert msg["type"] == "command"
           print(f"✅ Dispatch module importable; build_aip_message works: type={msg['type']!r}")
           EOF
+      - name: Verify mainline routing enforcement call site is present
+        run: |
+          python - <<'EOF'
+          import pathlib
+          source = pathlib.Path("core/openclawd.py").read_text(encoding="utf-8")
+          if "enforce_explicit_route_capability_gate" not in source:
+              print("❌ enforce_explicit_route_capability_gate call site missing from openclawd.py")
+              exit(1)
+          print("✅ Enforcement call site present in core/openclawd.py.")
+          EOF
 
 # ---------------------------------------------------------------------------
-# Android-side CI follow-up note (tracked here for visibility)
+# Android-side CI follow-up note
 # ---------------------------------------------------------------------------
 # The following Android-side CI actions are required for complete dual-repo
-# verification.  They should be added to the ufo-galaxy-android repository:
+# verification in the ufo-galaxy-android repository:
 #
-#   1. Build gate:
-#      ./gradlew assembleDebug
+#   1. ./gradlew assembleDebug  — Android build gate
+#   2. ./gradlew testDebugUnitTest  — Android unit tests
+#   3. Protocol contract smoke — AgentWebSocket / AIPMessageV3 format checks
+#   4. Runtime smoke (emulator) — startup, connect, register, task roundtrip
 #
-#   2. Unit tests:
-#      ./gradlew testDebugUnitTest
-#
-#   3. Protocol contract smoke:
-#      Tests for AgentWebSocket, AgentMessageHandler, AIPMessageV3
-#      verifying that device_register, capability_report, and task_result
-#      message formats match the AIP v3 contract.
-#
-#   4. Runtime smoke (emulator, if available):
-#      - App startup
-#      - WebSocket connection to V2 gateway (using a test server)
-#      - device_register + capability_report roundtrip
-#      - One task_assign → task_result roundtrip
-#
-# Until these are in place in ufo-galaxy-android, V2's android-ci-baseline
-# job (Job 3 above) serves as the cross-repo contract guard.
+# Until these are in place in ufo-galaxy-android, the android-ci-baseline
+# job (Job 3) and android-runtime-e2e job (Job 4) serve as the
+# V2-side cross-repo contract and runtime guards.
 # ---------------------------------------------------------------------------
