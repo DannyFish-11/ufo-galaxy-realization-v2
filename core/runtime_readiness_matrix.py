@@ -359,11 +359,14 @@ def _eval_capability_enforcement() -> Tuple[DimensionStatus, str]:
             enforce_mainline_capability_gate,
             CapabilityHardRejectError,
             EnforcementMode,
+            HardenedVerdict,
         )
         rec = enforce_mainline_capability_gate(
             "smoke-device", [], [], mode=EnforcementMode.STRICT, calling_site="readiness_matrix"
         )
-        assert rec.verdict == "no_requirements"
+        assert rec.verdict == HardenedVerdict.NO_REQUIREMENTS, (
+            f"Expected NO_REQUIREMENTS, got {rec.verdict!r}"
+        )
         # Smoke: strict mode raises on actual mismatch (non-empty device caps missing required)
         raised = False
         try:

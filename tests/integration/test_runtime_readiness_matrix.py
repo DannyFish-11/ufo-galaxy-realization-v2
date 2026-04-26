@@ -323,7 +323,8 @@ class TestReleaseBlockingGate:
 
         assert not decision.approved
         assert "critical_runtime_smoke" in decision.failed_criteria
-        assert decision.is_blocked() if hasattr(decision, "is_blocked") else True
+        # ReleaseGateDecision does not have is_blocked() — check via approved flag
+        assert not decision.approved
 
 
 # ===========================================================================
