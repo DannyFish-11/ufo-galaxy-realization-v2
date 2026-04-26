@@ -1,0 +1,306 @@
+name: Dual-Repo Integration & Protocol Regression
+
+# ---------------------------------------------------------------------------
+# Trigger conditions
+# ---------------------------------------------------------------------------
+on:
+  push:
+    branches: [main]
+    paths:
+      - "galaxy_gateway/**"
+      - "core/**"
+      - "tests/integration/test_dual_repo_transport_harness.py"
+      - "tests/integration/test_v2_android_protocol_regression.py"
+      - "tests/integration/test_android_ci_baseline.py"
+      - ".github/workflows/dual_repo_integration.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "galaxy_gateway/**"
+      - "core/**"
+      - "tests/integration/test_dual_repo_transport_harness.py"
+      - "tests/integration/test_v2_android_protocol_regression.py"
+      - "tests/integration/test_android_ci_baseline.py"
+      - ".github/workflows/dual_repo_integration.yml"
+  # Allow manual trigger so developers can run the suite on demand
+  workflow_dispatch:
+
+# ---------------------------------------------------------------------------
+# Shared env
+# ---------------------------------------------------------------------------
+env:
+  PYTHONUNBUFFERED: "1"
+  GALAXY_ENV: "test"
+
+jobs:
+  # =========================================================================
+  # Job 1 — Transport-layer integration harness
+  #
+  # Tests the full canonical V2 ↔ Android path using the real FastAPI WS
+  # transport (FastAPI TestClient), not just mock function calls.
+  #
+  # Validates:
+  #   • device_register → device_register_ack (WS transport)
+  #   • capability_report → capability_report_ack (WS transport) + persistence
+  #   • V2 dispatch Future → task_result → waiter unblock (async roundtrip)
+  #   • Full canonical chain: register → capability → dispatch → result
+  # =========================================================================
+  transport-harness:
+    name: Transport-Layer Integration Harness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run transport-layer harness
+        run: |
+          python -m pytest \
+            tests/integration/test_dual_repo_transport_harness.py \
+            -v --tb=short \
+            -p no:warnings
+          echo "✅ Transport-layer integration harness passed."
+
+  # =========================================================================
+  # Job 2 — Protocol regression tests
+  #
+  # Tests non-happy-path protocol behaviors that must remain stable across
+  # cross-repo changes.
+  #
+  # Validates:
+  #   • Reconnect path — device reconnects; V2 state continuity preserved
+  #   • Offline queue / replay — task_result for unknown task_ids: no crash
+  #   • Duplicate result delivery — double task_result: idempotent, no error
+  #   • Handoff signal path — handoff-style messages: reachable, not dead code
+  #   • Session identity continuity across protocol operations
+  # =========================================================================
+  protocol-regression:
+    name: Protocol Regression Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run protocol regression tests
+        run: |
+          python -m pytest \
+            tests/integration/test_v2_android_protocol_regression.py \
+            -v --tb=short \
+            -p no:warnings
+          echo "✅ Protocol regression tests passed."
+
+  # =========================================================================
+  # Job 3 — Android CI baseline (V2-side protocol contract verification)
+  #
+  # Verifies the V2-side protocol contract surface that Android clients depend
+  # on.  Acts as a guardian for cross-repo contract drift.
+  #
+  # Validates:
+  #   • All canonical Android→V2 message types produce valid responses
+  #   • Handler coverage: no canonical type is unhandled (silent drop)
+  #   • Inbound normalisation for Android SDK version variations
+  #   • Contract stability: type strings, field names, version strings
+  #   • Build/dispatch module imports are not broken
+  # =========================================================================
+  android-ci-baseline:
+    name: Android CI Baseline (V2-side contract)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run Android CI baseline
+        run: |
+          python -m pytest \
+            tests/integration/test_android_ci_baseline.py \
+            -v --tb=short \
+            -p no:warnings
+          echo "✅ Android CI baseline passed."
+
+  # =========================================================================
+  # Job 4 — Full dual-repo integration suite (all three suites together)
+  #
+  # Runs all three test suites as a single composite check.
+  # This is the job that should be required to pass before merging to main.
+  # =========================================================================
+  dual-repo-integration-full:
+    name: Full Dual-Repo Integration Suite
+    runs-on: ubuntu-latest
+    needs: [transport-harness, protocol-regression, android-ci-baseline]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run full dual-repo integration suite
+        run: |
+          python -m pytest \
+            tests/integration/test_dual_repo_transport_harness.py \
+            tests/integration/test_v2_android_protocol_regression.py \
+            tests/integration/test_android_ci_baseline.py \
+            -v --tb=short \
+            -p no:warnings \
+            --junitxml=dual_repo_integration_report.xml
+          echo "✅ Full dual-repo integration suite passed."
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dual-repo-integration-report
+          path: dual_repo_integration_report.xml
+          retention-days: 30
+
+  # =========================================================================
+  # Job 5 — Protocol contract drift guard
+  #
+  # Lightweight static checks that verify the protocol surface has not drifted.
+  # Runs fast (no network, no I/O) as a quick pre-check.
+  # =========================================================================
+  protocol-contract-drift-guard:
+    name: Protocol Contract Drift Guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Verify AIP v3 canonical ingress route exists
+        run: |
+          python - <<'EOF'
+          from fastapi import FastAPI
+          from galaxy_gateway.routes.websocket import register_websocket_routes
+
+          app = FastAPI()
+          register_websocket_routes(app)
+          routes = [r.path for r in app.routes]
+
+          required_routes = ["/ws/device/{device_id}"]
+          missing = [r for r in required_routes if r not in routes]
+          if missing:
+              print(f"❌ Required WebSocket routes missing: {missing}")
+              exit(1)
+          print(f"✅ Canonical device ingress routes present: {routes}")
+          EOF
+
+      - name: Verify canonical message types are registered in bridge
+        run: |
+          python - <<'EOF'
+          from galaxy_gateway.android_bridge import AndroidBridge
+
+          bridge = AndroidBridge()
+          registered = {mt.value for mt in bridge._message_handlers}
+
+          required = {
+              "device_register",
+              "capability_report",
+              "heartbeat",
+              "task_result",
+              "task_end",
+          }
+
+          missing = required - registered
+          if missing:
+              print(f"❌ Bridge missing handlers for: {missing}")
+              exit(1)
+          print(f"✅ All canonical message types have handlers: {sorted(required)}")
+          EOF
+
+      - name: Verify AIP v3 version string stability
+        run: |
+          python - <<'EOF'
+          from galaxy_gateway.android.message_builder import MessageBuilder
+
+          ack = MessageBuilder.device_register_ack("test", True, "ok")
+          version = ack.get("version")
+          if version != "3.0":
+              print(f"❌ AIP v3 version string changed: expected '3.0', got {version!r}")
+              exit(1)
+          print(f"✅ AIP v3 version string stable: '{version}'")
+          EOF
+
+      - name: Verify dispatch module is importable
+        run: |
+          python - <<'EOF'
+          from galaxy_gateway.routing.dispatch import build_aip_message, dispatch_to_websocket
+          import uuid, time
+
+          msg = build_aip_message(
+              device_id="smoke-test",
+              task_id=str(uuid.uuid4()),
+              trace_id=str(uuid.uuid4()),
+              command="screenshot",
+          )
+          assert msg["version"] == "3.0"
+          assert msg["type"] == "command"
+          print(f"✅ Dispatch module importable; build_aip_message works: type={msg['type']!r}")
+          EOF
+
+# ---------------------------------------------------------------------------
+# Android-side CI follow-up note (tracked here for visibility)
+# ---------------------------------------------------------------------------
+# The following Android-side CI actions are required for complete dual-repo
+# verification.  They should be added to the ufo-galaxy-android repository:
+#
+#   1. Build gate:
+#      ./gradlew assembleDebug
+#
+#   2. Unit tests:
+#      ./gradlew testDebugUnitTest
+#
+#   3. Protocol contract smoke:
+#      Tests for AgentWebSocket, AgentMessageHandler, AIPMessageV3
+#      verifying that device_register, capability_report, and task_result
+#      message formats match the AIP v3 contract.
+#
+#   4. Runtime smoke (emulator, if available):
+#      - App startup
+#      - WebSocket connection to V2 gateway (using a test server)
+#      - device_register + capability_report roundtrip
+#      - One task_assign → task_result roundtrip
+#
+# Until these are in place in ufo-galaxy-android, V2's android-ci-baseline
+# job (Job 3 above) serves as the cross-repo contract guard.
+# ---------------------------------------------------------------------------
