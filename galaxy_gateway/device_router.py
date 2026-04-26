@@ -1796,18 +1796,54 @@ class DeviceRouter:
         return [task.copy() for _ in devices]
 
     async def handle_task_result(self, task_id: str, result: Dict):
-        """处理任务执行结果（幂等：同一 task_id 的重复结果将被忽略）。"""
+        """处理任务执行结果（幂等：同一 task_id 的重复结果将被忽略）。
+
+        Idempotency is enforced at two levels:
+        1. Fast-path in-memory set (``_seen_task_result_ids``) — low latency,
+           reset on process restart.
+        2. Durable file-backed store (``DurableResultIdSet``) — survives V2
+           restarts; Android reconnects after a crash cannot re-deliver already-
+           processed results.
+        """
         try:
-            # ── Idempotency: ignore duplicate task results ──
+            # ── Idempotency level-1: in-memory fast path ──
             if task_id in self._seen_task_result_ids:
                 logger.info(
-                    "Duplicate task result ignored by device_router",
+                    "Duplicate task result ignored by device_router (in-memory)",
                     extra={
                         "event": "task_result_duplicate_ignored",
                         "task_id": task_id,
+                        "layer": "in_memory",
                     },
                 )
                 return
+
+            # ── Idempotency level-2: durable cross-restart dedup ──
+            try:
+                from core.durable_result_idempotency import (
+                    check_result_idempotency,
+                    record_result_idempotency,
+                )
+                if check_result_idempotency(task_id):
+                    # Already processed in a previous V2 process lifetime.
+                    # Populate the in-memory set so subsequent calls skip level-2.
+                    self._seen_task_result_ids.add(task_id)
+                    logger.info(
+                        "Duplicate task result ignored by device_router (durable store)",
+                        extra={
+                            "event": "task_result_duplicate_ignored",
+                            "task_id": task_id,
+                            "layer": "durable",
+                        },
+                    )
+                    return
+                record_result_idempotency(task_id)
+            except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
+                logger.debug(
+                    "device_router: durable idempotency check skipped (non-fatal): %s",
+                    _idem_exc,
+                )
+
             self._seen_task_result_ids.add(task_id)
 
             self.task_results[task_id] = result
