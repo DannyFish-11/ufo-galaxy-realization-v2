@@ -54,13 +54,28 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import tempfile
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 logger = logging.getLogger("Galaxy.Idempotency")
+
+# ---------------------------------------------------------------------------
+# Default persistence path for the durable result-id set
+# (used only by the re-export below; canonical implementation is in
+# core.durable_result_idempotency)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_RESULT_ID_STORE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data",
+    "result_idempotency_set.json",
+)
 
 # Default settings
 _DEFAULT_TTL_SECONDS: float = 3600.0   # 1 hour
@@ -372,3 +387,25 @@ def record_idempotency(
         store.record_in_flight(key, payload_hash, trace_id=trace_id, task_id=task_id)
     entry = store.record_completed(key, result)
     return entry  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Durable result-level idempotency — re-exported from standalone module
+# ---------------------------------------------------------------------------
+# The canonical implementation lives in core.durable_result_idempotency so
+# that callers can import it without triggering the pydantic dependency chain
+# rooted in core.unified.__init__.  This module re-exports for backward compat.
+# ---------------------------------------------------------------------------
+
+try:
+    from core.durable_result_idempotency import (  # noqa: F401
+        DURABLE_RESULT_IDEMPOTENCY_IS_AUTHORITY,
+        DurableResultIdSet,
+        get_durable_result_id_store,
+        reset_durable_result_id_store,
+        check_result_idempotency,
+        record_result_idempotency,
+        _DEFAULT_RESULT_ID_STORE_PATH,
+    )
+except ImportError:
+    pass

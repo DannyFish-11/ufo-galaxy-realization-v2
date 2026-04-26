@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
 import time
 import uuid
 from collections import deque
@@ -95,11 +96,13 @@ __all__ = [
     "PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY",
     "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
     "CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL",
+    "SESSION_TRUTH_SNAPSHOT_IS_DURABLE_POLICY",
     # Data types
     "SessionTruthSource",
     "CanonicalSessionTruthRecord",
     "CanonicalSessionTruthRuntime",
     "CanonicalSessionTruthSnapshot",
+    "SessionTruthSnapshotStore",
     # Functions
     "filter_result_units_by_posture",
     "merge_session_truth",
@@ -107,6 +110,9 @@ __all__ = [
     "build_canonical_session_truth_snapshot",
     "get_canonical_session_truth_runtime",
     "reset_canonical_session_truth_runtime",
+    "get_session_truth_snapshot_store",
+    "reset_session_truth_snapshot_store",
+    "restore_session_truth_from_snapshot",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -394,6 +400,33 @@ class CanonicalSessionTruthRecord:
             "authority": CANONICAL_SESSION_TRUTH_AUTHORITY,
         }
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "CanonicalSessionTruthRecord":
+        """Reconstruct a :class:`CanonicalSessionTruthRecord` from a dict."""
+        return cls(
+            record_id=d.get("record_id") or f"cst_{uuid.uuid4().hex[:12]}",
+            session_id=str(d.get("session_id") or ""),
+            task_id=d.get("task_id"),
+            trace_id=d.get("trace_id"),
+            source_runtime_posture=str(
+                d.get("source_runtime_posture") or _CONTROL_ONLY
+            ),
+            coordination_role=str(d.get("coordination_role") or ""),
+            source_eligible=bool(d.get("source_eligible", False)),
+            total_units_received=int(d.get("total_units_received", 0)),
+            units_after_filter=int(d.get("units_after_filter", 0)),
+            filtered_unit_ids=list(d.get("filtered_unit_ids") or []),
+            merge_id=d.get("merge_id"),
+            merge_success=bool(d.get("merge_success", False)),
+            primary_unit_id=d.get("primary_unit_id"),
+            truth_source=str(
+                d.get("truth_source") or SessionTruthSource.unknown.value
+            ),
+            reason=str(d.get("reason") or ""),
+            timestamp=float(d.get("timestamp") or time.time()),
+            metadata=dict(d.get("metadata") or {}),
+        )
+
 
 # ---------------------------------------------------------------------------
 # CanonicalSessionTruthSnapshot
@@ -478,6 +511,8 @@ class CanonicalSessionTruthRuntime:
         self._lock: Lock = Lock()
         # Optional durable audit sink (PR-B2)
         self._audit_store: Any = None
+        # Optional durable snapshot store (default-on via startup wiring)
+        self._snapshot_store: Any = None
 
     # ── Durable audit sink ───────────────────────────────────────────────
 
@@ -495,11 +530,28 @@ class CanonicalSessionTruthRuntime:
         """
         self._audit_store = store
 
+    def set_snapshot_store(self, store: Any) -> None:
+        """Attach a :class:`SessionTruthSnapshotStore` for durable session truth recovery.
+
+        Once attached, every :class:`CanonicalSessionTruthRecord` recorded
+        here is also written to the snapshot store.  On V2 restart, the
+        snapshot is reloaded via :func:`restore_session_truth_from_snapshot`.
+
+        Parameters
+        ----------
+        store:
+            A :class:`SessionTruthSnapshotStore` instance.  Pass ``None`` to
+            detach.
+        """
+        self._snapshot_store = store
+
     def record(self, rec: CanonicalSessionTruthRecord) -> CanonicalSessionTruthRecord:
         """Add *rec* to the ring buffer and return it.
 
         When a durable audit store is attached, the record is also written to
-        the store for persistent auditability (PR-B2).
+        the store for persistent auditability (PR-B2).  When a snapshot store
+        is attached, the record is also written to the snapshot for recovery
+        across V2 restarts.
         """
         with self._lock:
             self._records.append(rec)
@@ -521,6 +573,15 @@ class CanonicalSessionTruthRuntime:
             except Exception as _exc:  # noqa: BLE001
                 _logger.debug(
                     "CanonicalSessionTruthRuntime: durable audit append failed: %s",
+                    _exc,
+                )
+        # Write to snapshot store for cross-restart recovery
+        if self._snapshot_store is not None:
+            try:
+                self._snapshot_store.append(rec.to_dict())
+            except Exception as _exc:  # noqa: BLE001
+                _logger.debug(
+                    "CanonicalSessionTruthRuntime: snapshot store append failed: %s",
                     _exc,
                 )
         return rec
@@ -561,6 +622,26 @@ def reset_canonical_session_truth_runtime() -> None:
     global _RUNTIME
     with _RUNTIME_LOCK:
         _RUNTIME = None
+
+
+# ---------------------------------------------------------------------------
+# SessionTruthSnapshotStore — re-exported from core.session_truth_snapshot
+# ---------------------------------------------------------------------------
+# The canonical, standalone implementation lives in core.session_truth_snapshot
+# to avoid the pydantic dependency chain.  This module re-exports for backward
+# compatibility and for callers that already import from canonical_session_truth.
+# ---------------------------------------------------------------------------
+
+try:
+    from core.session_truth_snapshot import (  # noqa: F401
+        SESSION_TRUTH_SNAPSHOT_IS_DURABLE_POLICY,
+        SessionTruthSnapshotStore,
+        get_session_truth_snapshot_store,
+        reset_session_truth_snapshot_store,
+        restore_session_truth_from_snapshot,
+    )
+except ImportError:
+    pass  # graceful degradation if standalone module unavailable
 
 
 # ---------------------------------------------------------------------------

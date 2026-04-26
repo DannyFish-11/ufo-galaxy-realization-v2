@@ -835,6 +835,98 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         )
 
     # ====================================================================
+    # 19b. Session truth snapshot store 挂载与恢复
+    # Wire the SessionTruthSnapshotStore to CanonicalSessionTruthRuntime and
+    # reload the most recent session truth records from the snapshot file.
+    # This is the default-on durable session truth recovery path: V2 restart
+    # no longer loses all session truth context.
+    # ====================================================================
+    try:
+        from core.session_truth_snapshot import (
+            get_session_truth_snapshot_store,
+            restore_session_truth_from_snapshot,
+        )
+        from core.canonical_session_truth import get_canonical_session_truth_runtime
+        _stt_store = get_session_truth_snapshot_store()
+        get_canonical_session_truth_runtime().set_snapshot_store(_stt_store)
+        _stt_restored = restore_session_truth_from_snapshot(store=_stt_store)
+        results["session_truth_snapshot"] = {
+            "status": "ok",
+            "store_path": _stt_store.store_path,
+            "restored_records": _stt_restored,
+        }
+        logger.info(
+            "Session truth 快照存储已挂载: path=%s restored=%d",
+            _stt_store.store_path,
+            _stt_restored,
+        )
+    except Exception as _exc:
+        results["session_truth_snapshot"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("Session truth 快照存储挂载失败（降级）: %s", _exc)
+
+    # ====================================================================
+    # 20. 启动恢复（Runtime Restart Recovery）
+    # Run the canonical RuntimeRestartRecoveryCoordinator so that durable
+    # lifecycle state — BodyMeshRegistry, hybrid orchestration continuity,
+    # and in-flight task lifecycle records — is recovered before the
+    # runtime begins processing new work.  This step is default-on and
+    # runs unconditionally; individual recovery sub-steps degrade
+    # gracefully when their backing stores are absent.
+    # ====================================================================
+    try:
+        from core.runtime_restart_recovery import run_startup_recovery
+        _recovery_report = run_startup_recovery()
+        results["startup_recovery"] = {
+            "status": "ok",
+            "recovery_id": _recovery_report.recovery_id,
+            "mesh_sessions_recovered": _recovery_report.mesh_sessions_recovered,
+            "body_mesh_entries_restored": _recovery_report.body_mesh_entries_restored,
+            "inflight_tasks_recovered": _recovery_report.inflight_tasks_recovered,
+            "inflight_tasks_resumable": _recovery_report.inflight_tasks_resumable,
+            "has_errors": _recovery_report.has_errors,
+        }
+        if _recovery_report.has_errors:
+            logger.warning(
+                "启动恢复完成（含错误）: recovery_id=%s errors=%s",
+                _recovery_report.recovery_id,
+                list(_recovery_report.errors),
+            )
+        else:
+            logger.info(
+                "启动恢复完成: recovery_id=%s mesh=%d body=%d inflight=%d(resumable=%d)",
+                _recovery_report.recovery_id,
+                _recovery_report.mesh_sessions_recovered,
+                _recovery_report.body_mesh_entries_restored,
+                _recovery_report.inflight_tasks_recovered,
+                _recovery_report.inflight_tasks_resumable,
+            )
+    except Exception as _exc:
+        results["startup_recovery"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("启动恢复跳过（降级）: %s", _exc)
+
+    # ====================================================================
+    # 21. 持久化结果幂等性存储初始化（Durable Result Idempotency Store）
+    # Eagerly initialise the durable result-ID dedup store so that
+    # duplicate result handling is safe immediately after startup.
+    # ====================================================================
+    try:
+        from core.durable_result_idempotency import get_durable_result_id_store
+        _rid_store = get_durable_result_id_store()
+        results["durable_result_idempotency"] = {
+            "status": "ok",
+            "store_path": _rid_store.store_path,
+            "loaded_count": _rid_store.size(),
+        }
+        logger.info(
+            "持久化结果幂等性存储已初始化: path=%s loaded=%d",
+            _rid_store.store_path,
+            _rid_store.size(),
+        )
+    except Exception as _exc:
+        results["durable_result_idempotency"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("持久化结果幂等性存储初始化失败（降级）: %s", _exc)
+
+    # ====================================================================
     # 汇总
     # ====================================================================
     elapsed = time.monotonic() - t0
@@ -904,6 +996,20 @@ async def shutdown_subsystems():
         factory._persist_state()  # 关闭前持久化状态
     except Exception as e:
         logger.warning(f"Agent 系统关闭失败: {e}")
+
+    # 0-pre. 在关闭任何子系统前，持久化任务生命周期快照
+    # This must happen before any subsystem stops so that inflight task state
+    # captured in the registry is snapshotted while it is still valid.
+    try:
+        from core.task_envelope_lifecycle_registry import get_lifecycle_registry
+        _registry = get_lifecycle_registry()
+        _saved = _registry.persist_snapshot()
+        if _saved:
+            logger.info("任务生命周期快照已持久化（关闭前）")
+        else:
+            logger.warning("任务生命周期快照持久化失败（关闭前）")
+    except Exception as e:
+        logger.warning(f"任务生命周期快照持久化失败: {e}")
 
     # 0a. 健康检查整合层
     try:
