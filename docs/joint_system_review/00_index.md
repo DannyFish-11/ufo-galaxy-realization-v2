@@ -4,20 +4,23 @@
 > + `DannyFish-11/ufo-galaxy-android`（Android 端侧，Kotlin）
 >
 > 审查依据：基于两个仓库的真实代码，不以文档为主要依据。
->
-> 生成日期：2026-04-24
 
 ---
 
 ## 文件清单
 
-| 文件 | 内容 |
-|------|------|
-| [01_system_positioning.md](./01_system_positioning.md) | 系统整体定位：从真实代码反推系统是什么 |
-| [02_responsibility_boundary.md](./02_responsibility_boundary.md) | 双仓职责边界：V2 与 Android 各自负责什么 |
-| [03_key_flows.md](./03_key_flows.md) | 主链路与关键流转：代码层面的执行路径梳理 |
-| [04_cross_repo_contract.md](./04_cross_repo_contract.md) | 双仓 contract/signal 闭环：真实接通 vs 骨架声明 |
-| [05_maturity_assessment.md](./05_maturity_assessment.md) | 成熟度与缺口：当前阶段判断与下一步方向 |
+| 文件 | 日期 | 内容 |
+|------|------|------|
+| [DEEP_JOINT_REVIEW_2026.md](./DEEP_JOINT_REVIEW_2026.md) | 2026-04-26 | **深度联合审查主文档**（8 主题全覆盖，含问题全集与 workstream 优先级）|
+| [01_system_positioning.md](./01_system_positioning.md) | 2026-04-24 | 系统整体定位：从真实代码反推系统是什么 |
+| [02_responsibility_boundary.md](./02_responsibility_boundary.md) | 2026-04-24 | 双仓职责边界：V2 与 Android 各自负责什么 |
+| [03_key_flows.md](./03_key_flows.md) | 2026-04-24 | 主链路与关键流转：代码层面的执行路径梳理 |
+| [04_cross_repo_contract.md](./04_cross_repo_contract.md) | 2026-04-24 | 双仓 contract/signal 闭环：真实接通 vs 骨架声明 |
+| [05_maturity_assessment.md](./05_maturity_assessment.md) | 2026-04-24 | 成熟度与缺口：当前阶段判断与下一步方向 |
+
+---
+
+> 推荐阅读顺序：先读 `DEEP_JOINT_REVIEW_2026.md`（最新、最全、覆盖问题全集），再按需参阅 01-05 补充细节。
 
 ---
 
