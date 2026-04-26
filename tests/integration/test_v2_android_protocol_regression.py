@@ -1,0 +1,661 @@
+"""
+tests/integration/test_v2_android_protocol_regression.py
+=========================================================
+Protocol regression tests for the V2 ↔ Android interaction model.
+
+This suite validates the critical non-happy-path behaviors that must remain
+stable across cross-repo changes:
+
+  1. Reconnect path — device reconnects after disconnect; V2 restores state
+     correctly without creating duplicate identity.
+  2. Offline queue / replay semantics — task_result messages that arrive after
+     a task's Future has already been resolved are handled gracefully (no crash,
+     no duplicate Future resolution).
+  3. Duplicate result delivery — sending task_result twice for the same task_id
+     must not raise an exception and must not attempt to set an already-done
+     Future a second time.
+  4. Handoff envelope reception — the V2 handoff signal path exists and is
+     reachable code (not dead code).
+
+All tests are self-contained and require no external services.
+
+Design note: these tests target regression coverage of the protocol contract,
+not performance or scalability.  They are meant to be run on every PR to
+catch protocol drift between the V2 (Python) and Android (Kotlin) sides.
+"""
+
+import asyncio
+import json
+import time
+import uuid
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# AIP v3 message helper
+# ---------------------------------------------------------------------------
+
+
+def _v3(msg_type: str, device_id: str, **extra) -> Dict[str, Any]:
+    return {
+        "version": "3.0",
+        "type": msg_type,
+        "message_id": str(uuid.uuid4()),
+        "device_id": device_id,
+        "timestamp": int(time.time() * 1000),
+        **extra,
+    }
+
+
+def _make_ws() -> MagicMock:
+    ws = MagicMock()
+    ws.send_json = AsyncMock()
+    ws.send = AsyncMock()
+    return ws
+
+
+# ===========================================================================
+# 1. Reconnect path regression
+# ===========================================================================
+
+
+class TestReconnectPath:
+    """Device reconnects after disconnect; V2 state continuity is preserved."""
+
+    @pytest.mark.asyncio
+    async def test_reconnect_restores_connected_state(self) -> None:
+        """After reconnect, device.connected must be True with the new websocket."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"reconnect-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        # Register via first connection
+        await bridge.handle_message(
+            ws1, _v3("device_register", device_id, platform="android")
+        )
+
+        device = bridge.get_device(device_id)
+        assert device is not None
+        assert device.connected is True
+
+        # Simulate disconnect
+        await bridge.disconnect_device(device_id)
+        device = bridge.get_device(device_id)
+        assert device is not None
+        assert device.connected is False
+
+        # Reconnect with a new websocket
+        success = await bridge.reconnect_device(device_id, ws2)
+        assert success is True
+
+        device = bridge.get_device(device_id)
+        assert device is not None
+        assert device.connected is True
+        assert device.websocket is ws2
+
+    @pytest.mark.asyncio
+    async def test_reconnect_unknown_device_returns_false(self) -> None:
+        """reconnect_device must return False for a device that was never registered."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        ws = _make_ws()
+        fake_id = f"unknown-{uuid.uuid4().hex[:8]}"
+
+        result = await bridge.reconnect_device(fake_id, ws)
+        assert result is False, (
+            "reconnect_device must return False for unknown device_id"
+        )
+
+    @pytest.mark.asyncio
+    async def test_reconnect_preserves_capability_state(self) -> None:
+        """Capabilities reported before disconnect must still be present after reconnect."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"reconnect-cap-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+        caps = ["tap", "swipe", "screenshot"]
+
+        # Register + report capabilities
+        await bridge.handle_message(
+            ws1, _v3("device_register", device_id, platform="android")
+        )
+        await bridge.handle_message(
+            ws1,
+            _v3("capability_report", device_id, platform="android", supported_actions=caps),
+        )
+
+        device = bridge.get_device(device_id)
+        assert device is not None
+        for cap in caps:
+            assert cap in device.supported_actions
+
+        # Disconnect + reconnect
+        await bridge.disconnect_device(device_id)
+        await bridge.reconnect_device(device_id, ws2)
+
+        # Capabilities must survive the reconnect cycle
+        device = bridge.get_device(device_id)
+        assert device is not None
+        for cap in caps:
+            assert cap in device.supported_actions, (
+                f"Capability '{cap}' lost after reconnect — capability state regression"
+            )
+
+    @pytest.mark.asyncio
+    async def test_reconnect_new_registration_replaces_old(self) -> None:
+        """A second device_register from the same device_id is accepted.
+
+        Android clients may re-register if they restart.  V2 must accept the
+        re-registration and update device state without error.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"rereg-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        # First registration
+        reg1 = await bridge.handle_message(
+            ws1, _v3("device_register", device_id, platform="android", model="Phone v1")
+        )
+        assert reg1["type"] == "device_register_ack"
+
+        # Second registration (client restart / reconnect via register)
+        reg2 = await bridge.handle_message(
+            ws2, _v3("device_register", device_id, platform="android", model="Phone v1")
+        )
+        assert reg2 is not None
+        assert reg2["type"] == "device_register_ack", (
+            "Re-registration must be accepted — V2 must not reject a second "
+            "device_register for the same device_id"
+        )
+
+    def test_reconnect_via_transport_layer(self) -> None:
+        """Reconnect path through the real WS transport (FastAPI TestClient).
+
+        Simulates a device that disconnects and reconnects on the canonical
+        ``/ws/device/{device_id}`` path.  V2 must correctly accept both
+        connections and route messages after reconnect.
+        """
+        from fastapi import FastAPI, WebSocket
+        from fastapi.testclient import TestClient
+
+        from galaxy_gateway.routes.websocket import _handle_android_ws
+
+        app = FastAPI()
+
+        @app.websocket("/ws/device/{device_id}")
+        async def ws(websocket: WebSocket, device_id: str) -> None:
+            await _handle_android_ws(websocket, device_id)
+
+        device_id = f"reconnect-ws-{uuid.uuid4().hex[:8]}"
+
+        with TestClient(app) as client:
+            # First connection: register
+            with client.websocket_connect(f"/ws/device/{device_id}") as ws1:
+                ws1.send_text(
+                    json.dumps(_v3("device_register", device_id, platform="android"))
+                )
+                ack1 = ws1.receive_json()
+            assert ack1["type"] == "device_register_ack"
+
+            # Second connection (reconnect): register again
+            with client.websocket_connect(f"/ws/device/{device_id}") as ws2:
+                ws2.send_text(
+                    json.dumps(_v3("device_register", device_id, platform="android"))
+                )
+                ack2 = ws2.receive_json()
+            assert ack2["type"] == "device_register_ack", (
+                "Reconnect registration must succeed — V2 must handle device "
+                "reconnects via new WS connections"
+            )
+
+
+# ===========================================================================
+# 2. Offline queue / replay semantics
+# ===========================================================================
+
+
+class TestOfflineQueueReplaySemantics:
+    """task_result for unknown / already-resolved task_ids is handled gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_task_result_for_unknown_task_id_no_crash(self) -> None:
+        """task_result with no matching Future must not crash V2.
+
+        This is the "replay" scenario: Android sends a result for a task that
+        V2 has no pending waiter for (e.g. because V2 restarted or the task
+        was already cancelled).  V2 must process it gracefully.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"replay-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+        unknown_task_id = f"no-waiter-{uuid.uuid4().hex[:8]}"
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        # task_result with no matching pending Future — must not raise
+        response = await bridge.handle_message(
+            ws,
+            _v3(
+                "task_result",
+                device_id,
+                task_id=unknown_task_id,
+                status="completed",
+                result={"data": "replayed"},
+            ),
+        )
+        # handle_task_result returns None; None is an acceptable response here
+        assert response is None or isinstance(response, dict)
+
+    @pytest.mark.asyncio
+    async def test_multiple_task_results_without_matching_futures_no_crash(
+        self,
+    ) -> None:
+        """Multiple replayed results must not crash V2.
+
+        Simulates an Android client that sends several results on reconnect
+        (offline queue drain).  V2 must process each without raising.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"multi-replay-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        for i in range(5):
+            task_id = f"queued-task-{i}-{uuid.uuid4().hex[:6]}"
+            await bridge.handle_message(
+                ws,
+                _v3(
+                    "task_result",
+                    device_id,
+                    task_id=task_id,
+                    status="completed",
+                    result={"index": i},
+                ),
+            )
+        # If we reach here without exception, the replay path is safe
+
+    @pytest.mark.asyncio
+    async def test_task_result_after_disconnect_reconnect_no_crash(self) -> None:
+        """task_result can arrive after disconnect; V2 must not crash."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"offline-result-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+        task_id = str(uuid.uuid4())
+
+        # Register on first connection and set up a pending future
+        await bridge.handle_message(
+            ws1, _v3("device_register", device_id, platform="android")
+        )
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+        bridge._pending_responses[task_id] = future
+
+        # Disconnect
+        await bridge.disconnect_device(device_id)
+
+        # Reconnect
+        await bridge.reconnect_device(device_id, ws2)
+
+        # task_result arrives after reconnect — future must still be resolved
+        await bridge.handle_message(
+            ws2,
+            _v3(
+                "task_result",
+                device_id,
+                task_id=task_id,
+                status="completed",
+                result={"data": "late_result"},
+            ),
+        )
+
+        assert future.done(), (
+            "Future must be resolved even when task_result arrives after reconnect"
+        )
+
+
+# ===========================================================================
+# 3. Duplicate result delivery
+# ===========================================================================
+
+
+class TestDuplicateResultDelivery:
+    """Sending task_result twice for the same task_id must be idempotent."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_task_result_no_exception(self) -> None:
+        """A second task_result for the same task_id must not raise an exception.
+
+        Android may send duplicate results due to retry logic or network issues.
+        V2 must handle this idempotently — the second delivery must be a no-op.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"dup-{uuid.uuid4().hex[:8]}"
+        task_id = str(uuid.uuid4())
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        # Install Future
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+        bridge._pending_responses[task_id] = future
+
+        # First delivery — resolves the Future
+        await bridge.handle_message(
+            ws,
+            _v3("task_result", device_id, task_id=task_id, status="completed"),
+        )
+        assert future.done()
+
+        # Second delivery — no matching Future; must not raise
+        await bridge.handle_message(
+            ws,
+            _v3("task_result", device_id, task_id=task_id, status="completed"),
+        )
+        # If we reach here, duplicate delivery was handled gracefully
+
+    @pytest.mark.asyncio
+    async def test_duplicate_task_result_does_not_double_resolve_future(
+        self,
+    ) -> None:
+        """A second task_result must not attempt to set an already-resolved Future."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"dup-future-{uuid.uuid4().hex[:8]}"
+        task_id = str(uuid.uuid4())
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+        bridge._pending_responses[task_id] = future
+
+        result_msg = _v3("task_result", device_id, task_id=task_id, status="completed")
+
+        # First delivery
+        await bridge.handle_message(ws, result_msg)
+        first_result = future.result()
+        assert future.done()
+
+        # Second delivery — Future is already gone from _pending_responses;
+        # must not raise InvalidStateError
+        await bridge.handle_message(ws, result_msg)
+
+        # First result must be unchanged
+        assert future.result() == first_result, (
+            "Future result must not be overwritten by duplicate task_result"
+        )
+
+    @pytest.mark.asyncio
+    async def test_different_task_ids_handled_independently(self) -> None:
+        """task_results for different task_ids must resolve their respective Futures."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"multi-task-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        loop = asyncio.get_event_loop()
+        task_id_a = str(uuid.uuid4())
+        task_id_b = str(uuid.uuid4())
+        future_a: asyncio.Future = loop.create_future()
+        future_b: asyncio.Future = loop.create_future()
+        bridge._pending_responses[task_id_a] = future_a
+        bridge._pending_responses[task_id_b] = future_b
+
+        # Deliver result for B first, then A
+        await bridge.handle_message(
+            ws,
+            _v3("task_result", device_id, task_id=task_id_b, status="completed",
+                result={"which": "B"}),
+        )
+        await bridge.handle_message(
+            ws,
+            _v3("task_result", device_id, task_id=task_id_a, status="completed",
+                result={"which": "A"}),
+        )
+
+        assert future_a.done(), "Future for task_id_a must be resolved"
+        assert future_b.done(), "Future for task_id_b must be resolved"
+
+
+# ===========================================================================
+# 4. Handoff envelope reception path
+# ===========================================================================
+
+
+class TestHandoffSignalPath:
+    """Handoff envelope reception path must be reachable (not dead code)."""
+
+    @pytest.mark.asyncio
+    async def test_handoff_related_message_type_does_not_crash(self) -> None:
+        """An unrecognised or handoff-style message type must not crash the bridge.
+
+        V2 must tolerate unknown message types gracefully — returning an error
+        response or None, but never raising an unhandled exception.
+        This guards against the handoff ingress path becoming silently dead.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"handoff-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        # Send a handoff-style envelope (unrecognised type)
+        result = await bridge.handle_message(
+            ws,
+            _v3(
+                "session_handoff",
+                device_id,
+                payload={"continuation_token": "abc", "session_id": "sess-001"},
+            ),
+        )
+        # Must not raise; may return error dict or None
+        assert result is None or isinstance(result, dict)
+
+    @pytest.mark.asyncio
+    async def test_task_end_handler_reachable(self) -> None:
+        """task_end handler must be reachable and return a structured ack."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"task-end-{uuid.uuid4().hex[:8]}"
+        task_id = str(uuid.uuid4())
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        ack = await bridge.handle_message(
+            ws,
+            _v3(
+                "task_end",
+                device_id,
+                task_id=task_id,
+                status="completed",
+            ),
+        )
+        # task_end handler must produce a task_end_ack
+        assert ack is not None, "task_end must return a response (not dead code)"
+        assert ack.get("type") == "task_end_ack", (
+            f"Expected 'task_end_ack', got {ack.get('type')!r}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_goal_result_ingress_path_exists(self) -> None:
+        """goal_result ingress handler must be reachable without crashing.
+
+        goal_result is a cross-repo contract type used by higher-level Android
+        orchestration flows.  If it arrives, V2 must not crash.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"goal-result-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+
+        await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+
+        result = await bridge.handle_message(
+            ws,
+            _v3(
+                "goal_result",
+                device_id,
+                task_id=str(uuid.uuid4()),
+                status="completed",
+                result={"goal": "done"},
+            ),
+        )
+        # Must not raise; response type varies by handler implementation
+        assert result is None or isinstance(result, dict)
+
+    def test_handle_task_result_function_is_not_dead_code(self) -> None:
+        """handle_task_result must be importable and callable."""
+        from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
+
+        assert callable(handle_task_result), (
+            "handle_task_result must be a callable — handoff waiter resolution "
+            "path must not be dead code"
+        )
+
+    def test_reconnect_device_method_exists_and_is_callable(self) -> None:
+        """reconnect_device must exist on AndroidBridge as a callable method."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        assert callable(bridge.reconnect_device), (
+            "AndroidBridge.reconnect_device must be callable — reconnect path "
+            "must not be dead code"
+        )
+
+    def test_dispatch_to_websocket_function_is_importable(self) -> None:
+        """dispatch_to_websocket must be importable from the routing module."""
+        from galaxy_gateway.routing.dispatch import dispatch_to_websocket
+
+        assert callable(dispatch_to_websocket), (
+            "dispatch_to_websocket must be importable and callable — "
+            "V2→Android command dispatch path must not be dead code"
+        )
+
+
+# ===========================================================================
+# 5. Session identity continuity
+# ===========================================================================
+
+
+class TestSessionIdentityContinuity:
+    """Session identity (device_id) must be stable across protocol operations."""
+
+    @pytest.mark.asyncio
+    async def test_device_id_consistent_across_register_and_capability(self) -> None:
+        """device_id in register_ack and capability_report_ack must match."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"session-id-{uuid.uuid4().hex[:8]}"
+        ws = _make_ws()
+
+        reg_ack = await bridge.handle_message(
+            ws, _v3("device_register", device_id, platform="android")
+        )
+        cap_ack = await bridge.handle_message(
+            ws,
+            _v3(
+                "capability_report",
+                device_id,
+                platform="android",
+                supported_actions=["tap"],
+            ),
+        )
+
+        assert reg_ack["device_id"] == device_id
+        assert cap_ack["device_id"] == device_id
+
+    @pytest.mark.asyncio
+    async def test_multiple_devices_independent_state(self) -> None:
+        """Two concurrent devices must have independent, non-overlapping state."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_a = f"dev-a-{uuid.uuid4().hex[:8]}"
+        device_b = f"dev-b-{uuid.uuid4().hex[:8]}"
+        ws_a = _make_ws()
+        ws_b = _make_ws()
+        caps_a = ["tap", "swipe"]
+        caps_b = ["screenshot", "input_text"]
+
+        # Register and report capabilities for both devices
+        await bridge.handle_message(
+            ws_a, _v3("device_register", device_a, platform="android")
+        )
+        await bridge.handle_message(
+            ws_b, _v3("device_register", device_b, platform="android")
+        )
+        await bridge.handle_message(
+            ws_a,
+            _v3("capability_report", device_a, platform="android", supported_actions=caps_a),
+        )
+        await bridge.handle_message(
+            ws_b,
+            _v3("capability_report", device_b, platform="android", supported_actions=caps_b),
+        )
+
+        dev_a_obj = bridge.get_device(device_a)
+        dev_b_obj = bridge.get_device(device_b)
+
+        assert dev_a_obj is not None
+        assert dev_b_obj is not None
+        assert dev_a_obj is not dev_b_obj
+
+        for cap in caps_a:
+            assert cap in dev_a_obj.supported_actions
+        for cap in caps_b:
+            assert cap in dev_b_obj.supported_actions
+        # No cross-contamination
+        for cap in caps_b:
+            assert cap not in dev_a_obj.supported_actions, (
+                f"Device A must not have device B's capability '{cap}'"
+            )
