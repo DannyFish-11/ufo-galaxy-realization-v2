@@ -129,7 +129,9 @@ class DurableResultIdSet:
         self._max_entries = max_entries
         self._lock = threading.Lock()
         self._loaded = False
-        # Ordered for eviction: oldest → index 0
+        # OrderedDict is used (rather than plain dict) specifically for the
+        # popitem(last=False) capability, which efficiently evicts the oldest
+        # entry in O(1) when the set exceeds max_entries.
         self._ids: OrderedDict = OrderedDict()
         # Ensure the directory exists
         try:

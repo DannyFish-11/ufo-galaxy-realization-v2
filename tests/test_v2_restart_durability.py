@@ -351,7 +351,7 @@ class TestGroupI_SessionTruthSnapshotBounded:
 
 _pydantic_available = True
 try:
-    import pydantic  # noqa: F401
+    import pydantic
 except ImportError:
     _pydantic_available = False
 
@@ -645,7 +645,6 @@ class TestGroupO_ReplaySafetyAcrossRestart:
 class TestGroupP_StartupSessionTruthSnapshotWiring:
     def test_P01_session_truth_snapshot_key_present_in_results(self):
         """bootstrap_subsystems must include 'session_truth_snapshot' in results."""
-        import ast
         startup_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "core",
