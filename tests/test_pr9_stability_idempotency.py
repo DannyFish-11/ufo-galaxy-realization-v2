@@ -172,6 +172,24 @@ class TestDeviceRegistrationDedup(unittest.TestCase):
 class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
     """_handle_task_result must ignore duplicate task_id."""
 
+    def _reset_durable_store(self):
+        """Reset the durable result-ID singleton and clear its backing file."""
+        try:
+            from core.durable_result_idempotency import (
+                get_durable_result_id_store,
+                reset_durable_result_id_store,
+            )
+            get_durable_result_id_store().clear()
+            reset_durable_result_id_store()
+        except Exception:
+            pass
+
+    def setUp(self):
+        self._reset_durable_store()
+
+    def tearDown(self):
+        self._reset_durable_store()
+
     def _make_handler(self):
         from galaxy_gateway.handlers.message_handler import MessageHandler
         dm = MagicMock()
@@ -248,6 +266,24 @@ class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 
 class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
     """handle_task_result must ignore duplicate task_id in DeviceRouter."""
+
+    def _reset_durable_store(self):
+        """Reset the durable result-ID singleton and clear its backing file."""
+        try:
+            from core.durable_result_idempotency import (
+                get_durable_result_id_store,
+                reset_durable_result_id_store,
+            )
+            get_durable_result_id_store().clear()
+            reset_durable_result_id_store()
+        except Exception:
+            pass
+
+    def setUp(self):
+        self._reset_durable_store()
+
+    def tearDown(self):
+        self._reset_durable_store()
 
     async def test_first_result_stored(self):
         from galaxy_gateway.device_router import DeviceRouter

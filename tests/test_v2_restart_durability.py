@@ -752,3 +752,189 @@ class TestGroupS_ShutdownPersistsLifecycleSnapshot:
         with open(startup_path) as f:
             src = f.read()
         assert "get_lifecycle_registry" in src
+
+
+# ---------------------------------------------------------------------------
+# T: DeviceRouter.handle_task_result uses durable idempotency store
+# ---------------------------------------------------------------------------
+
+
+class TestGroupT_DeviceRouterDurableIdempotency:
+    """DeviceRouter.handle_task_result must consult the durable store so that
+    duplicate results are suppressed even after a V2 restart."""
+
+    def setup_method(self):
+        from core.durable_result_idempotency import reset_durable_result_id_store
+        reset_durable_result_id_store()
+
+    def teardown_method(self):
+        from core.durable_result_idempotency import reset_durable_result_id_store
+        reset_durable_result_id_store()
+
+    def test_T01_device_router_uses_durable_idempotency(self):
+        """device_router.py must import and call check/record_result_idempotency."""
+        import os
+        dr_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "device_router.py",
+        )
+        with open(dr_path) as f:
+            src = f.read()
+        assert "check_result_idempotency" in src, (
+            "device_router must call check_result_idempotency from durable store"
+        )
+        assert "record_result_idempotency" in src, (
+            "device_router must call record_result_idempotency from durable store"
+        )
+
+    def test_T02_device_router_imports_durable_idempotency_module(self):
+        """device_router.py must import from core.durable_result_idempotency."""
+        import os
+        dr_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "device_router.py",
+        )
+        with open(dr_path) as f:
+            src = f.read()
+        assert "core.durable_result_idempotency" in src
+
+    def test_T03_durable_store_suppresses_result_across_restart(self, tmp_path):
+        """Simulated restart: a result recorded in process-1 must be suppressed in process-2."""
+        from core.durable_result_idempotency import DurableResultIdSet
+        path = str(tmp_path / "dr_ids.json")
+        tid = _task_id()
+
+        # Process 1: DeviceRouter processes the result and records it durably
+        store1 = DurableResultIdSet(store_path=path)
+        assert store1.add(tid) is True  # new result accepted
+
+        # Process 2: new DeviceRouter instance (restart), same durable path
+        store2 = DurableResultIdSet(store_path=path)
+        # Android replays the same result — must be rejected
+        assert store2.contains(tid), (
+            "Durable store must still contain the result after simulated restart"
+        )
+        assert store2.add(tid) is False, (
+            "Replayed result must be rejected by the durable store after restart"
+        )
+
+    def test_T04_new_result_after_restart_accepted(self, tmp_path):
+        """A genuinely new result after restart must still be accepted."""
+        from core.durable_result_idempotency import DurableResultIdSet
+        path = str(tmp_path / "dr_ids2.json")
+        tid_old = _task_id()
+        tid_new = _task_id()
+
+        store1 = DurableResultIdSet(store_path=path)
+        store1.add(tid_old)
+
+        store2 = DurableResultIdSet(store_path=path)
+        assert not store2.contains(tid_new)
+        assert store2.add(tid_new) is True
+
+
+# ---------------------------------------------------------------------------
+# U: MessageHandler._handle_task_result uses durable idempotency store
+# ---------------------------------------------------------------------------
+
+
+class TestGroupU_MessageHandlerDurableIdempotency:
+    """MessageHandler._handle_task_result must consult the durable store."""
+
+    def test_U01_message_handler_uses_durable_idempotency(self):
+        """message_handler.py must import and call check/record_result_idempotency."""
+        import os
+        mh_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "handlers",
+            "message_handler.py",
+        )
+        with open(mh_path) as f:
+            src = f.read()
+        assert "check_result_idempotency" in src, (
+            "message_handler must call check_result_idempotency from durable store"
+        )
+        assert "record_result_idempotency" in src, (
+            "message_handler must call record_result_idempotency from durable store"
+        )
+
+    def test_U02_message_handler_imports_durable_idempotency_module(self):
+        """message_handler.py must import from core.durable_result_idempotency."""
+        import os
+        mh_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "handlers",
+            "message_handler.py",
+        )
+        with open(mh_path) as f:
+            src = f.read()
+        assert "core.durable_result_idempotency" in src
+
+
+# ---------------------------------------------------------------------------
+# V: android task_lifecycle.handle_task_result uses durable idempotency
+# ---------------------------------------------------------------------------
+
+
+class TestGroupV_TaskLifecycleDurableIdempotency:
+    """task_lifecycle.handle_task_result must apply the durable idempotency guard
+    before processing so that cross-restart duplicate results are suppressed at
+    the Android bridge ingress."""
+
+    def test_V01_task_lifecycle_uses_durable_idempotency(self):
+        """task_lifecycle.py must import and call check/record_result_idempotency."""
+        import os
+        tl_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "android",
+            "handlers",
+            "task_lifecycle.py",
+        )
+        with open(tl_path) as f:
+            src = f.read()
+        assert "check_result_idempotency" in src, (
+            "task_lifecycle must call check_result_idempotency from durable store"
+        )
+        assert "record_result_idempotency" in src, (
+            "task_lifecycle must call record_result_idempotency from durable store"
+        )
+
+    def test_V02_task_lifecycle_imports_durable_idempotency_module(self):
+        """task_lifecycle.py must import from core.durable_result_idempotency."""
+        import os
+        tl_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "android",
+            "handlers",
+            "task_lifecycle.py",
+        )
+        with open(tl_path) as f:
+            src = f.read()
+        assert "core.durable_result_idempotency" in src
+
+    def test_V03_durable_guard_placed_before_future_resolution(self):
+        """The durable guard in task_lifecycle.py must appear before the Future
+        completion block so that a duplicate result does not double-resolve
+        the awaiting coroutine."""
+        import os
+        tl_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "galaxy_gateway",
+            "android",
+            "handlers",
+            "task_lifecycle.py",
+        )
+        with open(tl_path) as f:
+            src = f.read()
+        durable_pos = src.find("check_result_idempotency")
+        future_pos = src.find("_pending_responses")
+        assert durable_pos != -1 and future_pos != -1
+        assert durable_pos < future_pos, (
+            "Durable idempotency guard must be applied before Future resolution"
+        )

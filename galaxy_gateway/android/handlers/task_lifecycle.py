@@ -182,7 +182,16 @@ def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> N
 async def handle_task_result(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> None:
-    """处理任务结果，完成 Future 并触发 OpenClawd 记忆回流"""
+    """处理任务结果，完成 Future 并触发 OpenClawd 记忆回流
+
+    Durable idempotency guard
+    -------------------------
+    Before processing, the task_id is checked against the cross-restart durable
+    result-ID store.  If the result was already processed in a previous V2
+    process lifetime (e.g. Android reconnects after a V2 restart and replays
+    the same task_result), the message is suppressed here so that the Future
+    is not double-resolved and memory backflow is not duplicated.
+    """
     task_id = message.get("task_id")
     device_id = message.get("device_id")
     result_status = message.get("status", "unknown")
@@ -192,6 +201,28 @@ async def handle_task_result(
         "Task result received: task_id=%s device_id=%s status=%s",
         task_id, device_id, result_status,
     )
+
+    # ── Durable idempotency: suppress cross-restart duplicate results ──
+    if task_id:
+        try:
+            from core.durable_result_idempotency import (
+                check_result_idempotency,
+                record_result_idempotency,
+            )
+            if check_result_idempotency(task_id):
+                logger.info(
+                    "task_lifecycle: duplicate task result suppressed (durable store): "
+                    "task_id=%s device_id=%s",
+                    task_id,
+                    device_id,
+                )
+                return
+            record_result_idempotency(task_id)
+        except Exception as _idem_exc:
+            logger.debug(
+                "task_lifecycle: durable idempotency check skipped (non-fatal): %s",
+                _idem_exc,
+            )
 
     # PR-13: reconcile inbound signal against host-side execution tracker
     _try_reconcile(message)

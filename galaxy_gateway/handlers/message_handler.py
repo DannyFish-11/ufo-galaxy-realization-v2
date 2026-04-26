@@ -174,22 +174,57 @@ class MessageHandler:
         return None
     
     async def _handle_task_result(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
-        """处理任务结果（幂等：同一 task_id 的重复回包将被忽略）。"""
+        """处理任务结果（幂等：同一 task_id 的重复回包将被忽略）。
+
+        Idempotency is enforced at two levels:
+        1. Fast-path in-memory set (``_seen_task_result_ids``) — low latency,
+           reset on process restart.
+        2. Durable file-backed store (``DurableResultIdSet``) — survives V2
+           restarts so Android reconnects cannot re-deliver already-processed
+           results.
+        """
         task_id = message.task_id
         if not task_id:
             return create_error_message(device_id, "Missing task_id", message.message_id)
 
-        # ── Idempotency: check for duplicate task result ──
+        # ── Idempotency level-1: in-memory fast path ──
         if task_id in self._seen_task_result_ids:
             logger.info(
-                "Duplicate task result ignored",
+                "Duplicate task result ignored (in-memory)",
                 extra={
                     "event": "task_result_duplicate_ignored",
                     "task_id": task_id,
                     "device_id": device_id,
+                    "layer": "in_memory",
                 },
             )
             return None
+
+        # ── Idempotency level-2: durable cross-restart dedup ──
+        try:
+            from core.durable_result_idempotency import (
+                check_result_idempotency,
+                record_result_idempotency,
+            )
+            if check_result_idempotency(task_id):
+                self._seen_task_result_ids.add(task_id)
+                logger.info(
+                    "Duplicate task result ignored (durable store)",
+                    extra={
+                        "event": "task_result_duplicate_ignored",
+                        "task_id": task_id,
+                        "device_id": device_id,
+                        "layer": "durable",
+                    },
+                )
+                return None
+            record_result_idempotency(task_id)
+        except Exception as _idem_exc:
+            logger.debug(
+                "message_handler: durable idempotency check skipped (non-fatal): %s",
+                _idem_exc,
+            )
+
         self._seen_task_result_ids.add(task_id)
 
         # ── Parallel subtask dedup (group_id + subtask_index) ──
