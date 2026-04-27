@@ -701,6 +701,40 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         ),
         resolved=False,
     ),
+    WorkstreamGapEntry(
+        gap_id="GAP_DURABLE_TRUTH_AUTHORITY_CONVERGENCE",
+        title="Session truth, task lifecycle, and result continuity form parallel persistence fragments rather than a unified authority chain",
+        severity=GapSeverity.P1,
+        description=(
+            "After PR-1 (GAP_V2_TRUTH_PERSISTENCE closure), V2 gained "
+            "SessionTruthSnapshotStore, TaskLifecyclePersistenceStore, and "
+            "DurableResultIdSet.  However, the CanonicalSessionTruthRuntime "
+            "ring buffer was described as 'the authoritative runtime read surface' "
+            "while durable stores were described as forensic/audit sinks.  "
+            "This creates semantic ambiguity: are the runtime ring buffer and "
+            "durable stores competing truth sources?  A unified authority "
+            "declaration (durable path IS the authority; ring buffer is a "
+            "read-cache) was missing."
+        ),
+        resolved=True,
+        resolution_pr="PR-2::core.durable_truth_authority_chain",
+    ),
+    WorkstreamGapEntry(
+        gap_id="GAP_CONTINUATION_REBIND_CLOSED_LOOP",
+        title="Continuation/waiter cross-restart rebind (second half of closed loop) not tracked",
+        severity=GapSeverity.P1,
+        description=(
+            "PR-1 added _reconcile_continuation_waiters() which fails stale "
+            "asyncio.Future waiters with a restart error (first half of the "
+            "closed loop).  However, there was no mechanism to track the "
+            "second half: re-dispatch → new waiter registered → result "
+            "delivered.  Without this, the control chain 'restarts from "
+            "scratch' with no structural proof that the loop was closed after "
+            "the restart."
+        ),
+        resolved=True,
+        resolution_pr="PR-2::core.continuation_rebind_registry",
+    ),
 ]
 
 
