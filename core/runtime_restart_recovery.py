@@ -255,9 +255,9 @@ SESSION_TRUTH_RECOVERY_POLICY: str = (
 CONTINUATION_WAITER_RECONCILIATION_POLICY: str = (
     "POLICY::CONTINUATION_WAITER_RECONCILIATION: On process restart, "
     "in-memory asyncio.Future waiters registered with CanonicalCompletionIngress "
-    "are lost.  For tasks recovered with disposition RESUMABLE or REPLAY_ONLY, "
-    "RuntimeRestartRecoveryCoordinator resolves any stale future still registered "
-    "in the CanonicalCompletionIngress with a RuntimeError('restart_recovery') "
+    "are lost.  For tasks recovered with disposition RESUMABLE, REPLAY_ONLY, or "
+    "REISSUABLE, RuntimeRestartRecoveryCoordinator resolves any stale future still "
+    "registered in the CanonicalCompletionIngress with a RuntimeError('restart_recovery') "
     "so that callers receive an explicit signal rather than waiting indefinitely.  "
     "This prevents the control chain from hanging after a restart.  Actual "
     "result delivery will follow when the task is re-dispatched and the device "

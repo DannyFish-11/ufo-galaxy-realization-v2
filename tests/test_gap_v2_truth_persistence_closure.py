@@ -521,9 +521,9 @@ class TestGroupI_InflightResumable:
             coord = RuntimeRestartRecoveryCoordinator(task_lifecycle_store=store)
             report = RuntimeRecoveryReport()
             coord._recover_inflight_tasks(report)
+            from core.task_lifecycle_persistence import restore_inflight_tasks_from_snapshot
             coord._dispatch_recovered_tasks(
-                __import__("core.task_lifecycle_persistence", fromlist=["restore_inflight_tasks_from_snapshot"])
-                .restore_inflight_tasks_from_snapshot(store=store),
+                restore_inflight_tasks_from_snapshot(store=store),
                 report,
             )
 
@@ -707,27 +707,14 @@ class TestGroupM_ReconcileContinuationWaiters:
                 coord = RuntimeRestartRecoveryCoordinator(task_lifecycle_store=store)
                 report = RuntimeRecoveryReport()
 
+                # Patch get_canonical_completion_ingress to return our isolated
+                # ingress instance so the reconciler operates on the futures we
+                # registered above rather than the process-level singleton.
                 with patch(
-                    "core.runtime_restart_recovery"
-                    ".RuntimeRestartRecoveryCoordinator"
-                    "._reconcile_continuation_waiters",
-                    wraps=coord._reconcile_continuation_waiters,
-                ):
-                    # Directly call with our ingress via monkeypatching.
-                    pass
-
-                # Patch get_canonical_completion_ingress to return our ingress.
-                with patch(
-                    "core.runtime_restart_recovery.get_canonical_completion_ingress"
-                    if False else "core.canonical_completion_ingress.get_canonical_completion_ingress",
+                    "core.canonical_completion_ingress.get_canonical_completion_ingress",
                     return_value=ingress,
                 ):
-                    # Manually invoke the reconcile method with our patched ingress.
-                    with patch(
-                        "core.canonical_completion_ingress.get_canonical_completion_ingress",
-                        return_value=ingress,
-                    ):
-                        coord._reconcile_continuation_waiters(report)
+                    coord._reconcile_continuation_waiters(report)
 
                 assert report.continuation_waiters_reconciled >= 1
                 # The future should be resolved with an exception.
