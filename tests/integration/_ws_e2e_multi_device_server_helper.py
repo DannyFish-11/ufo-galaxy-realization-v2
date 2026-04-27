@@ -100,7 +100,7 @@ def run(port: int) -> None:
             "payload": {"command": command},
         }
 
-        asyncio.ensure_future(
+        asyncio.create_task(
             _bridge.send_to_device(device_id, task_assign_msg, wait_response=False)
         )
         return {"dispatched": True, "task_id": task_id, "target_device_id": device_id}
@@ -155,7 +155,7 @@ def run(port: int) -> None:
             },
         }
 
-        asyncio.ensure_future(
+        asyncio.create_task(
             _bridge.send_to_device(
                 takeover_device_id, task_assign_msg, wait_response=False
             )

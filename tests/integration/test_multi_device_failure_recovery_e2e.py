@@ -197,7 +197,7 @@ class NetworkE2EClient:
         """Try to receive a message; return None if nothing arrives within *timeout*."""
         try:
             return await self.recv(timeout=timeout)
-        except (asyncio.TimeoutError, Exception):
+        except asyncio.TimeoutError:
             return None
 
     # ---------------------------------------------------------------- flows
