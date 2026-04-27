@@ -749,7 +749,17 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
             "mismatch routing are not covered by any automated network-level test. "
             "CI has no blocking gate for regressions in these paths."
         ),
-        resolved=False,
+        resolved=True,
+        resolution_pr=(
+            "#854 (PR-7): tests/integration/test_multi_device_failure_recovery_e2e.py "
+            "covers 8 network-level scenarios: multi-device concurrent registration, "
+            "per-device capability isolation, concurrent task execution, delegated "
+            "takeover with result continuity, disconnect/reconnect/recovery, "
+            "capability mismatch routing, multi-device result aggregation, and "
+            "degraded participant handling.  CI gate added in "
+            ".github/workflows/dual_repo_integration.yml "
+            "(multi-device-failure-recovery-e2e job)."
+        ),
     ),
 ]
 
