@@ -1311,12 +1311,12 @@ class RuntimeRestartRecoveryCoordinator:
             return
 
         consolidated: Dict[str, int] = {}
-        seen_task_ids: set = set()
+        deduplicated_task_ids: set = set()
         for rec in restored:
             # Deduplicate task_ids (same as dispatch step)
-            if rec.task_id in seen_task_ids:
+            if rec.task_id in deduplicated_task_ids:
                 continue
-            seen_task_ids.add(rec.task_id)
+            deduplicated_task_ids.add(rec.task_id)
             participant = rec.target_device_id or "unknown_participant"
             consolidated[participant] = consolidated.get(participant, 0) + 1
 

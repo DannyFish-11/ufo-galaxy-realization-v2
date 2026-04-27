@@ -243,10 +243,27 @@ class ContinuationRebindRecord:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ContinuationRebindRecord":
-        """Reconstruct from a dict."""
+        """Reconstruct from a dict.
+
+        Notes
+        -----
+        If ``record_id`` is missing, a new unique ID is generated (acceptable
+        since ``record_id`` is an internal correlation identifier; the stable
+        key used by the registry is ``task_id``).  If ``task_id`` is missing,
+        a warning is emitted — the record will have an empty ``task_id`` and
+        will not be indexable by the registry.
+        """
+        task_id = str(d.get("task_id") or "")
+        if not task_id:
+            logger.warning(
+                "ContinuationRebindRecord.from_dict: missing task_id — "
+                "reconstructed record will have empty task_id and cannot be "
+                "indexed by ContinuationRebindRegistry.  Dict keys: %s",
+                list(d.keys()),
+            )
         return cls(
             record_id=d.get("record_id") or f"crr_{uuid.uuid4().hex[:12]}",
-            task_id=str(d.get("task_id") or ""),
+            task_id=task_id,
             state=RebindState(d.get("state") or RebindState.pending_rebind.value),
             failed_at=float(d.get("failed_at") or time.time()),
             rebound_at=d.get("rebound_at"),

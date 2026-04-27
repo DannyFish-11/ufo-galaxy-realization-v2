@@ -23,8 +23,8 @@ However, these stores remained **semantically parallel** — each was added
 additively and there was no single declaration that they collectively form a
 **unified durable truth authority chain**.  The in-process ring buffer of
 :class:`~core.canonical_session_truth.CanonicalSessionTruthRuntime` continued
-to be described as "the authoritative runtime read surface", which created an
-ambiguity:
+to be described as "the authoritative runtime read surface", which created
+an ambiguity:
 
     *Is the ring buffer the truth source, with durable stores as
     observational sinks?  Or is the durable path the authority, with the
