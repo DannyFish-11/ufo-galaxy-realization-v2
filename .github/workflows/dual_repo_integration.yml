@@ -16,6 +16,8 @@ on:
       - "tests/integration/test_runtime_readiness_matrix.py"
       - "tests/integration/test_separated_process_ws_e2e.py"
       - "tests/integration/_ws_e2e_server_helper.py"
+      - "tests/integration/test_multi_device_failure_recovery_e2e.py"
+      - "tests/integration/_ws_e2e_multi_device_server_helper.py"
       - ".github/workflows/dual_repo_integration.yml"
   pull_request:
     branches: [main]
@@ -29,6 +31,8 @@ on:
       - "tests/integration/test_runtime_readiness_matrix.py"
       - "tests/integration/test_separated_process_ws_e2e.py"
       - "tests/integration/_ws_e2e_server_helper.py"
+      - "tests/integration/test_multi_device_failure_recovery_e2e.py"
+      - "tests/integration/_ws_e2e_multi_device_server_helper.py"
       - ".github/workflows/dual_repo_integration.yml"
   # Allow manual trigger so developers can run the suite on demand
   workflow_dispatch:
@@ -220,6 +224,78 @@ jobs:
           path: separated_process_ws_e2e_report.xml
           retention-days: 30
 
+  # =========================================================================
+  # Job 4c — Multi-device, delegated takeover, and failure-recovery E2E
+  #           [BLOCKING]
+  #
+  # Closes GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION by exercising:
+  #
+  #   • 2+ participant concurrent registration (no cross-contamination)
+  #   • Per-device capability isolation (task_assign not broadcast)
+  #   • Concurrent task execution and result collection
+  #   • Delegated takeover: primary fails → backup executes same task_id
+  #     (result continuity across handoff)
+  #   • Participant disconnect → reconnect → task recovery (full lifecycle)
+  #   • Capability mismatch routing (limited device does not receive tap task)
+  #   • Multi-device result aggregation (task-to-device correlation)
+  #   • Degraded participant (single-capability device participates safely)
+  #
+  # Architecture matches the separated-process E2E:
+  #   - Server: real uvicorn in a separate OS process
+  #   - Clients: websockets over genuine TCP loopback sockets
+  #   - Dispatch triggers: HTTP POST endpoints on the test server
+  #
+  # This job is BLOCKING — must pass before merging to main.
+  # =========================================================================
+  multi-device-failure-recovery-e2e:
+    name: Multi-Device + Takeover + Failure-Recovery E2E [BLOCKING]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run multi-device failure-recovery E2E suite
+        run: |
+          python -m pytest \
+            tests/integration/test_multi_device_failure_recovery_e2e.py \
+            -v --tb=short -p no:warnings \
+            --junitxml=multi_device_failure_recovery_e2e_report.xml
+          echo "✅ Multi-device failure-recovery E2E suite passed."
+      - name: Verify GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION is registered
+        run: |
+          python - <<'EOF'
+          from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY, GapSeverity
+          gap = next(
+              (g for g in WORKSTREAM_GAP_REGISTRY
+               if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
+              None,
+          )
+          assert gap is not None, (
+              "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION not found in registry"
+          )
+          assert gap.severity == GapSeverity.P0, (
+              f"Expected P0 severity, got {gap.severity!r}"
+          )
+          assert gap.description, "Gap description must be non-empty"
+          print(
+              f"✅ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION registered "
+              f"severity={gap.severity.value} resolved={gap.resolved}"
+          )
+          EOF
+      - name: Upload E2E test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-device-failure-recovery-e2e-report
+          path: multi_device_failure_recovery_e2e_report.xml
+          retention-days: 30
+
   #
   # Verifies that:
   #   • STRICT mode raises CapabilityHardRejectError on missing capabilities
@@ -370,6 +446,7 @@ jobs:
       - android-ci-baseline
       - android-runtime-e2e
       - separated-process-ws-e2e
+      - multi-device-failure-recovery-e2e
       - capability-enforcement-gate
       - release-readiness-gate
     permissions:
@@ -390,6 +467,7 @@ jobs:
             tests/integration/test_android_ci_baseline.py \
             tests/integration/test_android_runtime_e2e.py \
             tests/integration/test_separated_process_ws_e2e.py \
+            tests/integration/test_multi_device_failure_recovery_e2e.py \
             tests/integration/test_runtime_readiness_matrix.py \
             -v --tb=short -p no:warnings \
             --junitxml=dual_repo_integration_report.xml
