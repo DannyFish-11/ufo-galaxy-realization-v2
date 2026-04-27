@@ -18,6 +18,7 @@ on:
       - "tests/integration/_ws_e2e_server_helper.py"
       - "tests/integration/test_multi_device_failure_recovery_e2e.py"
       - "tests/integration/_ws_e2e_multi_device_server_helper.py"
+      - "tests/test_platform_closure_audit.py"
       - ".github/workflows/dual_repo_integration.yml"
   pull_request:
     branches: [main]
@@ -33,6 +34,7 @@ on:
       - "tests/integration/_ws_e2e_server_helper.py"
       - "tests/integration/test_multi_device_failure_recovery_e2e.py"
       - "tests/integration/_ws_e2e_multi_device_server_helper.py"
+      - "tests/test_platform_closure_audit.py"
       - ".github/workflows/dual_repo_integration.yml"
   # Allow manual trigger so developers can run the suite on demand
   workflow_dispatch:
@@ -435,6 +437,104 @@ jobs:
           retention-days: 30
 
   # =========================================================================
+  # Job 9 — Platform Closure Audit Gate [BLOCKING] (PR-8)
+  # =========================================================================
+  # Validates the formal closure audit and production-readiness classification
+  # introduced by PR-8.  This gate asserts:
+  #
+  #   • All tracked P0 gaps have been closed by PRs 1–7.
+  #   • GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION is resolved in the
+  #     gap registry (closed by PR-7 / #854).
+  #   • All ACTIVE_MAINLINE capabilities have non-empty code and test evidence.
+  #   • No blocking issues are present in the closure audit report.
+  #   • The platform_closure_audit module is importable and well-formed.
+  #
+  # This job is BLOCKING — a failed closure audit fails CI.
+  # =========================================================================
+  platform-closure-audit-gate:
+    name: Platform Closure Audit Gate [BLOCKING] (PR-8)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run platform closure audit tests
+        run: |
+          python -m pytest \
+            tests/test_platform_closure_audit.py \
+            -v --tb=short -p no:warnings \
+            --junitxml=platform_closure_audit_report.xml
+          echo "✅ Platform closure audit tests passed."
+      - name: Verify no P0 gap is open in closure audit report
+        run: |
+          python - <<'EOF'
+          from core.platform_closure_audit import (
+              build_platform_closure_audit_report,
+              GapClosureStatus,
+          )
+          report = build_platform_closure_audit_report()
+          p0_gaps = {
+              "GAP_V2_TRUTH_PERSISTENCE",
+              "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT",
+              "GAP_JOINT_INTEGRATION_TEST",
+              "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION",
+          }
+          open_p0 = [
+              g.gap_id for g in report.gap_closures
+              if g.gap_id in p0_gaps and g.status == GapClosureStatus.OPEN
+          ]
+          if open_p0:
+              print(f"❌ BLOCKED: P0 gaps are still OPEN: {open_p0}")
+              exit(1)
+          print(f"✅ All P0 gaps are closed.  Open gap IDs: {report.open_gap_ids}")
+          s = report.summary()
+          print(f"✅ Summary: gaps_closed={s['gaps_closed']}, gaps_open={s['gaps_open']}, "
+                f"capability_tiers={s['capability_tiers']}")
+          EOF
+      - name: Verify GAP_MULTI_DEVICE resolved in gap registry
+        run: |
+          python - <<'EOF'
+          from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY
+          entry = next(
+              (g for g in WORKSTREAM_GAP_REGISTRY
+               if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
+              None,
+          )
+          if entry is None:
+              print("❌ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION not in registry")
+              exit(1)
+          if not entry.resolved:
+              print(f"❌ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must be "
+                    f"resolved=True after PR-7 (#854), got resolved={entry.resolved}")
+              exit(1)
+          print(f"✅ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION resolved=True, "
+                f"resolution_pr={entry.resolution_pr!r}")
+          EOF
+      - name: Verify closure audit report has no blocking issues
+        run: |
+          python - <<'EOF'
+          from core.platform_closure_audit import build_platform_closure_audit_report
+          report = build_platform_closure_audit_report()
+          if report.is_blocked():
+              print(f"❌ BLOCKED: Closure audit has blocking issues: {report.blocking_issues}")
+              exit(1)
+          print(f"✅ Closure audit report has no blocking issues.")
+          EOF
+      - name: Upload closure audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-closure-audit-report
+          path: platform_closure_audit_report.xml
+          retention-days: 30
+
+  # =========================================================================
   # Job 7 — Full dual-repo integration suite (all suites together)
   # =========================================================================
   dual-repo-integration-full:
@@ -449,6 +549,7 @@ jobs:
       - multi-device-failure-recovery-e2e
       - capability-enforcement-gate
       - release-readiness-gate
+      - platform-closure-audit-gate
     permissions:
       contents: read
     steps:
