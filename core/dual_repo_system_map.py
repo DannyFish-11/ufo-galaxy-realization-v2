@@ -621,7 +621,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
             "single-repo unit or structural tests. A real Android device or "
             "Android emulator is required for true E2E coverage."
         ),
-        resolved=False,
+        resolved=True,
+        resolution_pr="GAP_JOINT_INTEGRATION_TEST_CLOSURE_SEPARATED_PROCESS_WS_E2E",
     ),
     WorkstreamGapEntry(
         gap_id="GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT",

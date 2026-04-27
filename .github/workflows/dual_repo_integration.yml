@@ -14,6 +14,8 @@ on:
       - "tests/integration/test_android_ci_baseline.py"
       - "tests/integration/test_android_runtime_e2e.py"
       - "tests/integration/test_runtime_readiness_matrix.py"
+      - "tests/integration/test_separated_process_ws_e2e.py"
+      - "tests/integration/_ws_e2e_server_helper.py"
       - ".github/workflows/dual_repo_integration.yml"
   pull_request:
     branches: [main]
@@ -25,6 +27,8 @@ on:
       - "tests/integration/test_android_ci_baseline.py"
       - "tests/integration/test_android_runtime_e2e.py"
       - "tests/integration/test_runtime_readiness_matrix.py"
+      - "tests/integration/test_separated_process_ws_e2e.py"
+      - "tests/integration/_ws_e2e_server_helper.py"
       - ".github/workflows/dual_repo_integration.yml"
   # Allow manual trigger so developers can run the suite on demand
   workflow_dispatch:
@@ -151,7 +155,71 @@ jobs:
           retention-days: 30
 
   # =========================================================================
-  # Job 5 — Capability enforcement hardening gate  [BLOCKING]
+  # Job 4b — Separated-process WebSocket E2E  [BLOCKING]
+  #          GAP_JOINT_INTEGRATION_TEST closure gate
+  #
+  # This job closes GAP_JOINT_INTEGRATION_TEST by exercising the full
+  # canonical six-step sequence at genuine network / separated-process level:
+  #
+  #   register → capability_report → task_assign (server-pushed) →
+  #   execution / task_result (client) → continuation via heartbeat_ack
+  #
+  # Architecture:
+  #   - Server: real uvicorn HTTP/WebSocket server in a separate OS process
+  #   - Client: websockets client connecting over genuine TCP loopback sockets
+  #   - Dispatch trigger: HTTP POST /test/dispatch-task/{device_id} pushes
+  #     task_assign from the server process to the WebSocket client process
+  #
+  # This is a fundamentally higher assurance level than FastAPI TestClient
+  # (in-process) tests — two separate OS processes communicate via TCP/IP.
+  #
+  # This job is BLOCKING — must pass before merging to main.
+  # =========================================================================
+  separated-process-ws-e2e:
+    name: Separated-Process WebSocket E2E [BLOCKING] (GAP_JOINT_INTEGRATION_TEST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run separated-process WebSocket E2E suite
+        run: |
+          python -m pytest \
+            tests/integration/test_separated_process_ws_e2e.py \
+            -v --tb=short -p no:warnings \
+            --junitxml=separated_process_ws_e2e_report.xml
+          echo "✅ Separated-process WebSocket E2E suite passed."
+      - name: Verify GAP_JOINT_INTEGRATION_TEST is resolved in registry
+        run: |
+          python - <<'EOF'
+          from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY
+          gap = next(
+              (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_JOINT_INTEGRATION_TEST"),
+              None,
+          )
+          assert gap is not None, "GAP_JOINT_INTEGRATION_TEST not found in registry"
+          assert gap.resolved is True, (
+              f"GAP_JOINT_INTEGRATION_TEST.resolved={gap.resolved!r}; "
+              "must be True after separated-process E2E closure"
+          )
+          assert gap.resolution_pr, "resolution_pr must be non-empty"
+          print(f"✅ GAP_JOINT_INTEGRATION_TEST.resolved=True "
+                f"resolution_pr={gap.resolution_pr!r}")
+          EOF
+      - name: Upload E2E test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: separated-process-ws-e2e-report
+          path: separated_process_ws_e2e_report.xml
+          retention-days: 30
+
   #
   # Verifies that:
   #   • STRICT mode raises CapabilityHardRejectError on missing capabilities
@@ -301,6 +369,7 @@ jobs:
       - protocol-regression
       - android-ci-baseline
       - android-runtime-e2e
+      - separated-process-ws-e2e
       - capability-enforcement-gate
       - release-readiness-gate
     permissions:
@@ -320,6 +389,7 @@ jobs:
             tests/integration/test_v2_android_protocol_regression.py \
             tests/integration/test_android_ci_baseline.py \
             tests/integration/test_android_runtime_e2e.py \
+            tests/integration/test_separated_process_ws_e2e.py \
             tests/integration/test_runtime_readiness_matrix.py \
             -v --tb=short -p no:warnings \
             --junitxml=dual_repo_integration_report.xml
