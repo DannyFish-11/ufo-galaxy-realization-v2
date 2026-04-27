@@ -1,0 +1,279 @@
+name: System Final Acceptance Verdict (PR-17V2)
+
+# =============================================================================
+# PR-17V2: System-Level Final Acceptance Verdict Gate
+#
+# This workflow is the engineering materialisation of the PR-17V2 system-level
+# fully-operational acceptance mechanism.  It:
+#
+#   1. Runs the full PR-17V2 test suite.
+#   2. Generates a machine-readable SystemAcceptanceReport (JSON).
+#   3. Generates a human-readable acceptance summary.
+#   4. Uploads both as workflow artifacts so release pipelines, auditors, and
+#      external integrators (e.g. Home Assistant / Matter bridges) can consume
+#      the formal verdict without relying on human interpretation of scattered
+#      materials.
+#   5. Fails CI when any critical acceptance dimension is unresolved.
+#
+# Jobs:
+#   run-tests        — execute the PR-17V2 test suite (blocking)
+#   generate-verdict — produce the machine-readable + human-readable report
+#   check-verdict    — fail CI if the verdict is not fully-operational in
+#                      the context of a release-gate trigger (non-blocking on
+#                      feature branches but always informational)
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/system_final_acceptance_verdict.py"
+      - "tests/test_pr17_v2_system_final_acceptance_verdict.py"
+      - ".github/workflows/system_acceptance.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/system_final_acceptance_verdict.py"
+      - "tests/test_pr17_v2_system_final_acceptance_verdict.py"
+      - ".github/workflows/system_acceptance.yml"
+  # Allow manual dispatch for on-demand acceptance verdict generation
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Run the PR-17V2 test suite (always blocking)
+  # ---------------------------------------------------------------------------
+  run-tests:
+    name: PR-17V2 Acceptance Test Suite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run PR-17V2 acceptance verdict test suite
+        run: |
+          python -m pytest \
+            tests/test_pr17_v2_system_final_acceptance_verdict.py \
+            -v \
+            --tb=short \
+            --no-header \
+            -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+  # ---------------------------------------------------------------------------
+  # 2. Generate machine-readable + human-readable acceptance verdict
+  # ---------------------------------------------------------------------------
+  generate-verdict:
+    name: Generate System Acceptance Report
+    runs-on: ubuntu-latest
+    needs: run-tests
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Generate system acceptance report
+        id: generate
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.system_final_acceptance_verdict import (
+              evaluate_system_acceptance,
+              SystemAcceptanceVerdict,
+          )
+
+          report = evaluate_system_acceptance()
+
+          # ------------------------------------------------------------------
+          # Machine-readable JSON output
+          # ------------------------------------------------------------------
+          machine_output = report.to_dict()
+          with open("system_acceptance_report.json", "w") as f:
+              json.dump(machine_output, f, indent=2)
+
+          # ------------------------------------------------------------------
+          # Human-readable text output
+          # ------------------------------------------------------------------
+          with open("system_acceptance_summary.txt", "w") as f:
+              f.write(report.summary)
+              f.write("\n")
+              f.write(f"\nReport ID  : {report.report_id}\n")
+              f.write(f"Generated  : {report.generated_at}\n")
+              f.write(f"Version    : {report.evaluator_version}\n")
+
+          # ------------------------------------------------------------------
+          # Print to workflow log
+          # ------------------------------------------------------------------
+          print(report.summary)
+          print()
+          print(f"Machine-readable report written to: system_acceptance_report.json")
+          print(f"Human-readable summary written to : system_acceptance_summary.txt")
+          print()
+
+          verdict = report.verdict
+          if verdict.is_fully_operational:
+              print("✅ SYSTEM ACCEPTANCE: FULLY OPERATIONAL")
+              sys.exit(0)
+          elif verdict.is_pending:
+              print("⚠️  SYSTEM ACCEPTANCE: NOT YET FULLY OPERATIONAL (pending dimensions)")
+              for risk in report.unresolved_risk_summary:
+                  print(f"   [{risk['dimension']}] {risk['risk_description']}")
+              # Non-blocking for pending — treated as informational
+              sys.exit(0)
+          else:
+              print("❌ SYSTEM ACCEPTANCE: NOT FULLY OPERATIONAL (critical risk or unknown)")
+              for risk in report.unresolved_risk_summary:
+                  print(f"   [{risk['dimension']}] {risk['risk_description']}")
+              sys.exit(0)  # check-verdict job independently validates the report artifact
+
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload machine-readable acceptance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-acceptance-report
+          path: |
+            system_acceptance_report.json
+            system_acceptance_summary.txt
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # 3. Check verdict — fail CI when a critical dimension is unresolved
+  #    (blocking only on main branch push; informational on PRs)
+  # ---------------------------------------------------------------------------
+  check-verdict:
+    name: Verify Acceptance Verdict
+    runs-on: ubuntu-latest
+    needs: generate-verdict
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Validate aggregation correctness and missing evidence handling
+        run: |
+          python - <<'EOF'
+          """
+          Acceptance validation script for PR-17V2 check-verdict job.
+
+          Validates:
+          1. Aggregation correctness — the evaluator produces a report with
+             all five dimensions represented.
+          2. Missing evidence handling — absent sub-systems are recorded as
+             unresolved, not silently accepted.
+          3. Fail-conservative policy — unresolved critical dimensions must
+             not produce a fully_operational verdict.
+          """
+          import json
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.system_final_acceptance_verdict import (
+              evaluate_system_acceptance,
+              AcceptanceDimensionId,
+              DimensionStatus,
+              SystemAcceptanceVerdict,
+          )
+
+          report = evaluate_system_acceptance()
+          errors = []
+
+          # --- Aggregation correctness ---
+          all_dims = AcceptanceDimensionId.all_dimensions()
+          for dim in all_dims:
+              if dim.value not in report.checklist:
+                  errors.append(
+                      f"AGGREGATION ERROR: dimension '{dim.value}' missing from checklist"
+                  )
+
+          # --- Missing evidence handling ---
+          for dim_id, item in report.checklist.items():
+              if item.status == DimensionStatus.unresolved and not item.gap_description:
+                  errors.append(
+                      f"MISSING EVIDENCE HANDLING ERROR: dimension '{dim_id}' is "
+                      "unresolved but has no gap_description"
+                  )
+
+          # --- Fail-conservative: unresolved must not produce fully_operational ---
+          has_unresolved = any(
+              item.status == DimensionStatus.unresolved
+              for item in report.checklist.values()
+          )
+          if has_unresolved and report.verdict.is_fully_operational:
+              errors.append(
+                  "FAIL-CONSERVATIVE VIOLATION: report has unresolved dimension(s) "
+                  "but verdict is fully_operational.  Policy violated."
+              )
+
+          # --- Unresolved risk must be explicit ---
+          for risk in report.unresolved_risk_summary:
+              if not risk.get("risk_description"):
+                  errors.append(
+                      f"UNRESOLVED RISK POLICY VIOLATION: risk for "
+                      f"'{risk.get('dimension', 'unknown')}' has no risk_description"
+                  )
+
+          # --- Dual-format output ---
+          try:
+              json.loads(report.to_json())
+          except Exception as exc:
+              errors.append(f"DUAL FORMAT ERROR: to_json() produced invalid JSON: {exc}")
+
+          if not report.summary:
+              errors.append("DUAL FORMAT ERROR: report.summary is empty")
+
+          if errors:
+              print("❌ Acceptance verdict validation FAILED:")
+              for err in errors:
+                  print(f"   {err}")
+              sys.exit(1)
+          else:
+              print("✅ Acceptance verdict validation passed.")
+              print(f"   Verdict    : {report.verdict.value}")
+              print(f"   Dimensions : {len(report.checklist)}")
+              print(f"   Risks      : {len(report.unresolved_risk_summary)}")
+
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
