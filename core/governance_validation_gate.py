@@ -97,6 +97,10 @@ __all__ = [
     "GOVERNANCE_VERDICT_AFFECTS_VALIDATION_POLICY",
     "NOT_READY_BLOCKS_VALIDATION_POLICY",
     "EXPERIMENTAL_CAPABILITY_MUST_NOT_CLAIM_MAIN_CHAIN_POLICY",
+    # CI blocking sentinels
+    "GOVERNANCE_CI_BLOCKING_AUTHORITY",
+    "CI_BLOCKING_DIMENSIONS",
+    "CI_ADVISORY_DIMENSIONS",
     # Enumerations
     "ValidationOutcome",
     "ValidationFailReason",
@@ -110,6 +114,7 @@ __all__ = [
     "evaluate_governance_validation",
     "get_governance_validation_gate",
     "reset_governance_validation_gate",
+    "run_governance_verdict_ci",
 ]
 
 # ---------------------------------------------------------------------------
@@ -154,6 +159,46 @@ EXPERIMENTAL_CAPABILITY_MUST_NOT_CLAIM_MAIN_CHAIN_POLICY: str = (
     "FAIL if the calling context requires strict tier enforcement."
 )
 """Policy: experimental capabilities must not be treated as main-chain."""
+
+# ---------------------------------------------------------------------------
+# CI blocking / advisory dimension classification
+# ---------------------------------------------------------------------------
+
+GOVERNANCE_CI_BLOCKING_AUTHORITY: str = (
+    "GOVERNANCE_CI_BLOCKING_AUTHORITY::"
+    "core.governance_validation_gate::"
+    "PR-CI-BLOCK::governance-verdict-ci-enforcement::"
+    "not-ready-fail-blocks-mainline"
+)
+"""Sentinel: this module is the canonical governance CI blocking entry point.
+When run as __main__ (or via run_governance_verdict_ci), a FAIL verdict causes
+a non-zero exit code, blocking CI/merge pipelines."""
+
+CI_BLOCKING_DIMENSIONS: tuple = (
+    "governance_blocked",
+    "readiness_blocked",
+    "delegated_readiness_not_ready",
+)
+"""Verdict dimensions that MUST block CI (exit 1) when they occur.
+
+These correspond to :class:`ValidationFailReason` values that represent hard
+execution-blocking conditions.  A NOT_READY or governance-blocked verdict in
+any of these dimensions causes :func:`run_governance_verdict_ci` to return
+exit code 1.
+"""
+
+CI_ADVISORY_DIMENSIONS: tuple = (
+    "evidence_surface_unavailable",
+    "capability_tier_experimental",
+    "capability_tier_quasi_main_chain",
+)
+"""Verdict dimensions that are advisory-only (exit 0 in non-strict mode).
+
+These represent conditions that WARN but do not constitute a hard block.
+They are surfaced in the JSON verdict artifact for operator review but do
+not cause :func:`run_governance_verdict_ci` to exit non-zero unless
+``--strict`` mode is used.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -708,3 +753,143 @@ def evaluate_governance_validation(
         check_delegated_readiness=check_delegated_readiness,
         check_capability_tier=check_capability_tier,
     )
+
+
+# ---------------------------------------------------------------------------
+# CI entry point
+# ---------------------------------------------------------------------------
+
+
+def run_governance_verdict_ci(
+    *,
+    output_path: Optional[str] = None,
+    strict: bool = False,
+    check_delegated_readiness: bool = False,
+) -> int:
+    """Run the governance/readiness verdict gate and return a CI exit code.
+
+    This function is the canonical entry point for CI blocking.  It evaluates
+    all active governance and readiness checks, writes a machine-readable JSON
+    verdict to *output_path* (if provided), prints a human-readable summary,
+    and returns:
+
+    - ``0`` — verdict is PASS or WARN (advisory conditions only)
+    - ``1`` — verdict is FAIL (at least one blocking dimension triggered)
+
+    When ``strict=True``, WARN is also treated as a blocking failure (exit 1).
+
+    Parameters
+    ----------
+    output_path
+        Optional filesystem path to write the JSON verdict.  If ``None``, the
+        verdict is only printed to stdout.
+    strict
+        When ``True``, treat WARN as a hard block (exit 1).  Defaults to
+        ``False`` so that advisory conditions (e.g. unavailable evidence
+        surface) do not block CI by default.
+    check_delegated_readiness
+        When ``True``, also evaluate the DelegatedFlowReadinessGate.
+
+    Returns
+    -------
+    int
+        Exit code: 0 = gate approved, 1 = gate blocked.
+    """
+    import json as _json
+
+    gate = GovernanceValidationGate(strict_on_unavailable=strict)
+    result = gate.validate(
+        check_readiness=True,
+        check_delegated_readiness=check_delegated_readiness,
+        check_capability_tier=False,
+    )
+
+    verdict_dict = result.to_dict()
+    # Annotate with CI metadata
+    verdict_dict["ci_blocking_dimensions"] = list(CI_BLOCKING_DIMENSIONS)
+    verdict_dict["ci_advisory_dimensions"] = list(CI_ADVISORY_DIMENSIONS)
+    verdict_dict["strict_mode"] = strict
+    verdict_dict["blocking_fail_reasons"] = [
+        r for r in verdict_dict["fail_reasons"] if r in CI_BLOCKING_DIMENSIONS
+    ]
+    verdict_dict["advisory_fail_reasons"] = [
+        r for r in verdict_dict["fail_reasons"] if r in CI_ADVISORY_DIMENSIONS
+    ]
+
+    verdict_json = _json.dumps(verdict_dict, indent=2)
+
+    # Print human-readable summary
+    print("=" * 60)
+    print("Governance / Readiness Verdict (CI Blocking Gate)")
+    print("=" * 60)
+    for line in [
+        f"  outcome          : {result.outcome.value.upper()}",
+        f"  release_gate     : {result.release_gate_verdict}",
+        f"  readiness_status : {result.readiness_status}",
+        f"  delegated_gate   : {result.delegated_readiness_verdict}",
+        f"  fail_reasons     : {[r.value for r in result.fail_reasons]}",
+        f"  blocking_reasons : {verdict_dict['blocking_fail_reasons']}",
+        f"  advisory_reasons : {verdict_dict['advisory_fail_reasons']}",
+        f"  summary          : {result.summary}",
+    ]:
+        print(line)
+    print("=" * 60)
+
+    # Write JSON artifact if requested
+    if output_path:
+        import pathlib as _pathlib
+        _pathlib.Path(output_path).write_text(verdict_json, encoding="utf-8")
+        print(f"  verdict JSON written to: {output_path}")
+
+    # Determine exit code
+    if result.outcome == ValidationOutcome.FAIL:
+        print("\n❌ Governance verdict: BLOCKED — CI gate failed.")
+        return 1
+    if strict and result.outcome == ValidationOutcome.WARN:
+        print("\n⚠️  Governance verdict: WARN (strict mode) — CI gate failed.")
+        return 1
+
+    print("\n✅ Governance verdict: APPROVED — CI gate passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    import argparse as _argparse
+    import pathlib as _pathlib
+    import sys as _sys
+
+    _repo_root = str(_pathlib.Path(__file__).resolve().parent.parent)
+    if _repo_root not in _sys.path:
+        _sys.path.insert(0, _repo_root)
+
+    _parser = _argparse.ArgumentParser(
+        description="Governance / Readiness verdict CI blocking gate."
+    )
+    _parser.add_argument(
+        "--output",
+        metavar="PATH",
+        default=None,
+        help="Write machine-readable JSON verdict to this path.",
+    )
+    _parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help="Treat WARN as a blocking failure (exit 1).",
+    )
+    _parser.add_argument(
+        "--delegated",
+        action="store_true",
+        default=False,
+        help="Also evaluate the DelegatedFlowReadinessGate.",
+    )
+    _args = _parser.parse_args()
+
+    _sys.exit(
+        run_governance_verdict_ci(
+            output_path=_args.output,
+            strict=_args.strict,
+            check_delegated_readiness=_args.delegated,
+        )
+    )
+
