@@ -269,7 +269,7 @@ jobs:
             -v --tb=short -p no:warnings \
             --junitxml=multi_device_failure_recovery_e2e_report.xml
           echo "✅ Multi-device failure-recovery E2E suite passed."
-      - name: Verify GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION is registered
+      - name: Verify GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION is resolved in registry
         run: |
           python - <<'EOF'
           from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY, GapSeverity
@@ -285,9 +285,22 @@ jobs:
               f"Expected P0 severity, got {gap.severity!r}"
           )
           assert gap.description, "Gap description must be non-empty"
+          assert gap.resolved is True, (
+              f"GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolved={gap.resolved!r}; "
+              "must be True after PR-7 (#854) added network-level multi-device "
+              "failure-recovery E2E coverage"
+          )
+          assert gap.resolution_pr, (
+              "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_pr must be "
+              "non-empty with a reference to the closing PR"
+          )
+          assert gap.resolution_evidence, (
+              "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_evidence must "
+              "be non-empty with bound test file, workflow job, and implementation evidence"
+          )
           print(
-              f"✅ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION registered "
-              f"severity={gap.severity.value} resolved={gap.resolved}"
+              f"✅ GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION resolved=True "
+              f"resolution_pr={gap.resolution_pr!r}"
           )
           EOF
       - name: Upload E2E test report

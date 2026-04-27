@@ -296,6 +296,11 @@ class WorkstreamGapEntry:
     resolution_pr: str = ""
     """PR reference (e.g. '#850') when resolved."""
 
+    resolution_evidence: str = ""
+    """Formal evidence binding for the resolution: test file(s), workflow job(s),
+    and implementation references that prove the gap is closed.  Must be non-empty
+    for any resolved P0 gap."""
+
 
 # ---------------------------------------------------------------------------
 # Dual-repo main chain declaration
@@ -623,6 +628,14 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         ),
         resolved=True,
         resolution_pr="GAP_JOINT_INTEGRATION_TEST_CLOSURE_SEPARATED_PROCESS_WS_E2E",
+        resolution_evidence=(
+            "Test file: tests/integration/test_separated_process_ws_e2e.py; "
+            "Server helper: tests/integration/_ws_e2e_server_helper.py; "
+            "CI workflow job: .github/workflows/dual_repo_integration.yml "
+            "#separated-process-ws-e2e [BLOCKING]; "
+            "Closure audit: core.platform_closure_audit "
+            "GAP_JOINT_INTEGRATION_TEST → GapClosureStatus.CLOSED"
+        ),
     ),
     WorkstreamGapEntry(
         gap_id="GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT",
@@ -637,6 +650,17 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         ),
         resolved=True,
         resolution_pr="GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT_CLOSURE_V1",
+        resolution_evidence=(
+            "Implementation: core.gateway_capability_default_enforcement."
+            "enforce_gateway_default_capability_gate; "
+            "core.capability_enforcement_hardener.enforce_mainline_capability_gate; "
+            "Test files: tests/test_pr4_entry_mode_readiness.py; "
+            "tests/test_pr4_config_driven_inventory.py; "
+            "CI workflow job: .github/workflows/dual_repo_integration.yml "
+            "#capability-enforcement-gate [BLOCKING]; "
+            "Closure audit: core.platform_closure_audit "
+            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT → GapClosureStatus.CLOSED"
+        ),
     ),
     WorkstreamGapEntry(
         gap_id="GAP_V2_TRUTH_PERSISTENCE",
@@ -650,6 +674,15 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         ),
         resolved=True,
         resolution_pr="#850",
+        resolution_evidence=(
+            "Implementation: core.runtime_restart_recovery.RuntimeRestartRecoveryCoordinator; "
+            "core.canonical_session_truth.CanonicalSessionTruthRuntime; "
+            "core.task_lifecycle_persistence.TaskLifecyclePersistenceStore; "
+            "Test files: tests/test_gap_v2_truth_persistence_closure.py; "
+            "tests/test_pr5_runtime_restart_recovery.py; "
+            "Closure audit: core.platform_closure_audit "
+            "GAP_V2_TRUTH_PERSISTENCE → GapClosureStatus.CLOSED"
+        ),
     ),
     WorkstreamGapEntry(
         gap_id="GAP_RUNTIME_TRUTH_SINGLE_INGRESS",
@@ -759,6 +792,15 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
             "degraded participant handling.  CI gate added in "
             ".github/workflows/dual_repo_integration.yml "
             "(multi-device-failure-recovery-e2e job)."
+        ),
+        resolution_evidence=(
+            "Test file: tests/integration/test_multi_device_failure_recovery_e2e.py; "
+            "Server helper: tests/integration/_ws_e2e_multi_device_server_helper.py; "
+            "Implementation: core.multi_device_runtime_harness; "
+            "CI workflow job: .github/workflows/dual_repo_integration.yml "
+            "#multi-device-failure-recovery-e2e [BLOCKING]; "
+            "Closure audit: core.platform_closure_audit "
+            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION → GapClosureStatus.CLOSED"
         ),
     ),
 ]
