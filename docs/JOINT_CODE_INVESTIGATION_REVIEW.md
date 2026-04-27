@@ -262,7 +262,7 @@ CI 保护：`release_blocking_gate.py` + `dual_repo_integration.yml` job 6 block
 当前真实状态：
 - `NoOpPlannerService` 是 DI 默认实现
 - `NoOpGroundingService` 是 DI 默认实现
-- `MobileVlmPlanner.kt` 存在（目标 MobileVLM V2-1.7B + llama.cpp/MLC-LLM backend），但是实现，不是默认激活的 runtime
+- `MobileVlmPlanner.kt` 存在（目标 MobileVLM V2-1.7B + llama.cpp/MLC-LLM backend），但是非默认激活的实现，不是默认激活的 runtime
 - Local inference 仍依赖 localhost HTTP 外部进程（llama.cpp/MLC-LLM server 需要单独启动）
 - `AndroidCapabilityVector.from()` 中，`LOCAL_INFERENCE` 维度只有在 `modelReady=true` 时才报告
 
