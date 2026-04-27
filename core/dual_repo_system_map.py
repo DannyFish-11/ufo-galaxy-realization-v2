@@ -735,6 +735,22 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         resolved=True,
         resolution_pr="PR-2::core.continuation_rebind_registry",
     ),
+    WorkstreamGapEntry(
+        gap_id="GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION",
+        title="Multi-device, delegated takeover, and failure/recovery paths lack automated network-level integration assurance",
+        severity=GapSeverity.P0,
+        description=(
+            "Existing separated-process E2E covers the single-participant "
+            "happy path at true network/transport level (GAP_JOINT_INTEGRATION_TEST "
+            "closure).  However, multi-device concurrent registration, per-device "
+            "capability isolation, delegated takeover (eligibility → assignment → "
+            "result propagation → continuation), participant disconnect/reconnect "
+            "with task recovery, degraded-participant handling, and capability "
+            "mismatch routing are not covered by any automated network-level test. "
+            "CI has no blocking gate for regressions in these paths."
+        ),
+        resolved=False,
+    ),
 ]
 
 

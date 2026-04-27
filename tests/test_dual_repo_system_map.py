@@ -273,6 +273,7 @@ class TestWorkstreamGapRegistry:
         "GAP_JOINT_INTEGRATION_TEST",
         "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT",
         "GAP_V2_TRUTH_PERSISTENCE",
+        "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION",
     }
 
     REQUIRED_P1_GAPS = {
@@ -321,34 +322,43 @@ class TestWorkstreamGapRegistry:
                 "All gaps must have accurate, non-misleading descriptions."
             )
 
-    def test_gap_joint_integration_test_is_open(self):
-        """The dual-repo joint integration test gap must still be open.
+    def test_gap_joint_integration_test_is_resolved(self):
+        """GAP_JOINT_INTEGRATION_TEST must be marked resolved with a concrete PR reference.
 
-        This gap can only be closed when a real cross-repo integration test
-        framework exists. A sentinel or declaration alone does not close it.
+        This gap was closed by the separated-process WebSocket E2E implementation
+        (test_separated_process_ws_e2e.py) which proved the canonical six-step
+        sequence at true network / OS-process separation level.
         """
         gap = next(
             (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_JOINT_INTEGRATION_TEST"),
             None,
         )
         assert gap is not None, "GAP_JOINT_INTEGRATION_TEST not found in registry."
-        assert not gap.resolved, (
-            "GAP_JOINT_INTEGRATION_TEST is marked resolved, but no cross-repo "
-            "integration test framework has been implemented. Update resolution_pr "
-            "and change resolved=True only when the framework is real."
+        assert gap.resolved, (
+            "GAP_JOINT_INTEGRATION_TEST must be marked resolved=True.  "
+            "It was closed by the separated-process WebSocket E2E implementation."
+        )
+        assert gap.resolution_pr, (
+            "GAP_JOINT_INTEGRATION_TEST.resolution_pr must reference the closing PR."
         )
 
-    def test_gap_capability_gate_default_enforcement_is_open(self):
-        """The capability gate default enforcement gap must still be open."""
+    def test_gap_capability_gate_default_enforcement_is_resolved(self):
+        """GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved.
+
+        This gap was closed by the capability enforcement hardener PR which
+        makes STRICT mode the default on the mainline dispatch path.
+        """
         gap = next(
             (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT"),
             None,
         )
         assert gap is not None, "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT not found."
-        assert not gap.resolved, (
-            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT is marked resolved, but "
-            "send_gateway_command() still allows calls without required_capabilities. "
-            "Update only when default enforcement is actually implemented."
+        assert gap.resolved, (
+            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved=True.  "
+            "It was closed by the capability enforcement hardener implementation."
+        )
+        assert gap.resolution_pr, (
+            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT.resolution_pr must reference the closing PR."
         )
 
     def test_registry_has_at_least_five_gaps(self):
