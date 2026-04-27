@@ -475,9 +475,12 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         ModuleSemanticType.SEMI_EXECUTABLE,
         naming_pattern="GATE / AUTHORITY",
         notes=(
-            "evaluate_capability_gate() is a real function but is NOT called "
-            "by default in send_gateway_command(); must be explicitly wired in. "
-            "Currently an additive constraint layer, not a default enforced gate."
+            "evaluate_capability_gate() is a real function and is now wired "
+            "into send_gateway_command() via "
+            "core.gateway_capability_default_enforcement.  "
+            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT closed: the gate is a "
+            "default-enforced invariant on the canonical gateway path, not "
+            "an additive optional layer."
         ),
     ),
     ModuleSemanticEntry(
@@ -631,7 +634,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
             "and silently skipping the capability gate. The gate is advisory, "
             "not a default-enforced invariant."
         ),
-        resolved=False,
+        resolved=True,
+        resolution_pr="GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT_CLOSURE_V1",
     ),
     WorkstreamGapEntry(
         gap_id="GAP_V2_TRUTH_PERSISTENCE",
