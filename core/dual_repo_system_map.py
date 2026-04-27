@@ -651,8 +651,9 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         resolved=True,
         resolution_pr="GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT_CLOSURE_V1",
         resolution_evidence=(
-            "Implementation: core.gateway_capability_default_enforcement."
-            "enforce_gateway_default_capability_gate; "
+            "Implementation: "
+            "core.gateway_capability_default_enforcement"
+            ".enforce_gateway_default_capability_gate; "
             "core.capability_enforcement_hardener.enforce_mainline_capability_gate; "
             "Test files: tests/test_pr4_entry_mode_readiness.py; "
             "tests/test_pr4_config_driven_inventory.py; "

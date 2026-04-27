@@ -407,7 +407,7 @@ class TestWorkstreamGapRegistry:
         """
         for gap in WORKSTREAM_GAP_REGISTRY:
             if gap.severity == GapSeverity.P0 and gap.resolved:
-                assert gap.resolution_evidence.strip(), (
+                assert gap.resolution_evidence and gap.resolution_evidence.strip(), (
                     f"Resolved P0 gap '{gap.gap_id}' is missing resolution_evidence. "
                     "All resolved P0 gaps must have evidence references binding "
                     "the test file(s), workflow job(s), and implementation."
