@@ -361,6 +361,58 @@ class TestWorkstreamGapRegistry:
             "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT.resolution_pr must reference the closing PR."
         )
 
+    def test_gap_multi_device_failure_recovery_is_resolved(self):
+        """GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must be marked resolved with
+        concrete PR and evidence references.
+
+        This gap was closed by PR-7 (#854) which added
+        tests/integration/test_multi_device_failure_recovery_e2e.py covering 8
+        network-level scenarios (multi-device registration, capability isolation,
+        concurrent execution, delegated takeover, disconnect/reconnect/recovery,
+        capability mismatch routing, result aggregation, and degraded participant).
+        The blocking CI gate is the multi-device-failure-recovery-e2e job in
+        .github/workflows/dual_repo_integration.yml.
+        """
+        gap = next(
+            (g for g in WORKSTREAM_GAP_REGISTRY
+             if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
+            None,
+        )
+        assert gap is not None, (
+            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION not found in "
+            "WORKSTREAM_GAP_REGISTRY.  This P0 gap must remain registered."
+        )
+        assert gap.resolved, (
+            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must be marked "
+            "resolved=True.  It was closed by PR-7 (#854) via "
+            "tests/integration/test_multi_device_failure_recovery_e2e.py."
+        )
+        assert gap.resolution_pr, (
+            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_pr must "
+            "reference the closing PR (#854 / PR-7)."
+        )
+        assert "854" in gap.resolution_pr, (
+            f"resolution_pr should reference #854, got: {gap.resolution_pr!r}"
+        )
+        assert gap.resolution_evidence, (
+            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_evidence must "
+            "be non-empty.  Formal closure requires bound test file, workflow job, "
+            "and implementation evidence."
+        )
+
+    def test_resolved_p0_gaps_have_resolution_evidence(self):
+        """Every resolved P0 gap must have non-empty resolution_evidence.
+
+        This ensures formal closure is evidence-bound, not just flag-flipped.
+        """
+        for gap in WORKSTREAM_GAP_REGISTRY:
+            if gap.severity == GapSeverity.P0 and gap.resolved:
+                assert gap.resolution_evidence and gap.resolution_evidence.strip(), (
+                    f"Resolved P0 gap '{gap.gap_id}' is missing resolution_evidence. "
+                    "All resolved P0 gaps must have evidence references binding "
+                    "the test file(s), workflow job(s), and implementation."
+                )
+
     def test_registry_has_at_least_five_gaps(self):
         """WORKSTREAM_GAP_REGISTRY must have at least 5 entries.
 
@@ -421,17 +473,25 @@ class TestSnapshotFunction:
             assert severity in open_gaps, f"open_gaps missing {severity}"
 
     def test_snapshot_reports_p0_gaps(self):
-        """Snapshot open_gaps P0 list must be a list; all P0 gaps are resolved after PRs 1–7."""
+        """Snapshot open_gaps P0 list must be empty after all P0 gaps closed by PRs 1–7.
+
+        After PRs 1–7, all P0 gaps have been closed:
+          GAP_JOINT_INTEGRATION_TEST               → PR-3 (separated-process WS E2E)
+          GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT  → PR-4 (capability enforcement hardener)
+          GAP_V2_TRUTH_PERSISTENCE                 → PR-1 (#850)
+          GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION → PR-7 (#854)
+
+        An open P0 gap in the snapshot means a critical gap was re-introduced or
+        a gap was prematurely resolved without a real fix.
+        """
         snapshot = build_system_map_snapshot()
         p0_gaps = snapshot["open_gaps"]["P0"]
-        # After PRs 1–7, all P0 gaps have been closed:
-        #   GAP_JOINT_INTEGRATION_TEST               → PR-3
-        #   GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT  → PR-4
-        #   GAP_V2_TRUTH_PERSISTENCE                 → PR-1 (#850)
-        #   GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION → PR-7 (#854)
-        # The list must be a list (may be empty).
         assert isinstance(p0_gaps, list), (
             "open_gaps['P0'] must be a list."
+        )
+        assert p0_gaps == [], (
+            f"All P0 gaps must be resolved after PRs 1–7.  "
+            f"Open P0 gaps remaining: {[g['id'] for g in p0_gaps]}"
         )
 
     def test_snapshot_version_matches_module(self):
