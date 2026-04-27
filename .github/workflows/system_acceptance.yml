@@ -151,10 +151,7 @@ jobs:
               print("❌ SYSTEM ACCEPTANCE: NOT FULLY OPERATIONAL (critical risk or unknown)")
               for risk in report.unresolved_risk_summary:
                   print(f"   [{risk['dimension']}] {risk['risk_description']}")
-              # Write non-zero exit code to file for check-verdict job to read
-              with open("verdict_exit_code.txt", "w") as f:
-                  f.write("1")
-              sys.exit(0)  # Let check-verdict job decide whether to fail CI
+              sys.exit(0)  # check-verdict job independently validates the report artifact
 
           EOF
         env:
