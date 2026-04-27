@@ -635,6 +635,27 @@ TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17: str = (
 )
 
 
+def _resolve_intent_name_for_inference(parsed_intent: object, intent_type: str) -> str:
+    """Extract the best available intent/command name for capability inference.
+
+    Checks ``parsed_intent.intent_type`` first (present on structured intent
+    objects), then falls back to the plain *intent_type* string, then to an
+    empty string.
+
+    This helper exists to keep the chained fallback logic in one place so
+    ``process()`` stays readable.
+    """
+    intent_type_attr: str = ""
+    if hasattr(parsed_intent, "intent_type"):
+        raw = parsed_intent.intent_type
+        intent_type_attr = str(raw) if raw else ""
+    if intent_type_attr:
+        return intent_type_attr
+    if intent_type:
+        return intent_type
+    return ""
+
+
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
@@ -3701,43 +3722,133 @@ class OpenClawd:
                 handler_name = "_dispatch_chat"
             handler = getattr(self, handler_name)
 
-            # Phase 2: capability-aware routing
-            # PR-enforcement: explicit device_id does NOT silently bypass the capability gate.
+            # Phase 2: capability-aware routing (default main path)
+            # PR-CAP-DEFAULT: capability-aware routing is the default main path for
+            # ALL cross-device dispatches, not just device_control/task_manage intents.
+            # Policy: CAPABILITY_AWARE_ROUTING_IS_DEFAULT_MAINLINE_V1
+            # When device_id is explicit, it is the EXCEPTION PATH — the capability
+            # gate still runs.  When mismatch occurs, the system reroutes to a capable
+            # alternative or returns a structured rejection.
             effective_device_id = device_id
-            if not effective_device_id and required_capabilities and intent_type in ("device_control", "task_manage"):
-                # No explicit device_id — auto-select via capability-filtered scheduler.
-                selected = self._select_device_via_scheduler(required_capabilities)
+
+            # Resolve effective capabilities: explicit arg → infer from message/intent
+            _effective_caps_for_routing = required_capabilities
+            if not _effective_caps_for_routing:
+                try:
+                    from core.capability_aware_routing_default import (
+                        infer_dispatch_capabilities as _infer_caps_process,
+                    )
+
+                    _inferred_for_routing = _infer_caps_process(
+                        _resolve_intent_name_for_inference(parsed_intent, intent_type)
+                    )
+                    if _inferred_for_routing:
+                        _effective_caps_for_routing = _inferred_for_routing
+                        logger.debug(
+                            "process [CAP-DEFAULT]: inferred caps=%s from intent_type=%r",
+                            _effective_caps_for_routing,
+                            intent_type,
+                        )
+                except Exception as _infer_exc:
+                    logger.debug(
+                        "process [CAP-DEFAULT]: capability inference skipped: %s",
+                        _infer_exc,
+                    )
+
+            if not effective_device_id and _effective_caps_for_routing:
+                # No explicit device_id — default main path: auto-select via
+                # capability-filtered scheduler (capability-driven selection).
+                selected = self._select_device_via_scheduler(_effective_caps_for_routing)
                 if selected:
                     logger.info(
-                        "process: scheduler auto-selected device=%s for caps=%s",
+                        "process [CAP-DEFAULT]: scheduler auto-selected device=%s "
+                        "for caps=%s (capability-driven default selection)",
                         selected,
-                        required_capabilities,
+                        _effective_caps_for_routing,
                     )
                     effective_device_id = selected
-            elif effective_device_id and required_capabilities and intent_type in ("device_control", "task_manage"):
-                # Explicit device_id provided — enforce capability gate (no silent bypass).
-                # Policy: NO_SILENT_CAPABILITY_BYPASS_V1
+            elif effective_device_id and _effective_caps_for_routing:
+                # Explicit device_id is the EXCEPTION PATH — capability gate still runs.
+                # Policy: EXPLICIT_DEVICE_ID_IS_EXCEPTION_PATH_V1
+                # When mismatch: try reroute to capable alternative; if none, reject.
                 try:
                     from core.mainline_routing_enforcement import (
                         enforce_explicit_route_capability_gate,
+                        ExplicitRouteVerdict,
                     )
 
                     _cap_audit = enforce_explicit_route_capability_gate(
                         device_id=effective_device_id,
-                        required_capabilities=required_capabilities,
+                        required_capabilities=_effective_caps_for_routing,
                         calling_site="openclawd.process",
                     )
                     logger.debug(
-                        "process: explicit-route capability audit device=%s verdict=%s",
+                        "process [CAP-DEFAULT]: explicit-route capability audit "
+                        "device=%s verdict=%s",
                         effective_device_id,
                         _cap_audit.verdict.value,
                     )
+
+                    # Capability mismatch is a routing constraint, not a warning.
+                    # Policy: CAPABILITY_MISMATCH_IS_ROUTING_CONSTRAINT_V1
+                    if _cap_audit.verdict in (
+                        ExplicitRouteVerdict.MISMATCH,
+                        ExplicitRouteVerdict.AUDITED_BYPASS,
+                    ):
+                        # Try to reroute to a capable alternative device.
+                        _alt_device = self._select_device_via_scheduler(
+                            _effective_caps_for_routing
+                        )
+                        if _alt_device and _alt_device != effective_device_id:
+                            logger.warning(
+                                "process [CAP-DEFAULT/REROUTE]: explicit device=%s "
+                                "failed capability gate for caps=%s; rerouting to "
+                                "capable alternative device=%s",
+                                effective_device_id,
+                                _effective_caps_for_routing,
+                                _alt_device,
+                            )
+                            effective_device_id = _alt_device
+                        else:
+                            # No capable alternative — structured rejection.
+                            logger.warning(
+                                "process [CAP-DEFAULT/REJECT]: explicit device=%s "
+                                "failed capability gate for caps=%s and no capable "
+                                "alternative found; dispatch rejected",
+                                effective_device_id,
+                                _effective_caps_for_routing,
+                            )
+                            return {
+                                "success": False,
+                                "response": (
+                                    f"Device '{effective_device_id}' does not satisfy "
+                                    f"required capabilities {_effective_caps_for_routing!r} "
+                                    "and no capable alternative device is available."
+                                ),
+                                "intent": intent_type,
+                                "metadata": {
+                                    "session_id": session_id,
+                                    "mode": "cross_device",
+                                    "execution_path": "capability_rejected",
+                                    "capability_mismatch": {
+                                        "device_id": effective_device_id,
+                                        "required_capabilities": list(
+                                            _effective_caps_for_routing
+                                        ),
+                                        "missing_capabilities": list(
+                                            _cap_audit.missing_capabilities
+                                        ),
+                                        "verdict": _cap_audit.verdict.value,
+                                    },
+                                },
+                            }
                 except Exception as _cap_err:
                     logger.warning(
-                        "process: explicit-route capability gate raised unexpectedly "
-                        "for device=%s caps=%s — capability enforcement NOT completed: %s",
+                        "process [CAP-DEFAULT]: explicit-route capability gate "
+                        "raised unexpectedly for device=%s caps=%s — "
+                        "capability enforcement NOT completed: %s",
                         effective_device_id,
-                        required_capabilities,
+                        _effective_caps_for_routing,
                         _cap_err,
                     )
 

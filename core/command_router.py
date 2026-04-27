@@ -1610,6 +1610,40 @@ class CommandRouter:
             _cap_query_caps = list(envelope.required_capabilities)
         elif isinstance(_meta_for_cap_query.get("required_capabilities"), list):
             _cap_query_caps = [str(c) for c in _meta_for_cap_query["required_capabilities"]]
+
+        # PR-CAP-DEFAULT: capability-aware routing is the default main path.
+        # When no required_capabilities are declared but explicit target(s) are
+        # present, infer capabilities from the tool_name so the capability gate
+        # activates automatically.  This closes the bypass gap where an explicit
+        # device_id without required_capabilities skipped all capability checking.
+        # See CAPABILITY_AWARE_ROUTING_IS_DEFAULT_MAINLINE in
+        # core.mainline_routing_enforcement and
+        # core.capability_aware_routing_default for the policy definition.
+        if _cap_query_caps is None and list(envelope.targets):
+            try:
+                from core.capability_aware_routing_default import (
+                    infer_dispatch_capabilities as _infer_caps,
+                )
+
+                _inferred_caps = _infer_caps(envelope.tool_name or "")
+                if _inferred_caps:
+                    _cap_query_caps = _inferred_caps
+                    logger.debug(
+                        "route_envelope [CAP-DEFAULT]: inferred required_capabilities=%s "
+                        "from tool_name=%r for explicit target(s) %s — "
+                        "capability-aware routing is the default main path",
+                        _cap_query_caps,
+                        envelope.tool_name,
+                        list(envelope.targets),
+                    )
+            except Exception as _infer_err:
+                logger.debug(
+                    "route_envelope [CAP-DEFAULT]: capability inference skipped "
+                    "for tool_name=%r: %s",
+                    envelope.tool_name,
+                    _infer_err,
+                )
+
         # PR-H: pre-initialize capability tracking variables so they are always
         # in scope for the live explanation wiring block below, regardless of
         # whether the capability enforcement try block was entered or completed.
