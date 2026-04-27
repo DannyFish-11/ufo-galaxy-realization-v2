@@ -1,0 +1,331 @@
+name: Dual-Repo System Reality Audit (PR-537)
+
+# =============================================================================
+# PR-537: Dual-Repo System Reality Audit Gate
+#
+# This workflow is the engineering materialisation of the PR-537 dual-repo
+# joint system reality audit mechanism.  It:
+#
+#   1. Runs the full PR-537 test suite (76 tests, Groups A–H).
+#   2. Generates a machine-readable DualRepoRealityAuditReport (JSON).
+#   3. Generates a human-readable audit summary.
+#   4. Uploads both as workflow artifacts (90-day retention).
+#   5. Fails CI when critical dimensions cannot be substantiated
+#      (system_verdict == critical_gaps_blocking_baseline or
+#       insufficient_evidence_to_conclude).
+#
+# Design principles honoured:
+#   • Code-grounded evidence only — no documentation claims accepted.
+#   • Fail-conservative — missing or absent modules downgrade maturity;
+#     silence is not acceptance.
+#   • Honest gap reporting — unresolved_blocking_gaps always surfaced.
+#
+# Jobs:
+#   run-tests       — execute the PR-537 test suite (blocking)
+#   generate-audit  — produce the machine-readable + human-readable report
+#   check-audit     — fail CI if critical dimensions are unsubstantiated
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/dual_repo_system_reality_audit.py"
+      - "tests/test_pr537_dual_repo_system_reality_audit.py"
+      - ".github/workflows/dual_repo_reality_audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/dual_repo_system_reality_audit.py"
+      - "tests/test_pr537_dual_repo_system_reality_audit.py"
+      - ".github/workflows/dual_repo_reality_audit.yml"
+  # Allow manual dispatch for on-demand audit runs
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Run the PR-537 test suite (always blocking)
+  # ---------------------------------------------------------------------------
+  run-tests:
+    name: PR-537 System Reality Audit Test Suite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run PR-537 reality audit test suite
+        run: |
+          python -m pytest \
+            tests/test_pr537_dual_repo_system_reality_audit.py \
+            -v \
+            --tb=short \
+            --no-header \
+            -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+  # ---------------------------------------------------------------------------
+  # 2. Generate machine-readable + human-readable reality audit report
+  # ---------------------------------------------------------------------------
+  generate-audit:
+    name: Generate Dual-Repo Reality Audit Report
+    runs-on: ubuntu-latest
+    needs: run-tests
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Generate dual-repo system reality audit report
+        id: generate
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.dual_repo_system_reality_audit import (
+              build_dual_repo_reality_audit,
+              SystemRealityVerdict,
+          )
+
+          report = build_dual_repo_reality_audit()
+
+          # ------------------------------------------------------------------
+          # Machine-readable JSON output
+          # ------------------------------------------------------------------
+          machine_output = report.to_dict()
+          with open("dual_repo_reality_audit_report.json", "w") as f:
+              json.dump(machine_output, f, indent=2)
+
+          # ------------------------------------------------------------------
+          # Human-readable text output
+          # ------------------------------------------------------------------
+          with open("dual_repo_reality_audit_summary.txt", "w") as f:
+              f.write(report.summary)
+              f.write("\n")
+              f.write(f"\nReport ID    : {report.report_id}\n")
+              f.write(f"Generated    : {report.generated_at}\n")
+              f.write(f"Auditor ver  : {report.auditor_version}\n")
+              f.write(f"\nSystem Verdict: {report.system_verdict.value}\n")
+              f.write(f"\nBlocking Gaps ({len(report.unresolved_blocking_gaps)}):\n")
+              for gap in report.unresolved_blocking_gaps:
+                  f.write(f"  * {gap}\n")
+
+          # ------------------------------------------------------------------
+          # Print to workflow log
+          # ------------------------------------------------------------------
+          print(report.summary)
+          print()
+          print(f"Machine-readable report: dual_repo_reality_audit_report.json")
+          print(f"Human-readable summary : dual_repo_reality_audit_summary.txt")
+          print()
+
+          verdict = report.system_verdict
+          if verdict.is_baseline_established:
+              print("✅ DUAL-REPO REALITY AUDIT: PLATFORM BASELINE ESTABLISHED")
+              print("   All five audit dimensions are at 'implemented' or above.")
+          elif verdict.has_critical_gaps:
+              print("❌ DUAL-REPO REALITY AUDIT: CRITICAL GAPS BLOCKING BASELINE")
+              for gap in report.unresolved_blocking_gaps:
+                  print(f"   CRITICAL: {gap}")
+          elif verdict.is_inconclusive:
+              print("❌ DUAL-REPO REALITY AUDIT: INSUFFICIENT EVIDENCE TO CONCLUDE")
+          else:
+              print("⚠️  DUAL-REPO REALITY AUDIT: PARTIAL BASELINE (significant gaps)")
+              for gap in report.unresolved_blocking_gaps:
+                  print(f"   GAP: {gap}")
+
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload dual-repo reality audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dual-repo-reality-audit-report
+          path: |
+            dual_repo_reality_audit_report.json
+            dual_repo_reality_audit_summary.txt
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # 3. Check audit — fail CI when critical dimensions are unsubstantiated
+  # ---------------------------------------------------------------------------
+  check-audit:
+    name: Verify Dual-Repo Reality Audit Verdict
+    runs-on: ubuntu-latest
+    needs: generate-audit
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Validate audit correctness and fail-conservative policy
+        run: |
+          python - <<'EOF'
+          """
+          Audit validation script for PR-537 check-audit job.
+
+          Validates:
+          1. Evidence aggregation correctness — all five dimensions present.
+          2. Fail-conservative policy — nominally_present dimensions must
+             produce critical_gaps_blocking_baseline, not platform_baseline.
+          3. Missing evidence handling — absent modules recorded in gaps.
+          4. Fail when critical dimensions cannot be substantiated —
+             critical_gaps_blocking_baseline or insufficient_evidence
+             causes CI failure.
+          5. Honest gap reporting — unresolved_blocking_gaps non-empty
+             when any dimension has gaps.
+          """
+          import json
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.dual_repo_system_reality_audit import (
+              build_dual_repo_reality_audit,
+              AuditDimension,
+              MaturityLabel,
+              SystemRealityVerdict,
+          )
+
+          report = build_dual_repo_reality_audit()
+          errors = []
+
+          # --- Aggregation correctness ---
+          all_dims = AuditDimension.all_dimensions()
+          found_dims = {e.dimension for e in report.dimensions}
+          for dim in all_dims:
+              if dim not in found_dims:
+                  errors.append(
+                      f"AGGREGATION ERROR: dimension '{dim.value}' missing "
+                      "from report"
+                  )
+
+          # --- Each dimension entry must have non-empty evidence_summary ---
+          for entry in report.dimensions:
+              if not entry.evidence_summary:
+                  errors.append(
+                      f"EVIDENCE SUMMARY ERROR: dimension "
+                      f"'{entry.dimension.value}' has empty evidence_summary"
+                  )
+              if not entry.verdict_rationale:
+                  errors.append(
+                      f"VERDICT RATIONALE ERROR: dimension "
+                      f"'{entry.dimension.value}' has empty verdict_rationale"
+                  )
+
+          # --- Missing evidence handling: nominally_present must have gaps ---
+          for entry in report.dimensions:
+              if entry.maturity == MaturityLabel.nominally_present_not_closed:
+                  if not entry.gaps:
+                      errors.append(
+                          f"HONEST GAP POLICY VIOLATION: dimension "
+                          f"'{entry.dimension.value}' is "
+                          "nominally_present_not_closed but has no gaps"
+                      )
+
+          # --- Fail-conservative policy: unresolved must not produce baseline ---
+          has_nominal = any(
+              e.maturity == MaturityLabel.nominally_present_not_closed
+              for e in report.dimensions
+          )
+          if has_nominal and report.system_verdict.is_baseline_established:
+              errors.append(
+                  "FAIL-CONSERVATIVE VIOLATION: report has nominally_present "
+                  "dimension(s) but verdict is platform_baseline_established.  "
+                  "Policy violated."
+              )
+
+          # --- Blocking gaps: if any dimension has gaps they must appear ---
+          dims_with_gaps = [e for e in report.dimensions if e.gaps]
+          if dims_with_gaps and not report.unresolved_blocking_gaps:
+              errors.append(
+                  "HONEST GAP POLICY VIOLATION: dimensions have gaps but "
+                  "unresolved_blocking_gaps is empty."
+              )
+
+          # --- Dual-format output ---
+          try:
+              json.loads(report.to_json())
+          except Exception as exc:
+              errors.append(
+                  f"DUAL FORMAT ERROR: to_json() produced invalid JSON: {exc}"
+              )
+          if not report.summary:
+              errors.append("DUAL FORMAT ERROR: report.summary is empty")
+
+          # --- Report all findings ---
+          if errors:
+              print("❌ Dual-repo reality audit validation FAILED:")
+              for err in errors:
+                  print(f"   {err}")
+              sys.exit(1)
+          else:
+              print("✅ Dual-repo reality audit validation passed.")
+              print(f"   Verdict       : {report.system_verdict.value}")
+              print(f"   Dimensions    : {len(report.dimensions)}")
+              print(f"   Blocking gaps : {len(report.unresolved_blocking_gaps)}")
+              for d in report.dimensions:
+                  print(
+                      f"   [{d.dimension.value:<42}] {d.maturity.value}"
+                  )
+
+          # --- Hard fail when critical dimensions cannot be substantiated ---
+          if report.system_verdict.has_critical_gaps:
+              print()
+              print(
+                  "❌ CRITICAL GAPS BLOCKING BASELINE — failing CI to prevent "
+                  "unsubstantiated platform claims."
+              )
+              print("   Unresolved blocking gaps:")
+              for gap in report.unresolved_blocking_gaps:
+                  print(f"     * {gap}")
+              sys.exit(1)
+
+          if report.system_verdict.is_inconclusive:
+              print()
+              print(
+                  "❌ INSUFFICIENT EVIDENCE TO CONCLUDE — failing CI.  "
+                  "The audit environment may be severely broken."
+              )
+              sys.exit(1)
+
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
