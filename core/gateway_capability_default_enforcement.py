@@ -282,7 +282,7 @@ def lookup_device_capabilities(device_id: str) -> List[str]:
             caps,
         )
         return caps
-    except Exception as exc:
+    except (ImportError, AttributeError, KeyError, TypeError) as exc:
         logger.debug(
             "lookup_device_capabilities: failed for device=%s — %s",
             device_id,

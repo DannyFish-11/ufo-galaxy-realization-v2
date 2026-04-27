@@ -7664,11 +7664,12 @@ class OpenClawd:
                 }
             )
             return result
-        except Exception as _gate_err:
-            # Gate module unavailable or non-fatal error — log and proceed.
-            # This preserves backward compatibility during partial deployments.
+        except (ImportError, ModuleNotFoundError, AttributeError) as _gate_err:
+            # Gate module unavailable during partial deployment — log and proceed.
+            # This preserves backward compatibility when the enforcement module
+            # has not yet been deployed.
             logger.warning(
-                "OpenClawd.send_gateway_command: capability gate raised unexpectedly "
+                "OpenClawd.send_gateway_command: capability gate module unavailable "
                 "for device=%s command=%s — gate NOT completed (proceeding): %s",
                 device_id,
                 command,
