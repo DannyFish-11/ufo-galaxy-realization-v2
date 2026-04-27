@@ -608,12 +608,43 @@ _RUNTIME_LOCK: Lock = Lock()
 
 
 def get_canonical_session_truth_runtime() -> CanonicalSessionTruthRuntime:
-    """Return the module-level :class:`CanonicalSessionTruthRuntime` singleton."""
+    """Return the module-level :class:`CanonicalSessionTruthRuntime` singleton.
+
+    Default-on durable wiring
+    -------------------------
+    When the singleton is first created, this function automatically attaches
+    the process-level :class:`SessionTruthSnapshotStore` so that every
+    :class:`CanonicalSessionTruthRecord` is written to durable storage
+    without requiring an explicit :meth:`CanonicalSessionTruthRuntime.set_snapshot_store`
+    call.  This makes session truth durable by default — callers and startup
+    code do **not** need to wire the store manually (though doing so again is
+    idempotent).
+
+    If the snapshot store cannot be obtained (e.g. import error, I/O error
+    creating the directory) the runtime degrades gracefully to in-memory only
+    and logs a warning.
+    """
     global _RUNTIME
     if _RUNTIME is None:
         with _RUNTIME_LOCK:
             if _RUNTIME is None:
-                _RUNTIME = CanonicalSessionTruthRuntime()
+                runtime = CanonicalSessionTruthRuntime()
+                # Default-on: attach the durable snapshot store immediately so
+                # session truth survives process restarts without any additional
+                # wiring by startup code or callers.
+                try:
+                    from core.session_truth_snapshot import (
+                        get_session_truth_snapshot_store,
+                    )
+                    _snap_store = get_session_truth_snapshot_store()
+                    runtime.set_snapshot_store(_snap_store)
+                except Exception as _wire_exc:  # noqa: BLE001
+                    _logger.warning(
+                        "CanonicalSessionTruthRuntime: could not auto-wire "
+                        "durable snapshot store — degrading to in-memory only: %s",
+                        _wire_exc,
+                    )
+                _RUNTIME = runtime
     return _RUNTIME
 
 

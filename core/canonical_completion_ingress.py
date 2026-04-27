@@ -263,6 +263,79 @@ class CanonicalCompletionIngress:
             )
             return False
 
+    def fail_pending_dispatch(
+        self,
+        handoff_id_or_task_id: str,
+        exc: BaseException,
+    ) -> bool:
+        """Resolve the Future registered under *handoff_id_or_task_id* with *exc*.
+
+        Unlike :meth:`complete_pending_dispatch` (which calls
+        ``Future.set_result``), this method calls ``Future.set_exception`` so
+        that ``await future`` raises *exc* on the awaiting side.  This is used
+        by the restart recovery coordinator to unblock stale waiters with an
+        explicit restart error rather than leaving them hanging indefinitely.
+
+        Parameters
+        ----------
+        handoff_id_or_task_id:
+            The correlation key used when the dispatch was registered.
+        exc:
+            The exception to raise at the awaiting call site.
+
+        Returns
+        -------
+        bool
+            True if a pending Future was found and resolved; False otherwise.
+        """
+        return self._fail_key(handoff_id_or_task_id, exc, clear=True)
+
+    def _fail_key(self, key: str, exc: BaseException, *, clear: bool) -> bool:
+        """Resolve the Future indexed by *key* with *exc* via ``set_exception``.
+
+        Returns True if a Future was found and set.
+        """
+        fut: Optional[asyncio.Future] = None
+
+        with self._lock:
+            if key in self._futures_by_handoff_id:
+                fut = self._futures_by_handoff_id[key]
+                if clear:
+                    del self._futures_by_handoff_id[key]
+            elif key in self._futures_by_task_id:
+                fut = self._futures_by_task_id[key]
+                if clear:
+                    del self._futures_by_task_id[key]
+
+        if fut is None:
+            return False
+
+        if fut.done():
+            logger.debug(
+                "canonical_completion_ingress: Future already resolved for key=%r "
+                "(fail_key no-op)",
+                key,
+            )
+            return False
+
+        try:
+            fut.set_exception(exc)
+            return True
+        except asyncio.InvalidStateError:
+            logger.debug(
+                "canonical_completion_ingress: InvalidStateError failing key=%r "
+                "(race condition, already resolved)",
+                key,
+            )
+            return False
+        except Exception as err:
+            logger.warning(
+                "canonical_completion_ingress: unexpected error failing key=%r: %s",
+                key,
+                err,
+            )
+            return False
+
     def pending_count(self) -> int:
         """Return the number of pending (unresolved) dispatches."""
         with self._lock:
@@ -316,6 +389,16 @@ def complete_pending_dispatch(
     )
 
 
+def fail_pending_dispatch(
+    handoff_id_or_task_id: str,
+    exc: BaseException,
+) -> bool:
+    """Module-level shortcut: ``get_canonical_completion_ingress().fail_pending_dispatch(...)``."""
+    return get_canonical_completion_ingress().fail_pending_dispatch(
+        handoff_id_or_task_id, exc
+    )
+
+
 __all__ = [
     # Sentinels
     "CANONICAL_COMPLETION_INGRESS_SENTINEL",
@@ -328,4 +411,5 @@ __all__ = [
     # Module-level shortcuts
     "register_pending_dispatch",
     "complete_pending_dispatch",
+    "fail_pending_dispatch",
 ]

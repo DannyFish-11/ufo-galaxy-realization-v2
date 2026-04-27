@@ -643,7 +643,8 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
             "in-progress task state and session truth is lost. No restart recovery "
             "mechanism exists for V2-side state."
         ),
-        resolved=False,
+        resolved=True,
+        resolution_pr="#850",
     ),
     WorkstreamGapEntry(
         gap_id="GAP_RUNTIME_TRUTH_SINGLE_INGRESS",
