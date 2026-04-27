@@ -58,6 +58,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
@@ -123,8 +125,6 @@ _REQUIRED_JSON_KEYS = [
 def _patch_gate_for_outcome(outcome: str):
     """Context manager that patches GovernanceValidationGate.validate to
     return a result with the given outcome string (pass/warn/fail)."""
-    import uuid
-    import time as _time
 
     def _mock_validate(self, **kwargs):
         enum_outcome = ValidationOutcome(outcome)
@@ -137,7 +137,7 @@ def _patch_gate_for_outcome(outcome: str):
 
         return ValidationResult(
             result_id=str(uuid.uuid4()),
-            generated_at=_time.time(),
+            generated_at=time.time(),
             outcome=enum_outcome,
             fail_reasons=fail_reasons,
             summary=f"mocked outcome: {outcome}",
@@ -336,13 +336,11 @@ class TestGroupC_ExitCode:
 
     def test_C06_governance_blocked_causes_exit_1(self):
         """Governance-blocked condition must produce exit code 1."""
-        import uuid
-        import time as _time
 
         def _blocked_validate(self, **kwargs):
             return ValidationResult(
                 result_id=str(uuid.uuid4()),
-                generated_at=_time.time(),
+                generated_at=time.time(),
                 outcome=ValidationOutcome.FAIL,
                 fail_reasons=[ValidationFailReason.governance_blocked],
                 summary="governance blocked",
@@ -356,13 +354,11 @@ class TestGroupC_ExitCode:
 
     def test_C07_readiness_blocked_causes_exit_1(self):
         """Readiness-blocked condition must produce exit code 1."""
-        import uuid
-        import time as _time
 
         def _blocked_validate(self, **kwargs):
             return ValidationResult(
                 result_id=str(uuid.uuid4()),
-                generated_at=_time.time(),
+                generated_at=time.time(),
                 outcome=ValidationOutcome.FAIL,
                 fail_reasons=[ValidationFailReason.readiness_blocked],
                 summary="readiness blocked",
@@ -505,6 +501,116 @@ class TestGroupE_CliIntegration:
                 data = json.load(fh)
             missing = [k for k in _REQUIRED_JSON_KEYS if k not in data]
             assert not missing, f"CLI verdict JSON missing required keys: {missing}"
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+
+# ===========================================================================
+# Group F — Delegated readiness blocking
+# ===========================================================================
+
+
+@_skip_if_unavailable
+class TestGroupF_DelegatedReadinessBlocking:
+    """Delegated readiness blocking: check_delegated_readiness=True path."""
+
+    def test_F01_delegated_blocked_causes_exit_1(self):
+        """delegated_readiness_not_ready must produce exit code 1."""
+
+        def _blocked_validate(self, **kwargs):
+            return ValidationResult(
+                result_id=str(uuid.uuid4()),
+                generated_at=time.time(),
+                outcome=ValidationOutcome.FAIL,
+                fail_reasons=[ValidationFailReason.delegated_readiness_not_ready],
+                summary="delegated readiness not ready",
+                release_gate_verdict="open",
+                readiness_status="ready",
+                delegated_readiness_verdict="not_ready",
+            )
+
+        with patch.object(GovernanceValidationGate, "validate", _blocked_validate):
+            code = run_governance_verdict_ci(check_delegated_readiness=True)
+        assert code == 1, "delegated_readiness_not_ready should cause exit code 1"
+
+    def test_F02_delegated_ready_returns_0(self):
+        """When delegated gate is ready, exit code must be 0."""
+
+        def _ready_validate(self, **kwargs):
+            return ValidationResult(
+                result_id=str(uuid.uuid4()),
+                generated_at=time.time(),
+                outcome=ValidationOutcome.PASS,
+                fail_reasons=[],
+                summary="all checks passed",
+                release_gate_verdict="open",
+                readiness_status="ready",
+                delegated_readiness_verdict="ready_for_release",
+            )
+
+        with patch.object(GovernanceValidationGate, "validate", _ready_validate):
+            code = run_governance_verdict_ci(check_delegated_readiness=True)
+        assert code == 0, "All-ready verdict with --delegated should still exit 0"
+
+    def test_F03_delegated_not_ready_in_blocking_dimensions(self):
+        """delegated_readiness_not_ready must be classified as a blocking dimension."""
+        assert "delegated_readiness_not_ready" in CI_BLOCKING_DIMENSIONS, (
+            "'delegated_readiness_not_ready' must be in CI_BLOCKING_DIMENSIONS "
+            "so that a not-ready delegated gate causes CI to fail"
+        )
+
+    def test_F04_cli_delegated_flag_is_accepted(self):
+        """``--delegated`` CLI flag must be accepted (no error/usage output)."""
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "core.governance_validation_gate",
+                "--delegated",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=_PROJECT_ROOT,
+        )
+        # Exit code 0 or 1 are both valid; exit code 2 indicates argparse
+        # usage error (unknown flag), which must not happen.
+        assert result.returncode in (0, 1), (
+            f"--delegated flag caused unexpected exit code {result.returncode}: "
+            f"stderr={result.stderr[:300]}"
+        )
+
+    def test_F05_cli_delegated_with_output_writes_schema(self):
+        """CLI --delegated --output must write a valid schema-compliant verdict."""
+        with tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, dir=tempfile.gettempdir()
+        ) as f:
+            path = f.name
+        os.unlink(path)
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "core.governance_validation_gate",
+                    "--delegated",
+                    "--output",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=_PROJECT_ROOT,
+            )
+            assert os.path.isfile(path), "CLI --delegated --output did not write JSON file"
+            with open(path) as fh:
+                data = json.load(fh)
+            missing = [k for k in _REQUIRED_JSON_KEYS if k not in data]
+            assert not missing, (
+                f"CLI --delegated verdict JSON missing required keys: {missing}"
+            )
+            # The delegated_readiness_verdict field must be present (value may be
+            # "unavailable" or an actual verdict string depending on environment).
+            assert "delegated_readiness_verdict" in data
         finally:
             if os.path.exists(path):
                 os.unlink(path)
