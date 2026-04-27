@@ -7611,6 +7611,71 @@ class OpenClawd:
             "command": command,
         }
 
+        # GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT: enforce capability gate on
+        # the canonical gateway path BEFORE contacting any backend.  Explicit
+        # device_id does not exempt this call from capability reality checks.
+        # The gate is a no-op when neither the caller nor the inference table
+        # can produce required capabilities (backward compatible).
+        try:
+            from core.gateway_capability_default_enforcement import (
+                enforce_gateway_default_capability_gate,
+            )
+            from core.capability_enforcement_hardener import CapabilityHardRejectError
+
+            _gate_caps: Optional[List[str]] = (
+                required_capabilities
+                or getattr(self, "_current_required_capabilities", None)
+                or None
+            )
+            _gate_record = enforce_gateway_default_capability_gate(
+                device_id=device_id,
+                command=command,
+                required_capabilities=_gate_caps,
+                calling_site="send_gateway_command",
+            )
+            result["capability_gate_verdict"] = _gate_record.verdict
+        except CapabilityHardRejectError as _cap_hard_err:
+            latency_ms = (time.monotonic() - t0) * 1000
+            logger.error(
+                "OpenClawd.send_gateway_command: capability gate HARD REJECT | "
+                "command_id=%s device=%s command=%s missing=%s audit_id=%s",
+                command_id,
+                device_id,
+                command,
+                _cap_hard_err.missing_capabilities,
+                _cap_hard_err.audit_id,
+            )
+            result.update(
+                {
+                    "success": False,
+                    "response": (
+                        f"Capability gate rejected dispatch to device '{device_id}': "
+                        f"missing capabilities {_cap_hard_err.missing_capabilities!r}.  "
+                        f"audit_id={_cap_hard_err.audit_id!r}"
+                    ),
+                    "error": "capability_hard_reject",
+                    "error_detail": {
+                        "missing_capabilities": _cap_hard_err.missing_capabilities,
+                        "required_capabilities": _cap_hard_err.required_capabilities,
+                        "audit_id": _cap_hard_err.audit_id,
+                    },
+                    "latency_ms": round(latency_ms, 1),
+                    "via": "capability_gate",
+                }
+            )
+            return result
+        except (ImportError, ModuleNotFoundError, AttributeError) as _gate_err:
+            # Gate module unavailable during partial deployment — log and proceed.
+            # This preserves backward compatibility when the enforcement module
+            # has not yet been deployed.
+            logger.warning(
+                "OpenClawd.send_gateway_command: capability gate module unavailable "
+                "for device=%s command=%s — gate NOT completed (proceeding): %s",
+                device_id,
+                command,
+                _gate_err,
+            )
+
         # 尝试通过 command_router.route_envelope 发送（PR-1: 统一入口）
         try:
             from core.command_router import get_command_router
