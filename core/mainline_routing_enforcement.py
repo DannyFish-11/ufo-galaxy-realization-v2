@@ -79,6 +79,8 @@ __all__ = [
     "CAPABILITY_GATE_ENFORCED_ON_EXPLICIT_ROUTING_POLICY",
     "NO_SILENT_CAPABILITY_BYPASS_POLICY",
     "EXPLICIT_ROUTE_BYPASS_REQUIRES_AUDIT_POLICY",
+    "EXPLICIT_ROUTE_IS_EXCEPTION_PATH",
+    "CAPABILITY_AWARE_ROUTING_IS_DEFAULT_MAINLINE",
     # Enumerations
     "ExplicitRouteVerdict",
     # Data class
@@ -131,6 +133,31 @@ EXPLICIT_ROUTE_BYPASS_REQUIRES_AUDIT_POLICY: str = (
     "capability mismatch or data gap, the routing event MUST be recorded "
     "with verdict AUDITED_BYPASS.  The record must include the device_id, "
     "the required_capabilities, and the reason for the bypass."
+)
+
+EXPLICIT_ROUTE_IS_EXCEPTION_PATH: str = (
+    "POLICY::EXPLICIT_ROUTE_IS_EXCEPTION_PATH_V1: "
+    "An explicit device_id in a cross-device dispatch request is the "
+    "EXCEPTION PATH (override / debug / forced routing scenarios).  It is "
+    "NOT the default main path.  The default main path is capability-driven "
+    "selection via the capability graph.  Exception-path requests still run "
+    "the capability gate and produce an audit record.  When the explicit "
+    "target fails the capability gate, the system must reroute to a capable "
+    "alternative or reject — it must NOT silently proceed with an incapable "
+    "device.  Closes the structural gap where explicit device_id bypassed "
+    "capability-aware routing in the default main path."
+)
+
+CAPABILITY_AWARE_ROUTING_IS_DEFAULT_MAINLINE: str = (
+    "POLICY::CAPABILITY_AWARE_ROUTING_IS_DEFAULT_MAINLINE_V1: "
+    "Cross-device participant selection MUST default to capability-driven "
+    "routing.  When required_capabilities is absent, capability inference "
+    "from the tool/command name activates the gate automatically.  The "
+    "system does NOT default to explicit device_id dispatch.  This policy "
+    "is enforced in route_envelope() (capability inference before dispatch) "
+    "and in process() (gate expanded to all intent types, not just "
+    "device_control/task_manage).  See core.capability_aware_routing_default "
+    "for the canonical enforcement implementation."
 )
 
 
