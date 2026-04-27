@@ -102,6 +102,11 @@ __all__ = [
     "RECOVERY_IDEMPOTENCY_POLICY",
     "SESSION_TRUTH_RECOVERY_POLICY",
     "CONTINUATION_WAITER_RECONCILIATION_POLICY",
+    # PR-2 sentinels
+    "DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY",
+    "CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY",
+    "MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY",
+    "RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -265,6 +270,52 @@ CONTINUATION_WAITER_RECONCILIATION_POLICY: str = (
     "may already have been delivered.  Closes GAP_V2_TRUTH_PERSISTENCE. (PR-1)"
 )
 
+# PR-2: durable truth authority convergence step
+DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY: str = (
+    "POLICY::DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP: On process restart, "
+    "RuntimeRestartRecoveryCoordinator runs a DurableTruthAuthorityChain "
+    "convergence_check() as step 8.  This verifies that all three durable "
+    "truth legs (SessionTruthSnapshotStore, TaskLifecyclePersistenceStore, "
+    "DurableResultIdSet) are healthy and accessible, confirming that the "
+    "unified durable truth authority chain is intact after restart.  "
+    "The result is recorded in RuntimeRecoveryReport.durable_truth_converged. "
+    "See core.durable_truth_authority_chain for the authority declaration.  (PR-2)"
+)
+
+# PR-2: continuation rebind registry integration
+CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY: str = (
+    "POLICY::CONTINUATION_REBIND_REGISTRY_INTEGRATION: After failing stale "
+    "asyncio.Future waiters in step 7, RuntimeRestartRecoveryCoordinator "
+    "calls ContinuationRebindRegistry.register_rebind_pending(task_id) for "
+    "each task whose waiter was successfully failed.  This records the "
+    "pending-rebind state so that when the task is re-dispatched and a new "
+    "waiter is registered, the registry can track that the rebind occurred "
+    "and ultimately that the continuation loop was closed.  "
+    "See core.continuation_rebind_registry for the closed-loop semantic.  (PR-2)"
+)
+
+# PR-2: multi-participant recovery consolidation
+MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY: str = (
+    "POLICY::MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION: When multiple tasks "
+    "are recovered across multiple participant device_ids, "
+    "RuntimeRestartRecoveryCoordinator consolidates the per-participant "
+    "recovery state into RuntimeRecoveryReport.participants_consolidated. "
+    "Each recovered task's target_device_id is grouped; tasks without a "
+    "target_device_id are assigned to the sentinel 'unknown_participant'.  "
+    "This makes multi-participant recovery state observable and verifiable.  "
+    "Duplicate task_ids under the same participant are deduplicated.  (PR-2)"
+)
+
+# PR-2: result continuity guard verification
+RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY: str = (
+    "POLICY::RESULT_CONTINUITY_GUARD_VERIFICATION: During startup recovery, "
+    "RuntimeRestartRecoveryCoordinator verifies that DurableResultIdSet "
+    "(the result continuity guard) is accessible and functional by calling "
+    "get_durable_result_id_store().size() without error.  "
+    "The result is recorded in RuntimeRecoveryReport.result_continuity_guard_active.  "
+    "This confirms the idempotency guard is live before any results are processed "
+    "after restart.  (PR-2)"
+)
 
 
 @dataclass
@@ -299,6 +350,24 @@ class RuntimeRecoveryReport:
         Number of stale asyncio.Future waiters resolved with a restart error
         during the continuation reconciliation step so that callers are not
         left waiting indefinitely after a restart. (PR-1)
+    continuation_rebinds_registered
+        Number of pending-rebind records created in
+        :class:`~core.continuation_rebind_registry.ContinuationRebindRegistry`
+        after failing stale waiters.  Each rebind record tracks the second
+        half of the closed-loop semantic: re-dispatch → new waiter →
+        result delivery.  (PR-2)
+    durable_truth_converged
+        True if the DurableTruthAuthorityChain convergence check passed —
+        all three durable legs (session truth, task lifecycle, result
+        continuity) were found healthy after restart.  (PR-2)
+    participants_consolidated
+        Dict mapping participant device_id to the count of recovered tasks
+        attributed to that participant.  Tasks without a target_device_id
+        are counted under 'unknown_participant'.  (PR-2)
+    result_continuity_guard_active
+        True if the DurableResultIdSet is accessible and functional after
+        restart.  Confirms the idempotency guard is live before any results
+        are processed.  (PR-2)
     errors
         List of non-fatal error strings encountered during recovery.
     non_goals
@@ -324,6 +393,11 @@ class RuntimeRecoveryReport:
     inflight_tasks_already_pending_skipped: int = 0
     session_truth_records_restored: int = 0
     continuation_waiters_reconciled: int = 0
+    # PR-2 fields
+    continuation_rebinds_registered: int = 0
+    durable_truth_converged: bool = False
+    participants_consolidated: Dict[str, int] = field(default_factory=dict)
+    result_continuity_guard_active: bool = False
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -349,6 +423,11 @@ class RuntimeRecoveryReport:
             "inflight_tasks_already_pending_skipped": self.inflight_tasks_already_pending_skipped,
             "session_truth_records_restored": self.session_truth_records_restored,
             "continuation_waiters_reconciled": self.continuation_waiters_reconciled,
+            # PR-2 fields
+            "continuation_rebinds_registered": self.continuation_rebinds_registered,
+            "durable_truth_converged": self.durable_truth_converged,
+            "participants_consolidated": dict(self.participants_consolidated),
+            "result_continuity_guard_active": self.result_continuity_guard_active,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -543,6 +622,45 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 8: Verify durable truth authority convergence (PR-2).
+        #
+        #         Run DurableTruthAuthorityChain.convergence_check() to
+        #         confirm all three durable legs are healthy after restart.
+        # ----------------------------------------------------------------
+        try:
+            self._verify_durable_truth_convergence(report)
+        except Exception as exc:
+            err = f"Durable truth authority convergence check failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 9: Consolidate multi-participant recovery state (PR-2).
+        #
+        #         Group recovered tasks by target_device_id to make
+        #         per-participant recovery state observable.
+        # ----------------------------------------------------------------
+        try:
+            self._consolidate_multi_participant_recovery(report)
+        except Exception as exc:
+            err = f"Multi-participant recovery consolidation failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 10: Verify result continuity guard is active (PR-2).
+        #
+        #          Confirm DurableResultIdSet is accessible before any
+        #          results are processed after restart.
+        # ----------------------------------------------------------------
+        try:
+            self._verify_result_continuity_guard(report)
+        except Exception as exc:
+            err = f"Result continuity guard verification failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
@@ -550,6 +668,8 @@ class RuntimeRestartRecoveryCoordinator:
             "hybrid_interrupted=%d hybrid_restored=%d hybrid_invalidated=%d "
             "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
             "truth_restored=%d continuation_reconciled=%d "
+            "rebinds_registered=%d truth_converged=%s "
+            "participants=%d result_guard=%s "
             "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
@@ -564,6 +684,10 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_terminal,
             report.session_truth_records_restored,
             report.continuation_waiters_reconciled,
+            report.continuation_rebinds_registered,
+            report.durable_truth_converged,
+            len(report.participants_consolidated),
+            report.result_continuity_guard_active,
             len(report.errors),
         )
         return report
@@ -982,10 +1106,17 @@ class RuntimeRestartRecoveryCoordinator:
         already have been delivered; resolving their futures could cause
         duplicate-result handling on the awaiting side.
 
-        Sets :attr:`RuntimeRecoveryReport.continuation_waiters_reconciled`.
+        After failing each stale future, registers the task_id in
+        :class:`~core.continuation_rebind_registry.ContinuationRebindRegistry`
+        as pending-rebind (PR-2), enabling the second half of the closed-loop
+        semantic: re-dispatch → new waiter → result delivery.
+
+        Sets :attr:`RuntimeRecoveryReport.continuation_waiters_reconciled` and
+        :attr:`RuntimeRecoveryReport.continuation_rebinds_registered`.
         Degrades gracefully if ``CanonicalCompletionIngress`` is unavailable.
 
-        See :data:`CONTINUATION_WAITER_RECONCILIATION_POLICY`.
+        See :data:`CONTINUATION_WAITER_RECONCILIATION_POLICY` and
+        :data:`CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY`.
         """
         try:
             from core.canonical_completion_ingress import (
@@ -1039,7 +1170,23 @@ class RuntimeRestartRecoveryCoordinator:
             )
             return
 
+        # Try to get the rebind registry (PR-2), but degrade gracefully if
+        # the module is unavailable.
+        rebind_registry = None
+        try:
+            from core.continuation_rebind_registry import (
+                get_continuation_rebind_registry,
+            )
+            rebind_registry = get_continuation_rebind_registry()
+        except Exception as exc:
+            logger.debug(
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                "continuation rebind registry unavailable — %s",
+                exc,
+            )
+
         reconciled = 0
+        rebinds_registered = 0
         restart_error = RuntimeError(
             "restart_recovery: V2 restarted; waiter unblocked for re-dispatch"
         )
@@ -1058,6 +1205,22 @@ class RuntimeRestartRecoveryCoordinator:
                         "resolved stale future for task_id=%s",
                         task_id,
                     )
+                    # PR-2: register pending-rebind so the second half of the
+                    # closed loop (re-dispatch → new waiter → result) is tracked.
+                    if rebind_registry is not None:
+                        try:
+                            rebind_registry.register_rebind_pending(
+                                task_id,
+                                recovery_id=report.recovery_id,
+                            )
+                            rebinds_registered += 1
+                        except Exception as rebind_exc:
+                            logger.debug(
+                                "RuntimeRestartRecovery: could not register "
+                                "rebind for task_id=%s — %s",
+                                task_id,
+                                rebind_exc,
+                            )
             except Exception as exc:
                 logger.debug(
                     "RuntimeRestartRecovery._reconcile_continuation_waiters: "
@@ -1067,12 +1230,141 @@ class RuntimeRestartRecoveryCoordinator:
                 )
 
         report.continuation_waiters_reconciled = reconciled
+        report.continuation_rebinds_registered = rebinds_registered
         logger.info(
             "RuntimeRestartRecovery._reconcile_continuation_waiters: "
-            "%d stale continuation future(s) reconciled. "
-            "See CONTINUATION_WAITER_RECONCILIATION_POLICY.",
+            "%d stale continuation future(s) reconciled; "
+            "%d rebind record(s) registered. "
+            "See CONTINUATION_WAITER_RECONCILIATION_POLICY and "
+            "CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY.",
             reconciled,
+            rebinds_registered,
         )
+
+    def _verify_durable_truth_convergence(self, report: RuntimeRecoveryReport) -> None:
+        """Verify that all three durable truth legs are healthy (PR-2).
+
+        Calls :func:`~core.durable_truth_authority_chain.verify_durable_truth_convergence`
+        to check the SessionTruthSnapshotStore, TaskLifecyclePersistenceStore,
+        and DurableResultIdSet.  Sets
+        :attr:`RuntimeRecoveryReport.durable_truth_converged`.
+
+        See :data:`DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY`.
+        """
+        try:
+            from core.durable_truth_authority_chain import verify_durable_truth_convergence
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._verify_durable_truth_convergence: "
+                "import failed — %s",
+                exc,
+            )
+            return
+
+        try:
+            result = verify_durable_truth_convergence(
+                task_lifecycle_store=self._task_lifecycle_store,
+            )
+            report.durable_truth_converged = result.converged
+            logger.info(
+                "RuntimeRestartRecovery._verify_durable_truth_convergence: "
+                "converged=%s (session_truth=%s task_lifecycle=%s result_continuity=%s). "
+                "See DURABLE_TRUTH_AUTHORITY_CONVERGENCE_STEP_POLICY.",
+                result.converged,
+                result.session_truth_leg_healthy,
+                result.task_lifecycle_leg_healthy,
+                result.result_continuity_leg_healthy,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._verify_durable_truth_convergence: "
+                "convergence check failed — %s",
+                exc,
+            )
+
+    def _consolidate_multi_participant_recovery(
+        self, report: RuntimeRecoveryReport
+    ) -> None:
+        """Group recovered tasks by participant device_id (PR-2).
+
+        Iterates the recovered in-flight task records and counts how many
+        tasks were associated with each target_device_id.  Tasks without a
+        target_device_id are counted under ``'unknown_participant'``.
+
+        Sets :attr:`RuntimeRecoveryReport.participants_consolidated`.
+
+        See :data:`MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY`.
+        """
+        try:
+            from core.task_lifecycle_persistence import (
+                restore_inflight_tasks_from_snapshot,
+            )
+            restored = restore_inflight_tasks_from_snapshot(
+                store=self._task_lifecycle_store,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._consolidate_multi_participant_recovery: "
+                "could not load recovered tasks — %s",
+                exc,
+            )
+            return
+
+        consolidated: Dict[str, int] = {}
+        deduplicated_task_ids: set = set()
+        for rec in restored:
+            # Deduplicate task_ids (same as dispatch step)
+            if rec.task_id in deduplicated_task_ids:
+                continue
+            deduplicated_task_ids.add(rec.task_id)
+            participant = rec.target_device_id or "unknown_participant"
+            consolidated[participant] = consolidated.get(participant, 0) + 1
+
+        report.participants_consolidated = consolidated
+        logger.info(
+            "RuntimeRestartRecovery._consolidate_multi_participant_recovery: "
+            "%d participant(s) with recovered tasks: %s. "
+            "See MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY.",
+            len(consolidated),
+            {k: v for k, v in consolidated.items()},
+        )
+
+    def _verify_result_continuity_guard(self, report: RuntimeRecoveryReport) -> None:
+        """Verify the DurableResultIdSet is active and functional (PR-2).
+
+        Calls :func:`~core.durable_result_idempotency.get_durable_result_id_store`
+        and invokes ``size()`` to confirm the guard is accessible.
+        Sets :attr:`RuntimeRecoveryReport.result_continuity_guard_active`.
+
+        See :data:`RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY`.
+        """
+        try:
+            from core.durable_result_idempotency import get_durable_result_id_store
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._verify_result_continuity_guard: "
+                "import failed — %s",
+                exc,
+            )
+            return
+
+        try:
+            store = get_durable_result_id_store()
+            count = store.size()
+            report.result_continuity_guard_active = True
+            logger.info(
+                "RuntimeRestartRecovery._verify_result_continuity_guard: "
+                "DurableResultIdSet active — %d result ID(s) tracked. "
+                "See RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY.",
+                count,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._verify_result_continuity_guard: "
+                "DurableResultIdSet check failed — %s",
+                exc,
+            )
+            report.result_continuity_guard_active = False
 
 
 # ---------------------------------------------------------------------------

@@ -97,6 +97,7 @@ __all__ = [
     "CANONICAL_SESSION_TRUTH_PR4_SENTINEL",
     "CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL",
     "SESSION_TRUTH_SNAPSHOT_IS_DURABLE_POLICY",
+    "SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL",
     # Data types
     "SessionTruthSource",
     "CanonicalSessionTruthRecord",
@@ -203,10 +204,25 @@ CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL: str = (
     "via set_audit_store().  When attached, every CanonicalSessionTruthRecord "
     "is also written to a DurableAuditStore so truth merge evidence survives "
     "process lifetime and is available for postmortem / forensic review.  "
-    "The in-memory ring buffer remains the authoritative runtime read surface.  "
-    "(PR-B2)"
+    "The in-memory ring buffer is a read-cache of the durable path — not an "
+    "independent truth authority.  (PR-B2, clarified by PR-2)"
 )
 """Sentinel confirming durable audit sink support is active on CanonicalSessionTruthRuntime (PR-B2)."""
+
+SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL: str = (
+    "CANONICAL_SESSION_TRUTH::RING_BUFFER_READ_CACHE_V1: "
+    "The CanonicalSessionTruthRuntime in-process ring buffer is a READ-CACHE, "
+    "not an independent truth authority.  At startup, "
+    "restore_session_truth_from_snapshot() repopulates it from the durable "
+    "SessionTruthSnapshotStore.  During runtime, every record written to the "
+    "ring buffer is ALSO written to the snapshot store (set_snapshot_store). "
+    "The ring buffer reflects the durable state and may be cleared and rebuilt "
+    "from the durable store at any time.  The SessionTruthSnapshotStore is the "
+    "canonical authority for session truth that must survive restarts.  "
+    "See core.durable_truth_authority_chain.RING_BUFFER_IS_READ_CACHE_POLICY "
+    "for the definitive authority declaration.  (PR-2)"
+)
+"""Sentinel clarifying the ring buffer's read-cache role vs. durable authority (PR-2)."""
 
 # ---------------------------------------------------------------------------
 # Internal posture helpers
