@@ -338,3 +338,78 @@ jobs:
             exit 1
           fi
           echo "✅ No in-source test files with real test logic found."
+
+  governance-verdict-blocking:
+    # PR-CI-BLOCK: Governance / Readiness Verdict CI Blocking Gate.
+    # Runs the governance validation gate in blocking mode.  A verdict of
+    # FAIL (governance blocked, readiness blocked, or delegated readiness
+    # not-ready) causes this job to exit non-zero, preventing merge to main.
+    #
+    # Blocking dimensions (exit 1):
+    #   - governance_blocked          (distributed release gate returned blocked)
+    #   - readiness_blocked           (ExecutionReadinessGate returned BLOCKED)
+    #   - delegated_readiness_not_ready
+    #
+    # Advisory dimensions (exit 0, surfaced in artifact only):
+    #   - evidence_surface_unavailable
+    #   - capability_tier_experimental
+    #   - capability_tier_quasi_main_chain
+    #
+    # The JSON verdict is uploaded as a workflow artifact for downstream
+    # tooling and release pipeline consumption.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run governance verdict CI gate (blocking on FAIL)
+        run: |
+          python core/governance_validation_gate.py \
+            --output governance_verdict.json
+          echo "✅ Governance verdict gate: APPROVED."
+      - name: Validate verdict JSON schema
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+
+          with open("governance_verdict.json") as f:
+              v = json.load(f)
+
+          required_keys = [
+              "result_id", "generated_at", "outcome", "fail_reasons",
+              "summary", "release_gate_verdict", "readiness_status",
+              "delegated_readiness_verdict", "blocked_gate_worthy_count",
+              "ci_blocking_dimensions", "ci_advisory_dimensions",
+              "blocking_fail_reasons", "advisory_fail_reasons",
+          ]
+          missing = [k for k in required_keys if k not in v]
+          if missing:
+              print(f"❌ Verdict JSON missing required keys: {missing}")
+              sys.exit(1)
+
+          valid_outcomes = {"pass", "warn", "fail"}
+          if v["outcome"] not in valid_outcomes:
+              print(f"❌ Invalid outcome value: {v['outcome']!r}")
+              sys.exit(1)
+
+          print(f"✅ Verdict JSON schema valid — outcome={v['outcome']!r}  "
+                f"blocking_reasons={v['blocking_fail_reasons']}")
+          EOF
+      - name: Upload governance verdict artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-verdict
+          path: governance_verdict.json
+          retention-days: 30
+      - name: Run governance CI blocking tests
+        run: |
+          python -m pytest tests/test_pr_governance_ci_blocking.py \
+            -v --tb=short
+          echo "✅ Governance CI blocking tests passed."
