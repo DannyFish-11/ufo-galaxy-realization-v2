@@ -348,12 +348,16 @@ jobs:
     # Blocking dimensions (exit 1):
     #   - governance_blocked          (distributed release gate returned blocked)
     #   - readiness_blocked           (ExecutionReadinessGate returned BLOCKED)
-    #   - delegated_readiness_not_ready
+    #   - delegated_readiness_not_ready (DelegatedFlowReadinessGate not ready)
     #
     # Advisory dimensions (exit 0, surfaced in artifact only):
     #   - evidence_surface_unavailable
     #   - capability_tier_experimental
     #   - capability_tier_quasi_main_chain
+    #
+    # The --delegated flag enables DelegatedFlowReadinessGate evaluation so
+    # that a delegated_readiness_not_ready verdict becomes a hard CI block.
+    # If the gate module is unavailable the flag is silently a no-op.
     #
     # The JSON verdict is uploaded as a workflow artifact for downstream
     # tooling and release pipeline consumption.
@@ -370,7 +374,8 @@ jobs:
       - name: Run governance verdict CI gate (blocking on FAIL)
         run: |
           python core/governance_validation_gate.py \
-            --output governance_verdict.json
+            --output governance_verdict.json \
+            --delegated
           echo "✅ Governance verdict gate: APPROVED."
       - name: Validate verdict JSON schema
         run: |
@@ -413,3 +418,8 @@ jobs:
           python -m pytest tests/test_pr_governance_ci_blocking.py \
             -v --tb=short
           echo "✅ Governance CI blocking tests passed."
+      - name: Run release blocking gate tests
+        run: |
+          python -m pytest tests/test_release_blocking_gate.py \
+            -v --tb=short
+          echo "✅ Release blocking gate tests passed."
