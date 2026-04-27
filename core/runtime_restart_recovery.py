@@ -100,6 +100,8 @@ __all__ = [
     "RECOVERED_LIFECYCLE_DISPATCH_POLICY",
     "RECOVERY_DUPLICATE_SAFETY_POLICY",
     "RECOVERY_IDEMPOTENCY_POLICY",
+    "SESSION_TRUTH_RECOVERY_POLICY",
+    "CONTINUATION_WAITER_RECONCILIATION_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -236,6 +238,33 @@ RECOVERY_IDEMPOTENCY_POLICY: str = (
     "after one pass. (PR-G)"
 )
 
+# PR-1 (GAP_V2_TRUTH_PERSISTENCE closure): session truth recovery step
+SESSION_TRUTH_RECOVERY_POLICY: str = (
+    "POLICY::SESSION_TRUTH_RECOVERY: On process restart, "
+    "RuntimeRestartRecoveryCoordinator reloads the most recent session truth "
+    "records from the durable SessionTruthSnapshotStore into the "
+    "CanonicalSessionTruthRuntime ring buffer via "
+    "restore_session_truth_from_snapshot().  This makes session truth context "
+    "available immediately after restart without waiting for new activity.  "
+    "The snapshot store is also the default-on write-path for the runtime "
+    "singleton — every new record is durably persisted as it is recorded.  "
+    "Together these two mechanisms close GAP_V2_TRUTH_PERSISTENCE. (PR-1)"
+)
+
+# PR-1 (GAP_V2_TRUTH_PERSISTENCE closure): continuation / waiter reconciliation
+CONTINUATION_WAITER_RECONCILIATION_POLICY: str = (
+    "POLICY::CONTINUATION_WAITER_RECONCILIATION: On process restart, "
+    "in-memory asyncio.Future waiters registered with CanonicalCompletionIngress "
+    "are lost.  For tasks recovered with disposition RESUMABLE, REPLAY_ONLY, or "
+    "REISSUABLE, RuntimeRestartRecoveryCoordinator resolves any stale future still "
+    "registered in the CanonicalCompletionIngress with a RuntimeError('restart_recovery') "
+    "so that callers receive an explicit signal rather than waiting indefinitely.  "
+    "This prevents the control chain from hanging after a restart.  Actual "
+    "result delivery will follow when the task is re-dispatched and the device "
+    "reconnects.  TERMINAL_ON_INTERRUPT tasks are excluded because their result "
+    "may already have been delivered.  Closes GAP_V2_TRUTH_PERSISTENCE. (PR-1)"
+)
+
 
 
 @dataclass
@@ -263,6 +292,13 @@ class RuntimeRecoveryReport:
         concrete runtime registry actions (i.e. non-terminal records that were
         added to the lifecycle registry under their disposition-appropriate
         ownership stage).  Terminal records are excluded from this count.
+    session_truth_records_restored
+        Number of canonical session truth records reloaded from the durable
+        snapshot into the in-memory ring buffer during restart recovery. (PR-1)
+    continuation_waiters_reconciled
+        Number of stale asyncio.Future waiters resolved with a restart error
+        during the continuation reconciliation step so that callers are not
+        left waiting indefinitely after a restart. (PR-1)
     errors
         List of non-fatal error strings encountered during recovery.
     non_goals
@@ -286,6 +322,8 @@ class RuntimeRecoveryReport:
     inflight_tasks_terminal: int = 0
     inflight_tasks_dispatch_actions_taken: int = 0
     inflight_tasks_already_pending_skipped: int = 0
+    session_truth_records_restored: int = 0
+    continuation_waiters_reconciled: int = 0
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -309,6 +347,8 @@ class RuntimeRecoveryReport:
             "inflight_tasks_terminal": self.inflight_tasks_terminal,
             "inflight_tasks_dispatch_actions_taken": self.inflight_tasks_dispatch_actions_taken,
             "inflight_tasks_already_pending_skipped": self.inflight_tasks_already_pending_skipped,
+            "session_truth_records_restored": self.session_truth_records_restored,
+            "continuation_waiters_reconciled": self.continuation_waiters_reconciled,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -472,12 +512,44 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 6: Recover session truth from durable snapshot (PR-1 /
+        #         GAP_V2_TRUTH_PERSISTENCE closure).
+        #
+        #         reload the most recent CanonicalSessionTruthRecord entries
+        #         from the file-backed SessionTruthSnapshotStore into the
+        #         in-memory CanonicalSessionTruthRuntime ring buffer.
+        # ----------------------------------------------------------------
+        try:
+            self._recover_session_truth(report)
+        except Exception as exc:
+            err = f"Session truth recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 7: Reconcile stale continuation / waiter futures (PR-1 /
+        #         GAP_V2_TRUTH_PERSISTENCE closure).
+        #
+        #         For every RESUMABLE or REPLAY_ONLY task recovered in
+        #         step 5, resolve any matching asyncio.Future registered
+        #         in CanonicalCompletionIngress with a restart error so
+        #         that callers are not left waiting indefinitely.
+        # ----------------------------------------------------------------
+        try:
+            self._reconcile_continuation_waiters(report)
+        except Exception as exc:
+            err = f"Continuation waiter reconciliation failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
             "mesh_sessions=%d body_entries=%d "
             "hybrid_interrupted=%d hybrid_restored=%d hybrid_invalidated=%d "
             "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
+            "truth_restored=%d continuation_reconciled=%d "
             "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
@@ -490,6 +562,8 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_replay_only,
             report.inflight_tasks_reissuable,
             report.inflight_tasks_terminal,
+            report.session_truth_records_restored,
+            report.continuation_waiters_reconciled,
             len(report.errors),
         )
         return report
@@ -843,6 +917,161 @@ class RuntimeRestartRecoveryCoordinator:
             actions_taken,
             report.inflight_tasks_terminal,
             already_pending_skipped,
+        )
+
+    def _recover_session_truth(self, report: RuntimeRecoveryReport) -> None:
+        """Reload session truth records from the durable snapshot (PR-1).
+
+        Calls :func:`~core.session_truth_snapshot.restore_session_truth_from_snapshot`
+        to re-populate the :class:`~core.canonical_session_truth
+        .CanonicalSessionTruthRuntime` ring buffer from the file-backed
+        :class:`~core.session_truth_snapshot.SessionTruthSnapshotStore`.
+
+        Sets :attr:`RuntimeRecoveryReport.session_truth_records_restored`.
+        Degrades gracefully if the snapshot module is unavailable.
+
+        See :data:`SESSION_TRUTH_RECOVERY_POLICY`.
+        """
+        try:
+            from core.session_truth_snapshot import (
+                restore_session_truth_from_snapshot,
+                get_session_truth_snapshot_store,
+            )
+            from core.canonical_session_truth import get_canonical_session_truth_runtime
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._recover_session_truth: "
+                "import failed — %s",
+                exc,
+            )
+            return
+
+        try:
+            _store = get_session_truth_snapshot_store()
+            _runtime = get_canonical_session_truth_runtime()
+            restored = restore_session_truth_from_snapshot(
+                runtime=_runtime,
+                store=_store,
+            )
+            report.session_truth_records_restored = restored
+            logger.info(
+                "RuntimeRestartRecovery._recover_session_truth: "
+                "restored %d session truth record(s) from snapshot. "
+                "See SESSION_TRUTH_RECOVERY_POLICY.",
+                restored,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._recover_session_truth: "
+                "restore failed — %s",
+                exc,
+            )
+
+    def _reconcile_continuation_waiters(self, report: RuntimeRecoveryReport) -> None:
+        """Resolve stale continuation futures with a restart error (PR-1).
+
+        For every task recovered with disposition RESUMABLE or REPLAY_ONLY,
+        resolves any asyncio.Future registered in
+        :class:`~core.canonical_completion_ingress.CanonicalCompletionIngress`
+        under that task_id with a :class:`RuntimeError` carrying
+        ``'restart_recovery'``.  This unblocks callers that were awaiting the
+        future before the restart, so the control chain does not hang
+        indefinitely.
+
+        TERMINAL_ON_INTERRUPT tasks are excluded because their result may
+        already have been delivered; resolving their futures could cause
+        duplicate-result handling on the awaiting side.
+
+        Sets :attr:`RuntimeRecoveryReport.continuation_waiters_reconciled`.
+        Degrades gracefully if ``CanonicalCompletionIngress`` is unavailable.
+
+        See :data:`CONTINUATION_WAITER_RECONCILIATION_POLICY`.
+        """
+        try:
+            from core.canonical_completion_ingress import (
+                get_canonical_completion_ingress,
+            )
+            from core.task_lifecycle_persistence import InFlightTaskDisposition
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                "import failed — %s",
+                exc,
+            )
+            return
+
+        # Collect task_ids for RESUMABLE and REPLAY_ONLY recovered tasks.
+        # These are the tasks for which stale futures must be resolved.
+        resumable_task_ids = []
+        try:
+            from core.task_lifecycle_persistence import (
+                restore_inflight_tasks_from_snapshot,
+            )
+            restored = restore_inflight_tasks_from_snapshot(
+                store=self._task_lifecycle_store,
+            )
+            for rec in restored:
+                if rec.disposition in (
+                    InFlightTaskDisposition.RESUMABLE,
+                    InFlightTaskDisposition.REPLAY_ONLY,
+                    InFlightTaskDisposition.REISSUABLE,
+                ):
+                    if rec.task_id:
+                        resumable_task_ids.append(rec.task_id)
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                "could not enumerate recovered tasks — %s",
+                exc,
+            )
+            return
+
+        if not resumable_task_ids:
+            return
+
+        try:
+            ingress = get_canonical_completion_ingress()
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                "could not get CanonicalCompletionIngress — %s",
+                exc,
+            )
+            return
+
+        reconciled = 0
+        restart_error = RuntimeError(
+            "restart_recovery: V2 restarted; waiter unblocked for re-dispatch"
+        )
+        for task_id in resumable_task_ids:
+            try:
+                # fail_pending_dispatch sets fut.set_exception so the awaiting
+                # coroutine raises RuntimeError rather than receiving a result.
+                resolved = ingress.fail_pending_dispatch(
+                    task_id,
+                    restart_error,
+                )
+                if resolved:
+                    reconciled += 1
+                    logger.debug(
+                        "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                        "resolved stale future for task_id=%s",
+                        task_id,
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+                    "could not resolve future for task_id=%s — %s",
+                    task_id,
+                    exc,
+                )
+
+        report.continuation_waiters_reconciled = reconciled
+        logger.info(
+            "RuntimeRestartRecovery._reconcile_continuation_waiters: "
+            "%d stale continuation future(s) reconciled. "
+            "See CONTINUATION_WAITER_RECONCILIATION_POLICY.",
+            reconciled,
         )
 
 
