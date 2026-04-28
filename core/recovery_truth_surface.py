@@ -137,6 +137,7 @@ __all__ = [
     "DUPLICATE_DISPATCH_AVOIDANCE_REQUIRES_EXPLICIT_EVIDENCE_POLICY",
     "AUTHORITY_ALIGNMENT_REQUIRES_STATE_MATCH_POLICY",
     "OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY",
+    "OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY",
     "EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY",
     # Enumerations
     "RecoveryTruthDimension",
@@ -239,6 +240,20 @@ OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY: str = (
     "This is a known deferred boundary; it MUST be recorded as deferred in "
     "the truth surface and MUST NOT be represented as a closed or observed "
     "truth atom.  (deferred)"
+)
+
+OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY: str = (
+    "POLICY::OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_PR_P03_TRUTH: "
+    "The V2-side authoritative offline replay ordering contract is now formally "
+    "defined in core.offline_replay_ordering_contract (PR-P0-3).  V2 is the "
+    "declared replay ordering authority; semantics cover in-order acceptance, "
+    "out-of-order rejection, duplicate rejection, stale rejection, partial-drain "
+    "advisory, and ambiguous-authority downgrade.  This advances the previously "
+    "deferred boundary: the contract is defined and enforced by the existing "
+    "signal guard (PR-18); full operational evidence under live Android drain "
+    "conditions is still being collected.  Recovery truth surface should "
+    "reflect this as partial (contract defined, live evidence pending) rather "
+    "than deferred.  (PR-P0-3)"
 )
 
 EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY: str = (
@@ -678,6 +693,14 @@ def _probe_signal_guard_available() -> bool:
 def _probe_restart_recovery_available() -> bool:
     try:
         import core.runtime_restart_recovery  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _probe_offline_replay_contract_available() -> bool:
+    try:
+        import core.offline_replay_ordering_contract  # noqa: F401
         return True
     except Exception:
         return False
@@ -1123,6 +1146,8 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         available_modules.append("core.attached_runtime_recovery_readiness")
     if _probe_restart_recovery_available():
         available_modules.append("core.runtime_restart_recovery")
+    if _probe_offline_replay_contract_available():
+        available_modules.append("core.offline_replay_ordering_contract")
 
     entries: List[RecoveryTruthEntry] = [
         _build_participant_disconnect_entry(available_modules),
@@ -1189,16 +1214,38 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         )
     lines.append("")
     if deferred_dims:
-        lines.append("DEFERRED BOUNDARIES (explicitly honested)")
+        lines.append("DEFERRED BOUNDARIES (explicitly and honestly reported)")
         lines.append("-" * 40)
-        lines.append(
-            "  • Android offline queue replay ordering (RS-16): deferred"
-        )
         lines.append(
             "  • Ephemeral transport binding identity proof: deferred"
         )
         lines.append(
             "  • Multi-device simultaneous reconnect ordering: deferred"
+        )
+        lines.append("")
+    offline_contract_present = (
+        "core.offline_replay_ordering_contract" in available_modules
+    )
+    if offline_contract_present:
+        lines.append("OFFLINE REPLAY ORDERING CONTRACT (PR-P0-3)")
+        lines.append("-" * 40)
+        lines.append(
+            "  • Android offline queue replay ordering: V2 authoritative"
+            " contract defined"
+        )
+        lines.append(
+            "  • V2 is declared replay ordering authority; signal guard"
+            " enforces semantics"
+        )
+        lines.append(
+            "  • Live drain evidence: pending (contract_not_yet_evidenced)"
+        )
+        lines.append("")
+    else:
+        lines.append("DEFERRED BOUNDARY (offline replay contract not loaded)")
+        lines.append("-" * 40)
+        lines.append(
+            "  • Android offline queue replay ordering (RS-16): deferred"
         )
         lines.append("")
     lines.append(

@@ -114,6 +114,7 @@ __all__ = [
     "SIGNAL_GUARD_PRECEDES_RECONCILIATION_POLICY",
     "CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY",
     "OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY",
+    "OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY",
     # Enums
     "RecoveryScenarioStatus",
     # Dataclasses
@@ -208,6 +209,19 @@ OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY: str = (
     "(PR-5, deferred)"
 )
 
+OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY: str = (
+    "POLICY::OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_PR_P03: "
+    "The V2-side authoritative offline replay ordering contract has been "
+    "formally defined in core.offline_replay_ordering_contract (PR-P0-3).  "
+    "V2 is now the declared replay ordering authority; formal semantics "
+    "cover in-order acceptance, out-of-order rejection, duplicate rejection, "
+    "stale rejection, partial-drain advisory, and ambiguous-authority "
+    "downgrade.  RS-16 advances from deferred to advisory: the contract is "
+    "defined and enforced by the signal guard; full operational evidence "
+    "under live Android drain conditions is still being collected.  "
+    "(PR-P0-3, resolves RS-16 deferred)"
+)
+
 _ALL_POLICY_SENTINELS = (
     RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
     RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL,
@@ -216,6 +230,7 @@ _ALL_POLICY_SENTINELS = (
     SIGNAL_GUARD_PRECEDES_RECONCILIATION_POLICY,
     CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY,
     OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY,
+    OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
 )
 
 
@@ -1088,30 +1103,78 @@ def _build_rs15_signal_guard_accept() -> RecoveryScenarioEntry:
 
 
 def _build_rs16_offline_queue_ordering_deferred() -> RecoveryScenarioEntry:
-    """RS-16: Offline queue ordering — deferred to later PR."""
-    return RecoveryScenarioEntry(
-        scenario_id="RS-16",
-        scenario_name=(
-            "Offline task queue replay — bounded authority / ordering model "
-            "(deferred)"
-        ),
-        event_kind="android_offline_queue_drain",
-        decision_path="(deferred)",
-        expected_decision="(deferred)",
-        observed_decision="(deferred)",
-        status=RecoveryScenarioStatus.deferred,
-        artifact_id="",
-        policy_reference="OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY",
-        note=(
-            "A fully bounded authority and strict ordering model for Android-side "
-            "offline task queues replaying after reconnect is deferred to a "
-            "later PR.  In the current closure, V2 relies on the PR-18 signal "
-            "guard (stale/out-of-order rejection) and InFlightTaskDisposition "
-            "to bound re-dispatch.  The remaining gap — defining a canonical "
-            "drain sequence and V2 absorption ordering under concurrent reconnect "
-            "— is deferred."
-        ),
-    )
+    """RS-16: Offline queue ordering — contract now defined (advisory).
+
+    PR-P0-3 establishes V2 as the authoritative owner of replay ordering
+    semantics via ``core.offline_replay_ordering_contract``.  This advances
+    RS-16 from ``deferred`` to ``advisory``: the contract is formally
+    defined and enforced by the existing signal guard; full operational
+    evidence under live Android drain conditions is still being collected.
+    """
+    try:
+        from core.offline_replay_ordering_contract import (
+            build_offline_replay_ordering_report,
+            OfflineReplayContractVerdict,
+            OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
+        )
+        rpt = build_offline_replay_ordering_report()
+        obs = rpt.verdict.value
+        # The baseline report always yields contract_not_yet_evidenced;
+        # that is the honest starting state.  Advisory is appropriate because
+        # the contract is defined even though no live drain has been seen.
+        return RecoveryScenarioEntry(
+            scenario_id="RS-16",
+            scenario_name=(
+                "Offline task queue replay — V2 authoritative contract "
+                "defined (advisory; live drain evidence pending)"
+            ),
+            event_kind="android_offline_queue_drain",
+            decision_path=(
+                "core.offline_replay_ordering_contract."
+                "build_offline_replay_ordering_report → "
+                + obs
+            ),
+            expected_decision=OfflineReplayContractVerdict.contract_not_yet_evidenced.value,
+            observed_decision=obs,
+            status=RecoveryScenarioStatus.advisory,
+            artifact_id=rpt.report_id,
+            policy_reference="OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY",
+            note=(
+                "V2-side authoritative offline replay ordering contract is "
+                "formally defined in core.offline_replay_ordering_contract "
+                "(PR-P0-3).  V2 is the declared replay ordering authority; "
+                "semantics cover in-order acceptance, out-of-order rejection, "
+                "duplicate rejection, stale rejection, partial-drain advisory, "
+                "and ambiguous-authority downgrade.  "
+                "Baseline verdict is contract_not_yet_evidenced (no live "
+                "Android drain in this process instance); contract is active "
+                "and enforced via the existing signal guard (PR-18).  "
+                "Status: advisory — contract defined, live operational "
+                "evidence being collected.  (PR-P0-3)"
+            ),
+        )
+    except Exception as exc:
+        # Fail-graceful: if the contract module is not importable, remain
+        # deferred rather than masking the gap.
+        return RecoveryScenarioEntry(
+            scenario_id="RS-16",
+            scenario_name=(
+                "Offline task queue replay — ordering contract "
+                "(module unavailable)"
+            ),
+            event_kind="android_offline_queue_drain",
+            decision_path="(contract module unavailable)",
+            expected_decision="(deferred)",
+            observed_decision="(deferred)",
+            status=RecoveryScenarioStatus.deferred,
+            artifact_id="",
+            policy_reference="OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY",
+            note=(
+                "core.offline_replay_ordering_contract could not be imported: "
+                + str(exc)
+                + ".  Falling back to deferred status."
+            ),
+        )
 
 
 def _build_rs17_duplicate_recovery_suppression() -> RecoveryScenarioEntry:
