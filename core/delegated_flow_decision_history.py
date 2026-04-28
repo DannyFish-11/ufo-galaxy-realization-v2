@@ -120,7 +120,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("Galaxy.DelegatedFlowDecisionHistory")
 
@@ -712,7 +712,7 @@ class DelegatedFlowDecisionHistory:
             )
 
         # Collect observed kinds and latest timestamp
-        observed_kind_set: set = set()
+        observed_kind_set: Set[DelegatedFlowEventKind] = set()
         latest_ts = 0.0
         for e in entries:
             observed_kind_set.add(e.kind)
