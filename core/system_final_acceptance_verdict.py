@@ -162,6 +162,20 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.SystemFinalAcceptanceVerdict")
 
+# ---------------------------------------------------------------------------
+# Unified taxonomy alignment
+# ---------------------------------------------------------------------------
+try:
+    from core.release_governance_taxonomy import (  # noqa: F401
+        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
+        IssueClassification as _IssueClassification,
+        verdict_to_classification as _verdict_to_classification,
+        operational_from_verdict as _operational_from_verdict,
+    )
+    _TAXONOMY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TAXONOMY_AVAILABLE = False
+
 __all__ = [
     # Authority sentinels
     "SYSTEM_FINAL_ACCEPTANCE_VERDICT_AUTHORITY",
@@ -600,7 +614,7 @@ class SystemAcceptanceReport:
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-safe dict representation (machine-readable output)."""
-        return {
+        result: Dict[str, Any] = {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
             "checklist": {
@@ -614,6 +628,15 @@ class SystemAcceptanceReport:
             "evaluator_version": self.evaluator_version,
             "generated_at": self.generated_at,
         }
+        if _TAXONOMY_AVAILABLE:
+            result["taxonomy_classification"] = _verdict_to_classification(
+                self.verdict.value
+            ).value
+            result["taxonomy_operational_status"] = _operational_from_verdict(
+                self.verdict.value
+            ).value
+            result["taxonomy_alignment"] = "core.release_governance_taxonomy::PR8"
+        return result
 
     def to_json(self) -> str:
         """Return a JSON string representation."""
