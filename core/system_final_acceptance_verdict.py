@@ -701,12 +701,12 @@ except Exception:
 # environment).  Not required; the evidence ingress layer is authoritative.
 try:
     from core.android_delegated_runtime_audit import (  # type: ignore[import]
-        get_android_delegated_audit_recorder as _get_audit_recorder,
+        get_android_delegated_audit_recorder as _get_android_delegated_audit_recorder,
     )
     _ANDROID_AUDIT_AVAILABLE = True
 except Exception:
     _ANDROID_AUDIT_AVAILABLE = False
-    _get_audit_recorder = None  # type: ignore[assignment]
+    _get_android_delegated_audit_recorder = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -1221,13 +1221,20 @@ class SystemFinalAcceptanceEvaluator:
         # ------------------------------------------------------------------
         # Fallback path: legacy in-process audit recorder (dual-repo env)
         # ------------------------------------------------------------------
-        if _ANDROID_AUDIT_AVAILABLE and _get_audit_recorder is not None:
+        if _ANDROID_AUDIT_AVAILABLE and _get_android_delegated_audit_recorder is not None:
             signal_source_fallback = "core.android_delegated_runtime_audit"
             try:
-                recorder = _get_audit_recorder()
+                recorder = _get_android_delegated_audit_recorder()
                 evidence: Dict[str, Any] = {}
+                # Support both snapshot() (current API) and build_snapshot() (alt)
                 if hasattr(recorder, "snapshot"):
                     snap = recorder.snapshot()
+                    if hasattr(snap, "to_dict"):
+                        evidence = snap.to_dict()
+                    elif isinstance(snap, dict):
+                        evidence = snap
+                elif hasattr(recorder, "build_snapshot"):
+                    snap = recorder.build_snapshot()
                     if hasattr(snap, "to_dict"):
                         evidence = snap.to_dict()
                     elif isinstance(snap, dict):
@@ -1235,7 +1242,12 @@ class SystemFinalAcceptanceEvaluator:
                 elif hasattr(recorder, "to_dict"):
                     evidence = recorder.to_dict()
 
-                audit_event_count = evidence.get("event_count", 0)
+                # AndroidDelegatedAuditSnapshot.to_dict() uses "event_count"
+                audit_event_count = (
+                    evidence.get("event_count")
+                    or evidence.get("audit_event_count")
+                    or 0
+                )
 
                 if audit_event_count > 0:
                     return AcceptanceChecklistItem(
