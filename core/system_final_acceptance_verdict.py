@@ -345,6 +345,18 @@ class AcceptanceDimensionId(str, Enum):
         what is the structured truth state of recovery?  Distinct from
         multi_device_recovery: this dimension surfaces *how* recovery is
         evidenced, not merely whether a readiness snapshot says ready.
+
+    cross_repo_evidence_pipeline
+        Canonical cross-repo evidence ingestion pipeline
+        (core.canonical_cross_repo_evidence_pipeline, PR-05).  Answers:
+        do all five cross-repo evidence source families (real-device
+        participant verification, Android evaluator readiness artifacts,
+        participant lifecycle truth, task-result runtime, delegated runtime
+        audit) converge into a single canonical evidence chain with
+        unified authority / freshness / completeness semantics?  This
+        dimension is the final-closure gate that ensures cross-repo
+        evidence is not merely a loose collection of parallel surfaces but
+        a formally unified and consumable pipeline.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -353,6 +365,7 @@ class AcceptanceDimensionId(str, Enum):
     multi_device_recovery = "multi_device_recovery"
     android_participant = "android_participant"
     recovery_truth_surface = "recovery_truth_surface"
+    cross_repo_evidence_pipeline = "cross_repo_evidence_pipeline"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -366,7 +379,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all six dimensions in canonical evaluation order."""
+        """Return all seven dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -374,6 +387,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.multi_device_recovery,
             cls.android_participant,
             cls.recovery_truth_surface,
+            cls.cross_repo_evidence_pipeline,
         ]
 
 
@@ -773,6 +787,21 @@ except Exception:
     _build_recovery_truth_report = None  # type: ignore[assignment]
     _RecoveryTruthStatus = None  # type: ignore[assignment]
 
+# CanonicalCrossRepoEvidencePipeline (PR-05) — unified canonical cross-repo
+# evidence ingestion pipeline for the cross_repo_evidence_pipeline dimension.
+try:
+    from core.canonical_cross_repo_evidence_pipeline import (  # type: ignore[import]
+        build_canonical_cross_repo_evidence_report as _build_cross_repo_report,
+        PipelineVerdict as _PipelineVerdict,
+        CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY as _CROSS_REPO_AUTHORITY,
+    )
+    _CROSS_REPO_PIPELINE_AVAILABLE = True
+except Exception:
+    _CROSS_REPO_PIPELINE_AVAILABLE = False
+    _build_cross_repo_report = None  # type: ignore[assignment]
+    _PipelineVerdict = None  # type: ignore[assignment]
+    _CROSS_REPO_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -811,7 +840,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all six acceptance dimensions and produce a report.
+        """Evaluate all seven acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -828,6 +857,7 @@ class SystemFinalAcceptanceEvaluator:
         item_recovery = self._evaluate_multi_device_recovery()
         item_android = self._evaluate_android_participant()
         item_recovery_truth = self._evaluate_recovery_truth_surface()
+        item_cross_repo = self._evaluate_cross_repo_evidence_pipeline()
 
         for item in (
             item_runtime,
@@ -836,6 +866,7 @@ class SystemFinalAcceptanceEvaluator:
             item_recovery,
             item_android,
             item_recovery_truth,
+            item_cross_repo,
         ):
             checklist[item.dimension.value] = item
 
@@ -1625,6 +1656,143 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_cross_repo_evidence_pipeline(self) -> AcceptanceChecklistItem:
+        """Evaluate the canonical cross-repo evidence pipeline dimension (PR-05).
+
+        Consumes :func:`~core.canonical_cross_repo_evidence_pipeline.build_canonical_cross_repo_evidence_report`
+        to produce a unified view of whether all five cross-repo evidence
+        source families have been ingested into a canonical, freshness-checked,
+        authority-ranked pipeline.
+
+        Status mapping
+        --------------
+        PipelineVerdict.complete
+            → ``accepted``  (all PRIMARY sources present, fresh, consistent)
+        PipelineVerdict.partial
+            → ``pending``  (some PRIMARY sources missing; partial evidence)
+        PipelineVerdict.stale
+            → ``unresolved``  (PRIMARY source evidence exceeds freshness window)
+        PipelineVerdict.missing
+            → ``unresolved``  (all PRIMARY sources missing)
+        PipelineVerdict.conflicting
+            → ``unresolved``  (PRIMARY sources conflict; cannot optimistically accept)
+        PipelineVerdict.authority_unclear
+            → ``unresolved``  (authority cannot be confirmed; blocked per policy)
+        PipelineVerdict.insufficient
+            → ``unresolved``  (insufficient evidence to conclude)
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.cross_repo_evidence_pipeline
+        signal_source = "core.canonical_cross_repo_evidence_pipeline"
+
+        if not _CROSS_REPO_PIPELINE_AVAILABLE or _build_cross_repo_report is None:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "CanonicalCrossRepoEvidencePipeline (PR-05) unavailable."
+                ),
+                gap_description=(
+                    "core.canonical_cross_repo_evidence_pipeline is not importable.  "
+                    "Cannot assess canonical cross-repo evidence closure.  "
+                    "Ensure core/canonical_cross_repo_evidence_pipeline.py is "
+                    "present and on the Python path."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            report = _build_cross_repo_report()
+            report_dict = report.to_dict()
+            verdict_val = report.pipeline_verdict.value
+
+            if report.pipeline_verdict.is_complete:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.accepted,
+                    evidence_summary=(
+                        "CanonicalCrossRepoEvidencePipeline: verdict=complete.  "
+                        "All PRIMARY cross-repo evidence sources present and fresh.  "
+                        "Cross-repo evidence chain is canonically closed."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description="",
+                    signal_source=signal_source,
+                )
+
+            # partial → pending (some evidence present, chain not fully closed)
+            if _PipelineVerdict is not None and report.pipeline_verdict == _PipelineVerdict.partial:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.pending,
+                    evidence_summary=(
+                        f"CanonicalCrossRepoEvidencePipeline: verdict={verdict_val}.  "
+                        "Some PRIMARY cross-repo evidence sources are missing.  "
+                        "Evidence chain is partially established but not fully closed."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description=(
+                        "Cross-repo evidence chain is partial.  "
+                        "Missing sources: "
+                        + str(report.missing_sources)
+                        + ".  "
+                        "Downgrade reasons: "
+                        + "; ".join(report.downgrade_reasons or ["none"])
+                        + ".  "
+                        "MISSING_PRIMARY_SOURCE_DOWNGRADES_TO_PARTIAL_POLICY applied."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # stale, missing (all), conflicting, authority_unclear, insufficient
+            # → all map to unresolved per fail-conservative policy
+            downgrade_notes = "; ".join(report.downgrade_reasons or ["none"])
+            conflict_notes = "; ".join(report.conflict_notes or [])
+
+            gap_parts: List[str] = [
+                f"CanonicalCrossRepoEvidencePipeline verdict: {verdict_val}.  ",
+                f"Downgrade reasons: {downgrade_notes}.  ",
+            ]
+            if conflict_notes:
+                gap_parts.append(f"Conflict notes: {conflict_notes}.  ")
+            if report.stale_sources:
+                gap_parts.append(
+                    f"Stale sources: {report.stale_sources}.  "
+                    "STALE_EVIDENCE_NEVER_UPGRADES_VERDICT_POLICY applied.  "
+                )
+            if report.authority_unclear_sources:
+                gap_parts.append(
+                    f"Authority unclear: {report.authority_unclear_sources}.  "
+                    "AUTHORITY_UNCLEAR_BLOCKS_COMPLETE_VERDICT_POLICY applied.  "
+                )
+
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    f"CanonicalCrossRepoEvidencePipeline: verdict={verdict_val}.  "
+                    "Cross-repo evidence chain is not canonically closed."
+                ),
+                evidence_linkage=report_dict,
+                gap_description="".join(gap_parts),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "CanonicalCrossRepoEvidencePipeline probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_canonical_cross_repo_evidence_report raised: {exc!r}.  "
+                    "Cannot assess canonical cross-repo evidence pipeline."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -1633,14 +1801,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the six dimension items.
+        """Derive the system-level verdict from the seven dimension items.
 
         Policy:
-        - All six dimensions must be ``accepted`` → ``fully_operational``
+        - All seven dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all six dimensions →
+        - Checklist does not contain all seven dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()

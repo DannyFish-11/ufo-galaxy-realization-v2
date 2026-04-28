@@ -258,7 +258,7 @@ class TestAcceptanceDimensionId:
         assert AcceptanceDimensionId.android_participant
 
     def test_exactly_five_members(self):
-        assert len(list(AcceptanceDimensionId)) == 6
+        assert len(list(AcceptanceDimensionId)) == 7
 
 
 # ===========================================================================
@@ -302,7 +302,7 @@ class TestAllDimensions:
         assert isinstance(dims, list)
 
     def test_all_dimensions_has_five_entries(self):
-        assert len(AcceptanceDimensionId.all_dimensions()) == 6
+        assert len(AcceptanceDimensionId.all_dimensions()) == 7
 
     def test_all_dimensions_order(self):
         dims = AcceptanceDimensionId.all_dimensions()
@@ -312,6 +312,7 @@ class TestAllDimensions:
         assert dims[3] == AcceptanceDimensionId.multi_device_recovery
         assert dims[4] == AcceptanceDimensionId.android_participant
         assert dims[5] == AcceptanceDimensionId.recovery_truth_surface
+        assert dims[6] == AcceptanceDimensionId.cross_repo_evidence_pipeline
 
 
 # ===========================================================================
@@ -658,7 +659,7 @@ class TestSystemAcceptanceReportFromDict:
         restored = SystemAcceptanceReport.from_dict(original.to_dict())
         assert restored.verdict == SystemAcceptanceVerdict.fully_operational
         assert restored.is_fully_operational is True
-        assert len(restored.checklist) == 6
+        assert len(restored.checklist) == 7
 
 
 # ===========================================================================

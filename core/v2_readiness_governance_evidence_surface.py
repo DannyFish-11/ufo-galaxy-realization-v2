@@ -946,6 +946,78 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
         )
 
 
+def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
+    """Probe the canonical cross-repo evidence ingestion pipeline (PR-05)."""
+    dim_id = "canonical_cross_repo_evidence_pipeline"
+    code_ref = (
+        "core.canonical_cross_repo_evidence_pipeline."
+        "CanonicalCrossRepoEvidencePipeline"
+    )
+    test_ref = "tests/test_canonical_cross_repo_evidence_pipeline.py"
+    try:
+        from core.canonical_cross_repo_evidence_pipeline import (
+            build_canonical_cross_repo_evidence_report,
+            PipelineVerdict,
+            CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY,
+        )
+        report = build_canonical_cross_repo_evidence_report()
+        verdict_val = report.pipeline_verdict.value
+        source_statuses = {
+            s.source_id.value: s.status.value for s in report.sources
+        }
+        summary = (
+            f"CanonicalCrossRepoEvidencePipeline: verdict={verdict_val}; "
+            f"is_complete={report.is_complete}; "
+            f"primary_complete={report.primary_sources_complete}; "
+            f"primary_fresh={report.primary_sources_fresh}; "
+            f"sources={source_statuses}"
+        )
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name=(
+                "Canonical Cross-Repo Evidence Ingestion Pipeline (PR-05)"
+            ),
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="present",
+            evidence_summary=summary,
+            code_reference=code_ref,
+            test_reference=test_ref,
+            raw_evidence=report.to_dict(),
+            notes=(
+                "Unified canonical pipeline that converges all cross-repo "
+                "evidence surfaces (real-device verification, readiness "
+                "evaluator artifacts, participant lifecycle truth, task-result "
+                "runtime, delegated runtime audit) into a single "
+                "final-acceptance-ready report with explicit authority, "
+                "freshness, completeness, and stale-handling semantics.  "
+                "verdict=complete only when all PRIMARY sources are present "
+                "and fresh.  "
+                + (
+                    "Pipeline not fully closed — verdict=" + verdict_val + ".  "
+                    "Downgrade reasons: " + "; ".join(report.downgrade_reasons) + ".  "
+                    if report.downgrade_reasons else
+                    "Pipeline verdict: " + verdict_val + ".  "
+                )
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name="Canonical Cross-Repo Evidence Ingestion Pipeline (PR-05)",
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="unavailable",
+            evidence_summary=(
+                f"CanonicalCrossRepoEvidencePipeline unavailable: {exc}"
+            ),
+            code_reference=code_ref,
+            test_reference=test_ref,
+            notes=(
+                "Module import failed; ensure "
+                "core/canonical_cross_repo_evidence_pipeline.py is present."
+            ),
+        )
+
+
 # ---------------------------------------------------------------------------
 # V2ReadinessGovernanceEvidenceSurface
 # ---------------------------------------------------------------------------
@@ -973,6 +1045,7 @@ class V2ReadinessGovernanceEvidenceSurface:
         (_probe_participant_session_truth, None),
         (_probe_delegated_flow_decision_history, None),
         (_probe_recovery_truth_surface, None),
+        (_probe_canonical_cross_repo_pipeline, None),
     ]
 
     _DEFERRED_NOTES: List[str] = [
