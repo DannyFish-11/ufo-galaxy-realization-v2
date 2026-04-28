@@ -257,8 +257,11 @@ class TestAcceptanceDimensionId:
     def test_enum_has_android_participant(self):
         assert AcceptanceDimensionId.android_participant
 
-    def test_exactly_seven_members(self):
-        assert len(list(AcceptanceDimensionId)) == 7
+    def test_enum_has_multi_device_canonical_governance(self):
+        assert AcceptanceDimensionId.multi_device_canonical_governance
+
+    def test_exactly_eight_members(self):
+        assert len(list(AcceptanceDimensionId)) == 8
 
 
 # ===========================================================================
@@ -301,8 +304,8 @@ class TestAllDimensions:
         dims = AcceptanceDimensionId.all_dimensions()
         assert isinstance(dims, list)
 
-    def test_all_dimensions_has_seven_entries(self):
-        assert len(AcceptanceDimensionId.all_dimensions()) == 7
+    def test_all_dimensions_has_eight_entries(self):
+        assert len(AcceptanceDimensionId.all_dimensions()) == 8
 
     def test_all_dimensions_order(self):
         dims = AcceptanceDimensionId.all_dimensions()
@@ -313,6 +316,7 @@ class TestAllDimensions:
         assert dims[4] == AcceptanceDimensionId.android_participant
         assert dims[5] == AcceptanceDimensionId.recovery_truth_surface
         assert dims[6] == AcceptanceDimensionId.cross_repo_evidence_pipeline
+        assert dims[7] == AcceptanceDimensionId.multi_device_canonical_governance
 
 
 # ===========================================================================
@@ -659,7 +663,7 @@ class TestSystemAcceptanceReportFromDict:
         restored = SystemAcceptanceReport.from_dict(original.to_dict())
         assert restored.verdict == SystemAcceptanceVerdict.fully_operational
         assert restored.is_fully_operational is True
-        assert len(restored.checklist) == 7
+        assert len(restored.checklist) == 8
 
 
 # ===========================================================================

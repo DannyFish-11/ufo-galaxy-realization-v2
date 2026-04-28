@@ -357,6 +357,17 @@ class AcceptanceDimensionId(str, Enum):
         dimension is the final-closure gate that ensures cross-repo
         evidence is not merely a loose collection of parallel surfaces but
         a formally unified and consumable pipeline.
+
+    multi_device_canonical_governance
+        Formal canonical governance surface for multi-device / delegated
+        runtime (core.multi_device_canonical_governance, PR-09).  Answers:
+        has multi-device / delegated runtime been formally classified into
+        its correct governance tier (default-mainline, conditional, guarded,
+        partial, optional, single-device-baseline)?  This dimension enforces
+        that the system does not report "fully active multi-device" merely
+        because delegated hooks exist, and that the canonical participant
+        role (primary / delegated / secondary / observer) and capability
+        tier of every multi-device surface are explicitly classified.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -366,6 +377,7 @@ class AcceptanceDimensionId(str, Enum):
     android_participant = "android_participant"
     recovery_truth_surface = "recovery_truth_surface"
     cross_repo_evidence_pipeline = "cross_repo_evidence_pipeline"
+    multi_device_canonical_governance = "multi_device_canonical_governance"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -379,7 +391,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all seven dimensions in canonical evaluation order."""
+        """Return all eight dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -388,6 +400,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.android_participant,
             cls.recovery_truth_surface,
             cls.cross_repo_evidence_pipeline,
+            cls.multi_device_canonical_governance,
         ]
 
 
@@ -802,6 +815,20 @@ except Exception:
     _PipelineVerdict = None  # type: ignore[assignment]
     _CROSS_REPO_AUTHORITY = ""
 
+# MultiDeviceCanonicalGovernance (PR-09) — multi-device canonical governance
+# dimension.  Probes whether multi-device / delegated runtime has been
+# formally classified with correct tiers and evidence-honest verdicts.
+try:
+    from core.multi_device_canonical_governance import (  # type: ignore[import]
+        build_multi_device_governance_report as _build_md_governance_report,
+        MultiDeviceGovernanceVerdict as _MDGovernanceVerdict,
+    )
+    _MD_GOVERNANCE_AVAILABLE = True
+except Exception:
+    _MD_GOVERNANCE_AVAILABLE = False
+    _build_md_governance_report = None  # type: ignore[assignment]
+    _MDGovernanceVerdict = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -858,6 +885,7 @@ class SystemFinalAcceptanceEvaluator:
         item_android = self._evaluate_android_participant()
         item_recovery_truth = self._evaluate_recovery_truth_surface()
         item_cross_repo = self._evaluate_cross_repo_evidence_pipeline()
+        item_md_governance = self._evaluate_multi_device_canonical_governance()
 
         for item in (
             item_runtime,
@@ -867,6 +895,7 @@ class SystemFinalAcceptanceEvaluator:
             item_android,
             item_recovery_truth,
             item_cross_repo,
+            item_md_governance,
         ):
             checklist[item.dimension.value] = item
 
@@ -1793,6 +1822,141 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_multi_device_canonical_governance(self) -> AcceptanceChecklistItem:
+        """Evaluate the multi-device canonical governance dimension (PR-09).
+
+        Consumes :func:`~core.multi_device_canonical_governance.build_multi_device_governance_report`
+        to produce a structured view of whether multi-device / delegated
+        runtime has been formally classified into the correct governance
+        tier and whether the verdict is evidence-honest.
+
+        Status mapping
+        --------------
+        MultiDeviceGovernanceVerdict.default_mainline_active
+            → ``accepted``  (delegated participant evidence present and
+              complete; no blocking guarded capabilities)
+        MultiDeviceGovernanceVerdict.conditional_active
+            → ``pending``  (delegated participant present but evidence
+              partial, or guarded capabilities block default-mainline)
+        MultiDeviceGovernanceVerdict.single_device_baseline
+            → ``pending``  (single-device mode; infrastructure wired but
+              no delegated participant present — honest operational state,
+              not a blocking failure)
+        MultiDeviceGovernanceVerdict.guarded_baseline
+            → ``pending``  (guarded sub-surfaces prevent operational tier)
+        MultiDeviceGovernanceVerdict.partial_evidence
+            → ``unresolved``  (insufficient evidence to classify)
+        MultiDeviceGovernanceVerdict.no_evidence
+            → ``unresolved``  (no evidence obtained)
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.multi_device_canonical_governance
+        signal_source = "core.multi_device_canonical_governance"
+
+        if not _MD_GOVERNANCE_AVAILABLE or _build_md_governance_report is None:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "MultiDeviceCanonicalGovernance (PR-09) unavailable."
+                ),
+                gap_description=(
+                    "core.multi_device_canonical_governance is not importable.  "
+                    "Cannot assess multi-device canonical governance tier.  "
+                    "Ensure core/multi_device_canonical_governance.py is "
+                    "present and on the Python path."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            report = _build_md_governance_report()
+            verdict_val = report.verdict.value
+            report_dict = report.to_dict()
+
+            if report.verdict == _MDGovernanceVerdict.default_mainline_active:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.accepted,
+                    evidence_summary=(
+                        "MultiDeviceCanonicalGovernance: verdict=default_mainline_active.  "
+                        "Delegated participant evidence present.  "
+                        f"Default-mainline capabilities: "
+                        f"{len(report.default_mainline_capabilities)}.  "
+                        "Multi-device / delegated runtime formally classified as "
+                        "default-mainline system surface."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description="",
+                    signal_source=signal_source,
+                )
+
+            if report.verdict in (
+                _MDGovernanceVerdict.conditional_active,
+                _MDGovernanceVerdict.guarded_baseline,
+                _MDGovernanceVerdict.single_device_baseline,
+            ):
+                downgrade_note = (
+                    "; ".join(report.downgrade_reasons[:3])
+                    if report.downgrade_reasons
+                    else "see report for details"
+                )
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.pending,
+                    evidence_summary=(
+                        f"MultiDeviceCanonicalGovernance: verdict={verdict_val}.  "
+                        f"Delegated participants: {report.delegated_participant_count}.  "
+                        f"Guarded capabilities: {len(report.guarded_capabilities)}.  "
+                        f"Default-mainline capabilities: "
+                        f"{len(report.default_mainline_capabilities)}."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description=(
+                        f"Multi-device governance verdict is {verdict_val!r} — "
+                        "not yet default-mainline.  "
+                        f"Downgrade reasons: {downgrade_note}.  "
+                        "EVIDENCE_REQUIRED_FOR_DEFAULT_MAINLINE_POLICY and "
+                        "DELEGATED_HOOKS_DO_NOT_EQUAL_FULLY_ACTIVE_POLICY applied."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # partial_evidence or no_evidence → unresolved
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    f"MultiDeviceCanonicalGovernance: verdict={verdict_val}.  "
+                    "Insufficient evidence to classify multi-device governance tier."
+                ),
+                evidence_linkage=report_dict,
+                gap_description=(
+                    f"Multi-device governance verdict is {verdict_val!r}.  "
+                    "Cannot classify system tier without evidence.  "
+                    "Downgrade reasons: "
+                    + ("; ".join(report.downgrade_reasons) or "none")
+                    + ".  "
+                    "NO_DELEGATED_PARTICIPANT_NO_MULTI_DEVICE_OPERATIONAL_POLICY applied."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "MultiDeviceCanonicalGovernance probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_multi_device_governance_report raised: {exc!r}.  "
+                    "Cannot assess multi-device canonical governance."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -1801,14 +1965,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the seven dimension items.
+        """Derive the system-level verdict from the eight dimension items.
 
         Policy:
-        - All seven dimensions must be ``accepted`` → ``fully_operational``
+        - All eight dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all seven dimensions →
+        - Checklist does not contain all eight dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
