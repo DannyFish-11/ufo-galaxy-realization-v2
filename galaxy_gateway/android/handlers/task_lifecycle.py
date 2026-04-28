@@ -40,6 +40,13 @@ try:
 except ImportError:
     _ingest_participant_truth = None  # type: ignore[assignment]
 
+# PR-TTC: Canonical must-run truth chain for task_result processing.
+# Top-level import so tests can patch() the chain function.
+try:
+    from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_task_result_truth_chain
+except ImportError:
+    _run_task_result_truth_chain = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Compat lifecycle path signal guard
 # ---------------------------------------------------------------------------
@@ -224,10 +231,44 @@ async def handle_task_result(
                 _idem_exc,
             )
 
-    # PR-13: reconcile inbound signal against host-side execution tracker
-    _try_reconcile(message)
-    # PR-4V2: ingest Android participant truth into V2 canonical orchestration
-    _try_ingest_participant_truth(message, "result")
+    # PR-TTC: Run the canonical must-run truth chain.  This replaces the
+    # previous separate _try_reconcile + _try_ingest_participant_truth calls
+    # with a single entry point that:
+    #   (1) truth_ingress   — ingest Android participant truth into V2 state
+    #   (2) reconcile       — reconcile against host-side execution tracker
+    #   (3) authority_update — advance CanonicalTaskRuntime lifecycle
+    #   (4) completion_linkage — notify CanonicalCompletionIngress
+    # The TruthChainOutcome records whether the chain was fully closed so
+    # acceptance / audit layers can distinguish "result arrived" from
+    # "truth chain complete".
+    if _run_task_result_truth_chain is not None:
+        _truth_chain_outcome = _run_task_result_truth_chain(
+            message,
+            task_id=task_id,
+            result_status=result_status,
+        )
+        if not _truth_chain_outcome.is_truth_chain_complete:
+            logger.warning(
+                "handle_task_result: truth chain incomplete for task_id=%r: %s",
+                task_id,
+                _truth_chain_outcome.incomplete_reason,
+            )
+        else:
+            logger.debug(
+                "handle_task_result: truth chain complete for task_id=%r",
+                task_id,
+            )
+    else:
+        # Fallback: canonical truth chain module unavailable — run legacy
+        # best-effort helpers so existing behaviour is preserved.
+        logger.warning(
+            "handle_task_result: canonical truth chain module unavailable "
+            "(task_result_canonical_truth_chain); falling back to legacy "
+            "best-effort helpers for task_id=%r",
+            task_id,
+        )
+        _try_reconcile(message)
+        _try_ingest_participant_truth(message, "result")
 
     # 完成等待的 Future
     if task_id in bridge._pending_responses:
