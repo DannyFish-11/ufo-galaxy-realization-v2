@@ -257,7 +257,7 @@ class TestAcceptanceDimensionId:
     def test_enum_has_android_participant(self):
         assert AcceptanceDimensionId.android_participant
 
-    def test_exactly_five_members(self):
+    def test_exactly_seven_members(self):
         assert len(list(AcceptanceDimensionId)) == 7
 
 
@@ -301,7 +301,7 @@ class TestAllDimensions:
         dims = AcceptanceDimensionId.all_dimensions()
         assert isinstance(dims, list)
 
-    def test_all_dimensions_has_five_entries(self):
+    def test_all_dimensions_has_seven_entries(self):
         assert len(AcceptanceDimensionId.all_dimensions()) == 7
 
     def test_all_dimensions_order(self):
