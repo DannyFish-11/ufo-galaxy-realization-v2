@@ -200,6 +200,8 @@ class TestGroupB_FullChainComplete:
 
     def test_b5_failed_status_maps_to_failed_lifecycle(self) -> None:
         """AC-TTC-1: 'failed' status causes authority update with FAILED lifecycle."""
+        if _ttc.TaskLifecycle is None:
+            pytest.skip("TaskLifecycle not available in this environment")
         calls: list = []
         mock_runtime = MagicMock()
         def _capture_update(task_id: str, lifecycle: Any) -> MagicMock:
@@ -213,13 +215,12 @@ class TestGroupB_FullChainComplete:
             patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
             patch.object(_ttc, "_get_canonical_task_runtime", lambda: mock_runtime),
             patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
-            patch.object(_ttc, "TaskLifecycle", _ttc.TaskLifecycle if _ttc.TaskLifecycle else MagicMock()),
         ):
             _ttc.run_task_result_truth_chain(msg)
 
-        if calls and _ttc.TaskLifecycle is not None:
-            _, lifecycle = calls[0]
-            assert lifecycle == _ttc.TaskLifecycle.FAILED
+        assert calls, "authority update must be called"
+        _, lifecycle = calls[0]
+        assert lifecycle == _ttc.TaskLifecycle.FAILED
 
 
 # ---------------------------------------------------------------------------
