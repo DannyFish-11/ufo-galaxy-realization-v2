@@ -91,6 +91,19 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.GovernanceValidationGate")
 
+# ---------------------------------------------------------------------------
+# Unified taxonomy alignment
+# ---------------------------------------------------------------------------
+try:
+    from core.release_governance_taxonomy import (  # noqa: F401
+        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
+        IssueClassification as _IssueClassification,
+        verdict_to_classification as _verdict_to_classification,
+    )
+    _TAXONOMY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TAXONOMY_AVAILABLE = False
+
 __all__ = [
     # Sentinels / policy constants
     "GOVERNANCE_VALIDATION_GATE_AUTHORITY",
@@ -346,7 +359,7 @@ class ValidationResult:
     details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result: Dict[str, Any] = {
             "result_id": self.result_id,
             "generated_at": self.generated_at,
             "outcome": self.outcome.value,
@@ -360,6 +373,12 @@ class ValidationResult:
             "enforce_mode": self.enforce_mode,
             "details": self.details,
         }
+        if _TAXONOMY_AVAILABLE:
+            result["taxonomy_classification"] = _verdict_to_classification(
+                self.outcome.value
+            ).value
+            result["taxonomy_alignment"] = "core.release_governance_taxonomy::PR8"
+        return result
 
     @property
     def passed(self) -> bool:

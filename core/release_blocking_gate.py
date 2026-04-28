@@ -76,6 +76,19 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.ReleaseBlockingGate")
 
+# ---------------------------------------------------------------------------
+# Unified taxonomy alignment
+# ---------------------------------------------------------------------------
+try:
+    from core.release_governance_taxonomy import (  # noqa: F401
+        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
+        IssueClassification as _IssueClassification,
+        verdict_to_classification as _verdict_to_classification,
+    )
+    _TAXONOMY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TAXONOMY_AVAILABLE = False
+
 __all__ = [
     # Sentinels
     "RELEASE_BLOCKING_GATE_AUTHORITY",
@@ -215,13 +228,19 @@ class GateCriterionResult:
     is_blocking: bool = True
 
     def to_dict(self) -> dict:
-        return {
+        status_str = self.status.value if isinstance(self.status, CriterionStatus) else str(self.status)
+        result: dict = {
             "criterion_id": self.criterion_id,
             "display_name": self.display_name,
-            "status": self.status.value if isinstance(self.status, CriterionStatus) else str(self.status),
+            "status": status_str,
             "detail": self.detail,
             "is_blocking": self.is_blocking,
         }
+        if _TAXONOMY_AVAILABLE:
+            result["taxonomy_classification"] = _verdict_to_classification(
+                status_str
+            ).value
+        return result
 
 
 @dataclass
@@ -252,7 +271,7 @@ class ReleaseGateDecision:
     notes: str = ""
 
     def to_dict(self) -> dict:
-        return {
+        result: dict = {
             "decision_id": self.decision_id,
             "approved": self.approved,
             "failed_criteria": self.failed_criteria,
@@ -260,6 +279,9 @@ class ReleaseGateDecision:
             "timestamp_ms": self.timestamp_ms,
             "notes": self.notes,
         }
+        if _TAXONOMY_AVAILABLE:
+            result["taxonomy_alignment"] = "core.release_governance_taxonomy::PR8"
+        return result
 
     def summary_lines(self) -> List[str]:
         lines = [
