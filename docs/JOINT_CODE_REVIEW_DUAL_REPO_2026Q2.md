@@ -835,7 +835,7 @@ SYSTEM_ORCHESTRATOR_AUTHORITY = "main.py:SYSTEM_ORCHESTRATOR"
 
 1. **接通 task_result 处理中的关键步骤**
    - 将 `store_task_result` / `reconcile_inbound_message` / `ingest_participant_truth` 改为强依赖或明确记录缺失告警
-   - 具体：在 `task_lifecycle.py:handle_task_result()` 添加 `if store_task_result is None: logger.warning("Memory backflow not available…")`
+   - 具体：在 `task_lifecycle.py:handle_task_result()` 添加 `if store_task_result is None: logger.warning("Memory backflow not available — task results will not be persisted to OpenClawd memory")`
 
 2. **激活 Android 本地 AI 的最小化路径**
    - 为 Android 提供一个最小化的本地规划/定位实现（哪怕是规则引擎），替代 NoOp
