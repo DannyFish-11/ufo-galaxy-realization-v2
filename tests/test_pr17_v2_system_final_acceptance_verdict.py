@@ -261,7 +261,7 @@ class TestAcceptanceDimensionId:
         assert AcceptanceDimensionId.multi_device_canonical_governance
 
     def test_exactly_eight_members(self):
-        assert len(list(AcceptanceDimensionId)) == 8
+        assert len(list(AcceptanceDimensionId)) == 9
 
 
 # ===========================================================================
@@ -305,7 +305,7 @@ class TestAllDimensions:
         assert isinstance(dims, list)
 
     def test_all_dimensions_has_eight_entries(self):
-        assert len(AcceptanceDimensionId.all_dimensions()) == 8
+        assert len(AcceptanceDimensionId.all_dimensions()) == 9
 
     def test_all_dimensions_order(self):
         dims = AcceptanceDimensionId.all_dimensions()
@@ -317,6 +317,7 @@ class TestAllDimensions:
         assert dims[5] == AcceptanceDimensionId.recovery_truth_surface
         assert dims[6] == AcceptanceDimensionId.cross_repo_evidence_pipeline
         assert dims[7] == AcceptanceDimensionId.multi_device_canonical_governance
+        assert dims[8] == AcceptanceDimensionId.conversation_continuity
 
 
 # ===========================================================================
@@ -663,7 +664,7 @@ class TestSystemAcceptanceReportFromDict:
         restored = SystemAcceptanceReport.from_dict(original.to_dict())
         assert restored.verdict == SystemAcceptanceVerdict.fully_operational
         assert restored.is_fully_operational is True
-        assert len(restored.checklist) == 8
+        assert len(restored.checklist) == 9
 
 
 # ===========================================================================

@@ -368,6 +368,19 @@ class AcceptanceDimensionId(str, Enum):
         because delegated hooks exist, and that the canonical participant
         role (primary / delegated / secondary / observer) and capability
         tier of every multi-device surface are explicitly classified.
+
+    conversation_continuity
+        Formal conversation continuity truth after crash / restart / process
+        death / partial recovery
+        (core.conversation_continuity_truth, PR-12).  Answers: what is the
+        authoritative conversation continuity class after a recovery event?
+        Distinguishes authoritative_continuity_restored, partial_continuity,
+        history_only_restored, state_restored_rebind_required, and
+        continuity_lost.  This dimension enforces that the system does not
+        conflate "state still visible" or "history readable" with
+        "conversation continuity has been authoritatively restored", and
+        that crash / restart / process death always yields an honest
+        continuity class rather than an optimistic promotion.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -378,6 +391,7 @@ class AcceptanceDimensionId(str, Enum):
     recovery_truth_surface = "recovery_truth_surface"
     cross_repo_evidence_pipeline = "cross_repo_evidence_pipeline"
     multi_device_canonical_governance = "multi_device_canonical_governance"
+    conversation_continuity = "conversation_continuity"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -391,7 +405,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all eight dimensions in canonical evaluation order."""
+        """Return all nine dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -401,6 +415,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.recovery_truth_surface,
             cls.cross_repo_evidence_pipeline,
             cls.multi_device_canonical_governance,
+            cls.conversation_continuity,
         ]
 
 
@@ -829,6 +844,24 @@ except Exception:
     _build_md_governance_report = None  # type: ignore[assignment]
     _MDGovernanceVerdict = None  # type: ignore[assignment]
 
+# ConversationContinuityTruth (PR-12) — conversation continuity truth
+# dimension.  Probes whether post-crash / post-restart conversation continuity
+# has been formally evaluated and classified rather than optimistically assumed.
+try:
+    from core.conversation_continuity_truth import (  # type: ignore[import]
+        build_conversation_continuity_verdict as _build_conversation_continuity_verdict,
+        ConversationContinuityClass as _ConversationContinuityClass,
+        ConversationContinuityEvidence as _ConversationContinuityEvidence,
+        CONVERSATION_CONTINUITY_TRUTH_AUTHORITY as _CONV_CONTINUITY_AUTHORITY,
+    )
+    _CONVERSATION_CONTINUITY_AVAILABLE = True
+except Exception:
+    _CONVERSATION_CONTINUITY_AVAILABLE = False
+    _build_conversation_continuity_verdict = None  # type: ignore[assignment]
+    _ConversationContinuityClass = None  # type: ignore[assignment]
+    _ConversationContinuityEvidence = None  # type: ignore[assignment]
+    _CONV_CONTINUITY_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -867,7 +900,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all seven acceptance dimensions and produce a report.
+        """Evaluate all nine acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -886,6 +919,7 @@ class SystemFinalAcceptanceEvaluator:
         item_recovery_truth = self._evaluate_recovery_truth_surface()
         item_cross_repo = self._evaluate_cross_repo_evidence_pipeline()
         item_md_governance = self._evaluate_multi_device_canonical_governance()
+        item_conv_continuity = self._evaluate_conversation_continuity()
 
         for item in (
             item_runtime,
@@ -896,6 +930,7 @@ class SystemFinalAcceptanceEvaluator:
             item_recovery_truth,
             item_cross_repo,
             item_md_governance,
+            item_conv_continuity,
         ):
             checklist[item.dimension.value] = item
 
@@ -1961,18 +1996,148 @@ class SystemFinalAcceptanceEvaluator:
     # Aggregation helpers
     # ------------------------------------------------------------------
 
+    def _evaluate_conversation_continuity(self) -> AcceptanceChecklistItem:
+        """Evaluate the conversation continuity truth dimension (PR-12).
+
+        Consumes :func:`~core.conversation_continuity_truth.build_conversation_continuity_verdict`
+        to determine whether crash / restart / process death scenarios have a
+        formally evaluated and classified conversation continuity state rather
+        than an optimistically assumed one.
+
+        This probe evaluates the *structural availability* of the contract
+        module and runs a default evidence evaluation to confirm the contract
+        is wired.  Production deployments should feed actual recovery evidence
+        via the contract directly; this acceptance probe verifies that the
+        taxonomy is available and that the evaluator correctly produces a
+        non-optimistic verdict when no active recovery evidence is present.
+
+        Status mapping
+        --------------
+        Module present and contract produces a valid ConversationContinuityVerdict
+        with class != ``continuity_lost`` under real evidence
+            → ``accepted``
+        Module present, contract available, but no active session evidence
+        (expected in baseline / non-recovery contexts)
+            → ``pending`` (structure present, live evidence not yet collected)
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.conversation_continuity
+        signal_source = "core.conversation_continuity_truth"
+
+        if (
+            not _CONVERSATION_CONTINUITY_AVAILABLE
+            or _build_conversation_continuity_verdict is None
+            or _ConversationContinuityEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConversationContinuityTruth (PR-12) module unavailable."
+                ),
+                gap_description=(
+                    "core.conversation_continuity_truth is not importable.  "
+                    "Cannot assess conversation continuity truth contract.  "
+                    "Ensure core/conversation_continuity_truth.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with a minimal (no-evidence) input to confirm the contract
+            # is wired and produces a conservative verdict (continuity_lost)
+            # rather than an optimistic one.
+            probe_evidence = _ConversationContinuityEvidence()
+            verdict = _build_conversation_continuity_verdict(probe_evidence)
+            verdict_dict = verdict.to_dict()
+            continuity_class = verdict.continuity_class.value
+
+            # The baseline probe (no evidence) MUST NOT produce
+            # authoritative_continuity_restored.  If it does, the contract is
+            # misconfigured.
+            if continuity_class == "authoritative_continuity_restored":
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "ConversationContinuityTruth baseline probe returned "
+                        "authoritative_continuity_restored with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The conversation continuity contract produced "
+                        "authoritative_continuity_restored with all evidence "
+                        "dimensions False.  This violates "
+                        "EVIDENCE_ABSENT_MUST_NOT_BE_OPTIMISTIC_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live recovery evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "ConversationContinuityTruth (PR-12) contract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Baseline probe class: {continuity_class}.  "
+                    "Live recovery evidence has not been ingested in this "
+                    "process instance (expected in non-recovery baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _CONV_CONTINUITY_AUTHORITY,
+                    "baseline_probe_class": continuity_class,
+                    "baseline_probe_is_authoritative": verdict.is_authoritative,
+                    "baseline_probe_requires_rebind": verdict.requires_rebind,
+                },
+                gap_description=(
+                    "Conversation continuity taxonomy is formally available "
+                    "(PR-12), but no active live recovery session evidence has "
+                    "been fed to the contract in this process instance.  "
+                    "This is expected in non-recovery baseline contexts.  "
+                    "Production recovery paths should feed evidence from the "
+                    "session manager and rebind layer."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConversationContinuityTruth probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_conversation_continuity_verdict raised: {exc!r}.  "
+                    "Cannot assess conversation continuity truth dimension."
+                ),
+                signal_source=signal_source,
+            )
+
+    # ------------------------------------------------------------------
+    # Aggregation helpers
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the eight dimension items.
+        """Derive the system-level verdict from the nine dimension items.
 
         Policy:
-        - All eight dimensions must be ``accepted`` → ``fully_operational``
+        - All nine dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all eight dimensions →
+        - Checklist does not contain all nine dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
