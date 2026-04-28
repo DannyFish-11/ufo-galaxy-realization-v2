@@ -909,17 +909,22 @@ def evaluate_session_continuity_after_restart(
                 session_identity_stable = False
                 history_accessible = False
         else:
-            # Enumerate all known sessions
-            all_sessions = (
-                list(sm._sessions.values())
-                if hasattr(sm, "_sessions")
+            # Enumerate all known sessions via public API
+            all_session_summaries = (
+                sm.list_sessions()
+                if hasattr(sm, "list_sessions")
                 else []
             )
-            if all_sessions:
+            if all_session_summaries:
                 session_ids_to_evaluate = [
-                    s.id for s in all_sessions
-                    if hasattr(s, "id")
+                    s.get("id") or s.get("session_id")
+                    for s in all_session_summaries
+                    if isinstance(s, dict)
                 ]
+                # Filter out None values
+                session_ids_to_evaluate = [
+                    sid for sid in session_ids_to_evaluate if sid is not None
+                ] or [None]
             else:
                 session_ids_to_evaluate = [None]
     except Exception as exc:  # noqa: BLE001
@@ -948,14 +953,11 @@ def evaluate_session_continuity_after_restart(
                         str(state_val) in ("RebindState.completed", "completed")
                         or state_val == RebindState.completed
                     )
-        elif hasattr(registry, "_records"):
-            records = list(registry._records.values())  # type: ignore[attr-defined]
-            if records:
-                completed_count = sum(
-                    1 for r in records
-                    if getattr(r, "state", None) == RebindState.completed
-                )
-                live_rebind_completed = completed_count > 0
+        elif hasattr(registry, "snapshot"):
+            # Use public snapshot() method to check completed count
+            snap = registry.snapshot()
+            completed_count = snap.get("completed", 0) if isinstance(snap, dict) else 0
+            live_rebind_completed = completed_count > 0
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "ConversationContinuityTruth: continuation_rebind_registry probe failed: %s",
