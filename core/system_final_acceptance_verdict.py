@@ -708,6 +708,20 @@ except Exception:
     _ANDROID_AUDIT_AVAILABLE = False
     _get_android_delegated_audit_recorder = None  # type: ignore[assignment]
 
+# DelegatedFlowDecisionHistory (PR-V2-4DH) — layered history evidence for
+# the delegated_flow dimension.  Enables fine-grained distinction between
+# "structure present" and "runtime closure established".
+try:
+    from core.delegated_flow_decision_history import (  # type: ignore[import]
+        get_decision_history as _get_decision_history,
+        HistoryEvidenceStatus as _HistoryEvidenceStatus,
+    )
+    _DECISION_HISTORY_AVAILABLE = True
+except Exception:
+    _DECISION_HISTORY_AVAILABLE = False
+    _get_decision_history = None  # type: ignore[assignment]
+    _HistoryEvidenceStatus = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -889,15 +903,57 @@ class SystemFinalAcceptanceEvaluator:
             )
 
     def _evaluate_delegated_flow(self) -> AcceptanceChecklistItem:
-        """Probe the DelegatedFlowAcceptanceGate (PR-10V2)."""
+        """Probe the DelegatedFlowAcceptanceGate (PR-10V2) and augment the
+        verdict with decision history evidence (PR-V2-4DH).
+
+        This evaluator operates in two layers:
+
+        Layer 1 — Acceptance gate (structural + evidence dimensions)
+            Queries DelegatedFlowAcceptanceGate.evaluate() which probes six
+            evidence dimensions.  An ``accepted_for_graduation`` result
+            immediately yields ``DimensionStatus.accepted``.
+
+        Layer 2 — Decision history (runtime closure evidence)
+            Queries DelegatedFlowDecisionHistory.evaluate() to obtain the
+            five-tier history evidence status.  This distinguishes between:
+
+            * ``no_history_yet``           → ``unresolved`` (no runs ever)
+            * ``insufficient_evidence``    → ``unresolved`` (too few events)
+            * ``observed_but_incomplete``  → ``pending``    (some branches)
+            * ``observed_and_closed``      → promotes partial gate gaps to
+                                             ``pending`` with gate context
+            * ``historical_evidence_stale``→ ``unresolved`` (stale history)
+
+        The ``evidence_linkage`` always surfaces both ``structure_present``
+        and ``runtime_closure_established`` so audit consumers can
+        distinguish structural existence from runtime proof.
+        """
         dimension = AcceptanceDimensionId.delegated_flow
         signal_source = "core.delegated_flow_acceptance_gate"
 
         if not _ACCEPTANCE_GATE_AVAILABLE or _get_acceptance_gate is None:
+            # Acceptance gate unavailable — still surface history context.
+            h_status_value = "unavailable"
+            structure_present = False
+            runtime_closure = False
+            if _DECISION_HISTORY_AVAILABLE and _get_decision_history is not None:
+                try:
+                    h_report = _get_decision_history().evaluate()
+                    h_status_value = h_report.evidence_status.value
+                    structure_present = h_report.structure_present
+                    runtime_closure = h_report.runtime_closure_established
+                except Exception:
+                    pass
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
                 evidence_summary="DelegatedFlowAcceptanceGate (PR-10V2) unavailable.",
+                evidence_linkage={
+                    "acceptance_gate_verdict": "unavailable",
+                    "history_evidence_status": h_status_value,
+                    "structure_present": structure_present,
+                    "runtime_closure_established": runtime_closure,
+                },
                 gap_description=(
                     "core.delegated_flow_acceptance_gate is not importable.  "
                     "Cannot assess delegated-flow acceptance.  Ensure PR-10V2 "
@@ -913,7 +969,36 @@ class SystemFinalAcceptanceEvaluator:
             is_accepted = getattr(report, "is_accepted_for_graduation", False)
             gaps = getattr(report, "evidence_gaps", [])
 
+            # ------------------------------------------------------------------
+            # Layer 2: Collect decision history status (always; used for
+            # evidence linkage and fine-grained gap descriptions).
+            # ------------------------------------------------------------------
+            h_status_value = "unavailable"
+            structure_present = False
+            runtime_closure = False
+            h_gap_description = ""
+            if _DECISION_HISTORY_AVAILABLE and _get_decision_history is not None:
+                try:
+                    h_report = _get_decision_history().evaluate()
+                    h_status_value = h_report.evidence_status.value
+                    structure_present = h_report.structure_present
+                    runtime_closure = h_report.runtime_closure_established
+                    h_gap_description = h_report.gap_description
+                except Exception:
+                    pass
+
+            base_linkage: Dict[str, Any] = {
+                "acceptance_gate_verdict": verdict_value,
+                "history_evidence_status": h_status_value,
+                "structure_present": structure_present,
+                "runtime_closure_established": runtime_closure,
+            }
+
+            # ------------------------------------------------------------------
+            # Fast path: acceptance gate passed → full acceptance
+            # ------------------------------------------------------------------
             if is_accepted:
+                base_linkage["evidence_gap_count"] = 0
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.accepted,
@@ -921,47 +1006,100 @@ class SystemFinalAcceptanceEvaluator:
                         f"DelegatedFlowAcceptanceGate verdict: {verdict_value}.  "
                         "Delegated canonical path accepted for graduation."
                     ),
-                    evidence_linkage={
-                        "acceptance_gate_verdict": verdict_value,
-                        "evidence_gap_count": 0,
-                    },
+                    evidence_linkage=base_linkage,
                     gap_description="",
                     signal_source=signal_source,
                 )
-            elif gaps:
-                return AcceptanceChecklistItem(
-                    dimension=dimension,
-                    status=DimensionStatus.pending,
-                    evidence_summary=(
-                        f"DelegatedFlowAcceptanceGate verdict: {verdict_value}.  "
-                        f"{len(gaps)} evidence gap(s) remain."
-                    ),
-                    evidence_linkage={
-                        "acceptance_gate_verdict": verdict_value,
-                        "evidence_gap_count": len(gaps),
-                    },
-                    gap_description=(
-                        f"Delegated-flow acceptance gate produced {len(gaps)} "
-                        "evidence gap(s)."
-                    ),
-                    signal_source=signal_source,
+
+            # ------------------------------------------------------------------
+            # Non-accepted: history status drives the DimensionStatus so
+            # callers can distinguish idle-env gaps from partial/stale/gate gaps.
+            # ------------------------------------------------------------------
+            base_linkage["evidence_gap_count"] = len(gaps)
+
+            if h_status_value == "no_history_yet":
+                dim_status = DimensionStatus.unresolved
+                combined_gap = (
+                    f"Delegated flow acceptance gate is non-accepted "
+                    f"(verdict: {verdict_value!r}) AND no delegated flow has "
+                    "ever been triggered in this process.  "
+                    "This is an idle-environment evidence gap, not a code failure.  "
+                    "History: " + (h_gap_description or "no_history_yet")
                 )
+            elif h_status_value == "historical_evidence_stale":
+                dim_status = DimensionStatus.unresolved
+                combined_gap = (
+                    f"Delegated flow acceptance gate is non-accepted "
+                    f"(verdict: {verdict_value!r}) AND the decision history is "
+                    "stale.  Prior run evidence is too old to establish current "
+                    "runtime closure.  "
+                    "History: " + (h_gap_description or "historical_evidence_stale")
+                )
+            elif h_status_value == "insufficient_evidence":
+                dim_status = DimensionStatus.unresolved
+                combined_gap = (
+                    f"Delegated flow acceptance gate is non-accepted "
+                    f"(verdict: {verdict_value!r}) AND the decision history has "
+                    "insufficient events to confirm end-to-end closure.  "
+                    "History: " + (h_gap_description or "insufficient_evidence")
+                )
+            elif h_status_value == "observed_but_incomplete":
+                dim_status = DimensionStatus.pending
+                combined_gap = (
+                    f"Delegated flow acceptance gate is non-accepted "
+                    f"(verdict: {verdict_value!r}) AND the decision history shows "
+                    "partial run coverage — some branches witnessed but not all.  "
+                    "History: " + (h_gap_description or "observed_but_incomplete")
+                )
+            elif h_status_value == "observed_and_closed":
+                # History is closed but gate still non-accepted → gate content
+                # gaps are the blocker (not run-history absence).
+                if gaps:
+                    dim_status = DimensionStatus.pending
+                    combined_gap = (
+                        f"DelegatedFlowAcceptanceGate produced {len(gaps)} "
+                        "evidence gap(s) despite a closed decision history.  "
+                        "Gate verdict: " + verdict_value
+                    )
+                else:
+                    dim_status = DimensionStatus.pending
+                    combined_gap = (
+                        f"Delegated-flow acceptance gate verdict "
+                        f"'{verdict_value}' is not accepted_for_graduation.  "
+                        "Decision history is closed but gate dimensions "
+                        "have not all passed."
+                    )
             else:
-                return AcceptanceChecklistItem(
-                    dimension=dimension,
-                    status=DimensionStatus.unresolved,
-                    evidence_summary=(
-                        f"DelegatedFlowAcceptanceGate verdict: {verdict_value}."
-                    ),
-                    evidence_linkage={"acceptance_gate_verdict": verdict_value},
-                    gap_description=(
+                # History module unavailable — fall back to gate-only logic.
+                if gaps:
+                    dim_status = DimensionStatus.pending
+                    combined_gap = (
+                        f"Delegated-flow acceptance gate produced {len(gaps)} "
+                        "evidence gap(s).  "
+                        "(Decision history module unavailable.)"
+                    )
+                else:
+                    dim_status = DimensionStatus.unresolved
+                    combined_gap = (
                         f"Delegated-flow acceptance gate verdict "
                         f"'{verdict_value}' is not accepted_for_graduation "
                         "and provided no evidence gap details.  "
                         "Treat as unresolved."
-                    ),
-                    signal_source=signal_source,
-                )
+                    )
+
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=dim_status,
+                evidence_summary=(
+                    f"DelegatedFlowAcceptanceGate verdict: {verdict_value}.  "
+                    f"History status: {h_status_value}.  "
+                    f"Structure present: {structure_present}.  "
+                    f"Runtime closure: {runtime_closure}."
+                ),
+                evidence_linkage=base_linkage,
+                gap_description=combined_gap,
+                signal_source=signal_source,
+            )
 
         except Exception as exc:
             return AcceptanceChecklistItem(

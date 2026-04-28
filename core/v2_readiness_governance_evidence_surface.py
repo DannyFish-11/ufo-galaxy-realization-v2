@@ -821,6 +821,52 @@ def _probe_participant_session_truth() -> EvidenceDimensionEntry:
             test_reference=test_ref,
         )
 
+def _probe_delegated_flow_decision_history() -> "EvidenceDimensionEntry":
+    """Probe DelegatedFlowDecisionHistory (PR-V2-4DH)."""
+    dim_id = "delegated_flow_decision_history"
+    code_ref = "core.delegated_flow_decision_history.DelegatedFlowDecisionHistory"
+    test_ref = "tests/test_pr_v2_delegated_flow_decision_history.py"
+    try:
+        from core.delegated_flow_decision_history import (
+            get_decision_history,
+            evaluate_delegated_flow_history,
+        )
+        h_report = evaluate_delegated_flow_history()
+        evidence_status_val = h_report.evidence_status.value
+        summary = (
+            f"DelegatedFlowDecisionHistory: status={evidence_status_val!r}; "
+            f"total_entries={h_report.total_entries}; "
+            f"structure_present={h_report.structure_present}; "
+            f"runtime_closure_established={h_report.runtime_closure_established}"
+        )
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name="Delegated Flow Decision History / Evidence Closure (PR-V2-4DH)",
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="present",
+            evidence_summary=summary,
+            code_reference=code_ref,
+            test_reference=test_ref,
+            raw_evidence=h_report.to_dict(),
+            notes=(
+                "Five-tier history status: no_history_yet / insufficient_evidence / "
+                "observed_but_incomplete / observed_and_closed / historical_evidence_stale.  "
+                "runtime_closure_established=True only when status=observed_and_closed.  "
+                "structure_present reflects static deployment availability, not run history."
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name="Delegated Flow Decision History / Evidence Closure (PR-V2-4DH)",
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="unavailable",
+            evidence_summary=f"DelegatedFlowDecisionHistory unavailable: {exc}",
+            code_reference=code_ref,
+            test_reference=test_ref,
+            notes="Module import failed; ensure core.delegated_flow_decision_history is importable.",
+        )
+
 
 # ---------------------------------------------------------------------------
 # V2ReadinessGovernanceEvidenceSurface
@@ -847,6 +893,7 @@ class V2ReadinessGovernanceEvidenceSurface:
         (_probe_continuity_recovery_closure, None),
         (_probe_compat_legacy_blocking, None),
         (_probe_participant_session_truth, None),
+        (_probe_delegated_flow_decision_history, None),
     ]
 
     _DEFERRED_NOTES: List[str] = [
