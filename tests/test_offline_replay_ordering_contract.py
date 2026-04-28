@@ -274,13 +274,17 @@ class TestContractModuleStructure:
         assert rpt.continuity_relation_note
         assert rpt.truth_convergence_note
         # Continuity note must reference canonical task identity policy
-        assert "task_id" in rpt.continuity_relation_note.lower() or \
-               "canonical" in rpt.continuity_relation_note.lower() or \
-               "identity" in rpt.continuity_relation_note.lower()
+        assert (
+            "task_id" in rpt.continuity_relation_note.lower()
+            or "canonical" in rpt.continuity_relation_note.lower()
+            or "identity" in rpt.continuity_relation_note.lower()
+        )
         # Truth convergence note must reference V2 absorption
-        assert "absorption" in rpt.truth_convergence_note.lower() or \
-               "v2" in rpt.truth_convergence_note.lower() or \
-               "convergence" in rpt.truth_convergence_note.lower()
+        assert (
+            "absorption" in rpt.truth_convergence_note.lower()
+            or "v2" in rpt.truth_convergence_note.lower()
+            or "convergence" in rpt.truth_convergence_note.lower()
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -695,8 +699,10 @@ class TestAuthorityEnforcement:
         from core.offline_replay_ordering_contract import (
             AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY,
         )
-        assert "MUST NOT" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY or \
-               "must not" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY.lower()
+        assert (
+            "MUST NOT" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY
+            or "must not" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY.lower()
+        )
 
     def test_G02_android_side_authority_still_applies_ordering_semantics(self):
         """Android-side authority is not ambiguous; ordering semantics still apply.

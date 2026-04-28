@@ -1214,7 +1214,7 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         )
     lines.append("")
     if deferred_dims:
-        lines.append("DEFERRED BOUNDARIES (explicitly honested)")
+        lines.append("DEFERRED BOUNDARIES (explicitly and honestly reported)")
         lines.append("-" * 40)
         lines.append(
             "  • Ephemeral transport binding identity proof: deferred"
