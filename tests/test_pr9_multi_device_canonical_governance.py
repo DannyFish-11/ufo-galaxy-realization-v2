@@ -261,6 +261,9 @@ class TestMultiDeviceSystemTierFromString:
     def test_non_string_returns_no_evidence(self):
         assert MultiDeviceSystemTier.from_string(42) == MultiDeviceSystemTier.no_evidence  # type: ignore[arg-type]
 
+    def test_none_returns_no_evidence(self):
+        assert MultiDeviceSystemTier.from_string(None) == MultiDeviceSystemTier.no_evidence  # type: ignore[arg-type]
+
 
 # ===========================================================================
 # E. MultiDeviceSystemTier.is_operational
@@ -408,6 +411,10 @@ class TestMultiDeviceGovernanceVerdictFromString:
 
     def test_non_string_returns_no_evidence(self):
         v = MultiDeviceGovernanceVerdict.from_string(99)  # type: ignore[arg-type]
+        assert v == MultiDeviceGovernanceVerdict.no_evidence
+
+    def test_none_returns_no_evidence(self):
+        v = MultiDeviceGovernanceVerdict.from_string(None)  # type: ignore[arg-type]
         assert v == MultiDeviceGovernanceVerdict.no_evidence
 
 
