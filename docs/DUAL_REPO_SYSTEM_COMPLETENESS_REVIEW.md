@@ -39,7 +39,7 @@ Galaxy 是一套**分布式智能 Agent 系统**，采用双仓架构：
 
 ### 架构图（简化）
 
-```
+```text
 用户请求
     │
     ▼
@@ -158,7 +158,7 @@ V2: android_delegated_signal_ingress → result_convergence → operator_surface
 
 **Gap #1：ReconciliationSignal AIP wire 层缺失（最关键）**
 
-```
+```text
 Android ReconciliationSignal.kt (PR-51) 内部 DTO 存在
 DelegatedRuntimeReadinessEvaluator 设计意图：通过 reconciliation signal channel 转发
 但 AipModels.kt 的 MsgType enum 无 reconciliation_signal 条目
@@ -169,7 +169,7 @@ DelegatedRuntimeReadinessEvaluator 设计意图：通过 reconciliation signal c
 
 **Gap #2：HandoffEnvelopeV2 response gateway handler 缺失（高优先级）**
 
-```
+```text
 Android 有 handoff_envelope_v2_result MsgType 和 HandoffEnvelopeV2ResultPayload
 V2 有 core/android_handoff_v2_response_ingress.py
 但 galaxy_gateway/android/handlers/ 无 handoff_response.py

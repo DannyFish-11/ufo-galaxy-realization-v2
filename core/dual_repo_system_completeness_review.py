@@ -320,8 +320,6 @@ class CompletenessLabel(str, Enum):
     deferred = "deferred"
     complete = "complete"
 
-    _ORDINALS: List[str] = []
-
     def ordinal(self) -> int:
         """Return integer rank (0 = lowest, 5 = highest)."""
         _order = [
@@ -604,6 +602,8 @@ def _try_import(module_path: str) -> bool:
     try:
         importlib.import_module(module_path)
         return True
+    except (ImportError, ModuleNotFoundError):
+        return False
     except Exception:
         return False
 
