@@ -868,6 +868,84 @@ def _probe_delegated_flow_decision_history() -> "EvidenceDimensionEntry":
         )
 
 
+def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
+    """Probe RecoveryTruthSurface (PR-5-TRUTH)."""
+    dim_id = "recovery_truth_surface"
+    code_ref = "core.recovery_truth_surface.build_recovery_truth_report"
+    test_ref = "tests/test_recovery_truth_surface.py"
+    try:
+        from core.recovery_truth_surface import (
+            build_recovery_truth_report,
+            RECOVERY_TRUTH_SURFACE_AUTHORITY,
+        )
+        report = build_recovery_truth_report()
+        report_dict = report.to_dict()
+        open_dims = report_dict.get("open_dimensions", [])
+        deferred_dims = report_dict.get("deferred_dimensions", [])
+        closed_dims = report_dict.get("closed_dimensions", [])
+        v2_ok = report_dict.get("v2_internal_success", False)
+        p_ok = report_dict.get("participant_reconnect_success", False)
+        tc_ok = report_dict.get("task_continuity_success", False)
+        aa_ok = report_dict.get("authority_alignment_success", False)
+        total_entries = len(report_dict.get("entries", []))
+        summary = (
+            f"RecoveryTruthSurface: {total_entries} truth atoms evaluated; "
+            f"closed={len(closed_dims)}, open={len(open_dims)}, "
+            f"deferred={len(deferred_dims)}.  "
+            f"Layer results: v2_internal={v2_ok}, "
+            f"participant_reconnect={p_ok}, "
+            f"task_continuity={tc_ok}, "
+            f"authority_alignment={aa_ok}."
+        )
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name=(
+                "Recovery Truth Surface — reconnect / redispatch / "
+                "continuity structured evidence (PR-5-TRUTH)"
+            ),
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="present",
+            evidence_summary=summary,
+            code_reference=code_ref,
+            test_reference=test_ref,
+            raw_evidence={
+                "total_entries": total_entries,
+                "closed_dimensions": closed_dims,
+                "open_dimensions": open_dims,
+                "deferred_dimensions": deferred_dims,
+                "v2_internal_success": v2_ok,
+                "participant_reconnect_success": p_ok,
+                "task_continuity_success": tc_ok,
+                "authority_alignment_success": aa_ok,
+            },
+            notes=(
+                "Six truth atoms (participant_disconnect_observed, "
+                "reconnect_observed, redispatch_triggered, "
+                "in_flight_task_continuity_preserved, "
+                "duplicate_dispatch_avoided, recovered_state_aligned) "
+                "across four recovery levels.  "
+                "Deferred boundaries: Android offline queue replay ordering, "
+                "ephemeral transport binding identity.  "
+                "'partial' status = structural wiring verified, no live event "
+                "in this process instance (honest, not a failure)."
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name=(
+                "Recovery Truth Surface — reconnect / redispatch / "
+                "continuity structured evidence (PR-5-TRUTH)"
+            ),
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="unavailable",
+            evidence_summary=f"RecoveryTruthSurface unavailable: {exc}",
+            code_reference=code_ref,
+            test_reference=test_ref,
+            notes="Module import failed; ensure core.recovery_truth_surface is importable.",
+        )
+
+
 # ---------------------------------------------------------------------------
 # V2ReadinessGovernanceEvidenceSurface
 # ---------------------------------------------------------------------------
@@ -894,6 +972,7 @@ class V2ReadinessGovernanceEvidenceSurface:
         (_probe_compat_legacy_blocking, None),
         (_probe_participant_session_truth, None),
         (_probe_delegated_flow_decision_history, None),
+        (_probe_recovery_truth_surface, None),
     ]
 
     _DEFERRED_NOTES: List[str] = [
@@ -904,12 +983,24 @@ class V2ReadinessGovernanceEvidenceSurface:
         ),
         (
             "DEFERRED: Android offline queue ordering authority is deferred to a "
-            "later PR (documented in RecoveryClosureReport RS-16 scenario)."
+            "later PR (documented in RecoveryClosureReport RS-16 scenario and "
+            "RecoveryTruthSurface OFFLINE_QUEUE_REPLAY_ORDERING_IS_DEFERRED_TRUTH_POLICY)."
         ),
         (
             "DEFERRED: Formal default-on / rollout promotion policy for the "
             "delegated canonical path is deferred; the acceptance and governance "
             "gates provide the evidence foundation for that decision."
+        ),
+        (
+            "DEFERRED: Ephemeral transport binding identity proof (whether the "
+            "reconnected session is provably the same participant via "
+            "cryptographic/token-based identity) is deferred "
+            "(RecoveryTruthSurface EPHEMERAL_TRANSPORT_BINDING_IS_DEFERRED_TRUTH_POLICY)."
+        ),
+        (
+            "DEFERRED: Multi-device simultaneous reconnect ordering authority "
+            "is deferred; the RecoveryTruthSurface records this boundary "
+            "explicitly as deferred rather than closed."
         ),
     ]
 
