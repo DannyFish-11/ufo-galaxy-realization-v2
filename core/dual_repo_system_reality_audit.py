@@ -1054,6 +1054,7 @@ class DualRepoSystemRealityAuditor:
             "core.recovery_durability_closure_validator"
         )
         restart_available = _try_import("core.runtime_restart_recovery")
+        truth_surface_available = _try_import("core.recovery_truth_surface")
 
         available: List[str] = []
         if continuity_available:
@@ -1064,6 +1065,8 @@ class DualRepoSystemRealityAuditor:
             available.append("core.recovery_durability_closure_validator")
         if restart_available:
             available.append("core.runtime_restart_recovery")
+        if truth_surface_available:
+            available.append("core.recovery_truth_surface")
 
         missing: List[str] = []
         if not continuity_available:
@@ -1074,6 +1077,8 @@ class DualRepoSystemRealityAuditor:
             missing.append("core.recovery_durability_closure_validator")
         if not restart_available:
             missing.append("core.runtime_restart_recovery")
+        if not truth_surface_available:
+            missing.append("core.recovery_truth_surface")
 
         # Check for all_closed on the closure validator (PR-5V2 says True)
         closure_all_closed: Optional[bool] = None
@@ -1088,6 +1093,24 @@ class DualRepoSystemRealityAuditor:
             except Exception:
                 closure_all_closed = None
 
+        # Check recovery truth surface for structured multi-layer evidence
+        truth_open_dims: Optional[List[str]] = None
+        truth_deferred_dims: Optional[List[str]] = None
+        truth_v2_internal_success: Optional[bool] = None
+        if truth_surface_available:
+            try:
+                from core.recovery_truth_surface import (  # type: ignore[import]
+                    build_recovery_truth_report,
+                )
+                tr = build_recovery_truth_report()
+                truth_open_dims = tr.open_dimensions
+                truth_deferred_dims = tr.deferred_dimensions
+                truth_v2_internal_success = tr.v2_internal_success
+            except Exception:
+                truth_open_dims = None
+                truth_deferred_dims = None
+                truth_v2_internal_success = None
+
         test_refs: List[str] = []
         if _file_exists(
             "tests/test_pr534_continuity_recovery_durability_closure.py"
@@ -1095,6 +1118,8 @@ class DualRepoSystemRealityAuditor:
             test_refs.append(
                 "tests/test_pr534_continuity_recovery_durability_closure.py"
             )
+        if _file_exists("tests/test_recovery_truth_surface.py"):
+            test_refs.append("tests/test_recovery_truth_surface.py")
 
         gaps: List[str] = []
         for m in missing:
@@ -1104,9 +1129,15 @@ class DualRepoSystemRealityAuditor:
                 "RecoveryDurabilityClosureValidator.all_closed is False — "
                 "at least one recovery scenario is not closed."
             )
+        if truth_surface_available and truth_open_dims:
+            for d in truth_open_dims:
+                gaps.append(
+                    f"RecoveryTruthSurface dimension '{d}' is open "
+                    "(partial/deferred/unknown)."
+                )
 
         found = len(available)
-        total = 4
+        total = 5  # now 5 modules including recovery_truth_surface
 
         if found == 0:
             maturity = MaturityLabel.nominally_present_not_closed
@@ -1117,36 +1148,53 @@ class DualRepoSystemRealityAuditor:
                 f"Only {found}/{total} recovery modules importable; "
                 "chain is incomplete."
             )
-        elif found < total:
+        elif found < 4:
             maturity = MaturityLabel.implemented
             rationale = (
                 f"{found}/{total} recovery modules importable; "
                 f"missing: {missing!r}"
             )
+        elif (
+            test_refs
+            and (closure_all_closed is True or closure_all_closed is None)
+            and truth_surface_available
+            and truth_v2_internal_success is True
+        ):
+            maturity = MaturityLabel.automated_verified
+            rationale = (
+                f"{found}/{total} recovery modules importable; "
+                f"test reference(s) found; "
+                f"closure_all_closed={closure_all_closed!r}; "
+                f"recovery_truth_surface v2_internal_success=True.  "
+                "Recovery truth surface provides structured multi-layer evidence."
+            )
         elif test_refs and (closure_all_closed is True or closure_all_closed is None):
             maturity = MaturityLabel.automated_verified
             rationale = (
-                f"All {total} recovery modules importable; "
+                f"{found}/{total} recovery modules importable; "
                 f"test reference found; "
                 f"closure_all_closed={closure_all_closed!r}."
             )
         elif test_refs:
             maturity = MaturityLabel.implemented
             rationale = (
-                f"All {total} recovery modules importable but "
+                f"{found}/{total} recovery modules importable but "
                 f"closure_all_closed={closure_all_closed!r} indicates open "
                 "scenarios."
             )
         else:
             maturity = MaturityLabel.mainchained
             rationale = (
-                f"All {total} recovery modules importable; "
+                f"{found}/{total} recovery modules importable; "
                 "no automated test reference found."
             )
 
         evidence_summary = (
             f"Probed {total} recovery modules; {found} importable.  "
             f"Closure all_closed: {closure_all_closed!r}.  "
+            f"RecoveryTruthSurface: open_dims={truth_open_dims!r}, "
+            f"deferred_dims={truth_deferred_dims!r}, "
+            f"v2_internal_success={truth_v2_internal_success!r}.  "
             f"Test references: {len(test_refs)}."
         )
 

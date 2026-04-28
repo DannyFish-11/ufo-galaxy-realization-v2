@@ -262,11 +262,12 @@ DUAL_FORMAT_OUTPUT_REQUIRED_POLICY: str = (
 
 ALL_FIVE_DIMENSIONS_REQUIRED_FOR_FULLY_OPERATIONAL_POLICY: str = (
     "POLICY::ALL_FIVE_DIMENSIONS_REQUIRED_FOR_FULLY_OPERATIONAL_V1: "
-    "A fully_operational verdict REQUIRES all five system acceptance dimensions "
+    "A fully_operational verdict REQUIRES all six system acceptance dimensions "
     "(runtime_readiness, delegated_flow, governance, multi_device_recovery, "
-    "android_participant) to have DimensionStatus.accepted status.  Any "
-    "dimension that is pending or unresolved MUST prevent the overall verdict "
-    "from reaching fully_operational.  "
+    "android_participant, recovery_truth_surface) to have "
+    "DimensionStatus.accepted status.  Any dimension that is pending or "
+    "unresolved MUST prevent the overall verdict from reaching "
+    "fully_operational.  "
     "PR-17V2, system final acceptance verdict."
 )
 
@@ -287,7 +288,7 @@ CRITICAL_DIMENSION_UNRESOLVED_BLOCKS_FULLY_OPERATIONAL_POLICY: str = (
 
 
 class AcceptanceDimensionId(str, Enum):
-    """The five canonical system acceptance dimensions.
+    """The six canonical system acceptance dimensions.
 
     Values
     ------
@@ -318,6 +319,18 @@ class AcceptanceDimensionId(str, Enum):
         (android_delegated_runtime_audit / android_evaluator_artifact_ingress).
         Answers: is the Android participant running with honest capability
         declarations and lifecycle governance?
+
+    recovery_truth_surface
+        Structured multi-layer recovery truth surface
+        (core.recovery_truth_surface, PR-5-TRUTH).  Answers: across the six
+        recovery truth dimensions (participant_disconnect_observed,
+        reconnect_observed, redispatch_triggered,
+        in_flight_task_continuity_preserved, duplicate_dispatch_avoided,
+        recovered_state_aligned) and four recovery levels (v2_internal,
+        participant_reconnect, task_continuity, authority_state_alignment),
+        what is the structured truth state of recovery?  Distinct from
+        multi_device_recovery: this dimension surfaces *how* recovery is
+        evidenced, not merely whether a readiness snapshot says ready.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -325,6 +338,7 @@ class AcceptanceDimensionId(str, Enum):
     governance = "governance"
     multi_device_recovery = "multi_device_recovery"
     android_participant = "android_participant"
+    recovery_truth_surface = "recovery_truth_surface"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -338,13 +352,14 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all five dimensions in canonical evaluation order."""
+        """Return all six dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
             cls.governance,
             cls.multi_device_recovery,
             cls.android_participant,
+            cls.recovery_truth_surface,
         ]
 
 
@@ -722,6 +737,19 @@ except Exception:
     _get_decision_history = None  # type: ignore[assignment]
     _HistoryEvidenceStatus = None  # type: ignore[assignment]
 
+# RecoveryTruthSurface (PR-5-TRUTH) — structured multi-layer recovery truth
+# surface for the recovery_truth_surface dimension.
+try:
+    from core.recovery_truth_surface import (  # type: ignore[import]
+        build_recovery_truth_report as _build_recovery_truth_report,
+        RecoveryTruthStatus as _RecoveryTruthStatus,
+    )
+    _RECOVERY_TRUTH_SURFACE_AVAILABLE = True
+except Exception:
+    _RECOVERY_TRUTH_SURFACE_AVAILABLE = False
+    _build_recovery_truth_report = None  # type: ignore[assignment]
+    _RecoveryTruthStatus = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -760,7 +788,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all five acceptance dimensions and produce a report.
+        """Evaluate all six acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -776,6 +804,7 @@ class SystemFinalAcceptanceEvaluator:
         item_governance = self._evaluate_governance()
         item_recovery = self._evaluate_multi_device_recovery()
         item_android = self._evaluate_android_participant()
+        item_recovery_truth = self._evaluate_recovery_truth_surface()
 
         for item in (
             item_runtime,
@@ -783,6 +812,7 @@ class SystemFinalAcceptanceEvaluator:
             item_governance,
             item_recovery,
             item_android,
+            item_recovery_truth,
         ):
             checklist[item.dimension.value] = item
 
@@ -1448,6 +1478,130 @@ class SystemFinalAcceptanceEvaluator:
             signal_source=signal_source,
         )
 
+    def _evaluate_recovery_truth_surface(self) -> AcceptanceChecklistItem:
+        """Evaluate the structured recovery truth surface dimension.
+
+        Consumes :func:`~core.recovery_truth_surface.build_recovery_truth_report`
+        to produce a structured, multi-layer view of recovery evidence across
+        six truth dimensions and four recovery levels.
+
+        This dimension is distinct from ``multi_device_recovery``:
+        ``multi_device_recovery`` asks "is the platform recovery-ready?";
+        ``recovery_truth_surface`` asks "what is the structured evidence
+        for each recovery truth atom, and which boundaries are deferred?"
+
+        Status mapping
+        --------------
+        All six dimensions have ``observed`` or ``not_applicable`` status
+        AND all four recovery levels are successful
+            → ``accepted``
+        Some dimensions are ``partial`` but none are ``unknown`` or
+        ``deferred`` that would indicate structural absence
+            → ``pending``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.recovery_truth_surface
+        signal_source = "core.recovery_truth_surface"
+
+        if not _RECOVERY_TRUTH_SURFACE_AVAILABLE or _build_recovery_truth_report is None:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "RecoveryTruthSurface module unavailable."
+                ),
+                gap_description=(
+                    "core.recovery_truth_surface is not importable.  "
+                    "Cannot assess structured recovery truth surface.  "
+                    "Ensure core/recovery_truth_surface.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            report = _build_recovery_truth_report()
+            report_dict = report.to_dict()
+
+            open_dims = report_dict.get("open_dimensions", [])
+            closed_dims = report_dict.get("closed_dimensions", [])
+            deferred_dims = report_dict.get("deferred_dimensions", [])
+            v2_ok = report_dict.get("v2_internal_success", False)
+            p_ok = report_dict.get("participant_reconnect_success", False)
+            tc_ok = report_dict.get("task_continuity_success", False)
+            aa_ok = report_dict.get("authority_alignment_success", False)
+
+            total_entries = len(report_dict.get("entries", []))
+            all_levels_ok = v2_ok and p_ok and tc_ok and aa_ok
+
+            if all_levels_ok and not open_dims:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.accepted,
+                    evidence_summary=(
+                        "RecoveryTruthSurface: all six dimensions closed; "
+                        "all four recovery levels successful."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description="",
+                    signal_source=signal_source,
+                )
+
+            # Build a gap description that accurately separates the four layers
+            layer_notes: List[str] = []
+            if not v2_ok:
+                layer_notes.append("v2_internal: not fully closed")
+            if not p_ok:
+                layer_notes.append("participant_reconnect: not fully closed")
+            if not tc_ok:
+                layer_notes.append("task_continuity: not fully closed")
+            if not aa_ok:
+                layer_notes.append("authority_state_alignment: not fully closed")
+
+            dim_notes: List[str] = []
+            if open_dims:
+                dim_notes.append(f"open dimensions: {open_dims!r}")
+            if deferred_dims:
+                dim_notes.append(f"deferred dimensions: {deferred_dims!r}")
+
+            all_notes = layer_notes + dim_notes
+            gap_desc = (
+                "RecoveryTruthSurface has open or deferred dimensions: "
+                + "; ".join(all_notes)
+                + ".  "
+                "Note: 'partial' status indicates structural wiring is present "
+                "but no live event was recorded in this process instance.  "
+                "Deferred boundaries (offline queue replay ordering, ephemeral "
+                "transport binding) are explicitly documented as deferred."
+            )
+
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    f"RecoveryTruthSurface: {len(closed_dims)}/6 closed, "
+                    f"{len(open_dims)}/6 open, {len(deferred_dims)} deferred; "
+                    f"{total_entries} entries evaluated."
+                ),
+                evidence_linkage=report_dict,
+                gap_description=gap_desc,
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "RecoveryTruthSurface probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_recovery_truth_report raised: {exc!r}.  "
+                    "Cannot assess structured recovery truth surface."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -1456,14 +1610,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the five dimension items.
+        """Derive the system-level verdict from the six dimension items.
 
         Policy:
-        - All five dimensions must be ``accepted`` → ``fully_operational``
+        - All six dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all five dimensions →
+        - Checklist does not contain all six dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
