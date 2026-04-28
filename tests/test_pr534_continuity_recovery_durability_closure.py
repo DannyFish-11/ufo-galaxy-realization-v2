@@ -40,11 +40,12 @@ Group B — RecoveryClosureReport content
   B02. Report contains exactly 17 scenario entries.
   B03. Report all_closed is True (no fail_closed scenarios).
   B04. Report has 0 fail_closed scenarios.
-  B05. Report has exactly 1 deferred scenario (RS-16: offline queue ordering).
+  B05. Report has 0 deferred scenarios (RS-16 advanced to advisory via PR-P0-3).
   B06. All non-deferred scenarios have observed_decision != '(deferred)'.
   B07. Every scenario entry has a non-empty scenario_id.
   B08. Every scenario entry has a non-empty policy_reference.
-  B09. Deferred scenario RS-16 documents the offline queue ordering deferral.
+  B09. RS-16 scenario is now advisory and references the offline replay
+       ordering contract (PR-P0-3).
   B10. Report to_dict() contains all required top-level keys.
   B11. pr5_sentinel in report matches RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL.
 
@@ -253,6 +254,7 @@ def test_A02_all_policy_sentinels_non_empty():
         SIGNAL_GUARD_PRECEDES_RECONCILIATION_POLICY,
         CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY,
         OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY,
+        OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
     )
     for sentinel in [
         RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
@@ -262,6 +264,7 @@ def test_A02_all_policy_sentinels_non_empty():
         SIGNAL_GUARD_PRECEDES_RECONCILIATION_POLICY,
         CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY,
         OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY,
+        OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
     ]:
         assert isinstance(sentinel, str) and sentinel, f"empty sentinel: {sentinel!r}"
 
@@ -383,10 +386,18 @@ def test_B04_report_no_fail_closed_scenarios(closure_report):
     )
 
 
-def test_B05_report_has_exactly_one_deferred_scenario(closure_report):
+def test_B05_report_has_zero_deferred_scenarios(closure_report):
+    """RS-16 has been advanced from deferred to advisory via PR-P0-3.
+
+    The V2-side authoritative offline replay ordering contract is now
+    formally defined in core.offline_replay_ordering_contract.  RS-16
+    status is advisory (contract defined, live evidence pending).
+    """
     deferred = [s for s in closure_report.scenarios if s.status.value == "deferred"]
-    assert len(deferred) == 1
-    assert deferred[0].scenario_id == "RS-16"
+    assert len(deferred) == 0, (
+        f"Expected 0 deferred scenarios after PR-P0-3 contract definition; "
+        f"found: {[(s.scenario_id, s.status.value) for s in deferred]}"
+    )
 
 
 def test_B06_non_deferred_scenarios_have_real_observed_decisions(closure_report):
@@ -409,10 +420,29 @@ def test_B08_every_scenario_has_non_empty_policy_reference(closure_report):
         )
 
 
-def test_B09_deferred_rs16_documents_offline_queue(closure_report):
+def test_B09_rs16_is_advisory_and_references_contract(closure_report):
+    """RS-16 is now advisory (PR-P0-3) and references the offline replay
+    ordering contract.
+
+    Previously deferred, RS-16 now reflects that the V2-side authoritative
+    contract is formally defined in core.offline_replay_ordering_contract.
+    The advisory status means: contract defined, live operational evidence
+    still being collected.
+    """
     rs16 = next(s for s in closure_report.scenarios if s.scenario_id == "RS-16")
-    assert "offline" in rs16.note.lower() or "queue" in rs16.note.lower()
-    assert "deferred" in rs16.note.lower() or "RS-16" in rs16.scenario_id
+    # RS-16 must be advisory (contract defined, not deferred)
+    assert rs16.status.value == "advisory", (
+        f"Expected RS-16 status=advisory after PR-P0-3; got {rs16.status.value!r}"
+    )
+    # Must reference the new contract
+    note_lower = rs16.note.lower()
+    assert (
+        "offline" in note_lower or "queue" in note_lower or "replay" in note_lower
+    ), f"RS-16 note does not mention offline/queue/replay: {rs16.note!r}"
+    assert (
+        "contract" in note_lower or "pr-p0-3" in note_lower
+        or "offline_replay_ordering_contract" in note_lower
+    ), f"RS-16 note does not reference the ordering contract: {rs16.note!r}"
 
 
 def test_B10_report_to_dict_has_required_keys(closure_report):
