@@ -706,6 +706,14 @@ def _probe_offline_replay_contract_available() -> bool:
         return False
 
 
+def _probe_continuity_contract_available() -> bool:
+    try:
+        import core.inflight_task_continuity_contract  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 def _build_participant_disconnect_entry(available_modules: List[str]) -> RecoveryTruthEntry:
     """Probe participant disconnect observation truth."""
     dimension = RecoveryTruthDimension.participant_disconnect_observed
@@ -895,6 +903,35 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
         supporting.append("core.delegated_flow_recovery_coordinator")
     if "core.flow_continuity_coordinator" in available_modules:
         supporting.append("core.flow_continuity_coordinator")
+    if "core.inflight_task_continuity_contract" in available_modules:
+        supporting.append("core.inflight_task_continuity_contract")
+
+    # PR-P1-1: check for the formal continuity contract module, which
+    # provides a structured judgment (not just structural evidence) of
+    # task-level continuity.
+    continuity_contract_present: Optional[bool] = None
+    if "core.inflight_task_continuity_contract" in available_modules:
+        try:
+            from core.inflight_task_continuity_contract import (
+                InFlightTaskContinuityContract,
+                TaskContinuityStatus,
+                TaskContinuityReport,
+                STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY,
+            )
+            continuity_contract_present = all([
+                callable(InFlightTaskContinuityContract),
+                hasattr(TaskContinuityStatus, "resumed"),
+                hasattr(TaskContinuityStatus, "recoverable"),
+                hasattr(TaskContinuityStatus, "interrupted"),
+                hasattr(TaskContinuityStatus, "abandoned"),
+                hasattr(TaskContinuityStatus, "needs_reconcile"),
+                hasattr(TaskContinuityStatus, "ambiguous"),
+                hasattr(TaskContinuityReport, "continuity_gap_count"),
+                hasattr(TaskContinuityReport, "has_unrecovered_tasks"),
+                hasattr(TaskContinuityReport, "has_ambiguous_tasks"),
+            ])
+        except Exception:
+            continuity_contract_present = None
 
     continuity_actions_present: Optional[bool] = None
     if "core.delegated_flow_recovery_coordinator" in available_modules:
@@ -907,6 +944,29 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
         except Exception:
             continuity_actions_present = None
 
+    if continuity_contract_present:
+        return RecoveryTruthEntry(
+            dimension=dimension,
+            status=RecoveryTruthStatus.observed,
+            recovery_level=RecoveryLevel.task_continuity,
+            evidence_summary=(
+                "InFlightTaskContinuityContract (PR-P1-1) is present and "
+                "fully wired.  It provides a formal judgment layer that "
+                "distinguishes resumed / recoverable / interrupted / abandoned "
+                "/ needs_reconcile / ambiguous status for each in-flight task "
+                "after restart.  TaskContinuityReport.continuity_gap_count "
+                "makes the gap between state_restored and continuity_restored "
+                "machine-readable.  RuntimeRestartRecoveryCoordinator produces "
+                "a TaskContinuityReport in step 11 of its recovery pass, stored "
+                "in RuntimeRecoveryReport.continuity_report.  "
+                "STATE_RESTORED_IS_NOT_CONTINUITY_RESTORED_POLICY enforced: "
+                "state presence in the registry does not equal continuity "
+                "confirmation."
+            ),
+            policy_reference=policy,
+            supporting_modules=supporting,
+            deferred_note="",
+        )
     if continuity_actions_present:
         return RecoveryTruthEntry(
             dimension=dimension,
@@ -917,7 +977,8 @@ def _build_in_flight_continuity_entry(available_modules: List[str]) -> RecoveryT
                 "in-flight continuity actions: resume_in_place, "
                 "replay_from_checkpoint, and preserve_partial_then_resume.  "
                 "These cover the full range of continuity preservation scenarios.  "
-                "No live in-flight task was present in this process instance."
+                "No live in-flight task was present in this process instance.  "
+                "(InFlightTaskContinuityContract not yet loaded.)"
             ),
             policy_reference=policy,
             supporting_modules=supporting,
@@ -1148,6 +1209,8 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         available_modules.append("core.runtime_restart_recovery")
     if _probe_offline_replay_contract_available():
         available_modules.append("core.offline_replay_ordering_contract")
+    if _probe_continuity_contract_available():
+        available_modules.append("core.inflight_task_continuity_contract")
 
     entries: List[RecoveryTruthEntry] = [
         _build_participant_disconnect_entry(available_modules),
@@ -1193,7 +1256,7 @@ def build_recovery_truth_report() -> RecoveryTruthReport:
         "=" * 68,
         "GALAXY V2 — RECOVERY TRUTH SURFACE",
         "=" * 68,
-        f"Modules available: {len(available_modules)}/5",
+        f"Modules available: {len(available_modules)}/6",
         f"Dimensions closed: {len(closed_dims)}/6  "
         f"open: {len(open_dims)}/6  "
         f"deferred: {len(deferred_dims)}/6",

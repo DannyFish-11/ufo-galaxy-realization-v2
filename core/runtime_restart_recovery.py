@@ -107,6 +107,8 @@ __all__ = [
     "CONTINUATION_REBIND_REGISTRY_INTEGRATION_POLICY",
     "MULTI_PARTICIPANT_RECOVERY_CONSOLIDATION_POLICY",
     "RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY",
+    # PR-P1-1 sentinels
+    "TASK_CONTINUITY_EVALUATION_STEP_POLICY",
     # Classes
     "RuntimeRecoveryReport",
     "RuntimeRestartRecoveryCoordinator",
@@ -317,6 +319,26 @@ RESULT_CONTINUITY_GUARD_VERIFICATION_POLICY: str = (
     "after restart.  (PR-2)"
 )
 
+# PR-P1-1: in-flight task continuity evaluation step
+TASK_CONTINUITY_EVALUATION_STEP_POLICY: str = (
+    "POLICY::TASK_CONTINUITY_EVALUATION_STEP_PR_P1_1: "
+    "After recovering in-flight task records (step 5) and dispatching them "
+    "(step 5b), RuntimeRestartRecoveryCoordinator runs step 11: "
+    "InFlightTaskContinuityContract.evaluate() to produce a formal "
+    "TaskContinuityReport.  This report is stored in "
+    "RuntimeRecoveryReport.continuity_report and distinguishes: "
+    "resumed (execution continuity confirmed — task was already live), "
+    "recoverable (state present, continuity pending device reconnect / routing), "
+    "interrupted (REISSUABLE — needs external re-issuance), "
+    "abandoned (TERMINAL_ON_INTERRUPT — no safe recovery path), "
+    "needs_reconcile (duplicate/stale snapshot records), "
+    "ambiguous (insufficient information).  "
+    "State restored ≠ continuity restored; the continuity_gap_count field "
+    "makes this gap machine-readable.  Acceptance and readiness verdicts "
+    "MUST consume continuity_report rather than treating inflight_tasks_recovered "
+    "alone as proof of continuity.  (PR-P1-1)"
+)
+
 
 @dataclass
 class RuntimeRecoveryReport:
@@ -398,12 +420,16 @@ class RuntimeRecoveryReport:
     durable_truth_converged: bool = False
     participants_consolidated: Dict[str, int] = field(default_factory=dict)
     result_continuity_guard_active: bool = False
+    # PR-P1-1: formal in-flight task continuity verdict
+    # Holds a TaskContinuityReport instance when the InFlightTaskContinuityContract
+    # module is available.  None if the module could not be loaded.
+    continuity_report: Optional[Any] = None
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict."""
-        return {
+        result: Dict[str, Any] = {
             "recovery_id": self.recovery_id,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
@@ -431,6 +457,12 @@ class RuntimeRecoveryReport:
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
+        # PR-P1-1: include continuity report if available
+        if self.continuity_report is not None and hasattr(self.continuity_report, "to_dict"):
+            result["continuity_report"] = self.continuity_report.to_dict()
+        else:
+            result["continuity_report"] = None
+        return result
 
     @property
     def duration_seconds(self) -> Optional[float]:
@@ -661,6 +693,23 @@ class RuntimeRestartRecoveryCoordinator:
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
+        # ----------------------------------------------------------------
+        # Step 11: Evaluate in-flight task continuity (PR-P1-1).
+        #
+        #          Produce a formal TaskContinuityReport that distinguishes
+        #          resumed / recoverable / interrupted / abandoned /
+        #          needs_reconcile / ambiguous for each recovered task.
+        #          This closes the gap between state restoration and
+        #          continuity confirmation.  See
+        #          TASK_CONTINUITY_EVALUATION_STEP_POLICY.
+        # ----------------------------------------------------------------
+        try:
+            self._evaluate_task_continuity(report)
+        except Exception as exc:
+            err = f"In-flight task continuity evaluation failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
         report.completed_at = time.time()
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
@@ -670,6 +719,7 @@ class RuntimeRestartRecoveryCoordinator:
             "truth_restored=%d continuation_reconciled=%d "
             "rebinds_registered=%d truth_converged=%s "
             "participants=%d result_guard=%s "
+            "continuity_report=%s "
             "errors=%d",
             report.recovery_id,
             report.mesh_sessions_recovered,
@@ -688,6 +738,7 @@ class RuntimeRestartRecoveryCoordinator:
             report.durable_truth_converged,
             len(report.participants_consolidated),
             report.result_continuity_guard_active,
+            "present" if report.continuity_report is not None else "unavailable",
             len(report.errors),
         )
         return report
@@ -830,6 +881,10 @@ class RuntimeRestartRecoveryCoordinator:
         After counting, this method calls :meth:`_dispatch_recovered_tasks` to
         convert each recovered disposition into a concrete registry action
         (see :data:`RECOVERED_LIFECYCLE_DISPATCH_POLICY`).
+
+        The sets of task_ids that were already_pending and those for which
+        dispatch actions were taken are stored in the report for consumption
+        by the continuity evaluation step (PR-P1-1).
         """
         from core.task_lifecycle_persistence import (
             InFlightTaskDisposition,
@@ -858,13 +913,22 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_terminal,
         )
         # Convert documentary recovery into operational execution behavior.
-        self._dispatch_recovered_tasks(restored, report)
+        # Capture already_pending and dispatched sets for step 11 (PR-P1-1).
+        already_pending_ids, dispatched_ids = self._dispatch_recovered_tasks(
+            restored, report
+        )
+        # Store on the report for the continuity evaluation step.
+        # Using private attrs to avoid polluting the public report schema;
+        # the continuity_report field (PR-P1-1) is the consumer-facing surface.
+        report._recovered_task_records = restored  # type: ignore[attr-defined]
+        report._already_pending_ids = already_pending_ids  # type: ignore[attr-defined]
+        report._dispatched_ids = dispatched_ids  # type: ignore[attr-defined]
 
     def _dispatch_recovered_tasks(
         self,
         restored: "List[Any]",
         report: RuntimeRecoveryReport,
-    ) -> None:
+    ) -> "tuple":
         """Convert recovered lifecycle records into concrete registry actions.
 
         This is the operational conversion step described by
@@ -909,9 +973,23 @@ class RuntimeRestartRecoveryCoordinator:
         report:
             The :class:`RuntimeRecoveryReport` being built; updated with
             ``inflight_tasks_dispatch_actions_taken``.
+
+        Returns
+        -------
+        tuple[set, set]
+            ``(already_pending_ids, dispatched_ids)`` — sets of task_id
+            strings used by the continuity evaluation step (PR-P1-1).
+            ``already_pending_ids`` contains task_ids that were already in
+            the live registry (live state supersedes snapshot).
+            ``dispatched_ids`` contains task_ids for which a dispatch action
+            was taken (re-registered in the registry).
         """
+        # Return empty sets when there are no records — avoids import overhead.
         if not restored:
-            return
+            return set(), set()
+
+        already_pending_ids: set = set()
+        dispatched_ids: set = set()
 
         try:
             from core.task_lifecycle_persistence import InFlightTaskDisposition
@@ -926,7 +1004,7 @@ class RuntimeRestartRecoveryCoordinator:
                 "import failed — %s",
                 exc,
             )
-            return
+            return already_pending_ids, dispatched_ids
 
         # Disposition → canonical registry ownership stage
         _disposition_to_owner = {
@@ -943,7 +1021,7 @@ class RuntimeRestartRecoveryCoordinator:
                 "could not obtain lifecycle registry — %s",
                 exc,
             )
-            return
+            return already_pending_ids, dispatched_ids
 
         actions_taken = 0
         already_pending_skipped = 0
@@ -980,6 +1058,9 @@ class RuntimeRestartRecoveryCoordinator:
             # Duplicate guard — never overwrite a live in-process record.
             if registry.is_pending(rec.task_id):
                 already_pending_skipped += 1
+                # Track for PR-P1-1 continuity evaluation: task was already
+                # live, which means execution continuity was preserved.
+                already_pending_ids.add(rec.task_id)
                 logger.debug(
                     "RuntimeRestartRecovery._dispatch_recovered_tasks: "
                     "task_id=%s already pending — skipping (live record takes "
@@ -1017,6 +1098,8 @@ class RuntimeRestartRecoveryCoordinator:
                 # pylint: disable=protected-access
                 registry._pending[rec.task_id] = pending_record
                 actions_taken += 1
+                # Track for PR-P1-1 continuity evaluation.
+                dispatched_ids.add(rec.task_id)
                 logger.info(
                     "RuntimeRestartRecovery._dispatch_recovered_tasks: "
                     "task_id=%s disposition=%s → owner=%s (operational)",
@@ -1042,6 +1125,7 @@ class RuntimeRestartRecoveryCoordinator:
             report.inflight_tasks_terminal,
             already_pending_skipped,
         )
+        return already_pending_ids, dispatched_ids
 
     def _recover_session_truth(self, report: RuntimeRecoveryReport) -> None:
         """Reload session truth records from the durable snapshot (PR-1).
@@ -1365,6 +1449,91 @@ class RuntimeRestartRecoveryCoordinator:
                 exc,
             )
             report.result_continuity_guard_active = False
+
+    def _evaluate_task_continuity(self, report: RuntimeRecoveryReport) -> None:
+        """Evaluate in-flight task continuity after dispatch (PR-P1-1).
+
+        Reads the recovered task records and dispatch-tracking sets from
+        private attributes set by :meth:`_recover_inflight_tasks`, then
+        calls :class:`~core.inflight_task_continuity_contract
+        .InFlightTaskContinuityContract` to produce a structured
+        :class:`~core.inflight_task_continuity_contract.TaskContinuityReport`.
+
+        The report is stored in :attr:`RuntimeRecoveryReport.continuity_report`
+        and is consumable by acceptance / readiness pipelines.
+
+        This step closes the gap between *state restored* (tasks re-registered
+        in the lifecycle registry) and *continuity confirmed* (execution thread
+        confirmed uninterrupted or formally classified as recoverable, interrupted,
+        abandoned, etc.).
+
+        Degrades gracefully when the continuity contract module is unavailable.
+
+        See :data:`TASK_CONTINUITY_EVALUATION_STEP_POLICY`.
+        """
+        try:
+            from core.inflight_task_continuity_contract import (
+                build_continuity_report,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._evaluate_task_continuity: "
+                "continuity contract module unavailable — %s. "
+                "See TASK_CONTINUITY_EVALUATION_STEP_POLICY.",
+                exc,
+            )
+            return
+
+        # Retrieve the per-task tracking sets stored by _recover_inflight_tasks.
+        restored_records = getattr(report, "_recovered_task_records", None) or []
+        already_pending_ids = getattr(report, "_already_pending_ids", None) or set()
+        dispatched_ids = getattr(report, "_dispatched_ids", None) or set()
+
+        if not restored_records:
+            # No in-flight tasks were recovered; produce an empty report that
+            # still carries the sentinel so consumers know evaluation ran.
+            report.continuity_report = build_continuity_report(
+                [],
+                already_pending_ids=set(),
+                dispatched_ids=set(),
+            )
+            logger.info(
+                "RuntimeRestartRecovery._evaluate_task_continuity: "
+                "no recovered task records — continuity report is empty. "
+                "See TASK_CONTINUITY_EVALUATION_STEP_POLICY."
+            )
+            return
+
+        try:
+            continuity_report = build_continuity_report(
+                restored_records,
+                already_pending_ids=already_pending_ids,
+                dispatched_ids=dispatched_ids,
+            )
+            report.continuity_report = continuity_report
+            logger.info(
+                "RuntimeRestartRecovery._evaluate_task_continuity: "
+                "total=%d resumed=%d recoverable=%d interrupted=%d "
+                "abandoned=%d needs_reconcile=%d ambiguous=%d "
+                "state_restored=%d continuity_restored=%d continuity_gap=%d. "
+                "See TASK_CONTINUITY_EVALUATION_STEP_POLICY.",
+                continuity_report.total_evaluated,
+                continuity_report.resumed_count,
+                continuity_report.recoverable_count,
+                continuity_report.interrupted_count,
+                continuity_report.abandoned_count,
+                continuity_report.needs_reconcile_count,
+                continuity_report.ambiguous_count,
+                continuity_report.state_restored_count,
+                continuity_report.continuity_restored_count,
+                continuity_report.continuity_gap_count,
+            )
+        except Exception as exc:
+            logger.warning(
+                "RuntimeRestartRecovery._evaluate_task_continuity: "
+                "evaluation failed — %s",
+                exc,
+            )
 
 
 # ---------------------------------------------------------------------------
