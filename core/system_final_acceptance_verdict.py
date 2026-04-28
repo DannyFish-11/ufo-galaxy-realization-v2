@@ -681,15 +681,32 @@ except Exception:
     _RECOVERY_AVAILABLE = False
     _build_recovery_snapshot = None  # type: ignore[assignment]
 
-# AndroidDelegatedRuntimeAuditRecorder — android_participant dimension
+# AndroidParticipantEvidenceIngress — android_participant dimension
+# Uses a structured file-based evidence contract rather than a direct import
+# of the Android-side audit module, allowing evidence to be ingested from
+# JSON artifacts produced by the Android participant.
+try:
+    from core.android_participant_evidence_ingress import (  # type: ignore[import]
+        ingest_android_participant_evidence as _ingest_android_evidence,
+        AndroidParticipantStatus as _AndroidParticipantStatus,
+    )
+    _ANDROID_EVIDENCE_INGRESS_AVAILABLE = True
+except Exception:
+    _ANDROID_EVIDENCE_INGRESS_AVAILABLE = False
+    _ingest_android_evidence = None  # type: ignore[assignment]
+    _AndroidParticipantStatus = None  # type: ignore[assignment]
+
+# Also try the legacy direct audit recorder import (for backward compat when
+# available in the same process — e.g. when running with the full dual-repo
+# environment).  Not required; the evidence ingress layer is authoritative.
 try:
     from core.android_delegated_runtime_audit import (  # type: ignore[import]
-        get_audit_recorder as _get_audit_recorder,
+        get_android_delegated_audit_recorder as _get_android_delegated_audit_recorder,
     )
     _ANDROID_AUDIT_AVAILABLE = True
 except Exception:
     _ANDROID_AUDIT_AVAILABLE = False
-    _get_audit_recorder = None  # type: ignore[assignment]
+    _get_android_delegated_audit_recorder = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -1130,97 +1147,168 @@ class SystemFinalAcceptanceEvaluator:
             )
 
     def _evaluate_android_participant(self) -> AcceptanceChecklistItem:
-        """Probe the AndroidDelegatedRuntimeAuditRecorder."""
+        """Evaluate the Android participant dimension via the evidence ingress layer.
+
+        Uses :func:`~core.android_participant_evidence_ingress.ingest_android_participant_evidence`
+        to load, validate, and normalize a JSON evidence artifact produced by
+        the Android participant.  Falls back to the legacy in-process audit
+        recorder if available and the evidence ingress module is not installed.
+
+        Status mapping
+        --------------
+        ready / recovered          → ``accepted``
+        degraded                   → ``pending``
+        unavailable                → ``unresolved``
+        stale_evidence             → ``unresolved`` (with stale_evidence reason)
+        malformed_evidence         → ``unresolved`` (with malformed_evidence reason)
+        missing_evidence           → ``unresolved`` (with missing_evidence reason)
+        unverified                 → ``pending``
+        """
         dimension = AcceptanceDimensionId.android_participant
-        signal_source = "core.android_delegated_runtime_audit"
+        signal_source = "core.android_participant_evidence_ingress"
 
-        if not _ANDROID_AUDIT_AVAILABLE or _get_audit_recorder is None:
-            return AcceptanceChecklistItem(
-                dimension=dimension,
-                status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "AndroidDelegatedRuntimeAuditRecorder unavailable."
-                ),
-                gap_description=(
-                    "core.android_delegated_runtime_audit is not importable.  "
-                    "Cannot assess Android participant operational evidence.  "
-                    "Ensure the Android audit module is deployed."
-                ),
-                signal_source=signal_source,
-            )
+        # ------------------------------------------------------------------
+        # Primary path: structured evidence ingress layer
+        # ------------------------------------------------------------------
+        if _ANDROID_EVIDENCE_INGRESS_AVAILABLE and _ingest_android_evidence is not None:
+            try:
+                result = _ingest_android_evidence()
+                evidence_dict = result.to_dict()
 
-        try:
-            recorder = _get_audit_recorder()
-            evidence: Dict[str, Any] = {}
-            if hasattr(recorder, "build_snapshot"):
-                snapshot = recorder.build_snapshot()
-                if hasattr(snapshot, "to_dict"):
-                    evidence = snapshot.to_dict()
-                elif isinstance(snapshot, dict):
-                    evidence = snapshot
-            elif hasattr(recorder, "to_dict"):
-                evidence = recorder.to_dict()
-
-            is_operational = evidence.get("is_operational", False)
-            audit_event_count = evidence.get("audit_event_count", 0)
-
-            if is_operational and audit_event_count > 0:
-                return AcceptanceChecklistItem(
-                    dimension=dimension,
-                    status=DimensionStatus.accepted,
-                    evidence_summary=(
-                        f"Android participant operational: {audit_event_count} "
-                        "audit events recorded."
-                    ),
-                    evidence_linkage=evidence,
-                    gap_description="",
-                    signal_source=signal_source,
-                )
-            elif audit_event_count > 0:
-                return AcceptanceChecklistItem(
-                    dimension=dimension,
-                    status=DimensionStatus.pending,
-                    evidence_summary=(
-                        f"Android participant: {audit_event_count} audit "
-                        "events, operational status not confirmed."
-                    ),
-                    evidence_linkage=evidence,
-                    gap_description=(
-                        f"Android audit recorder shows {audit_event_count} "
-                        "events but operational status is not confirmed.  "
-                        "Awaiting full lifecycle and capability-honesty validation."
-                    ),
-                    signal_source=signal_source,
-                )
-            else:
+                if result.status.value in ("ready", "recovered"):
+                    return AcceptanceChecklistItem(
+                        dimension=dimension,
+                        status=DimensionStatus.accepted,
+                        evidence_summary=result.evidence_summary,
+                        evidence_linkage=evidence_dict,
+                        gap_description="",
+                        signal_source=signal_source,
+                    )
+                elif result.status.value in ("degraded", "unverified"):
+                    return AcceptanceChecklistItem(
+                        dimension=dimension,
+                        status=DimensionStatus.pending,
+                        evidence_summary=result.evidence_summary,
+                        evidence_linkage=evidence_dict,
+                        gap_description=result.gap_description,
+                        signal_source=signal_source,
+                    )
+                else:
+                    # missing_evidence, malformed_evidence, stale_evidence,
+                    # unavailable — all map to unresolved
+                    return AcceptanceChecklistItem(
+                        dimension=dimension,
+                        status=DimensionStatus.unresolved,
+                        evidence_summary=result.evidence_summary,
+                        evidence_linkage=evidence_dict,
+                        gap_description=result.gap_description,
+                        signal_source=signal_source,
+                    )
+            except Exception as exc:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
                     evidence_summary=(
-                        "Android participant: no audit events recorded."
+                        "Android participant evidence ingress raised an exception."
                     ),
-                    evidence_linkage=evidence,
                     gap_description=(
-                        "AndroidDelegatedRuntimeAuditRecorder has no audit "
-                        "events.  Android participant has not been exercised "
-                        "or its audit trail is absent.  Treat as unresolved."
+                        f"android_participant_evidence_ingress raised: {exc!r}.  "
+                        "Cannot assess Android participant operational evidence."
                     ),
                     signal_source=signal_source,
                 )
 
-        except Exception as exc:
-            return AcceptanceChecklistItem(
-                dimension=dimension,
-                status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "AndroidDelegatedRuntimeAuditRecorder probe raised an exception."
-                ),
-                gap_description=(
-                    f"AndroidDelegatedRuntimeAuditRecorder raised: {exc!r}.  "
-                    "Cannot assess Android participant operational evidence."
-                ),
-                signal_source=signal_source,
-            )
+        # ------------------------------------------------------------------
+        # Fallback path: legacy in-process audit recorder (dual-repo env)
+        # ------------------------------------------------------------------
+        if _ANDROID_AUDIT_AVAILABLE and _get_android_delegated_audit_recorder is not None:
+            signal_source_fallback = "core.android_delegated_runtime_audit"
+            try:
+                recorder = _get_android_delegated_audit_recorder()
+                evidence: Dict[str, Any] = {}
+                # Support both snapshot() (current API) and build_snapshot() (alt)
+                if hasattr(recorder, "snapshot"):
+                    snap = recorder.snapshot()
+                    if hasattr(snap, "to_dict"):
+                        evidence = snap.to_dict()
+                    elif isinstance(snap, dict):
+                        evidence = snap
+                elif hasattr(recorder, "build_snapshot"):
+                    snap = recorder.build_snapshot()
+                    if hasattr(snap, "to_dict"):
+                        evidence = snap.to_dict()
+                    elif isinstance(snap, dict):
+                        evidence = snap
+                elif hasattr(recorder, "to_dict"):
+                    evidence = recorder.to_dict()
+
+                # AndroidDelegatedAuditSnapshot.to_dict() uses "event_count"
+                audit_event_count = (
+                    evidence.get("event_count")
+                    or evidence.get("audit_event_count")
+                    or 0
+                )
+
+                if audit_event_count > 0:
+                    return AcceptanceChecklistItem(
+                        dimension=dimension,
+                        status=DimensionStatus.accepted,
+                        evidence_summary=(
+                            f"Android participant operational (in-process audit): "
+                            f"{audit_event_count} audit events recorded."
+                        ),
+                        evidence_linkage=evidence,
+                        gap_description="",
+                        signal_source=signal_source_fallback,
+                    )
+                else:
+                    return AcceptanceChecklistItem(
+                        dimension=dimension,
+                        status=DimensionStatus.unresolved,
+                        evidence_summary=(
+                            "Android participant: no audit events in in-process recorder."
+                        ),
+                        evidence_linkage=evidence,
+                        gap_description=(
+                            "AndroidDelegatedRuntimeAuditRecorder has no audit events.  "
+                            "Android participant has not been exercised or its audit trail "
+                            "is absent.  Treat as unresolved."
+                        ),
+                        signal_source=signal_source_fallback,
+                    )
+            except Exception as exc:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "AndroidDelegatedRuntimeAuditRecorder probe raised an exception."
+                    ),
+                    gap_description=(
+                        f"AndroidDelegatedRuntimeAuditRecorder raised: {exc!r}.  "
+                        "Cannot assess Android participant operational evidence."
+                    ),
+                    signal_source=signal_source_fallback,
+                )
+
+        # ------------------------------------------------------------------
+        # Both paths unavailable — neither ingress layer nor audit recorder
+        # ------------------------------------------------------------------
+        return AcceptanceChecklistItem(
+            dimension=dimension,
+            status=DimensionStatus.unresolved,
+            evidence_summary=(
+                "Android participant evidence ingress layer unavailable."
+            ),
+            gap_description=(
+                "core.android_participant_evidence_ingress is not importable and "
+                "core.android_delegated_runtime_audit is also unavailable.  "
+                "Cannot assess Android participant operational evidence.  "
+                "Ensure core/android_participant_evidence_ingress.py is present "
+                "in the repository and ANDROID_PARTICIPANT_EVIDENCE_PATH points "
+                "to a valid evidence artifact."
+            ),
+            signal_source=signal_source,
+        )
 
     # ------------------------------------------------------------------
     # Aggregation helpers
