@@ -368,6 +368,19 @@ class AcceptanceDimensionId(str, Enum):
         because delegated hooks exist, and that the canonical participant
         role (primary / delegated / secondary / observer) and capability
         tier of every multi-device surface are explicitly classified.
+
+    conversation_continuity_truth
+        Formal conversation continuity taxonomy and structured verdict
+        surface for crash / restart / process death / partial recovery
+        (core.conversation_continuity_truth, PR-CCT).  Answers: after a
+        crash or restart, is conversation continuity authoritatively
+        restored, or is the system only seeing history residue / partial
+        state that must not be conflated with authoritative continuity?
+        Distinguishes five tiers: authoritative_continuity_restored,
+        partial_continuity, history_only_restored,
+        state_restored_rebind_required, and continuity_lost.  Enforces
+        that history visible / state present / task resumed are NOT
+        sufficient alone to claim authoritative conversation continuity.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -378,6 +391,7 @@ class AcceptanceDimensionId(str, Enum):
     recovery_truth_surface = "recovery_truth_surface"
     cross_repo_evidence_pipeline = "cross_repo_evidence_pipeline"
     multi_device_canonical_governance = "multi_device_canonical_governance"
+    conversation_continuity_truth = "conversation_continuity_truth"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -391,7 +405,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all eight dimensions in canonical evaluation order."""
+        """Return all nine dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -401,6 +415,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.recovery_truth_surface,
             cls.cross_repo_evidence_pipeline,
             cls.multi_device_canonical_governance,
+            cls.conversation_continuity_truth,
         ]
 
 
@@ -829,10 +844,21 @@ except Exception:
     _build_md_governance_report = None  # type: ignore[assignment]
     _MDGovernanceVerdict = None  # type: ignore[assignment]
 
-
-# ---------------------------------------------------------------------------
-# SystemFinalAcceptanceEvaluator
-# ---------------------------------------------------------------------------
+# ConversationContinuityTruth (PR-CCT) — formal conversation continuity
+# taxonomy and verdict surface for crash / restart / process death /
+# partial recovery.
+try:
+    from core.conversation_continuity_truth import (  # type: ignore[import]
+        evaluate_session_continuity_after_restart as _evaluate_conv_continuity,
+        ConversationContinuityStatus as _ConvContinuityStatus,
+        CONVERSATION_CONTINUITY_TRUTH_AUTHORITY as _CONV_CONTINUITY_AUTHORITY,
+    )
+    _CONV_CONTINUITY_AVAILABLE = True
+except Exception:
+    _CONV_CONTINUITY_AVAILABLE = False
+    _evaluate_conv_continuity = None  # type: ignore[assignment]
+    _ConvContinuityStatus = None  # type: ignore[assignment]
+    _CONV_CONTINUITY_AUTHORITY = ""  # type: ignore[assignment]
 
 
 class SystemFinalAcceptanceEvaluator:
@@ -867,7 +893,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all seven acceptance dimensions and produce a report.
+        """Evaluate all nine acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -886,6 +912,7 @@ class SystemFinalAcceptanceEvaluator:
         item_recovery_truth = self._evaluate_recovery_truth_surface()
         item_cross_repo = self._evaluate_cross_repo_evidence_pipeline()
         item_md_governance = self._evaluate_multi_device_canonical_governance()
+        item_conv_continuity = self._evaluate_conversation_continuity_truth()
 
         for item in (
             item_runtime,
@@ -896,6 +923,7 @@ class SystemFinalAcceptanceEvaluator:
             item_recovery_truth,
             item_cross_repo,
             item_md_governance,
+            item_conv_continuity,
         ):
             checklist[item.dimension.value] = item
 
@@ -1957,22 +1985,176 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
-    # ------------------------------------------------------------------
-    # Aggregation helpers
-    # ------------------------------------------------------------------
+    def _evaluate_conversation_continuity_truth(self) -> AcceptanceChecklistItem:
+        """Evaluate the formal conversation continuity truth dimension (PR-CCT).
+
+        Consumes
+        :func:`~core.conversation_continuity_truth.evaluate_session_continuity_after_restart`
+        to produce a structured view of whether conversation continuity has
+        been authoritatively restored after crash / restart / process death /
+        partial recovery — or whether the system is only observing state
+        residue that must not be conflated with authoritative continuity.
+
+        Status mapping
+        --------------
+        All sessions: ``authoritative_continuity_restored``
+            → ``accepted``  (conversation continuity formally confirmed)
+        Some ``authoritative``, some ``partial``
+            → ``pending``   (partial but not full conversation continuity)
+        Any ``history_only_restored`` or ``state_restored_rebind_required``
+            → ``pending``   (rebind required before full continuity)
+        Any ``continuity_lost`` with no authoritative sessions
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.conversation_continuity_truth
+        signal_source = "core.conversation_continuity_truth"
+
+        if not _CONV_CONTINUITY_AVAILABLE or _evaluate_conv_continuity is None:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConversationContinuityTruth (PR-CCT) module unavailable."
+                ),
+                gap_description=(
+                    "core.conversation_continuity_truth is not importable.  "
+                    "Cannot assess formal conversation continuity after "
+                    "crash / restart / process death.  "
+                    "Ensure core/conversation_continuity_truth.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            report = _evaluate_conv_continuity()
+            report_dict = report.to_dict()
+
+            authoritative = report.authoritative_count
+            partial = report.partial_count
+            history_only = report.history_only_count
+            rebind_required = report.rebind_required_count
+            lost = report.lost_count
+            total = len(report.verdicts)
+
+            # All sessions authoritative → accepted
+            if total > 0 and authoritative == total:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.accepted,
+                    evidence_summary=(
+                        f"ConversationContinuityTruth: all {total} session(s) have "
+                        "authoritative_continuity_restored verdict.  "
+                        "Conversation continuity formally confirmed."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description="",
+                    signal_source=signal_source,
+                )
+
+            # No sessions evaluated (probe module present but no sessions)
+            if total == 0:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.pending,
+                    evidence_summary=(
+                        "ConversationContinuityTruth: no sessions evaluated "
+                        "(no active sessions in this process instance).  "
+                        "Contract structure is present and wired."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description=(
+                        "ConversationContinuityTruth: zero sessions evaluated.  "
+                        "This is honest: no conversation sessions are active in "
+                        "this process instance.  Contract structure is wired; "
+                        "will produce verdicts when sessions are present."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Any lost with no authoritative → unresolved
+            if lost > 0 and authoritative == 0:
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        f"ConversationContinuityTruth: {lost}/{total} session(s) "
+                        "have continuity_lost verdict.  No authoritative sessions."
+                    ),
+                    evidence_linkage=report_dict,
+                    gap_description=(
+                        f"ConversationContinuityTruth: {lost} session(s) with "
+                        "continuity_lost and no authoritative sessions.  "
+                        "Conversation continuity cannot be claimed.  "
+                        f"history_only={history_only}, rebind_required={rebind_required}, "
+                        f"partial={partial}."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Mixed: some authoritative, some not → pending
+            gap_parts: List[str] = [
+                f"ConversationContinuityTruth: {authoritative}/{total} authoritative, "
+                f"{partial} partial, {history_only} history_only, "
+                f"{rebind_required} rebind_required, {lost} lost.  "
+            ]
+            if history_only > 0:
+                gap_parts.append(
+                    f"{history_only} session(s) are history_only_restored: "
+                    "rebind required before authoritative continuity.  "
+                    "REBIND_INCOMPLETE_BLOCKS_AUTHORITATIVE_CONTINUITY_POLICY applied.  "
+                )
+            if rebind_required > 0:
+                gap_parts.append(
+                    f"{rebind_required} session(s) are state_restored_rebind_required: "
+                    "state present but live rebind has not been completed.  "
+                    "STATE_RESTORED_IS_NOT_CONVERSATION_CONTINUITY_POLICY applied.  "
+                )
+            if partial > 0:
+                gap_parts.append(
+                    f"{partial} session(s) are partial_continuity: "
+                    "some evidence present but not all conditions met.  "
+                )
+
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    f"ConversationContinuityTruth: {authoritative}/{total} "
+                    "session(s) authoritative; mixed verdicts present."
+                ),
+                evidence_linkage=report_dict,
+                gap_description="".join(gap_parts),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConversationContinuityTruth probe raised an exception."
+                ),
+                gap_description=(
+                    f"evaluate_session_continuity_after_restart raised: {exc!r}.  "
+                    "Cannot assess conversation continuity truth."
+                ),
+                signal_source=signal_source,
+            )
 
     @staticmethod
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the eight dimension items.
+        """Derive the system-level verdict from the nine dimension items.
 
         Policy:
-        - All eight dimensions must be ``accepted`` → ``fully_operational``
+        - All nine dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all eight dimensions →
+        - Checklist does not contain all nine dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()

@@ -1018,9 +1018,80 @@ def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
         )
 
 
-# ---------------------------------------------------------------------------
-# V2ReadinessGovernanceEvidenceSurface
-# ---------------------------------------------------------------------------
+def _probe_conversation_continuity_truth() -> "EvidenceDimensionEntry":
+    """Probe the Conversation Continuity Truth Contract (PR-CCT)."""
+    dim_id = "conversation_continuity_truth"
+    code_ref = (
+        "core.conversation_continuity_truth."
+        "evaluate_session_continuity_after_restart"
+    )
+    test_ref = "tests/test_conversation_continuity_truth.py"
+    try:
+        from core.conversation_continuity_truth import (
+            evaluate_session_continuity_after_restart,
+            ConversationContinuityStatus,
+            CONVERSATION_CONTINUITY_TRUTH_AUTHORITY,
+        )
+        report = evaluate_session_continuity_after_restart()
+        total = len(report.verdicts)
+        authoritative = report.authoritative_count
+        partial = report.partial_count
+        history_only = report.history_only_count
+        rebind_required = report.rebind_required_count
+        lost = report.lost_count
+
+        summary = (
+            f"ConversationContinuityTruth: {total} session(s) evaluated; "
+            f"authoritative={authoritative}, partial={partial}, "
+            f"history_only={history_only}, rebind_required={rebind_required}, "
+            f"lost={lost}.  "
+            "Contract enforces: history_visible ≠ continuity restored; "
+            "task_continuity ≠ conversation_continuity; "
+            "state_restored ≠ conversation_continuity; "
+            "rebind_incomplete blocks authoritative verdict."
+        )
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name=(
+                "Conversation Continuity Truth Contract — "
+                "crash / restart / process death continuity taxonomy (PR-CCT)"
+            ),
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="present",
+            evidence_summary=summary,
+            code_reference=code_ref,
+            test_reference=test_ref,
+            raw_evidence=report.to_dict(),
+            notes=(
+                "Five-tier taxonomy: authoritative_continuity_restored, "
+                "partial_continuity, history_only_restored, "
+                "state_restored_rebind_required, continuity_lost.  "
+                "Downgrade semantics: no optimistic upgrade when evidence is "
+                "absent or ambiguous.  "
+                "Enforces PR-CCT policies: HISTORY_VISIBLE_IS_NOT_CONVERSATION_"
+                "CONTINUITY, TASK_CONTINUITY_IS_NOT_CONVERSATION_CONTINUITY, "
+                "STATE_RESTORED_IS_NOT_CONVERSATION_CONTINUITY, "
+                "REBIND_INCOMPLETE_BLOCKS_AUTHORITATIVE_CONTINUITY, "
+                "EVIDENCE_ABSENT_MUST_NOT_UPGRADE_VERDICT."
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return EvidenceDimensionEntry(
+            dimension_id=dim_id,
+            display_name=(
+                "Conversation Continuity Truth Contract — "
+                "crash / restart / process death continuity taxonomy (PR-CCT)"
+            ),
+            classification=EvidenceClassification.canonical.value,
+            evidence_status="unavailable",
+            evidence_summary=f"ConversationContinuityTruth unavailable: {exc}",
+            code_reference=code_ref,
+            test_reference=test_ref,
+            notes=(
+                "Module import failed; ensure "
+                "core/conversation_continuity_truth.py is present."
+            ),
+        )
 
 
 class V2ReadinessGovernanceEvidenceSurface:
@@ -1046,6 +1117,7 @@ class V2ReadinessGovernanceEvidenceSurface:
         (_probe_delegated_flow_decision_history, None),
         (_probe_recovery_truth_surface, None),
         (_probe_canonical_cross_repo_pipeline, None),
+        (_probe_conversation_continuity_truth, None),
     ]
 
     _DEFERRED_NOTES: List[str] = [
