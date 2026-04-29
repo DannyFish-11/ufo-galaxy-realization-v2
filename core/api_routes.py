@@ -606,10 +606,78 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
                 elif msg_type == "task_result":
                     task_id = data.get("task_id", "")
-                    if task_id in task_queue:
-                        task_queue[task_id]["status"] = "completed"
-                        task_queue[task_id]["result"] = data.get("result", {})
-                        task_queue[task_id]["completed_at"] = datetime.now().isoformat()
+                    if task_id:
+                        # ── Compat-path idempotency guard ──────────────────
+                        # Android OfflineTaskQueue can replay task_result messages
+                        # on reconnect.  Suppress duplicate results so that an
+                        # already-closed task is not re-processed.
+                        _compat_already_seen = False
+                        try:
+                            from core.durable_result_idempotency import (
+                                check_result_idempotency as _check_idem,
+                                record_result_idempotency as _record_idem,
+                            )
+                            if _check_idem(task_id):
+                                _compat_already_seen = True
+                                logger.debug(
+                                    "compat_ws: duplicate task_result suppressed "
+                                    "(durable store): task_id=%s device_id=%s",
+                                    task_id,
+                                    device_id,
+                                )
+                            else:
+                                _record_idem(task_id)
+                        except Exception as _idem_err:
+                            logger.debug(
+                                "compat_ws: idempotency check skipped (non-fatal): %s",
+                                _idem_err,
+                            )
+
+                        if not _compat_already_seen:
+                            # ── Status truth mapping ───────────────────────
+                            # Android sends the real status field (success/failed/
+                            # error/cancelled).  Map it to an honest completion
+                            # status instead of unconditionally claiming "completed".
+                            _raw_status = str(data.get("status", "")).lower().strip()
+                            if _raw_status in ("failed", "error"):
+                                _mapped_status = "failed"
+                            elif _raw_status == "cancelled":
+                                _mapped_status = "cancelled"
+                            elif _raw_status == "degraded":
+                                _mapped_status = "degraded"
+                            else:
+                                _mapped_status = "completed"
+
+                            if task_id in task_queue:
+                                task_queue[task_id]["status"] = _mapped_status
+                                task_queue[task_id]["result"] = data.get("result", {})
+                                task_queue[task_id]["completed_at"] = datetime.now().isoformat()
+
+                            # ── Truth chain (best-effort) ──────────────────
+                            # Run the canonical four-step truth chain so that the
+                            # execution tracker, lifecycle, and completion ingress
+                            # are updated even on the compat path.
+                            try:
+                                from core.task_result_canonical_truth_chain import (
+                                    run_task_result_truth_chain as _run_ttc,
+                                )
+                                _ttc_outcome = _run_ttc(
+                                    data,
+                                    task_id=task_id,
+                                    result_status=_mapped_status,
+                                )
+                                if not _ttc_outcome.is_truth_chain_complete:
+                                    logger.debug(
+                                        "compat_ws: task_result truth chain incomplete "
+                                        "task_id=%s: %s",
+                                        task_id,
+                                        _ttc_outcome.incomplete_reason,
+                                    )
+                            except Exception as _ttc_err:
+                                logger.debug(
+                                    "compat_ws: truth chain skipped (non-fatal): %s",
+                                    _ttc_err,
+                                )
 
                 elif msg_type == "ocr_request":
                     image_b64 = data.get("image", "")
