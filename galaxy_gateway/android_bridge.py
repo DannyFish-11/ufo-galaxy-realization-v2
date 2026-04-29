@@ -871,7 +871,48 @@ class AndroidBridge:
         The ``trace_id`` embedded in *payload* by the orchestrator dispatch
         path is surfaced as a top-level AIP message field for end-to-end
         observability (see PR-G4 / ``get_android_bridge_trace_id``).
+
+        Registration gap guard
+        ----------------------
+        Before dispatching, the registration completeness of *device_id* is
+        checked via :func:`~galaxy_gateway.android.handlers.registration.is_registration_fully_attached`.
+        If downstream registration steps (``attach_runtime_session``,
+        ``attached_runtime_session_registry``, etc.) failed for this device,
+        :class:`~galaxy_gateway.android.handlers.registration.DispatchBlockedByRegistrationGapError`
+        is raised rather than silently proceeding with an incompletely attached
+        device.  This converts what was previously a best-effort gap into an
+        explicit machine-observable dispatch block.
+
+        Note: the guard only fires when gaps were *recorded* for this
+        device_id.  Devices that were never registered through the canonical
+        handler (e.g. in unit tests that construct devices directly) are
+        considered gap-free and pass through unaffected.
         """
+        # Registration completeness guard — raises DispatchBlockedByRegistrationGapError
+        # when the device has recorded attachment gaps from its registration attempt.
+        try:
+            from galaxy_gateway.android.handlers.registration import (
+                get_registration_gaps,
+                DispatchBlockedByRegistrationGapError,
+            )
+            _gaps = get_registration_gaps(device_id)
+            if _gaps:
+                logger.warning(
+                    "AndroidBridge.assign_task: DISPATCH BLOCKED — device_id=%s has "
+                    "incomplete registration attachment gaps=%s; raising "
+                    "DispatchBlockedByRegistrationGapError",
+                    device_id, _gaps,
+                )
+                raise DispatchBlockedByRegistrationGapError(device_id, _gaps)
+        except DispatchBlockedByRegistrationGapError:
+            raise
+        except Exception as _gap_check_err:
+            logger.debug(
+                "AndroidBridge.assign_task: registration gap check skipped "
+                "(registration module unavailable or import failed) — %s",
+                _gap_check_err,
+            )
+
         # Extract trace_id from payload if the orchestrator embedded it there.
         # Surfacing it at the top level makes it visible to get_android_bridge_trace_id
         # and to any log-line inspection without needing to unwrap the payload.

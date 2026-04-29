@@ -276,6 +276,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         Android/device execution taxonomy.  The status is normalised to the
         canonical V2 vocabulary before being written — a failed or cancelled
         result is **not** recorded as ``completed``.
+
+        State consistency (PR-893)
+        --------------------------
+        After updating ``task_queue`` the handler also advances the
+        :class:`~core.canonical_task.CanonicalTaskRuntime` lifecycle to the
+        matching terminal state so that both state surfaces agree.  Without
+        this step the REST result path could leave ``CanonicalTaskRuntime`` in
+        a stale intermediate lifecycle (e.g. ``dispatched``) while
+        ``task_queue`` already reflects ``completed`` or ``failed``,
+        creating the dual-track state drift described in PR-893.
         """
         if task_id not in task_queue:
             raise HTTPException(status_code=404, detail="任务未找到")
@@ -287,6 +297,33 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         task_queue[task_id]["completed_at"] = datetime.now().isoformat()
         if payload and payload.result is not None:
             task_queue[task_id]["result"] = payload.result
+
+        # PR-893: sync CanonicalTaskRuntime to the same terminal state so the
+        # two authority surfaces do not drift apart.
+        try:
+            from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+            _runtime = get_canonical_task_runtime()
+            _status_lower = canonical_status.lower()
+            if _status_lower == "failed":
+                _target = TaskLifecycle.FAILED
+            elif _status_lower == "cancelled":
+                _target = TaskLifecycle.CANCELLED
+            elif _status_lower == "degraded":
+                _target = TaskLifecycle.DEGRADED
+            else:
+                _target = TaskLifecycle.COMPLETED
+            _runtime.update_lifecycle(task_id, _target)
+            logger.debug(
+                "submit_task_result: CanonicalTaskRuntime synced task_id=%s lifecycle=%s",
+                task_id, _target.value,
+            )
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _sync_err:
+            logger.warning(
+                "submit_task_result: CanonicalTaskRuntime sync failed task_id=%s error=%s — "
+                "task_queue was updated but CanonicalTaskRuntime lifecycle may be stale",
+                task_id, _sync_err,
+            )
+
         return {"success": True, "status": canonical_status}
 
     @router.delete("/api/v1/tasks/{task_id}/cancel")
