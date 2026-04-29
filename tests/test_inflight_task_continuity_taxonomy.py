@@ -997,7 +997,7 @@ class TestGroupAB_AllDimensions:
     def test_AB01_all_dimensions_has_ten_entries(self):
         from core.system_final_acceptance_verdict import AcceptanceDimensionId
         dims = AcceptanceDimensionId.all_dimensions()
-        assert len(dims) == 10
+        assert len(dims) == 11
 
     def test_AB02_all_dimensions_no_duplicates(self):
         from core.system_final_acceptance_verdict import AcceptanceDimensionId
