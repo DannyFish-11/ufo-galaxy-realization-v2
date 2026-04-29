@@ -559,4 +559,60 @@ async def handle_goal_execution_result(
             )
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
+
+    # ── PR-UNIFY: CanonicalCompletionIngress notify + _pending_responses ─────
+    # These two steps were previously missing from this handler, causing a
+    # gap where "result arrived" did not imply "completion chain closed":
+    # - CanonicalCompletionIngress.notify() unblocks any asyncio Future or
+    #   registered awaiter waiting for this task_id/handoff_id.
+    # - bridge._pending_responses: resolves any send_to_device(wait_response=True)
+    #   future keyed by task_id, unblocking callers that await device results.
+    try:
+        from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci
+
+        _cci = _get_cci()
+
+        class _Envelope:
+            is_terminal: bool = True
+            handoff_id: str = ""
+            task_id: str = ""
+
+        _env = _Envelope()
+        _env.is_terminal = True
+        _env.handoff_id = payload.get("handoff_id") or ""
+        _env.task_id = task_id
+
+        _cci.notify(_env)
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: CanonicalCompletionIngress notified task_id=%s",
+            task_id,
+        )
+    except Exception as _cci_err:
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: CanonicalCompletionIngress notify failed (non-fatal): %s",
+            _cci_err,
+        )
+
+    # Resolve bridge._pending_responses future keyed by task_id (if present).
+    try:
+        _pending = getattr(bridge, "_pending_responses", None)
+        if _pending is not None and task_id in _pending:
+            _future = _pending.pop(task_id, None)
+            if _future is not None and not _future.done():
+                _future.set_result({
+                    "status": status,
+                    "task_id": task_id,
+                    "result": result_text,
+                    "source": "canonical_ws",
+                })
+                logger.debug(
+                    "GOAL_EXECUTION_RESULT: _pending_responses future resolved task_id=%s",
+                    task_id,
+                )
+    except Exception as _pr_err:
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: _pending_responses resolution failed (non-fatal): %s",
+            _pr_err,
+        )
+
     return None
