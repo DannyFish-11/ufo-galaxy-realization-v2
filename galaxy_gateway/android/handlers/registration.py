@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 #
 # Bounded to _REG_GAP_MAX_ENTRIES entries (LRU eviction) so it never grows
 # unboundedly.
+#
+# 512 entries covers the registration history of a large fleet of devices in
+# a single process.  A device registers once per session; 512 entries retain
+# the gap state for up to 512 unique device sessions before the oldest are
+# evicted.  This is intentionally smaller than the truth chain ledger because
+# device registrations are far less frequent than task results.
 
 _REG_GAP_MAX_ENTRIES: int = 512
 _device_registration_gaps: OrderedDict = OrderedDict()

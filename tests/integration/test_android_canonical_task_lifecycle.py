@@ -55,12 +55,15 @@ Verdict labels used in assertions
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +457,7 @@ class TestTaskResultAndTruthChain:
             assert recorded.incomplete_reason, (
                 "Ledger entry must have a non-empty incomplete_reason"
             )
-            # Confirm which specific steps are missing so CI logs are actionable.
+            # Log which specific steps are missing so CI output is actionable.
             missing_steps = []
             if recorded.truth_ingress_status == StepStatus.SKIPPED_MODULE_UNAVAILABLE:
                 missing_steps.append("truth_ingress (android_participant_truth_ingress)")
@@ -464,12 +467,10 @@ class TestTaskResultAndTruthChain:
                 missing_steps.append("authority_state_update (canonical_task / CanonicalTaskRuntime)")
             if recorded.completion_linkage_status == StepStatus.SKIPPED_MODULE_UNAVAILABLE:
                 missing_steps.append("completion_linkage (canonical_completion_ingress)")
-            # This assert always passes — it exists to surface the missing steps in
-            # the test output so maintainers know exactly what remains unresolved.
-            assert True, (
-                f"SEGMENT 3 UNRESOLVED-OBSERVABLE: truth chain missing steps: {missing_steps}. "
-                "These are recorded in the IncompleteResultLedger — "
-                "machine-visible but not yet closed."
+            logger.info(
+                "SEGMENT 3 UNRESOLVED-OBSERVABLE: truth chain missing steps: %s — "
+                "recorded in IncompleteResultLedger, machine-visible but not yet closed.",
+                missing_steps,
             )
 
     @pytest.mark.asyncio
@@ -638,8 +639,7 @@ class TestFullCanonicalLifecycleRoundtrip:
         seg1_verdict = "CLOSED" if is_registration_fully_attached(device_id) else (
             f"PARTIAL/UNRESOLVED-OBSERVABLE (gaps={gaps})"
         )
-        # Always passes — verdict surfaces in message.
-        assert True, f"SEGMENT 1 registration attachment verdict: {seg1_verdict}"
+        logger.info("SEGMENT 1 registration attachment verdict: %s", seg1_verdict)
 
         # ── Segment 2: heartbeat ──────────────────────────────────────────
         hb_ack = await bridge.handle_message(ws, _v3("heartbeat", device_id))
@@ -699,8 +699,7 @@ class TestFullCanonicalLifecycleRoundtrip:
         except ImportError:
             seg5_verdict = "UNRESOLVED: truth chain module unavailable"
 
-        # Always passes — verdict is machine-visible in assertion message.
-        assert True, f"SEGMENT 5 truth chain verdict: {seg5_verdict}"
+        logger.info("SEGMENT 5 truth chain verdict: %s", seg5_verdict)
 
         # Summary assertion that is checkable by test tooling:
         # The lifecycle did NOT silently succeed without any observable state.

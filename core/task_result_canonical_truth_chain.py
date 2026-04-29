@@ -458,6 +458,11 @@ class IncompleteResultLedger:
                 print(outcome.task_id, outcome.incomplete_reason)
     """
 
+    # 1024 entries covers a generous window of recent incomplete results in a
+    # long-running process.  A typical high-throughput gateway processes tens of
+    # tasks per second; 1024 entries retain roughly 10–30 seconds of incomplete
+    # history before the oldest entries are evicted.  Increasing this value uses
+    # more memory; decreasing it shortens the observable window.
     _MAX_ENTRIES: int = 1024
 
     def __init__(self) -> None:
