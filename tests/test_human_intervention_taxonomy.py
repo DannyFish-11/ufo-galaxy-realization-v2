@@ -868,6 +868,21 @@ class TestFromString:
         result = HumanInterventionClass.from_string(None)  # type: ignore[arg-type]
         assert result == HumanInterventionClass.escalation_required
 
+    @_skip_taxonomy
+    def test_AL04_integer_input_defaults_to_escalation_required(self):
+        result = HumanInterventionClass.from_string(42)  # type: ignore[arg-type]
+        assert result == HumanInterventionClass.escalation_required
+
+    @_skip_taxonomy
+    def test_AL05_list_input_defaults_to_escalation_required(self):
+        result = HumanInterventionClass.from_string(["autonomous_closure"])  # type: ignore[arg-type]
+        assert result == HumanInterventionClass.escalation_required
+
+    @_skip_taxonomy
+    def test_AL06_dict_input_defaults_to_escalation_required(self):
+        result = HumanInterventionClass.from_string({"value": "autonomous_closure"})  # type: ignore[arg-type]
+        assert result == HumanInterventionClass.escalation_required
+
 
 # ===========================================================================
 # AM — classify_autonomy_level consistency

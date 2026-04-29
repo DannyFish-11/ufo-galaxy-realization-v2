@@ -446,7 +446,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.multi_device_canonical_governance,
             cls.conversation_continuity,
             cls.task_continuity,
-            cls.human_intervention,
+            cls.human_intervention,  # 11th dimension — PR-08 human intervention taxonomy
         ]
 
 
