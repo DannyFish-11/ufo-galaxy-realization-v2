@@ -408,6 +408,19 @@ class AcceptanceDimensionId(str, Enum):
         system reached autonomous operational closure", and that any human
         involvement in the closure path is honestly surfaced rather than
         optimistically suppressed.
+
+    offline_operational
+        Formal offline / disconnected / delayed-sync operational taxonomy
+        (core.offline_operational_contract, PR-10).  Answers: what is the
+        authoritative operational class for a participant or system surface
+        with respect to connectivity and sync state?  Distinguishes
+        online_operational, bounded_disconnected_resumable,
+        offline_deferred_sync, pending_reconciliation, and unavailable.
+        This dimension enforces that the system does not conflate "will
+        eventually sync back" (deferred evidence return) with "is
+        continuously online operational" (uninterrupted active connection),
+        and that any disconnected, offline, or deferred-sync scenario is
+        honestly classified rather than optimistically promoted.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -421,6 +434,7 @@ class AcceptanceDimensionId(str, Enum):
     conversation_continuity = "conversation_continuity"
     task_continuity = "task_continuity"
     human_intervention = "human_intervention"
+    offline_operational = "offline_operational"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -434,7 +448,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all eleven dimensions in canonical evaluation order."""
+        """Return all twelve dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -447,6 +461,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.conversation_continuity,
             cls.task_continuity,
             cls.human_intervention,
+            cls.offline_operational,
         ]
 
 
@@ -931,6 +946,27 @@ except Exception:
     _HumanInterventionEvidence = None  # type: ignore[assignment]
     _HUMAN_INTERVENTION_AUTHORITY = ""
 
+# OfflineOperationalContract (PR-10) — offline / disconnected / delayed-sync
+# operational taxonomy dimension.  Probes whether the formal operational
+# taxonomy is available and correctly produces conservative (unavailable)
+# verdicts when no connectivity or evidence is present.
+try:
+    from core.offline_operational_contract import (  # type: ignore[import]
+        build_offline_operational_verdict as _build_offline_operational_verdict,
+        build_baseline_offline_operational_verdict as _build_baseline_offline_verdict,
+        OfflineOperationalClass as _OfflineOperationalClass,
+        OfflineOperationalEvidence as _OfflineOperationalEvidence,
+        OFFLINE_OPERATIONAL_CONTRACT_AUTHORITY as _OFFLINE_OPERATIONAL_AUTHORITY,
+    )
+    _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE = True
+except Exception:
+    _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE = False
+    _build_offline_operational_verdict = None  # type: ignore[assignment]
+    _build_baseline_offline_verdict = None  # type: ignore[assignment]
+    _OfflineOperationalClass = None  # type: ignore[assignment]
+    _OfflineOperationalEvidence = None  # type: ignore[assignment]
+    _OFFLINE_OPERATIONAL_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -991,6 +1027,7 @@ class SystemFinalAcceptanceEvaluator:
         item_conv_continuity = self._evaluate_conversation_continuity()
         item_task_continuity = self._evaluate_task_continuity()
         item_human_intervention = self._evaluate_human_intervention()
+        item_offline_operational = self._evaluate_offline_operational()
 
         for item in (
             item_runtime,
@@ -1004,6 +1041,7 @@ class SystemFinalAcceptanceEvaluator:
             item_conv_continuity,
             item_task_continuity,
             item_human_intervention,
+            item_offline_operational,
         ):
             checklist[item.dimension.value] = item
 
@@ -2471,6 +2509,146 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_offline_operational(self) -> AcceptanceChecklistItem:
+        """Evaluate the offline / disconnected / delayed-sync operational
+        taxonomy dimension (PR-10).
+
+        Consumes :func:`~core.offline_operational_contract
+        .build_baseline_offline_operational_verdict` to determine whether the
+        formal offline operational taxonomy is available and correctly produces
+        a conservative (unavailable) verdict when no connectivity or evidence
+        is present.
+
+        This probe evaluates the *structural availability* of the contract
+        module and runs a zero-evidence evaluation to confirm the contract is
+        wired and correctly defaults to ``unavailable`` rather than
+        optimistically claiming ``online_operational``.  Production deployments
+        should feed actual connectivity and operational evidence via
+        :func:`~core.offline_operational_contract.build_offline_operational_verdict`;
+        this acceptance probe verifies that the contract is available and
+        conservatively wired.
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``unavailable`` (fail-conservative)
+            → ``pending`` (structure present; live evidence not yet collected)
+        Zero-evidence probe returns ``online_operational``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.offline_operational
+        signal_source = "core.offline_operational_contract"
+
+        if (
+            not _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE
+            or _build_baseline_offline_verdict is None
+            or _OfflineOperationalEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "OfflineOperationalContract (PR-10) module unavailable."
+                ),
+                gap_description=(
+                    "core.offline_operational_contract is not importable.  "
+                    "Cannot assess offline / disconnected / delayed-sync "
+                    "operational taxonomy contract.  "
+                    "Ensure core/offline_operational_contract.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (unavailable) rather than an optimistic online_operational.
+            verdict = _build_baseline_offline_verdict()
+            verdict_dict = verdict.to_dict()
+            operational_class = verdict.operational_class.value
+
+            # The zero-evidence probe MUST NOT produce online_operational.
+            # If it does, the contract is misconfigured.
+            if (
+                _OfflineOperationalClass is not None
+                and verdict.operational_class
+                == _OfflineOperationalClass.online_operational
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "OfflineOperationalContract zero-evidence probe returned "
+                        "online_operational with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The offline operational contract produced "
+                        "online_operational with all evidence dimensions "
+                        "at their conservative defaults.  This violates "
+                        "EVIDENCE_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY and "
+                        "DEFERRED_SYNC_MUST_NOT_CLAIM_ONLINE_OPERATIONAL_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live connectivity / operational
+            # evidence has been ingested is a runtime concern; the acceptance
+            # dimension confirms the formal taxonomy is available and correctly
+            # wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "OfflineOperationalContract (PR-10) contract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {operational_class}.  "
+                    "Live connectivity / operational evidence has not been "
+                    "ingested in this process instance (expected in "
+                    "non-operational baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _OFFLINE_OPERATIONAL_AUTHORITY,
+                    "zero_evidence_probe_class": operational_class,
+                    "zero_evidence_probe_is_online_operational": (
+                        verdict.is_online_operational
+                    ),
+                    "zero_evidence_probe_is_resumable": verdict.is_resumable,
+                    "zero_evidence_probe_is_deferred": verdict.is_deferred,
+                },
+                gap_description=(
+                    "Offline operational taxonomy is formally available (PR-10), "
+                    "but no live connectivity or operational evidence has been "
+                    "fed to the contract in this process instance.  "
+                    "This is expected in non-operational baseline contexts.  "
+                    "Production paths should feed evidence from connectivity "
+                    "monitors, participant readiness signals, and sync state "
+                    "observers via build_offline_operational_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "OfflineOperationalContract probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_baseline_offline_operational_verdict raised: {exc!r}.  "
+                    "Cannot assess offline operational taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -2479,14 +2657,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the eleven dimension items.
+        """Derive the system-level verdict from the twelve dimension items.
 
         Policy:
-        - All eleven dimensions must be ``accepted`` → ``fully_operational``
+        - All twelve dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all eleven dimensions →
+        - Checklist does not contain all twelve dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
