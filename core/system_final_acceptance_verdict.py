@@ -446,6 +446,21 @@ class AcceptanceDimensionId(str, Enum):
         any stale, partial, delayed, or unreliable telemetry is honestly
         classified rather than optimistically promoted to
         realtime_authoritative.
+
+    resource_pressure_capacity
+        Formal resource pressure / degraded-capacity / admission semantics
+        taxonomy (core.resource_pressure_capacity_contract, PR-17).
+        Answers: what is the authoritative capacity class for the system
+        under its current resource pressure and admission state?
+        Distinguishes normal_capacity, degraded_capacity,
+        admission_limited, best_effort_only, and unavailable.  This
+        dimension enforces that the system does not conflate "still
+        processing some requests" (partial service continuation) with
+        "operating at normal operational capacity" (throughput and latency
+        within nominal bounds, all admission gates open, no resource
+        pressure), and that any backpressure, admission gating, load
+        shedding, or best-effort operation is honestly classified rather
+        than optimistically promoted to normal_capacity.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -462,6 +477,7 @@ class AcceptanceDimensionId(str, Enum):
     offline_operational = "offline_operational"
     verification_evidence_closure = "verification_evidence_closure"
     telemetry_freshness = "telemetry_freshness"
+    resource_pressure_capacity = "resource_pressure_capacity"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -475,7 +491,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all fourteen dimensions in canonical evaluation order.
+        """Return all fifteen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -490,6 +506,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 12 with offline_operational (PR-10)
           - Expanded to 13 with verification_evidence_closure (PR-12)
           - Expanded to 14 with telemetry_freshness (PR-15)
+          - Expanded to 15 with resource_pressure_capacity (PR-17)
         """
         return [
             cls.runtime_readiness,
@@ -506,6 +523,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.offline_operational,
             cls.verification_evidence_closure,
             cls.telemetry_freshness,
+            cls.resource_pressure_capacity,
         ]
 
 
@@ -1053,6 +1071,27 @@ except Exception:
     _TelemetryFreshnessEvidence = None  # type: ignore[assignment]
     _TELEMETRY_FRESHNESS_AUTHORITY = ""
 
+# ResourcePressureCapacityContract (PR-17) — resource pressure /
+# degraded-capacity / admission semantics taxonomy dimension.  Probes whether
+# the formal capacity taxonomy is available and correctly produces conservative
+# (unavailable) verdicts when no positive capacity evidence is present.
+try:
+    from core.resource_pressure_capacity_contract import (  # type: ignore[import]
+        build_capacity_verdict as _build_capacity_verdict,
+        build_baseline_capacity_verdict as _build_baseline_capacity_verdict,
+        CapacityClass as _CapacityClass,
+        CapacityEvidence as _CapacityEvidence,
+        RESOURCE_PRESSURE_CAPACITY_CONTRACT_AUTHORITY as _CAPACITY_CONTRACT_AUTHORITY,
+    )
+    _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE = True
+except Exception:
+    _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE = False
+    _build_capacity_verdict = None  # type: ignore[assignment]
+    _build_baseline_capacity_verdict = None  # type: ignore[assignment]
+    _CapacityClass = None  # type: ignore[assignment]
+    _CapacityEvidence = None  # type: ignore[assignment]
+    _CAPACITY_CONTRACT_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1116,6 +1155,7 @@ class SystemFinalAcceptanceEvaluator:
         item_offline_operational = self._evaluate_offline_operational()
         item_verification_closure = self._evaluate_verification_evidence_closure()
         item_telemetry_freshness = self._evaluate_telemetry_freshness()
+        item_resource_pressure_capacity = self._evaluate_resource_pressure_capacity()
 
         for item in (
             item_runtime,
@@ -1132,6 +1172,7 @@ class SystemFinalAcceptanceEvaluator:
             item_offline_operational,
             item_verification_closure,
             item_telemetry_freshness,
+            item_resource_pressure_capacity,
         ):
             checklist[item.dimension.value] = item
 
@@ -3021,6 +3062,135 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_resource_pressure_capacity(self) -> AcceptanceChecklistItem:
+        """Probe the ResourcePressureCapacityContract (PR-17).
+
+        Verifies that the formal resource pressure / degraded-capacity /
+        admission semantics contract is available and that its zero-evidence
+        baseline probe correctly returns ``unavailable`` (fail-conservative)
+        rather than ``normal_capacity``.
+
+        This confirms that the contract module is present and conservatively
+        wired.
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``unavailable`` (fail-conservative)
+            → ``pending`` (structure present; live capacity evidence not yet
+            collected)
+        Zero-evidence probe returns ``normal_capacity``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.resource_pressure_capacity
+        signal_source = "core.resource_pressure_capacity_contract"
+
+        if (
+            not _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE
+            or _build_baseline_capacity_verdict is None
+            or _CapacityClass is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ResourcePressureCapacityContract (PR-17) module unavailable."
+                ),
+                gap_description=(
+                    "core.resource_pressure_capacity_contract is not importable.  "
+                    "Cannot assess resource pressure / degraded-capacity / "
+                    "admission semantics taxonomy contract.  "
+                    "Ensure core/resource_pressure_capacity_contract.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (unavailable) rather than an optimistic normal_capacity.
+            verdict = _build_baseline_capacity_verdict()
+            verdict_dict = verdict.to_dict()
+            capacity_class = verdict.capacity_class.value
+
+            # The zero-evidence probe MUST NOT produce normal_capacity.
+            # If it does, the contract is misconfigured.
+            if (
+                _CapacityClass is not None
+                and verdict.capacity_class == _CapacityClass.normal_capacity
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "ResourcePressureCapacityContract zero-evidence probe "
+                        "returned normal_capacity with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The resource pressure capacity contract produced "
+                        "normal_capacity with all evidence dimensions at "
+                        "their conservative defaults.  This violates "
+                        "CAPACITY_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY and "
+                        "PARTIAL_SERVICE_MUST_NOT_CLAIM_NORMAL_CAPACITY_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live capacity evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "ResourcePressureCapacityContract (PR-17) contract is wired "
+                    "and correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {capacity_class}.  "
+                    "Live resource pressure / capacity evidence has not been "
+                    "ingested in this process instance (expected in "
+                    "non-capacity-monitor baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _CAPACITY_CONTRACT_AUTHORITY,
+                    "zero_evidence_probe_class": capacity_class,
+                    "zero_evidence_probe_is_normal": verdict.is_normal,
+                    "zero_evidence_probe_is_degraded": verdict.is_degraded,
+                    "zero_evidence_probe_is_unavailable": verdict.is_unavailable,
+                },
+                gap_description=(
+                    "Resource pressure / capacity taxonomy is formally available "
+                    "(PR-17), but no live resource or admission evidence has been "
+                    "fed to the contract in this process instance.  "
+                    "This is expected in non-capacity-monitor baseline contexts.  "
+                    "Production paths should feed evidence from resource monitors, "
+                    "admission gate signals, backpressure detectors, and throughput "
+                    "observers via build_capacity_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ResourcePressureCapacityContract probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_baseline_capacity_verdict raised: {exc!r}.  "
+                    "Cannot assess resource pressure capacity taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -3029,14 +3199,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the fourteen dimension items.
+        """Derive the system-level verdict from the fifteen dimension items.
 
         Policy:
-        - All fourteen dimensions must be ``accepted`` → ``fully_operational``
+        - All fifteen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all fourteen dimensions →
+        - Checklist does not contain all fifteen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
