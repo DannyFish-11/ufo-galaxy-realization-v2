@@ -830,8 +830,8 @@ def test_96_all_dimensions_includes_conversation_continuity():
     assert AcceptanceDimensionId.conversation_continuity in dims
 
 
-def test_97_all_dimensions_returns_nine():
-    assert len(AcceptanceDimensionId.all_dimensions()) == 9
+def test_97_all_dimensions_returns_ten():
+    assert len(AcceptanceDimensionId.all_dimensions()) == 10
 
 
 def test_98_from_string_returns_conversation_continuity():

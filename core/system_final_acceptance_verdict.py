@@ -381,6 +381,20 @@ class AcceptanceDimensionId(str, Enum):
         "conversation continuity has been authoritatively restored", and
         that crash / restart / process death always yields an honest
         continuity class rather than an optimistic promotion.
+
+    task_continuity
+        Formal in-flight task continuity taxonomy after restart / process
+        bounce / controller recovery
+        (core.inflight_task_continuity_taxonomy, PR-06).  Answers: what is
+        the authoritative system-level in-flight task continuity class after
+        a recovery event?  Distinguishes authoritative_task_continuity_restored,
+        resumable_with_replay_or_reconcile, state_restored_not_resumed,
+        history_or_evidence_only, and task_continuity_lost.  This dimension
+        enforces that the system does not conflate "task snapshot present",
+        "state in registry", or "replay/reconcile initiated" with "in-flight
+        task continuity has been authoritatively restored", and that restart /
+        recovery / process bounce always yields an honest continuity taxonomy
+        class rather than an optimistic promotion.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -392,6 +406,7 @@ class AcceptanceDimensionId(str, Enum):
     cross_repo_evidence_pipeline = "cross_repo_evidence_pipeline"
     multi_device_canonical_governance = "multi_device_canonical_governance"
     conversation_continuity = "conversation_continuity"
+    task_continuity = "task_continuity"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -405,7 +420,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all nine dimensions in canonical evaluation order."""
+        """Return all ten dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -416,6 +431,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.cross_repo_evidence_pipeline,
             cls.multi_device_canonical_governance,
             cls.conversation_continuity,
+            cls.task_continuity,
         ]
 
 
@@ -862,6 +878,25 @@ except Exception:
     _ConversationContinuityEvidence = None  # type: ignore[assignment]
     _CONV_CONTINUITY_AUTHORITY = ""
 
+# InFlightTaskContinuityTaxonomy (PR-06) — in-flight task continuity taxonomy
+# dimension.  Probes whether post-restart / post-bounce in-flight task
+# continuity has been formally evaluated and classified rather than
+# optimistically assumed from snapshot/state presence.
+try:
+    from core.inflight_task_continuity_taxonomy import (  # type: ignore[import]
+        build_task_continuity_verdict as _build_task_continuity_verdict,
+        InFlightTaskContinuityClass as _InFlightTaskContinuityClass,
+        InFlightTaskContinuityEvidence as _InFlightTaskContinuityEvidence,
+        INFLIGHT_TASK_CONTINUITY_TAXONOMY_IS_AUTHORITY as _TASK_CONTINUITY_AUTHORITY,
+    )
+    _TASK_CONTINUITY_TAXONOMY_AVAILABLE = True
+except Exception:
+    _TASK_CONTINUITY_TAXONOMY_AVAILABLE = False
+    _build_task_continuity_verdict = None  # type: ignore[assignment]
+    _InFlightTaskContinuityClass = None  # type: ignore[assignment]
+    _InFlightTaskContinuityEvidence = None  # type: ignore[assignment]
+    _TASK_CONTINUITY_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -920,6 +955,7 @@ class SystemFinalAcceptanceEvaluator:
         item_cross_repo = self._evaluate_cross_repo_evidence_pipeline()
         item_md_governance = self._evaluate_multi_device_canonical_governance()
         item_conv_continuity = self._evaluate_conversation_continuity()
+        item_task_continuity = self._evaluate_task_continuity()
 
         for item in (
             item_runtime,
@@ -931,6 +967,7 @@ class SystemFinalAcceptanceEvaluator:
             item_cross_repo,
             item_md_governance,
             item_conv_continuity,
+            item_task_continuity,
         ):
             checklist[item.dimension.value] = item
 
@@ -2122,6 +2159,144 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_task_continuity(self) -> AcceptanceChecklistItem:
+        """Evaluate the in-flight task continuity taxonomy dimension (PR-06).
+
+        Consumes :func:`~core.inflight_task_continuity_taxonomy
+        .build_task_continuity_verdict` to determine whether restart /
+        process bounce / recovery scenarios have a formally evaluated and
+        classified in-flight task continuity state rather than an optimistically
+        assumed one.
+
+        This probe evaluates the *structural availability* of the taxonomy
+        module and runs a default (no-evidence) evaluation to confirm the
+        contract is wired and correctly produces a conservative verdict
+        (``task_continuity_lost``) rather than an optimistic one.
+        Production deployments should feed actual recovery evidence via
+        :func:`~core.inflight_task_continuity_taxonomy
+        .build_task_continuity_verdict_from_report`; this acceptance probe
+        verifies that the taxonomy is available and conservatively wired.
+
+        Status mapping
+        --------------
+        Module present and contract produces a valid verdict with class
+        != ``task_continuity_lost`` under real restart recovery evidence
+            → ``accepted``
+        Module present, contract available, but no recovery evidence in
+        this process instance (expected in baseline / non-recovery contexts)
+            → ``pending`` (structure present, live evidence not yet collected)
+        Baseline probe returns ``authoritative_task_continuity_restored``
+        with no evidence (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.task_continuity
+        signal_source = "core.inflight_task_continuity_taxonomy"
+
+        if (
+            not _TASK_CONTINUITY_TAXONOMY_AVAILABLE
+            or _build_task_continuity_verdict is None
+            or _InFlightTaskContinuityEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "InFlightTaskContinuityTaxonomy (PR-06) module unavailable."
+                ),
+                gap_description=(
+                    "core.inflight_task_continuity_taxonomy is not importable.  "
+                    "Cannot assess in-flight task continuity taxonomy contract.  "
+                    "Ensure core/inflight_task_continuity_taxonomy.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with a minimal (no-evidence) input to confirm the contract
+            # is wired and produces a conservative verdict (task_continuity_lost)
+            # rather than an optimistic one.
+            probe_evidence = _InFlightTaskContinuityEvidence()
+            verdict = _build_task_continuity_verdict(probe_evidence)
+            verdict_dict = verdict.to_dict()
+            continuity_class = verdict.continuity_class.value
+
+            # The baseline probe (no evidence) MUST NOT produce
+            # authoritative_task_continuity_restored.  If it does, the
+            # taxonomy contract is misconfigured.
+            if (
+                _InFlightTaskContinuityClass is not None
+                and verdict.continuity_class
+                == _InFlightTaskContinuityClass.authoritative_task_continuity_restored
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "InFlightTaskContinuityTaxonomy baseline probe returned "
+                        "authoritative_task_continuity_restored with no evidence — "
+                        "taxonomy contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The in-flight task continuity taxonomy contract produced "
+                        "authoritative_task_continuity_restored with all evidence "
+                        "dimensions at zero/False.  This violates "
+                        "EVIDENCE_ABSENT_DEFAULTS_TO_CONTINUITY_LOST_POLICY and "
+                        "SNAPSHOT_PRESENCE_IS_NOT_AUTHORITATIVE_CONTINUITY_POLICY.  "
+                        "The taxonomy module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Taxonomy is wired and conservative.  This dimension is
+            # structurally present.  Whether live recovery evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "InFlightTaskContinuityTaxonomy (PR-06) contract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Baseline probe class: {continuity_class}.  "
+                    "Live recovery evidence has not been ingested in this "
+                    "process instance (expected in non-recovery baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "taxonomy_sentinel": _TASK_CONTINUITY_AUTHORITY,
+                    "baseline_probe_class": continuity_class,
+                    "baseline_probe_is_authoritative": verdict.is_authoritative,
+                    "baseline_probe_continuity_lost": verdict.continuity_lost,
+                },
+                gap_description=(
+                    "In-flight task continuity taxonomy is formally available "
+                    "(PR-06), but no active live recovery evidence has been fed "
+                    "to the contract in this process instance.  "
+                    "This is expected in non-recovery baseline contexts.  "
+                    "Production recovery paths should feed evidence from the "
+                    "RuntimeRestartRecoveryCoordinator and InFlightTaskContinuityContract "
+                    "via build_task_continuity_verdict_from_report()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "InFlightTaskContinuityTaxonomy probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_task_continuity_verdict raised: {exc!r}.  "
+                    "Cannot assess in-flight task continuity taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -2130,14 +2305,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the nine dimension items.
+        """Derive the system-level verdict from the ten dimension items.
 
         Policy:
-        - All nine dimensions must be ``accepted`` → ``fully_operational``
+        - All ten dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all nine dimensions →
+        - Checklist does not contain all ten dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
