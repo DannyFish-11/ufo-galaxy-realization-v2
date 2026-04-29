@@ -567,7 +567,7 @@ class TestSourceChannelCoverage:
 # Group H — REST endpoint integration
 # ===========================================================================
 
-@pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
+@pytest.mark.skipif(not (_FASTAPI_AVAILABLE and _PYDANTIC_AVAILABLE), reason="fastapi and/or pydantic not installed")
 class TestRestEndpointIntegration:
 
     def test_H01_submit_task_result_calls_truth_chain(self):
