@@ -661,3 +661,229 @@ class TestSessionIdentityContinuity:
             assert cap not in dev_a_obj.supported_actions, (
                 f"Device A must not have device B's capability '{cap}'"
             )
+
+
+# ===========================================================================
+# 6. Reconnect continuity semantics
+# ===========================================================================
+
+
+class TestReconnectContinuitySemantics:
+    """Re-register + continuity fields must be recognised as the same session.
+
+    These tests validate the canonical Android reconnect path:
+      - Android client reconnects by sending ``device_register`` with the same
+        ``runtime_attachment_session_id`` that was echoed in the previous ack.
+      - The server responds with ``continuity_outcome = "continuity_resume"`` and
+        preserves the stable ``runtime_session_id``.
+      - A re-registration with a *different* (or absent first-time) attachment ID
+        is classified as ``"new_attachment"`` — a fresh session.
+      - The explicit ``device_reconnect`` wire message is NOT the canonical path
+        and must not be required for reconnect continuity to work.
+    """
+
+    @pytest.mark.asyncio
+    async def test_reregister_with_same_attachment_id_is_continuity_resume(
+        self,
+    ) -> None:
+        """Re-registration with the same runtime_attachment_session_id → continuity_resume.
+
+        Android production reconnect: new WebSocket + device_register with same
+        runtime_attachment_session_id.  The server must detect this as a continuity
+        resume and preserve the runtime_session_id.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"continuity-{uuid.uuid4().hex[:8]}"
+        attachment_id = str(uuid.uuid4())
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        # First registration — establishes session
+        ack1 = await bridge.handle_message(
+            ws1,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        assert ack1["type"] == "device_register_ack"
+        assert ack1["runtime_attachment_session_id"] == attachment_id
+        # First registration is always a new attachment (no prior session)
+        assert ack1.get("continuity_outcome") in ("new_attachment", None), (
+            "First registration must be new_attachment or unclassified"
+        )
+
+        # Simulate disconnect so the session is in detached state
+        await bridge.disconnect_device(device_id)
+
+        # Reconnect via re-registration with the SAME attachment id
+        ack2 = await bridge.handle_message(
+            ws2,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        assert ack2["type"] == "device_register_ack"
+        assert ack2.get("continuity_outcome") == "continuity_resume", (
+            "Re-registration with the same runtime_attachment_session_id must be "
+            "classified as continuity_resume — this is the canonical Android reconnect path"
+        )
+        # runtime_attachment_session_id must be echoed back
+        assert ack2["runtime_attachment_session_id"] == attachment_id
+
+    @pytest.mark.asyncio
+    async def test_reregister_with_different_attachment_id_is_new_attachment(
+        self,
+    ) -> None:
+        """Re-registration with a different attachment ID → new_attachment (not continuity)."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"newattach-{uuid.uuid4().hex[:8]}"
+        attachment_id_1 = str(uuid.uuid4())
+        attachment_id_2 = str(uuid.uuid4())
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        # First registration
+        ack1 = await bridge.handle_message(
+            ws1,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id_1,
+            ),
+        )
+        assert ack1["type"] == "device_register_ack"
+
+        await bridge.disconnect_device(device_id)
+
+        # Second registration with a DIFFERENT attachment id (e.g. app reinstall)
+        ack2 = await bridge.handle_message(
+            ws2,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id_2,
+            ),
+        )
+        assert ack2["type"] == "device_register_ack"
+        assert ack2.get("continuity_outcome") == "new_attachment", (
+            "Re-registration with a different runtime_attachment_session_id must be "
+            "classified as new_attachment — prevents session ID spoofing and "
+            "correctly represents a fresh connection"
+        )
+
+    @pytest.mark.asyncio
+    async def test_continuity_resume_preserves_runtime_session_id(self) -> None:
+        """Continuity resume must preserve the stable runtime_session_id.
+
+        When Android reconnects with the same attachment ID, the server must call
+        reconnect_session() (not register_session()), preserving runtime_session_id.
+        """
+        from core.attached_runtime_session_registry import (
+            get_session_registry,
+        )
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"session-persist-{uuid.uuid4().hex[:8]}"
+        attachment_id = str(uuid.uuid4())
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+        registry = get_session_registry()
+
+        # First registration
+        await bridge.handle_message(
+            ws1,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        # Capture the runtime_session_id after first registration
+        entry1 = registry.get_active_for_device(device_id)
+        assert entry1 is not None, "Registry must have an entry after registration"
+        runtime_session_id_before = entry1.runtime_session_id
+
+        # Disconnect
+        await bridge.disconnect_device(device_id)
+
+        # Reconnect via re-registration with same attachment id
+        await bridge.handle_message(
+            ws2,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        entry2 = registry.get_active_for_device(device_id)
+        assert entry2 is not None, "Registry must have an active entry after reconnect"
+        assert entry2.runtime_session_id == runtime_session_id_before, (
+            "Continuity resume must preserve the runtime_session_id — "
+            "reconnect_session() must be used instead of register_session()"
+        )
+
+    def test_device_reconnect_message_is_not_canonical_path_sentinel(self) -> None:
+        """The codebase sentinel must affirm that device_reconnect is NOT the canonical path."""
+        from galaxy_gateway.android.handlers.registration import (
+            DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH,
+        )
+        from galaxy_gateway.android_bridge import (
+            ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL,
+        )
+
+        assert "device_register" in DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH
+        assert "NOT" in ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL, (
+            "Sentinel must explicitly state that device_reconnect is NOT the canonical path"
+        )
+
+    @pytest.mark.asyncio
+    async def test_reregister_without_attachment_id_falls_back_gracefully(
+        self,
+    ) -> None:
+        """Re-registration without attachment ID must be accepted (backward compat).
+
+        Android clients that do not supply runtime_attachment_session_id must
+        still be able to reconnect without error.
+        """
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        device_id = f"noattach-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        # First registration — no explicit attachment id
+        ack1 = await bridge.handle_message(
+            ws1,
+            _v3("device_register", device_id, platform="android"),
+        )
+        assert ack1["type"] == "device_register_ack"
+
+        # Second registration — no explicit attachment id
+        ack2 = await bridge.handle_message(
+            ws2,
+            _v3("device_register", device_id, platform="android"),
+        )
+        assert ack2 is not None
+        assert ack2["type"] == "device_register_ack", (
+            "Re-registration without attachment ID must succeed — backward compat"
+        )
+        # continuity_outcome must be present and must be one of the two valid values
+        assert ack2.get("continuity_outcome") in ("continuity_resume", "new_attachment"), (
+            "continuity_outcome must always be present in device_register_ack"
+        )
