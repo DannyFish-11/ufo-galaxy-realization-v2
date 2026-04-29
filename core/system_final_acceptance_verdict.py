@@ -421,6 +421,18 @@ class AcceptanceDimensionId(str, Enum):
         continuously online operational" (uninterrupted active connection),
         and that any disconnected, offline, or deferred-sync scenario is
         honestly classified rather than optimistically promoted.
+
+    verification_evidence_closure
+        Formal verification / evidence closure taxonomy
+        (core.verification_evidence_closure_contract, PR-12).  Answers:
+        what is the authoritative closure class for verification and evidence
+        completeness?  Distinguishes fully_closed, conditionally_closed,
+        partially_substantiated, evidence_present_verification_pending, and
+        unverified.  This dimension enforces that the system does not conflate
+        "evidence exists" or "review traversed" with "verification closure
+        established", and that any partial verification, incomplete evidence
+        base, or open verification items are honestly classified rather than
+        optimistically promoted to fully_closed.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -435,6 +447,7 @@ class AcceptanceDimensionId(str, Enum):
     task_continuity = "task_continuity"
     human_intervention = "human_intervention"
     offline_operational = "offline_operational"
+    verification_evidence_closure = "verification_evidence_closure"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -448,7 +461,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all twelve dimensions in canonical evaluation order.
+        """Return all thirteen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -461,6 +474,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 10 with task_continuity (PR-06)
           - Expanded to 11 with human_intervention (PR-08)
           - Expanded to 12 with offline_operational (PR-10)
+          - Expanded to 13 with verification_evidence_closure (PR-12)
         """
         return [
             cls.runtime_readiness,
@@ -475,6 +489,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.task_continuity,
             cls.human_intervention,
             cls.offline_operational,
+            cls.verification_evidence_closure,
         ]
 
 
@@ -980,6 +995,27 @@ except Exception:
     _OfflineOperationalEvidence = None  # type: ignore[assignment]
     _OFFLINE_OPERATIONAL_AUTHORITY = ""
 
+# VerificationEvidenceClosureContract (PR-12) — verification / evidence
+# closure taxonomy dimension.  Probes whether the formal closure taxonomy is
+# available and correctly produces conservative (unverified) verdicts when no
+# evidence or verification checks are present.
+try:
+    from core.verification_evidence_closure_contract import (  # type: ignore[import]
+        build_verification_closure_verdict as _build_verification_closure_verdict,
+        build_baseline_verification_closure_verdict as _build_baseline_verification_closure_verdict,
+        VerificationClosureClass as _VerificationClosureClass,
+        VerificationClosureEvidence as _VerificationClosureEvidence,
+        VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_AUTHORITY as _VERIFICATION_CLOSURE_AUTHORITY,
+    )
+    _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE = True
+except Exception:
+    _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE = False
+    _build_verification_closure_verdict = None  # type: ignore[assignment]
+    _build_baseline_verification_closure_verdict = None  # type: ignore[assignment]
+    _VerificationClosureClass = None  # type: ignore[assignment]
+    _VerificationClosureEvidence = None  # type: ignore[assignment]
+    _VERIFICATION_CLOSURE_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1018,7 +1054,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all nine acceptance dimensions and produce a report.
+        """Evaluate all thirteen acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -1041,6 +1077,7 @@ class SystemFinalAcceptanceEvaluator:
         item_task_continuity = self._evaluate_task_continuity()
         item_human_intervention = self._evaluate_human_intervention()
         item_offline_operational = self._evaluate_offline_operational()
+        item_verification_closure = self._evaluate_verification_evidence_closure()
 
         for item in (
             item_runtime,
@@ -1055,6 +1092,7 @@ class SystemFinalAcceptanceEvaluator:
             item_task_continuity,
             item_human_intervention,
             item_offline_operational,
+            item_verification_closure,
         ):
             checklist[item.dimension.value] = item
 
@@ -2662,6 +2700,147 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_verification_evidence_closure(self) -> AcceptanceChecklistItem:
+        """Evaluate the verification / evidence closure taxonomy dimension (PR-12).
+
+        Consumes :func:`~core.verification_evidence_closure_contract
+        .build_baseline_verification_closure_verdict` to determine whether the
+        formal verification closure taxonomy is available and correctly produces
+        a conservative (unverified) verdict when no evidence or verification
+        checks are present.
+
+        This probe evaluates the *structural availability* of the contract
+        module and runs a zero-evidence evaluation to confirm the contract is
+        wired and correctly defaults to ``unverified`` rather than
+        optimistically claiming ``fully_closed``.  Production deployments
+        should feed actual verification and evidence state via
+        :func:`~core.verification_evidence_closure_contract
+        .build_verification_closure_verdict`; this acceptance probe verifies
+        that the contract is available and conservatively wired.
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``unverified`` (fail-conservative)
+            → ``pending`` (structure present; live evidence not yet collected)
+        Zero-evidence probe returns ``fully_closed``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.verification_evidence_closure
+        signal_source = "core.verification_evidence_closure_contract"
+
+        if (
+            not _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE
+            or _build_baseline_verification_closure_verdict is None
+            or _VerificationClosureEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "VerificationEvidureClosureContract (PR-12) module unavailable."
+                ),
+                gap_description=(
+                    "core.verification_evidence_closure_contract is not importable.  "
+                    "Cannot assess verification / evidence closure taxonomy contract.  "
+                    "Ensure core/verification_evidence_closure_contract.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (unverified) rather than an optimistic fully_closed.
+            verdict = _build_baseline_verification_closure_verdict()
+            verdict_dict = verdict.to_dict()
+            closure_class = verdict.closure_class.value
+
+            # The zero-evidence probe MUST NOT produce fully_closed.
+            # If it does, the contract is misconfigured.
+            if (
+                _VerificationClosureClass is not None
+                and verdict.closure_class
+                == _VerificationClosureClass.fully_closed
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "VerificationEvidureClosureContract zero-evidence probe "
+                        "returned fully_closed with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The verification evidence closure contract produced "
+                        "fully_closed with all evidence dimensions at their "
+                        "conservative defaults.  This violates "
+                        "EVIDENCE_ABSENCE_DEFAULTS_TO_UNVERIFIED_POLICY and "
+                        "EVIDENCE_PRESENCE_IS_NOT_VERIFICATION_CLOSURE_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live verification / evidence
+            # state has been ingested is a runtime concern; the acceptance
+            # dimension confirms the formal taxonomy is available and
+            # correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "VerificationEvidureClosureContract (PR-12) contract is wired "
+                    "and correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {closure_class}.  "
+                    "Live verification / evidence state has not been "
+                    "ingested in this process instance (expected in "
+                    "non-verification baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _VERIFICATION_CLOSURE_AUTHORITY,
+                    "zero_evidence_probe_class": closure_class,
+                    "zero_evidence_probe_is_fully_closed": (
+                        verdict.is_fully_closed
+                    ),
+                    "zero_evidence_probe_is_closed": verdict.is_closed,
+                    "zero_evidence_probe_is_evidence_present": (
+                        verdict.is_evidence_present
+                    ),
+                },
+                gap_description=(
+                    "Verification evidence closure taxonomy is formally available "
+                    "(PR-12), but no live verification or evidence state has been "
+                    "fed to the contract in this process instance.  "
+                    "This is expected in non-verification baseline contexts.  "
+                    "Production paths should feed evidence from verification "
+                    "check results, evidence source confirmations, review gate "
+                    "outcomes, and multi-source convergence signals via "
+                    "build_verification_closure_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "VerificationEvidureClosureContract probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_baseline_verification_closure_verdict raised: {exc!r}.  "
+                    "Cannot assess verification evidence closure taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -2670,14 +2849,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the twelve dimension items.
+        """Derive the system-level verdict from the thirteen dimension items.
 
         Policy:
-        - All twelve dimensions must be ``accepted`` → ``fully_operational``
+        - All thirteen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all twelve dimensions →
+        - Checklist does not contain all thirteen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
