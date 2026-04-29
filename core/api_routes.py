@@ -775,6 +775,102 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                     _goal_ttc_err,
                                 )
 
+                elif msg_type == "goal_execution_result":
+                    # ── goal_execution_result compat-path handler ──────────────
+                    # Android sends goal_execution_result (the canonical result type
+                    # for goal_execution tasks) on both live connections AND via
+                    # OfflineTaskQueue replay on reconnect.
+                    #
+                    # Before this fix there was NO handler for goal_execution_result
+                    # on the compat path — every goal_execution_result fell through
+                    # to the "unknown message type" branch, meaning goal execution
+                    # outcomes were silently discarded.
+                    #
+                    # Idempotency, status mapping, truth chain, and completion
+                    # linkage are all delegated to the unified result ingress so
+                    # there is a single chain for all source channels.
+                    _ger_task_id = (
+                        data.get("task_id", "")
+                        or (data.get("payload") or {}).get("task_id", "")
+                        or data.get("goal_id", "")
+                    )
+                    if _ger_task_id:
+                        # ── Status truth mapping ──────────────────────────────
+                        _payload_sub = data.get("payload") or {}
+                        _ger_raw_status = str(
+                            _payload_sub.get("status") or data.get("status", "")
+                        ).lower().strip()
+                        if _ger_raw_status in ("failed", "error"):
+                            _ger_mapped_status = "failed"
+                        elif _ger_raw_status == "cancelled":
+                            _ger_mapped_status = "cancelled"
+                        elif _ger_raw_status == "degraded":
+                            _ger_mapped_status = "degraded"
+                        else:
+                            _ger_mapped_status = "completed"
+
+                        # ── Unified result ingress (idempotency + truth chain +
+                        #    completion linkage) ─────────────────────────────────
+                        # Idempotency is entirely delegated to ingest_result so
+                        # there is no double-check and no premature key recording.
+                        _ger_ingress_ok = False
+                        _ger_was_dedup = False
+                        try:
+                            from core.unified_result_ingress import (
+                                NormalizedResultEvent,
+                                ResultSourceChannel,
+                                ingest_result,
+                            )
+                            _ger_event = NormalizedResultEvent(
+                                task_id=_ger_task_id,
+                                device_id=device_id,
+                                raw_message_type="goal_execution_result",
+                                normalized_result_kind="goal_execution_result",
+                                normalized_status=_ger_mapped_status,
+                                source_channel=ResultSourceChannel.COMPAT_WS,
+                                payload=data,
+                                trace_id=data.get("trace_id", ""),
+                                raw_message=data,
+                            )
+                            _ger_outcome = ingest_result(_ger_event)
+                            _ger_was_dedup = _ger_outcome.was_deduplicated
+                            _ger_ingress_ok = True
+                            if _ger_was_dedup:
+                                logger.debug(
+                                    "compat_ws: duplicate goal_execution_result suppressed "
+                                    "task_id=%s device_id=%s",
+                                    _ger_task_id,
+                                    device_id,
+                                )
+                            elif not _ger_outcome.truth_chain_complete:
+                                logger.debug(
+                                    "compat_ws: goal_execution_result truth chain incomplete "
+                                    "task_id=%s: %s",
+                                    _ger_task_id,
+                                    _ger_outcome.incomplete_reason,
+                                )
+                        except Exception as _ger_ingress_err:
+                            logger.debug(
+                                "compat_ws: goal_execution_result unified ingress skipped "
+                                "(non-fatal): %s",
+                                _ger_ingress_err,
+                            )
+
+                        # Update task_queue only for first-seen results.
+                        if not _ger_was_dedup:
+                            logger.info(
+                                "compat_ws: goal_execution_result task_id=%s status=%s→%s",
+                                _ger_task_id, _ger_raw_status, _ger_mapped_status,
+                            )
+                            if _ger_task_id in task_queue:
+                                task_queue[_ger_task_id]["status"] = _ger_mapped_status
+                                task_queue[_ger_task_id]["result"] = (
+                                    _payload_sub.get("result") or data.get("result", {})
+                                )
+                                task_queue[_ger_task_id]["completed_at"] = (
+                                    datetime.now().isoformat()
+                                )
+
                 elif msg_type == "ocr_request":
                     image_b64 = data.get("image", "")
                     mode = data.get("mode", "full")

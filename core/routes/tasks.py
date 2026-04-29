@@ -277,15 +277,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         canonical V2 vocabulary before being written — a failed or cancelled
         result is **not** recorded as ``completed``.
 
-        State consistency (PR-893)
-        --------------------------
-        After updating ``task_queue`` the handler also advances the
-        :class:`~core.canonical_task.CanonicalTaskRuntime` lifecycle to the
-        matching terminal state so that both state surfaces agree.  Without
-        this step the REST result path could leave ``CanonicalTaskRuntime`` in
-        a stale intermediate lifecycle (e.g. ``dispatched``) while
-        ``task_queue`` already reflects ``completed`` or ``failed``,
-        creating the dual-track state drift described in PR-893.
+        Unified result ingress (PR-UNIFY)
+        ----------------------------------
+        The result is driven through the canonical unified result ingress:
+        1. idempotency check / record
+        2. four-step truth chain (truth_ingress, reconcile, lifecycle, completion)
+        3. CanonicalCompletionIngress notify  — awaiters are unblocked
+        4. store_task_result / memory backflow
+
+        This replaces the previous "write task_queue → return success" pseudo-
+        completion with a real truth-chain closure, ending the "interface
+        returns success before the system is actually complete" pattern
+        (principle P6).
         """
         if task_id not in task_queue:
             raise HTTPException(status_code=404, detail="任务未找到")
@@ -298,31 +301,81 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if payload and payload.result is not None:
             task_queue[task_id]["result"] = payload.result
 
-        # PR-893: sync CanonicalTaskRuntime to the same terminal state so the
-        # two authority surfaces do not drift apart.
+        # PR-UNIFY: drive through unified result ingress — truth chain,
+        # lifecycle, completion ingress, memory backflow.
+        # This replaces the previous CanonicalTaskRuntime-only sync so that
+        # the REST path is a real ingress into the full closure chain.
         try:
-            from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
-            _runtime = get_canonical_task_runtime()
-            _status_lower = canonical_status.lower()
-            if _status_lower == "failed":
-                _target = TaskLifecycle.FAILED
-            elif _status_lower == "cancelled":
-                _target = TaskLifecycle.CANCELLED
-            elif _status_lower == "degraded":
-                _target = TaskLifecycle.DEGRADED
-            else:
-                _target = TaskLifecycle.COMPLETED
-            _runtime.update_lifecycle(task_id, _target)
+            from core.unified_result_ingress import (
+                NormalizedResultEvent,
+                ResultSourceChannel,
+                ingest_result_async,
+                normalize_status as _normalize,
+            )
+            _raw_msg: Dict[str, Any] = {
+                "task_id": task_id,
+                "status": canonical_status,
+                "result": payload.result if payload else None,
+                "trace_id": payload.trace_id if payload else None,
+                "type": "task_result",
+            }
+            _event = NormalizedResultEvent(
+                task_id=task_id,
+                device_id=task_queue[task_id].get("device_id", ""),
+                raw_message_type="task_result",
+                normalized_result_kind="task_result",
+                normalized_status=canonical_status,
+                source_channel=ResultSourceChannel.REST_CALLBACK,
+                payload=_raw_msg,
+                trace_id=payload.trace_id if payload else "",
+                raw_message=_raw_msg,
+            )
+            # Attempt async memory backflow via store_task_result
+            try:
+                from core.openclawd_memory_backflow import store_task_result as _store_fn
+            except ImportError:
+                _store_fn = None  # type: ignore[assignment]
+
+            _ingress_outcome = await ingest_result_async(
+                _event,
+                store_fn=_store_fn,
+            )
             logger.debug(
-                "submit_task_result: CanonicalTaskRuntime synced task_id=%s lifecycle=%s",
-                task_id, _target.value,
+                "submit_task_result: unified ingress complete "
+                "task_id=%s status=%s truth_chain=%s completion=%s store=%s",
+                task_id,
+                canonical_status,
+                _ingress_outcome.truth_chain_complete,
+                _ingress_outcome.completion_notified,
+                _ingress_outcome.store_task_result_ran,
             )
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _sync_err:
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _ingress_err:
+            # Fallback: belt-and-suspenders CanonicalTaskRuntime sync (PR-893).
+            # This path only runs when the unified ingress module is unavailable.
             logger.warning(
-                "submit_task_result: CanonicalTaskRuntime sync failed task_id=%s error=%s — "
-                "task_queue was updated but CanonicalTaskRuntime lifecycle may be stale",
-                task_id, _sync_err,
+                "submit_task_result: unified ingress unavailable, "
+                "falling back to CanonicalTaskRuntime sync: task_id=%s error=%s",
+                task_id, _ingress_err,
             )
+            try:
+                from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+                _runtime = get_canonical_task_runtime()
+                _status_lower = canonical_status.lower()
+                if _status_lower == "failed":
+                    _target = TaskLifecycle.FAILED
+                elif _status_lower == "cancelled":
+                    _target = TaskLifecycle.CANCELLED
+                elif _status_lower == "degraded":
+                    _target = TaskLifecycle.DEGRADED
+                else:
+                    _target = TaskLifecycle.COMPLETED
+                _runtime.update_lifecycle(task_id, _target)
+            except Exception as _sync_err:
+                logger.warning(
+                    "submit_task_result: CanonicalTaskRuntime sync also failed "
+                    "task_id=%s error=%s",
+                    task_id, _sync_err,
+                )
 
         return {"success": True, "status": canonical_status}
 
