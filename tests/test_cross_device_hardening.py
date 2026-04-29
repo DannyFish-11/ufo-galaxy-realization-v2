@@ -363,8 +363,12 @@ class TestTaskLifecycle:
         device_id = "lc-dev-001"
         task_id = str(uuid.uuid4())
 
-        # Register device
-        await bridge.handle_message(ws, _msg("device_register", device_id))
+        # Register device; suppress DeviceRouter session sync so the device is
+        # only in bridge._devices (not in DeviceRouter).  This ensures
+        # assign_task takes the bridge.send_to_device fallback path, which is
+        # what this test exercises.
+        with patch.object(bridge, "_sync_device_router_session"):
+            await bridge.handle_message(ws, _msg("device_register", device_id))
 
         # Wire the device's websocket so assign_task can send
         device = bridge.get_device(device_id)
@@ -576,7 +580,12 @@ class TestOpenClawdMemoryBackflow:
         backflow module.  If the module is unavailable the bridge must not
         raise.
         """
+        from core.durable_result_idempotency import reset_durable_result_id_store
         from galaxy_gateway.android_bridge import AndroidBridge
+
+        # Reset durable idempotency singleton so a fresh uuid task_id is never
+        # seen as a duplicate (the store is file-backed and persists across runs).
+        reset_durable_result_id_store()
 
         bridge = AndroidBridge()
         ws = _ws()
@@ -591,8 +600,10 @@ class TestOpenClawdMemoryBackflow:
             backflow_called.append({"task_id": task_id, "device_id": device_id,
                                     "route_mode": route_mode})
 
-        # Patch at the module level in android_bridge where store_task_result is referenced
-        with patch("galaxy_gateway.android_bridge.store_task_result", _mock_store):
+        # store_task_result is imported and called inside task_lifecycle.py;
+        # patch the reference there (not the android_bridge module-level alias).
+        with patch("galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
+                   _mock_store):
             await bridge.handle_message(ws, _msg(
                 "task_result", device_id,
                 task_id=task_id,
