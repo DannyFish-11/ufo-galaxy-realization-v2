@@ -582,7 +582,12 @@ class AndroidBridge:
         group_id: Optional[str] = None,
         require_local_agent: bool = True,
     ) -> Dict[str, Any]:
-        """将 task_assign 扇出（fan-out）到多台设备。"""
+        """将 task_assign 扇出（fan-out）到多台设备。
+
+        每台设备在发送前必须通过统一派发就绪检查
+        (:func:`~core.unified_dispatch_readiness_gate.evaluate_dispatch_readiness`)。
+        未通过检查的设备被标记为 failed 并跳过，不发送任务。
+        """
         constraints = constraints or []
         results: Dict[str, Any] = {"fanout": 0, "failed": 0, "device_ids": [], "errors": []}
 
@@ -595,7 +600,52 @@ class AndroidBridge:
             )
             return {"fanout": 0, "failed": len(device_ids), "device_ids": [], "errors": [str(ucm_err)]}
 
+        # --- Import the unified dispatch readiness gate (additive; non-fatal if unavailable) ---
+        _readiness_gate_fn = None
+        try:
+            from core.unified_dispatch_readiness_gate import evaluate_dispatch_readiness as _readiness_gate_fn  # noqa: N812
+        except Exception as _gate_import_err:
+            logger.debug(
+                "PARALLEL_SUBTASK fan-out: unified readiness gate unavailable "
+                "(non-fatal, proceeding without per-device gating): %s",
+                _gate_import_err,
+            )
+
         for idx, did in enumerate(device_ids):
+            # ------------------------------------------------------------------
+            # PR: Unified dispatch readiness gate — skip non-ready devices
+            # ------------------------------------------------------------------
+            if _readiness_gate_fn is not None:
+                try:
+                    _readiness = _readiness_gate_fn(
+                        did,
+                        session_id=session_id,
+                        execution_mode="parallel_fanout",
+                    )
+                    if not _readiness.dispatch_ready:
+                        results["failed"] += 1
+                        _err_msg = (
+                            f"device {did}: dispatch blocked by readiness gate "
+                            f"(status={_readiness.status!r}, "
+                            f"reason={_readiness.reason!r})"
+                        )
+                        results["errors"].append(_err_msg)
+                        logger.info(
+                            "PARALLEL_SUBTASK fan-out: device_id=%s blocked by "
+                            "unified readiness gate | status=%s reason=%r",
+                            did,
+                            _readiness.status,
+                            _readiness.reason,
+                        )
+                        continue
+                except Exception as _gate_err:
+                    logger.debug(
+                        "PARALLEL_SUBTASK fan-out: readiness gate check failed "
+                        "for device_id=%s (non-fatal, proceeding): %s",
+                        did,
+                        _gate_err,
+                    )
+
             try:
                 task_assign_payload: Dict[str, Any] = {
                     "task_id": task_id,
