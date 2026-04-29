@@ -260,8 +260,8 @@ class TestAcceptanceDimensionId:
     def test_enum_has_multi_device_canonical_governance(self):
         assert AcceptanceDimensionId.multi_device_canonical_governance
 
-    def test_exactly_eight_members(self):
-        assert len(list(AcceptanceDimensionId)) == 9
+    def test_exactly_ten_members(self):
+        assert len(list(AcceptanceDimensionId)) == 10
 
 
 # ===========================================================================
@@ -304,8 +304,8 @@ class TestAllDimensions:
         dims = AcceptanceDimensionId.all_dimensions()
         assert isinstance(dims, list)
 
-    def test_all_dimensions_has_eight_entries(self):
-        assert len(AcceptanceDimensionId.all_dimensions()) == 9
+    def test_all_dimensions_has_ten_entries(self):
+        assert len(AcceptanceDimensionId.all_dimensions()) == 10
 
     def test_all_dimensions_order(self):
         dims = AcceptanceDimensionId.all_dimensions()
@@ -664,7 +664,7 @@ class TestSystemAcceptanceReportFromDict:
         restored = SystemAcceptanceReport.from_dict(original.to_dict())
         assert restored.verdict == SystemAcceptanceVerdict.fully_operational
         assert restored.is_fully_operational is True
-        assert len(restored.checklist) == 9
+        assert len(restored.checklist) == 10
 
 
 # ===========================================================================
