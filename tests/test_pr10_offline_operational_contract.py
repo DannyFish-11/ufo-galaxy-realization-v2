@@ -483,8 +483,9 @@ class TestOfflineOperationalContract(unittest.TestCase):
         )
 
     @_skip_if_unavailable
-    def test_I03_connected_with_reconnect_and_tracking_is_online_not_resumable_class(self):
-        # Connected + fresh evidence → online_operational (not resumable class)
+    def test_I03_connected_with_fresh_evidence_produces_online_not_resumable_class(self):
+        # Connected + fresh evidence → online_operational (fresh evidence is the
+        # determining factor; bounded_disconnected_resumable requires disconnected state)
         evidence = _ev(
             connectivity_state=ConnectivityState.connected,
             evidence_fresh=True,

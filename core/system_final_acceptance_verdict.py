@@ -448,7 +448,20 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all twelve dimensions in canonical evaluation order."""
+        """Return all twelve dimensions in canonical evaluation order.
+
+        Dimension count history:
+          - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
+            delegated_flow, governance, multi_device_recovery,
+            android_participant)
+          - Expanded to 6 with recovery_truth_surface (PR-5-TRUTH)
+          - Expanded to 7 with cross_repo_evidence_pipeline (PR-05)
+          - Expanded to 8 with multi_device_canonical_governance (PR-09)
+          - Expanded to 9 with conversation_continuity (PR-12)
+          - Expanded to 10 with task_continuity (PR-06)
+          - Expanded to 11 with human_intervention (PR-08)
+          - Expanded to 12 with offline_operational (PR-10)
+        """
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
