@@ -395,6 +395,19 @@ class AcceptanceDimensionId(str, Enum):
         task continuity has been authoritatively restored", and that restart /
         recovery / process bounce always yields an honest continuity taxonomy
         class rather than an optimistic promotion.
+
+    human_intervention
+        Formal human escalation / operator takeover / manual intervention
+        taxonomy (core.human_intervention_taxonomy, PR-08).  Answers: for
+        any given operational closure or task completion, was it reached
+        autonomously by the system, or did a human operator assist, confirm,
+        override, or escalate?  Distinguishes autonomous_closure,
+        operator_assisted_closure, human_confirmed_system_incomplete,
+        manual_override, and escalation_required.  This dimension enforces
+        that the system does not conflate "a human can take over" with "the
+        system reached autonomous operational closure", and that any human
+        involvement in the closure path is honestly surfaced rather than
+        optimistically suppressed.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -407,6 +420,7 @@ class AcceptanceDimensionId(str, Enum):
     multi_device_canonical_governance = "multi_device_canonical_governance"
     conversation_continuity = "conversation_continuity"
     task_continuity = "task_continuity"
+    human_intervention = "human_intervention"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -420,7 +434,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all ten dimensions in canonical evaluation order."""
+        """Return all eleven dimensions in canonical evaluation order."""
         return [
             cls.runtime_readiness,
             cls.delegated_flow,
@@ -432,6 +446,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.multi_device_canonical_governance,
             cls.conversation_continuity,
             cls.task_continuity,
+            cls.human_intervention,
         ]
 
 
@@ -897,6 +912,25 @@ except Exception:
     _InFlightTaskContinuityEvidence = None  # type: ignore[assignment]
     _TASK_CONTINUITY_AUTHORITY = ""
 
+# HumanInterventionTaxonomy (PR-08) — human escalation / operator takeover /
+# manual intervention taxonomy dimension.  Probes whether the formal
+# intervention taxonomy is available and correctly produces conservative
+# (non-autonomous) verdicts when no explicit autonomous evidence is present.
+try:
+    from core.human_intervention_taxonomy import (  # type: ignore[import]
+        build_human_intervention_verdict as _build_human_intervention_verdict,
+        HumanInterventionClass as _HumanInterventionClass,
+        HumanInterventionEvidence as _HumanInterventionEvidence,
+        HUMAN_INTERVENTION_TAXONOMY_AUTHORITY as _HUMAN_INTERVENTION_AUTHORITY,
+    )
+    _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE = True
+except Exception:
+    _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE = False
+    _build_human_intervention_verdict = None  # type: ignore[assignment]
+    _HumanInterventionClass = None  # type: ignore[assignment]
+    _HumanInterventionEvidence = None  # type: ignore[assignment]
+    _HUMAN_INTERVENTION_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -956,6 +990,7 @@ class SystemFinalAcceptanceEvaluator:
         item_md_governance = self._evaluate_multi_device_canonical_governance()
         item_conv_continuity = self._evaluate_conversation_continuity()
         item_task_continuity = self._evaluate_task_continuity()
+        item_human_intervention = self._evaluate_human_intervention()
 
         for item in (
             item_runtime,
@@ -968,6 +1003,7 @@ class SystemFinalAcceptanceEvaluator:
             item_md_governance,
             item_conv_continuity,
             item_task_continuity,
+            item_human_intervention,
         ):
             checklist[item.dimension.value] = item
 
@@ -2297,6 +2333,144 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_human_intervention(self) -> AcceptanceChecklistItem:
+        """Evaluate the human intervention taxonomy dimension (PR-08).
+
+        Consumes :func:`~core.human_intervention_taxonomy
+        .build_human_intervention_verdict` to determine whether the formal
+        human intervention taxonomy is available and correctly produces a
+        conservative (non-autonomous) verdict when no explicit autonomous
+        evidence is present.
+
+        This probe evaluates the *structural availability* of the taxonomy
+        module and runs a zero-evidence evaluation to confirm the contract
+        is wired and correctly defaults to ``escalation_required`` rather
+        than optimistically claiming ``autonomous_closure``.  Production
+        deployments should feed actual intervention evidence (operator
+        actions, manual overrides, confirmation events, escalation state)
+        via the contract directly; this acceptance probe verifies that the
+        taxonomy is available and conservatively wired.
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns a
+        non-autonomous class (``escalation_required``)
+            → ``pending`` (structure present; live evidence not yet collected)
+        Zero-evidence probe returns ``autonomous_closure``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.human_intervention
+        signal_source = "core.human_intervention_taxonomy"
+
+        if (
+            not _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE
+            or _build_human_intervention_verdict is None
+            or _HumanInterventionEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "HumanInterventionTaxonomy (PR-08) module unavailable."
+                ),
+                gap_description=(
+                    "core.human_intervention_taxonomy is not importable.  "
+                    "Cannot assess human intervention taxonomy contract.  "
+                    "Ensure core/human_intervention_taxonomy.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with a zero-evidence input to confirm the contract is
+            # wired and produces a conservative verdict (escalation_required)
+            # rather than an optimistic autonomous_closure.
+            probe_evidence = _HumanInterventionEvidence()
+            verdict = _build_human_intervention_verdict(probe_evidence)
+            verdict_dict = verdict.to_dict()
+            intervention_class = verdict.intervention_class.value
+
+            # The zero-evidence probe MUST NOT produce autonomous_closure.
+            # If it does, the contract is misconfigured.
+            if (
+                _HumanInterventionClass is not None
+                and verdict.intervention_class
+                == _HumanInterventionClass.autonomous_closure
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "HumanInterventionTaxonomy zero-evidence probe returned "
+                        "autonomous_closure with no evidence — "
+                        "taxonomy contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The human intervention taxonomy contract produced "
+                        "autonomous_closure with all evidence dimensions False.  "
+                        "This violates "
+                        "EVIDENCE_ABSENT_DEFAULTS_TO_ESCALATION_REQUIRED_POLICY "
+                        "and AUTONOMOUS_CLOSURE_REQUIRES_NO_HUMAN_ACTION_POLICY.  "
+                        "The taxonomy module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Taxonomy is wired and conservative.  This dimension is
+            # structurally present.  Whether live intervention evidence has
+            # been ingested is a runtime concern; the acceptance dimension
+            # confirms the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "HumanInterventionTaxonomy (PR-08) contract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {intervention_class}.  "
+                    "Live intervention evidence has not been ingested in this "
+                    "process instance (expected in non-intervention baseline "
+                    "context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "taxonomy_sentinel": _HUMAN_INTERVENTION_AUTHORITY,
+                    "zero_evidence_probe_class": intervention_class,
+                    "zero_evidence_probe_is_autonomous": verdict.is_autonomous,
+                    "zero_evidence_probe_is_positive_closure": (
+                        verdict.is_positive_closure
+                    ),
+                },
+                gap_description=(
+                    "Human intervention taxonomy is formally available (PR-08), "
+                    "but no live intervention evidence has been fed to the "
+                    "contract in this process instance.  "
+                    "This is expected in non-intervention baseline contexts.  "
+                    "Production paths should feed evidence from operator action "
+                    "signals, manual override events, escalation state, and "
+                    "human confirmation events via "
+                    "build_human_intervention_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "HumanInterventionTaxonomy probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_human_intervention_verdict raised: {exc!r}.  "
+                    "Cannot assess human intervention taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -2305,14 +2479,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the ten dimension items.
+        """Derive the system-level verdict from the eleven dimension items.
 
         Policy:
-        - All ten dimensions must be ``accepted`` → ``fully_operational``
+        - All eleven dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all ten dimensions →
+        - Checklist does not contain all eleven dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
