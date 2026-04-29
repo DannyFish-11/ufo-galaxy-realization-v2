@@ -135,6 +135,11 @@ class MessageType(str, Enum):
     DEVICE_HEARTBEAT_ACK = "heartbeat_ack"
     DEVICE_STATUS = "device_status"
     DEVICE_CAPABILITIES = "device_capabilities"
+    # Explicit reconnect message type.  Secondary/compat path only — the
+    # canonical Android reconnect path is device_register +
+    # runtime_attachment_session_id (see handle_device_register).
+    DEVICE_RECONNECT = "device_reconnect"
+    RECONNECT_ACK = "reconnect_ack"
     
     # === 任务调度 ===
     TASK_SUBMIT = "task_submit"

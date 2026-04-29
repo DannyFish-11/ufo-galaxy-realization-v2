@@ -61,6 +61,7 @@ from galaxy_gateway.android.message_builder import MessageBuilder
 # 子模块：处理器
 from galaxy_gateway.android.handlers.registration import (
     handle_device_register,
+    handle_device_reconnect,
     handle_unregistered,
 )
 from galaxy_gateway.android.handlers.heartbeat import (
@@ -623,6 +624,11 @@ class AndroidBridge:
             return _wrapped_handler
 
         self._message_handlers[MessageType.DEVICE_REGISTER] = _wrap(handle_device_register)
+        # Explicit device_reconnect message handler (secondary/compat path).
+        # The canonical Android reconnect path is device_register +
+        # runtime_attachment_session_id; this handler handles the case where
+        # a client sends an explicit device_reconnect message instead.
+        self._message_handlers[MessageType.DEVICE_RECONNECT] = _wrap(handle_device_reconnect)
         self._message_handlers[MessageType.DEVICE_HEARTBEAT] = _wrap(handle_heartbeat)
         self._message_handlers[MessageType.TASK_RESULT] = _wrap(handle_task_result)
         self._message_handlers[MessageType.TASK_PROGRESS] = _wrap(handle_task_progress)

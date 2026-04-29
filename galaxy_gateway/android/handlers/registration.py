@@ -283,22 +283,66 @@ async def handle_device_register(
             )
             record_registration_gap(device_id, "attach_runtime_session")
 
-        # PR-C / PR-G: register in the authoritative attached runtime session registry
-        # with the canonical runtime_attachment_session_id for stable identity lookup.
+        # PR-C / PR-G / reconnect-semantics: register or reconnect in the authoritative
+        # attached runtime session registry.
+        #
+        # Canonical Android reconnect path: Android opens a new WebSocket after a
+        # disconnect and sends device_register with the previously issued
+        # runtime_attachment_session_id echoed back.  classify_reconnect_outcome()
+        # detects that the id matches an existing registry entry and returns
+        # "continuity_resume", which causes reconnect_session() to be called so
+        # the stable runtime_session_id is preserved across the reconnect.
+        #
+        # New-connection path: runtime_attachment_session_id is absent (older
+        # clients) or does not match any stored entry → "new_attachment" →
+        # register_session() creates a fresh session as before.
+        #
+        # Backward-compat note: _extract_runtime_attachment_session_id() always
+        # returns a non-empty string (UUID fallback when the field is absent).
+        # For classification purposes we pass the RAW field value (possibly
+        # empty) so that classify_reconnect_outcome() activates its backward-
+        # compat branch (older client with no explicit id → treat existing
+        # session as continuity_resume).
+        _raw_attachment_id = (
+            message.get("runtime_attachment_session_id") or message.get("session_id") or ""
+        )
+        _continuity_outcome = "new_attachment"
         try:
-            from core.attached_runtime_session_registry import register_session
-            _reg_entry = register_session(
+            from core.attached_runtime_session_registry import (
+                classify_reconnect_outcome,
+                reconnect_session,
+                register_session,
+            )
+            _continuity_outcome, _existing_reg_entry = classify_reconnect_outcome(
                 device_id,
-                posture="join_runtime",
-                runtime_attachment_session_id=inbound_attachment_id,
-                metadata={"registration_trigger": "android_device_register"},
+                runtime_attachment_session_id=_raw_attachment_id,
             )
-            logger.info(
-                "attached_runtime_session_registry: registered device_id=%s "
-                "runtime_session_id=%s runtime_attachment_session_id=%s",
-                device_id, _reg_entry.runtime_session_id,
-                _reg_entry.runtime_attachment_session_id,
-            )
+            if _continuity_outcome == "continuity_resume" and _existing_reg_entry is not None:
+                _reg_entry = reconnect_session(
+                    _existing_reg_entry,
+                    runtime_attachment_session_id=inbound_attachment_id,
+                    metadata={"reconnect_trigger": "android_device_register_continuity"},
+                )
+                logger.info(
+                    "attached_runtime_session_registry: continuity_resume via device_register: "
+                    "device_id=%s runtime_session_id=%s (preserved) "
+                    "runtime_attachment_session_id=%s",
+                    device_id, _reg_entry.runtime_session_id,
+                    _reg_entry.runtime_attachment_session_id,
+                )
+            else:
+                _reg_entry = register_session(
+                    device_id,
+                    posture="join_runtime",
+                    runtime_attachment_session_id=inbound_attachment_id,
+                    metadata={"registration_trigger": "android_device_register"},
+                )
+                logger.info(
+                    "attached_runtime_session_registry: new_attachment via device_register: "
+                    "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s",
+                    device_id, _reg_entry.runtime_session_id,
+                    _reg_entry.runtime_attachment_session_id,
+                )
         except Exception as _reg_exc:
             logger.debug(
                 "android_bridge: attached_runtime_session_registry non-fatal: device_id=%s error=%s",
@@ -347,8 +391,9 @@ async def handle_device_register(
 
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s "
-            "runtime_attachment_session_id=%s",
+            "runtime_attachment_session_id=%s continuity_outcome=%s",
             device_id, device.model, device.platform, inbound_attachment_id,
+            _continuity_outcome,
         )
 
         _gaps = get_registration_gaps(device_id)
@@ -369,6 +414,10 @@ async def handle_device_register(
         # PR-G: echo back the canonical runtime_attachment_session_id so the
         # client can confirm and persist it for reconnect continuity.
         ack["runtime_attachment_session_id"] = inbound_attachment_id
+        # Surface the reconnect continuity outcome so callers can distinguish
+        # a continuity resume (re-register + matching id → same session) from
+        # a new attachment (first registration or unmatched id).
+        ack["continuity_outcome"] = _continuity_outcome
         # Surface registration completeness so callers can assert the state.
         ack["registration_fully_attached"] = len(_gaps) == 0
         if _gaps:
@@ -395,14 +444,28 @@ async def handle_device_register(
 async def handle_device_reconnect(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle a device reconnect message.
+    """Handle an explicit ``device_reconnect`` message (secondary/compat path).
 
-    PR-G: This handler is the canonical continuity reconnect consumer.  It
-    extracts ``runtime_attachment_session_id`` from the inbound message and
-    uses :func:`~core.attached_runtime_session_registry.classify_reconnect_outcome`
-    to determine whether the reconnect should restore an existing runtime
-    attachment continuity (``continuity_resume``) or create a new attachment
-    session (``new_attachment``).
+    CANONICAL ANDROID RECONNECT PATH
+    ---------------------------------
+    **This handler is NOT the canonical Android reconnect path.**
+
+    The canonical Android reconnect path is:
+
+    1. Android opens a new WebSocket connection (``onOpen`` callback).
+    2. Android sends ``device_register`` (not ``device_reconnect``) with the
+       previously issued ``runtime_attachment_session_id`` echoed back in the
+       message payload.
+    3. ``handle_device_register`` uses ``classify_reconnect_outcome()`` to
+       detect continuity — if the id matches an existing registry entry,
+       ``reconnect_session()`` is called to preserve the stable
+       ``runtime_session_id`` (continuity resume); otherwise
+       ``register_session()`` creates a fresh session (new attachment).
+
+    This handler processes the alternative explicit ``device_reconnect``
+    message type, which is a secondary/compat path for clients that send a
+    dedicated reconnect message rather than re-registering.  It applies the
+    same ``classify_reconnect_outcome`` logic for continuity detection.
 
     Continuity resume
         The existing registry entry is reconnected via
