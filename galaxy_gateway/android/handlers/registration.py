@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
@@ -18,6 +19,72 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Registration completeness tracking
+# ---------------------------------------------------------------------------
+# Per-device store of downstream registration step gaps.  When a device
+# registers successfully at the transport/UDM level but one or more of the
+# critical downstream steps (attach_runtime_session, registry, DeviceRouter
+# session sync) fails, the gap is recorded here so the incompleteness is
+# machine-observable rather than silently logged.
+#
+# Key   → device_id
+# Value → list of step-name strings that failed, e.g. ["attach_runtime_session"]
+#
+# Bounded to _REG_GAP_MAX_ENTRIES entries (LRU eviction) so it never grows
+# unboundedly.
+
+_REG_GAP_MAX_ENTRIES: int = 512
+_device_registration_gaps: OrderedDict = OrderedDict()
+
+
+def record_registration_gap(device_id: str, step_name: str) -> None:
+    """Record that *step_name* failed during *device_id*'s registration.
+
+    Safe to call from any except block — never raises.  Does nothing if
+    *device_id* is falsy.
+    """
+    if not device_id:
+        return
+    if device_id not in _device_registration_gaps:
+        if len(_device_registration_gaps) >= _REG_GAP_MAX_ENTRIES:
+            _device_registration_gaps.popitem(last=False)
+        _device_registration_gaps[device_id] = []
+    _device_registration_gaps[device_id].append(step_name)
+
+
+def get_registration_gaps(device_id: str) -> List[str]:
+    """Return the list of downstream step names that failed for *device_id*.
+
+    An empty list means the device completed all tracked downstream steps
+    successfully (or it was never registered through this handler).
+    """
+    return list(_device_registration_gaps.get(device_id, []))
+
+
+def is_registration_fully_attached(device_id: str) -> bool:
+    """Return ``True`` if no downstream registration gaps were recorded for
+    *device_id*.
+
+    A device without gaps successfully completed all tracked downstream steps:
+    UDM write, DeviceRouter session sync, ``attach_runtime_session``, and
+    ``attached_runtime_session_registry``.  A device with gaps is considered
+    *partially registered* and may not be reliably dispatchable.
+    """
+    return len(_device_registration_gaps.get(device_id, [])) == 0
+
+
+def clear_registration_gaps(device_id: Optional[str] = None) -> None:
+    """Remove registration gap records.
+
+    If *device_id* is given, only that device's record is removed.  If
+    *device_id* is ``None``, all records are cleared (useful in tests).
+    """
+    if device_id is None:
+        _device_registration_gaps.clear()
+    else:
+        _device_registration_gaps.pop(device_id, None)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -180,6 +247,7 @@ async def handle_device_register(
                 "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
                 device_id, _attach_exc,
             )
+            record_registration_gap(device_id, "attach_runtime_session")
 
         # PR-C / PR-G: register in the authoritative attached runtime session registry
         # with the canonical runtime_attachment_session_id for stable identity lookup.
@@ -202,6 +270,7 @@ async def handle_device_register(
                 "android_bridge: attached_runtime_session_registry non-fatal: device_id=%s error=%s",
                 device_id, _reg_exc,
             )
+            record_registration_gap(device_id, "attached_runtime_session_registry")
 
         # PR-C: assign Body Mesh roles based on device capability bitmask so
         # that the BodyMeshRegistry (and downstream presence/projection paths)
@@ -248,6 +317,15 @@ async def handle_device_register(
             device_id, device.model, device.platform, inbound_attachment_id,
         )
 
+        _gaps = get_registration_gaps(device_id)
+        if _gaps:
+            logger.warning(
+                "Device registration partially attached: device_id=%s gaps=%s — "
+                "device is registered at transport level but downstream steps failed; "
+                "dispatch reliability may be reduced",
+                device_id, _gaps,
+            )
+
         ack = MessageBuilder.device_register_ack(
             device_id=device_id,
             success=True,
@@ -257,6 +335,10 @@ async def handle_device_register(
         # PR-G: echo back the canonical runtime_attachment_session_id so the
         # client can confirm and persist it for reconnect continuity.
         ack["runtime_attachment_session_id"] = inbound_attachment_id
+        # Surface registration completeness so callers can assert the state.
+        ack["registration_fully_attached"] = len(_gaps) == 0
+        if _gaps:
+            ack["registration_gaps"] = _gaps
         return ack
 
     except Exception as exc:
