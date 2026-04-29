@@ -182,8 +182,9 @@ async def handle_parallel_subtask(
     1. 解析 parallel_subtask payload
     2. 通过 DesktopPresenceRuntime 将 goal 转换为可执行文本
     3. 查询 UnifiedDeviceManager 获取所有已连接的 Android 设备
-    4. 向每台设备发送独立的 task_assign（包含 subtask_index）
-    5. 返回 fan-out 结果（异步，不等待设备执行完成）
+    4. 通过统一编排脊柱（unified orchestration spine）评估每台设备的派发就绪状态
+    5. 向通过就绪检查的设备发送独立的 task_assign（包含 subtask_index）
+    6. 返回 fan-out 结果（异步，不等待设备执行完成）
     """
     payload = message.get("payload", {})
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
@@ -257,7 +258,48 @@ async def handle_parallel_subtask(
         all_device_ids = []
 
     # 排除当前发送者设备（避免重复执行）
-    target_device_ids: List[str] = [d for d in all_device_ids if d != device_id]
+    candidate_device_ids: List[str] = [d for d in all_device_ids if d != device_id]
+
+    # ── Step 2b: 统一编排脊柱评估 (Unified Orchestration Spine) ─────
+    # All fan-out targets must pass the unified dispatch readiness gate via
+    # the orchestration spine before any task_assign is sent.  Non-ready
+    # devices are excluded from the fan-out set.
+    target_device_ids: List[str] = candidate_device_ids
+    _spine_blocked_count = 0
+    try:
+        from core.unified_orchestration_spine import (
+            OrchestrationRequest,
+            ExecutionMode,
+            evaluate_orchestration_request,
+        )
+        if candidate_device_ids:
+            _orch_request = OrchestrationRequest(
+                execution_mode=ExecutionMode.PARALLEL_FANOUT.value,
+                target_device_ids=candidate_device_ids,
+                task_id=task_id,
+                session_id=session_id,
+                group_id=group_id,
+            )
+            _orch_decision = evaluate_orchestration_request(_orch_request)
+            target_device_ids = _orch_decision.ready_device_ids
+            _spine_blocked_count = len(_orch_decision.blocked_slots)
+            if _spine_blocked_count > 0:
+                logger.info(
+                    "PARALLEL_SUBTASK: orchestration spine blocked %d/%d devices "
+                    "| task_id=%s ready=%s blocked=%s",
+                    _spine_blocked_count,
+                    len(candidate_device_ids),
+                    task_id,
+                    target_device_ids,
+                    _orch_decision.blocked_device_ids,
+                )
+    except Exception as _spine_err:
+        # Spine unavailable — degrade gracefully and proceed with candidate list
+        logger.debug(
+            "PARALLEL_SUBTASK: unified orchestration spine unavailable "
+            "(non-fatal, using candidate device list): %s",
+            _spine_err,
+        )
 
     # ── PR-D: Register group with aggregator before dispatching ──────────
     # Record the expected subtask count now so the aggregator can recognise
@@ -315,6 +357,7 @@ async def handle_parallel_subtask(
                 "fanout_count": fanout_summary["fanout"],
                 "dispatched_to": fanout_summary["device_ids"],
                 "dispatch_failed": fanout_summary["failed"],
+                "spine_blocked": _spine_blocked_count,
                 "runtime_session_id": runtime_session_id,
                 "message": f"Parallel task dispatched to {fanout_summary['fanout']} device(s)",
             },
