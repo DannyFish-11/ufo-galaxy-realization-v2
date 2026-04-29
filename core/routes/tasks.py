@@ -33,10 +33,11 @@ Routes:
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from core.routes._shared import connection_manager, task_queue
 from core.routes._models import TaskRequest
@@ -69,6 +70,49 @@ TASK_INGRESS_CANONICAL_DISPATCH_SPINE: str = (
     "attempts CommandRouter.route_envelope() before falling back to compat "
     "send_to_device, so the API task path converges on the canonical spine."
 )
+
+
+class TaskResultPayload(BaseModel):
+    """Request body for POST /api/v1/tasks/{task_id}/result.
+
+    ``status`` carries the Android/device execution result status.  When absent
+    the result is treated as successful.  The value is normalised from the
+    Android execution taxonomy (``success`` / ``failed`` / ``error`` /
+    ``cancelled`` / ``degraded``) to the canonical V2 vocabulary before being
+    written to task_queue, mirroring the mapping applied by
+    ``_normalize_android_goal_status`` in the canonical WS handler.
+    """
+
+    status: Optional[str] = None
+    result: Optional[Any] = None
+    details: Optional[str] = None
+    trace_id: Optional[str] = None
+
+
+def _map_result_status(raw_status: Optional[str]) -> str:
+    """Map Android/device result status to canonical V2 task status.
+
+    Mirrors the taxonomy in
+    ``galaxy_gateway.android.handlers.goal_execution._normalize_android_goal_status``
+    so the REST callback path produces consistent statuses with the canonical
+    WebSocket handler path.
+
+    Mapping:
+        failed / error   → "failed"
+        cancelled        → "cancelled"
+        degraded         → "degraded"
+        anything else    → "completed"   (includes "success", "completed", absent)
+    """
+    if not raw_status:
+        return "completed"
+    s = str(raw_status).lower().strip()
+    if s in ("failed", "error"):
+        return "failed"
+    if s == "cancelled":
+        return "cancelled"
+    if s == "degraded":
+        return "degraded"
+    return "completed"
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -225,13 +269,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         })
 
     @router.post("/api/v1/tasks/{task_id}/result")
-    async def submit_task_result(task_id: str):
-        """提交任务结果（设备回调）"""
-        if task_id in task_queue:
-            task_queue[task_id]["status"] = "completed"
-            task_queue[task_id]["completed_at"] = datetime.now().isoformat()
-            return {"success": True}
-        raise HTTPException(status_code=404, detail="任务未找到")
+    async def submit_task_result(task_id: str, payload: TaskResultPayload = None):
+        """提交任务结果（设备回调）.
+
+        Accepts an optional JSON body with a ``status`` field from the
+        Android/device execution taxonomy.  The status is normalised to the
+        canonical V2 vocabulary before being written — a failed or cancelled
+        result is **not** recorded as ``completed``.
+        """
+        if task_id not in task_queue:
+            raise HTTPException(status_code=404, detail="任务未找到")
+
+        raw_status = (payload.status if payload else None)
+        canonical_status = _map_result_status(raw_status)
+
+        task_queue[task_id]["status"] = canonical_status
+        task_queue[task_id]["completed_at"] = datetime.now().isoformat()
+        if payload and payload.result is not None:
+            task_queue[task_id]["result"] = payload.result
+        return {"success": True, "status": canonical_status}
 
     @router.delete("/api/v1/tasks/{task_id}/cancel")
     @router.post("/api/v1/tasks/{task_id}/cancel")

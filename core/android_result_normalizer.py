@@ -263,6 +263,10 @@ _MESSAGE_TYPE_TO_CATEGORY: Dict[str, AndroidResultCategory] = {
     # User-visible business results
     "task_result": AndroidResultCategory.user_visible_business_result,
     "goal_execution_result": AndroidResultCategory.user_visible_business_result,
+    # Android error-path alias — goal_result carries the same user-visible
+    # business result as goal_execution_result (different wire name used on
+    # failure/cancellation paths in some Android flows).
+    "goal_result": AndroidResultCategory.user_visible_business_result,
     # Runtime lifecycle signals
     "delegated_execution_signal": AndroidResultCategory.runtime_lifecycle_signal,
     # Reconciliation-authoritative updates

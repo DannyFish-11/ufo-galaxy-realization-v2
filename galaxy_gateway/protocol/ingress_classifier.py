@@ -132,6 +132,9 @@ _KIND_TO_CLASS: Dict[str, str] = {
     # Android business result messages — PR-03-V2
     # goal_execution_result is the Android uplink result for goal_execution tasks.
     IngressEventKind.GOAL_EXECUTION_RESULT:      IngressMessageClass.EXECUTION,
+    # goal_result is the Android error-path alias for goal_execution_result;
+    # it carries the same class of user-visible business result.
+    IngressEventKind.GOAL_RESULT:                IngressMessageClass.EXECUTION,
     # Handoff protocol uplink result types (PR-02-V2 / PR-03-V2).
     # All three status variants plus the unified envelope result share the
     # EXECUTION class: they carry terminal Android task execution outcomes.
