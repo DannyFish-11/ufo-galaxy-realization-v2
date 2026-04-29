@@ -133,6 +133,42 @@ logger = logging.getLogger(__name__)
 ANDROID_BRIDGE_EXECUTION_SPINE_APPLIED: str = "ANDROID_BRIDGE_EXECUTION_SPINE_V1"
 
 # =============================================================================
+# Canonical Android reconnect path declaration
+# =============================================================================
+
+#: Affirms the canonical Android reconnect path and eliminates the ambiguity
+#: between the explicit ``device_reconnect`` message handler (which is NOT used
+#: in the Android production path) and the real reconnect flow.
+#:
+#: **Canonical Android reconnect path:**
+#:   1. Android client opens a new WebSocket connection (new ``onOpen``).
+#:   2. Android sends ``device_register`` with the same
+#:      ``runtime_attachment_session_id`` that was echoed in the previous
+#:      ``device_register_ack``.
+#:   3. :func:`~galaxy_gateway.android.handlers.registration.handle_device_register`
+#:      calls :func:`~core.attached_runtime_session_registry.classify_reconnect_outcome`
+#:      to determine whether this is a *continuity resume* (same attachment ID →
+#:      preserve ``runtime_session_id``) or a *new attachment* (different / absent
+#:      ID → fresh session).
+#:   4. The ack includes ``continuity_outcome`` so the caller can observe the
+#:      server-side decision.
+#:
+#: The explicit ``device_reconnect`` wire message handler
+#: (:func:`~galaxy_gateway.android.handlers.registration.handle_device_reconnect`)
+#: is retained for backward-compatibility only and is **not** the production
+#: canonical path.  :meth:`AndroidBridge.reconnect_device` is a bridge-level
+#: transport helper (used in tests / external callers); it is also not the
+#: primary inbound reconnect path.
+ANDROID_RECONNECT_CANONICAL_PATH_SENTINEL: str = (
+    "RECONNECT_CANONICAL_PATH_V1: "
+    "Android reconnects via new WebSocket + device_register with the same "
+    "runtime_attachment_session_id.  handle_device_register() calls "
+    "classify_reconnect_outcome() to decide continuity_resume vs new_attachment. "
+    "handle_device_reconnect() and reconnect_device() are NOT the production "
+    "canonical reconnect path."
+)
+
+# =============================================================================
 # PR-G4: Android trace round-trip hook — stable entry point for cross-repo
 # trace correlation.
 # =============================================================================
