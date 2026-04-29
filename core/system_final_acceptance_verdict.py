@@ -2741,7 +2741,7 @@ class SystemFinalAcceptanceEvaluator:
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
                 evidence_summary=(
-                    "VerificationEvidureClosureContract (PR-12) module unavailable."
+                    "VerificationEvidenceClosureContract (PR-12) module unavailable."
                 ),
                 gap_description=(
                     "core.verification_evidence_closure_contract is not importable.  "
@@ -2770,7 +2770,7 @@ class SystemFinalAcceptanceEvaluator:
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
                     evidence_summary=(
-                        "VerificationEvidureClosureContract zero-evidence probe "
+                        "VerificationEvidenceClosureContract zero-evidence probe "
                         "returned fully_closed with no evidence — "
                         "contract misconfiguration detected."
                     ),
@@ -2795,7 +2795,7 @@ class SystemFinalAcceptanceEvaluator:
                 dimension=dimension,
                 status=DimensionStatus.pending,
                 evidence_summary=(
-                    "VerificationEvidureClosureContract (PR-12) contract is wired "
+                    "VerificationEvidenceClosureContract (PR-12) contract is wired "
                     "and correctly produces conservative verdicts.  "
                     f"Zero-evidence probe class: {closure_class}.  "
                     "Live verification / evidence state has not been "
@@ -2832,7 +2832,7 @@ class SystemFinalAcceptanceEvaluator:
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
                 evidence_summary=(
-                    "VerificationEvidureClosureContract probe raised an exception."
+                    "VerificationEvidenceClosureContract probe raised an exception."
                 ),
                 gap_description=(
                     f"build_baseline_verification_closure_verdict raised: {exc!r}.  "

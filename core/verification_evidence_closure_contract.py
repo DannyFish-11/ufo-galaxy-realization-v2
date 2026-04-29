@@ -174,7 +174,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("Galaxy.VerificationEvidureClosureContract")
+logger = logging.getLogger("Galaxy.VerificationEvidenceClosureContract")
 
 __all__ = [
     # Authority sentinels
