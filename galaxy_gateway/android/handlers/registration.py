@@ -92,6 +92,34 @@ def clear_registration_gaps(device_id: Optional[str] = None) -> None:
     else:
         _device_registration_gaps.pop(device_id, None)
 
+
+class DispatchBlockedByRegistrationGapError(RuntimeError):
+    """Raised when a task dispatch is attempted for a device that has incomplete
+    registration attachments (one or more downstream registration steps failed).
+
+    This converts what was previously a silent best-effort gap into a
+    machine-observable, explicit dispatch block so that callers can decide how
+    to handle partial registration rather than silently proceeding with
+    potentially unreliable devices.
+
+    Attributes
+    ----------
+    device_id : str
+        The device that has incomplete registration.
+    gaps : list[str]
+        Names of the registration steps that failed.
+    """
+
+    def __init__(self, device_id: str, gaps: List[str]) -> None:
+        self.device_id = device_id
+        self.gaps = gaps
+        super().__init__(
+            f"Dispatch blocked: device_id={device_id!r} has incomplete registration "
+            f"attachments (gaps={gaps!r}). The device registered at transport level "
+            "but critical downstream attachment steps failed. Resolve the gaps before "
+            "dispatching tasks to this device."
+        )
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
