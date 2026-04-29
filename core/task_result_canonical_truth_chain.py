@@ -75,8 +75,9 @@ Public API
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +429,87 @@ def _run_completion_linkage(
 
 
 # ---------------------------------------------------------------------------
+# Incomplete result ledger — makes is_truth_chain_complete=False observable
+# ---------------------------------------------------------------------------
+
+class IncompleteResultLedger:
+    """Process-local store for task_result messages where the truth chain did
+    not fully close.
+
+    When ``run_task_result_truth_chain`` produces an outcome where
+    ``is_truth_chain_complete`` is ``False``, the outcome is recorded here
+    automatically.  This converts a previously log-only signal into a
+    machine-observable state that tests and monitoring can inspect without
+    log parsing.
+
+    The ledger is bounded to ``_MAX_ENTRIES`` entries (LRU eviction) so it
+    never grows unboundedly in a long-running process.
+
+    Typical usage
+    -------------
+    ::
+
+        from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
+        ledger = get_incomplete_result_ledger()
+        if ledger.count() > 0:
+            # There are tasks whose truth chain did not fully close.
+            for outcome in ledger.all_incomplete():
+                print(outcome.task_id, outcome.incomplete_reason)
+    """
+
+    # 1024 entries covers a generous window of recent incomplete results in a
+    # long-running process.  A typical high-throughput gateway processes tens of
+    # tasks per second; 1024 entries retain roughly 10–30 seconds of incomplete
+    # history before the oldest entries are evicted.  Increasing this value uses
+    # more memory; decreasing it shortens the observable window.
+    _MAX_ENTRIES: int = 1024
+
+    def __init__(self) -> None:
+        self._records: OrderedDict = OrderedDict()
+
+    def record(self, outcome: "TruthChainOutcome") -> None:
+        """Record an incomplete truth chain outcome.
+
+        The outcome is keyed by ``outcome.task_id``.  If the same task_id is
+        recorded again (e.g. a retry), the newer outcome replaces the older one.
+        When the ledger is at capacity the oldest entry is evicted first.
+        """
+        key = outcome.task_id or f"_notask_{len(self._records)}"
+        # Evict oldest when at capacity (before inserting so we never exceed
+        # _MAX_ENTRIES, even temporarily).
+        if key not in self._records and len(self._records) >= self._MAX_ENTRIES:
+            self._records.popitem(last=False)
+        self._records[key] = outcome
+
+    def get(self, task_id: str) -> Optional["TruthChainOutcome"]:
+        """Return the recorded outcome for *task_id*, or ``None``."""
+        return self._records.get(task_id)
+
+    def all_incomplete(self) -> List["TruthChainOutcome"]:
+        """Return a snapshot list of all recorded incomplete outcomes."""
+        return list(self._records.values())
+
+    def count(self) -> int:
+        """Return the number of recorded incomplete outcomes."""
+        return len(self._records)
+
+    def clear(self) -> None:
+        """Remove all entries (useful in tests to reset between test cases)."""
+        self._records.clear()
+
+
+# Module-level singleton.  Tests can call get_incomplete_result_ledger() to
+# inspect state or clear() to reset between test cases.
+_incomplete_result_ledger: IncompleteResultLedger = IncompleteResultLedger()
+
+
+def get_incomplete_result_ledger() -> IncompleteResultLedger:
+    """Return the process-local :class:`IncompleteResultLedger` singleton."""
+    return _incomplete_result_ledger
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -521,6 +603,11 @@ def run_task_result_truth_chain(
             outcome.authority_update_status,
             outcome.completion_linkage_status,
         )
+        # Record the incomplete outcome in the observable ledger so that the
+        # incompleteness is machine-visible (not just a log warning).  Tests and
+        # monitoring surfaces can query get_incomplete_result_ledger() to detect
+        # tasks that arrived without a fully-closed truth chain.
+        _incomplete_result_ledger.record(outcome)
 
     return outcome
 
@@ -539,4 +626,7 @@ __all__ = [
     "TruthChainOutcome",
     # Entry point
     "run_task_result_truth_chain",
+    # Incomplete result observable state
+    "IncompleteResultLedger",
+    "get_incomplete_result_ledger",
 ]
