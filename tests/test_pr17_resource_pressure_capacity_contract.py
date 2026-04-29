@@ -994,13 +994,13 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
         self.assertIn("resource_pressure_capacity", dim_values)
 
     @_skip_if_unavailable
-    def test_AL02_all_dimensions_has_fifteen_items(self):
+    def test_AL02_all_dimensions_has_sixteen_items(self):
         try:
             from core.system_final_acceptance_verdict import AcceptanceDimensionId
         except ImportError as e:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {e}")
 
-        self.assertEqual(len(AcceptanceDimensionId.all_dimensions()), 15)
+        self.assertEqual(len(AcceptanceDimensionId.all_dimensions()), 16)
 
     # -----------------------------------------------------------------------
     # Group AM — Probe returns pending for correct baseline

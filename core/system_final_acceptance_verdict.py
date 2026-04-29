@@ -461,6 +461,21 @@ class AcceptanceDimensionId(str, Enum):
         pressure), and that any backpressure, admission gating, load
         shedding, or best-effort operation is honestly classified rather
         than optimistically promoted to normal_capacity.
+
+    concurrent_mutation_conflict
+        Formal multi-writer / concurrent mutation / conflict semantics
+        taxonomy (core.concurrent_mutation_conflict_contract, PR-13).
+        Answers: what is the authoritative mutation conflict class for a
+        write operation or state update?  Distinguishes
+        conflict_free_authoritative, deterministically_merged,
+        last_writer_won_non_authoritative, reconciliation_required, and
+        conflict_unresolved.  This dimension enforces that the system does
+        not conflate "the last write landed successfully" (write-success)
+        with "concurrent mutation semantics are formally sound and
+        authoritative" (conflict-free authoritative or deterministically
+        merged), and that last-writer-wins, reconciliation-in-progress, or
+        duplicate/out-of-order writes are honestly classified rather than
+        optimistically promoted to conflict_free_authoritative.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -478,6 +493,7 @@ class AcceptanceDimensionId(str, Enum):
     verification_evidence_closure = "verification_evidence_closure"
     telemetry_freshness = "telemetry_freshness"
     resource_pressure_capacity = "resource_pressure_capacity"
+    concurrent_mutation_conflict = "concurrent_mutation_conflict"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -491,7 +507,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all fifteen dimensions in canonical evaluation order.
+        """Return all sixteen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -507,6 +523,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 13 with verification_evidence_closure (PR-12)
           - Expanded to 14 with telemetry_freshness (PR-15)
           - Expanded to 15 with resource_pressure_capacity (PR-17)
+          - Expanded to 16 with concurrent_mutation_conflict (PR-13)
         """
         return [
             cls.runtime_readiness,
@@ -524,6 +541,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.verification_evidence_closure,
             cls.telemetry_freshness,
             cls.resource_pressure_capacity,
+            cls.concurrent_mutation_conflict,
         ]
 
 
@@ -1092,6 +1110,28 @@ except Exception:
     _CapacityEvidence = None  # type: ignore[assignment]
     _CAPACITY_CONTRACT_AUTHORITY = ""
 
+# ConcurrentMutationConflictContract (PR-13) — multi-writer / concurrent
+# mutation / conflict semantics taxonomy dimension.  Probes whether the
+# formal mutation conflict taxonomy is available and correctly produces
+# conservative (conflict_unresolved) verdicts when no mutation evidence is
+# present.
+try:
+    from core.concurrent_mutation_conflict_contract import (  # type: ignore[import]
+        build_mutation_conflict_verdict as _build_mutation_conflict_verdict,
+        build_baseline_mutation_conflict_verdict as _build_baseline_mutation_conflict_verdict,
+        MutationConflictClass as _MutationConflictClass,
+        MutationConflictEvidence as _MutationConflictEvidence,
+        CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY as _MUTATION_CONFLICT_CONTRACT_AUTHORITY,
+    )
+    _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE = True
+except Exception:
+    _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE = False
+    _build_mutation_conflict_verdict = None  # type: ignore[assignment]
+    _build_baseline_mutation_conflict_verdict = None  # type: ignore[assignment]
+    _MutationConflictClass = None  # type: ignore[assignment]
+    _MutationConflictEvidence = None  # type: ignore[assignment]
+    _MUTATION_CONFLICT_CONTRACT_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1130,7 +1170,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all fourteen acceptance dimensions and produce a report.
+        """Evaluate all sixteen acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -1156,6 +1196,7 @@ class SystemFinalAcceptanceEvaluator:
         item_verification_closure = self._evaluate_verification_evidence_closure()
         item_telemetry_freshness = self._evaluate_telemetry_freshness()
         item_resource_pressure_capacity = self._evaluate_resource_pressure_capacity()
+        item_concurrent_mutation = self._evaluate_concurrent_mutation_conflict()
 
         for item in (
             item_runtime,
@@ -1173,6 +1214,7 @@ class SystemFinalAcceptanceEvaluator:
             item_verification_closure,
             item_telemetry_freshness,
             item_resource_pressure_capacity,
+            item_concurrent_mutation,
         ):
             checklist[item.dimension.value] = item
 
@@ -3191,6 +3233,148 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_concurrent_mutation_conflict(self) -> AcceptanceChecklistItem:
+        """Probe the ConcurrentMutationConflictContract (PR-13).
+
+        Verifies that the formal multi-writer / concurrent mutation / conflict
+        semantics contract is available and that its zero-evidence baseline
+        probe correctly returns ``conflict_unresolved`` (fail-conservative)
+        rather than ``conflict_free_authoritative``.
+
+        This confirms that the contract module is present and conservatively
+        wired: "write succeeded" must never auto-promote to
+        "conflict-free authoritative concurrent semantics".
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``conflict_unresolved`` (fail-conservative)
+            → ``pending`` (structure present; live mutation evidence not yet
+            collected)
+        Zero-evidence probe returns ``conflict_free_authoritative``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.concurrent_mutation_conflict
+        signal_source = "core.concurrent_mutation_conflict_contract"
+
+        if (
+            not _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE
+            or _build_baseline_mutation_conflict_verdict is None
+            or _MutationConflictClass is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConcurrentMutationConflictContract (PR-13) module "
+                    "unavailable."
+                ),
+                gap_description=(
+                    "core.concurrent_mutation_conflict_contract is not "
+                    "importable.  Cannot assess multi-writer / concurrent "
+                    "mutation / conflict semantics taxonomy contract.  "
+                    "Ensure core/concurrent_mutation_conflict_contract.py "
+                    "is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (conflict_unresolved) rather than an optimistic
+            # conflict_free_authoritative.
+            verdict = _build_baseline_mutation_conflict_verdict()
+            verdict_dict = verdict.to_dict()
+            mutation_class = verdict.mutation_class.value
+
+            # The zero-evidence probe MUST NOT produce
+            # conflict_free_authoritative.  If it does, the contract is
+            # misconfigured.
+            if (
+                _MutationConflictClass is not None
+                and verdict.mutation_class
+                == _MutationConflictClass.conflict_free_authoritative
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "ConcurrentMutationConflictContract zero-evidence "
+                        "probe returned conflict_free_authoritative with no "
+                        "evidence — contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The concurrent mutation conflict contract produced "
+                        "conflict_free_authoritative with all evidence "
+                        "dimensions at their conservative defaults.  This "
+                        "violates MUTATION_ABSENCE_DEFAULTS_TO_CONFLICT_"
+                        "UNRESOLVED_POLICY and "
+                        "WRITE_SUCCESS_MUST_NOT_IMPLY_CONCURRENT_SEMANTICS_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live mutation evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "ConcurrentMutationConflictContract (PR-13) contract is "
+                    "wired and correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {mutation_class}.  "
+                    "Live multi-writer / concurrent mutation evidence has not "
+                    "been ingested in this process instance (expected in "
+                    "non-mutation-monitor baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _MUTATION_CONFLICT_CONTRACT_AUTHORITY,
+                    "zero_evidence_probe_class": mutation_class,
+                    "zero_evidence_probe_is_conflict_free": (
+                        verdict.is_conflict_free_authoritative
+                    ),
+                    "zero_evidence_probe_is_unresolved": (
+                        verdict.is_conflict_unresolved
+                    ),
+                },
+                gap_description=(
+                    "Concurrent mutation / conflict taxonomy is formally "
+                    "available (PR-13), but no live mutation or conflict "
+                    "evidence has been fed to the contract in this process "
+                    "instance.  This is expected in non-mutation-monitor "
+                    "baseline contexts.  Production paths should feed "
+                    "evidence from write coordinators, conflict detectors, "
+                    "reconciliation monitors, and merge function outputs "
+                    "via build_mutation_conflict_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "ConcurrentMutationConflictContract probe raised an "
+                    "exception."
+                ),
+                gap_description=(
+                    f"build_baseline_mutation_conflict_verdict raised: "
+                    f"{exc!r}.  Cannot assess concurrent mutation conflict "
+                    "taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -3199,14 +3383,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the fifteen dimension items.
+        """Derive the system-level verdict from the sixteen dimension items.
 
         Policy:
-        - All fifteen dimensions must be ``accepted`` → ``fully_operational``
+        - All sixteen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all fifteen dimensions →
+        - Checklist does not contain all sixteen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
