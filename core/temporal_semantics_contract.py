@@ -730,17 +730,9 @@ class TemporalVerdict:
     # Invariant checks -------------------------------------------------
 
     def __post_init__(self) -> None:
-        # Exactly one of the five class flags must be True
-        active_flags = sum([
-            self.is_timely_authoritative,
-            self.is_fresh and not self.is_timely_authoritative,
-            self.is_stale_but_usable,
-            self.is_deadline_missed,
-            self.is_temporally_unreliable,
-        ])
-        # Allow (is_fresh=True, is_timely_authoritative=True) as a special case
-        # Both flags are True for timely_authoritative, but exactly one
-        # "primary" flag should be true.
+        # Count primary class flags (exactly one should be True).
+        # Note: is_fresh can be True alongside is_timely_authoritative —
+        # timely_authoritative implies is_fresh=True by contract.
         primary_flags = sum([
             self.is_timely_authoritative,
             self.is_stale_but_usable,
@@ -975,7 +967,11 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
             "heartbeat_required=True AND heartbeat_present=False — required "
             "heartbeat is absent; HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY"
         )
-    if evidence.heartbeat_required and evidence.heartbeat_present and not evidence.heartbeat_within_window:
+    if (
+        evidence.heartbeat_required
+        and evidence.heartbeat_present
+        and not evidence.heartbeat_within_window
+    ):
         timely_auth_blockers.append(
             "heartbeat_required=True AND heartbeat_within_window=False — "
             "heartbeat present but arrived outside the expected window"

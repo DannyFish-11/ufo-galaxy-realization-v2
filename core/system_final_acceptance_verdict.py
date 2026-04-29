@@ -1211,6 +1211,10 @@ class SystemFinalAcceptanceEvaluator:
     def evaluate(self) -> SystemAcceptanceReport:
         """Evaluate all seventeen acceptance dimensions and produce a report.
 
+        The seventeen dimensions include the newly added ``temporal_semantics``
+        dimension (PR-14) which enforces that timestamp presence alone does not
+        constitute timely authoritative temporal truth.
+
         Returns
         -------
         SystemAcceptanceReport
