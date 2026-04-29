@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -584,21 +585,30 @@ class TestStandaloneHandlers:
 
     @pytest.mark.asyncio
     async def test_handle_task_result_resolves_future(self):
+        from core.durable_result_idempotency import reset_durable_result_id_store
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
+
+        # Use a unique task_id so the durable idempotency store (file-backed,
+        # survives across test runs) never classifies this result as a duplicate.
+        task_id = f"test-tr-{uuid.uuid4().hex}"
+        # Reset the singleton so no stale in-memory state leaks across tests.
+        reset_durable_result_id_store()
+        reset_durable_result_id_store()
+
         bridge = self._make_bridge()
         ws = _make_ws()
         loop = asyncio.get_event_loop()
         future = loop.create_future()
-        bridge._pending_responses["task_123"] = future
+        bridge._pending_responses[task_id] = future
         msg = {
             "type": "task_result",
             "device_id": "dev_01",
-            "task_id": "task_123",
+            "task_id": task_id,
             "status": "completed",
         }
         await handle_task_result(bridge, ws, msg)
         assert future.done()
-        assert future.result()["task_id"] == "task_123"
+        assert future.result()["task_id"] == task_id
 
     @pytest.mark.asyncio
     async def test_handle_generic_forward_standalone(self):
