@@ -476,6 +476,21 @@ class AcceptanceDimensionId(str, Enum):
         merged), and that last-writer-wins, reconciliation-in-progress, or
         duplicate/out-of-order writes are honestly classified rather than
         optimistically promoted to conflict_free_authoritative.
+
+    temporal_semantics
+        Formal time semantics / freshness / staleness / deadline truth
+        taxonomy (core.temporal_semantics_contract, PR-14).  Answers:
+        what is the authoritative temporal class for a data item, evidence
+        surface, or runtime signal?  Distinguishes timely_authoritative,
+        fresh_with_bounded_lag, stale_but_usable,
+        deadline_missed_or_timed_out, and temporally_unreliable.  This
+        dimension enforces that the system does not conflate "a timestamp
+        exists" or "a recent signal was observed" (timestamp presence /
+        heartbeat receipt) with "temporal truth is authoritative and fresh"
+        (timely_authoritative), and that stale data, deadline misses,
+        clock uncertainty, heartbeat absence, and unmeasured lags are
+        honestly classified rather than optimistically promoted to
+        timely_authoritative.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -494,6 +509,7 @@ class AcceptanceDimensionId(str, Enum):
     telemetry_freshness = "telemetry_freshness"
     resource_pressure_capacity = "resource_pressure_capacity"
     concurrent_mutation_conflict = "concurrent_mutation_conflict"
+    temporal_semantics = "temporal_semantics"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -507,7 +523,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all sixteen dimensions in canonical evaluation order.
+        """Return all seventeen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -524,6 +540,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 14 with telemetry_freshness (PR-15)
           - Expanded to 15 with resource_pressure_capacity (PR-17)
           - Expanded to 16 with concurrent_mutation_conflict (PR-13)
+          - Expanded to 17 with temporal_semantics (PR-14)
         """
         return [
             cls.runtime_readiness,
@@ -542,6 +559,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.telemetry_freshness,
             cls.resource_pressure_capacity,
             cls.concurrent_mutation_conflict,
+            cls.temporal_semantics,
         ]
 
 
@@ -1132,6 +1150,27 @@ except Exception:
     _MutationConflictEvidence = None  # type: ignore[assignment]
     _MUTATION_CONFLICT_CONTRACT_AUTHORITY = ""
 
+# TemporalSemanticsContract (PR-14) — time semantics / freshness / staleness
+# / deadline truth taxonomy dimension.  Probes whether the formal temporal
+# taxonomy is available and correctly produces conservative
+# (temporally_unreliable) verdicts when no temporal evidence is present.
+try:
+    from core.temporal_semantics_contract import (  # type: ignore[import]
+        build_temporal_verdict as _build_temporal_verdict,
+        build_baseline_temporal_verdict as _build_baseline_temporal_verdict,
+        TemporalClass as _TemporalClass,
+        TemporalEvidence as _TemporalEvidence,
+        TEMPORAL_SEMANTICS_CONTRACT_AUTHORITY as _TEMPORAL_SEMANTICS_AUTHORITY,
+    )
+    _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE = True
+except Exception:
+    _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE = False
+    _build_temporal_verdict = None  # type: ignore[assignment]
+    _build_baseline_temporal_verdict = None  # type: ignore[assignment]
+    _TemporalClass = None  # type: ignore[assignment]
+    _TemporalEvidence = None  # type: ignore[assignment]
+    _TEMPORAL_SEMANTICS_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1170,7 +1209,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all sixteen acceptance dimensions and produce a report.
+        """Evaluate all seventeen acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -1197,6 +1236,7 @@ class SystemFinalAcceptanceEvaluator:
         item_telemetry_freshness = self._evaluate_telemetry_freshness()
         item_resource_pressure_capacity = self._evaluate_resource_pressure_capacity()
         item_concurrent_mutation = self._evaluate_concurrent_mutation_conflict()
+        item_temporal_semantics = self._evaluate_temporal_semantics()
 
         for item in (
             item_runtime,
@@ -1215,6 +1255,7 @@ class SystemFinalAcceptanceEvaluator:
             item_telemetry_freshness,
             item_resource_pressure_capacity,
             item_concurrent_mutation,
+            item_temporal_semantics,
         ):
             checklist[item.dimension.value] = item
 
@@ -3375,6 +3416,142 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_temporal_semantics(self) -> AcceptanceChecklistItem:
+        """Probe the TemporalSemanticsContract (PR-14).
+
+        Verifies that the formal time semantics / freshness / staleness /
+        deadline truth contract is available and that its zero-evidence
+        baseline probe correctly returns ``temporally_unreliable``
+        (fail-conservative) rather than ``timely_authoritative``.
+
+        This confirms that the contract module is present and conservatively
+        wired: "timestamp present" or "recent signal received" must never
+        auto-promote to "temporally authoritative".
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``temporally_unreliable`` (fail-conservative)
+            → ``pending`` (structure present; live temporal evidence not yet
+            collected)
+        Zero-evidence probe returns ``timely_authoritative``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.temporal_semantics
+        signal_source = "core.temporal_semantics_contract"
+
+        if (
+            not _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE
+            or _build_baseline_temporal_verdict is None
+            or _TemporalClass is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "TemporalSemanticsContract (PR-14) module unavailable."
+                ),
+                gap_description=(
+                    "core.temporal_semantics_contract is not importable.  "
+                    "Cannot assess time semantics / freshness / staleness / "
+                    "deadline truth taxonomy contract.  "
+                    "Ensure core/temporal_semantics_contract.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (temporally_unreliable) rather than an optimistic
+            # timely_authoritative.
+            verdict = _build_baseline_temporal_verdict()
+            verdict_dict = verdict.to_dict()
+            temporal_class = verdict.temporal_class.value
+
+            # The zero-evidence probe MUST NOT produce timely_authoritative.
+            # If it does, the contract is misconfigured.
+            if (
+                _TemporalClass is not None
+                and verdict.temporal_class
+                == _TemporalClass.timely_authoritative
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "TemporalSemanticsContract zero-evidence probe "
+                        "returned timely_authoritative with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The temporal semantics contract produced "
+                        "timely_authoritative with all evidence dimensions "
+                        "at their conservative defaults.  This violates "
+                        "TEMPORAL_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY and "
+                        "TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live temporal evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "TemporalSemanticsContract (PR-14) contract is wired "
+                    "and correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {temporal_class}.  "
+                    "Live temporal evidence has not been ingested in this "
+                    "process instance (expected in non-temporal-monitor "
+                    "baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _TEMPORAL_SEMANTICS_AUTHORITY,
+                    "zero_evidence_probe_class": temporal_class,
+                    "zero_evidence_probe_is_timely_authoritative": (
+                        verdict.is_timely_authoritative
+                    ),
+                    "zero_evidence_probe_is_temporally_unreliable": (
+                        verdict.is_temporally_unreliable
+                    ),
+                },
+                gap_description=(
+                    "Temporal semantics taxonomy is formally available "
+                    "(PR-14), but no live temporal evidence has been fed "
+                    "to the contract in this process instance.  This is "
+                    "expected in non-temporal-monitor baseline contexts.  "
+                    "Production paths should feed evidence from timestamp "
+                    "sources, heartbeat monitors, lag measurement systems, "
+                    "deadline trackers, and clock integrity verifiers "
+                    "via build_temporal_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "TemporalSemanticsContract probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_baseline_temporal_verdict raised: {exc!r}.  "
+                    "Cannot assess temporal semantics taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -3383,14 +3560,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the sixteen dimension items.
+        """Derive the system-level verdict from the seventeen dimension items.
 
         Policy:
-        - All sixteen dimensions must be ``accepted`` → ``fully_operational``
+        - All seventeen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all sixteen dimensions →
+        - Checklist does not contain all seventeen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
