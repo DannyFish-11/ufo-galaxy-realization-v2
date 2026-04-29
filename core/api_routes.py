@@ -679,6 +679,102 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                     _ttc_err,
                                 )
 
+                elif msg_type == "goal_result":
+                    # ── goal_result compat-path handler ───────────────────────
+                    # Android's OfflineTaskQueue queues goal_result messages
+                    # (alongside task_result) and drains them on reconnect with
+                    # real status values (success/failed/error/cancelled).
+                    # Before this fix there was no handler at all — every
+                    # goal_result fell through to the "unknown message type"
+                    # branch, meaning goal execution outcomes were silently
+                    # discarded on the compat path.
+                    #
+                    # This handler applies the same three-layer fix that PR #886
+                    # applied to task_result:
+                    #   1. Idempotency guard  — suppress offline-replay duplicates
+                    #   2. Status truth mapping — map Android taxonomy to canonical
+                    #   3. Truth chain call    — drive truth_ingress, reconcile,
+                    #                           lifecycle update, completion linkage
+                    _goal_task_id = data.get("task_id", "") or data.get("goal_id", "")
+                    if _goal_task_id:
+                        # ── Compat-path idempotency guard ──────────────────
+                        _goal_already_seen = False
+                        _goal_idem_key = f"goal_result:{_goal_task_id}"
+                        try:
+                            from core.durable_result_idempotency import (
+                                check_result_idempotency as _check_goal_idem,
+                                record_result_idempotency as _record_goal_idem,
+                            )
+                            if _check_goal_idem(_goal_idem_key):
+                                _goal_already_seen = True
+                                logger.debug(
+                                    "compat_ws: duplicate goal_result suppressed "
+                                    "(durable store): task_id=%s device_id=%s",
+                                    _goal_task_id,
+                                    device_id,
+                                )
+                            else:
+                                _record_goal_idem(_goal_idem_key)
+                        except Exception as _goal_idem_err:
+                            logger.debug(
+                                "compat_ws: goal_result idempotency check skipped "
+                                "(non-fatal): %s",
+                                _goal_idem_err,
+                            )
+
+                        if not _goal_already_seen:
+                            # ── Status truth mapping ───────────────────────
+                            # Android sends real status (success/failed/error/
+                            # cancelled/degraded).  Map to canonical V2 status
+                            # rather than silently discarding or assuming success.
+                            _goal_raw_status = str(data.get("status", "")).lower().strip()
+                            if _goal_raw_status in ("failed", "error"):
+                                _goal_mapped_status = "failed"
+                            elif _goal_raw_status == "cancelled":
+                                _goal_mapped_status = "cancelled"
+                            elif _goal_raw_status == "degraded":
+                                _goal_mapped_status = "degraded"
+                            else:
+                                _goal_mapped_status = "completed"
+
+                            logger.info(
+                                "compat_ws: goal_result task_id=%s status=%s→%s",
+                                _goal_task_id, _goal_raw_status, _goal_mapped_status,
+                            )
+
+                            if _goal_task_id in task_queue:
+                                task_queue[_goal_task_id]["status"] = _goal_mapped_status
+                                task_queue[_goal_task_id]["result"] = data.get("result", {})
+                                task_queue[_goal_task_id]["completed_at"] = datetime.now().isoformat()
+
+                            # ── Truth chain (best-effort) ──────────────────
+                            # Reuse the task_result canonical truth chain for
+                            # goal_result — the four steps (truth_ingress,
+                            # reconcile, authority_update, completion_linkage)
+                            # apply equally to goal execution outcomes.
+                            try:
+                                from core.task_result_canonical_truth_chain import (
+                                    run_task_result_truth_chain as _run_goal_ttc,
+                                )
+                                _goal_ttc_outcome = _run_goal_ttc(
+                                    data,
+                                    task_id=_goal_task_id,
+                                    result_status=_goal_mapped_status,
+                                )
+                                if not _goal_ttc_outcome.is_truth_chain_complete:
+                                    logger.debug(
+                                        "compat_ws: goal_result truth chain incomplete "
+                                        "task_id=%s: %s",
+                                        _goal_task_id,
+                                        _goal_ttc_outcome.incomplete_reason,
+                                    )
+                            except Exception as _goal_ttc_err:
+                                logger.debug(
+                                    "compat_ws: goal_result truth chain skipped "
+                                    "(non-fatal): %s",
+                                    _goal_ttc_err,
+                                )
+
                 elif msg_type == "ocr_request":
                     image_b64 = data.get("image", "")
                     mode = data.get("mode", "full")
