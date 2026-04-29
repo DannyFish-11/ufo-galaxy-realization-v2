@@ -450,8 +450,8 @@ class TestExplicitReconnectUnknownDevice:
             ws,
             _v3("device_reconnect", unknown_device_id, platform="android"),
         )
-        # The handler should return a ack (not None, not an exception)
-        assert ack is not None, "device_reconnect for unknown device must return an ack"
+        # The handler should return an acknowledgment (not None, not an exception)
+        assert ack is not None, "device_reconnect for unknown device must return an acknowledgment"
         assert ack.get("type") == "reconnect_ack"
         # outcome depends on implementation; the important thing is no crash and
         # a machine-observable response is returned
