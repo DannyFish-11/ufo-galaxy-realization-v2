@@ -265,7 +265,7 @@ class TestTruthChainInvocation:
         # Simulate the try/except block in the compat handler
         def _invoke_truth_chain_safe(message: Dict[str, Any], task_id: str, mapped_status: str) -> None:
             try:
-                from core.task_result_canonical_truth_chain import (  # noqa: F401
+                from core.task_result_canonical_truth_chain import (
                     run_task_result_truth_chain as _run_ttc,
                 )
                 _run_ttc(message, task_id=task_id, result_status=mapped_status)
