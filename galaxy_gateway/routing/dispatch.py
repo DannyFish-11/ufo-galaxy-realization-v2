@@ -157,7 +157,11 @@ async def dispatch_to_websocket(
         )
 
         class _EnvProxy:
-            pass
+            task_id: str
+            trace_id: str
+            target: str
+            tool_name: str
+            timeout: float
 
         _ep = _EnvProxy()
         _ep.task_id = task_id

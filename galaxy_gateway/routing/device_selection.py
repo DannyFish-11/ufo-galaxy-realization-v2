@@ -316,7 +316,7 @@ def select_devices(
         pool = get_device_pool_manager()
         preferred_ids = {d.device_id for d in preferred}
         device_type_str = (
-            target_device_type.value
+            target_device_type.value  # type: ignore[union-attr]
             if hasattr(target_device_type, "value")
             else str(target_device_type)
         )

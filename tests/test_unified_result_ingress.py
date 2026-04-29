@@ -80,6 +80,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+try:
+    import fastapi  # noqa: F401
+    _FASTAPI_AVAILABLE = True
+except ImportError:
+    _FASTAPI_AVAILABLE = False
+
+try:
+    import pydantic  # noqa: F401
+    _PYDANTIC_AVAILABLE = True
+except ImportError:
+    _PYDANTIC_AVAILABLE = False
+
 
 # ===========================================================================
 # Helpers
@@ -555,6 +567,7 @@ class TestSourceChannelCoverage:
 # Group H — REST endpoint integration
 # ===========================================================================
 
+@pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 class TestRestEndpointIntegration:
 
     def test_H01_submit_task_result_calls_truth_chain(self):
@@ -727,6 +740,7 @@ class TestCompatWsGoalExecutionResult:
 # Group J — canonical handle_goal_execution_result completion authority
 # ===========================================================================
 
+@pytest.mark.skipif(not _PYDANTIC_AVAILABLE, reason="pydantic not installed")
 class TestCanonicalGoalExecutionResultCompletion:
 
     @pytest.mark.asyncio
