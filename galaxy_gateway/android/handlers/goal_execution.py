@@ -351,6 +351,29 @@ async def handle_parallel_subtask(
         )
 
 
+def _normalize_android_goal_status(raw_status: str) -> str:
+    """Map Android execution status taxonomy to canonical V2 status.
+
+    Android's ``OfflineTaskQueue`` emits ``goal_execution_result`` messages
+    with status values from the Android execution taxonomy:
+    ``success`` / ``failed`` / ``error`` / ``cancelled`` / ``degraded``.
+    V2's canonical truth chain and lifecycle expect the normalised vocabulary:
+    ``completed`` / ``failed`` / ``cancelled`` / ``degraded``.
+
+    This function closes the taxonomy mismatch so that downstream truth chain
+    steps — reconcile, authority_update, completion_linkage — always see the
+    canonical status string.
+    """
+    s = str(raw_status).lower().strip()
+    if s in ("failed", "error"):
+        return "failed"
+    if s == "cancelled":
+        return "cancelled"
+    if s == "degraded":
+        return "degraded"
+    return "completed"
+
+
 async def handle_goal_execution_result(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> None:
@@ -358,6 +381,8 @@ async def handle_goal_execution_result(
 
     Android 执行完 goal_execution 或 parallel_subtask 后发送此消息。
     处理策略：
+    - 幂等性保护（durable store）— 防止 OfflineTaskQueue 重放重复消费
+    - Android→canonical status 规范化 — 防止"success"被误判为非终态
     - 记录到 TaskMemory（供 LLM 上下文注入）
     - 触发 OpenClawd 反馈（如果有对话反馈路径）
     """
@@ -365,16 +390,46 @@ async def handle_goal_execution_result(
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
-    status = payload.get("status", "unknown")
+    # Raw Android status — may be "success", "failed", "error", "cancelled", "degraded".
+    _raw_status = payload.get("status", "unknown")
+    # Canonical V2 status — normalised from the Android taxonomy.
+    status = _normalize_android_goal_status(_raw_status)
     result_text = payload.get("result") or payload.get("details", "")
     latency_ms = payload.get("latency_ms", 0)
     group_id = payload.get("group_id")
     subtask_index = payload.get("subtask_index")
 
+    # ── Durable idempotency guard ─────────────────────────────────────────
+    # Android's OfflineTaskQueue drains goal_execution_result messages on
+    # reconnect.  A V2 restart + Android reconnect can replay the same result
+    # multiple times.  Check the durable store before any side-effecting work
+    # so that memory backflow, reconcile, and completion linkage each run at
+    # most once per task_id.
+    _ger_idem_key = f"goal_execution_result:{task_id}"
+    try:
+        from core.durable_result_idempotency import (
+            check_result_idempotency as _check_ger_idem,
+            record_result_idempotency as _record_ger_idem,
+        )
+        if _check_ger_idem(_ger_idem_key):
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: duplicate suppressed (durable store): "
+                "task_id=%s device_id=%s",
+                task_id, device_id,
+            )
+            return
+        _record_ger_idem(_ger_idem_key)
+    except Exception as _ger_idem_err:
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: idempotency check skipped (non-fatal): %s",
+            _ger_idem_err,
+        )
+
     logger.info(
-        "GOAL_EXECUTION_RESULT received: task_id=%s device_id=%s status=%s "
+        "GOAL_EXECUTION_RESULT received: task_id=%s device_id=%s "
+        "raw_status=%s canonical_status=%s "
         "group_id=%s subtask_index=%s latency=%sms",
-        task_id, device_id, status, group_id, subtask_index, latency_ms,
+        task_id, device_id, _raw_status, status, group_id, subtask_index, latency_ms,
     )
 
     # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
