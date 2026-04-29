@@ -269,7 +269,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         })
 
     @router.post("/api/v1/tasks/{task_id}/result")
-    async def submit_task_result(task_id: str, payload: TaskResultPayload = None):
+    async def submit_task_result(task_id: str, payload: Optional[TaskResultPayload] = None):
         """提交任务结果（设备回调）.
 
         Accepts an optional JSON body with a ``status`` field from the
