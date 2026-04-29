@@ -491,6 +491,20 @@ class AcceptanceDimensionId(str, Enum):
         clock uncertainty, heartbeat absence, and unmeasured lags are
         honestly classified rather than optimistically promoted to
         timely_authoritative.
+
+    identity_authorship_binding
+        Formal identity / authorship / actor-binding semantics taxonomy
+        (core.identity_authorship_actor_binding_contract).  Answers:
+        what is the authoritative identity binding class for an actor,
+        participant, author, or source claim?  Distinguishes
+        identity_authoritatively_bound, authorship_verified,
+        asserted_but_unverified, delegated_or_proxy_actor, and
+        identity_or_provenance_uncertain.  This dimension enforces that
+        the system does not conflate "actor field is present" (field
+        existence) with "identity is authoritatively bound" (verified
+        binding), and that bare assertions, delegations, proxy actors, and
+        unverified source attributions are honestly classified rather than
+        optimistically promoted to identity_authoritatively_bound.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -510,6 +524,7 @@ class AcceptanceDimensionId(str, Enum):
     resource_pressure_capacity = "resource_pressure_capacity"
     concurrent_mutation_conflict = "concurrent_mutation_conflict"
     temporal_semantics = "temporal_semantics"
+    identity_authorship_binding = "identity_authorship_binding"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -523,7 +538,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all seventeen dimensions in canonical evaluation order.
+        """Return all eighteen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -541,6 +556,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 15 with resource_pressure_capacity (PR-17)
           - Expanded to 16 with concurrent_mutation_conflict (PR-13)
           - Expanded to 17 with temporal_semantics (PR-14)
+          - Expanded to 18 with identity_authorship_binding
         """
         return [
             cls.runtime_readiness,
@@ -560,6 +576,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.resource_pressure_capacity,
             cls.concurrent_mutation_conflict,
             cls.temporal_semantics,
+            cls.identity_authorship_binding,
         ]
 
 
@@ -1171,6 +1188,28 @@ except Exception:
     _TemporalEvidence = None  # type: ignore[assignment]
     _TEMPORAL_SEMANTICS_AUTHORITY = ""
 
+# IdentityAuthorshipActorBindingContract — identity / authorship /
+# actor-binding semantics taxonomy dimension.  Probes whether the formal
+# identity binding taxonomy is available and correctly produces conservative
+# (identity_or_provenance_uncertain) verdicts when no identity evidence is
+# present.
+try:
+    from core.identity_authorship_actor_binding_contract import (  # type: ignore[import]
+        build_identity_binding_verdict as _build_identity_binding_verdict,
+        build_baseline_identity_binding_verdict as _build_baseline_identity_binding_verdict,
+        IdentityBindingClass as _IdentityBindingClass,
+        IdentityBindingEvidence as _IdentityBindingEvidence,
+        IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY as _IDENTITY_BINDING_AUTHORITY,
+    )
+    _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE = True
+except Exception:
+    _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE = False
+    _build_identity_binding_verdict = None  # type: ignore[assignment]
+    _build_baseline_identity_binding_verdict = None  # type: ignore[assignment]
+    _IdentityBindingClass = None  # type: ignore[assignment]
+    _IdentityBindingEvidence = None  # type: ignore[assignment]
+    _IDENTITY_BINDING_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1209,11 +1248,14 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all seventeen acceptance dimensions and produce a report.
+        """Evaluate all eighteen acceptance dimensions and produce a report.
 
-        The seventeen dimensions include the newly added ``temporal_semantics``
-        dimension (PR-14) which enforces that timestamp presence alone does not
-        constitute timely authoritative temporal truth.
+        The eighteen dimensions include the newly added
+        ``identity_authorship_binding`` dimension which enforces that actor
+        field presence alone does not constitute authoritative identity
+        binding, and the ``temporal_semantics`` dimension (PR-14) which
+        enforces that timestamp presence alone does not constitute timely
+        authoritative temporal truth.
 
         Returns
         -------
@@ -1241,6 +1283,7 @@ class SystemFinalAcceptanceEvaluator:
         item_resource_pressure_capacity = self._evaluate_resource_pressure_capacity()
         item_concurrent_mutation = self._evaluate_concurrent_mutation_conflict()
         item_temporal_semantics = self._evaluate_temporal_semantics()
+        item_identity_authorship_binding = self._evaluate_identity_authorship_binding()
 
         for item in (
             item_runtime,
@@ -1260,6 +1303,7 @@ class SystemFinalAcceptanceEvaluator:
             item_resource_pressure_capacity,
             item_concurrent_mutation,
             item_temporal_semantics,
+            item_identity_authorship_binding,
         ):
             checklist[item.dimension.value] = item
 
@@ -3556,6 +3600,148 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_identity_authorship_binding(self) -> AcceptanceChecklistItem:
+        """Probe the IdentityAuthorshipActorBindingContract.
+
+        Verifies that the formal identity / authorship / actor-binding
+        semantics contract is available and that its zero-evidence baseline
+        probe correctly returns ``identity_or_provenance_uncertain``
+        (fail-conservative) rather than ``identity_authoritatively_bound``.
+
+        This confirms that the contract module is present and conservatively
+        wired: "actor field is present" must never auto-promote to
+        "identity authoritatively bound".
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``identity_or_provenance_uncertain`` (fail-conservative)
+            → ``pending`` (structure present; live identity evidence not
+            yet collected)
+        Zero-evidence probe returns ``identity_authoritatively_bound``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.identity_authorship_binding
+        signal_source = "core.identity_authorship_actor_binding_contract"
+
+        if (
+            not _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE
+            or _build_baseline_identity_binding_verdict is None
+            or _IdentityBindingClass is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "IdentityAuthorshipActorBindingContract module "
+                    "unavailable."
+                ),
+                gap_description=(
+                    "core.identity_authorship_actor_binding_contract is not "
+                    "importable.  Cannot assess identity / authorship / "
+                    "actor-binding semantics taxonomy contract.  "
+                    "Ensure core/identity_authorship_actor_binding_contract.py "
+                    "is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (identity_or_provenance_uncertain) rather than an optimistic
+            # identity_authoritatively_bound.
+            verdict = _build_baseline_identity_binding_verdict()
+            verdict_dict = verdict.to_dict()
+            binding_class = verdict.binding_class.value
+
+            # The zero-evidence probe MUST NOT produce
+            # identity_authoritatively_bound.  If it does, the contract is
+            # misconfigured.
+            if (
+                _IdentityBindingClass is not None
+                and verdict.binding_class
+                == _IdentityBindingClass.identity_authoritatively_bound
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "IdentityAuthorshipActorBindingContract zero-evidence "
+                        "probe returned identity_authoritatively_bound with "
+                        "no evidence — contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The identity authorship binding contract produced "
+                        "identity_authoritatively_bound with all evidence "
+                        "dimensions at their conservative defaults.  This "
+                        "violates ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_"
+                        "BINDING_POLICY and "
+                        "PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live identity evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "IdentityAuthorshipActorBindingContract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {binding_class}.  "
+                    "Live identity / authorship evidence has not been "
+                    "ingested in this process instance (expected in "
+                    "non-identity-monitor baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _IDENTITY_BINDING_AUTHORITY,
+                    "zero_evidence_probe_class": binding_class,
+                    "zero_evidence_probe_is_authoritatively_bound": (
+                        verdict.is_authoritatively_bound
+                    ),
+                    "zero_evidence_probe_is_uncertain": (
+                        verdict.is_uncertain
+                    ),
+                },
+                gap_description=(
+                    "Identity / authorship / actor-binding taxonomy is "
+                    "formally available, but no live identity evidence has "
+                    "been fed to the contract in this process instance.  "
+                    "This is expected in non-identity-monitor baseline "
+                    "contexts.  Production paths should feed evidence from "
+                    "identity providers, authorship validators, delegation "
+                    "registries, and actor attribution surfaces via "
+                    "build_identity_binding_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "IdentityAuthorshipActorBindingContract probe raised an "
+                    "exception."
+                ),
+                gap_description=(
+                    f"build_baseline_identity_binding_verdict raised: "
+                    f"{exc!r}.  Cannot assess identity / authorship / "
+                    "actor-binding taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -3564,14 +3750,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the seventeen dimension items.
+        """Derive the system-level verdict from the eighteen dimension items.
 
         Policy:
-        - All seventeen dimensions must be ``accepted`` → ``fully_operational``
+        - All eighteen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all seventeen dimensions →
+        - Checklist does not contain all eighteen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
