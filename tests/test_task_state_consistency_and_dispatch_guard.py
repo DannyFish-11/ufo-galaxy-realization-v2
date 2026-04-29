@@ -210,6 +210,26 @@ class TestSubmitTaskResultSyncsCanonicalRuntime:
         assert runtime_task is not None
         assert runtime_task.lifecycle == TaskLifecycle.COMPLETED
 
+    def test_A07_unrecognized_status_defaults_to_completed(self, task_route_client):
+        """An unrecognized status string falls back to 'completed' in both surfaces."""
+        from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+
+        client, task_queue = task_route_client
+        task_id = _make_task_in_queue(task_queue, status="dispatched")
+        _register_task_in_canonical_runtime(task_id)
+
+        resp = self._call_submit(client, task_id, status="unknown_result_type_xyz")
+        assert resp.status_code == 200
+
+        # Unrecognized status → both surfaces should be 'completed'
+        assert task_queue[task_id]["status"] == "completed"
+
+        runtime_task = get_canonical_task_runtime().get_by_task_id(task_id)
+        assert runtime_task is not None
+        assert runtime_task.lifecycle == TaskLifecycle.COMPLETED, (
+            "An unrecognized status must default to COMPLETED in CanonicalTaskRuntime"
+        )
+
 
 # ===========================================================================
 # B. task_queue and CanonicalTaskRuntime agree after submit_task_result

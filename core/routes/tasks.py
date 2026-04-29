@@ -317,7 +317,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "submit_task_result: CanonicalTaskRuntime synced task_id=%s lifecycle=%s",
                 task_id, _target.value,
             )
-        except Exception as _sync_err:
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _sync_err:
             logger.warning(
                 "submit_task_result: CanonicalTaskRuntime sync failed task_id=%s error=%s — "
                 "task_queue was updated but CanonicalTaskRuntime lifecycle may be stale",

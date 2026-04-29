@@ -899,7 +899,7 @@ class AndroidBridge:
             if _gaps:
                 logger.warning(
                     "AndroidBridge.assign_task: DISPATCH BLOCKED — device_id=%s has "
-                    "incomplete registration attachments gaps=%s; raising "
+                    "incomplete registration attachment gaps=%s; raising "
                     "DispatchBlockedByRegistrationGapError",
                     device_id, _gaps,
                 )
@@ -908,7 +908,8 @@ class AndroidBridge:
             raise
         except Exception as _gap_check_err:
             logger.debug(
-                "AndroidBridge.assign_task: registration gap check skipped — %s",
+                "AndroidBridge.assign_task: registration gap check skipped "
+                "(registration module unavailable or import failed) — %s",
                 _gap_check_err,
             )
 
