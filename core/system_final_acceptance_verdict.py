@@ -433,6 +433,19 @@ class AcceptanceDimensionId(str, Enum):
         established", and that any partial verification, incomplete evidence
         base, or open verification items are honestly classified rather than
         optimistically promoted to fully_closed.
+
+    telemetry_freshness
+        Formal real-time observability / telemetry freshness taxonomy
+        (core.telemetry_freshness_contract, PR-15).  Answers: what is the
+        authoritative observability freshness class for the system?
+        Distinguishes realtime_authoritative, fresh_not_realtime,
+        delayed_observable, partially_observable, and telemetry_unreliable.
+        This dimension enforces that the system does not conflate "some
+        telemetry is visible" (signal presence) with "the system is being
+        observed in real-time, completely, and authoritatively", and that
+        any stale, partial, delayed, or unreliable telemetry is honestly
+        classified rather than optimistically promoted to
+        realtime_authoritative.
     """
 
     runtime_readiness = "runtime_readiness"
@@ -448,6 +461,7 @@ class AcceptanceDimensionId(str, Enum):
     human_intervention = "human_intervention"
     offline_operational = "offline_operational"
     verification_evidence_closure = "verification_evidence_closure"
+    telemetry_freshness = "telemetry_freshness"
 
     @classmethod
     def from_string(cls, value: str) -> "AcceptanceDimensionId":
@@ -461,7 +475,7 @@ class AcceptanceDimensionId(str, Enum):
 
     @classmethod
     def all_dimensions(cls) -> List["AcceptanceDimensionId"]:
-        """Return all thirteen dimensions in canonical evaluation order.
+        """Return all fourteen dimensions in canonical evaluation order.
 
         Dimension count history:
           - Originally 5 dimensions (PR-17V2 baseline: runtime_readiness,
@@ -475,6 +489,7 @@ class AcceptanceDimensionId(str, Enum):
           - Expanded to 11 with human_intervention (PR-08)
           - Expanded to 12 with offline_operational (PR-10)
           - Expanded to 13 with verification_evidence_closure (PR-12)
+          - Expanded to 14 with telemetry_freshness (PR-15)
         """
         return [
             cls.runtime_readiness,
@@ -490,6 +505,7 @@ class AcceptanceDimensionId(str, Enum):
             cls.human_intervention,
             cls.offline_operational,
             cls.verification_evidence_closure,
+            cls.telemetry_freshness,
         ]
 
 
@@ -1016,6 +1032,27 @@ except Exception:
     _VerificationClosureEvidence = None  # type: ignore[assignment]
     _VERIFICATION_CLOSURE_AUTHORITY = ""
 
+# TelemetryFreshnessContract (PR-15) — real-time observability / telemetry
+# freshness taxonomy dimension.  Probes whether the formal freshness taxonomy
+# is available and correctly produces conservative (telemetry_unreliable)
+# verdicts when no positive telemetry evidence is present.
+try:
+    from core.telemetry_freshness_contract import (  # type: ignore[import]
+        build_telemetry_freshness_verdict as _build_telemetry_freshness_verdict,
+        build_baseline_telemetry_freshness_verdict as _build_baseline_telemetry_freshness_verdict,
+        TelemetryFreshnessClass as _TelemetryFreshnessClass,
+        TelemetryFreshnessEvidence as _TelemetryFreshnessEvidence,
+        TELEMETRY_FRESHNESS_CONTRACT_AUTHORITY as _TELEMETRY_FRESHNESS_AUTHORITY,
+    )
+    _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE = True
+except Exception:
+    _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE = False
+    _build_telemetry_freshness_verdict = None  # type: ignore[assignment]
+    _build_baseline_telemetry_freshness_verdict = None  # type: ignore[assignment]
+    _TelemetryFreshnessClass = None  # type: ignore[assignment]
+    _TelemetryFreshnessEvidence = None  # type: ignore[assignment]
+    _TELEMETRY_FRESHNESS_AUTHORITY = ""
+
 
 # ---------------------------------------------------------------------------
 # SystemFinalAcceptanceEvaluator
@@ -1054,7 +1091,7 @@ class SystemFinalAcceptanceEvaluator:
     EVALUATOR_VERSION: str = "1.0"
 
     def evaluate(self) -> SystemAcceptanceReport:
-        """Evaluate all thirteen acceptance dimensions and produce a report.
+        """Evaluate all fourteen acceptance dimensions and produce a report.
 
         Returns
         -------
@@ -1078,6 +1115,7 @@ class SystemFinalAcceptanceEvaluator:
         item_human_intervention = self._evaluate_human_intervention()
         item_offline_operational = self._evaluate_offline_operational()
         item_verification_closure = self._evaluate_verification_evidence_closure()
+        item_telemetry_freshness = self._evaluate_telemetry_freshness()
 
         for item in (
             item_runtime,
@@ -1093,6 +1131,7 @@ class SystemFinalAcceptanceEvaluator:
             item_human_intervention,
             item_offline_operational,
             item_verification_closure,
+            item_telemetry_freshness,
         ):
             checklist[item.dimension.value] = item
 
@@ -2841,6 +2880,147 @@ class SystemFinalAcceptanceEvaluator:
                 signal_source=signal_source,
             )
 
+    def _evaluate_telemetry_freshness(self) -> AcceptanceChecklistItem:
+        """Evaluate the real-time observability / telemetry freshness taxonomy
+        dimension (PR-15).
+
+        Consumes :func:`~core.telemetry_freshness_contract
+        .build_baseline_telemetry_freshness_verdict` to determine whether the
+        formal telemetry freshness taxonomy is available and correctly produces
+        a conservative (telemetry_unreliable) verdict when no positive
+        telemetry evidence is present.
+
+        This probe evaluates the *structural availability* of the contract
+        module and runs a zero-evidence evaluation to confirm the contract is
+        wired and correctly defaults to ``telemetry_unreliable`` rather than
+        optimistically claiming ``realtime_authoritative``.  Production
+        deployments should feed actual telemetry channel state via
+        :func:`~core.telemetry_freshness_contract.build_telemetry_freshness_verdict`;
+        this acceptance probe verifies that the contract is available and
+        conservatively wired.
+
+        Status mapping
+        --------------
+        Module present and zero-evidence probe correctly returns
+        ``telemetry_unreliable`` (fail-conservative)
+            → ``pending`` (structure present; live evidence not yet collected)
+        Zero-evidence probe returns ``realtime_authoritative``
+        (contract misconfiguration)
+            → ``unresolved``
+        Module unavailable or probe raised
+            → ``unresolved``
+        """
+        dimension = AcceptanceDimensionId.telemetry_freshness
+        signal_source = "core.telemetry_freshness_contract"
+
+        if (
+            not _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE
+            or _build_baseline_telemetry_freshness_verdict is None
+            or _TelemetryFreshnessEvidence is None
+        ):
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "TelemetryFreshnessContract (PR-15) module unavailable."
+                ),
+                gap_description=(
+                    "core.telemetry_freshness_contract is not importable.  "
+                    "Cannot assess real-time observability / telemetry freshness "
+                    "taxonomy contract.  "
+                    "Ensure core/telemetry_freshness_contract.py is deployed."
+                ),
+                signal_source=signal_source,
+            )
+
+        try:
+            # Probe with the baseline (zero-evidence) input to confirm the
+            # contract is wired and produces a conservative verdict
+            # (telemetry_unreliable) rather than an optimistic
+            # realtime_authoritative.
+            verdict = _build_baseline_telemetry_freshness_verdict()
+            verdict_dict = verdict.to_dict()
+            freshness_class = verdict.freshness_class.value
+
+            # The zero-evidence probe MUST NOT produce realtime_authoritative.
+            # If it does, the contract is misconfigured.
+            if (
+                _TelemetryFreshnessClass is not None
+                and verdict.freshness_class
+                == _TelemetryFreshnessClass.realtime_authoritative
+            ):
+                return AcceptanceChecklistItem(
+                    dimension=dimension,
+                    status=DimensionStatus.unresolved,
+                    evidence_summary=(
+                        "TelemetryFreshnessContract zero-evidence probe returned "
+                        "realtime_authoritative with no evidence — "
+                        "contract misconfiguration detected."
+                    ),
+                    evidence_linkage=verdict_dict,
+                    gap_description=(
+                        "The telemetry freshness contract produced "
+                        "realtime_authoritative with all evidence dimensions at "
+                        "their conservative defaults.  This violates "
+                        "TELEMETRY_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY and "
+                        "SIGNAL_PRESENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY.  "
+                        "The contract module must be corrected."
+                    ),
+                    signal_source=signal_source,
+                )
+
+            # Contract is wired and conservative.  This dimension is
+            # structurally present.  Whether live telemetry evidence has been
+            # ingested is a runtime concern; the acceptance dimension confirms
+            # the formal taxonomy is available and correctly wired.
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.pending,
+                evidence_summary=(
+                    "TelemetryFreshnessContract (PR-15) contract is wired and "
+                    "correctly produces conservative verdicts.  "
+                    f"Zero-evidence probe class: {freshness_class}.  "
+                    "Live telemetry / observability evidence has not been "
+                    "ingested in this process instance (expected in "
+                    "non-telemetry baseline context)."
+                ),
+                evidence_linkage={
+                    "module": signal_source,
+                    "contract_sentinel": _TELEMETRY_FRESHNESS_AUTHORITY,
+                    "zero_evidence_probe_class": freshness_class,
+                    "zero_evidence_probe_is_realtime_authoritative": (
+                        verdict.is_realtime_authoritative
+                    ),
+                    "zero_evidence_probe_is_fresh": verdict.is_fresh,
+                    "zero_evidence_probe_is_unreliable": verdict.is_unreliable,
+                },
+                gap_description=(
+                    "Telemetry freshness taxonomy is formally available (PR-15), "
+                    "but no live telemetry or observability evidence has been "
+                    "fed to the contract in this process instance.  "
+                    "This is expected in non-telemetry baseline contexts.  "
+                    "Production paths should feed evidence from telemetry "
+                    "channel monitors, delivery path confirmations, freshness "
+                    "window evaluators, and sampling rate observers via "
+                    "build_telemetry_freshness_verdict()."
+                ),
+                signal_source=signal_source,
+            )
+
+        except Exception as exc:
+            return AcceptanceChecklistItem(
+                dimension=dimension,
+                status=DimensionStatus.unresolved,
+                evidence_summary=(
+                    "TelemetryFreshnessContract probe raised an exception."
+                ),
+                gap_description=(
+                    f"build_baseline_telemetry_freshness_verdict raised: {exc!r}.  "
+                    "Cannot assess telemetry freshness taxonomy dimension."
+                ),
+                signal_source=signal_source,
+            )
+
     # ------------------------------------------------------------------
     # Aggregation helpers
     # ------------------------------------------------------------------
@@ -2849,14 +3029,14 @@ class SystemFinalAcceptanceEvaluator:
     def _compute_verdict(
         checklist: Dict[str, AcceptanceChecklistItem],
     ) -> SystemAcceptanceVerdict:
-        """Derive the system-level verdict from the thirteen dimension items.
+        """Derive the system-level verdict from the fourteen dimension items.
 
         Policy:
-        - All thirteen dimensions must be ``accepted`` → ``fully_operational``
+        - All fourteen dimensions must be ``accepted`` → ``fully_operational``
         - Any ``unresolved`` dimension → ``not_fully_operational_critical_risk``
         - Any ``pending`` dimension (no ``unresolved``) →
           ``not_fully_operational_pending_dimensions``
-        - Checklist does not contain all thirteen dimensions →
+        - Checklist does not contain all fourteen dimensions →
           ``acceptance_unknown_insufficient_evidence``
         """
         all_dims = AcceptanceDimensionId.all_dimensions()
