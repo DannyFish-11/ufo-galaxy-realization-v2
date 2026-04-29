@@ -221,6 +221,11 @@ class MessageType(str, Enum):
     # === 高层自治目标执行 ===
     GOAL_EXECUTION = "goal_execution"
     GOAL_EXECUTION_RESULT = "goal_execution_result"
+    # Android error-path alias for goal_execution_result — some Android flows
+    # emit "goal_result" on failure/cancellation paths instead of the canonical
+    # "goal_execution_result".  This alias must be mapped to the same handler
+    # so the error path is not silently discarded on the canonical gateway.
+    GOAL_RESULT = "goal_result"
 
     # === 多设备并行任务 ===
     PARALLEL_SUBTASK = "parallel_subtask"

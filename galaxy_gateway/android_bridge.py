@@ -635,6 +635,10 @@ class AndroidBridge:
         self._message_handlers[MessageType.GOAL_EXECUTION] = _wrap(handle_goal_execution)
         self._message_handlers[MessageType.PARALLEL_SUBTASK] = _wrap(handle_parallel_subtask)
         self._message_handlers[MessageType.GOAL_EXECUTION_RESULT] = _wrap(handle_goal_execution_result)
+        # Android error-path alias: some flows emit "goal_result" instead of
+        # "goal_execution_result" on failure/cancellation.  Route to the same
+        # handler so the canonical result path is not silently discarded.
+        self._message_handlers[MessageType.GOAL_RESULT] = _wrap(handle_goal_execution_result)
         self._message_handlers[MessageType.TASK_CANCEL] = _wrap(handle_task_cancel)
         self._message_handlers[MessageType.TASK_STATUS] = _wrap(handle_task_status)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
