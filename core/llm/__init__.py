@@ -5,6 +5,7 @@ core/llm — Multi-LLM Router Package
 **Batch PR-5: Multi-LLM routing decomposition**
 **L1: Unify LLM routing under a single router authority**
 **L2: Canonicalize model supply truth, provider ordering, and fallback legality**
+**L3: Canonicalize cognitive input assembly under a single context authority**
 
 This package decomposes the multi-LLM routing layer into explicit, testable
 submodules while preserving the public API of ``core.multi_llm_router``.
@@ -25,6 +26,16 @@ supply_authority.py
     provider/model was requested, which was supplied, and why any fallback
     was legal.  Public factory: :func:`get_llm_supply_authority`.
     Sentinel: ``LLM_SUPPLY_AUTHORITY = "core.llm.supply_authority.LLMSupplyAuthority"``.
+
+context_authority.py
+    **L3 canonical cognitive input assembly authority**.
+    :class:`CognitiveContextAuthority` is the single gate through which all
+    cognitive input assembly (prompt, memory, tools, runtime state, policy
+    constraints, continuity context, execution metadata) must pass before
+    provider formatting and model invocation.  Public factory:
+    :func:`get_cognitive_context_authority`.
+    Sentinel:
+    ``LLM_CONTEXT_AUTHORITY = "core.llm.context_authority.CognitiveContextAuthority"``.
 
 router.py
     Facade and authority sentinel for ``MultiLLMRouter``.  Public factory
@@ -54,6 +65,12 @@ Authority sentinels
     L1 route intent and provider execution.  Enforces explicit provider ordering
     and fallback legality.
 
+``LLM_CONTEXT_AUTHORITY = "core.llm.context_authority.CognitiveContextAuthority"``
+    **Context (L3)** — the single canonical cognitive input assembly authority.
+    All prompt, memory, tool, runtime, continuity, and metadata inputs must be
+    assembled through :class:`CognitiveContextAuthority` before provider
+    formatting and execution.
+
 ``LLM_ROUTING_PACKAGE_AUTHORITY = "core.llm"``
     Package-level sentinel (PR-5).
 
@@ -67,6 +84,7 @@ For new code, prefer the canonical authority entry points:
 
     from core.llm import get_llm_route_authority, LLMRouteRequest
     from core.llm import get_llm_supply_authority, FallbackLegality
+    from core.llm import get_cognitive_context_authority, CognitiveContextRequest
 """
 from __future__ import annotations
 
@@ -98,6 +116,16 @@ from core.llm.supply_authority import (  # noqa: F401
     LLMSupplyAuthority,
     get_llm_supply_authority,
     refresh_llm_supply_authority,
+)
+
+# ── L3 canonical cognitive input assembly authority ───────────────────────
+from core.llm.context_authority import (  # noqa: F401
+    LLM_CONTEXT_AUTHORITY,
+    CognitiveContextRequest,
+    CognitiveContextAssembly,
+    CognitiveContextAuthority,
+    get_cognitive_context_authority,
+    refresh_cognitive_context_authority,
 )
 
 # ── backward-compat re-exports from canonical implementation ─────────────
@@ -133,6 +161,13 @@ __all__ = [
     "LLMSupplyAuthority",
     "get_llm_supply_authority",
     "refresh_llm_supply_authority",
+    # L3 canonical cognitive input assembly authority
+    "LLM_CONTEXT_AUTHORITY",
+    "CognitiveContextRequest",
+    "CognitiveContextAssembly",
+    "CognitiveContextAuthority",
+    "get_cognitive_context_authority",
+    "refresh_cognitive_context_authority",
     # main router (legacy compat supply layer)
     "MultiLLMRouter",
     "get_llm_router",
