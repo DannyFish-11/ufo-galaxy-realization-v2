@@ -192,7 +192,12 @@ ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY: str = (
     "dispatch/handoff planning code that targets an attached Android runtime "
     "surface MUST construct or resolve an AndroidRuntimeDispatchBindingRecord "
     "to express the targeting relationship rather than scattering session, "
-    "device, contract, and tracker ids across ad hoc fields."
+    "device, contract, and tracker ids across ad hoc fields.  "
+    "This module is the CONCRETE Android implementation of the participant-"
+    "generic dispatch binding contract defined in "
+    "core.participant_authority_interfaces (PR-8).  "
+    "AndroidRuntimeBindingState implements ParticipantDispatchBindingState; "
+    "AndroidRuntimeBindingSignal implements ParticipantDispatchBindingSignal."
 )
 
 BINDING_REQUIRES_ATTACHED_SESSION_POLICY: str = (
