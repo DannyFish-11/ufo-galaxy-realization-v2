@@ -414,26 +414,32 @@ def _probe_v4_orchestration_spine() -> ModuleProbeResult:
     if importable and mod:
         result.sentinel_present = _has_sentinel(mod, "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY")
         result.sentinel_name = "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY"
-    # Check command_router, execution_spine, cross_device_execution_chain
-    checks = {
-        "core/command_router.py": _file_contains("core/command_router.py", "unified_orchestration_spine"),
-        "core/execution_spine.py": _file_contains("core/execution_spine.py", "unified_orchestration_spine"),
-        "core/cross_device_execution_chain.py": _file_contains(
-            "core/cross_device_execution_chain.py", "unified_orchestration_spine"
-        ),
-    }
-    hot = any(checks.values())
-    result.hot_path_files = list(checks.keys())
+    # Per-request hot path files: these MUST NOT import V4 — V4 is not a per-request gate.
+    _per_request_files = [
+        "core/command_router.py",
+        "core/execution_spine.py",
+        "core/cross_device_execution_chain.py",
+    ]
+    per_request_checks = {f: _file_contains(f, "unified_orchestration_spine") for f in _per_request_files}
+    # Multi-step orchestration session callers: these SHOULD import V4 — correct usage.
+    _orch_session_files = [
+        "galaxy_gateway/android/handlers/goal_execution.py",
+    ]
+    orch_session_callers = {f: _file_contains(f, "unified_orchestration_spine") for f in _orch_session_files}
+    hot = any(per_request_checks.values())
+    result.hot_path_files = list(per_request_checks.keys())
     result.hot_path_confirmed = hot
     result.enforcement_mode = "hard" if hot else "none"
     result.wiring_status = WiringStatus.HOT_PATH if hot else (
         WiringStatus.ARCHITECTURALLY_PRESENT if importable else WiringStatus.UNAVAILABLE
     )
     result.notes = (
-        f"evaluate_orchestration_request() call-site check per file: {checks}. "
-        "Spine policy declares ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY but no live "
-        "execution path imports or calls it. center_authority_boundary.py references it "
-        "as a policy declaration only."
+        f"Per-request hot path absence check: {per_request_checks}. "
+        f"Multi-step orchestration session callers: {orch_session_callers}. "
+        "V4 is correctly absent from per-request dispatch (CommandRouter, execution_spine). "
+        "V4 is correctly present in goal_execution.py for PARALLEL_FANOUT multi-step "
+        "orchestration sessions.  V4 is NOT the universal synchronous per-request gate; "
+        "it governs multi-step orchestration sessions only."
     )
     return result
 

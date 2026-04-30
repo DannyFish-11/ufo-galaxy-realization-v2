@@ -284,6 +284,54 @@ jobs:
           python -m pytest tests/test_pr7_final_consolidation.py -v --tb=short
           echo "✅ PR7 final consolidation tests passed."
 
+  v4-scope-guard:
+    # PR-7 V4 Scope Correction: Verify that unified_orchestration_spine is correctly
+    # scoped to multi-step orchestration sessions and is NOT wired as a universal
+    # per-request gate into OpenClawd or CommandRouter.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run V4 scope correction tests
+        run: |
+          python -m pytest tests/test_pr7_v4_scope_correction.py -v --tb=short
+          echo "✅ V4 orchestration spine scope correction tests passed."
+      - name: Verify V4 is absent from per-request hot path
+        run: |
+          # V4 (unified_orchestration_spine) must NOT be imported by the
+          # per-request dispatch files: command_router.py, openclawd.py,
+          # or execution_spine.py.  Its correct place is in multi-step
+          # orchestration handlers like goal_execution.py.
+          FORBIDDEN=$(grep -ln "unified_orchestration_spine" \
+            core/command_router.py \
+            core/openclawd.py \
+            core/execution_spine.py \
+            2>/dev/null || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "❌ V4 unified_orchestration_spine found in per-request hot path:"
+            echo "$FORBIDDEN"
+            echo "V4 must not be a universal per-request gate."
+            exit 1
+          fi
+          echo "✅ V4 correctly absent from per-request hot path (command_router, openclawd, execution_spine)."
+      - name: Verify V4 is present in goal_execution.py (legitimate multi-step usage)
+        run: |
+          # V4 (unified_orchestration_spine) MUST be used by goal_execution.py
+          # for PARALLEL_FANOUT multi-step orchestration sessions.
+          HANDLER="galaxy_gateway/android/handlers/goal_execution.py"
+          if ! grep -q "unified_orchestration_spine" "$HANDLER" 2>/dev/null; then
+            echo "❌ V4 unified_orchestration_spine is missing from $HANDLER"
+            echo "goal_execution.py must use V4 for PARALLEL_FANOUT multi-step sessions."
+            exit 1
+          fi
+          echo "✅ V4 correctly present in $HANDLER for multi-step orchestration."
+
   test:
     runs-on: ubuntu-latest
     permissions:
