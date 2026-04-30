@@ -103,3 +103,4 @@ data/rag_memory/
 runtime/config.json
 runtime/secrets.env
 learning_data.db
+audit/wiring_report_*.json
