@@ -5,7 +5,7 @@
 Code-grounded dual-repo system runthrough prober.
 
 This module programmatically verifies the wiring status of all major authority
-modules (L1–L4, V1–V5) by attempting real imports and inspecting whether
+modules (L1–L4, V1–V6) by attempting real imports and inspecting whether
 canonical entry points are reachable from the live execution path.
 
 It does NOT simulate actual LLM calls or network traffic.  It inspects module
@@ -733,14 +733,15 @@ def run_all_probes() -> WiringReport:
     # Summary counts
     counts: Dict[str, int] = {}
     for probe in report.probes:
-        counts[probe.wiring_status] = counts.get(probe.wiring_status, 0) + 1
+        key = probe.wiring_status.value if hasattr(probe.wiring_status, "value") else str(probe.wiring_status)
+        counts[key] = counts.get(key, 0) + 1
     report.summary = counts
 
     # Verdict
-    hot = counts.get(WiringStatus.HOT_PATH, 0)
-    soft = counts.get(WiringStatus.SOFT_PATH, 0)
-    arch = counts.get(WiringStatus.ARCHITECTURALLY_PRESENT, 0)
-    unavail = counts.get(WiringStatus.UNAVAILABLE, 0)
+    hot = counts.get(WiringStatus.HOT_PATH.value, 0)
+    soft = counts.get(WiringStatus.SOFT_PATH.value, 0)
+    arch = counts.get(WiringStatus.ARCHITECTURALLY_PRESENT.value, 0)
+    unavail = counts.get(WiringStatus.UNAVAILABLE.value, 0)
     total = len(report.probes)
 
     report.verdict = (
@@ -778,10 +779,10 @@ def main() -> None:
     for probe in report.probes:
         importable_mark = "✅" if probe.importable else "❌"
         hot_mark = "🔥" if probe.hot_path_confirmed else "  "
-        status_val = probe.wiring_status.replace("WiringStatus.", "") if "WiringStatus." in str(probe.wiring_status) else probe.wiring_status
+        status_val = probe.wiring_status  # WiringStatus inherits from str, already clean
         print(
             f"{probe.pr_label:8} {probe.module_path:50} "
-            f"{hot_mark} {status_val:26} {probe.enforcement_mode:10} {importable_mark}"
+            f"{hot_mark} {status_val.value:26} {probe.enforcement_mode:10} {importable_mark}"
         )
 
     print()
