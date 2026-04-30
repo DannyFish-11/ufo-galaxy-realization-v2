@@ -610,6 +610,38 @@ def evaluate_orchestration_request(
         )
 
 
+def _slot_from_canonical(
+    canonical_slot: Any,
+    *,
+    dispatch_ready: bool,
+    device_order: Dict[str, int],
+) -> DeviceOrchestrationSlot:
+    """Build a :class:`DeviceOrchestrationSlot` from a canonical slot result.
+
+    Maps the V3 ``CanonicalDispatchSlot.status`` to the legacy
+    ``DispatchReadinessStatus`` vocabulary for the ``readiness_status`` field
+    while also exposing the canonical status in the new ``slot_status`` field.
+    """
+    readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
+        canonical_slot.status, canonical_slot.status
+    )
+    return DeviceOrchestrationSlot(
+        device_id=canonical_slot.device_id,
+        dispatch_ready=dispatch_ready,
+        readiness_status=readiness_status,
+        readiness_reason=canonical_slot.reason,
+        subtask_index=device_order.get(canonical_slot.device_id, 0),
+        registration_gaps=list(canonical_slot.registration_gaps),
+        attachment_state=canonical_slot.attachment_state,
+        runtime_session_id=canonical_slot.runtime_session_id,
+        runtime_attachment_session_id=canonical_slot.runtime_attachment_session_id,
+        transport_alive=canonical_slot.transport_alive,
+        slot_status=canonical_slot.status,
+        blocking_dimension=canonical_slot.blocking_dimension,
+        dimension_results=dict(canonical_slot.dimension_results),
+    )
+
+
 def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     """Internal spine evaluation — V4: uses canonical dispatch-slot authority."""
     if get_canonical_dispatch_slots is None:
@@ -641,7 +673,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     # (all ten legality dimensions)
     # ----------------------------------------------------------------
     continuity_context: Dict[str, Any] = (
-        request.metadata.get("continuity_context") or {}
+        (request.metadata or {}).get("continuity_context") or {}
     )
     slots_result = get_canonical_dispatch_slots(
         device_ids=request.target_device_ids,
@@ -659,50 +691,18 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     ready_slots: List[DeviceOrchestrationSlot] = []
     blocked_slots: List[DeviceOrchestrationSlot] = []
 
-    # Build index → canonical slot for subtask ordering
+    # Build device_id → subtask index for ordering
     device_order = {did: idx for idx, did in enumerate(request.target_device_ids)}
 
     for canonical_slot in slots_result.approved_slots:
-        readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
-            canonical_slot.status, canonical_slot.status
+        ready_slots.append(
+            _slot_from_canonical(canonical_slot, dispatch_ready=True, device_order=device_order)
         )
-        slot = DeviceOrchestrationSlot(
-            device_id=canonical_slot.device_id,
-            dispatch_ready=True,
-            readiness_status=readiness_status,
-            readiness_reason=canonical_slot.reason,
-            subtask_index=device_order.get(canonical_slot.device_id, 0),
-            registration_gaps=list(canonical_slot.registration_gaps),
-            attachment_state=canonical_slot.attachment_state,
-            runtime_session_id=canonical_slot.runtime_session_id,
-            runtime_attachment_session_id=canonical_slot.runtime_attachment_session_id,
-            transport_alive=canonical_slot.transport_alive,
-            slot_status=canonical_slot.status,
-            blocking_dimension=canonical_slot.blocking_dimension,
-            dimension_results=dict(canonical_slot.dimension_results),
-        )
-        ready_slots.append(slot)
 
     for canonical_slot in slots_result.blocked_slots:
-        readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
-            canonical_slot.status, canonical_slot.status
+        blocked_slots.append(
+            _slot_from_canonical(canonical_slot, dispatch_ready=False, device_order=device_order)
         )
-        slot = DeviceOrchestrationSlot(
-            device_id=canonical_slot.device_id,
-            dispatch_ready=False,
-            readiness_status=readiness_status,
-            readiness_reason=canonical_slot.reason,
-            subtask_index=device_order.get(canonical_slot.device_id, 0),
-            registration_gaps=list(canonical_slot.registration_gaps),
-            attachment_state=canonical_slot.attachment_state,
-            runtime_session_id=canonical_slot.runtime_session_id,
-            runtime_attachment_session_id=canonical_slot.runtime_attachment_session_id,
-            transport_alive=canonical_slot.transport_alive,
-            slot_status=canonical_slot.status,
-            blocking_dimension=canonical_slot.blocking_dimension,
-            dimension_results=dict(canonical_slot.dimension_results),
-        )
-        blocked_slots.append(slot)
         spine_notes.append(
             f"device_id={canonical_slot.device_id!r} blocked: "
             f"slot_status={canonical_slot.status!r} "
