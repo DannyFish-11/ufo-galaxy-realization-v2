@@ -261,7 +261,7 @@ class RuntimeTruthIngressOutcome:
 
 def _check_runtime_ingress_continuity(
     message: Dict[str, Any], msg_type: str
-) -> tuple:  # (verdict_str, is_rejected_bool)
+) -> tuple:  # Tuple[str, bool]: (verdict_str, is_hard_rejected)
     """Run the unified continuity legality gate for an inbound runtime update.
 
     Execution signals use the ONLINE_SIGNAL_INGESTION path; all other types

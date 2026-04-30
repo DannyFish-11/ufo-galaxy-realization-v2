@@ -127,6 +127,7 @@ try:
         AttachedSessionRegistry,
         RegistryEntryState,
         get_session_registry,
+        invalidate_session,
         register_session,
         reset_session_registry,
     )
@@ -473,10 +474,6 @@ class TestStaleSessionRejects:
         attachment_id = _attachment_id()
 
         # Register then invalidate (mark as replaced/invalidated)
-        from core.attached_runtime_session_registry import (
-            invalidate_session,
-            register_session,
-        )
         entry = register_session(
             device_id,
             session_id=session_id,
@@ -506,10 +503,6 @@ class TestStaleSessionRejects:
         session_id = _session_id()
         attachment_id = _attachment_id()
 
-        from core.attached_runtime_session_registry import (
-            invalidate_session,
-            register_session,
-        )
         entry = register_session(
             device_id,
             session_id=session_id,
@@ -551,7 +544,6 @@ class TestIdentityMismatchRejects:
         stale_session_id = _session_id()
         attachment_id = _attachment_id()
 
-        from core.attached_runtime_session_registry import register_session
         register_session(
             device_id,
             session_id=real_session_id,
@@ -581,7 +573,6 @@ class TestIdentityMismatchRejects:
         real_attachment_id = _attachment_id()
         stale_attachment_id = _attachment_id()
 
-        from core.attached_runtime_session_registry import register_session
         register_session(
             device_id,
             session_id=session_id,

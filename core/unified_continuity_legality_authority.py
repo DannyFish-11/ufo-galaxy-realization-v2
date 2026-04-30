@@ -1273,7 +1273,7 @@ class UnifiedContinuityLegalityAuthority:
     def _aggregate(
         outcomes: List[DimensionLegalityOutcome],
         path: ContinuityLegalityPath,
-    ) -> tuple:  # (ContinuityLegalityVerdict, str)
+    ) -> tuple:  # Tuple[ContinuityLegalityVerdict, str]: (overall_verdict, reject_reason)
         """Aggregate dimension outcomes into the overall verdict.
 
         Rules
