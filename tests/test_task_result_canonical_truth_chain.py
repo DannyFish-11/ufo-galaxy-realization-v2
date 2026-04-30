@@ -25,8 +25,10 @@ AC-TTC-4  A step that finds no matching record (NOT_RECONCILED /
            COMPLETED_NO_MATCH) does NOT prevent ``is_truth_chain_complete``
            from being True — record absence is not a fatal gap.
 
-AC-TTC-5  Exceptions inside any step are caught, recorded as
-           FAILED_EXCEPTION, and prevent ``is_truth_chain_complete``.
+AC-TTC-5  Exceptions inside steps 1–3 are recorded as FAILED_EXCEPTION and
+           cause ``TruthChainStepError`` to be raised (hardened enforcement).
+           Exceptions inside step 4 (completion_linkage) are still caught
+           and recorded without re-raising (best-effort / idempotent behavior).
 
 AC-TTC-6  Optional enrichment steps (memory backflow, device-router
            notification) are absent from the module and their absence cannot
@@ -40,6 +42,14 @@ AC-TTC-8  Full chain integration: message with task_id + result_status →
 AC-TTC-9  ``handle_task_result`` in ``task_lifecycle`` calls
            ``_run_task_result_truth_chain`` when it is available, and falls back
            to legacy helpers when it is None, without raising.
+
+AC-TTC-10 Hardened enforcement: steps 1–3 fatal failures raise
+           ``TruthChainStepError`` with the full outcome attached; step 4
+           failure does NOT raise.  Failures are recorded in the incomplete
+           ledger before raising.
+
+AC-TTC-11 Valid delegated / handoff flows and multi-device grouped completions
+           remain compatible with the hardened chain.
 """
 
 from __future__ import annotations
@@ -139,6 +149,15 @@ class TestGroupA_ModuleStructure:
         assert _ttc.StepStatus.COMPLETED == "completed"
         assert _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE == "skipped_module_unavailable"
         assert _ttc.StepStatus.FAILED_EXCEPTION == "failed_exception"
+
+    def test_a6_truth_chain_step_error_exists(self) -> None:
+        """TruthChainStepError is exported and is a RuntimeError subclass."""
+        assert hasattr(_ttc, "TruthChainStepError")
+        assert issubclass(_ttc.TruthChainStepError, RuntimeError)
+
+    def test_a7_truth_chain_step_error_in_all(self) -> None:
+        """TruthChainStepError is listed in __all__."""
+        assert "TruthChainStepError" in _ttc.__all__
 
 
 # ---------------------------------------------------------------------------
@@ -253,39 +272,72 @@ class TestGroupC_MissingModulesIncomplete:
             return _ttc.run_task_result_truth_chain(msg)
 
     def test_c1_missing_truth_ingress(self) -> None:
-        """AC-TTC-3: truth_ingress missing → is_truth_chain_complete = False."""
+        """AC-TTC-3: truth_ingress missing → TruthChainStepError raised."""
         msg = {"task_id": "t-c1", "status": "completed"}
-        outcome = self._run_with_missing(msg, "_ingest_participant_truth")
-        assert outcome.is_truth_chain_complete is False
-        assert outcome.truth_ingress_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
-        assert "truth_ingress" in outcome.incomplete_reason
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", None),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "truth_ingress"
+        assert err.outcome.truth_ingress_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
+        assert err.outcome.is_truth_chain_complete is False
+        assert "truth_ingress" in err.outcome.incomplete_reason
 
     def test_c2_missing_reconcile(self) -> None:
-        """AC-TTC-2: reconcile missing → is_truth_chain_complete = False."""
+        """AC-TTC-2: reconcile missing → TruthChainStepError raised."""
         msg = {"task_id": "t-c2", "session_id": "s-c2", "status": "completed"}
-        outcome = self._run_with_missing(msg, "_reconcile_inbound_message")
-        assert outcome.is_truth_chain_complete is False
-        assert outcome.reconcile_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
-        assert "reconcile" in outcome.incomplete_reason
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", None),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "reconcile"
+        assert err.outcome.reconcile_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
+        assert err.outcome.is_truth_chain_complete is False
+        assert "reconcile" in err.outcome.incomplete_reason
 
     def test_c3_missing_authority_update(self) -> None:
-        """AC-TTC-2: authority runtime missing → is_truth_chain_complete = False."""
+        """AC-TTC-2: authority runtime missing → TruthChainStepError raised."""
         msg = {"task_id": "t-c3", "status": "completed"}
-        outcome = self._run_with_missing(msg, "_get_canonical_task_runtime")
-        assert outcome.is_truth_chain_complete is False
-        assert outcome.authority_update_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
-        assert "authority_update" in outcome.incomplete_reason
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", None),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "authority_update"
+        assert err.outcome.authority_update_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
+        assert err.outcome.is_truth_chain_complete is False
+        assert "authority_update" in err.outcome.incomplete_reason
 
     def test_c4_missing_completion_ingress(self) -> None:
-        """AC-TTC-2: completion ingress missing → is_truth_chain_complete = False."""
+        """AC-TTC-2: completion ingress missing → is_truth_chain_complete = False (step 4 soft)."""
         msg = {"task_id": "t-c4", "status": "completed"}
-        outcome = self._run_with_missing(msg, "_get_canonical_completion_ingress")
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", None),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)
         assert outcome.is_truth_chain_complete is False
         assert outcome.completion_linkage_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
         assert "completion_linkage" in outcome.incomplete_reason
 
     def test_c5_all_modules_missing(self) -> None:
-        """AC-TTC-2: all critical modules missing → clearly incomplete."""
+        """AC-TTC-2: all critical modules missing → TruthChainStepError for step 1."""
         msg = {"task_id": "t-c5", "status": "completed"}
         with (
             patch.object(_ttc, "_ingest_participant_truth", None),
@@ -293,14 +345,17 @@ class TestGroupC_MissingModulesIncomplete:
             patch.object(_ttc, "_get_canonical_task_runtime", None),
             patch.object(_ttc, "_get_canonical_completion_ingress", None),
         ):
-            outcome = _ttc.run_task_result_truth_chain(msg)
-        assert outcome.is_truth_chain_complete is False
-        # incomplete_reason should name all four missing steps
-        reason = outcome.incomplete_reason
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        # First failing step is truth_ingress (step 1).
+        assert err.step_name == "truth_ingress"
+        assert not err.outcome.is_truth_chain_complete
+        # The outcome has all four step statuses set (all steps were attempted).
+        reason = err.outcome.incomplete_reason
         assert "truth_ingress" in reason
         assert "reconcile" in reason
         assert "authority_update" in reason
-        assert "completion_linkage" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +419,7 @@ class TestGroupE_ExceptionsAreCaptured:
     """AC-TTC-5: exceptions inside any step set FAILED_EXCEPTION and prevent completion."""
 
     def test_e1_truth_ingress_exception(self) -> None:
+        """AC-TTC-5: step 1 exception → TruthChainStepError raised (hardened)."""
         def _raising(msg: Dict[str, Any], **_kw: Any) -> Any:
             raise RuntimeError("ingress crash")
         msg = {"task_id": "t-e1", "status": "completed"}
@@ -373,11 +429,15 @@ class TestGroupE_ExceptionsAreCaptured:
             patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
             patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
         ):
-            outcome = _ttc.run_task_result_truth_chain(msg)
-        assert outcome.truth_ingress_status == _ttc.StepStatus.FAILED_EXCEPTION
-        assert outcome.is_truth_chain_complete is False
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "truth_ingress"
+        assert err.outcome.truth_ingress_status == _ttc.StepStatus.FAILED_EXCEPTION
+        assert err.outcome.is_truth_chain_complete is False
 
     def test_e2_reconcile_exception(self) -> None:
+        """AC-TTC-5: step 2 exception → TruthChainStepError raised (hardened)."""
         def _raising(msg: Dict[str, Any], **_kw: Any) -> Any:
             raise ValueError("reconcile crash")
         msg = {"task_id": "t-e2", "session_id": "s-e2", "status": "completed"}
@@ -387,11 +447,15 @@ class TestGroupE_ExceptionsAreCaptured:
             patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
             patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
         ):
-            outcome = _ttc.run_task_result_truth_chain(msg)
-        assert outcome.reconcile_status == _ttc.StepStatus.FAILED_EXCEPTION
-        assert outcome.is_truth_chain_complete is False
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "reconcile"
+        assert err.outcome.reconcile_status == _ttc.StepStatus.FAILED_EXCEPTION
+        assert err.outcome.is_truth_chain_complete is False
 
     def test_e3_authority_update_exception(self) -> None:
+        """AC-TTC-5: step 3 exception → TruthChainStepError raised (hardened)."""
         mock_runtime = MagicMock()
         mock_runtime.update_lifecycle.side_effect = RuntimeError("runtime crash")
         msg = {"task_id": "t-e3", "status": "completed"}
@@ -401,11 +465,15 @@ class TestGroupE_ExceptionsAreCaptured:
             patch.object(_ttc, "_get_canonical_task_runtime", lambda: mock_runtime),
             patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
         ):
-            outcome = _ttc.run_task_result_truth_chain(msg)
-        assert outcome.authority_update_status == _ttc.StepStatus.FAILED_EXCEPTION
-        assert outcome.is_truth_chain_complete is False
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "authority_update"
+        assert err.outcome.authority_update_status == _ttc.StepStatus.FAILED_EXCEPTION
+        assert err.outcome.is_truth_chain_complete is False
 
     def test_e4_completion_linkage_exception(self) -> None:
+        """AC-TTC-5: step 4 exception → returns outcome (step 4 is best-effort, no raise)."""
         mock_ingress = MagicMock()
         mock_ingress.notify.side_effect = RuntimeError("ingress crash")
         mock_ingress.complete_pending_dispatch.side_effect = RuntimeError("direct crash")
@@ -420,8 +488,12 @@ class TestGroupE_ExceptionsAreCaptured:
         assert outcome.completion_linkage_status == _ttc.StepStatus.FAILED_EXCEPTION
         assert outcome.is_truth_chain_complete is False
 
-    def test_e5_exceptions_are_not_re_raised(self) -> None:
-        """AC-TTC-5: exception-raising steps must not propagate exceptions to caller."""
+    def test_e5_steps_1_to_3_raise_truth_chain_step_error(self) -> None:
+        """AC-TTC-5/10: step-1–3 failures raise TruthChainStepError (hardened enforcement).
+
+        Previously this test verified that exceptions were NOT re-raised.
+        With the PR-3 hardening, steps 1–3 exceptions are materially visible.
+        """
         def _raising(*_a: Any, **_kw: Any) -> Any:
             raise RuntimeError("crash")
         msg = {"task_id": "t-e5", "status": "completed"}
@@ -431,8 +503,11 @@ class TestGroupE_ExceptionsAreCaptured:
             patch.object(_ttc, "_get_canonical_task_runtime", None),
             patch.object(_ttc, "_get_canonical_completion_ingress", None),
         ):
-            outcome = _ttc.run_task_result_truth_chain(msg)  # must not raise
-        assert not outcome.is_truth_chain_complete
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        err = exc_info.value
+        assert err.step_name == "truth_ingress"
+        assert not err.outcome.is_truth_chain_complete
 
 
 # ---------------------------------------------------------------------------
@@ -656,3 +731,307 @@ class TestGroupI_TaskLifecycleCalls:
 
         asyncio.run(_inner())
         assert resolved[0], "pending Future must be resolved after handle_task_result"
+
+
+# ---------------------------------------------------------------------------
+# Group J — AC-TTC-10/11: Hardened enforcement & valid-flow preservation
+# ---------------------------------------------------------------------------
+
+
+@_SKIP
+class TestGroupJ_HardenedEnforcement:
+    """AC-TTC-10/11: steps 1–3 raise TruthChainStepError; valid flows intact."""
+
+    # -----------------------------------------------------------------------
+    # J1–J4: Each truth-establishment step independently raises on failure
+    # -----------------------------------------------------------------------
+
+    def test_j1_step1_module_none_raises(self) -> None:
+        """AC-TTC-10: truth_ingress=None → TruthChainStepError with step_name='truth_ingress'."""
+        msg = {"task_id": "t-j1", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", None),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        assert exc_info.value.step_name == "truth_ingress"
+
+    def test_j2_step2_module_none_raises(self) -> None:
+        """AC-TTC-10: reconcile=None → TruthChainStepError with step_name='reconcile'."""
+        msg = {"task_id": "t-j2", "session_id": "s-j2", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", None),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        assert exc_info.value.step_name == "reconcile"
+
+    def test_j3_step3_module_none_raises(self) -> None:
+        """AC-TTC-10: authority runtime=None → TruthChainStepError with step_name='authority_update'."""
+        msg = {"task_id": "t-j3", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", None),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        assert exc_info.value.step_name == "authority_update"
+
+    def test_j4_step4_module_none_does_not_raise(self) -> None:
+        """AC-TTC-10: completion_ingress=None → returns outcome (step 4 is best-effort)."""
+        msg = {"task_id": "t-j4", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", None),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)  # must not raise
+        assert outcome.completion_linkage_status == _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
+        assert outcome.is_truth_chain_complete is False
+
+    # -----------------------------------------------------------------------
+    # J5–J6: Exception payload — all four step statuses are available
+    # -----------------------------------------------------------------------
+
+    def test_j5_exception_carries_full_outcome(self) -> None:
+        """AC-TTC-10: TruthChainStepError.outcome has all four step statuses set."""
+        def _raising(*_a: Any, **_kw: Any) -> Any:
+            raise RuntimeError("step2 crash")
+        msg = {"task_id": "t-j5", "session_id": "s-j5", "status": "failed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _raising),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        outcome = exc_info.value.outcome
+        # Steps 1, 3, 4 ran; step 2 failed.
+        assert outcome.truth_ingress_status == _ttc.StepStatus.COMPLETED
+        assert outcome.reconcile_status == _ttc.StepStatus.FAILED_EXCEPTION
+        # Steps 3 & 4 still ran (all four steps attempted before raising).
+        assert outcome.authority_update_status in (
+            _ttc.StepStatus.COMPLETED,
+            _ttc.StepStatus.COMPLETED_NO_MATCH,
+            _ttc.StepStatus.SKIPPED_NO_TASK_ID,
+        )
+        assert outcome.completion_linkage_status in (
+            _ttc.StepStatus.COMPLETED,
+            _ttc.StepStatus.SKIPPED_NO_TASK_ID,
+        )
+        assert outcome.task_id == "t-j5"
+        assert outcome.result_status == "failed"
+
+    def test_j6_exception_message_contains_step_and_task_id(self) -> None:
+        """TruthChainStepError str includes step name and task_id."""
+        msg = {"task_id": "t-j6", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", None),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        msg_str = str(exc_info.value)
+        assert "truth_ingress" in msg_str
+        assert "t-j6" in msg_str
+
+    # -----------------------------------------------------------------------
+    # J7: Incomplete ledger is populated before the exception propagates
+    # -----------------------------------------------------------------------
+
+    def test_j7_ledger_populated_before_raise(self) -> None:
+        """AC-TTC-10: incomplete ledger records the outcome even when TruthChainStepError is raised."""
+        ledger = _ttc.get_incomplete_result_ledger()
+        ledger.clear()
+        msg = {"task_id": "t-j7", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", None),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError):
+                _ttc.run_task_result_truth_chain(msg)
+        assert ledger.count() == 1
+        recorded = ledger.get("t-j7")
+        assert recorded is not None
+        assert recorded.task_id == "t-j7"
+        assert recorded.is_truth_chain_complete is False
+        ledger.clear()
+
+    # -----------------------------------------------------------------------
+    # J8: Valid flow — all four steps OK → no exception, complete outcome
+    # -----------------------------------------------------------------------
+
+    def test_j8_valid_flow_completes_without_exception(self) -> None:
+        """AC-TTC-10/11: all four steps OK → no exception, is_truth_chain_complete=True."""
+        msg = {"task_id": "t-j8", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)  # must not raise
+        assert outcome.is_truth_chain_complete is True
+        assert outcome.incomplete_reason == ""
+
+    # -----------------------------------------------------------------------
+    # J9: Delegated / handoff flow — handoff_id in message
+    # -----------------------------------------------------------------------
+
+    def test_j9_delegated_handoff_flow(self) -> None:
+        """AC-TTC-11: message with handoff_id passes through truth chain without error."""
+        notify_calls: list = []
+        mock_ingress = MagicMock()
+        mock_ingress.notify.side_effect = lambda env: notify_calls.append(
+            (env.task_id, getattr(env, "handoff_id", ""))
+        ) or True
+        mock_ingress.complete_pending_dispatch.return_value = False
+
+        msg = {
+            "task_id": "t-j9",
+            "status": "completed",
+            "handoff_id": "handoff-abc",
+            "device_id": "device-remote",
+        }
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", lambda: mock_ingress),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)
+
+        assert outcome.is_truth_chain_complete is True
+        assert len(notify_calls) == 1
+        _, handoff_id = notify_calls[0]
+        assert handoff_id == "handoff-abc", (
+            "handoff_id must be forwarded to CanonicalCompletionIngress.notify()"
+        )
+
+    # -----------------------------------------------------------------------
+    # J10: Grouped / multi-device completion — multiple sequential results
+    # -----------------------------------------------------------------------
+
+    def test_j10_grouped_multi_device_completion(self) -> None:
+        """AC-TTC-11: multiple device results processed in sequence all complete."""
+        device_ids = ["dev-alpha", "dev-beta", "dev-gamma"]
+        outcomes = []
+        for i, dev in enumerate(device_ids):
+            msg = {
+                "task_id": f"t-j10-{i}",
+                "status": "completed",
+                "device_id": dev,
+                "session_id": f"session-{i}",
+            }
+            with (
+                patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+                patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+                patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+                patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+            ):
+                outcomes.append(_ttc.run_task_result_truth_chain(msg))
+
+        assert all(o.is_truth_chain_complete for o in outcomes), (
+            "All grouped device results must produce complete truth chains"
+        )
+        assert len({o.task_id for o in outcomes}) == len(device_ids), (
+            "Each device result must produce a distinct task_id outcome"
+        )
+
+    # -----------------------------------------------------------------------
+    # J11: Completion ingress safety — step 4 exception never blocks chain
+    # -----------------------------------------------------------------------
+
+    def test_j11_completion_ingress_exception_does_not_block_truth(self) -> None:
+        """AC-TTC-10/11: step 4 exception → outcome returned, is_truth_chain_complete=False.
+
+        Steps 1–3 succeeded (truth was established).  Only step 4 failed.
+        The caller gets back an outcome rather than an exception — step 4 is
+        intentionally bounded / best-effort so a transient notification
+        failure never makes the truth establishment appear as failed.
+        """
+        mock_ingress = MagicMock()
+        mock_ingress.notify.side_effect = RuntimeError("notification timeout")
+        mock_ingress.complete_pending_dispatch.side_effect = RuntimeError("direct timeout")
+        msg = {"task_id": "t-j11", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", lambda: mock_ingress),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)  # must not raise
+
+        # Steps 1–3 are complete.
+        assert outcome.truth_ingress_status == _ttc.StepStatus.COMPLETED
+        assert outcome.reconcile_status in (
+            _ttc.StepStatus.COMPLETED,
+            _ttc.StepStatus.COMPLETED_NO_MATCH,
+        )
+        assert outcome.authority_update_status in (
+            _ttc.StepStatus.COMPLETED,
+            _ttc.StepStatus.COMPLETED_NO_MATCH,
+        )
+        # Step 4 failed (soft failure).
+        assert outcome.completion_linkage_status == _ttc.StepStatus.FAILED_EXCEPTION
+        # Overall chain incomplete due only to step 4.
+        assert outcome.is_truth_chain_complete is False
+        assert "completion_linkage" in outcome.incomplete_reason
+
+    # -----------------------------------------------------------------------
+    # J12: Replay / recovery scenario — task_id already processed
+    # -----------------------------------------------------------------------
+
+    def test_j12_replay_recovery_with_same_task_id(self) -> None:
+        """AC-TTC-11: re-processing the same task_id (replay) produces a clean outcome."""
+        task_id = "t-j12-replay"
+        for _attempt in range(2):
+            msg = {"task_id": task_id, "status": "completed"}
+            with (
+                patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+                patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+                patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+                patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+            ):
+                outcome = _ttc.run_task_result_truth_chain(msg)
+            assert outcome.is_truth_chain_complete is True, (
+                f"Replay attempt {_attempt + 1} must still produce a complete outcome"
+            )
+
+    # -----------------------------------------------------------------------
+    # J13: First-failed-step precedence when steps 1 and 2 both fail
+    # -----------------------------------------------------------------------
+
+    def test_j13_first_failed_step_reported(self) -> None:
+        """AC-TTC-10: when steps 1 and 3 both fail, step 1 is reported as the first failure."""
+        def _raising(*_a: Any, **_kw: Any) -> Any:
+            raise RuntimeError("crash")
+        msg = {"task_id": "t-j13", "status": "completed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _raising),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", None),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+        ):
+            with pytest.raises(_ttc.TruthChainStepError) as exc_info:
+                _ttc.run_task_result_truth_chain(msg)
+        # Step 1 is the first fatal failure.
+        assert exc_info.value.step_name == "truth_ingress"
+        # Outcome also records step 3 failure.
+        assert exc_info.value.outcome.authority_update_status == (
+            _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
+        )

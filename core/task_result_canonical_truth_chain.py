@@ -108,6 +108,49 @@ TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY: str = (
 
 
 # ---------------------------------------------------------------------------
+# Hardened truth-step exception
+# ---------------------------------------------------------------------------
+
+class TruthChainStepError(RuntimeError):
+    """Raised when a truth-establishment step (1–3) fails fatally.
+
+    This exception makes step-1–3 failures materially visible to callers,
+    preventing the system from silently treating an incomplete truth chain as
+    a successfully closed task.
+
+    Step 4 (:class:`~core.canonical_completion_ingress.CanonicalCompletionIngress`
+    notification) is intentionally excluded from this hard enforcement because
+    it is idempotent / best-effort by design: wake-up safety requires that a
+    transient notification failure never blocks completion closure.
+
+    Attributes
+    ----------
+    step_name : str
+        Name of the first failed truth-establishment step
+        (``"truth_ingress"``, ``"reconcile"``, or ``"authority_update"``).
+    outcome : TruthChainOutcome
+        The fully-populated outcome object (all four step statuses set) at
+        the point the exception was raised.  Callers may inspect
+        ``outcome.truth_ingress_status``, ``outcome.reconcile_status``,
+        ``outcome.authority_update_status``, and
+        ``outcome.completion_linkage_status`` for diagnostics.
+    """
+
+    def __init__(
+        self,
+        step_name: str,
+        reason: str,
+        outcome: "TruthChainOutcome",
+    ) -> None:
+        self.step_name = step_name
+        self.outcome = outcome
+        super().__init__(
+            f"Truth chain step '{step_name}' failed: {reason}. "
+            f"task_id={outcome.task_id!r} status={outcome.result_status!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Step outcome types
 # ---------------------------------------------------------------------------
 
@@ -579,6 +622,53 @@ def run_task_result_truth_chain(
     # Compute top-level completeness verdict
     outcome._compute_completeness()
 
+    # ------------------------------------------------------------------
+    # Hardened enforcement for steps 1–3 (truth-establishment steps).
+    #
+    # A fatal failure in any of steps 1–3 (SKIPPED_MODULE_UNAVAILABLE or
+    # FAILED_EXCEPTION) means truth was never established.  Silently
+    # returning an incomplete outcome would let callers treat the task as
+    # closed when it is not.  We raise TruthChainStepError so the failure
+    # is materially visible in caller behavior, logs, and tests.
+    #
+    # Step 4 (CanonicalCompletionIngress.notify) is intentionally excluded
+    # from this hard enforcement — it is idempotent/best-effort by design
+    # and its failure must not block completion closure in valid flows.
+    # ------------------------------------------------------------------
+    _step1_fatal = outcome._fatal_status(outcome.truth_ingress_status)
+    _step2_fatal = outcome._fatal_status(outcome.reconcile_status)
+    _step3_fatal = outcome._fatal_status(outcome.authority_update_status)
+
+    if _step1_fatal or _step2_fatal or _step3_fatal:
+        # Record in the observable ledger *before* raising so the failure
+        # remains inspectable via get_incomplete_result_ledger() even when
+        # the caller catches the exception.
+        _incomplete_result_ledger.record(outcome)
+        logger.error(
+            "task_result truth chain HARDENED FAILURE: task_id=%r status=%r "
+            "reason=%r "
+            "truth_ingress=%s reconcile=%s authority_update=%s",
+            _task_id,
+            _result_status,
+            outcome.incomplete_reason,
+            outcome.truth_ingress_status,
+            outcome.reconcile_status,
+            outcome.authority_update_status,
+        )
+        # Report the *first* failed truth-establishment step.
+        if _step1_fatal:
+            _failed_step = "truth_ingress"
+            _failed_reason = outcome.truth_ingress_status
+        elif _step2_fatal:
+            _failed_step = "reconcile"
+            _failed_reason = outcome.reconcile_status
+        else:
+            _failed_step = "authority_update"
+            _failed_reason = outcome.authority_update_status
+        raise TruthChainStepError(_failed_step, _failed_reason, outcome)
+
+    # Steps 1–3 succeeded.  Check overall completeness (step 4 may still
+    # have failed — that is a soft / best-effort failure only).
     if outcome.is_truth_chain_complete:
         logger.info(
             "task_result truth chain complete: task_id=%r status=%r "
@@ -591,9 +681,15 @@ def run_task_result_truth_chain(
             outcome.completion_linkage_status,
         )
     else:
+        # Reaching this branch means steps 1–3 are all non-fatal (the block
+        # above would have raised otherwise).  The only remaining reason for
+        # is_truth_chain_complete to be False is a step-4 (completion_linkage)
+        # failure, which is intentionally best-effort.
+        # Record for observability but do NOT raise.
+        _step4_status = outcome.completion_linkage_status
         logger.warning(
-            "task_result truth chain INCOMPLETE: task_id=%r status=%r "
-            "reason=%r "
+            "task_result truth chain INCOMPLETE (completion_linkage only): "
+            "task_id=%r status=%r reason=%r "
             "truth_ingress=%s reconcile=%s authority_update=%s completion_linkage=%s",
             _task_id,
             _result_status,
@@ -601,7 +697,7 @@ def run_task_result_truth_chain(
             outcome.truth_ingress_status,
             outcome.reconcile_status,
             outcome.authority_update_status,
-            outcome.completion_linkage_status,
+            _step4_status,
         )
         # Record the incomplete outcome in the observable ledger so that the
         # incompleteness is machine-visible (not just a log warning).  Tests and
@@ -620,6 +716,8 @@ __all__ = [
     # Sentinels
     "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY",
     "TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY",
+    # Step exception (hardened enforcement)
+    "TruthChainStepError",
     # Status constants
     "StepStatus",
     # Dataclass
