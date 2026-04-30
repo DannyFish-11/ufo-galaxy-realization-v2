@@ -3,7 +3,7 @@ tests/test_pr4_v6_boundary_integration.py
 ==========================================
 PR-4: V6 center_authority_boundary — startup / health / release integration.
 
-This test suite verifies that V6 is correctly operationalised at the
+This test suite verifies that V6 is correctly operationalized at the
 **boundary / startup / health / release** layer and is NOT wired into
 per-request hot paths.
 
@@ -33,6 +33,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 PROJECT_ROOT = pathlib.Path(__file__).parent.parent
+
+# Heuristic window (characters) used when scanning a method body for V6 calls.
+# 4000 chars covers all but the most unusually large method definitions and is
+# conservative enough to avoid spanning into the *next* method definition.
+_METHOD_SCAN_WINDOW: int = 4000
 
 # ---------------------------------------------------------------------------
 # Availability guard — skip entire suite if V6 module is absent
@@ -199,7 +204,7 @@ class TestStartupPhase7Integration:
 class TestHealthEndpointHelper:
     """health_monitor._get_authority_boundary_status() is wired correctly."""
 
-    def _load_health_monitor_mod(self, name: str = "_hm_check"):
+    def _load_health_monitor_mod(self, name: str = "health_monitor_test"):
         """Load health_monitor.py with problematic optional deps stubbed out."""
         import importlib.util
         import sys
@@ -386,7 +391,7 @@ class TestHotPathExclusion:
             return
         # Find the approximate end of process() by looking for the next top-level def
         # (heuristic: next line starting with "    def " or "def " at same indentation)
-        process_block = content[process_idx: process_idx + 4000]
+        process_block = content[process_idx: process_idx + _METHOD_SCAN_WINDOW]
         assert "evaluate_center_authority_boundary" not in process_block, (
             "OpenClawd.process() must not call evaluate_center_authority_boundary() "
             "— V6 belongs at the boundary/startup layer, not the per-request hot path"
@@ -405,7 +410,7 @@ class TestHotPathExclusion:
         route_idx = content.find("def route_envelope(")
         if route_idx == -1:
             return
-        route_block = content[route_idx: route_idx + 4000]
+        route_block = content[route_idx: route_idx + _METHOD_SCAN_WINDOW]
         assert "evaluate_center_authority_boundary" not in route_block, (
             "CommandRouter.route_envelope() must not call evaluate_center_authority_boundary() "
             "— V6 belongs at the boundary/startup layer, not the per-request hot path"

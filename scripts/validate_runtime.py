@@ -1904,7 +1904,7 @@ def check_center_authority_boundary() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-8 / PR-9 / PR-10 / PR-530 / PR-531 / PR-V6)"
+        description="Galaxy runtime integration validator (PR-8 / PR-9 / PR-10 / PR-530 / PR-531 / PR-V6-boundary)"
     )
     parser.add_argument(
         "--json",
