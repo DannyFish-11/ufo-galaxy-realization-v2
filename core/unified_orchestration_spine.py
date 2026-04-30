@@ -1,23 +1,44 @@
 """core/unified_orchestration_spine.py
 ========================================
-Unified Orchestration Spine — single canonical entry point for all execution
-modes.
+Unified Orchestration Spine — orchestration session governor for multi-step
+and multi-device execution sessions.
 
-Problem addressed
------------------
-Prior to this module, execution modes (local, single-device remote, parallel
-fan-out, cross-device, handoff/takeover, wake-routed, delegated runtime,
-hybrid) each maintained their own dispatch precondition checks, readiness
-gating, and completion contracts.  This created:
+Architectural scope (V4 corrected)
+------------------------------------
+V4 ``unified_orchestration_spine`` governs **multi-step orchestration
+sessions** — scenarios that involve coordinating multiple devices, multiple
+dispatch steps, or complex completion semantics.  Concretely, V4 is the
+session authority for:
+
+- parallel fan-out execution (``PARALLEL_FANOUT``),
+- delegated runtime execution (``DELEGATED_RUNTIME``),
+- wake-routed execution (``WAKE_ROUTED``),
+- handoff / takeover flows (``HANDOFF``, ``TAKEOVER``),
+- cross-device coordinated execution (``CROSS_DEVICE``),
+- hybrid local-plus-remote sessions (``HYBRID``).
+
+V4 is **not** the universal synchronous per-request gate.  Simple per-request
+execution (including ordinary ``LOCAL`` and ``SINGLE_DEVICE_REMOTE`` paths)
+continues to be governed by the existing cognitive/dispatch spine:
+``OpenClawd._determine_execution_path()`` → ``CommandRouter.route_envelope()``.
+Forcing V4 into every per-request call would mis-layer the architecture and
+create a false split-brain system model.
+
+Problem originally addressed
+-----------------------------
+Prior to this module, multi-step execution modes (parallel fan-out,
+cross-device, handoff/takeover, wake-routed, delegated runtime, hybrid) each
+maintained their own dispatch precondition checks, readiness gating, and
+completion contracts.  This created:
 
 - ``parallel_subtask`` fan-out bypassing the unified readiness gate.
 - ``wake`` / ``handoff`` / ``delegated`` each using special-cased gating that
   diverged from ordinary dispatch semantics.
-- No single place to enforce the ``DISPATCH_MUST_CONSULT_UNIFIED_GATE_POLICY``
-  before any task is sent.
+- No single place to enforce dispatch readiness before complex multi-step
+  tasks were sent.
 
-This module closes those gaps by providing a single spine that every execution
-mode MUST pass through.  The spine:
+This module closes those gaps by providing a single spine that all **multi-step
+orchestration sessions** use.  The spine:
 
 1. Accepts an :class:`OrchestrationRequest` describing the desired execution.
 2. Evaluates dispatch readiness for all target devices via the V3
@@ -25,7 +46,8 @@ mode MUST pass through.  The spine:
    (all ten legality dimensions).
 3. Returns an :class:`OrchestrationDecision` that callers use to proceed or
    abort dispatch.
-4. Provides a consistent ``completion_contract`` that all modes share.
+4. Provides a consistent ``completion_contract`` that all orchestration
+   sessions share.
 5. Exposes a ``lifecycle_stage`` reflecting the current orchestration phase
    and an ``audit_record`` for observability / projection semantics.
 
@@ -33,10 +55,10 @@ V4 structural closure
 ---------------------
 PR-V4 upgrades the spine to consume the V3 canonical dispatch-slot authority
 (:mod:`core.canonical_dispatch_slot_authority`) instead of calling the lower
-dispatch readiness gate directly.  This means every execution mode now passes
-through **all ten legality dimensions** — including continuity legality,
-execution-mode eligibility, occupancy, policy allowance, and
-delegated/handoff acceptability — in a single unified evaluation.
+dispatch readiness gate directly.  This means every multi-step orchestration
+session now passes through **all ten legality dimensions** — including
+continuity legality, execution-mode eligibility, occupancy, policy allowance,
+and delegated/handoff acceptability — in a single unified evaluation.
 
 Design
 ------
@@ -51,6 +73,8 @@ Design
 Authority sentinels
 -------------------
 :data:`UNIFIED_ORCHESTRATION_SPINE_AUTHORITY`
+:data:`ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY`
+:data:`V4_IS_NOT_PER_REQUEST_GATE_POLICY`
 :data:`ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY`
 :data:`PARALLEL_FANOUT_MUST_USE_SPINE_POLICY`
 :data:`WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY`
@@ -102,25 +126,62 @@ except ImportError:  # pragma: no cover
 
 UNIFIED_ORCHESTRATION_SPINE_AUTHORITY: str = (
     "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY::"
-    "core.unified_orchestration_spine is the single canonical orchestration "
-    "entry point for all execution modes.  All dispatch paths — local, "
-    "single-device remote, parallel fan-out, cross-device, handoff/takeover, "
-    "wake-routed, delegated runtime, and hybrid — MUST pass through "
-    "evaluate_orchestration_request() before any task is dispatched.  "
-    "PR-V4: the spine now consumes core.canonical_dispatch_slot_authority "
-    "(all ten legality dimensions) as the sole readiness authority, eliminating "
-    "per-mode special-cased gating.  Lifecycle stage and audit projection "
-    "semantics are unified across all modes."
+    "core.unified_orchestration_spine is the V4 orchestration session governor "
+    "for multi-step and multi-device execution sessions.  It governs parallel "
+    "fan-out, delegated runtime, wake-routed, handoff/takeover, cross-device, "
+    "and hybrid orchestration sessions.  "
+    "PR-V4: the spine consumes core.canonical_dispatch_slot_authority "
+    "(all ten legality dimensions) as the slot-readiness authority, eliminating "
+    "per-mode special-cased gating across multi-step sessions.  Lifecycle stage "
+    "and audit projection semantics are unified across all orchestration sessions.  "
+    "V4 is NOT the universal synchronous per-request gate; simple per-request "
+    "execution remains governed by OpenClawd._determine_execution_path() and "
+    "CommandRouter.route_envelope()."
+)
+
+ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY: str = (
+    "POLICY::ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE: "
+    "core.unified_orchestration_spine (V4) governs multi-step orchestration "
+    "sessions — scenarios that coordinate multiple devices, multiple dispatch "
+    "steps, or complex completion semantics.  This includes: parallel fan-out "
+    "(PARALLEL_FANOUT), delegated runtime (DELEGATED_RUNTIME), wake-routed "
+    "(WAKE_ROUTED), handoff/takeover (HANDOFF, TAKEOVER), cross-device "
+    "(CROSS_DEVICE), and hybrid (HYBRID) execution sessions.  "
+    "The spine is NOT the universal gate for every per-request call.  Simple "
+    "LOCAL or SINGLE_DEVICE_REMOTE requests governed by a single unambiguous "
+    "execution path do not require V4; they remain on the direct cognitive/"
+    "dispatch spine (OpenClawd → CommandRouter).  V4 adds session-level "
+    "orchestration authority, lifecycle tracking, and canonical completion "
+    "contracts for complex multi-step flows."
+)
+
+V4_IS_NOT_PER_REQUEST_GATE_POLICY: str = (
+    "POLICY::V4_IS_NOT_PER_REQUEST_GATE: "
+    "V4 unified_orchestration_spine MUST NOT be inserted as a mandatory "
+    "synchronous gate on every per-request call through OpenClawd.process() "
+    "or CommandRouter.route_envelope().  Doing so would force unnecessary "
+    "latency onto the per-request hot path, mis-layer the architecture by "
+    "conflating orchestration-session authority with per-request routing "
+    "authority, and produce a false system model where all execution is "
+    "incorrectly described as going through V4.  "
+    "The validated per-request path remains: "
+    "OpenClawd.process() → _determine_execution_path() → CommandRouter.route_envelope(). "
+    "V4 is called by orchestration handlers that initiate multi-step sessions "
+    "(e.g., goal_execution, parallel fan-out launchers, delegated runtime "
+    "coordinators) — not by the per-request cognitive spine."
 )
 
 ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY: str = (
-    "POLICY::ALL_EXECUTION_MODES_MUST_USE_SPINE: "
-    "No execution mode may bypass evaluate_orchestration_request(). "
-    "This includes local execution (which still requires readiness for the "
-    "local target), single-device remote, parallel fan-out, cross-device, "
-    "handoff/takeover, wake-routed, delegated runtime, and hybrid executions. "
-    "The spine is the single gate that enforces dispatch readiness before "
-    "any task payload is sent to any device."
+    "POLICY::ALL_ORCHESTRATION_SESSION_MODES_MUST_USE_SPINE: "
+    "All multi-step orchestration sessions — regardless of execution mode "
+    "(parallel fan-out, delegated, handoff, takeover, wake-routed, cross-device, "
+    "hybrid) — MUST use evaluate_orchestration_request() as their pre-dispatch "
+    "session authority.  This ensures all ten legality dimensions are enforced "
+    "uniformly for complex multi-device flows.  "
+    "NOTE: This policy applies to orchestration sessions, not to simple "
+    "per-request execution.  Simple per-request dispatch (direct local or "
+    "single-device-remote paths chosen by _determine_execution_path()) is "
+    "governed by the cognitive/dispatch spine, not by this orchestration spine."
 )
 
 PARALLEL_FANOUT_MUST_USE_SPINE_POLICY: str = (
@@ -650,21 +711,29 @@ def evaluate_orchestration_request(
 ) -> OrchestrationDecision:
     """Evaluate an orchestration request through the unified spine.
 
-    This is the **single canonical entry point** for all execution modes.
-    Every dispatch path MUST call this before sending any task payload.
+    This is the **canonical entry point for multi-step orchestration sessions**.
+    Orchestration handlers that initiate complex multi-device or multi-step
+    flows (parallel fan-out, delegated runtime, wake-routed, handoff/takeover,
+    cross-device, hybrid) MUST call this before dispatching task payloads.
+
+    This function is **not** a universal per-request gate.  Simple per-request
+    dispatch paths governed by ``OpenClawd._determine_execution_path()`` and
+    ``CommandRouter.route_envelope()`` do not call this function; they remain
+    on the direct cognitive/dispatch spine.
 
     The function:
     1. Validates the request.
     2. Evaluates dispatch readiness for each candidate device via
-       :func:`~core.unified_dispatch_readiness_gate.evaluate_dispatch_readiness`.
+       :func:`~core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots`
+       (all ten legality dimensions).
     3. Partitions devices into ready_slots and blocked_slots.
-    4. Derives a :class:`CompletionContract` appropriate for the mode.
+    4. Derives a :class:`CompletionContract` appropriate for the session mode.
     5. Returns an :class:`OrchestrationDecision`.
 
     Parameters
     ----------
     request
-        :class:`OrchestrationRequest` describing the desired execution.
+        :class:`OrchestrationRequest` describing the desired orchestration session.
 
     Returns
     -------
@@ -930,6 +999,8 @@ def _derive_completion_contract(
 
 __all__ = [
     "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY",
+    "ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY",
+    "V4_IS_NOT_PER_REQUEST_GATE_POLICY",
     "ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY",
     "PARALLEL_FANOUT_MUST_USE_SPINE_POLICY",
     "WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY",

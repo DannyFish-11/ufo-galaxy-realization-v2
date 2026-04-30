@@ -405,7 +405,7 @@ def _probe_v4_orchestration_spine() -> ModuleProbeResult:
     result = ModuleProbeResult(
         module_path="core.unified_orchestration_spine",
         pr_label="V4",
-        description="Unified Orchestration Spine — single canonical pre-dispatch authority",
+        description="Unified Orchestration Spine — multi-step orchestration session governor; NOT per-request gate",
         group=AuthorityGroup.DISPATCH_ORCHESTRATION,
     )
     importable, mod, err = _try_import("core.unified_orchestration_spine")
