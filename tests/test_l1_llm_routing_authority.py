@@ -56,7 +56,7 @@ Validates:
   47. LEGACY_PATH_REGISTRY contains PR-L1 galaxy_orchestrator entry.
   48. LEGACY_PATH_REGISTRY contains PR-L1 dashboard entry.
   49. PR-L1 registry entries have pr_guardrail_added == "PR-L1".
-  50. LEGACY_PATH_REGISTRY has at least 8 PR-L1 entries.
+  50. LEGACY_PATH_REGISTRY has at least 12 PR-L1 entries.
   51. All PR-L1 entries have status LEGACY_COMPATIBILITY.
   52. docs/MODEL_ROUTING_AUTHORITY.md mentions LLMRouteAuthority.
   53. docs/MODEL_ROUTING_AUTHORITY.md mentions LLM_ROUTE_AUTHORITY.
@@ -522,7 +522,7 @@ def test_49_all_pr_l1_entries_have_guardrail_tag():
         assert entry.pr_guardrail_added == "PR-L1"
 
 
-def test_50_legacy_registry_has_at_least_eight_pr_l1_entries():
+def test_50_legacy_registry_has_at_least_twelve_pr_l1_entries():
     from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
 
     count = sum(
@@ -530,7 +530,7 @@ def test_50_legacy_registry_has_at_least_eight_pr_l1_entries():
         for e in LEGACY_PATH_REGISTRY.values()
         if e.pr_guardrail_added == "PR-L1"
     )
-    assert count >= 8, f"Expected ≥8 PR-L1 entries, got {count}"
+    assert count >= 12, f"Expected ≥12 PR-L1 entries, got {count}"
 
 
 def test_51_all_pr_l1_entries_are_legacy_compatibility():
