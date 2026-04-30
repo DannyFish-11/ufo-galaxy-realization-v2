@@ -47,6 +47,32 @@ try:
 except ImportError:
     _run_task_result_truth_chain = None  # type: ignore[assignment]
 
+# PR-V1-RESULT: V1 unified continuity legality authority — top-level import so
+# tests can patch() the evaluate function and import failures are handled
+# gracefully (fail-open so existing deployments are never broken by a missing
+# authority module).
+try:
+    from core.unified_continuity_legality_authority import (
+        ContinuityLegalityContext as _ContinuityLegalityContext,
+        ContinuityLegalityPath as _ContinuityLegalityPath,
+        evaluate_continuity_legality as _evaluate_continuity_legality,
+    )
+except ImportError:
+    _ContinuityLegalityContext = None  # type: ignore[assignment,misc]
+    _ContinuityLegalityPath = None  # type: ignore[assignment]
+    _evaluate_continuity_legality = None  # type: ignore[assignment]
+
+# PR-V1-RESULT: Policy sentinel — participant result ingress must submit to the
+# V1 unified continuity legality authority before truth-chain execution.
+RESULT_INGRESS_CONTINUITY_LEGALITY_POLICY = (
+    "Participant result ingress MUST evaluate V1 unified continuity legality "
+    "(TERMINAL_RESULT_INGESTION path) before entering participant truth ingress, "
+    "execution signal reconciliation, canonical lifecycle update, or canonical "
+    "completion ingress.  Stale, revoked, detached, or otherwise "
+    "continuity-invalid runtime/session identities MUST be rejected before "
+    "truth-chain execution."
+)
+
 # ---------------------------------------------------------------------------
 # Compat lifecycle path signal guard
 # ---------------------------------------------------------------------------
@@ -186,6 +212,77 @@ def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> N
         logger.debug("PR-4V2 participant truth ingest failed (non-fatal): %s", exc)
 
 
+def _check_result_ingress_continuity_legality(
+    message: Dict[str, Any],
+) -> tuple:
+    """Run the V1 canonical continuity legality pre-check for participant result ingress.
+
+    Evaluates the inbound result message against the unified continuity
+    legality authority (``TERMINAL_RESULT_INGESTION`` path) BEFORE any
+    truth-chain step is allowed to run.
+
+    Returns
+    -------
+    (verdict_str, is_rejected) :
+        *verdict_str* is one of ``"allow"``, ``"reject"``,
+        ``"require_review"``.
+        *is_rejected* is ``True`` when the result must be blocked (i.e. the
+        calling path MUST NOT enter the truth chain).
+
+    Graceful degradation
+    --------------------
+    When the authority module is unavailable the function returns
+    ``("allow", False)`` so existing deployments are never broken by a
+    missing authority.  Exceptions inside the authority call are also caught
+    and treated as ``"allow"`` with a DEBUG-level log entry.
+    """
+    if _evaluate_continuity_legality is None:
+        # Authority module not installed — fail-open for backward compat.
+        return "allow", False
+    try:
+        payload = message.get("payload") or {}
+        ctx = _ContinuityLegalityContext(
+            device_id=str(message.get("device_id") or ""),
+            runtime_session_id=str(
+                message.get("runtime_session_id")
+                or payload.get("runtime_session_id")
+                or ""
+            ),
+            runtime_attachment_session_id=str(
+                message.get("runtime_attachment_session_id")
+                or payload.get("runtime_attachment_session_id")
+                or ""
+            ),
+            durable_session_id=str(
+                message.get("durable_session_id")
+                or payload.get("durable_session_id")
+                or ""
+            ),
+            contract_id=str(
+                message.get("contract_id")
+                or payload.get("contract_id")
+                or ""
+            ),
+            flow_id=str(
+                message.get("flow_id")
+                or payload.get("flow_id")
+                or ""
+            ),
+        )
+        report = _evaluate_continuity_legality(
+            _ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+            ctx,
+        )
+        return report.verdict.value, report.is_rejected
+    except Exception as _ce:
+        logger.debug(
+            "task_lifecycle: V1 continuity legality gate error "
+            "(non-fatal, allowing): %s",
+            _ce,
+        )
+        return "allow", False
+
+
 async def handle_task_result(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> None:
@@ -207,6 +304,32 @@ async def handle_task_result(
     logger.info(
         "Task result received: task_id=%s device_id=%s status=%s",
         task_id, device_id, result_status,
+    )
+
+    # PR-V1-RESULT: Canonical V1 continuity legality pre-check.
+    # Evaluate the inbound result against the unified continuity legality
+    # authority BEFORE any truth-chain step (truth ingress, reconciliation,
+    # lifecycle update, completion ingress) is allowed to run.  This closes
+    # the result-ingress continuity gap so that stale, revoked, detached, or
+    # otherwise continuity-invalid runtime/session identities cannot pollute
+    # canonical truth.  Per RESULT_INGRESS_CONTINUITY_LEGALITY_POLICY.
+    _continuity_verdict, _continuity_rejected = (
+        _check_result_ingress_continuity_legality(message)
+    )
+    if _continuity_rejected:
+        logger.warning(
+            "handle_task_result: V1 continuity legality REJECTED result "
+            "ingress (verdict=%s) for task_id=%r device_id=%r — blocking "
+            "before truth chain",
+            _continuity_verdict,
+            task_id,
+            device_id,
+        )
+        return
+    logger.debug(
+        "handle_task_result: V1 continuity legality verdict=%s task_id=%r",
+        _continuity_verdict,
+        task_id,
     )
 
     # ── Durable idempotency: suppress cross-restart duplicate results ──
