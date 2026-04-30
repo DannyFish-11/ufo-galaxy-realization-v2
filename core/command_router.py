@@ -1859,22 +1859,18 @@ class CommandRouter:
                 )
 
                 _v3_meta = envelope.metadata or {}
-                _v3_exec_mode = str(
-                    _v3_meta.get("execution_mode")
-                    or (
-                        "parallel_fanout"
-                        if _v3_meta.get("parallel_fanout") == "true"
-                        else (
-                            "cross_device"
-                            if _v3_meta.get("cross_device") == "true"
-                            else (
-                                str(envelope.executor_target_type)
-                                if envelope.executor_target_type is not None
-                                else "cross_device"
-                            )
-                        )
-                    )
-                )
+                # Resolve execution mode in priority order: explicit metadata field,
+                # parallel_fanout hint, cross_device hint, executor_target_type, default.
+                if _v3_meta.get("execution_mode"):
+                    _v3_exec_mode = str(_v3_meta["execution_mode"])
+                elif _v3_meta.get("parallel_fanout") == "true":
+                    _v3_exec_mode = "parallel_fanout"
+                elif _v3_meta.get("cross_device") == "true":
+                    _v3_exec_mode = "cross_device"
+                elif envelope.executor_target_type is not None:
+                    _v3_exec_mode = str(envelope.executor_target_type)
+                else:
+                    _v3_exec_mode = "cross_device"
                 _v3_required_caps: Optional[List[str]] = (
                     list(envelope.required_capabilities)
                     if envelope.required_capabilities
