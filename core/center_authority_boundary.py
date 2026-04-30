@@ -483,7 +483,7 @@ def _evaluate_completion_truth_domain() -> DomainBoundaryState:
             state.sentinel_checks[sentinel_name] = bool(
                 sentinel_value and isinstance(sentinel_value, str)
             )
-        except Exception as exc:  # pragma: no cover
+        except (ImportError, AttributeError) as exc:  # pragma: no cover
             state.missing_modules.append(module_path)
             state.notes.append(f"Import failed for {module_path}: {exc}")
             state.sentinel_checks[sentinel_name] = False
@@ -526,7 +526,7 @@ def _evaluate_continuity_legality_domain() -> DomainBoundaryState:
             state.sentinel_checks[sentinel_name] = bool(
                 sentinel_value and isinstance(sentinel_value, str)
             )
-        except Exception as exc:  # pragma: no cover
+        except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)
             state.notes.append(f"Import failed for {module_path}: {exc}")
@@ -573,7 +573,7 @@ def _evaluate_dispatch_readiness_domain() -> DomainBoundaryState:
             state.sentinel_checks[sentinel_name] = bool(
                 sentinel_value and isinstance(sentinel_value, str)
             )
-        except Exception as exc:  # pragma: no cover
+        except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)
             state.notes.append(f"Import failed for {module_path}: {exc}")
@@ -620,7 +620,7 @@ def _evaluate_orchestration_truth_domain() -> DomainBoundaryState:
             state.sentinel_checks[sentinel_name] = bool(
                 sentinel_value and isinstance(sentinel_value, str)
             )
-        except Exception as exc:  # pragma: no cover
+        except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)
             state.notes.append(f"Import failed for {module_path}: {exc}")
@@ -681,7 +681,7 @@ def evaluate_center_authority_boundary() -> CenterAuthorityBoundaryReport:
     for domain, evaluator in domain_evaluators:
         try:
             state = evaluator()
-        except Exception as exc:  # pragma: no cover
+        except (ImportError, AttributeError) as exc:  # pragma: no cover
             state = DomainBoundaryState(domain=domain)
             state.status = DomainBoundaryStatus.UNKNOWN
             state.notes.append(f"Evaluation error: {exc}")
