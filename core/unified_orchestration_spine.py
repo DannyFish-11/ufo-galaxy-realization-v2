@@ -20,17 +20,29 @@ This module closes those gaps by providing a single spine that every execution
 mode MUST pass through.  The spine:
 
 1. Accepts an :class:`OrchestrationRequest` describing the desired execution.
-2. Evaluates dispatch readiness for all target devices via
-   :func:`~core.unified_dispatch_readiness_gate.evaluate_dispatch_readiness`.
+2. Evaluates dispatch readiness for all target devices via the V3
+   :func:`~core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots`
+   (all ten legality dimensions).
 3. Returns an :class:`OrchestrationDecision` that callers use to proceed or
    abort dispatch.
 4. Provides a consistent ``completion_contract`` that all modes share.
+5. Exposes a ``lifecycle_stage`` reflecting the current orchestration phase
+   and an ``audit_record`` for observability / projection semantics.
+
+V4 structural closure
+---------------------
+PR-V4 upgrades the spine to consume the V3 canonical dispatch-slot authority
+(:mod:`core.canonical_dispatch_slot_authority`) instead of calling the lower
+dispatch readiness gate directly.  This means every execution mode now passes
+through **all ten legality dimensions** — including continuity legality,
+execution-mode eligibility, occupancy, policy allowance, and
+delegated/handoff acceptability — in a single unified evaluation.
 
 Design
 ------
 - **Additive only** — does not modify any existing module.
-- **Composing, not duplicating** — delegates readiness evaluation to
-  :mod:`core.unified_dispatch_readiness_gate`.
+- **Composing, not duplicating** — delegates slot evaluation to
+  :mod:`core.canonical_dispatch_slot_authority` (V3).
 - **Stateless** — no singleton; each call is independent.
 - **Graceful degradation** — unavailable sub-systems produce conservative
   blocking decisions; they never produce false READY verdicts.
@@ -43,12 +55,15 @@ Authority sentinels
 :data:`PARALLEL_FANOUT_MUST_USE_SPINE_POLICY`
 :data:`WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY`
 :data:`SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY`
+:data:`CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY`
+:data:`ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY`
 
 Public API
 ----------
 Enums::
 
     ExecutionMode
+    OrchestrationLifecycleStage
 
 Dataclasses::
 
@@ -72,6 +87,15 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.UnifiedOrchestrationSpine")
 
+# Lazy import of canonical dispatch-slot authority (V3).  Imported at module
+# level so callers and tests can patch core.unified_orchestration_spine.get_canonical_dispatch_slots.
+try:
+    from core.canonical_dispatch_slot_authority import (
+        get_canonical_dispatch_slots,
+    )
+except ImportError:  # pragma: no cover
+    get_canonical_dispatch_slots = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -82,7 +106,11 @@ UNIFIED_ORCHESTRATION_SPINE_AUTHORITY: str = (
     "entry point for all execution modes.  All dispatch paths — local, "
     "single-device remote, parallel fan-out, cross-device, handoff/takeover, "
     "wake-routed, delegated runtime, and hybrid — MUST pass through "
-    "evaluate_orchestration_request() before any task is dispatched."
+    "evaluate_orchestration_request() before any task is dispatched.  "
+    "PR-V4: the spine now consumes core.canonical_dispatch_slot_authority "
+    "(all ten legality dimensions) as the sole readiness authority, eliminating "
+    "per-mode special-cased gating.  Lifecycle stage and audit projection "
+    "semantics are unified across all modes."
 )
 
 ALL_EXECUTION_MODES_MUST_USE_SPINE_POLICY: str = (
@@ -133,6 +161,42 @@ CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY: str = (
     "from this spine and MUST NOT perform independent readiness evaluation."
 )
 
+ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY: str = (
+    "POLICY::ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT: "
+    "PR-V4 structural closure: the orchestration spine MUST call "
+    "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots() "
+    "as its sole slot-evaluation authority for ALL execution modes.  "
+    "This replaces the previous direct usage of evaluate_dispatch_readiness() "
+    "and ensures all ten legality dimensions (transport, registration, attachment, "
+    "continuity legality, capability, execution-mode eligibility, occupancy, "
+    "policy allowance, cross-device reachability, delegated/handoff acceptability) "
+    "are enforced uniformly across local, single-device-remote, parallel-fanout, "
+    "cross-device, handoff, takeover, wake-routed, delegated-runtime, and hybrid "
+    "execution modes.  Mode-specific bypass of any dimension is a policy violation."
+)
+
+ORCHESTRATION_SPINE_LIFECYCLE_STAGE_IS_UNIFIED_POLICY: str = (
+    "POLICY::ORCHESTRATION_SPINE_LIFECYCLE_STAGE_IS_UNIFIED: "
+    "All execution modes share the same lifecycle stage progression expressed "
+    "through OrchestrationLifecycleStage.  Callers MUST NOT infer lifecycle "
+    "meaning from mode-specific side-contracts; they MUST read the "
+    "OrchestrationDecision.lifecycle_stage field set by the spine.  "
+    "This ensures handoff, delegated, wake-routed, parallel-fanout, and all "
+    "other modes advance through the same PRE_EVALUATION → SLOT_EVALUATION → "
+    "DISPATCH_EVALUATED → DISPATCHING → AWAITING_RESULT → COMPLETE / "
+    "PARTIAL_FAILURE / ABORTED sequence."
+)
+
+ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL_POLICY: str = (
+    "POLICY::ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL: "
+    "Each OrchestrationDecision carries a canonical audit_record that "
+    "contains the orchestration_id, execution_mode, lifecycle_stage, "
+    "ready_device_count, blocked_device_count, and completion_contract "
+    "snapshot.  This record is the authoritative projection source for "
+    "observability systems; mode-specific projection paths MUST NOT "
+    "supplement it with separate completion or lifecycle reality."
+)
+
 # ---------------------------------------------------------------------------
 # ExecutionMode
 # ---------------------------------------------------------------------------
@@ -174,6 +238,74 @@ class ExecutionMode(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# OrchestrationLifecycleStage
+# ---------------------------------------------------------------------------
+
+
+class OrchestrationLifecycleStage(str, Enum):
+    """Unified lifecycle stage progression for all execution modes.
+
+    All execution modes advance through the same stage sequence, ensuring
+    that handoff, delegated, wake-routed, parallel-fanout, and ordinary
+    dispatch share a single lifecycle reality.
+
+    PRE_EVALUATION
+        Request accepted; slot evaluation has not yet started.
+    SLOT_EVALUATION
+        Canonical dispatch-slot authority is being consulted.
+    DISPATCH_EVALUATED
+        Slot evaluation complete; can_proceed determined.  Ready slots are
+        available for dispatch or all slots are blocked.
+    DISPATCHING
+        Task payload is being sent to approved dispatch slots.
+    AWAITING_RESULT
+        Dispatch complete; awaiting device results per completion contract.
+    PARTIAL_FAILURE
+        One or more device results indicate failure; partial_failure_policy
+        governs whether the orchestration continues or aborts.
+    COMPLETE
+        All expected results received and completion contract satisfied.
+    ABORTED
+        Orchestration aborted due to all-blocked outcome, internal error, or
+        explicit cancellation before dispatch.
+    """
+
+    PRE_EVALUATION = "pre_evaluation"
+    SLOT_EVALUATION = "slot_evaluation"
+    DISPATCH_EVALUATED = "dispatch_evaluated"
+    DISPATCHING = "dispatching"
+    AWAITING_RESULT = "awaiting_result"
+    PARTIAL_FAILURE = "partial_failure"
+    COMPLETE = "complete"
+    ABORTED = "aborted"
+
+
+# ---------------------------------------------------------------------------
+# Canonical slot status → legacy readiness status mapping
+# ---------------------------------------------------------------------------
+
+# Maps CanonicalDispatchSlotStatus values (from V3 authority) back to the
+# DispatchReadinessStatus vocabulary that DeviceOrchestrationSlot.readiness_status
+# has historically exposed.  This preserves backward compatibility for callers
+# that check readiness_status against DispatchReadinessStatus values.
+_CANONICAL_SLOT_TO_READINESS_STATUS: Dict[str, str] = {
+    "slot_approved": "dispatch_ready",
+    "slot_blocked_transport": "blocked_transport",
+    "slot_blocked_registration": "blocked_registration_gap",
+    "slot_blocked_attachment": "blocked_stale_attachment",
+    "slot_blocked_continuity_legality": "blocked_continuity_legality",
+    "slot_blocked_capability": "blocked_capability",
+    "slot_blocked_execution_mode_ineligible": "blocked_execution_mode_ineligible",
+    "slot_blocked_occupancy": "blocked_occupancy",
+    "slot_blocked_policy": "blocked_policy",
+    "slot_blocked_cross_device_reachability": "blocked_cross_device_eligibility",
+    "slot_blocked_delegated_handoff": "blocked_stale_attachment",
+    "slot_not_registered": "not_registered",
+    "slot_authority_error": "gate_error",
+}
+
+
+# ---------------------------------------------------------------------------
 # DeviceOrchestrationSlot
 # ---------------------------------------------------------------------------
 
@@ -189,12 +321,30 @@ class DeviceOrchestrationSlot:
     dispatch_ready
         True iff the device passed all readiness gates.
     readiness_status
-        :class:`~core.unified_dispatch_readiness_gate.DispatchReadinessStatus`
-        value string.
+        Legacy :class:`~core.unified_dispatch_readiness_gate.DispatchReadinessStatus`
+        value string, mapped from the canonical slot status for backward
+        compatibility.  Callers that check this field against
+        ``DispatchReadinessStatus`` values continue to work unchanged.
     readiness_reason
         Human-readable explanation from the readiness gate.
     subtask_index
         Optional index within a fan-out for ordering and tracking.
+    slot_status
+        Canonical :class:`~core.canonical_dispatch_slot_authority.CanonicalDispatchSlotStatus`
+        value string from the V3 authority.  Use this field for new code;
+        ``readiness_status`` is provided for backward compatibility only.
+    blocking_dimension
+        The name of the first legality dimension that blocked the slot, or
+        ``""`` when the slot is approved.  One of: ``transport_readiness``,
+        ``registration_validity``, ``attachment_validity``,
+        ``continuity_legality``, ``capability_fit``,
+        ``execution_mode_eligibility``, ``occupancy``,
+        ``policy_allowance``, ``cross_device_reachability``,
+        ``delegated_handoff_acceptability``.
+    dimension_results
+        Per-dimension pass/fail results keyed by dimension name.  All ten
+        dimensions are present when evaluation reached them; earlier-blocked
+        slots carry only the dimensions evaluated before the blocking one.
     """
 
     device_id: str
@@ -207,6 +357,9 @@ class DeviceOrchestrationSlot:
     runtime_session_id: Optional[str] = None
     runtime_attachment_session_id: Optional[str] = None
     transport_alive: bool = False
+    slot_status: str = ""
+    blocking_dimension: str = ""
+    dimension_results: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -220,6 +373,9 @@ class DeviceOrchestrationSlot:
             "runtime_session_id": self.runtime_session_id,
             "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "transport_alive": self.transport_alive,
+            "slot_status": self.slot_status,
+            "blocking_dimension": self.blocking_dimension,
+            "dimension_results": dict(self.dimension_results),
         }
 
 
@@ -349,6 +505,17 @@ class OrchestrationDecision:
         Human-readable reason when can_proceed is False.
     spine_notes
         Additional diagnostic notes from the spine evaluation.
+    lifecycle_stage
+        Current :class:`OrchestrationLifecycleStage` value string.  Set to
+        ``DISPATCH_EVALUATED`` upon return from
+        :func:`evaluate_orchestration_request`; callers advance the stage
+        as the orchestration progresses.
+    audit_record
+        Canonical audit / projection snapshot produced at evaluation time.
+        Contains ``orchestration_id``, ``execution_mode``, ``lifecycle_stage``,
+        ``ready_device_count``, ``blocked_device_count``, and a
+        ``completion_contract`` snapshot.  Observability consumers MUST use
+        this record as their canonical projection source.
     """
 
     orchestration_id: str = field(
@@ -363,6 +530,8 @@ class OrchestrationDecision:
     )
     block_reason: str = ""
     spine_notes: List[str] = field(default_factory=list)
+    lifecycle_stage: str = OrchestrationLifecycleStage.DISPATCH_EVALUATED.value
+    audit_record: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def ready_device_ids(self) -> List[str]:
@@ -384,6 +553,8 @@ class OrchestrationDecision:
             "completion_contract": self.completion_contract.to_dict(),
             "block_reason": self.block_reason,
             "spine_notes": list(self.spine_notes),
+            "lifecycle_stage": self.lifecycle_stage,
+            "audit_record": dict(self.audit_record),
             "authority": UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
         }
 
@@ -440,8 +611,12 @@ def evaluate_orchestration_request(
 
 
 def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
-    """Internal spine evaluation."""
-    from core.unified_dispatch_readiness_gate import evaluate_dispatch_readiness
+    """Internal spine evaluation — V4: uses canonical dispatch-slot authority."""
+    if get_canonical_dispatch_slots is None:
+        raise RuntimeError(
+            "core.canonical_dispatch_slot_authority is unavailable; "
+            "cannot evaluate orchestration request."
+        )
 
     spine_notes: List[str] = []
     mode = request.execution_mode
@@ -458,52 +633,82 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
                 "target_device_ids is empty — cannot proceed without at "
                 "least one candidate device"
             ],
+            lifecycle_stage=OrchestrationLifecycleStage.ABORTED.value,
         )
 
     # ----------------------------------------------------------------
-    # Evaluate readiness per device
+    # Evaluate all target devices via canonical dispatch-slot authority
+    # (all ten legality dimensions)
+    # ----------------------------------------------------------------
+    continuity_context: Dict[str, Any] = (
+        request.metadata.get("continuity_context") or {}
+    )
+    slots_result = get_canonical_dispatch_slots(
+        device_ids=request.target_device_ids,
+        execution_mode=mode,
+        required_capabilities=request.required_capabilities,
+        session_id=request.session_id,
+        runtime_attachment_session_id=request.runtime_attachment_session_id,
+        task_id=request.task_id,
+        continuity_context=continuity_context,
+    )
+
+    # ----------------------------------------------------------------
+    # Map canonical slot results to DeviceOrchestrationSlot objects
     # ----------------------------------------------------------------
     ready_slots: List[DeviceOrchestrationSlot] = []
     blocked_slots: List[DeviceOrchestrationSlot] = []
 
-    require_cd = request.require_cross_device_eligible or mode in (
-        ExecutionMode.CROSS_DEVICE.value,
-        ExecutionMode.HANDOFF.value,
-        ExecutionMode.TAKEOVER.value,
-        ExecutionMode.WAKE_ROUTED.value,
-    )
+    # Build index → canonical slot for subtask ordering
+    device_order = {did: idx for idx, did in enumerate(request.target_device_ids)}
 
-    for idx, device_id in enumerate(request.target_device_ids):
-        readiness = evaluate_dispatch_readiness(
-            device_id,
-            required_capabilities=request.required_capabilities,
-            require_cross_device_eligible=require_cd,
-            session_id=request.session_id,
-            runtime_attachment_session_id=request.runtime_attachment_session_id,
-            execution_mode=mode,
+    for canonical_slot in slots_result.approved_slots:
+        readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
+            canonical_slot.status, canonical_slot.status
         )
-
         slot = DeviceOrchestrationSlot(
-            device_id=device_id,
-            dispatch_ready=readiness.dispatch_ready,
-            readiness_status=readiness.status,
-            readiness_reason=readiness.reason,
-            subtask_index=idx,
-            registration_gaps=readiness.registration_gaps,
-            attachment_state=readiness.attachment_state,
-            runtime_session_id=readiness.runtime_session_id,
-            runtime_attachment_session_id=readiness.runtime_attachment_session_id,
-            transport_alive=readiness.transport_alive,
+            device_id=canonical_slot.device_id,
+            dispatch_ready=True,
+            readiness_status=readiness_status,
+            readiness_reason=canonical_slot.reason,
+            subtask_index=device_order.get(canonical_slot.device_id, 0),
+            registration_gaps=list(canonical_slot.registration_gaps),
+            attachment_state=canonical_slot.attachment_state,
+            runtime_session_id=canonical_slot.runtime_session_id,
+            runtime_attachment_session_id=canonical_slot.runtime_attachment_session_id,
+            transport_alive=canonical_slot.transport_alive,
+            slot_status=canonical_slot.status,
+            blocking_dimension=canonical_slot.blocking_dimension,
+            dimension_results=dict(canonical_slot.dimension_results),
         )
+        ready_slots.append(slot)
 
-        if readiness.dispatch_ready:
-            ready_slots.append(slot)
-        else:
-            blocked_slots.append(slot)
-            spine_notes.append(
-                f"device_id={device_id!r} blocked: "
-                f"status={readiness.status!r} reason={readiness.reason!r}"
-            )
+    for canonical_slot in slots_result.blocked_slots:
+        readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
+            canonical_slot.status, canonical_slot.status
+        )
+        slot = DeviceOrchestrationSlot(
+            device_id=canonical_slot.device_id,
+            dispatch_ready=False,
+            readiness_status=readiness_status,
+            readiness_reason=canonical_slot.reason,
+            subtask_index=device_order.get(canonical_slot.device_id, 0),
+            registration_gaps=list(canonical_slot.registration_gaps),
+            attachment_state=canonical_slot.attachment_state,
+            runtime_session_id=canonical_slot.runtime_session_id,
+            runtime_attachment_session_id=canonical_slot.runtime_attachment_session_id,
+            transport_alive=canonical_slot.transport_alive,
+            slot_status=canonical_slot.status,
+            blocking_dimension=canonical_slot.blocking_dimension,
+            dimension_results=dict(canonical_slot.dimension_results),
+        )
+        blocked_slots.append(slot)
+        spine_notes.append(
+            f"device_id={canonical_slot.device_id!r} blocked: "
+            f"slot_status={canonical_slot.status!r} "
+            f"blocking_dimension={canonical_slot.blocking_dimension!r} "
+            f"reason={canonical_slot.reason!r}"
+        )
 
     # ----------------------------------------------------------------
     # Derive completion contract
@@ -511,14 +716,14 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     completion_contract = _derive_completion_contract(mode, ready_slots)
 
     # ----------------------------------------------------------------
-    # Determine can_proceed
+    # Determine can_proceed and lifecycle stage
     # ----------------------------------------------------------------
     can_proceed = len(ready_slots) > 0
-    block_reason = ""
-    if not can_proceed:
+    block_reason = slots_result.block_reason
+    if not can_proceed and not block_reason:
         block_reason = (
             f"All {len(request.target_device_ids)} candidate device(s) failed "
-            f"dispatch readiness gate for mode={mode!r}."
+            f"canonical dispatch-slot evaluation for mode={mode!r}."
         )
         if blocked_slots:
             first_blocked = blocked_slots[0]
@@ -527,13 +732,24 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
                 f"{first_blocked.readiness_reason!r}"
             )
 
+    lifecycle_stage = (
+        OrchestrationLifecycleStage.DISPATCH_EVALUATED.value
+        if can_proceed
+        else OrchestrationLifecycleStage.ABORTED.value
+    )
+
     if blocked_slots:
         spine_notes.append(
-            f"{len(blocked_slots)} device(s) blocked by readiness gate; "
+            f"{len(blocked_slots)} device(s) blocked by canonical slot authority; "
             f"{len(ready_slots)} device(s) ready."
         )
 
-    return OrchestrationDecision(
+    # ----------------------------------------------------------------
+    # Build the orchestration_id and audit_record
+    # ----------------------------------------------------------------
+    # We build the decision first to get the orchestration_id, then we
+    # populate audit_record after creation using the id.
+    decision = OrchestrationDecision(
         execution_mode=mode,
         can_proceed=can_proceed,
         ready_slots=ready_slots,
@@ -541,7 +757,20 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
         completion_contract=completion_contract,
         block_reason=block_reason,
         spine_notes=spine_notes,
+        lifecycle_stage=lifecycle_stage,
     )
+
+    decision.audit_record = {
+        "orchestration_id": decision.orchestration_id,
+        "execution_mode": mode,
+        "lifecycle_stage": lifecycle_stage,
+        "ready_device_count": len(ready_slots),
+        "blocked_device_count": len(blocked_slots),
+        "completion_contract": completion_contract.to_dict(),
+        "authority": UNIFIED_ORCHESTRATION_SPINE_AUTHORITY,
+    }
+
+    return decision
 
 
 def _derive_completion_contract(
@@ -608,7 +837,11 @@ __all__ = [
     "WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY",
     "SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY",
     "CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY",
+    "ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY",
+    "ORCHESTRATION_SPINE_LIFECYCLE_STAGE_IS_UNIFIED_POLICY",
+    "ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL_POLICY",
     "ExecutionMode",
+    "OrchestrationLifecycleStage",
     "DeviceOrchestrationSlot",
     "OrchestrationRequest",
     "OrchestrationDecision",
