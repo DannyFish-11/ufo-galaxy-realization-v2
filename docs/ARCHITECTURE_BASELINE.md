@@ -1,4 +1,4 @@
-# Architecture Baseline — Terminal State After PR-011
+# Architecture Baseline — Terminal State After PR-11
 
 > Produced by **PR-010 Consolidation**.  Summarises the Galaxy architecture
 > baseline after the PR-001 through PR-009 sequence.  This document is the

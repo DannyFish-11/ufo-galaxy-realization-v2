@@ -618,7 +618,7 @@ class TestRunFinalConvergenceChecks:
         from core.final_architecture_convergence import run_final_convergence_checks
         before = time.time() - 5.0
         report = run_final_convergence_checks()
-        after = time.time() + 5.0
+        after = time.time()
         assert report.generated_at > 0, "generated_at must be positive"
         assert before <= report.generated_at <= after, (
             f"generated_at {report.generated_at} not in expected range "
