@@ -115,8 +115,10 @@ Usage::
 from __future__ import annotations
 
 import dataclasses
+import importlib
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger("Galaxy.ArchInvariants")
@@ -140,6 +142,14 @@ __all__ = [
     "check_canonical_layer_model_consistent",
     # Aggregate entry point
     "run_consolidation_invariants",
+    # Terminal regression guards (PR-10)
+    "TerminalRegressionReport",
+    "check_v4_not_universal_per_request_gate",
+    "check_v6_not_in_hot_request_path",
+    "check_l1_l2_l3_in_router_authority",
+    "check_completion_truth_is_enforced",
+    "check_canonical_declarations_consistent",
+    "run_terminal_regression_guards",
 ]
 
 # ---------------------------------------------------------------------------
@@ -758,6 +768,778 @@ def run_consolidation_invariants(
         logger.warning(
             "Architecture consolidation invariants: %d error(s) found — "
             "overall_consistent=False",
+            report.error_count,
+        )
+
+    return report
+
+
+# ===========================================================================
+# PR-10 Terminal Architecture Regression Guards
+# ===========================================================================
+#
+# These five checks detect the key invalid architecture regressions that must
+# not be reintroduced after the PR-1–PR-9 alignment sequence.  Each check is
+# a pure function operating on importable modules and/or source-file content;
+# none alters any runtime state.
+#
+# Regression categories guarded:
+#   1. V4 reclassified as a universal per-request gate.
+#   2. V6 inserted into hot request paths.
+#   3. L1/L2/L3 detached from the router-level authority (UnifiedLLMRouter).
+#   4. Canonical completion truth backbone weakened into optional soft signaling.
+#   5. Repository-level architecture declarations contradict the final model.
+
+
+@dataclasses.dataclass
+class TerminalRegressionReport:
+    """Aggregated result of all terminal architecture regression guard checks.
+
+    Attributes
+    ----------
+    findings:
+        All :class:`InvariantFinding` objects produced by the five guards.
+    checks_run:
+        Ordered list of check-name strings that were executed.
+    overall_pass:
+        ``True`` when no ERROR-severity findings were produced.
+    error_count:
+        Number of ERROR-severity findings.
+    warning_count:
+        Number of WARNING-severity findings.
+    """
+
+    findings: List[InvariantFinding] = dataclasses.field(default_factory=list)
+    checks_run: List[str] = dataclasses.field(default_factory=list)
+    overall_pass: bool = True
+    error_count: int = 0
+    warning_count: int = 0
+
+    def __post_init__(self) -> None:
+        self._recompute()
+
+    def _recompute(self) -> None:
+        self.error_count = sum(
+            1 for f in self.findings if f.severity == InvariantSeverity.ERROR.value
+        )
+        self.warning_count = sum(
+            1 for f in self.findings if f.severity == InvariantSeverity.WARNING.value
+        )
+        self.overall_pass = self.error_count == 0
+
+    def add(self, finding: InvariantFinding) -> None:
+        self.findings.append(finding)
+        self._recompute()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "overall_pass": self.overall_pass,
+            "error_count": self.error_count,
+            "warning_count": self.warning_count,
+            "checks_run": list(self.checks_run),
+            "findings": [f.to_dict() for f in self.findings],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Guard 1 — V4 must NOT be a universal per-request gate
+# ---------------------------------------------------------------------------
+
+#: Source files whose content must NOT import unified_orchestration_spine at
+#: the per-request dispatch level.  These are the canonical hot-path modules.
+_V4_HOT_PATH_FILES: Tuple[str, ...] = (
+    "core/command_router.py",
+    "core/execution_spine.py",
+    "core/openclawd.py",
+)
+
+#: Token whose presence in a hot-path file signals a V4 gate regression.
+_V4_IMPORT_TOKEN: str = "unified_orchestration_spine"
+
+
+def check_v4_not_universal_per_request_gate(
+    project_root: Optional[Path] = None,
+) -> List[InvariantFinding]:
+    """Detect the V4-as-universal-per-request-gate regression.
+
+    Two complementary checks are run:
+
+    1. **Sentinel check** — ``core.unified_orchestration_spine`` must be
+       importable and must carry ``V4_IS_NOT_PER_REQUEST_GATE_POLICY``
+       containing the "NOT" keyword, confirming that the module itself still
+       declares the correct scope.
+
+    2. **Hot-path isolation check** — the canonical per-request hot-path
+       source files (``core/command_router.py``, ``core/execution_spine.py``,
+       ``core/openclawd.py``) must not import
+       ``unified_orchestration_spine``.  An import there would indicate that
+       V4 has been wired as a synchronous gate on every per-request call.
+
+    Parameters
+    ----------
+    project_root:
+        Root path of the repository.  Defaults to the directory three levels
+        above this file (``<repo>/``).
+
+    Returns
+    -------
+    List[InvariantFinding]
+        Empty list on success; ERROR findings for each regression detected.
+    """
+    check = "V4_NOT_UNIVERSAL_PER_REQUEST_GATE"
+    findings: List[InvariantFinding] = []
+    root = project_root or Path(__file__).parent.parent.parent
+
+    # 1. Sentinel check.
+    try:
+        spine = importlib.import_module("core.unified_orchestration_spine")
+        policy = getattr(spine, "V4_IS_NOT_PER_REQUEST_GATE_POLICY", None)
+        if policy is None:
+            findings.append(
+                _err(
+                    check,
+                    "core.unified_orchestration_spine is missing "
+                    "V4_IS_NOT_PER_REQUEST_GATE_POLICY sentinel.  "
+                    "This sentinel is the machine-checkable declaration that V4 "
+                    "is NOT the universal per-request gate.",
+                    {"module": "core.unified_orchestration_spine",
+                     "missing_attr": "V4_IS_NOT_PER_REQUEST_GATE_POLICY"},
+                )
+            )
+        elif "NOT" not in str(policy) and "not" not in str(policy).lower():
+            findings.append(
+                _err(
+                    check,
+                    "V4_IS_NOT_PER_REQUEST_GATE_POLICY does not contain the "
+                    "required 'NOT' keyword.  The policy must explicitly state "
+                    "that V4 is NOT the per-request gate.",
+                    {"policy_value": str(policy)[:120]},
+                )
+            )
+        else:
+            findings.append(
+                _info(
+                    check,
+                    "V4_IS_NOT_PER_REQUEST_GATE_POLICY sentinel is present and "
+                    "correctly contains NOT language.",
+                )
+            )
+    except ImportError as exc:
+        findings.append(
+            _err(
+                check,
+                f"core.unified_orchestration_spine is not importable: {exc}.  "
+                "The V4 spine module must be present for the scope guard to work.",
+                {"import_error": str(exc)},
+            )
+        )
+
+    # 2. Hot-path isolation check.
+    for rel_path in _V4_HOT_PATH_FILES:
+        fpath = root / rel_path
+        if not fpath.exists():
+            findings.append(
+                _info(check, f"Hot-path file '{rel_path}' not found — skipping isolation check.")
+            )
+            continue
+        content = fpath.read_text(encoding="utf-8", errors="replace")
+        if _V4_IMPORT_TOKEN in content:
+            # Allow import only if it is in a comment or in a non-request scope.
+            # A simple heuristic: flag if it appears in an import statement line.
+            import_lines = [
+                line.strip() for line in content.splitlines()
+                if _V4_IMPORT_TOKEN in line and line.strip().startswith(("import ", "from "))
+            ]
+            if import_lines:
+                findings.append(
+                    _err(
+                        check,
+                        f"Hot-path file '{rel_path}' imports "
+                        f"'{_V4_IMPORT_TOKEN}'.  V4 must not be wired into the "
+                        "per-request dispatch path — this is the V4-as-universal-gate "
+                        "regression.",
+                        {"file": rel_path, "import_lines": import_lines[:3]},
+                    )
+                )
+            else:
+                findings.append(
+                    _info(
+                        check,
+                        f"Hot-path file '{rel_path}': '{_V4_IMPORT_TOKEN}' appears "
+                        "only in non-import context (e.g. comment/docstring) — "
+                        "isolation check passes.",
+                    )
+                )
+        else:
+            findings.append(
+                _info(
+                    check,
+                    f"Hot-path file '{rel_path}' does not import "
+                    f"'{_V4_IMPORT_TOKEN}' — V4 hot-path isolation confirmed.",
+                )
+            )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Guard 2 — V6 must NOT be in hot request paths
+# ---------------------------------------------------------------------------
+
+#: Tokens whose presence inside a per-request dispatch method signals a V6
+#: hot-path insertion regression.
+_V6_HOT_PATH_TOKENS: Tuple[str, ...] = (
+    "center_authority_boundary",
+    "evaluate_center_authority_boundary",
+    "assert_center_authority_intact",
+    "release_blocking_gate",
+)
+
+#: Per-request method names to scan for V6 token intrusion.
+_V6_SCANNED_METHODS: Tuple[str, ...] = (
+    "def process(",
+    "def route_envelope(",
+)
+
+#: How many characters to scan inside each method body.
+_METHOD_SCAN_WINDOW: int = 3000
+
+
+def check_v6_not_in_hot_request_path(
+    project_root: Optional[Path] = None,
+) -> List[InvariantFinding]:
+    """Detect the V6-in-hot-path regression.
+
+    V6 (``core.release_blocking_gate`` / ``core.center_authority_boundary``)
+    is the startup / readiness / health / release integrity boundary layer.
+    It must NOT appear inside synchronous per-request dispatch methods such as
+    ``OpenClawd.process()`` or ``CommandRouter.route_envelope()``.
+
+    The check scans the first :data:`_METHOD_SCAN_WINDOW` characters of each
+    listed method for any of the V6 tokens.
+
+    Parameters
+    ----------
+    project_root:
+        Root path of the repository.
+
+    Returns
+    -------
+    List[InvariantFinding]
+        ERROR findings for each V6-in-hot-path regression detected.
+    """
+    check = "V6_NOT_IN_HOT_REQUEST_PATH"
+    findings: List[InvariantFinding] = []
+    root = project_root or Path(__file__).parent.parent.parent
+
+    scanned_files = {
+        "core/openclawd.py": ("def process(",),
+        "core/command_router.py": ("def route_envelope(",),
+    }
+
+    for rel_path, method_sigs in scanned_files.items():
+        fpath = root / rel_path
+        if not fpath.exists():
+            findings.append(
+                _info(check, f"File '{rel_path}' not found — skipping V6 hot-path scan.")
+            )
+            continue
+
+        content = fpath.read_text(encoding="utf-8", errors="replace")
+
+        for method_sig in method_sigs:
+            method_idx = content.find(method_sig)
+            if method_idx == -1:
+                findings.append(
+                    _info(
+                        check,
+                        f"Method '{method_sig.strip()}' not found in '{rel_path}' — skipping.",
+                    )
+                )
+                continue
+
+            method_body = content[method_idx: method_idx + _METHOD_SCAN_WINDOW]
+            violated_tokens = [t for t in _V6_HOT_PATH_TOKENS if t in method_body]
+
+            if violated_tokens:
+                findings.append(
+                    _err(
+                        check,
+                        f"'{rel_path}' method '{method_sig.strip()}' contains V6 "
+                        f"boundary token(s) {violated_tokens!r}.  "
+                        "V6 (release_blocking_gate / center_authority_boundary) must "
+                        "not be called inside per-request dispatch methods — this is "
+                        "the V6-in-hot-path regression.",
+                        {
+                            "file": rel_path,
+                            "method": method_sig.strip(),
+                            "violated_tokens": violated_tokens,
+                        },
+                    )
+                )
+            else:
+                findings.append(
+                    _info(
+                        check,
+                        f"'{rel_path}' method '{method_sig.strip()}': no V6 tokens "
+                        "detected — V6 hot-path exclusion confirmed.",
+                    )
+                )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Guard 3 — L1/L2/L3 must remain in the router-level authority
+# ---------------------------------------------------------------------------
+
+
+def check_l1_l2_l3_in_router_authority() -> List[InvariantFinding]:
+    """Detect the L1/L2/L3-detached-from-router regression.
+
+    L1 (:class:`~core.llm.route_authority.LLMRouteAuthority`),
+    L2 (:class:`~core.llm.supply_authority.LLMSupplyAuthority`), and
+    L3 (:class:`~core.llm.context_authority.CognitiveContextAuthority`) must
+    be fused into :class:`~core.unified.llm_router.UnifiedLLMRouter` via the
+    ``_l1_authority``, ``_l2_authority``, and ``_l3_authority`` instance
+    attributes.
+
+    If ``UnifiedLLMRouter`` no longer initialises these attributes the
+    cognitive authority layer is effectively detached from the router —
+    the L1/L2/L3-shadow-stack regression.
+
+    Returns
+    -------
+    List[InvariantFinding]
+        ERROR findings for each missing integration point detected.
+    """
+    check = "L1_L2_L3_IN_ROUTER_AUTHORITY"
+    findings: List[InvariantFinding] = []
+
+    # Check that each authority sentinel is importable.
+    sentinel_checks: Tuple[Tuple[str, str], ...] = (
+        ("core.llm.route_authority", "LLM_ROUTE_AUTHORITY"),
+        ("core.llm.supply_authority", "LLM_SUPPLY_AUTHORITY"),
+        ("core.llm.context_authority", "LLM_CONTEXT_AUTHORITY"),
+    )
+    for mod_path, sentinel_name in sentinel_checks:
+        try:
+            mod = importlib.import_module(mod_path)
+            sentinel = getattr(mod, sentinel_name, None)
+            if sentinel is None:
+                findings.append(
+                    _err(
+                        check,
+                        f"{mod_path} is missing sentinel '{sentinel_name}'.  "
+                        "The authority module must declare its canonical sentinel "
+                        "for the router integration guard to be meaningful.",
+                        {"module": mod_path, "missing_attr": sentinel_name},
+                    )
+                )
+            else:
+                findings.append(
+                    _info(check, f"{mod_path}.{sentinel_name} is present — authority module intact.")
+                )
+        except ImportError as exc:
+            findings.append(
+                _err(
+                    check,
+                    f"{mod_path} is not importable: {exc}.  "
+                    "All three L1/L2/L3 authority modules must be importable for "
+                    "the router-level cognitive authority to function.",
+                    {"module": mod_path, "import_error": str(exc)},
+                )
+            )
+
+    # Check that UnifiedLLMRouter initialises the three authority attributes.
+    # Strategy: if the module file exists on disk (i.e., the integration is
+    # present in the repository), but cannot be imported due to missing
+    # optional runtime dependencies (e.g. pydantic, aiohttp), that is an
+    # environment issue — not an architecture regression.  Downgrade to
+    # WARNING.  Only emit an ERROR if the router source file itself is
+    # absent (i.e., the integration was removed from the repository).
+    _llm_router_src_path = Path(__file__).parent.parent.parent / "core" / "unified" / "llm_router.py"
+    _router_file_exists = _llm_router_src_path.exists()
+
+    if not _router_file_exists:
+        findings.append(
+            _err(
+                check,
+                "core/unified/llm_router.py does not exist in the repository.  "
+                "The unified LLM router source file is required for L1/L2/L3 "
+                "authority fusion — its absence is the L1/L2/L3-detached-from-router "
+                "regression.",
+                {"missing_file": "core/unified/llm_router.py"},
+            )
+        )
+    else:
+        try:
+            llm_router_mod = importlib.import_module("core.unified.llm_router")
+            router_cls = getattr(llm_router_mod, "UnifiedLLMRouter", None)
+            if router_cls is None:
+                findings.append(
+                    _err(
+                        check,
+                        "core.unified.llm_router does not expose UnifiedLLMRouter.  "
+                        "The router class is required for L1/L2/L3 fusion.",
+                        {"module": "core.unified.llm_router", "missing_attr": "UnifiedLLMRouter"},
+                    )
+                )
+            else:
+                # Inspect the __init__ source for the authority attribute assignments.
+                import inspect
+                try:
+                    init_src = inspect.getsource(router_cls.__init__)
+                except (OSError, TypeError):
+                    init_src = ""
+
+                for attr in ("_l1_authority", "_l2_authority", "_l3_authority"):
+                    if attr in init_src or hasattr(router_cls, attr):
+                        findings.append(
+                            _info(check, f"UnifiedLLMRouter declares '{attr}' — L1/L2/L3 integration present.")
+                        )
+                    else:
+                        findings.append(
+                            _err(
+                                check,
+                                f"UnifiedLLMRouter.__init__ does not initialise '{attr}'.  "
+                                "This attribute is required for the L1/L2/L3 cognitive "
+                                "authority to be fused into the router — its absence is "
+                                "the L1/L2/L3-detached-from-router regression.",
+                                {"missing_attr": attr},
+                            )
+                        )
+        except ImportError as exc:
+            # The source file exists but the module cannot be imported due to
+            # missing optional dependencies.  Treat as WARNING (environment
+            # issue), not ERROR (architecture regression).
+            findings.append(
+                _warn(
+                    check,
+                    f"core.unified.llm_router exists on disk but is not importable "
+                    f"in this environment ({exc}).  "
+                    "This is likely an optional dependency gap (e.g. pydantic) rather "
+                    "than an architecture regression.  "
+                    "Falling back to source-level attribute scan.",
+                    {"module": "core.unified.llm_router", "import_error": str(exc)},
+                )
+            )
+            # Fall back to source-level scan for the three authority attributes.
+            src = _llm_router_src_path.read_text(encoding="utf-8", errors="replace")
+            for attr in ("_l1_authority", "_l2_authority", "_l3_authority"):
+                if attr in src:
+                    findings.append(
+                        _info(
+                            check,
+                            f"Source scan: '{attr}' found in llm_router.py — "
+                            "L1/L2/L3 integration present at source level.",
+                        )
+                    )
+                else:
+                    findings.append(
+                        _err(
+                            check,
+                            f"Source scan: '{attr}' NOT found in llm_router.py.  "
+                            "This attribute is required for L1/L2/L3 fusion — "
+                            "its absence in source is the detached-from-router regression.",
+                            {"missing_attr": attr, "source_scan": True},
+                        )
+                    )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Guard 4 — Canonical completion truth must be enforced, not optional
+# ---------------------------------------------------------------------------
+
+
+def check_completion_truth_is_enforced() -> List[InvariantFinding]:
+    """Detect the completion-truth-weakened-to-optional-signaling regression.
+
+    The canonical completion truth backbone is implemented by
+    ``core.task_result_canonical_truth_chain``.  Its
+    ``TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY`` sentinel declares that the
+    four truth-chain steps are mandatory for every ``task_result`` message.
+
+    If the sentinel is absent, renamed, or its text no longer contains the
+    word "MUST", the completion truth contract has been weakened — the
+    optional-soft-signaling regression.
+
+    Returns
+    -------
+    List[InvariantFinding]
+        ERROR findings for each weakening of the completion truth contract.
+    """
+    check = "COMPLETION_TRUTH_ENFORCED_NOT_OPTIONAL"
+    findings: List[InvariantFinding] = []
+
+    try:
+        trtc = importlib.import_module("core.task_result_canonical_truth_chain")
+    except ImportError as exc:
+        findings.append(
+            _err(
+                check,
+                f"core.task_result_canonical_truth_chain is not importable: {exc}.  "
+                "The canonical truth chain module must be present for the completion "
+                "truth backbone to be enforced.",
+                {"import_error": str(exc)},
+            )
+        )
+        return findings
+
+    # Check the must-run policy sentinel.
+    policy = getattr(trtc, "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY", None)
+    if policy is None:
+        findings.append(
+            _err(
+                check,
+                "core.task_result_canonical_truth_chain is missing "
+                "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY sentinel.  "
+                "This sentinel is the machine-checkable declaration that the "
+                "completion truth chain is mandatory.",
+                {"missing_attr": "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY"},
+            )
+        )
+    else:
+        policy_str = str(policy)
+        if "MUST" not in policy_str and "must" not in policy_str.lower():
+            findings.append(
+                _err(
+                    check,
+                    "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY does not contain the "
+                    "required 'MUST' keyword.  The policy must explicitly declare "
+                    "the truth chain as mandatory (not optional).",
+                    {"policy_excerpt": policy_str[:120]},
+                )
+            )
+        else:
+            findings.append(
+                _info(
+                    check,
+                    "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY is present and contains "
+                    "mandatory 'MUST' language — completion truth enforcement confirmed.",
+                )
+            )
+
+    # Check run_task_result_truth_chain is callable (not removed/stubbed).
+    runner = getattr(trtc, "run_task_result_truth_chain", None)
+    if runner is None or not callable(runner):
+        findings.append(
+            _err(
+                check,
+                "core.task_result_canonical_truth_chain.run_task_result_truth_chain "
+                "is missing or not callable.  The entry point for the mandatory "
+                "truth chain must remain callable.",
+                {"missing_callable": "run_task_result_truth_chain"},
+            )
+        )
+    else:
+        findings.append(
+            _info(check, "run_task_result_truth_chain is present and callable.")
+        )
+
+    # Check the optional enrichment policy to confirm it does NOT override the
+    # mandatory steps (it must exist and must not claim the chain is optional).
+    optional_policy = getattr(trtc, "TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY", None)
+    if optional_policy is not None:
+        opt_str = str(optional_policy)
+        # The optional enrichment policy must not claim the truth chain itself
+        # is optional — only enrichment steps (memory backflow etc.) are optional.
+        if "chain" in opt_str.lower() and "optional" in opt_str.lower():
+            # This is acceptable only if it refers to enrichment, not the chain.
+            # Heuristic: flag if it says "truth chain is optional" but not "enrichment".
+            if "enrichment" not in opt_str.lower():
+                findings.append(
+                    _err(
+                        check,
+                        "TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY appears to describe the "
+                        "truth chain itself as optional, not merely enrichment steps.  "
+                        "The canonical truth chain steps (ingress, reconcile, "
+                        "authority_update, completion_linkage) are mandatory.",
+                        {"policy_excerpt": opt_str[:120]},
+                    )
+                )
+            else:
+                findings.append(
+                    _info(
+                        check,
+                        "TRUTH_CHAIN_OPTIONAL_ENRICHMENT_POLICY correctly scopes "
+                        "optionality to enrichment steps only.",
+                    )
+                )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Guard 5 — Repository-level architecture declarations must be consistent
+# ---------------------------------------------------------------------------
+
+
+def check_canonical_declarations_consistent(
+    layer_snapshots: Optional[Sequence[Dict[str, Any]]] = None,
+) -> List[InvariantFinding]:
+    """Detect contradictory repository-level architecture declarations.
+
+    Runs :func:`check_canonical_layer_model_consistent` (which delegates to
+    :mod:`core.canonical_layer_model`) and additionally verifies that the
+    terminal regression guard sentinel introduced by PR-10 is present in the
+    module, confirming the module itself has not been silently downgraded.
+
+    Parameters
+    ----------
+    layer_snapshots:
+        Optional layer snapshots to validate.  Pass ``None`` to check only
+        the registry self-consistency.
+
+    Returns
+    -------
+    List[InvariantFinding]
+        ERROR findings for each inconsistency or missing anchor sentinel.
+    """
+    check = "CANONICAL_DECLARATIONS_CONSISTENT"
+    findings: List[InvariantFinding] = []
+
+    # Delegate to the existing layer model check.
+    for finding in check_canonical_layer_model_consistent(layer_snapshots):
+        # Re-tag so the check name is the terminal-guard name.
+        findings.append(
+            InvariantFinding(
+                check=check,
+                severity=finding.severity,
+                message=finding.message,
+                detail=finding.detail,
+            )
+        )
+
+    # Verify the PR-10 terminal regression anchor sentinel is present.
+    try:
+        clm = importlib.import_module("core.canonical_layer_model")
+        anchor = getattr(clm, "TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL", None)
+        if anchor is None:
+            findings.append(
+                _err(
+                    check,
+                    "core.canonical_layer_model is missing "
+                    "TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL.  "
+                    "This sentinel anchors the terminal regression guard series; "
+                    "its absence means the terminal hardening PR-10 has been "
+                    "reverted or partially undone.",
+                    {"missing_attr": "TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL"},
+                )
+            )
+        else:
+            findings.append(
+                _info(
+                    check,
+                    "TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL is present — "
+                    "PR-10 terminal architecture anchor confirmed.",
+                )
+            )
+    except ImportError as exc:
+        findings.append(
+            _err(
+                check,
+                f"core.canonical_layer_model is not importable: {exc}.",
+                {"import_error": str(exc)},
+            )
+        )
+
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# Aggregate entry point — run all five terminal regression guards
+# ---------------------------------------------------------------------------
+
+
+def run_terminal_regression_guards(
+    project_root: Optional[Path] = None,
+    layer_snapshots: Optional[Sequence[Dict[str, Any]]] = None,
+) -> TerminalRegressionReport:
+    """Run all five terminal architecture regression guards.
+
+    This is the single entry point for PR-10 regression protection.  It
+    executes the five named guards in order and returns an aggregated
+    :class:`TerminalRegressionReport`.
+
+    The five guards are:
+
+    1. **V4_NOT_UNIVERSAL_PER_REQUEST_GATE** — V4 must not be wired as a
+       synchronous gate on every per-request call.
+    2. **V6_NOT_IN_HOT_REQUEST_PATH** — V6 boundary checks must not appear
+       inside ``OpenClawd.process()`` or ``CommandRouter.route_envelope()``.
+    3. **L1_L2_L3_IN_ROUTER_AUTHORITY** — L1/L2/L3 authority must remain
+       integrated into ``UnifiedLLMRouter``.
+    4. **COMPLETION_TRUTH_ENFORCED_NOT_OPTIONAL** — the canonical completion
+       truth chain must not be weakened to optional soft signaling.
+    5. **CANONICAL_DECLARATIONS_CONSISTENT** — repository-level architecture
+       declarations must not contradict the final integrated layer model.
+
+    Parameters
+    ----------
+    project_root:
+        Root path of the repository.  Defaults to the directory three levels
+        above this file.
+    layer_snapshots:
+        Optional layer snapshots to validate in guard 5.
+
+    Returns
+    -------
+    TerminalRegressionReport
+        Aggregated report.  ``report.overall_pass`` is ``True`` when all five
+        guards produce zero ERROR-severity findings.
+    """
+    report = TerminalRegressionReport()
+
+    _guard_calls: Tuple[Tuple[str, Any], ...] = (
+        (
+            "V4_NOT_UNIVERSAL_PER_REQUEST_GATE",
+            lambda: check_v4_not_universal_per_request_gate(project_root),
+        ),
+        (
+            "V6_NOT_IN_HOT_REQUEST_PATH",
+            lambda: check_v6_not_in_hot_request_path(project_root),
+        ),
+        (
+            "L1_L2_L3_IN_ROUTER_AUTHORITY",
+            lambda: check_l1_l2_l3_in_router_authority(),
+        ),
+        (
+            "COMPLETION_TRUTH_ENFORCED_NOT_OPTIONAL",
+            lambda: check_completion_truth_is_enforced(),
+        ),
+        (
+            "CANONICAL_DECLARATIONS_CONSISTENT",
+            lambda: check_canonical_declarations_consistent(layer_snapshots),
+        ),
+    )
+
+    for guard_name, guard_fn in _guard_calls:
+        report.checks_run.append(guard_name)
+        try:
+            for finding in guard_fn():
+                report.add(finding)
+        except Exception as exc:  # pragma: no cover — guard must not crash the runner
+            report.add(
+                _err(
+                    guard_name,
+                    f"Guard '{guard_name}' raised an unexpected exception: {exc}.  "
+                    "Guards must not raise exceptions; an exception here means the "
+                    "guard itself is broken.",
+                    {"exception": str(exc)},
+                )
+            )
+
+    if report.overall_pass:
+        logger.debug(
+            "Terminal regression guards: all five guards passed (errors=0, warnings=%d)",
+            report.warning_count,
+        )
+    else:
+        logger.warning(
+            "Terminal regression guards: %d error(s) detected — overall_pass=False",
             report.error_count,
         )
 

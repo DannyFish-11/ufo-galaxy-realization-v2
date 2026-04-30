@@ -137,6 +137,8 @@ __all__ = [
     "V6_IS_NOT_PER_REQUEST_GATE",
     "L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK",
     "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL",
+    # Terminal regression guard sentinel (PR-10)
+    "TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL",
     # Enumeration
     "CanonicalLayer",
     # Data types
@@ -175,6 +177,20 @@ CANONICAL_LAYER_MODEL_PR9_SENTINEL: str = (
     "Introduced by PR-9 (Normalize canonical runtime architecture declarations "
     "across layers).  Removing or contradicting this module re-opens the "
     "split-brain architecture declarations that PR-9 resolved."
+)
+
+TERMINAL_ARCHITECTURE_REGRESSION_GUARD_SENTINEL: str = (
+    "TERMINAL_ARCHITECTURE_REGRESSION_GUARD::PR10: "
+    "This sentinel marks core.canonical_layer_model as a terminal architecture "
+    "regression anchor.  PR-10 added machine-checkable regression guards that "
+    "detect the five key invalid architecture regressions: "
+    "(1) V4 unified_orchestration_spine reclassified as a universal per-request gate; "
+    "(2) V6 release_blocking_gate / center_authority_boundary inserted into hot request paths; "
+    "(3) L1/L2/L3 cognitive authority detached from router-layer (UnifiedLLMRouter); "
+    "(4) canonical completion truth backbone weakened into optional soft signaling; "
+    "(5) repository-level architecture declarations that contradict the final integrated model.  "
+    "Guards are exercised by tools.architecture.architecture_invariants."
+    "run_terminal_regression_guards() and tests/test_pr10_terminal_architecture_regression_guards.py."
 )
 
 # ---------------------------------------------------------------------------
