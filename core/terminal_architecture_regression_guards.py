@@ -217,8 +217,6 @@ LAYER_DECLARATIONS_CONVERGENCE_GUARD: str = (
 # Finding and report data types
 # ---------------------------------------------------------------------------
 
-_METHOD_SCAN_WINDOW = 6_000  # characters to scan inside a method body
-
 
 @dataclasses.dataclass(frozen=True)
 class RegressionFinding:
@@ -366,9 +364,9 @@ def _module_file_exists(module_path: str) -> bool:
     return False
 
 
-
-
-
+# ---------------------------------------------------------------------------
+# Guard 1 — V4 hot-path isolation
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Guard 1 — V4 hot-path isolation
 # ---------------------------------------------------------------------------
