@@ -32,6 +32,40 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+# ---------------------------------------------------------------------------
+# V3 slot gate test helpers
+# ---------------------------------------------------------------------------
+
+def _make_v3_all_approved_result(device_ids, execution_mode):
+    """Build a CanonicalDispatchSlotsResult that approves all given device IDs."""
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    approved = [
+        CanonicalDispatchSlot(
+            device_id=d,
+            execution_mode=execution_mode,
+            slot_approved=True,
+            status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+            reason="mock: approved for test",
+        )
+        for d in device_ids
+    ]
+    return CanonicalDispatchSlotsResult(
+        execution_mode=execution_mode,
+        approved_slots=approved,
+        blocked_slots=[],
+        can_proceed=True,
+    )
+
+
+def _v3_all_approved_side_effect(device_ids, execution_mode, **kw):
+    """Side-effect for patching get_canonical_dispatch_slots to approve all targets."""
+    return _make_v3_all_approved_result(device_ids, execution_mode)
+
+
 # ===========================================================================
 # A.1 — handle_task_result wakes DeviceRouter task_event
 # ===========================================================================
@@ -422,7 +456,11 @@ class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
            patch("core.command_router.get_command_router", return_value=cr), \
            patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
                check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )):
+           )), \
+           patch(
+               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+               side_effect=_v3_all_approved_side_effect,
+           ):
             result = await cr.route_envelope(envelope)
 
         # Should have been redirected to the capable device, not the wrong one
@@ -564,7 +602,11 @@ class TestCapabilityMismatchAuditTrail(unittest.IsolatedAsyncioTestCase):
            patch("core.command_router.get_command_router", return_value=cr), \
            patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
                check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )):
+           )), \
+           patch(
+               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+               side_effect=_v3_all_approved_side_effect,
+           ):
             await cr.route_envelope(envelope)
 
         self.assertTrue(
