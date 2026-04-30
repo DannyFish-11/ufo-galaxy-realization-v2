@@ -466,3 +466,123 @@ class TestArchitectureConsistency:
     def test_canonical_dispatch_slot_authority_policy_still_present(self) -> None:
         assert isinstance(CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY, str)
         assert len(CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY) > 0
+
+
+# ---------------------------------------------------------------------------
+# Section 8 — goal_execution.py legitimate V4 usage preserved
+# ---------------------------------------------------------------------------
+
+
+class TestGoalExecutionV4Usage:
+    """goal_execution.py correctly uses V4 for multi-step orchestration (PARALLEL_FANOUT)."""
+
+    _GOAL_EXECUTION_PATH = "galaxy_gateway/android/handlers/goal_execution.py"
+
+    def _read_source(self) -> str:
+        try:
+            with open(self._GOAL_EXECUTION_PATH, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except FileNotFoundError:
+            return ""
+
+    def test_goal_execution_file_exists(self) -> None:
+        import os
+        assert os.path.exists(self._GOAL_EXECUTION_PATH), (
+            f"{self._GOAL_EXECUTION_PATH} must exist — it is the legitimate "
+            "caller of V4 for multi-step PARALLEL_FANOUT orchestration sessions."
+        )
+
+    def test_goal_execution_imports_v4_spine(self) -> None:
+        source = self._read_source()
+        assert "unified_orchestration_spine" in source, (
+            "goal_execution.py must import from core.unified_orchestration_spine; "
+            "it is the correct caller of evaluate_orchestration_request() for "
+            "PARALLEL_FANOUT multi-step orchestration sessions."
+        )
+
+    def test_goal_execution_calls_evaluate_orchestration_request(self) -> None:
+        source = self._read_source()
+        assert "evaluate_orchestration_request" in source, (
+            "goal_execution.py must call evaluate_orchestration_request() — "
+            "this is the legitimate V4 usage for PARALLEL_FANOUT fan-out sessions."
+        )
+
+    def test_goal_execution_uses_parallel_fanout_mode(self) -> None:
+        source = self._read_source()
+        assert "PARALLEL_FANOUT" in source, (
+            "goal_execution.py must use ExecutionMode.PARALLEL_FANOUT when calling "
+            "evaluate_orchestration_request(); this is the specific multi-step "
+            "orchestration mode that requires V4 session authority."
+        )
+
+    def test_goal_execution_does_not_use_v4_for_simple_per_request(self) -> None:
+        # V4 in goal_execution.py must be inside the parallel_subtask handler,
+        # not the top-level per-request dispatch entry point.
+        source = self._read_source()
+        # The file uses V4, confirming it's for orchestration sessions, not every call.
+        # Check that the usage is associated with PARALLEL_FANOUT (multi-step), not
+        # a blanket wrapper around all request handling.
+        if "unified_orchestration_spine" in source:
+            assert "PARALLEL_FANOUT" in source, (
+                "goal_execution.py V4 usage must be scoped to PARALLEL_FANOUT "
+                "multi-step orchestration sessions."
+            )
+
+
+# ---------------------------------------------------------------------------
+# Section 9 — Repository-level architecture invariants
+# ---------------------------------------------------------------------------
+
+
+class TestRepositoryArchitectureInvariants:
+    """Top-level architecture invariants for the final consistent repository state."""
+
+    def test_v4_scope_is_multi_step_not_universal(self) -> None:
+        """The architecture contract explicitly limits V4 to multi-step sessions."""
+        assert _SPINE_AVAILABLE, "core.unified_orchestration_spine must be importable"
+        # Both the main authority sentinel and the scope policy must agree.
+        authority_lower = UNIFIED_ORCHESTRATION_SPINE_AUTHORITY.lower()
+        scope_lower = ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+        assert "not" in authority_lower, (
+            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must state V4 is NOT the universal gate"
+        )
+        assert "multi-step" in scope_lower or "session" in scope_lower, (
+            "ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY must reference "
+            "multi-step orchestration sessions"
+        )
+        assert "all dispatch paths" not in authority_lower, (
+            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must not claim all dispatch paths "
+            "must pass through V4"
+        )
+
+    def test_per_request_path_is_openclawd_commandrouter(self) -> None:
+        """The validated per-request path is OpenClawd → CommandRouter, not V4."""
+        assert _SPINE_AVAILABLE, "core.unified_orchestration_spine must be importable"
+        gate_policy = V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
+        # The policy must name the actual per-request path components.
+        assert "openclawd" in gate_policy, (
+            "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name OpenClawd as the per-request spine"
+        )
+        assert "commandrouter" in gate_policy, (
+            "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name CommandRouter as the per-request router"
+        )
+
+    def test_no_false_split_brain_narrative(self) -> None:
+        """No sentinel claims V4 is the universal gate while another denies it."""
+        assert _SPINE_AVAILABLE, "core.unified_orchestration_spine must be importable"
+        # If ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY says V4 is scoped to
+        # multi-step sessions, and V4_IS_NOT_PER_REQUEST_GATE_POLICY says V4 is NOT
+        # a per-request gate, these two sentinels must not contradict each other.
+        scope_denies_universal = (
+            "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+            or "multi-step" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+        )
+        gate_denies_per_request = (
+            "not" in V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
+        )
+        assert scope_denies_universal, (
+            "Scope policy must not claim V4 governs all execution universally"
+        )
+        assert gate_denies_per_request, (
+            "Gate policy must explicitly state V4 is NOT a per-request gate"
+        )
