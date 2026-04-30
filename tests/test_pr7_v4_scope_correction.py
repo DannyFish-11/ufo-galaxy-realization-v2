@@ -516,17 +516,41 @@ class TestGoalExecutionV4Usage:
         )
 
     def test_goal_execution_does_not_use_v4_for_simple_per_request(self) -> None:
-        # V4 in goal_execution.py must be inside the parallel_subtask handler,
-        # not the top-level per-request dispatch entry point.
+        # Verify that evaluate_orchestration_request appears only in the context
+        # of PARALLEL_FANOUT (multi-step), not as a blanket wrapper around all
+        # request handling in goal_execution.py.
+        import re
         source = self._read_source()
-        # The file uses V4, confirming it's for orchestration sessions, not every call.
-        # Check that the usage is associated with PARALLEL_FANOUT (multi-step), not
-        # a blanket wrapper around all request handling.
-        if "unified_orchestration_spine" in source:
-            assert "PARALLEL_FANOUT" in source, (
-                "goal_execution.py V4 usage must be scoped to PARALLEL_FANOUT "
-                "multi-step orchestration sessions."
-            )
+        if not source:
+            return
+        # Find the line number(s) where evaluate_orchestration_request is called.
+        call_lines = [
+            i for i, line in enumerate(source.splitlines(), 1)
+            if "evaluate_orchestration_request" in line
+        ]
+        # Find the line number(s) where PARALLEL_FANOUT appears.
+        fanout_lines = [
+            i for i, line in enumerate(source.splitlines(), 1)
+            if "PARALLEL_FANOUT" in line
+        ]
+        assert call_lines, (
+            "evaluate_orchestration_request must be called in goal_execution.py"
+        )
+        assert fanout_lines, (
+            "PARALLEL_FANOUT must appear in goal_execution.py alongside V4 usage"
+        )
+        # The V4 call must be within 30 lines of a PARALLEL_FANOUT reference,
+        # confirming the two are in the same handler block.
+        close_enough = any(
+            abs(call_ln - fanout_ln) <= 30
+            for call_ln in call_lines
+            for fanout_ln in fanout_lines
+        )
+        assert close_enough, (
+            "evaluate_orchestration_request() in goal_execution.py must appear "
+            "within 30 lines of a PARALLEL_FANOUT reference, confirming V4 usage "
+            "is scoped to the multi-step fan-out handler, not every request."
+        )
 
 
 # ---------------------------------------------------------------------------
