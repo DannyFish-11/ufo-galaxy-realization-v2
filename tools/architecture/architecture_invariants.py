@@ -906,7 +906,7 @@ def check_v4_not_universal_per_request_gate(
                      "missing_attr": "V4_IS_NOT_PER_REQUEST_GATE_POLICY"},
                 )
             )
-        elif "NOT" not in str(policy) and "not" not in str(policy).lower():
+        elif "not" not in str(policy).lower():
             findings.append(
                 _err(
                     check,
@@ -1303,7 +1303,7 @@ def check_completion_truth_is_enforced() -> List[InvariantFinding]:
         )
     else:
         policy_str = str(policy)
-        if "MUST" not in policy_str and "must" not in policy_str.lower():
+        if "must" not in policy_str.lower():
             findings.append(
                 _err(
                     check,
@@ -1521,7 +1521,7 @@ def run_terminal_regression_guards(
         try:
             for finding in guard_fn():
                 report.add(finding)
-        except Exception as exc:  # pragma: no cover — guard must not crash the runner
+        except (RuntimeError, OSError, AttributeError) as exc:  # pragma: no cover — guard must not crash the runner
             report.add(
                 _err(
                     guard_name,
@@ -1531,6 +1531,8 @@ def run_terminal_regression_guards(
                     {"exception": str(exc)},
                 )
             )
+        except (SystemExit, KeyboardInterrupt):
+            raise
 
     if report.overall_pass:
         logger.debug(

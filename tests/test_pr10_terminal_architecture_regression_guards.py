@@ -198,7 +198,7 @@ class TestGuard1V4NotUniversalGate:
         """V4_IS_NOT_PER_REQUEST_GATE_POLICY must explicitly state V4 is NOT the gate."""
         spine = pytest.importorskip("core.unified_orchestration_spine")
         policy = spine.V4_IS_NOT_PER_REQUEST_GATE_POLICY
-        assert "NOT" in policy or "not" in policy.lower(), (
+        assert "not" in policy.lower(), (
             "V4_IS_NOT_PER_REQUEST_GATE_POLICY must contain NOT language"
         )
 
@@ -398,7 +398,7 @@ class TestGuard4CompletionTruthEnforced:
     def test_must_run_policy_contains_must_language(self):
         trtc = pytest.importorskip("core.task_result_canonical_truth_chain")
         policy = trtc.TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY
-        assert "MUST" in policy or "must" in policy.lower(), (
+        assert "must" in policy.lower(), (
             "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY must contain 'MUST' language"
         )
 
