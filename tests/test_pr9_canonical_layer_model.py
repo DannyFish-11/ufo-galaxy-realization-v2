@@ -537,27 +537,19 @@ class TestArchitectureModulesAgreeOnLayerModel:
         assert hasattr(gate, "RELEASE_BLOCKING_GATE_AUTHORITY")
 
     def test_llm_route_authority_importable(self):
-        pytest.importorskip("httpx", reason="httpx required for core.llm.route_authority")
-        import importlib
-        ra = importlib.import_module("core.llm.route_authority")
+        ra = pytest.importorskip("core.llm.route_authority")
         assert hasattr(ra, "LLM_ROUTE_AUTHORITY")
 
     def test_llm_supply_authority_importable(self):
-        pytest.importorskip("httpx", reason="httpx required for core.llm.supply_authority")
-        import importlib
-        sa = importlib.import_module("core.llm.supply_authority")
+        sa = pytest.importorskip("core.llm.supply_authority")
         assert hasattr(sa, "LLM_SUPPLY_AUTHORITY")
 
     def test_llm_context_authority_importable(self):
-        pytest.importorskip("httpx", reason="httpx required for core.llm.context_authority")
-        import importlib
-        ca = importlib.import_module("core.llm.context_authority")
+        ca = pytest.importorskip("core.llm.context_authority")
         assert hasattr(ca, "LLM_CONTEXT_AUTHORITY")
 
     def test_unified_llm_router_importable(self):
-        pytest.importorskip("pydantic", reason="pydantic required for core.unified.llm_router")
-        import importlib
-        router = importlib.import_module("core.unified.llm_router")
+        router = pytest.importorskip("core.unified.llm_router")
         assert hasattr(router, "UNIFIED_LLM_ROUTER_AUTHORITY")
 
     def test_canonical_completion_ingress_importable(self):
