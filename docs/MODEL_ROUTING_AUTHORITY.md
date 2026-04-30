@@ -449,3 +449,135 @@ For new code producing routing decisions:
 For existing code still populating `chosen_model` / `chosen_provider` top-level keys:  
 — Continue doing so for backward compatibility, but add `topology_route_plan` when possible.
 — These keys are now explicitly classified as legacy compat fallbacks.
+
+---
+
+## 11. L3 — Canonical Cognitive Input Assembly Authority
+
+### 11.1 The L3 Problem
+
+After L1 (routing authority) and L2 (supply / fallback legality) were unified,
+context assembly remained scattered.  Different features attach prompt prefixes,
+memory blocks, tool manifests, runtime state, user metadata, continuity context,
+or execution hints in slightly different ways:
+
+- `AgentKernel._fallback_chat` assembles system prompt + user policy + history
+  + user message locally.
+- `OpenCodeEngine.generate_code_async` assembles its own system prompt + user
+  content + context dict independently.
+- `AgentFactory._build_agent_generation_prompt` constructs a prompt string with
+  soul policy + task description + schema in yet another private path.
+- Feature-specific helpers in `enhancements/` define their own prompt builders.
+
+The result was that the system had no single authoritative answer to: *"What
+cognitive context did the model actually receive, and under whose rules was it
+assembled?"*
+
+### 11.2 L3 Canonical Cognitive Input Assembly Authority
+
+The L3 closure is implemented in `core/llm/context_authority.py`.
+
+**`CognitiveContextAuthority`** is the **single canonical cognitive input
+assembly authority**.  All cognitive context (prompt, memory, tools, runtime
+state, policy constraints, continuity data, execution metadata) must be
+assembled through `CognitiveContextAuthority.assemble()` before being passed
+to provider formatting and model invocation.
+
+The authority sentinel:
+
+```python
+# core/llm/context_authority.py
+LLM_CONTEXT_AUTHORITY = "core.llm.context_authority.CognitiveContextAuthority"
+```
+
+- **`get_cognitive_context_authority()`** is the canonical factory function.
+- **`CognitiveContextRequest`** is the input contract — all cognitive inputs
+  are expressed as fields of this dataclass before assembly.
+- **`CognitiveContextAssembly`** is the canonical output — carries the
+  assembled `messages` list, `tool_manifest`, `assembly_trace`, and the
+  `LLM_CONTEXT_AUTHORITY` sentinel.
+
+### 11.3 L3 Authority / Supply / Context Separation
+
+| Layer | Module | Role |
+|---|---|---|
+| **Routing authority (L1)** | `core.llm.route_authority.LLMRouteAuthority` | Decides *intent*: which provider/model to use |
+| **Supply authority (L2)** | `core.llm.supply_authority.LLMSupplyAuthority` | Decides *satisfaction*: can intent be met legally? |
+| **Context authority (L3)** | `core.llm.context_authority.CognitiveContextAuthority` | Assembles *cognitive world*: what the model actually receives |
+| **Execution** | `core.multi_llm_router.MultiLLMRouter` | Performs the actual LLM API call |
+
+Provider-specific code must not assemble cognitive context independently.
+Feature-specific prompt builders must terminate in `CognitiveContextAuthority`.
+Retry, fallback, replay, and recovery paths must use the same `assemble()` call
+and the same `CognitiveContextRequest`.
+
+### 11.4 Canonical Assembly Order Contract
+
+The canonical cognitive context is **always** assembled in the following order:
+
+1. **System message** — constructed from, in order:
+   a. `system_prefix` — base identity / role (default: "You are Galaxy, an intelligent AI assistant.")
+   b. `soul_policy` — SOUL constraints (task_execute / hybrid paths only)
+   c. `agents_policy` — AGENTS policy
+   d. `user_policy` — USER preferences
+   e. `policy_constraints` — additional free-form policy constraints
+   f. `memory_context` — long-term / retrieved memory
+   g. `continuity_context` — session continuity / replay context
+   h. `execution_metadata` — operational hints (retry count, recovery flag, etc.)
+
+2. **Conversation history** — the most recent `max_history_turns` turns from
+   `conversation_history`, in chronological order.
+
+3. **Current user message** — appended as the final `{"role": "user", ...}` entry.
+
+Feature-specific code must not redefine this order.
+
+### 11.5 Canonical L3 Data Flow
+
+```
+CognitiveContextRequest {
+    task_type, system_prefix,
+    soul_policy, agents_policy, user_policy, policy_constraints,
+    memory_context, continuity_context,
+    conversation_history, tool_manifest,
+    user_message, session_id, feature_context,
+    execution_mode, execution_metadata,
+    max_history_turns,
+}
+    │
+    ▼
+CognitiveContextAuthority.assemble(request)   ← L3 CANONICAL CONTEXT GATE
+    │  1. Build system message (prefix → soul → agents → user → constraints
+    │                           → memory → continuity → metadata)
+    │  2. Append conversation history (bounded by max_history_turns)
+    │  3. Append user message
+    │  4. Record full assembly trace
+    ▼
+CognitiveContextAssembly {
+    messages,           ← canonical OpenAI-compatible message list
+    tool_manifest,      ← normalised tool declarations (may be None)
+    assembly_trace,     ← ordered audit list of assembled inputs
+    authority,          ← LLM_CONTEXT_AUTHORITY sentinel
+    is_canonical,       ← True for canonical path
+    source_request,     ← originating CognitiveContextRequest
+}
+    │
+    ▼
+LLMRouteAuthority (L1) → LLMSupplyAuthority (L2) → MultiLLMRouter (execution)
+```
+
+### 11.6 Retry / Fallback / Recovery Contract
+
+Retry, fallback, replay, and recovery paths **must** assemble context by
+calling `CognitiveContextAuthority.assemble()` with the same
+`CognitiveContextRequest` as the original path.  They must not rebuild the
+message list independently.
+
+Any retry-specific operational metadata (e.g. `retry_count`, `recovery_reason`)
+may be passed via `execution_metadata`.  The assembly order and cognitive
+meaning remain unchanged.
+
+### 11.7 L3 Tests
+
+Guardrails for L3 context authority closure are implemented in
+`tests/test_l3_cognitive_context_authority.py`.
