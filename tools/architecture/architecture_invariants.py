@@ -86,6 +86,10 @@ Main API
     Verify that installable addon/package contract metadata has the
     expected fields across a registry snapshot.
 
+:func:`check_terminal_regression_guards`
+    Run the PR-10 terminal architecture regression guards and translate
+    findings into :class:`InvariantFinding` objects.
+
 :func:`run_consolidation_invariants`
     Run all cross-cutting checks and return a :class:`ConsolidationReport`.
 
@@ -138,6 +142,7 @@ __all__ = [
     "check_projection_is_outward_truth",
     "check_addon_contract_metadata_uniform",
     "check_canonical_layer_model_consistent",
+    "check_terminal_regression_guards",
     # Aggregate entry point
     "run_consolidation_invariants",
 ]
@@ -668,6 +673,71 @@ def check_canonical_layer_model_consistent(
     return findings
 
 
+def check_terminal_regression_guards(
+    layer_snapshots: Optional[Sequence[Dict[str, Any]]] = None,
+) -> List[InvariantFinding]:
+    """Run PR-10 terminal architecture regression guards.
+
+    Delegates to :mod:`core.terminal_architecture_regression_guards` to run
+    all five terminal regression guards:
+
+    1. V4 (unified_orchestration_spine) not wired into per-request hot paths.
+    2. V6 (release_blocking_gate / center_authority_boundary) not wired into
+       per-request hot paths.
+    3. L1/L2/L3 cognitive authority importable and fused in UnifiedLLMRouter.
+    4. Canonical completion truth backbone present and enforced.
+    5. Canonical layer model self-consistent with the final integrated model.
+
+    Parameters
+    ----------
+    layer_snapshots:
+        Optional sequence of layer snapshot dicts to validate against the
+        canonical layer model (passed through to guard 5).
+
+    Returns
+    -------
+    List[InvariantFinding]
+        Findings translated from the underlying
+        :class:`~core.terminal_architecture_regression_guards.RegressionReport`.
+    """
+    check = "TERMINAL_REGRESSION_GUARDS"
+    findings: List[InvariantFinding] = []
+
+    try:
+        from core.terminal_architecture_regression_guards import (  # noqa: PLC0415
+            run_terminal_regression_guards,
+        )
+    except ImportError as exc:
+        findings.append(
+            _err(
+                check,
+                f"core.terminal_architecture_regression_guards is not importable: {exc}.  "
+                "The terminal regression guards must be present for architecture "
+                "regression detection to function.",
+                {"import_error": str(exc)},
+            )
+        )
+        return findings
+
+    snapshots_list = list(layer_snapshots) if layer_snapshots is not None else None
+    report = run_terminal_regression_guards(layer_snapshots=snapshots_list)
+
+    for rf in report.findings:
+        if rf.severity == "error":
+            findings.append(_err(check, rf.message, rf.detail))
+        elif rf.severity == "warning":
+            findings.append(_warn(check, rf.message, rf.detail))
+        else:
+            findings.append(_info(check, rf.message, rf.detail))
+
+    if not findings:
+        findings.append(
+            _info(check, "Terminal regression guards: all five guards passed.")
+        )
+
+    return findings
+
+
 # ---------------------------------------------------------------------------
 # Aggregate entry point
 # ---------------------------------------------------------------------------
@@ -683,13 +753,14 @@ def run_consolidation_invariants(
     """Run all cross-cutting consolidation invariant checks.
 
     This is the main entry point for obtaining a :class:`ConsolidationReport`
-    that covers all five categories of cross-cutting invariants:
+    that covers all six categories of cross-cutting invariants:
 
     1. Authority label consistency
     2. Canonical vs legacy marker uniformity
     3. Projection outward-truth compliance
     4. Addon contract metadata uniformity
     5. Canonical layer model consistency (PR-9)
+    6. Terminal architecture regression guards (PR-10)
 
     Parameters
     ----------
@@ -705,8 +776,8 @@ def run_consolidation_invariants(
         Sequence of addon/package registry entries.  Pass ``None`` to skip.
     layer_snapshots:
         Optional sequence of layer snapshot dicts for the canonical layer
-        model check.  Pass ``None`` to run only the registry self-consistency
-        check (added in PR-9).
+        model check and terminal regression guards.  Pass ``None`` to run
+        only the registry self-consistency check (added in PR-9).
 
     Returns
     -------
@@ -744,6 +815,12 @@ def run_consolidation_invariants(
     check_name = "CANONICAL_LAYER_MODEL_CONSISTENT"
     report.checks_run.append(check_name)
     for finding in check_canonical_layer_model_consistent(layer_snapshots):
+        report.add(finding)
+
+    # PR-10: terminal regression guards — always run.
+    check_name = "TERMINAL_REGRESSION_GUARDS"
+    report.checks_run.append(check_name)
+    for finding in check_terminal_regression_guards(layer_snapshots):
         report.add(finding)
 
     # Log summary.
