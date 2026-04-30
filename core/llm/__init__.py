@@ -4,6 +4,7 @@ core/llm — Multi-LLM Router Package
 
 **Batch PR-5: Multi-LLM routing decomposition**
 **L1: Unify LLM routing under a single router authority**
+**L2: Canonicalize model supply truth, provider ordering, and fallback legality**
 
 This package decomposes the multi-LLM routing layer into explicit, testable
 submodules while preserving the public API of ``core.multi_llm_router``.
@@ -15,6 +16,15 @@ route_authority.py
     single gate through which all LLM model-selection decisions must pass.
     Public factory: :func:`get_llm_route_authority`.
     Sentinel: ``LLM_ROUTE_AUTHORITY = "core.llm.route_authority.LLMRouteAuthority"``.
+
+supply_authority.py
+    **L2 canonical LLM supply authority**.  :class:`LLMSupplyAuthority` sits
+    between the L1 routing authority and provider execution.  It enforces
+    explicit provider ordering, explicit fallback legality, and produces a
+    canonical :class:`SupplyResolutionResult` that makes it clear which
+    provider/model was requested, which was supplied, and why any fallback
+    was legal.  Public factory: :func:`get_llm_supply_authority`.
+    Sentinel: ``LLM_SUPPLY_AUTHORITY = "core.llm.supply_authority.LLMSupplyAuthority"``.
 
 router.py
     Facade and authority sentinel for ``MultiLLMRouter``.  Public factory
@@ -39,6 +49,11 @@ Authority sentinels
     model-selection decisions must pass through :class:`LLMRouteAuthority`
     before reaching provider supply.
 
+``LLM_SUPPLY_AUTHORITY = "core.llm.supply_authority.LLMSupplyAuthority"``
+    **Supply (L2)** — the single canonical LLM supply authority.  Sits between
+    L1 route intent and provider execution.  Enforces explicit provider ordering
+    and fallback legality.
+
 ``LLM_ROUTING_PACKAGE_AUTHORITY = "core.llm"``
     Package-level sentinel (PR-5).
 
@@ -48,9 +63,10 @@ All public symbols from ``core.multi_llm_router`` are re-exported here.
 
     from core.llm import MultiLLMRouter, TaskType, get_llm_router
 
-For new code, prefer the canonical authority entry point:
+For new code, prefer the canonical authority entry points:
 
     from core.llm import get_llm_route_authority, LLMRouteRequest
+    from core.llm import get_llm_supply_authority, FallbackLegality
 """
 from __future__ import annotations
 
@@ -70,6 +86,18 @@ from core.llm.route_authority import (  # noqa: F401
     LLMRouteAuthority,
     get_llm_route_authority,
     refresh_llm_route_authority,
+)
+
+# ── L2 canonical supply authority ─────────────────────────────────────────
+from core.llm.supply_authority import (  # noqa: F401
+    LLM_SUPPLY_AUTHORITY,
+    FallbackLegality,
+    ProviderOrderingPolicy,
+    SupplyResolutionStep,
+    SupplyResolutionResult,
+    LLMSupplyAuthority,
+    get_llm_supply_authority,
+    refresh_llm_supply_authority,
 )
 
 # ── backward-compat re-exports from canonical implementation ─────────────
@@ -96,6 +124,15 @@ __all__ = [
     "LLMRouteAuthority",
     "get_llm_route_authority",
     "refresh_llm_route_authority",
+    # L2 canonical supply authority
+    "LLM_SUPPLY_AUTHORITY",
+    "FallbackLegality",
+    "ProviderOrderingPolicy",
+    "SupplyResolutionStep",
+    "SupplyResolutionResult",
+    "LLMSupplyAuthority",
+    "get_llm_supply_authority",
+    "refresh_llm_supply_authority",
     # main router (legacy compat supply layer)
     "MultiLLMRouter",
     "get_llm_router",

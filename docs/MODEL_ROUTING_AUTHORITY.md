@@ -315,6 +315,128 @@ Guardrails for L1 routing authority closure are implemented in
 
 ---
 
+## 10. L2 — Canonical Model Supply Truth, Provider Ordering, and Fallback Legality
+
+> **Status:** Implemented in PR-L2.
+
+### 10.1 The L2 Problem
+
+After L1, routing authority (deciding *where* to route) was centralised in
+`LLMRouteAuthority`.  However, supply authority (deciding *whether* a route
+can be satisfied and *how* to degrade legally) was still scattered:
+
+- Provider ordering was implicit in scattered `route()` calls rather than
+  defined in one explicit canonical place.
+- Unavailable providers could trigger ad-hoc provider-specific substitution
+  without any declared legality basis.
+- Fallback paths could silently redefine the practical model served without
+  surfacing the reason.
+- Emergency / "best-effort" provider shortcuts could short-circuit canonical
+  ordering.
+
+### 10.2 L2 Canonical Supply Authority
+
+```
+core/llm/supply_authority.py
+```
+
+- **`LLMSupplyAuthority`** is the **single canonical gate** for supply
+  resolution.  It sits between `LLMRouteDecision` (L1 output) and provider
+  execution.
+- **`FallbackLegality`** is the explicit vocabulary of legal fallback bases.
+  Any fallback that cannot be classified is rejected.
+- **`ProviderOrderingPolicy`** makes provider ordering explicit and consistent
+  in one place rather than scattered across integrations.
+- **`SupplyResolutionResult`** is the canonical output contract: it always
+  states which provider/model was *requested*, which was *supplied*, and the
+  exact *legal basis* for any fallback taken.
+- **`get_llm_supply_authority()`** is the canonical factory function.
+
+The authority sentinel:
+
+```python
+# core/llm/supply_authority.py
+LLM_SUPPLY_AUTHORITY = "core.llm.supply_authority.LLMSupplyAuthority"
+```
+
+### 10.3 L2 Authority / Supply / Execution Separation
+
+| Layer | Module | Role |
+|---|---|---|
+| **Routing authority (L1)** | `core.llm.route_authority.LLMRouteAuthority` | Decides *intent*: which provider/model to use |
+| **Supply authority (L2)** | `core.llm.supply_authority.LLMSupplyAuthority` | Decides *satisfaction*: can intent be met legally? |
+| **Execution** | `core.multi_llm_router.MultiLLMRouter` | Performs the actual LLM API call |
+
+Provider-specific code must not perform supply resolution independently.
+Emergency / shortcut paths inside providers are not permitted to override the
+canonical supply decision produced by `LLMSupplyAuthority`.
+
+### 10.4 Fallback Legality Contract
+
+Fallback is ONLY permitted under one of these explicit bases:
+
+| `FallbackLegality` | Meaning |
+|---|---|
+| `NONE` | No fallback; primary was satisfied directly |
+| `PRIMARY_UNAVAILABLE` | Primary provider is DOWN or missing API key |
+| `PRIMARY_DEGRADED` | Primary provider is DEGRADED; policy allows degraded fallback |
+| `CAPABILITY_MISMATCH` | Primary lacks a required capability (tool-use, multimodal, etc.) |
+| `EXPLICIT_CALLER_PREFERENCE` | Caller's `preferred_provider` was unavailable; L1 consented to fall through |
+| `NO_SUPPLY_AVAILABLE` | No provider could be supplied under any legal basis |
+
+Any fallback that cannot be classified under one of the first four bases is
+rejected; `SupplyResolutionResult.is_satisfied` is `False`.
+
+### 10.5 Canonical L2 Data Flow
+
+```
+LLMRouteDecision {provider, model, reason, authority=LLM_ROUTE_AUTHORITY}
+    │  (L1 canonical route intent)
+    ▼
+LLMSupplyAuthority.resolve_supply(decision, supply_state)   ← L2 CANONICAL SUPPLY GATE
+    │  1. Build canonical ordered provider list from supply_state
+    │     (route_intent → fallback_candidates → available_ids)
+    │  2. Walk ordered list; check health + capabilities
+    │  3. Classify any fallback under FallbackLegality
+    │  4. Stop at first legally satisfiable provider
+    ▼
+SupplyResolutionResult {
+    requested_provider, requested_model,   ← what L1 asked for
+    supplied_provider, supplied_model,     ← what supply gives
+    fallback_legality,                     ← explicit legal basis
+    ordering_basis,                        ← how ordering was derived
+    is_satisfied,                          ← can we proceed?
+    resolution_trace,                      ← full audit trail
+    authority = LLM_SUPPLY_AUTHORITY,
+}
+    │
+    ▼
+MultiLLMRouter (execution layer — supply truth is now canonical)
+```
+
+### 10.6 Provider Ordering Contract
+
+Provider ordering is derived from the canonical supply snapshot passed to
+`LLMSupplyAuthority.resolve_supply()`.  The algorithm is defined once here
+and is never inferred ad-hoc inside a provider-specific integration.
+
+Ordering priority (highest first):
+
+1. Provider explicitly named in the `LLMRouteDecision` (canonical route intent).
+2. Available providers in the canonical `fallback_candidates` list of the
+   supply snapshot (when `prefer_canonical_fallback_list=True`).
+3. Remaining available providers from `available_provider_ids`.
+4. Any providers in the supply records that are not DOWN (safety net).
+
+Providers with health status DOWN are always excluded.
+
+### 10.7 L2 Tests
+
+Guardrails for L2 supply authority closure are implemented in
+`tests/test_l2_model_supply_authority.py`.
+
+---
+
 
 For new code producing routing decisions:
 
