@@ -127,6 +127,7 @@ class GatewayErrorCode(str, Enum):
     HITL_TIMEOUT = "HITL_TIMEOUT"  # HITL approval window elapsed
     HITL_DENIED = "HITL_DENIED"  # HITL approval denied by operator
     CAPABILITY_MISMATCH = "CAPABILITY_MISMATCH"  # PR-1 P0: target lacks required capabilities
+    V3_SLOT_BLOCKED = "V3_SLOT_BLOCKED"  # PR-V3: canonical dispatch slot authority blocked all targets
 
 
 @dataclass
@@ -1831,6 +1832,166 @@ class CommandRouter:
                     )
             except Exception:
                 pass
+
+        # ── PR-V3: Canonical dispatch slot legality gate ──────────────────────
+        # V3 canonical_dispatch_slot_authority is the single canonical pre-dispatch
+        # legality authority for all execution modes.  Call get_canonical_dispatch_slots()
+        # with the current (already ACL/admissibility/capability-filtered) targets and
+        # filter to SLOT_APPROVED targets only.  If no target survives, block dispatch
+        # with a structured V3_SLOT_BLOCKED error.
+        #
+        # This closes the dispatch split-brain: V3 was previously a shadow authority
+        # (declared but not on the real hot path).  After this gate it is the live
+        # pre-dispatch legality authority for all targets.
+        #
+        # Placement: after ACL, admissibility, and capability enforcement, before
+        # task-graph registration and actual dispatch branching.
+        _v3_slot_gate_applied = False
+        _v3_approved_targets: List[str] = []
+        _v3_blocked_targets: List[str] = []
+        _v3_block_reason: str = ""
+        _v3_slot_result = None
+        _v3_pre_targets = list(envelope.targets)
+        if _v3_pre_targets:
+            try:
+                from core.canonical_dispatch_slot_authority import (
+                    get_canonical_dispatch_slots as _get_slots,
+                )
+
+                _v3_meta = envelope.metadata or {}
+                _v3_exec_mode = str(
+                    _v3_meta.get("execution_mode")
+                    or (
+                        "parallel_fanout"
+                        if _v3_meta.get("parallel_fanout") == "true"
+                        else (
+                            "cross_device"
+                            if _v3_meta.get("cross_device") == "true"
+                            else (
+                                str(envelope.executor_target_type)
+                                if envelope.executor_target_type is not None
+                                else "cross_device"
+                            )
+                        )
+                    )
+                )
+                _v3_required_caps: Optional[List[str]] = (
+                    list(envelope.required_capabilities)
+                    if envelope.required_capabilities
+                    else None
+                )
+                _v3_session_id = str(_v3_meta.get("session_id", "") or "")
+                _v3_attachment_sid = str(
+                    _v3_meta.get("runtime_attachment_session_id", "") or ""
+                )
+                _v3_continuity_ctx: Dict[str, Any] = {
+                    k: v
+                    for k, v in _v3_meta.items()
+                    if k.startswith("continuity_")
+                }
+
+                _v3_slot_result = _get_slots(
+                    device_ids=_v3_pre_targets,
+                    execution_mode=_v3_exec_mode,
+                    required_capabilities=_v3_required_caps,
+                    session_id=_v3_session_id or None,
+                    runtime_attachment_session_id=_v3_attachment_sid or None,
+                    task_id=envelope.task_id,
+                    continuity_context=_v3_continuity_ctx or None,
+                )
+                _v3_slot_gate_applied = True
+                _v3_approved_targets = list(_v3_slot_result.approved_device_ids)
+                _v3_blocked_targets = list(_v3_slot_result.blocked_device_ids)
+                _v3_block_reason = _v3_slot_result.block_reason or ""
+
+                if _v3_approved_targets:
+                    if _v3_blocked_targets:
+                        # Some targets blocked — filter to approved only.
+                        logger.warning(
+                            "route_envelope [V3-slot-gate]: %d target(s) blocked by "
+                            "canonical slot authority; dispatching to %d approved: %s "
+                            "(blocked: %s) task_id=%s",
+                            len(_v3_blocked_targets),
+                            len(_v3_approved_targets),
+                            _v3_approved_targets,
+                            _v3_blocked_targets,
+                            envelope.task_id,
+                        )
+                    else:
+                        logger.debug(
+                            "route_envelope [V3-slot-gate]: all %d target(s) SLOT_APPROVED "
+                            "task_id=%s",
+                            len(_v3_approved_targets),
+                            envelope.task_id,
+                        )
+                    if set(_v3_approved_targets) != set(_v3_pre_targets):
+                        envelope = envelope.model_copy(
+                            update={"targets": _v3_approved_targets}
+                        )
+                else:
+                    # All targets blocked — hard reject.
+                    _blocked_detail = "; ".join(
+                        f"{s.device_id}: {s.reason} (dim={s.blocking_dimension})"
+                        for s in (_v3_slot_result.blocked_slots if _v3_slot_result else [])
+                    )
+                    logger.warning(
+                        "route_envelope [V3-slot-gate]: ALL target(s) blocked by "
+                        "canonical slot authority — block_reason=%r blocked=%s "
+                        "task_id=%s",
+                        _v3_block_reason,
+                        _v3_blocked_targets,
+                        envelope.task_id,
+                    )
+                    return {
+                        "request_id": envelope.task_id,
+                        "task_id": envelope.task_id,
+                        "trace_id": envelope.trace_id,
+                        "command_id": (envelope.metadata or {}).get(
+                            "command_id", envelope.task_id
+                        ),
+                        "device_id": _v3_pre_targets[0] if _v3_pre_targets else "",
+                        "command": envelope.tool_name,
+                        "via": "command_router",
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.V3_SLOT_BLOCKED.value,
+                        "error_message": (
+                            f"V3 canonical slot authority blocked all dispatch targets. "
+                            f"block_reason={_v3_block_reason!r}. "
+                            f"Detail: {_blocked_detail}"
+                        ),
+                        "v3_slot_gate": {
+                            "applied": True,
+                            "approved": [],
+                            "blocked": _v3_blocked_targets,
+                            "block_reason": _v3_block_reason,
+                        },
+                        "latency_ms": 0.0,
+                    }
+
+            except Exception as _v3_exc:
+                logger.debug(
+                    "route_envelope [V3-slot-gate]: skipped (fail-open): %s",
+                    _v3_exc,
+                )
+
+        # ── PR-H: Record V3 slot gate into live explanation ───────────────────
+        if _live_expl_builder is not None and _v3_slot_gate_applied:
+            try:
+                _live_expl_builder.record_v3_slot_gate(  # type: ignore[attr-defined]
+                    approved=_v3_approved_targets,
+                    blocked=_v3_blocked_targets,
+                    block_reason=_v3_block_reason,
+                )
+            except Exception:
+                pass
+
+        # Stamp V3 slot gate result into constraint chain trace for end-to-end
+        # reviewability.
+        _constraint_chain_trace["v3_slot_gate_applied"] = _v3_slot_gate_applied
+        _constraint_chain_trace["v3_approved_targets"] = _v3_approved_targets
+        _constraint_chain_trace["v3_blocked_targets"] = _v3_blocked_targets
+        _constraint_chain_trace["v3_block_reason"] = _v3_block_reason
 
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:

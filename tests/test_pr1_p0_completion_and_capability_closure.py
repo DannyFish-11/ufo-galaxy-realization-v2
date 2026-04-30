@@ -422,7 +422,34 @@ class TestCapabilityMismatchFallback(unittest.IsolatedAsyncioTestCase):
            patch("core.command_router.get_command_router", return_value=cr), \
            patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
                check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )):
+           )), \
+           patch(
+               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+               side_effect=lambda device_ids, execution_mode, **kw: __import__(
+                   "core.canonical_dispatch_slot_authority",
+                   fromlist=["CanonicalDispatchSlotsResult", "CanonicalDispatchSlot", "CanonicalDispatchSlotStatus"],
+               ).CanonicalDispatchSlotsResult(
+                   execution_mode=execution_mode,
+                   approved_slots=[
+                       __import__(
+                           "core.canonical_dispatch_slot_authority",
+                           fromlist=["CanonicalDispatchSlot", "CanonicalDispatchSlotStatus"],
+                       ).CanonicalDispatchSlot(
+                           device_id=d,
+                           execution_mode=execution_mode,
+                           slot_approved=True,
+                           status=__import__(
+                               "core.canonical_dispatch_slot_authority",
+                               fromlist=["CanonicalDispatchSlotStatus"],
+                           ).CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                           reason="mock: approved for capability fallback test",
+                       )
+                       for d in device_ids
+                   ],
+                   blocked_slots=[],
+                   can_proceed=True,
+               ),
+           ):
             result = await cr.route_envelope(envelope)
 
         # Should have been redirected to the capable device, not the wrong one
@@ -564,7 +591,34 @@ class TestCapabilityMismatchAuditTrail(unittest.IsolatedAsyncioTestCase):
            patch("core.command_router.get_command_router", return_value=cr), \
            patch("core.acl_enforcer.get_acl_enforcer", return_value=MagicMock(
                check=MagicMock(return_value=MagicMock(allowed=True, reason=""))
-           )):
+           )), \
+           patch(
+               "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+               side_effect=lambda device_ids, execution_mode, **kw: __import__(
+                   "core.canonical_dispatch_slot_authority",
+                   fromlist=["CanonicalDispatchSlotsResult", "CanonicalDispatchSlot", "CanonicalDispatchSlotStatus"],
+               ).CanonicalDispatchSlotsResult(
+                   execution_mode=execution_mode,
+                   approved_slots=[
+                       __import__(
+                           "core.canonical_dispatch_slot_authority",
+                           fromlist=["CanonicalDispatchSlot", "CanonicalDispatchSlotStatus"],
+                       ).CanonicalDispatchSlot(
+                           device_id=d,
+                           execution_mode=execution_mode,
+                           slot_approved=True,
+                           status=__import__(
+                               "core.canonical_dispatch_slot_authority",
+                               fromlist=["CanonicalDispatchSlotStatus"],
+                           ).CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+                           reason="mock: approved for audit trail test",
+                       )
+                       for d in device_ids
+                   ],
+                   blocked_slots=[],
+                   can_proceed=True,
+               ),
+           ):
             await cr.route_envelope(envelope)
 
         self.assertTrue(
