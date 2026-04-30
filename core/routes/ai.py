@@ -132,7 +132,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.agent_team import TeamManager, TeamStrategy
             from core.agent_factory import get_agent_factory
-            from core.multi_llm_router import get_llm_router
+            from core.llm.route_authority import get_llm_route_authority
 
             strategy_map = {
                 "PARALLEL": TeamStrategy.PARALLEL,
@@ -141,7 +141,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             }
             strategy = strategy_map.get(req.strategy.upper(), TeamStrategy.SPECIALIZED)
 
-            llm_router = get_llm_router()
+            llm_router = get_llm_route_authority().execution_router
             factory = get_agent_factory(llm_router)
             team_manager = TeamManager(
                 agent_factory=factory, llm_router=llm_router,
@@ -174,9 +174,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.agent_team import TeamManager, TeamStrategy
             from core.agent_factory import get_agent_factory
-            from core.multi_llm_router import get_llm_router
+            from core.llm.route_authority import get_llm_route_authority
 
-            llm_router = get_llm_router()
+            llm_router = get_llm_route_authority().execution_router
             factory = get_agent_factory(llm_router)
             team_manager = TeamManager(
                 agent_factory=factory, llm_router=llm_router,

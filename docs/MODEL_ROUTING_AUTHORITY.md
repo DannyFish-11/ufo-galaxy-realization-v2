@@ -219,7 +219,102 @@ Legacy routing paths are registered in `core/orchestration_authority/legacy_path
 
 ---
 
-## 8. Migration Notes
+## 9. L1 — LLM Cognitive Routing Authority Closure
+
+> **Status:** Implemented in PR-L1.
+
+### 9.1 The L1 Problem
+
+Before L1, LLM routing decisions were scattered across the codebase.
+Provider-specific code, feature routes, and fallback paths each imported
+`core.multi_llm_router.get_llm_router()` directly and made implicit routing
+decisions without going through any single canonical gate.  The result was:
+
+- Provider code acting as a de-facto route authority.
+- Feature-specific branches silently acquiring their own model-selection
+  semantics.
+- Fallback paths redefining routing intent without any visibility.
+
+### 9.2 L1 Canonical LLM Routing Authority
+
+```
+core/llm/route_authority.py
+```
+
+- **`LLMRouteAuthority`** is the **single canonical gate** for all LLM
+  model-selection decisions.  All cognitive / LLM routing requests must pass
+  through `LLMRouteAuthority.resolve()` before reaching provider supply.
+- **`LLMRouteRequest`** is the explicit input contract for a routing decision.
+- **`LLMRouteDecision`** is the output contract carrying the decision, routing
+  reason, and the `LLM_ROUTE_AUTHORITY` sentinel.
+- **`get_llm_route_authority()`** is the canonical factory function.  Callers
+  that previously used `core.multi_llm_router.get_llm_router()` for routing
+  decisions must switch to `get_llm_route_authority()`.
+
+The authority sentinel:
+
+```python
+# core/llm/route_authority.py
+LLM_ROUTE_AUTHORITY = "core.llm.route_authority.LLMRouteAuthority"
+```
+
+### 9.3 L1 Authority / Supply Separation
+
+| Layer | Module | Role |
+|---|---|---|
+| **Routing authority** | `core.llm.route_authority.LLMRouteAuthority` | Decides which model/provider handles a cognitive task |
+| **Provider supply** | `core.multi_llm_router.MultiLLMRouter` | Supplies provider instances, executes LLM calls, manages failover |
+
+Provider supply code must not override routing decisions made by
+`LLMRouteAuthority`.  Feature-specific code must not make routing decisions
+outside the canonical authority.
+
+### 9.4 Canonical LLM Routing Data Flow (L1)
+
+```
+LLMRouteRequest {task_type, complexity, preferred_provider, feature_context}
+    │
+    ▼
+LLMRouteAuthority.resolve()               ← L1 CANONICAL ROUTING AUTHORITY
+    │  (consults MultiLLMRouter.route() for provider policy)
+    ▼
+LLMRouteDecision {provider, model, reason, authority=LLM_ROUTE_AUTHORITY}
+    │
+    ▼
+MultiLLMRouter (provider supply / execution)  ← supply layer only
+    │
+    ▼
+LLMResponse
+```
+
+### 9.5 Legacy Paths Updated in L1
+
+The following scattered routing paths were updated to route through
+`LLMRouteAuthority`:
+
+- `core/routes/ai.py` (twin + swarm agent creation)
+- `core/routes/nodes.py` (node execution router)
+- `core/routes/system.py` (LLM router status + hot-reload)
+- `core/routes/observability.py` (diagnostic model-route endpoint)
+- `core/system_integration.py` (built-in chat capability)
+
+The following paths were registered as `LEGACY_COMPATIBILITY` in
+`core/orchestration_authority/legacy_paths.py` (PR-L1 entries) and are
+scheduled for migration in a future L1-continuation PR:
+
+- `core.openclawd.OpenClawd`
+- `core.agent.kernel.AgentKernel`
+- `core.ai_intent.IntentParser`
+- `galaxy_gateway.orchestrator.galaxy_orchestrator`
+- `dashboard.backend.main`
+
+### 9.6 L1 Tests
+
+Guardrails for L1 routing authority closure are implemented in
+`tests/test_l1_llm_routing_authority.py`.
+
+---
+
 
 For new code producing routing decisions:
 

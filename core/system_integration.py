@@ -589,8 +589,8 @@ class SystemIntegration:
         """执行内置能力"""
         if cap.id == "builtin_chat":
             # 对话
-            from core.multi_llm_router import get_llm_router
-            router = get_llm_router()
+            from core.llm.route_authority import get_llm_route_authority
+            router = get_llm_route_authority().execution_router
             return await router.chat([{"role": "user", "content": params.get("message", "")}])
         
         elif cap.id == "builtin_device_control":
