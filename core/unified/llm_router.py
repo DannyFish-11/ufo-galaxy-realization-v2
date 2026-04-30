@@ -371,6 +371,14 @@ class UnifiedLLMRouter:
         self._backend = self._load_backend()
         self._policy: Dict[str, Any] = _load_routing_policy()
         self._telemetry: RoutingTelemetry = get_routing_telemetry()
+
+        # PR-6: L1/L2/L3 cognitive authority — lazy-initialised on first use
+        # so that import-time errors in the authority modules never prevent
+        # the router from initialising.
+        self._l1_authority: Any = None  # LLMRouteAuthority (L1)
+        self._l2_authority: Any = None  # LLMSupplyAuthority (L2)
+        self._l3_authority: Any = None  # CognitiveContextAuthority (L3)
+
         self._initialized = True
 
         logger.info(
@@ -405,6 +413,216 @@ class UnifiedLLMRouter:
             return None
 
     # ------------------------------------------------------------------
+    # PR-6: L1 / L2 / L3 cognitive authority helpers
+    # ------------------------------------------------------------------
+
+    def _get_l1_route_authority(self) -> Any:
+        """Lazy-load and return the L1 :class:`LLMRouteAuthority` singleton."""
+        if self._l1_authority is None:
+            try:
+                from core.llm.route_authority import get_llm_route_authority
+                self._l1_authority = get_llm_route_authority()
+            except Exception as exc:  # pragma: no cover
+                logger.debug("L1 route authority unavailable: %s", exc)
+        return self._l1_authority
+
+    def _get_l2_supply_authority(self) -> Any:
+        """Lazy-load and return the L2 :class:`LLMSupplyAuthority` singleton."""
+        if self._l2_authority is None:
+            try:
+                from core.llm.supply_authority import get_llm_supply_authority
+                self._l2_authority = get_llm_supply_authority()
+            except Exception as exc:  # pragma: no cover
+                logger.debug("L2 supply authority unavailable: %s", exc)
+        return self._l2_authority
+
+    def _get_l3_context_authority(self) -> Any:
+        """Lazy-load and return the L3 :class:`CognitiveContextAuthority` singleton."""
+        if self._l3_authority is None:
+            try:
+                from core.llm.context_authority import get_cognitive_context_authority
+                self._l3_authority = get_cognitive_context_authority()
+            except Exception as exc:  # pragma: no cover
+                logger.debug("L3 context authority unavailable: %s", exc)
+        return self._l3_authority
+
+    def _consult_l1_route(
+        self,
+        task_type_str: str,
+        preferred_provider: Optional[str],
+    ) -> Tuple[Optional[str], Optional[str], List[str], Any]:
+        """Consult the L1 route authority for a canonical routing decision.
+
+        Returns ``(provider, model, alternatives, decision_object)``.  On any
+        error the original ``preferred_provider`` is returned and the decision
+        object is ``None`` so that callers fall back to the existing policy
+        layer gracefully.
+        """
+        l1 = self._get_l1_route_authority()
+        if l1 is None:
+            return preferred_provider, None, [], None
+        try:
+            from core.llm.route_authority import LLMRouteRequest as _L1RouteRequest
+            decision = l1.resolve(_L1RouteRequest(
+                task_type=task_type_str,
+                complexity=0.5,
+                preferred_provider=preferred_provider,
+            ))
+            alternatives: List[str] = list(getattr(decision, "alternatives", []) or [])
+            logger.debug(
+                "L1 route authority: provider=%s model=%s",
+                decision.provider, decision.model,
+            )
+            return decision.provider, decision.model, alternatives, decision
+        except Exception as exc:
+            logger.debug("L1 route authority error (non-fatal): %s", exc)
+            return preferred_provider, None, [], None
+
+    def _consult_l2_supply(
+        self,
+        route_decision: Any,
+    ) -> Tuple[Optional[str], Optional[str], bool]:
+        """Consult the L2 supply authority to validate the route decision.
+
+        Returns ``(supplied_provider, supplied_model, is_satisfied)``.  When
+        the authority is unavailable or raises, returns ``(None, None, False)``
+        so that callers fall back gracefully.
+        """
+        if route_decision is None:
+            return None, None, False
+        l2 = self._get_l2_supply_authority()
+        if l2 is None:
+            return None, None, False
+        try:
+            supply_state = self._build_backend_supply_state()
+            result = l2.resolve_supply(route_decision, supply_state)
+            logger.debug(
+                "L2 supply authority: satisfied=%s supplied=%s/%s fallback=%s",
+                result.is_satisfied,
+                result.supplied_provider,
+                result.supplied_model,
+                result.fallback_legality,
+            )
+            if result.is_satisfied:
+                return result.supplied_provider, result.supplied_model, True
+            return None, None, False
+        except Exception as exc:
+            logger.debug("L2 supply authority error (non-fatal): %s", exc)
+            return None, None, False
+
+    def _build_backend_supply_state(self) -> Dict[str, Any]:
+        """Build a minimal supply-state dict from the backend's provider status.
+
+        This feeds into :meth:`_consult_l2_supply` so that the L2 authority
+        can reason about real provider availability.
+        """
+        if self._backend is None:
+            return {}
+        try:
+            status = self.get_status()
+            providers_raw = status.get("providers", []) or []
+            providers_dict: Dict[str, Any] = {}
+            available: List[str] = []
+            for p in providers_raw:
+                if not isinstance(p, dict):
+                    continue
+                pid = p.get("name", "")
+                if not pid:
+                    continue
+                health = str(p.get("status", "unknown")).lower()
+                providers_dict[pid] = {
+                    "provider_id": pid,
+                    "health_status": health,
+                    "available_models": [],
+                }
+                if health not in ("down", "unavailable", "error"):
+                    available.append(pid)
+            return {
+                "providers": providers_dict,
+                "available_provider_ids": available,
+                "fallback_candidates": available,
+            }
+        except Exception:
+            return {}
+
+    def _enrich_l3_context(
+        self,
+        messages: List[Dict[str, Any]],
+        task_type: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Enrich *messages* through the L3 cognitive context authority.
+
+        Decomposes the existing message list into L3 request fields
+        (system_prefix, conversation_history, user_message), passes them
+        through :class:`~core.llm.context_authority.CognitiveContextAuthority`,
+        and returns the assembled canonical message list.
+
+        Returns the original *messages* unchanged on any error or when the
+        assembly produces empty output, so callers are never left without a
+        valid message list.
+        """
+        if not messages:
+            return messages
+        l3 = self._get_l3_context_authority()
+        if l3 is None:
+            return messages
+        try:
+            from core.llm.context_authority import CognitiveContextRequest
+
+            system_prefix: Optional[str] = None
+            history: List[Dict[str, Any]] = []
+
+            for msg in messages:
+                role = (
+                    msg.get("role", "") if isinstance(msg, dict)
+                    else str(getattr(msg, "role", ""))
+                )
+                content = (
+                    msg.get("content", "") if isinstance(msg, dict)
+                    else str(getattr(msg, "content", ""))
+                )
+                if role == "system" and system_prefix is None:
+                    system_prefix = content
+                else:
+                    history.append(msg)
+
+            # The last user-role message becomes the current user_message;
+            # the remainder is treated as conversation history.
+            user_message: Optional[str] = None
+            for i in range(len(history) - 1, -1, -1):
+                msg = history[i]
+                role = (
+                    msg.get("role", "") if isinstance(msg, dict)
+                    else str(getattr(msg, "role", ""))
+                )
+                if role == "user":
+                    user_message = (
+                        msg.get("content", "") if isinstance(msg, dict)
+                        else str(getattr(msg, "content", ""))
+                    )
+                    history = history[:i] + history[i + 1:]
+                    break
+
+            ctx_request = CognitiveContextRequest(
+                task_type=task_type,
+                system_prefix=system_prefix,
+                conversation_history=history or None,
+                tool_manifest=tools,
+                user_message=user_message,
+            )
+            assembly = l3.assemble(ctx_request)
+            if assembly.messages:
+                logger.debug(
+                    "L3 context authority enriched messages: %d → %d",
+                    len(messages), len(assembly.messages),
+                )
+                return list(assembly.messages)
+        except Exception as exc:
+            logger.debug("L3 context authority error (non-fatal): %s", exc)
+        return messages
+
+    # ------------------------------------------------------------------
     # 策略辅助
     # ------------------------------------------------------------------
 
@@ -436,6 +654,10 @@ class UnifiedLLMRouter:
         """
         使用统一 LLMRequest 模型发起 LLM 对话请求（策略驱动 + 遥测 + 预算执行）。
 
+        PR-6 扩展：在现有策略层之上按顺序调用 L3 / L1 / L2 认知权威，
+        以便 model-selection 和 context-assembly 具有规范权威语义。
+        所有权威调用均为非破坏性：若不可用或抛出异常，则静默降级为既有策略路径。
+
         Args:
             request: LLMRequest Pydantic 模型实例。
 
@@ -455,9 +677,31 @@ class UnifiedLLMRouter:
             else request.task_type.value
         )
 
-        # 策略：获取提供商优先顺序
-        provider_order, slo = self._get_provider_order(
+        # ── PR-6 L3: Enrich messages through the canonical context authority ──
+        enriched_messages = self._enrich_l3_context(
+            messages=list(request.messages),
+            task_type=task_type_str,
+        )
+
+        # ── PR-6 L1: Consult the canonical route authority ────────────────────
+        l1_provider, _l1_model, l1_alternatives, l1_decision = self._consult_l1_route(
             task_type_str, request.preferred_provider
+        )
+
+        # ── PR-6 L2: Validate supply against the L1 route decision ───────────
+        l2_provider, _l2_model, l2_satisfied = self._consult_l2_supply(l1_decision)
+
+        # ── Determine effective preferred provider ────────────────────────────
+        # Priority: L2 supplied → L1 route → original preferred
+        effective_preferred: Optional[str] = (
+            l2_provider if l2_satisfied and l2_provider
+            else l1_provider if l1_provider
+            else request.preferred_provider
+        )
+
+        # 策略：获取提供商优先顺序（保留既有 SLO / fallback 语义）
+        provider_order, slo = self._get_provider_order(
+            task_type_str, effective_preferred
         )
 
         start = time.monotonic()
@@ -468,15 +712,15 @@ class UnifiedLLMRouter:
 
         # 若策略无可用提供商列表，回退到单次无偏好调用
         _effective_order: List[Optional[str]] = (
-            list(provider_order) if provider_order else [request.preferred_provider]
+            list(provider_order) if provider_order else [effective_preferred]
         )
 
         # 尝试按策略顺序逐个提供商
         for idx, provider in enumerate(_effective_order):
-            _preferred = provider or request.preferred_provider
+            _preferred = provider or effective_preferred
             try:
                 result = await self._backend.chat(
-                    messages=request.messages,
+                    messages=enriched_messages,
                     task_type=task_type_str,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
@@ -716,6 +960,10 @@ class UnifiedLLMRouter:
         的 LLM 时应使用的**唯一合法入口**，以确保所有调用都经过统一路由策略和
         遥测记录，不可绕过。
 
+        PR-6 扩展：在策略层之前依次调用 L3 / L1 / L2 认知权威，以便
+        model-selection 和 context-assembly 具有规范权威语义。
+        所有权威调用均为非破坏性：若不可用或抛出异常，则静默降级为既有策略路径。
+
         设计原则：
         - 统一策略层负责决定**首选 provider**（来自 llm_routing_policy.yaml 或默认偏好）
         - 执行层（MultiLLMRouter._backend）负责**故障转移**（auto_failover=True 默认行为）
@@ -740,22 +988,46 @@ class UnifiedLLMRouter:
         if self._backend is None:
             raise NoAvailableProviderError(task_type=task_type)
 
-        # 应用策略层：获取首选 provider（统一策略层职责）
         task_type_str = task_type or "general"
+
+        # ── PR-6 L3: Enrich messages through the canonical context authority ──
+        enriched_messages = self._enrich_l3_context(
+            messages=list(messages),
+            task_type=task_type_str,
+            tools=tools,
+        )
+
+        # ── PR-6 L1: Consult the canonical route authority ────────────────────
+        l1_provider, _l1_model, _l1_alternatives, l1_decision = self._consult_l1_route(
+            task_type_str, provider
+        )
+
+        # ── PR-6 L2: Validate supply against the L1 route decision ───────────
+        l2_provider, _l2_model, l2_satisfied = self._consult_l2_supply(l1_decision)
+
+        # ── Determine effective preferred provider ────────────────────────────
+        # Priority: L2 supplied → L1 route → caller-specified
+        effective_provider: Optional[str] = (
+            l2_provider if l2_satisfied and l2_provider
+            else l1_provider if l1_provider
+            else provider
+        )
+
+        # 应用策略层：获取首选 provider（统一策略层职责）
         _provider_order, _slo = self._get_provider_order(
             task_type_str,
-            preferred_provider=provider,
+            preferred_provider=effective_provider,
         )
-        # 取策略层最优先 provider；若无策略顺序（空列表或 None）则使用调用方明确指定的（可为 None）。
+        # 取策略层最优先 provider；若无策略顺序（空列表或 None）则使用 effective_provider。
         # `_provider_order[0]` is safe here because we only access index 0 when the list is
         # non-empty (truthy), which is guaranteed by the `if _provider_order` guard.
-        _effective_provider = _provider_order[0] if _provider_order else provider
+        _effective_provider = _provider_order[0] if _provider_order else effective_provider
 
         start = time.monotonic()
         try:
             # 执行层（MultiLLMRouter）负责 provider 内部故障转移（auto_failover 默认 True）
             result = await self._backend.chat(
-                messages=messages,
+                messages=enriched_messages,
                 task_type=task_type_str,
                 provider=_effective_provider,
                 model=model,
