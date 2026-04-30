@@ -476,7 +476,20 @@ class SystemOrchestrator:
             )
 
     def _run_phase_7_readiness_summary(self, summary: StartupSummary) -> PhaseResult:
-        """Phase 7 — Final readiness summary / status report."""
+        """Phase 7 — Final readiness summary / status report.
+
+        This phase also runs the V6 center authority boundary integrity check
+        (:func:`core.center_authority_boundary.assert_center_authority_intact`).
+        A degraded or broken boundary is surfaced as ``DEGRADED`` in the phase
+        result so that startup logs reflect the structural state without
+        blocking the process from continuing (boundary failures are
+        non-fatal to allow degraded-mode operation while the issue is
+        investigated).
+
+        Note: V6 is intentionally placed here — at the **boundary / startup /
+        readiness layer** — and is **not** wired into per-request hot paths
+        such as ``OpenClawd.process()`` or ``CommandRouter.route_envelope()``.
+        """
         logger.info("[Phase 7] Producing final readiness summary …")
         detail = (
             f"readiness={summary.readiness.value}, "
@@ -484,13 +497,53 @@ class SystemOrchestrator:
             f"{len(summary.phase_results)}"
         )
         logger.info("[Phase 7] %s", detail)
+
+        # V6 center authority boundary integrity check — boundary / startup layer
+        authority_boundary_status: str = "not_checked"
+        authority_boundary_data: Dict[str, Any] = {}
+        phase_status = PhaseStatus.OK
+        try:
+            from core.center_authority_boundary import (
+                evaluate_center_authority_boundary,
+                CenterAuthorityBoundaryReport,
+            )
+            boundary_report: CenterAuthorityBoundaryReport = evaluate_center_authority_boundary()
+            authority_boundary_data = {
+                "all_domains_intact": boundary_report.all_domains_intact,
+                "degraded_domains": boundary_report.degraded_domains,
+                "report_id": boundary_report.report_id,
+            }
+            if boundary_report.all_domains_intact:
+                authority_boundary_status = "intact"
+                logger.info(
+                    "[Phase 7] V6 center authority boundary: INTACT — "
+                    "all four authority domains verified."
+                )
+            else:
+                authority_boundary_status = "degraded"
+                phase_status = PhaseStatus.DEGRADED
+                detail = (
+                    f"{detail} | authority_boundary=DEGRADED "
+                    f"degraded_domains={boundary_report.degraded_domains}"
+                )
+                logger.warning(
+                    "[Phase 7] V6 center authority boundary DEGRADED: %s",
+                    boundary_report.degraded_domains,
+                )
+        except Exception as exc:
+            authority_boundary_status = "error"
+            authority_boundary_data = {"error": str(exc)}
+            logger.debug("[Phase 7] V6 center authority boundary check skipped — %s", exc)
+
         return PhaseResult(
             phase=StartupPhase.READINESS_SUMMARY,
-            status=PhaseStatus.OK,
+            status=phase_status,
             detail=detail,
             data={
                 "readiness": summary.readiness.value,
                 "system_mode": summary.system_mode,
+                "authority_boundary_status": authority_boundary_status,
+                "authority_boundary": authority_boundary_data,
             },
         )
 
