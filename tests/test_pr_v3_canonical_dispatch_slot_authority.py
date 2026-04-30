@@ -166,7 +166,7 @@ def _make_blocked_gate_result(device_id: str, status: str, reason: str) -> Any:
 
 
 @pytest.mark.skipif(not _AUTHORITY_AVAILABLE, reason="canonical_dispatch_slot_authority unavailable")
-class TestAuthoritysentinel:
+class TestAuthoritySentinel:
     """All canonical dispatch-slot authority sentinels are importable non-empty strings."""
 
     def test_authority_sentinel_non_empty(self) -> None:
