@@ -779,6 +779,20 @@ class AndroidBridge:
             handle_reconciliation_signal
         )
 
+        # Android Lifecycle / Governance Uplink Reports
+        # These types are emitted by GalaxyConnectionService.kt but were previously
+        # absent from MessageType, causing gateway to return UNKNOWN_MESSAGE_TYPE.
+        # Route to handle_generic_forward so Android receives a structured ACK
+        # instead of an error response, and the message is logged (not silently dropped).
+        for _android_report_type in (
+            MessageType.CANCEL_RESULT,
+            MessageType.DEVICE_READINESS_REPORT,
+            MessageType.DEVICE_GOVERNANCE_REPORT,
+            MessageType.DEVICE_ACCEPTANCE_REPORT,
+            MessageType.DEVICE_STRATEGY_REPORT,
+        ):
+            self._message_handlers[_android_report_type] = _wrap(handle_generic_forward)
+
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:
             if msg_type not in self._message_handlers:
