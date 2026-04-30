@@ -156,8 +156,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         # LLM Router
         try:
-            from core.multi_llm_router import get_llm_router
-            router_inst = get_llm_router()
+            from core.llm.route_authority import get_llm_route_authority
+            router_inst = get_llm_route_authority().execution_router
             router_status = router_inst.get_status() if hasattr(router_inst, 'get_status') else {}
             subsystems["llm_router"] = {
                 "status": "running",
@@ -444,8 +444,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             # 热重载 LLM Router 以拾取新 API Key
             if updated_keys and any("API_KEY" in k or "URL" in k for k in updated_keys):
                 try:
-                    from core.multi_llm_router import get_llm_router
-                    router = get_llm_router()
+                    from core.llm.route_authority import get_llm_route_authority
+                    router = get_llm_route_authority().execution_router
                     router._discover_providers()  # 重新发现 providers
                     logger.info(f"LLM Router 已热重载 (更新: {updated_keys})")
                 except Exception as e:

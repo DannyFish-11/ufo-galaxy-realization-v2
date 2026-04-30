@@ -71,10 +71,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
 
     from core.scheduler import AutonomousScheduler
-    from core.multi_llm_router import get_llm_router
+    from core.llm.route_authority import get_llm_route_authority
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_router = get_llm_router()
+    llm_router = get_llm_route_authority().execution_router
 
     class AutonomousRequest(BaseModel):
         instruction: str

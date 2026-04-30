@@ -82,8 +82,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         以及最近一次路由决策。
         """
         try:
-            from core.multi_llm_router import get_llm_router
-            router_inst = get_llm_router()
+            from core.llm.route_authority import get_llm_route_authority
+            router_inst = get_llm_route_authority().execution_router
             status = router_inst.get_status()
             providers = router_inst.get_provider_status()
             default_model = router_inst.get_default_model()

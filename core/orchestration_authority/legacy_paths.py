@@ -662,8 +662,163 @@ _register(
 )
 
 # ---------------------------------------------------------------------------
-# PR-oneapi-system-position entries
+# L1 (PR-L1): Unify LLM routing under a single router authority.
+#
+# The canonical LLM cognitive routing authority is:
+#   core.llm.route_authority.LLMRouteAuthority   (LLM_ROUTE_AUTHORITY sentinel)
+#
+# The paths listed below previously bypassed the canonical authority by calling
+# core.multi_llm_router.get_llm_router() directly for routing decisions or
+# provider supply.  They have been updated (L1) to route through
+# core.llm.route_authority.get_llm_route_authority().execution_router so that
+# all LLM routing decisions pass through the canonical authority gate first.
+# They are registered here as LEGACY_COMPATIBILITY entries to record the
+# pre-L1 bypass state and to enable non-regression checks.
 # ---------------------------------------------------------------------------
+
+_register(
+    LegacyPathEntry(
+        module_path="core.routes.ai.create_twin_command.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/ai.py create_twin_command previously called "
+            "core.multi_llm_router.get_llm_router() directly, bypassing the "
+            "canonical LLM routing authority.  Updated in L1 to route through "
+            "core.llm.route_authority.get_llm_route_authority().execution_router.  "
+            "New code must use get_llm_route_authority() as the entry point."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes=(
+            "Routes AI twin — pre-L1 direct multi_llm_router bypass.  "
+            "Updated in L1 to canonical authority path."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.ai.create_agent_swarm.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/ai.py create_agent_swarm previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="Routes AI swarm — pre-L1 direct multi_llm_router bypass.  Updated in L1.",
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.nodes.create_router.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/nodes.py create_router previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1 to "
+            "route through get_llm_route_authority().execution_router."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="Routes nodes — pre-L1 direct multi_llm_router bypass.  Updated in L1.",
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.system.get_system_status.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/system.py get_system_status previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="Routes system status — pre-L1 direct multi_llm_router bypass.  Updated in L1.",
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.system.update_env.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/system.py update_env previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="Routes system env update — pre-L1 direct multi_llm_router bypass.  Updated in L1.",
+    ),
+    LegacyPathEntry(
+        module_path="core.routes.observability.model_route_status.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/routes/observability.py model_route_status previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1 to "
+            "route through get_llm_route_authority().execution_router.  "
+            "Note: this endpoint remains a legacy/diagnostic surface; canonical "
+            "routing truth must still be read from the projection endpoints."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes=(
+            "Observability model-route — pre-L1 direct multi_llm_router bypass.  "
+            "Updated in L1.  Endpoint is diagnostic-only; not canonical truth."
+        ),
+    ),
+    LegacyPathEntry(
+        module_path="core.system_integration.SystemIntegration._execute_builtin.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/system_integration.py _execute_builtin previously called "
+            "core.multi_llm_router.get_llm_router() directly.  Updated in L1."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="System integration builtin — pre-L1 direct multi_llm_router bypass.  Updated in L1.",
+    ),
+    # ── Remaining direct multi_llm_router callers (not yet migrated) ─────
+    # These paths still call get_llm_router() from core.multi_llm_router
+    # directly.  They are registered here to make the bypass explicit and
+    # to enable non-regression checks.  They should be migrated in future PRs.
+    LegacyPathEntry(
+        module_path="core.openclawd.OpenClawd.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/openclawd.py imports core.multi_llm_router.get_llm_router directly.  "
+            "Migrate to core.llm.route_authority.get_llm_route_authority() in a "
+            "future L1-continuation PR."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="openclawd — remaining direct multi_llm_router caller.  Not yet migrated (L1).",
+    ),
+    LegacyPathEntry(
+        module_path="core.agent.kernel.AgentKernel.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/agent/kernel.py imports core.multi_llm_router.get_llm_router directly.  "
+            "Migrate to get_llm_route_authority() in a future L1-continuation PR."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="agent kernel — remaining direct multi_llm_router caller.  Not yet migrated (L1).",
+    ),
+    LegacyPathEntry(
+        module_path="core.ai_intent.IntentParser.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "core/ai_intent.py imports core.multi_llm_router.get_llm_router directly.  "
+            "Migrate to get_llm_route_authority() in a future L1-continuation PR."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="ai_intent — remaining direct multi_llm_router caller.  Not yet migrated (L1).",
+    ),
+    LegacyPathEntry(
+        module_path="galaxy_gateway.orchestrator.galaxy_orchestrator.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "galaxy_gateway/orchestrator/galaxy_orchestrator.py imports "
+            "core.multi_llm_router.get_llm_router directly.  "
+            "Migrate to get_llm_route_authority() in a future L1-continuation PR."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="galaxy_orchestrator — remaining direct multi_llm_router caller.  Not yet migrated (L1).",
+    ),
+    LegacyPathEntry(
+        module_path="dashboard.backend.main.direct_get_llm_router",
+        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        recommendation=(
+            "dashboard/backend/main.py imports core.multi_llm_router.get_llm_router directly.  "
+            "dashboard/ is a LEGACY UI SURFACE (PR-8).  "
+            "Routing truth must be sourced from projection endpoints, not from dashboard."
+        ),
+        pr_guardrail_added="PR-L1",
+        notes="dashboard — remaining direct multi_llm_router caller.  Legacy UI surface (PR-8).",
+    ),
+)
+
 # These entries document paths related to the OneAPI aggregator integration.
 # They are NOT "broken" or "to-be-removed" paths; they are ACTIVE_INTEGRATION
 # entries that record the canonical system-wide effect semantics for
