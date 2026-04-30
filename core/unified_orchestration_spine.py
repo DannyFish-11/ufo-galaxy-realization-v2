@@ -197,6 +197,57 @@ ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL_POLICY: str = (
     "supplement it with separate completion or lifecycle reality."
 )
 
+# V5 sentinels — canonical group completion, delegated completion, and
+# partial failure semantics.
+
+ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY: str = (
+    "POLICY::ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE: "
+    "PR-V5 structural closure: all advanced execution modes (parallel "
+    "fan-out, delegated, handoff, takeover, wake-routed, cross-device, "
+    "hybrid) MUST determine their canonical terminal state by calling "
+    "core.canonical_group_completion_closure.apply_completion_closure() "
+    "with the CompletionContract from this spine.  No mode may maintain a "
+    "private completion contract, treat a subtask success as group "
+    "completion, treat a delegated ACK as delegated terminal completion, "
+    "or emit a terminal state outside the canonical closure.  "
+    "PR-V5, canonical group completion, delegated completion, and partial "
+    "failure semantics."
+)
+
+COMPLETION_CONTRACT_V5_BLOCKED_DEVICE_EXCLUSION_POLICY: str = (
+    "POLICY::COMPLETION_CONTRACT_V5_BLOCKED_DEVICE_EXCLUSION: "
+    "CompletionContract.blocked_device_exclusion governs how blocked (non-"
+    "ready) device slots affect the canonical completion outcome.  Allowed "
+    "values: 'exclude_from_contract' (shrink effective expected count), "
+    "'promote_to_partial_failure' (count each as a failure), "
+    "'abort_on_any_blocked' (abort the orchestration immediately).  "
+    "The spine sets this field per execution mode in "
+    "_derive_completion_contract().  Callers MUST NOT override it.  "
+    "PR-V5, canonical group completion closure."
+)
+
+COMPLETION_CONTRACT_V5_DEGRADED_SUCCESS_POLICY: str = (
+    "POLICY::COMPLETION_CONTRACT_V5_DEGRADED_SUCCESS: "
+    "CompletionContract.degraded_success_allowed=True permits the canonical "
+    "closure to produce CanonicalTerminalKind.degraded_success when all "
+    "received device results succeeded but some device slots were excluded "
+    "by blocked_device_exclusion='exclude_from_contract'.  When False (the "
+    "default) the same scenario produces partial_success or "
+    "aggregate_failure depending on the partial_failure_policy.  "
+    "PR-V5, canonical group completion closure."
+)
+
+COMPLETION_CONTRACT_V5_AGGREGATE_TIMEOUT_POLICY: str = (
+    "POLICY::COMPLETION_CONTRACT_V5_AGGREGATE_TIMEOUT: "
+    "CompletionContract.aggregate_timeout_seconds, when set, provides the "
+    "wall-clock deadline for the entire orchestration.  When this deadline "
+    "elapses before the effective expected result count is satisfied, the "
+    "canonical closure produces CanonicalTerminalKind.aggregate_timeout.  "
+    "This is a canonical terminal state; callers MUST close the "
+    "orchestration rather than continuing to wait.  "
+    "PR-V5, canonical group completion closure."
+)
+
 # ---------------------------------------------------------------------------
 # ExecutionMode
 # ---------------------------------------------------------------------------
@@ -462,17 +513,44 @@ class CompletionContract:
         - ``"first_wins"`` — use the first result received.
         - ``"all_required"`` — wait for all results.
         - ``"any_success"`` — complete on first successful result.
+    blocked_device_exclusion
+        V5: How blocked (non-ready) device slots affect the canonical
+        completion outcome.  One of:
+        - ``"exclude_from_contract"`` — shrink effective expected count.
+        - ``"promote_to_partial_failure"`` — count each blocked slot as a
+          failure and apply the partial_failure_policy.
+        - ``"abort_on_any_blocked"`` — abort the entire orchestration when
+          any device slot is blocked.
+        Set by :func:`_derive_completion_contract` per execution mode.
+        Callers MUST NOT override this value.
+    degraded_success_allowed
+        V5: When True, the canonical closure may produce
+        ``CanonicalTerminalKind.degraded_success`` when all received device
+        results succeeded but some slots were excluded via
+        ``blocked_device_exclusion="exclude_from_contract"``.  Defaults to
+        False; degraded success is an explicit opt-in.
+    aggregate_timeout_seconds
+        V5: Wall-clock deadline for the entire orchestration.  When set and
+        the deadline elapses before the effective expected result count is
+        satisfied, the canonical closure produces
+        ``CanonicalTerminalKind.aggregate_timeout``.  None means no timeout.
     """
 
     expected_result_count: int = 0
     partial_failure_policy: str = "best_effort"
     aggregation_mode: str = "all_required"
+    blocked_device_exclusion: str = "exclude_from_contract"
+    degraded_success_allowed: bool = False
+    aggregate_timeout_seconds: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "expected_result_count": self.expected_result_count,
             "partial_failure_policy": self.partial_failure_policy,
             "aggregation_mode": self.aggregation_mode,
+            "blocked_device_exclusion": self.blocked_device_exclusion,
+            "degraded_success_allowed": self.degraded_success_allowed,
+            "aggregate_timeout_seconds": self.aggregate_timeout_seconds,
         }
 
 
@@ -776,7 +854,12 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
 def _derive_completion_contract(
     mode: str, ready_slots: List[DeviceOrchestrationSlot]
 ) -> CompletionContract:
-    """Derive the appropriate completion contract for the given mode."""
+    """Derive the appropriate completion contract for the given mode.
+
+    V5: populates blocked_device_exclusion, degraded_success_allowed, and
+    aggregate_timeout_seconds per execution mode so the canonical completion
+    closure has the correct semantics for each mode.
+    """
     count = len(ready_slots)
 
     if mode in (
@@ -788,6 +871,9 @@ def _derive_completion_contract(
             expected_result_count=count,
             partial_failure_policy="fail_all",
             aggregation_mode="first_wins",
+            blocked_device_exclusion="promote_to_partial_failure",
+            degraded_success_allowed=False,
+            aggregate_timeout_seconds=None,
         )
 
     if mode in (
@@ -799,6 +885,9 @@ def _derive_completion_contract(
             expected_result_count=count,
             partial_failure_policy="best_effort",
             aggregation_mode="all_required",
+            blocked_device_exclusion="exclude_from_contract",
+            degraded_success_allowed=True,
+            aggregate_timeout_seconds=None,
         )
 
     if mode in (
@@ -809,6 +898,9 @@ def _derive_completion_contract(
             expected_result_count=min(count, 1),
             partial_failure_policy="fail_all",
             aggregation_mode="first_wins",
+            blocked_device_exclusion="promote_to_partial_failure",
+            degraded_success_allowed=False,
+            aggregate_timeout_seconds=None,
         )
 
     if mode == ExecutionMode.WAKE_ROUTED.value:
@@ -816,6 +908,9 @@ def _derive_completion_contract(
             expected_result_count=min(count, 1),
             partial_failure_policy="fail_all",
             aggregation_mode="any_success",
+            blocked_device_exclusion="exclude_from_contract",
+            degraded_success_allowed=False,
+            aggregate_timeout_seconds=None,
         )
 
     # Default contract
@@ -823,6 +918,9 @@ def _derive_completion_contract(
         expected_result_count=count,
         partial_failure_policy="best_effort",
         aggregation_mode="all_required",
+        blocked_device_exclusion="exclude_from_contract",
+        degraded_success_allowed=False,
+        aggregate_timeout_seconds=None,
     )
 
 
@@ -840,6 +938,10 @@ __all__ = [
     "ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY",
     "ORCHESTRATION_SPINE_LIFECYCLE_STAGE_IS_UNIFIED_POLICY",
     "ORCHESTRATION_SPINE_AUDIT_RECORD_IS_CANONICAL_POLICY",
+    "ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY",
+    "COMPLETION_CONTRACT_V5_BLOCKED_DEVICE_EXCLUSION_POLICY",
+    "COMPLETION_CONTRACT_V5_DEGRADED_SUCCESS_POLICY",
+    "COMPLETION_CONTRACT_V5_AGGREGATE_TIMEOUT_POLICY",
     "ExecutionMode",
     "OrchestrationLifecycleStage",
     "DeviceOrchestrationSlot",
