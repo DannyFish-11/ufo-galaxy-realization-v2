@@ -1233,3 +1233,44 @@ def test_90_to_dict_source_request_task_type_preserved():
     )
     d = result.to_dict()
     assert d["source_request"]["task_type"] == "reasoning"
+
+
+# ---------------------------------------------------------------------------
+# 91: Soul policy + chat_only contract violation warning
+# ---------------------------------------------------------------------------
+
+
+def test_91_soul_policy_with_chat_only_execution_mode_logs_warning(caplog):
+    """Validates that setting soul_policy with execution_mode='chat_only'
+    triggers a warning — this is a context authority contract violation.
+    The assembly must still succeed (soft validation), but the violation
+    must be visible in the warning log so it can be detected and corrected.
+    """
+    import logging
+    from core.llm.context_authority import (
+        CognitiveContextAuthority,
+        CognitiveContextRequest,
+    )
+
+    auth = CognitiveContextAuthority()
+    req = CognitiveContextRequest(
+        soul_policy="SOUL constraints here.",
+        execution_mode="chat_only",
+        user_message="This violates the contract.",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="Galaxy.LLM.ContextAuthority"):
+        # Assembly must succeed (no exception raised)
+        result = auth.assemble(req)
+
+    # Assembly still returns a canonical result
+    assert result.is_canonical is True
+    # soul_policy content is still injected (soft validation — caller is warned)
+    system_content = result.messages[0]["content"]
+    assert "SOUL constraints here" in system_content
+    # The contract violation must appear in the warning log
+    warning_records = [
+        r for r in caplog.records
+        if r.levelno >= logging.WARNING and "chat_only" in r.message
+    ]
+    assert len(warning_records) >= 1

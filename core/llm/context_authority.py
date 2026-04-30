@@ -232,7 +232,14 @@ class CognitiveContextRequest:
     max_history_turns: int = 8
 
     def __post_init__(self) -> None:
-        self.max_history_turns = max(0, int(self.max_history_turns))
+        clamped = max(0, int(self.max_history_turns))
+        if clamped != self.max_history_turns:
+            logger.debug(
+                "CognitiveContextRequest: max_history_turns clamped from %r to %d",
+                self.max_history_turns,
+                clamped,
+            )
+        self.max_history_turns = clamped
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +417,16 @@ class CognitiveContextAuthority:
         # ── 1. System message ─────────────────────────────────────────
         system_parts: List[str] = []
 
+        # Validate soul_policy / execution_mode contract.
+        # soul_policy must only be set for task_execute or hybrid paths.
+        if request.soul_policy and request.execution_mode == "chat_only":
+            logger.warning(
+                "CognitiveContextAuthority.assemble: soul_policy is set but "
+                "execution_mode='chat_only' — soul_policy must only be present "
+                "on task_execute or hybrid paths. Proceeding with assembly "
+                "but this represents a context authority violation."
+            )
+
         # 1a. Base system prefix
         prefix = (request.system_prefix or _DEFAULT_SYSTEM_PREFIX).strip()
         system_parts.append(prefix)
@@ -418,6 +435,8 @@ class CognitiveContextAuthority:
         )
 
         # 1b. Soul policy (task_execute / hybrid paths only)
+        # Note: Section labels are intentionally in Chinese to match the
+        # existing Galaxy codebase policy / system prompt conventions.
         if request.soul_policy:
             system_parts.append(f"\nSOUL 约束：\n{request.soul_policy.strip()}")
             trace.append("soul_policy: injected")
