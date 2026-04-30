@@ -229,6 +229,11 @@ class UnifiedResultIngressOutcome:
     incomplete_reason: str = ""
     task_id: str = ""
     normalized_status: str = ""
+    continuity_rejected: bool = False
+    """True iff the unified continuity legality authority rejected this result."""
+    continuity_legality_verdict: str = ""
+    """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
+    value string produced by the continuity gate (empty when not evaluated)."""
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +277,26 @@ class UnifiedResultIngress:
             task_id=event.task_id,
             normalized_status=event.normalized_status,
         )
+
+        # Step 0: unified continuity legality gate
+        # Terminal result ingestion MUST submit to the same continuity
+        # authority as reconnect, replay, and delegated recovery paths.
+        # Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY.
+        continuity_verdict = self._check_continuity_legality(event)
+        outcome.continuity_legality_verdict = continuity_verdict
+        if continuity_verdict in ("reject", "require_review"):
+            outcome.continuity_rejected = True
+            outcome.incomplete_reason = (
+                f"continuity_rejected:{continuity_verdict}"
+            )
+            logger.warning(
+                "unified_result_ingress: continuity gate rejected result "
+                "task_id=%r verdict=%r source=%s",
+                event.task_id,
+                continuity_verdict,
+                event.source_channel.value,
+            )
+            return outcome
 
         # Step 1: idempotency
         if self._check_idempotency(event):
@@ -388,6 +413,38 @@ class UnifiedResultIngress:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _check_continuity_legality(self, event: NormalizedResultEvent) -> str:
+        """Run the unified continuity legality gate for terminal result ingestion.
+
+        Returns the verdict string: ``"allow"``, ``"reject"``, or
+        ``"require_review"``.  Defaults to ``"allow"`` when the authority
+        module is unavailable (graceful degradation consistent with the
+        additive-only policy for this change).
+        """
+        try:
+            from core.unified_continuity_legality_authority import (
+                ContinuityLegalityContext,
+                ContinuityLegalityPath,
+                evaluate_continuity_legality,
+            )
+            ctx = ContinuityLegalityContext(
+                device_id=event.device_id or "",
+                runtime_session_id=event.runtime_session_id or "",
+                runtime_attachment_session_id=event.runtime_attachment_session_id or "",
+                durable_session_id=event.durable_session_id or "",
+            )
+            report = evaluate_continuity_legality(
+                ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx
+            )
+            return report.verdict.value
+        except Exception as _e:
+            logger.debug(
+                "unified_result_ingress: continuity legality gate unavailable "
+                "(non-fatal, passing through): %s",
+                _e,
+            )
+            return "allow"
 
     def _check_idempotency(self, event: NormalizedResultEvent) -> bool:
         """Return True iff the idempotency_key is already recorded."""
