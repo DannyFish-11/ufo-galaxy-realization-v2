@@ -47,6 +47,36 @@ try:
 except ImportError:
     _ingest_goal_result_truth = None  # type: ignore[assignment]
 
+# PR-UNIFY: Canonical must-run truth chain for goal_execution_result processing.
+# Top-level import so tests can patch() the chain function.
+# Mirrors the PR-TTC pattern from task_lifecycle.py handle_task_result so that
+# goal_execution_result routes through the same four-step canonical chain:
+#   (1) truth_ingress, (2) reconcile, (3) authority_update, (4) completion_linkage.
+try:
+    from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_task_result_truth_chain
+except ImportError:
+    _run_task_result_truth_chain = None  # type: ignore[assignment]
+
+
+def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
+    """Build a minimal duck-typed envelope for CanonicalCompletionIngress.notify().
+
+    Used only in the fallback path when the canonical truth chain module is
+    unavailable.  The three fields match what the truth chain's
+    _run_completion_linkage helper creates internally.
+    """
+
+    class _Envelope:
+        is_terminal: bool = True
+        handoff_id: str = ""
+        task_id: str = ""
+
+    env = _Envelope()
+    env.is_terminal = True
+    env.handoff_id = handoff_id
+    env.task_id = task_id
+    return env
+
 
 def _try_ingest_goal_result_truth(message: Dict[str, Any]) -> None:
     """Best-effort ingest *message* as Android participant truth (result kind).
@@ -527,25 +557,75 @@ async def handle_goal_execution_result(
             task_id, feedback_err,
         )
 
-    # PR-13: reconcile inbound signal against host-side execution tracker
-    if _reconcile_goal_result is not None:
-        try:
-            outcome = _reconcile_goal_result(message)
-            if outcome.was_updated:
+    # PR-UNIFY: Run the canonical must-run truth chain for goal_execution_result.
+    # This replaces the previous separate _reconcile_goal_result +
+    # _try_ingest_goal_result_truth + direct CanonicalCompletionIngress.notify()
+    # calls with a single entry point (mirroring task_lifecycle.py PR-TTC):
+    #   (1) truth_ingress   — ingest Android participant truth into V2 state
+    #   (2) reconcile       — reconcile against host-side execution tracker
+    #   (3) authority_update — advance CanonicalTaskRuntime lifecycle
+    #   (4) completion_linkage — notify CanonicalCompletionIngress
+    # All four steps must run as a single chain so that goal_execution_result
+    # and task_result share the same canonical completion authority path.
+    if _run_task_result_truth_chain is not None:
+        _ger_ttc_outcome = _run_task_result_truth_chain(
+            message,
+            task_id=task_id,
+            result_status=status,
+        )
+        if not _ger_ttc_outcome.is_truth_chain_complete:
+            logger.warning(
+                "handle_goal_execution_result: truth chain incomplete for task_id=%r: %s",
+                task_id,
+                _ger_ttc_outcome.incomplete_reason,
+            )
+        else:
+            logger.debug(
+                "handle_goal_execution_result: truth chain complete for task_id=%r",
+                task_id,
+            )
+    else:
+        # Fallback: canonical truth chain module unavailable — run legacy
+        # best-effort helpers so existing behaviour is preserved.
+        logger.warning(
+            "handle_goal_execution_result: canonical truth chain module unavailable "
+            "(task_result_canonical_truth_chain); falling back to legacy "
+            "best-effort helpers for task_id=%r",
+            task_id,
+        )
+        if _reconcile_goal_result is not None:
+            try:
+                _rec_outcome = _reconcile_goal_result(message)
+                if _rec_outcome.was_updated:
+                    logger.debug(
+                        "goal_execution_result fallback reconcile: "
+                        "signal=%s contract_id=%r → phase=%s",
+                        _rec_outcome.envelope.signal_kind.value if _rec_outcome.envelope else "?",
+                        _rec_outcome.envelope.contract_id if _rec_outcome.envelope else "",
+                        _rec_outcome.record.phase.value if _rec_outcome.record else "?",
+                    )
+            except Exception as rec_err:
                 logger.debug(
-                    "PR-13 reconcile goal_execution_result: signal=%s contract_id=%r → phase=%s",
-                    outcome.envelope.signal_kind.value if outcome.envelope else "?",
-                    outcome.envelope.contract_id if outcome.envelope else "",
-                    outcome.record.phase.value if outcome.record else "?",
+                    "goal_execution_result fallback reconcile failed (non-fatal): %s", rec_err
                 )
-        except Exception as rec_err:
-            logger.debug("PR-13 reconcile goal_execution_result failed (non-fatal): %s", rec_err)
+        _try_ingest_goal_result_truth(message)
+        # Fallback completion linkage — only reached when truth chain is unavailable.
+        try:
+            from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
 
-    # PR-8V2: ingest goal_execution_result into V2 canonical participant truth.
-    # goal_execution_result is a user-visible business result and MUST be
-    # reconciled into participant truth (truth_kind="result") so that V2
-    # canonical tracking records reflect the final state.
-    _try_ingest_goal_result_truth(message)
+            _get_cci_fb().notify(_make_completion_envelope(
+                task_id=task_id,
+                handoff_id=payload.get("handoff_id") or "",
+            ))
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: fallback CanonicalCompletionIngress notified task_id=%s",
+                task_id,
+            )
+        except Exception as _cci_fb_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: fallback completion ingress notify failed (non-fatal): %s",
+                _cci_fb_err,
+            )
 
     # PR-D: parallel/group subtask aggregation
     # If this result carries a group_id, feed it into the canonical aggregator.
@@ -603,40 +683,8 @@ async def handle_goal_execution_result(
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
 
-    # ── PR-UNIFY: CanonicalCompletionIngress notify + _pending_responses ─────
-    # These two steps were previously missing from this handler, causing a
-    # gap where "result arrived" did not imply "completion chain closed":
-    # - CanonicalCompletionIngress.notify() unblocks any asyncio Future or
-    #   registered awaiter waiting for this task_id/handoff_id.
-    # - bridge._pending_responses: resolves any send_to_device(wait_response=True)
-    #   future keyed by task_id, unblocking callers that await device results.
-    try:
-        from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci
-
-        _cci = _get_cci()
-
-        class _Envelope:
-            is_terminal: bool = True
-            handoff_id: str = ""
-            task_id: str = ""
-
-        _env = _Envelope()
-        _env.is_terminal = True
-        _env.handoff_id = payload.get("handoff_id") or ""
-        _env.task_id = task_id
-
-        _cci.notify(_env)
-        logger.debug(
-            "GOAL_EXECUTION_RESULT: CanonicalCompletionIngress notified task_id=%s",
-            task_id,
-        )
-    except Exception as _cci_err:
-        logger.debug(
-            "GOAL_EXECUTION_RESULT: CanonicalCompletionIngress notify failed (non-fatal): %s",
-            _cci_err,
-        )
-
     # Resolve bridge._pending_responses future keyed by task_id (if present).
+    # This is an enrichment step separate from the canonical truth chain.
     try:
         _pending = getattr(bridge, "_pending_responses", None)
         if _pending is not None and task_id in _pending:

@@ -744,13 +744,26 @@ class TestCompatWsGoalExecutionResult:
 class TestCanonicalGoalExecutionResultCompletion:
 
     @pytest.mark.asyncio
-    async def test_J01_handle_goal_execution_result_notifies_completion_ingress(self):
-        """handle_goal_execution_result must call CanonicalCompletionIngress.notify()."""
+    async def test_J01_handle_goal_execution_result_routes_through_canonical_truth_chain(self):
+        """handle_goal_execution_result must route through run_task_result_truth_chain.
+
+        This is the canonical authority contract: goal_execution_result must run
+        all four truth-chain steps (truth_ingress, reconcile, authority_update,
+        completion_linkage) via the single unified entry point — not through
+        independent ad-hoc calls.  Routing through the chain is the ONLY way to
+        guarantee Step 3 (canonical lifecycle update) always runs.
+        """
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
 
-        notified = []
-        mock_cci = MagicMock()
-        mock_cci.notify.side_effect = lambda env: notified.append(env.task_id) or True
+        truth_chain_calls = []
+
+        class _FakeTTCOutcome:
+            is_truth_chain_complete = True
+            incomplete_reason = ""
+
+        def _fake_ttc(msg, *, task_id=None, result_status=None):
+            truth_chain_calls.append((task_id, result_status))
+            return _FakeTTCOutcome()
 
         bridge = MagicMock()
         bridge._pending_responses = {}
@@ -776,15 +789,21 @@ class TestCanonicalGoalExecutionResultCompletion:
                 "core.durable_result_idempotency.record_result_idempotency",
             ),
             patch(
-                "core.canonical_completion_ingress.get_canonical_completion_ingress",
-                return_value=mock_cci,
+                "galaxy_gateway.android.handlers.goal_execution._run_task_result_truth_chain",
+                side_effect=_fake_ttc,
             ),
         ):
             await handle_goal_execution_result(bridge, ws, msg)
 
-        assert tid in notified, (
-            "handle_goal_execution_result did not call "
-            "CanonicalCompletionIngress.notify()"
+        assert len(truth_chain_calls) == 1, (
+            "handle_goal_execution_result must call run_task_result_truth_chain exactly once"
+        )
+        assert truth_chain_calls[0][0] == tid, (
+            "run_task_result_truth_chain must receive the correct task_id"
+        )
+        assert truth_chain_calls[0][1] == "completed", (
+            "run_task_result_truth_chain must receive the normalized canonical status "
+            "(not the raw Android 'success')"
         )
 
     @pytest.mark.asyncio
@@ -827,3 +846,51 @@ class TestCanonicalGoalExecutionResultCompletion:
         )
         result = future.result()
         assert result["task_id"] == tid
+
+    @pytest.mark.asyncio
+    async def test_J03_handle_goal_execution_result_normalizes_all_terminal_statuses(self):
+        """Truth chain must receive normalized status even for failed Android results.
+
+        Android reports 'failed' or 'error'; both must map to 'failed' before
+        the canonical truth chain receives them, ensuring status normalization
+        always happens before canonical state mutation.
+        """
+        from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
+
+        received_statuses = []
+
+        class _FakeTTCOutcome:
+            is_truth_chain_complete = True
+            incomplete_reason = ""
+
+        def _fake_ttc(msg, *, task_id=None, result_status=None):
+            received_statuses.append(result_status)
+            return _FakeTTCOutcome()
+
+        bridge = MagicMock()
+        bridge._pending_responses = {}
+        ws = MagicMock()
+
+        for raw_status, expected in [("failed", "failed"), ("error", "failed"), ("cancelled", "cancelled")]:
+            received_statuses.clear()
+            tid = _make_task_id()
+            msg = {
+                "type": "goal_execution_result",
+                "device_id": "test-device",
+                "payload": {"task_id": tid, "status": raw_status, "result": ""},
+            }
+
+            with (
+                patch("core.durable_result_idempotency.check_result_idempotency", return_value=False),
+                patch("core.durable_result_idempotency.record_result_idempotency"),
+                patch(
+                    "galaxy_gateway.android.handlers.goal_execution._run_task_result_truth_chain",
+                    side_effect=_fake_ttc,
+                ),
+            ):
+                await handle_goal_execution_result(bridge, ws, msg)
+
+            assert received_statuses == [expected], (
+                f"For raw_status={raw_status!r}, truth chain received "
+                f"{received_statuses!r} instead of [{expected!r}]"
+            )
