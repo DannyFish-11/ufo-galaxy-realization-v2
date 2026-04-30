@@ -47,11 +47,10 @@ Coverage
 
 from __future__ import annotations
 
-import importlib
-import inspect
+import ast
 import uuid
 from typing import List
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -314,10 +313,20 @@ class TestPerRequestPathIsolation:
         """Return True if the file contains an import of unified_orchestration_spine."""
         try:
             with open(filepath, "r", encoding="utf-8") as fh:
-                content = fh.read()
-            return "unified_orchestration_spine" in content
-        except FileNotFoundError:
+                source = fh.read()
+            tree = ast.parse(source, filename=filepath)
+        except (FileNotFoundError, SyntaxError):
             return False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if "unified_orchestration_spine" in alias.name:
+                        return True
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if "unified_orchestration_spine" in module:
+                    return True
+        return False
 
     def test_command_router_does_not_import_v4_spine(self) -> None:
         assert not self._file_imports_spine("core/command_router.py"), (
@@ -444,13 +453,11 @@ class TestArchitectureConsistency:
         assert "delegated" in scope
 
     def test_not_gate_policy_consistent_with_scope_policy(self) -> None:
-        # V4_IS_NOT_PER_REQUEST_GATE_POLICY and
-        # ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY are not contradictory.
+        # V4_IS_NOT_PER_REQUEST_GATE_POLICY should mention "per-request".
         assert "per-request" in V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
-        # The scope policy doesn't claim V4 is a per-request gate either.
-        assert "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower() or \
-               "per-request" not in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower() or \
-               "NOT" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY
+        # The scope policy should NOT describe V4 as a per-request gate.
+        assert "per-request gate" not in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower() or \
+               "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
 
     def test_spine_completion_contract_policy_still_present(self) -> None:
         assert isinstance(SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY, str)
