@@ -581,3 +581,150 @@ meaning remain unchanged.
 
 Guardrails for L3 context authority closure are implemented in
 `tests/test_l3_cognitive_context_authority.py`.
+
+---
+
+## 12. L4 — Cognitive Execution Authority Boundary Closure
+
+### 12.1 Summary
+
+L4 closes the final layer of the cognitive authority stack.  It establishes
+`CognitiveExecutionAuthority` as the **single canonical gate** through which all
+LLM invocations must pass after L3 context assembly and L2 supply resolution.
+With L4 in place, `ufo-galaxy-realization-v2` unambiguously owns:
+
+| Authority | Layer | Module |
+|---|---|---|
+| Routing truth | L1 | `core.llm.route_authority.LLMRouteAuthority` |
+| Supply legality truth | L2 | `core.llm.supply_authority.LLMSupplyAuthority` |
+| Context assembly truth | L3 | `core.llm.context_authority.CognitiveContextAuthority` |
+| **Cognitive execution semantics** | **L4** | **`core.llm.execution_authority.CognitiveExecutionAuthority`** |
+
+Providers, adapters, transports, and compatibility shims are explicitly
+subordinate to this boundary.  They contribute:
+
+- **Execution capability** — making the actual API call.
+- **Transport formatting** — converting the canonical message list to the wire
+  format the provider accepts.
+- **Raw output** — returning the provider's raw API response.
+
+They must NOT:
+
+- Decide which model or provider to use (L1 authority).
+- Reinterpret cognitive context (L3 authority).
+- Define fallback semantics (L2 authority).
+- Normalize or interpret the response content as final cognitive truth (L4 authority).
+
+### 12.2 L4 Canonical Cognitive Execution Authority
+
+```
+core/llm/execution_authority.py
+```
+
+**`CognitiveExecutionAuthority`** is the **single canonical gate** through which
+all LLM invocations must pass.  It:
+
+1. Verifies the context assembly carries the `LLM_CONTEXT_AUTHORITY` sentinel
+   (confirming L3 was used).
+2. Verifies the supply result carries the `LLM_SUPPLY_AUTHORITY` sentinel
+   (confirming L2 was used) and that supply is satisfied.
+3. Delegates raw execution to the provider adapter (capability only).
+4. Normalizes the raw provider output under center-owned semantics.
+5. Embeds `LLM_EXECUTION_AUTHORITY` in the canonical result.
+
+The authority sentinel:
+
+```python
+# core/llm/execution_authority.py
+LLM_EXECUTION_AUTHORITY = "core.llm.execution_authority.CognitiveExecutionAuthority"
+```
+
+- **`get_cognitive_execution_authority()`** is the canonical factory function.
+- **`CognitiveExecutionRequest`** is the input contract — carries the L3
+  context assembly, L2 supply resolution, and execution parameters.
+- **`CognitiveExecutionResult`** is the canonical output — carries normalized
+  content, tool calls, execution trace, and the `LLM_EXECUTION_AUTHORITY`
+  sentinel.
+
+### 12.3 Complete L1–L4 Authority Stack
+
+```
+CognitiveContextRequest  ──▶  CognitiveContextAuthority.assemble()  (L3)
+                                    │
+                                    ▼
+                              CognitiveContextAssembly { authority=LLM_CONTEXT_AUTHORITY }
+                                    │
+LLMRouteDecision (L1)  ─────────────┤
+SupplyResolutionResult (L2) ─────────┤
+                                    ▼
+                              CognitiveExecutionAuthority.execute()  (L4)
+                                    │  1. Verify LLM_CONTEXT_AUTHORITY sentinel
+                                    │  2. Verify LLM_SUPPLY_AUTHORITY sentinel + is_satisfied
+                                    │  3. Dispatch to provider (capability only)
+                                    │  4. Normalize output (center-owned semantics)
+                                    ▼
+                              CognitiveExecutionResult {
+                                  content,        ← center-owned normalized text
+                                  tool_calls,     ← canonical OpenAI-compatible format
+                                  provider,       ← from supply resolution (not provider-local)
+                                  model,          ← from supply resolution (not provider-local)
+                                  authority,      ← LLM_EXECUTION_AUTHORITY sentinel
+                                  execution_trace,← ordered audit list
+                                  source_context, ← CognitiveContextAssembly (L3)
+                                  source_supply,  ← SupplyResolutionResult (L2)
+                                  raw_response,   ← raw provider output (not authoritative)
+                              }
+```
+
+### 12.4 Center/Provider Cognitive Authority Boundary
+
+The boundary is explicit and enforced at the `execute()` gate:
+
+| Responsibility | Owner |
+|---|---|
+| Which provider/model to use | L1 `LLMRouteAuthority` |
+| Whether supply is legal | L2 `LLMSupplyAuthority` |
+| What context the model receives | L3 `CognitiveContextAuthority` |
+| How execution is performed | L4 `CognitiveExecutionAuthority` |
+| How output is normalized/interpreted | L4 `CognitiveExecutionAuthority` |
+| Raw API call mechanics | Provider adapter (capability only) |
+| Wire format translation | Provider adapter (formatting only) |
+| Raw API response | Provider adapter (raw output only) |
+
+Provider-specific code that attempts to re-interpret cognitive context, override
+the model selection, or define private normalization semantics violates this
+boundary.
+
+### 12.5 Response Normalization Contract
+
+Final output interpretation and normalization are performed once, here, under
+center-owned semantics:
+
+- `content` is always a `str` (empty string when the provider returns no text).
+- `tool_calls` is always `None` or a list of dicts in canonical OpenAI-compatible
+  tool-call format (provider-specific formats are translated).
+- `raw_response` is preserved for diagnostics but is **not** used as the
+  authoritative interpretation of cognitive output.
+
+### 12.6 Retry / Fallback / Compatibility Contract
+
+Retry, fallback, replay, and recovery paths MUST:
+
+1. Use the same `CognitiveContextAssembly` (from L3) — do not rebuild context
+   independently.
+2. Use a fresh `SupplyResolutionResult` from L2 if the supply path changes
+   (primary failed, fallback taken).
+3. Call `CognitiveExecutionAuthority.execute()` for every attempt — never bypass
+   the execution gate.
+4. Pass retry/fallback metadata via `CognitiveExecutionRequest.execution_metadata`
+   so the trace records the attempt context.
+
+Compatibility shims and legacy paths must not define parallel cognitive truth.
+They must either be updated to flow through `CognitiveExecutionAuthority` or be
+registered as `LegacyPathStatus.LEGACY_COMPATIBILITY` paths in
+`core/orchestration_authority/legacy_paths.py`.
+
+### 12.7 L4 Tests
+
+Guardrails for L4 cognitive execution authority boundary closure are implemented
+in `tests/test_l4_cognitive_execution_authority.py`.

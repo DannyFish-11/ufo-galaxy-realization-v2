@@ -6,6 +6,7 @@ core/llm — Multi-LLM Router Package
 **L1: Unify LLM routing under a single router authority**
 **L2: Canonicalize model supply truth, provider ordering, and fallback legality**
 **L3: Canonicalize cognitive input assembly under a single context authority**
+**L4: Close the final cognitive authority boundary**
 
 This package decomposes the multi-LLM routing layer into explicit, testable
 submodules while preserving the public API of ``core.multi_llm_router``.
@@ -36,6 +37,18 @@ context_authority.py
     :func:`get_cognitive_context_authority`.
     Sentinel:
     ``LLM_CONTEXT_AUTHORITY = "core.llm.context_authority.CognitiveContextAuthority"``.
+
+execution_authority.py
+    **L4 canonical cognitive execution semantics authority**.
+    :class:`CognitiveExecutionAuthority` is the single gate through which all
+    LLM invocations must pass after L3 context assembly and L2 supply
+    resolution.  It verifies that both upstream authorities were used, delegates
+    raw execution to the provider adapter, and normalizes output under
+    center-owned semantics.  Public factory:
+    :func:`get_cognitive_execution_authority`.
+    Sentinel:
+    ``LLM_EXECUTION_AUTHORITY =
+    "core.llm.execution_authority.CognitiveExecutionAuthority"``.
 
 router.py
     Facade and authority sentinel for ``MultiLLMRouter``.  Public factory
@@ -71,6 +84,15 @@ Authority sentinels
     assembled through :class:`CognitiveContextAuthority` before provider
     formatting and execution.
 
+``LLM_EXECUTION_AUTHORITY =
+"core.llm.execution_authority.CognitiveExecutionAuthority"``
+    **Execution (L4)** — the single canonical cognitive execution semantics
+    authority.  All LLM invocations must pass through
+    :class:`CognitiveExecutionAuthority` after L3 assembly and L2 supply
+    resolution.  Providers contribute raw execution only; response
+    normalization and output interpretation are performed here under
+    center-owned semantics.
+
 ``LLM_ROUTING_PACKAGE_AUTHORITY = "core.llm"``
     Package-level sentinel (PR-5).
 
@@ -85,6 +107,7 @@ For new code, prefer the canonical authority entry points:
     from core.llm import get_llm_route_authority, LLMRouteRequest
     from core.llm import get_llm_supply_authority, FallbackLegality
     from core.llm import get_cognitive_context_authority, CognitiveContextRequest
+    from core.llm import get_cognitive_execution_authority, CognitiveExecutionRequest
 """
 from __future__ import annotations
 
@@ -128,6 +151,16 @@ from core.llm.context_authority import (  # noqa: F401
     refresh_cognitive_context_authority,
 )
 
+# ── L4 canonical cognitive execution semantics authority ──────────────────
+from core.llm.execution_authority import (  # noqa: F401
+    LLM_EXECUTION_AUTHORITY,
+    CognitiveExecutionRequest,
+    CognitiveExecutionResult,
+    CognitiveExecutionAuthority,
+    get_cognitive_execution_authority,
+    refresh_cognitive_execution_authority,
+)
+
 # ── backward-compat re-exports from canonical implementation ─────────────
 from core.multi_llm_router import (  # noqa: F401
     MultiLLMRouter,
@@ -168,6 +201,13 @@ __all__ = [
     "CognitiveContextAuthority",
     "get_cognitive_context_authority",
     "refresh_cognitive_context_authority",
+    # L4 canonical cognitive execution semantics authority
+    "LLM_EXECUTION_AUTHORITY",
+    "CognitiveExecutionRequest",
+    "CognitiveExecutionResult",
+    "CognitiveExecutionAuthority",
+    "get_cognitive_execution_authority",
+    "refresh_cognitive_execution_authority",
     # main router (legacy compat supply layer)
     "MultiLLMRouter",
     "get_llm_router",
