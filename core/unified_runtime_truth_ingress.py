@@ -164,6 +164,16 @@ INGRESS_IS_GRACEFUL_ON_SUBMODULE_UNAVAILABILITY_POLICY: str = (
     "caller."
 )
 
+CONTINUITY_GATE_PRECEDES_ROUTING_POLICY: str = (
+    "POLICY::CONTINUITY_GATE_PRECEDES_ROUTING: "
+    "The unified continuity legality authority MUST be consulted BEFORE "
+    "the message is routed to any sub-ingress path.  An inbound Android "
+    "runtime state update that carries stale session identities or is "
+    "associated with a superseded runtime MUST be rejected before reaching "
+    "the execution-signal, handoff, or participant-truth sub-ingress paths.  "
+    "Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY."
+)
+
 # ---------------------------------------------------------------------------
 # Sub-path routing constants
 # ---------------------------------------------------------------------------
@@ -226,6 +236,11 @@ class RuntimeTruthIngressOutcome:
     reject_reason: str = ""
     sub_outcome: Optional[Any] = None
     message_type: str = ""
+    continuity_rejected: bool = False
+    """True iff the unified continuity legality authority rejected this update."""
+    continuity_legality_verdict: str = ""
+    """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
+    value string (empty when not evaluated)."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -234,7 +249,62 @@ class RuntimeTruthIngressOutcome:
             "degraded": self.degraded,
             "reject_reason": self.reject_reason,
             "message_type": self.message_type,
+            "continuity_rejected": self.continuity_rejected,
+            "continuity_legality_verdict": self.continuity_legality_verdict,
         }
+
+
+# ---------------------------------------------------------------------------
+# Internal: continuity legality helper
+# ---------------------------------------------------------------------------
+
+
+def _check_runtime_ingress_continuity(
+    message: Dict[str, Any], msg_type: str
+) -> tuple:  # Tuple[str, bool]: (verdict_str, is_hard_rejected)
+    """Run the unified continuity legality gate for an inbound runtime update.
+
+    Execution signals use the ONLINE_SIGNAL_INGESTION path; all other types
+    (including handoff responses and participant truth) use ATTACHMENT_RESUME.
+    Returns ``(verdict_str, is_rejected)`` where ``is_rejected`` is True only
+    when the verdict is ``"reject"`` (hard rejection).  ``"require_review"``
+    is treated as advisory and does NOT block routing, consistent with the
+    graceful-degradation policy for this module.
+    """
+    try:
+        from core.unified_continuity_legality_authority import (
+            ContinuityLegalityContext,
+            ContinuityLegalityPath,
+            evaluate_continuity_legality,
+        )
+
+        # Determine path based on message type
+        if msg_type in _EXECUTION_SIGNAL_TYPES:
+            path = ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION
+        else:
+            path = ContinuityLegalityPath.ATTACHMENT_RESUME
+
+        ctx = ContinuityLegalityContext(
+            device_id=str(message.get("device_id") or ""),
+            runtime_session_id=str(message.get("runtime_session_id") or ""),
+            runtime_attachment_session_id=str(
+                message.get("runtime_attachment_session_id") or ""
+            ),
+            durable_session_id=str(message.get("durable_session_id") or ""),
+            signal_id=str(message.get("signal_id") or ""),
+            emission_seq=int(message.get("emission_seq") or 0),
+            contract_id=str(message.get("contract_id") or ""),
+        )
+        report = evaluate_continuity_legality(path, ctx)
+        # Only hard REJECT (stale terminal identity) blocks routing
+        return report.verdict.value, report.verdict.is_hard_rejected()
+    except Exception as _e:
+        logger.debug(
+            "unified_runtime_truth_ingress: continuity gate unavailable "
+            "(non-fatal, passing through): %s",
+            _e,
+        )
+        return "allow", False
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +388,24 @@ def ingest_android_runtime_state_update(
         )
 
     msg_type: str = str(message.get("type") or "").lower().strip()
+
+    # ── Step 0: Unified continuity legality gate ──────────────────────────
+    # Online signal ingestion submits to the same continuity authority as
+    # recovery and replay paths.  Execution signals are evaluated under
+    # ONLINE_SIGNAL_INGESTION; all other types under ATTACHMENT_RESUME.
+    # Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY.
+    _continuity_verdict, _continuity_rejected = _check_runtime_ingress_continuity(
+        message, msg_type
+    )
+    if _continuity_rejected:
+        return RuntimeTruthIngressOutcome(
+            routed_path="rejected",
+            was_reconciled=False,
+            reject_reason=f"continuity_rejected:{_continuity_verdict}",
+            message_type=msg_type,
+            continuity_rejected=True,
+            continuity_legality_verdict=_continuity_verdict,
+        )
 
     # ── Priority 1: Handoff responses ────────────────────────────────────
     if msg_type in _HANDOFF_TYPES:
@@ -449,6 +537,7 @@ __all__ = [
     "INGRESS_ROUTES_TO_CORRECT_SUB_PATH_POLICY",
     "INGRESS_FAIL_CLOSED_ON_UNKNOWN_TYPE_POLICY",
     "INGRESS_IS_GRACEFUL_ON_SUBMODULE_UNAVAILABILITY_POLICY",
+    "CONTINUITY_GATE_PRECEDES_ROUTING_POLICY",
     # Dataclass
     "RuntimeTruthIngressOutcome",
     # Functions

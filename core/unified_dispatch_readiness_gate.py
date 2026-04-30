@@ -118,6 +118,17 @@ ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY: str = (
     "be explicit in every dispatch decision."
 )
 
+DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY: str = (
+    "POLICY::DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY: "
+    "Online dispatch acceptance is NOT exempt from the unified continuity legality "
+    "authority.  The attachment-validity check in evaluate_dispatch_readiness() "
+    "implements the same stale-identity and session-mismatch rules that apply to "
+    "reconnect, replay, delegated recovery, and result ingestion.  This ensures "
+    "that a stale or invalidated attachment cannot proceed to dispatch even on the "
+    "'online' path.  Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY in "
+    "core.unified_continuity_legality_authority."
+)
+
 # ---------------------------------------------------------------------------
 # DispatchReadinessStatus — canonical status vocabulary
 # ---------------------------------------------------------------------------
@@ -763,6 +774,7 @@ __all__ = [
     "REGISTRATION_GAP_BLOCKS_DISPATCH_POLICY",
     "STALE_ATTACHMENT_BLOCKS_DISPATCH_POLICY",
     "ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY",
+    "DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY",
     "DispatchReadinessStatus",
     "DispatchReadinessResult",
     "evaluate_dispatch_readiness",
