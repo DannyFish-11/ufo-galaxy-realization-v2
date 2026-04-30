@@ -188,7 +188,7 @@ V2_OWNS_ORCHESTRATION_TRUTH_POLICY: str = (
 
 EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY: str = (
     "POLICY::EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_V6: "
-    "External runtimes (Android, compat), devices, transports, adapters, "
+    "External participant runtimes, devices, transports, adapters, "
     "and compatibility layers are participant-only contributors to the "
     "distributed agent system.  They may contribute: participant truth "
     "signals, execution signals, continuity input, and compat ingress "
@@ -212,14 +212,15 @@ NO_PARALLEL_AUTHORITY_PERMITTED_POLICY: str = (
 
 COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY: str = (
     "POLICY::COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_V6: "
-    "Compat, legacy, and migration ingress adapters (including Android compat "
-    "WebSocket paths, offline replay, REST callback adapters) are permitted "
-    "as normalisation shims only.  They MUST normalise inbound signals into "
-    "the center-owned canonical schema (NormalizedResultEvent for completion, "
-    "ContinuityLegalityContext for continuity, DispatchReadinessResult for "
-    "readiness, OrchestrationRequest for orchestration) and hand off to the "
-    "canonical center-owned processing chain.  Compat paths MUST NOT "
-    "implement their own final truth decisions after normalisation.  "
+    "Compat, legacy, and migration ingress adapters (including participant "
+    "runtime WebSocket paths, offline replay, REST callback adapters) are "
+    "permitted as normalisation shims only.  They MUST normalise inbound "
+    "signals into the center-owned canonical schema (NormalizedResultEvent "
+    "for completion, ContinuityLegalityContext for continuity, "
+    "DispatchReadinessResult for readiness, OrchestrationRequest for "
+    "orchestration) and hand off to the canonical center-owned processing "
+    "chain.  Compat paths MUST NOT implement their own final truth decisions "
+    "after normalisation.  "
     "PR-V6 center authority boundary closure."
 )
 

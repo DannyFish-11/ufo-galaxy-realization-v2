@@ -24,7 +24,7 @@ from typing import Dict, List
 from pathlib import Path
 from fastapi import FastAPI, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from nodes.common.cors_config import get_cors_origins
 
 # 导入系统管理器
@@ -361,6 +361,35 @@ async def authority_boundary():
         }
     """
     return _get_authority_boundary_status()
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness probe — surfaces V6 center authority boundary status.
+
+    Returns HTTP 200 when all four center authority domain boundaries are
+    INTACT.  Returns HTTP 503 when the boundary is degraded or the V6 module
+    is unavailable, so that readiness probes and load-balancers can surface
+    structural integrity regressions without any per-request overhead.
+
+    This endpoint does **not** gate any request path — it is a boundary /
+    startup / readiness layer check only.
+
+    Response schema::
+
+        {
+          "ready":              bool,
+          "status":             "intact" | "degraded" | "error",
+          "all_domains_intact": bool,
+          "degraded_domains":   list[str],
+          "report_id":          str        (omitted on error)
+        }
+    """
+    boundary = _get_authority_boundary_status()
+    ready = boundary.get("status") == "intact"
+    payload = {"ready": ready, **boundary}
+    status_code = 200 if ready else 503
+    return JSONResponse(content=payload, status_code=status_code)
 
 
 # =============================================================================
