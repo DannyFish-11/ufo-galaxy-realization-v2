@@ -1,4 +1,4 @@
-# Architecture Baseline — Post-PR-009
+# Architecture Baseline — Terminal State After PR-011
 
 > Produced by **PR-010 Consolidation**.  Summarises the Galaxy architecture
 > baseline after the PR-001 through PR-009 sequence.  This document is the
@@ -9,6 +9,14 @@
 > PR-9 (Normalize canonical runtime architecture declarations across layers)
 > to resolve split-brain declarations and establish a single coherent
 > architecture story across all layers.
+>
+> **PR-11 addendum**: Section 9 (Final Architecture Convergence) was added by
+> PR-11 (Final architecture convergence — capstone convergence pass after
+> PR-6 through PR-10).  PR-11 completes the architecture alignment sequence by
+> consolidating residual edge inconsistencies, strengthening final boundary
+> clarity, and confirming the repository presents one coherent terminal
+> architecture state.  The machine-checkable convergence surface is
+> `core.final_architecture_convergence`.
 
 ---
 
@@ -329,7 +337,63 @@ recommended next actions:
 
 ---
 
+## 9. Final Architecture Convergence (PR-11)
+
+PR-11 is the capstone convergence pass for the architecture alignment sequence
+(PR-6 through PR-10).  It completes the series without redesigning the runtime
+by:
+
+1. **Consolidating residual edge inconsistencies** — any naming drift, stale
+   declarations, or weakly articulated boundaries left after PR-6–PR-10.
+2. **Strengthening final boundary clarity** — five boundary sentinels that
+   clearly name each architecture surface (per-request hot path, router
+   cognitive authority, orchestration session scope, participant generic vs.
+   Android concrete, startup/release integrity).
+3. **Removing remaining split-brain terminology** — one coherent terminal
+   architecture vocabulary enforced by importable sentinels.
+4. **Refining existing validation surfaces** — the convergence checks delegate
+   to `core.canonical_layer_model`, `core.terminal_architecture_audit_guards`,
+   and `core.participant_authority_interfaces` rather than duplicating them.
+
+### Five final boundary clarity sentinels (PR-11)
+
+| Sentinel | Architecture surface |
+|---|---|
+| `PER_REQUEST_HOT_PATH_BOUNDARY_SENTINEL` | Every synchronous request; `OpenClawd → CommandRouter`; V4/V6 NOT inserted |
+| `ROUTER_COGNITIVE_AUTHORITY_BOUNDARY_SENTINEL` | L1/L2/L3 fused into `UnifiedLLMRouter`; NOT a shadow stack |
+| `ORCHESTRATION_SESSION_SCOPE_BOUNDARY_SENTINEL` | V4 = multi-step sessions only; NOT the universal per-request gate |
+| `PARTICIPANT_GENERIC_VS_ANDROID_CONCRETE_BOUNDARY_SENTINEL` | `participant_authority_interfaces` above Android; Android NOT removed |
+| `STARTUP_RELEASE_INTEGRITY_BOUNDARY_SENTINEL` | V6 = CI / startup; NEVER in per-request path |
+
+### Three convergence policy sentinels (PR-11)
+
+| Sentinel | Policy |
+|---|---|
+| `CONVERGENCE_PASS_DOES_NOT_REDESIGN_RUNTIME_POLICY` | PR-11 does not redesign runtime or create new layers |
+| `SINGLE_COHERENT_ARCHITECTURE_STORY_POLICY` | Exactly one architecture story after PR-11 |
+| `BOUNDARY_CLARITY_PRESERVED_POLICY` | All five boundary sentinels must remain importable and consistent |
+
+### How to run the convergence checks
+
+```python
+from core.final_architecture_convergence import run_final_convergence_checks
+
+report = run_final_convergence_checks()
+print(report.overall_converged)    # True on a clean system
+print(report.to_dict())
+```
+
+The convergence checks run four sub-checks:
+- `BOUNDARY_SENTINEL_COMPLETENESS` — all five boundary and three policy sentinels present
+- `TERMINAL_GUARD_INTEGRITY` — PR-10 terminal audit guards intact and passing
+- `PARTICIPANT_LAYER_CONSISTENCY` — PR-8 participant-generic layer intact
+- `CANONICAL_LAYER_MODEL_REACHABLE` — PR-9 five-layer model intact
+
+---
+
 *This document was produced by PR-010 (Consolidate architecture invariants
-after PR-001 through PR-009) and updated in PR-10 final purge/hardening
+after PR-001 through PR-009), updated in PR-10 final purge/hardening
 to reflect the legacy purge decisions catalogued in
-`core/legacy_purge_registry.py` and `docs/LEGACY_PURGE_HARDENING.md`.*
+`core/legacy_purge_registry.py` and `docs/LEGACY_PURGE_HARDENING.md`,
+and finalized by PR-11 (Final architecture convergence — capstone convergence
+pass after PR-6 through PR-10).*
