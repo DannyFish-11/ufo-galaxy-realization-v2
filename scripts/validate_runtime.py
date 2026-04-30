@@ -1745,9 +1745,166 @@ def check_runtime_invariant_enforcement() -> None:
         _print_result(r)
 
 
+
+
+# ---------------------------------------------------------------------------
+# 16. V6 Center Authority Boundary (PR-V6)
+# ---------------------------------------------------------------------------
+
+
+def check_center_authority_boundary() -> None:
+    """PR-V6: Verify that the center authority boundary module is present and intact.
+
+    This is the release / CI integrity gate for V6.  It checks:
+
+    a. ``core.center_authority_boundary`` is importable.
+    b. :data:`~core.center_authority_boundary.CENTER_AUTHORITY_BOUNDARY_AUTHORITY`
+       sentinel is non-empty.
+    c. :data:`~core.center_authority_boundary.CENTER_AUTHORITY_BOUNDARY_PR_V6_SENTINEL`
+       sentinel is non-empty.
+    d. All four policy sentinels are present and non-empty.
+    e. :func:`~core.center_authority_boundary.evaluate_center_authority_boundary`
+       returns a report without raising.
+    f. :func:`~core.center_authority_boundary.assert_center_authority_intact`
+       does not raise (all four domains intact on a correctly-wired system).
+    g. Phase 7 of :class:`~core.system_orchestrator.SystemOrchestrator` surfaces
+       ``authority_boundary_status`` in its result data (startup integration).
+
+    Note: V6 is a boundary / startup / health / release gate — it must NOT appear
+    in per-request hot paths (``OpenClawd.process``, ``CommandRouter.route_envelope``).
+    """
+    _section("16. V6 Center Authority Boundary (PR-V6)")
+
+    # 16a. Module importable
+    try:
+        from core.center_authority_boundary import (
+            CENTER_AUTHORITY_BOUNDARY_AUTHORITY,
+            CENTER_AUTHORITY_BOUNDARY_PR_V6_SENTINEL,
+            V2_OWNS_COMPLETION_TRUTH_POLICY,
+            V2_OWNS_CONTINUITY_LEGALITY_TRUTH_POLICY,
+            V2_OWNS_DISPATCH_READINESS_TRUTH_POLICY,
+            V2_OWNS_ORCHESTRATION_TRUTH_POLICY,
+            evaluate_center_authority_boundary,
+            assert_center_authority_intact,
+            CenterAuthorityBoundaryReport,
+        )
+        r = _record(
+            "v6_authority_boundary: core.center_authority_boundary importable",
+            True,
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "v6_authority_boundary: core.center_authority_boundary importable",
+            False,
+            str(exc)[:120],
+        ))
+        return
+
+    # 16b. Authority sentinel
+    r = _record(
+        "v6_authority_boundary: CENTER_AUTHORITY_BOUNDARY_AUTHORITY non-empty",
+        bool(CENTER_AUTHORITY_BOUNDARY_AUTHORITY),
+        str(CENTER_AUTHORITY_BOUNDARY_AUTHORITY)[:80],
+    )
+    _print_result(r)
+
+    # 16c. PR sentinel
+    r = _record(
+        "v6_authority_boundary: CENTER_AUTHORITY_BOUNDARY_PR_V6_SENTINEL non-empty",
+        bool(CENTER_AUTHORITY_BOUNDARY_PR_V6_SENTINEL),
+        str(CENTER_AUTHORITY_BOUNDARY_PR_V6_SENTINEL)[:80],
+    )
+    _print_result(r)
+
+    # 16d. Four policy sentinels
+    for name, val in [
+        ("V2_OWNS_COMPLETION_TRUTH_POLICY", V2_OWNS_COMPLETION_TRUTH_POLICY),
+        ("V2_OWNS_CONTINUITY_LEGALITY_TRUTH_POLICY", V2_OWNS_CONTINUITY_LEGALITY_TRUTH_POLICY),
+        ("V2_OWNS_DISPATCH_READINESS_TRUTH_POLICY", V2_OWNS_DISPATCH_READINESS_TRUTH_POLICY),
+        ("V2_OWNS_ORCHESTRATION_TRUTH_POLICY", V2_OWNS_ORCHESTRATION_TRUTH_POLICY),
+    ]:
+        r = _record(
+            f"v6_authority_boundary: {name} non-empty",
+            bool(val),
+            str(val)[:60],
+        )
+        _print_result(r)
+
+    # 16e. evaluate_center_authority_boundary() returns without raising
+    try:
+        report = evaluate_center_authority_boundary()
+        r = _record(
+            "v6_authority_boundary: evaluate_center_authority_boundary() returns report",
+            isinstance(report, CenterAuthorityBoundaryReport),
+            f"all_domains_intact={report.all_domains_intact} "
+            f"degraded={report.degraded_domains}",
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "v6_authority_boundary: evaluate_center_authority_boundary() callable",
+            False,
+            str(exc)[:120],
+        ))
+        return
+
+    # 16f. assert_center_authority_intact() — warn-only if degraded
+    try:
+        assert_center_authority_intact()
+        r = _record(
+            "v6_authority_boundary: assert_center_authority_intact() — all domains intact",
+            True,
+            "No CenterAuthorityViolation raised",
+        )
+        _print_result(r)
+    except Exception as exc:
+        # Surface as warning: a degraded boundary in a dev/CI environment without
+        # all canonical modules installed is not a hard FAIL, but it must be
+        # visible so the operator can investigate.
+        r = _record(
+            "v6_authority_boundary: assert_center_authority_intact() — boundary check",
+            False,
+            f"boundary degraded or error: {str(exc)[:120]}",
+            warn_only=True,
+        )
+        _print_result(r)
+
+    # 16g. Phase 7 startup integration: SystemOrchestrator exposes
+    #      authority_boundary_status in its READINESS_SUMMARY phase data.
+    try:
+        from core.system_orchestrator import SystemOrchestrator, StartupPhase
+        orch = SystemOrchestrator(continue_on_failure=True)
+        summary = orch.run_startup_sequence()
+        phase7_results = [
+            rr for rr in summary.phase_results
+            if rr.phase == StartupPhase.READINESS_SUMMARY
+        ]
+        has_boundary_data = (
+            bool(phase7_results)
+            and "authority_boundary_status" in phase7_results[0].data
+        )
+        r = _record(
+            "v6_authority_boundary: Phase 7 surfaces authority_boundary_status in data",
+            has_boundary_data,
+            (
+                f"authority_boundary_status="
+                f"{phase7_results[0].data.get('authority_boundary_status', 'missing')}"
+                if phase7_results else "Phase 7 result not found"
+            ),
+        )
+        _print_result(r)
+    except Exception as exc:
+        _print_result(_record(
+            "v6_authority_boundary: Phase 7 startup integration",
+            False,
+            str(exc)[:120],
+        ))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Galaxy runtime integration validator (PR-8 / PR-9 / PR-10 / PR-530 / PR-531)"
+        description="Galaxy runtime integration validator (PR-8 / PR-9 / PR-10 / PR-530 / PR-531 / PR-V6)"
     )
     parser.add_argument(
         "--json",
@@ -1782,6 +1939,7 @@ def main() -> int:
     check_deployment_baseline()
     check_capability_utilization_observability()
     check_runtime_invariant_enforcement()
+    check_center_authority_boundary()
 
     if args.json:
         print(json.dumps(_to_json(), indent=2))

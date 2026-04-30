@@ -223,6 +223,26 @@ monitor = HealthMonitor(manager)
 # API 端点
 # =============================================================================
 
+def _get_authority_boundary_status() -> dict:
+    """Return a snapshot of the V6 center authority boundary for diagnostics.
+
+    This is called from health/readiness endpoints so that authority-boundary
+    structural integrity is observable at runtime without adding any overhead
+    to per-request hot paths.
+    """
+    try:
+        from core.center_authority_boundary import evaluate_center_authority_boundary
+        report = evaluate_center_authority_boundary()
+        return {
+            "status": "intact" if report.all_domains_intact else "degraded",
+            "all_domains_intact": report.all_domains_intact,
+            "degraded_domains": report.degraded_domains,
+            "report_id": report.report_id,
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
 @app.get("/")
 async def root():
     """首页 — JSON status endpoint; UI via main SONARA dashboard at :8080"""
@@ -243,6 +263,13 @@ async def get_status():
         "summary": summary,
         "nodes": results
     }
+
+    # Surface authority boundary integrity (V6) for structural diagnostics.
+    # This is read-only and non-blocking — it does not affect the request path.
+    try:
+        response["authority_boundary"] = _get_authority_boundary_status()
+    except Exception:
+        pass
 
     # Surface federation health summary if available
     try:
@@ -312,6 +339,29 @@ async def slo_metrics_json():
         }
     """
     return get_slo_metrics().snapshot()
+
+@app.get("/api/v1/authority/boundary")
+async def authority_boundary():
+    """V6 center authority boundary integrity status.
+
+    Returns a structured snapshot of the four center authority domain
+    boundaries.  Intended for health dashboards, readiness probes, and
+    diagnostic tooling.
+
+    This endpoint does **not** gate any request path — it is purely
+    observational.
+
+    Schema::
+
+        {
+          "status":             "intact" | "degraded" | "error",
+          "all_domains_intact": bool,
+          "degraded_domains":   list[str],
+          "report_id":          str
+        }
+    """
+    return _get_authority_boundary_status()
+
 
 # =============================================================================
 # 启动服务
