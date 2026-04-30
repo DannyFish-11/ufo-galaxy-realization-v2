@@ -122,6 +122,17 @@ SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY: str = (
     "logic."
 )
 
+CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY: str = (
+    "POLICY::CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER: "
+    "core.canonical_dispatch_slot_authority (PR-V3) is the canonical dispatch-slot "
+    "authority that ALL execution modes MUST consume.  This spine "
+    "(core.unified_orchestration_spine) is the orchestration-layer consumer of "
+    "the canonical dispatch-slot authority: it calls evaluate_canonical_dispatch_slot() "
+    "or get_canonical_dispatch_slots() and dispatches only against SLOT_APPROVED "
+    "results.  DeviceRouter and lower transport layers receive pre-approved slots "
+    "from this spine and MUST NOT perform independent readiness evaluation."
+)
+
 # ---------------------------------------------------------------------------
 # ExecutionMode
 # ---------------------------------------------------------------------------
@@ -596,6 +607,7 @@ __all__ = [
     "PARALLEL_FANOUT_MUST_USE_SPINE_POLICY",
     "WAKE_HANDOFF_DELEGATED_MUST_USE_SPINE_POLICY",
     "SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY",
+    "CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY",
     "ExecutionMode",
     "DeviceOrchestrationSlot",
     "OrchestrationRequest",

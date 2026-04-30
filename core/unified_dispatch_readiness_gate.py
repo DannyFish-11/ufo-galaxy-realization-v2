@@ -129,6 +129,17 @@ DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY: str = (
     "core.unified_continuity_legality_authority."
 )
 
+CANONICAL_DISPATCH_SLOT_AUTHORITY_CONSUMES_THIS_GATE_POLICY: str = (
+    "POLICY::CANONICAL_DISPATCH_SLOT_AUTHORITY_CONSUMES_THIS_GATE: "
+    "core.canonical_dispatch_slot_authority (PR-V3) is the higher-level dispatch-slot "
+    "authority that consumes this gate for dimensions 1-3, 5, and 9 "
+    "(transport readiness, registration validity, attachment validity, capability fit, "
+    "and cross-device reachability).  It additionally evaluates continuity legality, "
+    "execution-mode eligibility, occupancy, policy allowance, and delegated/handoff "
+    "acceptability.  All execution modes MUST use the canonical dispatch-slot "
+    "authority rather than calling this gate directly."
+)
+
 # ---------------------------------------------------------------------------
 # DispatchReadinessStatus — canonical status vocabulary
 # ---------------------------------------------------------------------------
@@ -159,6 +170,25 @@ class DispatchReadinessStatus(str, Enum):
         session for this device.
     BLOCKED_CROSS_DEVICE_ELIGIBILITY
         Cross-device eligibility requirements are not met for this device.
+    BLOCKED_CONTINUITY_LEGALITY
+        The unified continuity legality authority rejected the inbound action
+        for this device.  Dispatch is blocked until continuity legality is
+        re-established.  Evaluated by ``core.canonical_dispatch_slot_authority``
+        (dimension 4) which consumes this gate for lower dimensions.
+    BLOCKED_EXECUTION_MODE_INELIGIBLE
+        Device does not meet the eligibility requirements for the requested
+        execution mode (e.g., device does not support concurrent execution for
+        PARALLEL_FANOUT, or does not support wake-signal delivery for
+        WAKE_ROUTED).  Evaluated by ``core.canonical_dispatch_slot_authority``
+        (dimension 6).
+    BLOCKED_OCCUPANCY
+        Device is fully occupied (maximum concurrent task limit reached or
+        exclusive reservation held by another task).  Evaluated by
+        ``core.canonical_dispatch_slot_authority`` (dimension 7).
+    BLOCKED_POLICY
+        Device-level or system-level dispatch policy rejects this request
+        (device disabled, maintenance mode, rate-limit exhausted).  Evaluated
+        by ``core.canonical_dispatch_slot_authority`` (dimension 8).
     NOT_REGISTERED
         Device is not registered in UDM at all.
     GATE_ERROR
@@ -174,6 +204,10 @@ class DispatchReadinessStatus(str, Enum):
     BLOCKED_CAPABILITY = "blocked_capability"
     BLOCKED_SESSION_VALIDITY = "blocked_session_validity"
     BLOCKED_CROSS_DEVICE_ELIGIBILITY = "blocked_cross_device_eligibility"
+    BLOCKED_CONTINUITY_LEGALITY = "blocked_continuity_legality"
+    BLOCKED_EXECUTION_MODE_INELIGIBLE = "blocked_execution_mode_ineligible"
+    BLOCKED_OCCUPANCY = "blocked_occupancy"
+    BLOCKED_POLICY = "blocked_policy"
     NOT_REGISTERED = "not_registered"
     GATE_ERROR = "gate_error"
 
@@ -775,6 +809,7 @@ __all__ = [
     "STALE_ATTACHMENT_BLOCKS_DISPATCH_POLICY",
     "ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY",
     "DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY",
+    "CANONICAL_DISPATCH_SLOT_AUTHORITY_CONSUMES_THIS_GATE_POLICY",
     "DispatchReadinessStatus",
     "DispatchReadinessResult",
     "evaluate_dispatch_readiness",
