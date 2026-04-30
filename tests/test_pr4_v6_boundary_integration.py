@@ -485,3 +485,120 @@ class TestV6ModuleStructure:
         ):
             with pytest.raises(CenterAuthorityViolation):
                 assert_center_authority_intact()
+
+    def test_evaluator_domain_modules_are_participant_generic(self):
+        """Domain evaluators must not list Android-specific module names.
+
+        The authority-boundary evaluation layer should reference
+        participant-generic canonical modules only.  Android-concrete module
+        paths (e.g. 'core.android_*') are not appropriate at this boundary
+        layer.
+        """
+        import inspect
+        import ast
+        import core.center_authority_boundary as cab
+        source = inspect.getsource(cab)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name.startswith("_evaluate_")
+                and node.name.endswith("_domain")
+            ):
+                func_source = ast.get_source_segment(source, node) or ""
+                assert "android_" not in func_source.lower(), (
+                    f"{node.name}: domain evaluators must not reference "
+                    "Android-specific module names at the authority-boundary layer"
+                )
+
+    def test_policy_sentinels_are_participant_generic(self):
+        """Policy sentinels at the authority-boundary layer must not name Android runtimes."""
+        from core.center_authority_boundary import (
+            EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY,
+            COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY,
+        )
+        # The boundary layer should use participant-generic terminology
+        assert "participant" in EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY.lower(), (
+            "EXTERNAL_SURFACES policy must reference 'participant' semantics"
+        )
+        assert "compat" in COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY.lower(), (
+            "COMPAT_INGRESS policy must reference 'compat' semantics"
+        )
+
+
+# ===========================================================================
+# 6. Readiness probe endpoint
+# ===========================================================================
+
+class TestReadinessProbeEndpoint:
+    """health_monitor./health/ready readiness probe returns 200/503 correctly."""
+
+    def _load_health_monitor_mod(self, name: str = "health_monitor_ready_test"):
+        """Load health_monitor.py with optional deps stubbed out."""
+        import importlib.util
+        import sys
+        for dep in ("httpx", "fastapi", "fastapi.middleware.cors",
+                    "fastapi.responses", "uvicorn"):
+            sys.modules.setdefault(dep, MagicMock())
+        sys.modules.setdefault("system_manager", MagicMock())
+        spec = importlib.util.spec_from_file_location(
+            name, str(PROJECT_ROOT / "health_monitor.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod
+
+    def test_health_ready_endpoint_exists_in_health_monitor(self):
+        """health_monitor must define the /health/ready readiness probe."""
+        content = (PROJECT_ROOT / "health_monitor.py").read_text()
+        assert "/health/ready" in content, (
+            "health_monitor.py must define a /health/ready readiness probe endpoint"
+        )
+
+    def test_health_ready_endpoint_callable(self):
+        """health_ready() function must be defined and callable."""
+        mod = self._load_health_monitor_mod("_hm_ready_callable")
+        assert hasattr(mod, "health_ready"), (
+            "health_monitor must define health_ready() for /health/ready"
+        )
+
+    @_skip_v6
+    def test_helper_status_intact_gives_ready_true(self):
+        """_get_authority_boundary_status() returning 'intact' must yield ready=True payload."""
+        mod = self._load_health_monitor_mod("_hm_ready_intact")
+        intact_report = CenterAuthorityBoundaryReport()
+        intact_report.degraded_domains = []
+        intact_report.all_domains_intact = True
+
+        with patch(
+            "core.center_authority_boundary.evaluate_center_authority_boundary",
+            return_value=intact_report,
+        ):
+            status = mod._get_authority_boundary_status()
+        assert status.get("status") == "intact"
+        # The ready payload should include the status
+        assert status.get("all_domains_intact") is True
+
+    @_skip_v6
+    def test_helper_status_degraded_gives_degraded(self):
+        """_get_authority_boundary_status() returning 'degraded' surfaces degraded domains."""
+        mod = self._load_health_monitor_mod("_hm_ready_degraded")
+        degraded_report = CenterAuthorityBoundaryReport()
+        degraded_report.degraded_domains = ["orchestration_truth"]
+        degraded_report.all_domains_intact = False
+
+        with patch(
+            "core.center_authority_boundary.evaluate_center_authority_boundary",
+            return_value=degraded_report,
+        ):
+            status = mod._get_authority_boundary_status()
+        assert status.get("status") == "degraded"
+        assert "orchestration_truth" in status.get("degraded_domains", [])
+
+    def test_health_ready_source_uses_503_on_not_ready(self):
+        """health_ready() source must use 503 status code for non-intact boundaries."""
+        content = (PROJECT_ROOT / "health_monitor.py").read_text()
+        assert "503" in content, (
+            "health_monitor.py must use HTTP 503 in the /health/ready endpoint "
+            "when the authority boundary is not intact"
+        )
