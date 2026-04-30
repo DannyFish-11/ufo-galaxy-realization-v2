@@ -4,6 +4,70 @@
 > baseline after the PR-001 through PR-009 sequence.  This document is the
 > single authoritative reference for canonical paths, authority chain,
 > legacy policy, and completion evaluation.
+>
+> **PR-9 addendum**: Section 0 (Canonical Runtime Layer Model) was added by
+> PR-9 (Normalize canonical runtime architecture declarations across layers)
+> to resolve split-brain declarations and establish a single coherent
+> architecture story across all layers.
+
+---
+
+## 0. Canonical Runtime Layer Model (PR-9)
+
+The Galaxy system defines **five canonical runtime layers**.  Each layer has a
+distinct scope, a set of canonical modules, and one or more "NOT" boundary
+invariants that prevent split-brain declarations.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 5 — Startup / Readiness / Health / Release Integrity (V6)    │
+│  core.release_blocking_gate                                         │
+│  NOT a per-request runtime gate                                     │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ CI / startup only
+┌────────────────────────────▼────────────────────────────────────────┐
+│  Layer 4 — Multi-Step Orchestration Spine (V4)                      │
+│  core.unified_orchestration_spine                                   │
+│  NOT the universal synchronous per-request gate                     │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ complex sessions only
+┌────────────────────────────▼────────────────────────────────────────┐
+│  Layer 3 — Per-Request Hot Path                                     │
+│  core.openclawd → core.agent.kernel → core.command_router           │
+│  Exercised on every synchronous request                             │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ LLM calls via UnifiedLLMRouter
+┌────────────────────────────▼────────────────────────────────────────┐
+│  Layer 2 — Router-Level Cognitive Authority (L1/L2/L3)              │
+│  L1: core.llm.route_authority   (route selection)                   │
+│  L2: core.llm.supply_authority  (supply/availability legality)      │
+│  L3: core.llm.context_authority (context enrichment/governance)     │
+│  Facade: core.unified.llm_router.UnifiedLLMRouter                  │
+│  NOT a detached shadow stack                                        │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ completion truth enforced
+┌────────────────────────────▼────────────────────────────────────────┐
+│  Layer 1 — Completion Truth Backbone (V2/V5)                        │
+│  core.canonical_completion_ingress                                  │
+│  core.canonical_group_completion_closure (V5)                       │
+│  core.durable_truth_authority_chain                                 │
+│  NOT optional soft signaling                                        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Layer boundary invariants (split-brain prevention)
+
+| Invariant | What it prevents |
+|---|---|
+| **V4 is NOT a per-request gate** | V4 (`unified_orchestration_spine`) governs multi-step orchestration sessions only.  Simple per-request execution remains on the per-request hot path (Layer 3). |
+| **V6 is NOT a per-request gate** | V6 (`release_blocking_gate`) is evaluated at CI time and system startup, never inserted into the synchronous request path. |
+| **L1/L2/L3 belongs to the router layer** | L1/L2/L3 is fused into `UnifiedLLMRouter`; it is NOT a detached shadow stack running independently alongside the hot path. |
+| **Completion truth is enforced** | Completion truth (`CanonicalCompletionIngress` + V5 closure) is NOT optional soft signaling; callers must use the canonical backbone. |
+
+The canonical layer model is machine-checkable via:
+- `core.canonical_layer_model.run_layer_model_invariants()`
+- `tools.architecture.architecture_invariants.check_canonical_layer_model_consistent()`
+- `tools.architecture.architecture_invariants.run_consolidation_invariants()` (always includes the layer model check)
 
 ---
 
