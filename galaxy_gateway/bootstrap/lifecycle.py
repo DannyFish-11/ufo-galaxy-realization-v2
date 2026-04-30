@@ -131,6 +131,57 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     except Exception as e:
         logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e)
 
+    # ── Stale-device cleanup background task ──
+    # Periodically calls android_bridge.cleanup_stale_devices() to mark
+    # devices whose heartbeats have exceeded the 120s liveness window as
+    # disconnected in the transport cache.  This ensures the routing layer
+    # never dispatches to a device that has silently gone offline.
+    # Cleanup interval: 90 s (heartbeat timeout is 120 s, OkHttp TCP ping 20 s).
+    _stale_cleanup_task: object = None
+    try:
+        import asyncio as _asyncio
+        from galaxy_gateway.android_bridge import android_bridge as _android_bridge
+
+        async def _periodic_stale_cleanup() -> None:
+            """Background task: prune stale AndroidBridge transport cache entries."""
+            _cleanup_interval = float(
+                os.getenv("GALAXY_STALE_CLEANUP_INTERVAL_S", "90")
+            )
+            _cleanup_timeout = float(
+                os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120")
+            )
+            while True:
+                await _asyncio.sleep(_cleanup_interval)
+                try:
+                    await _android_bridge.cleanup_stale_devices(
+                        timeout_seconds=_cleanup_timeout
+                    )
+                    logger.debug(
+                        "Stale device cleanup pass complete "
+                        "(interval=%.0fs timeout=%.0fs)",
+                        _cleanup_interval,
+                        _cleanup_timeout,
+                    )
+                except Exception as _cln_err:
+                    logger.debug(
+                        "Stale device cleanup pass failed (non-fatal): %s",
+                        _cln_err,
+                    )
+
+        _stale_cleanup_task = _asyncio.create_task(_periodic_stale_cleanup())
+        logger.info(
+            "Stale-device cleanup background task started "
+            "(interval=%ss, timeout=%ss)",
+            os.getenv("GALAXY_STALE_CLEANUP_INTERVAL_S", "90"),
+            os.getenv("GALAXY_STALE_CLEANUP_TIMEOUT_S", "120"),
+        )
+    except Exception as _task_err:
+        logger.warning(
+            "Stale-device cleanup background task could not be started "
+            "(non-fatal): %s",
+            _task_err,
+        )
+
     # ── MasterBrain: cloud-side orchestrator ──
     if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
         try:
@@ -206,6 +257,13 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # Shutdown
     # ------------------------------------------------------------------
     logger.info("Shutting down Galaxy Gateway...")
+
+    # Cancel the stale-device cleanup background task first.
+    if _stale_cleanup_task is not None:
+        try:
+            _stale_cleanup_task.cancel()  # type: ignore[union-attr]
+        except Exception:
+            pass
 
     if app.state.heartbeat_scheduler is not None:
         try:

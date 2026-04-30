@@ -292,6 +292,20 @@ class MessageType(str, Enum):
     HANDOFF_RESULT = "handoff_result"
     HANDOFF_FAILURE = "handoff_failure"
 
+    # === Android Lifecycle / Governance Uplink Reports ===
+    # These types are emitted by GalaxyConnectionService.kt on the Android side
+    # (MsgType.CANCEL_RESULT, DEVICE_READINESS_REPORT, DEVICE_GOVERNANCE_REPORT,
+    # DEVICE_ACCEPTANCE_REPORT, DEVICE_STRATEGY_REPORT).  They were previously
+    # absent from this enum which caused MessageType('cancel_result') to raise
+    # ValueError and the gateway to return UNKNOWN_MESSAGE_TYPE to Android.
+    # They are now registered here so the dispatch table can route them to
+    # handle_generic_forward for structured ACK logging instead of an error.
+    CANCEL_RESULT = "cancel_result"
+    DEVICE_READINESS_REPORT = "device_readiness_report"
+    DEVICE_GOVERNANCE_REPORT = "device_governance_report"
+    DEVICE_ACCEPTANCE_REPORT = "device_acceptance_report"
+    DEVICE_STRATEGY_REPORT = "device_strategy_report"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

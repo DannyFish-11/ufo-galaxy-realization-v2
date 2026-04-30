@@ -171,6 +171,11 @@ _LEGACY_TYPE_MAP: dict = {
     # high-level autonomous task aliases
     "goal_execute": MessageType.GOAL_EXECUTION,
     "goal": MessageType.GOAL_EXECUTION,
+    # Android error-path alias: GalaxyConnectionService.kt emits "goal_result" on
+    # failure/cancellation instead of the canonical "goal_execution_result".
+    # Mapping it here ensures v1.0/v2.0 clients are correctly normalised.
+    # AIP v3.0 clients pass through as-is and are handled by MessageType.GOAL_RESULT.
+    "goal_result": MessageType.GOAL_EXECUTION_RESULT,
     "parallel_task": MessageType.PARALLEL_SUBTASK,
     # parallel result alias – devices/nodes may send "parallel_result"
     "parallel_result": MessageType.PARALLEL_RESULT,
