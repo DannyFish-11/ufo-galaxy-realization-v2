@@ -135,7 +135,12 @@ ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY: str = (
     "core.android_participant_session_state is the canonical source of "
     "session-level lifecycle state for Android participant sessions in the "
     "V2 delegated runtime.  advance_participant_session() is the single "
-    "path for phase transitions."
+    "path for phase transitions.  "
+    "This module is the CONCRETE Android implementation of the participant-"
+    "generic session lifecycle contract defined in "
+    "core.participant_authority_interfaces (PR-8).  "
+    "AndroidParticipantSessionPhase implements ParticipantSessionPhase; "
+    "AndroidParticipantSessionSignal implements ParticipantSessionSignal."
 )
 
 ANDROID_PARTICIPANT_SESSION_STATE_CONTRACT_VERSION: str = "1.0"

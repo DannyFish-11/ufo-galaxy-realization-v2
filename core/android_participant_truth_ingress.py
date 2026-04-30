@@ -202,7 +202,10 @@ except ImportError:  # pragma: no cover
 ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY: str = (
     "core.android_participant_truth_ingress::PR4V2::"
     "android-participant-session-runtime-truth-ingress-and-canonical-"
-    "reconciliation-into-v2-orchestration-state"
+    "reconciliation-into-v2-orchestration-state::"
+    "concrete-android-implementation-of-participant-generic-result-ingress-"
+    "contract-defined-in-core.participant_authority_interfaces-PR-8::"
+    "AndroidParticipantTruthKind-implements-ParticipantResultKind"
 )
 
 # ---------------------------------------------------------------------------
