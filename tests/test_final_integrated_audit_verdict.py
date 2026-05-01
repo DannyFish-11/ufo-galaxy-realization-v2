@@ -477,7 +477,7 @@ class TestInvariantGuard:
         original = FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"]
         FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"] = CapabilityVerdict.COMPLETE
         try:
-            with pytest.raises(AssertionError):
+            with pytest.raises(AssertionError, match="lifecycle_android_reconnect_perpetual"):
                 assert_final_verdict_invariants()
         finally:
             FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"] = original
