@@ -78,6 +78,52 @@ class TestFreshAuditInvariants:
         """The full invariant suite must pass without raising AssertionError."""
         assert_fresh_audit_invariants()
 
+    def test_transport_invariants(self) -> None:
+        """Transport area: overall must be COMPLETE and both key wire paths confirmed."""
+        assert TRANSPORT_OVERALL == CodeVerdictLevel.COMPLETE, (
+            "transport_overall must be COMPLETE"
+        )
+        assert TRANSPORT_RECONCILIATION_SIGNAL_WIRE == CodeVerdictLevel.COMPLETE, (
+            "transport_reconciliation_signal_wire must be COMPLETE (PR-51 closed both sides)"
+        )
+        assert TRANSPORT_HANDOFF_V2_RESPONSE == CodeVerdictLevel.COMPLETE, (
+            "transport_handoff_v2_response must be COMPLETE"
+        )
+
+    def test_lifecycle_perpetual_reconnect_invariant(self) -> None:
+        """Lifecycle: perpetual reconnect must NOT be MISSING (PR-Block1)."""
+        assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL != CodeVerdictLevel.MISSING, (
+            "Perpetual reconnect must NOT be MISSING — PR-Block1 watchdog is implemented"
+        )
+        assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL == CodeVerdictLevel.RUNNABLE_BUT_CONDITIONAL, (
+            "Perpetual reconnect must be RUNNABLE_BUT_CONDITIONAL (requires activation flags)"
+        )
+
+    def test_multi_device_activation_barrier_invariant(self) -> None:
+        """Multi-device: activation barriers must be documented and zero-config must be MISSING."""
+        assert MULTI_DEVICE_ACTIVATION_BARRIER_EXISTS is True, (
+            "Activation barrier must be documented as existing (cross_device_enabled=false default)"
+        )
+        assert MULTI_DEVICE_PLUG_AND_RUN == CodeVerdictLevel.MISSING, (
+            "Plug-and-run must be MISSING (no zero-config provisioning)"
+        )
+        assert MULTI_DEVICE_CROSS_REPO_SIGNAL_FLOW != CodeVerdictLevel.MISSING, (
+            "Cross-repo signal flow must NOT be MISSING (ReconciliationSignal wire closed)"
+        )
+
+    def test_governance_invariant(self) -> None:
+        """Governance: overall must be COMPLETE (CI-enforcing, not advisory)."""
+        assert GOVERNANCE_OVERALL == CodeVerdictLevel.COMPLETE, (
+            "governance_overall must be COMPLETE (governance_gate_enforcement.yml hard-blocks CI)"
+        )
+
+    def test_final_verdict_invariant(self) -> None:
+        """Final verdict must be OPERATIONALLY_CLOSED_CONDITIONAL."""
+        assert FRESH_SYSTEM_VERDICT == FreshSystemVerdict.OPERATIONALLY_CLOSED_CONDITIONAL, (
+            "Final verdict must be OPERATIONALLY_CLOSED_CONDITIONAL — all wire paths are "
+            "implementation-complete; system is deployment-conditional only."
+        )
+
 
 # =============================================================================
 # SECTION 2 — Transport / Protocol
