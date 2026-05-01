@@ -289,12 +289,12 @@ class TestDispatchExecution:
         """Disconnect/reconnect risk is PARTIAL: short-window covered, long-outage not."""
         assert DISPATCH_DISCONNECT_RECONNECT_RISK == CapabilityVerdict.PARTIAL
 
-    def test_D07_durability_across_restart_missing(self) -> None:
-        """GAP: Restart durability is MISSING: pending buffer lost on V2 restart."""
-        assert DISPATCH_DURABILITY_ACROSS_RESTART == CapabilityVerdict.MISSING, (
-            "Pending-delivery buffer is in-process only. "
-            "V2 restart loses all buffered dispatch messages. "
-            "This MUST remain MISSING until the buffer is backed by durable storage."
+    def test_D07_durability_across_restart_runnable_but_conditional(self) -> None:
+        """GAP FIXED: Restart durability is RUNNABLE_BUT_CONDITIONAL — durable buffer added."""
+        assert DISPATCH_DURABILITY_ACROSS_RESTART == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL, (
+            "Pending-delivery buffer is now backed by a durable JSON snapshot. "
+            "Messages survive V2 restarts within the TTL window. "
+            "This MUST remain RUNNABLE_BUT_CONDITIONAL (not MISSING) while the durable buffer exists."
         )
 
     def test_D08_dispatch_overall_conditional(self) -> None:
@@ -418,22 +418,20 @@ class TestFinalSystemVerdict:
         )
 
     def test_F05_gaps_to_complete_count(self) -> None:
-        """There are exactly 5 documented remaining gaps to achieve COMPLETE."""
-        assert len(GAPS_TO_COMPLETE) == 5, (
-            f"Expected 5 gaps_to_complete, got {len(GAPS_TO_COMPLETE)}. "
-            "If a gap is resolved, update the corresponding capability verdict "
+        """There are exactly 4 documented remaining gaps to achieve COMPLETE (GAP-4 resolved)."""
+        assert len(GAPS_TO_COMPLETE) == 4, (
+            f"Expected 4 gaps_to_complete, got {len(GAPS_TO_COMPLETE)}. "
+            "GAP-4 (durable pending delivery) was resolved by DurablePendingDeliveryBuffer. "
+            "If another gap is resolved, update the corresponding capability verdict "
             "and remove the gap from this list."
         )
 
     def test_F06_gaps_cover_critical_areas(self) -> None:
-        """Gaps list covers all four critical areas."""
+        """Gaps list covers all remaining critical areas (durable buffer gap now closed)."""
         gaps_text = " ".join(GAPS_TO_COMPLETE).lower()
         assert "reconnect" in gaps_text, "gaps_to_complete must cover reconnect gap"
         assert "reconciliation" in gaps_text, "gaps_to_complete must cover ReconciliationSignal gap"
         assert "handoff" in gaps_text, "gaps_to_complete must cover HandoffEnvelopeV2 gap"
-        assert "durable" in gaps_text or "buffer" in gaps_text, (
-            "gaps_to_complete must cover durable buffer gap"
-        )
         assert "governance" in gaps_text or "gate" in gaps_text, (
             "gaps_to_complete must cover governance gate gap"
         )
