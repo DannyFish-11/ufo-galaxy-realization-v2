@@ -1,0 +1,166 @@
+name: Operational Enablement Audit
+
+# =============================================================================
+# Dual-Repo Operational Enablement Audit CI
+#
+# This workflow runs the machine-checkable sentinels in
+# core/operational_enablement_audit.py and the test suite in
+# tests/test_operational_enablement_audit.py.
+#
+# Purpose:
+#   Verify that the code-grounded operational enablement audit facts remain
+#   self-consistent. All constants in the audit module derive from direct
+#   inspection of real source files in both repositories:
+#     - DannyFish-11/ufo-galaxy-realization-v2
+#     - DannyFish-11/ufo-galaxy-android
+#
+# Key facts enforced:
+#   1. V2 has 5 config source layers; process env is highest precedence.
+#   2. Android has 3 config layers; SharedPreferences is highest.
+#   3. Android serverUrl and cross_device are runtime-editable without rebuild.
+#   4. cross_device_enabled defaults to false.
+#   5. Desktop status board IS a bounded write-through control surface.
+#   6. Agent tri-state has exactly 3 modes; UI shell has 4; fabric has 2.
+#   7. All 3 Android model SHA-256 checksums are null (not verified).
+#   8. Provisioning pipeline has exactly 8 formal stages.
+#   9. Final verdict is IMPLEMENTATION_COMPLETE_DEVELOPER_OPS_ORIENTED.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/operational_enablement_audit.py"
+      - "tests/test_operational_enablement_audit.py"
+      - "audit/DUAL_REPO_OPERATIONAL_ENABLEMENT_AUDIT_2026.md"
+      - ".github/workflows/operational_enablement_audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/operational_enablement_audit.py"
+      - "tests/test_operational_enablement_audit.py"
+      - "audit/DUAL_REPO_OPERATIONAL_ENABLEMENT_AUDIT_2026.md"
+      - ".github/workflows/operational_enablement_audit.yml"
+  workflow_dispatch:
+
+jobs:
+  operational-enablement-audit:
+    name: Operational Enablement Audit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run operational enablement audit test suite
+        run: |
+          python -m pytest \
+            tests/test_operational_enablement_audit.py \
+            -v \
+            --tb=short \
+            --no-header
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Verify audit summary invariants
+        run: |
+          python - <<'EOF'
+          import sys
+          import os
+          sys.path.insert(0, os.getcwd())
+
+          from core.operational_enablement_audit import (
+              get_audit_summary,
+              FINAL_VERDICT,
+              OperabilityTier,
+              ANDROID_CROSS_DEVICE_DEFAULT,
+              ANDROID_SERVER_URL_RUNTIME_EDITABLE,
+              DESKTOP_BOARD_IS_CONTROL_SURFACE,
+              ANDROID_MODEL_PROVISIONING_AUTO_ON_STARTUP,
+              TRI_STATE_IS_REAL_RUNTIME_MODE,
+              CHINESE_SUMMARY,
+          )
+
+          summary = get_audit_summary()
+
+          failures = []
+
+          # V2 config source layers
+          if summary["v2_config_sources_count"] != 5:
+              failures.append(f"Expected 5 V2 config sources, got {summary['v2_config_sources_count']}")
+
+          # Android config layers
+          if len(summary.get("tri_state_modes", [])) != 3:
+              failures.append(f"Expected 3 tri-state modes, got {len(summary.get('tri_state_modes', []))}")
+
+          # Android cross device default
+          if ANDROID_CROSS_DEVICE_DEFAULT is not False:
+              failures.append("ANDROID_CROSS_DEVICE_DEFAULT must be False")
+
+          # Android runtime editable
+          if ANDROID_SERVER_URL_RUNTIME_EDITABLE is not True:
+              failures.append("ANDROID_SERVER_URL_RUNTIME_EDITABLE must be True")
+
+          # Desktop board control surface
+          if DESKTOP_BOARD_IS_CONTROL_SURFACE is not True:
+              failures.append("DESKTOP_BOARD_IS_CONTROL_SURFACE must be True")
+
+          # Tri-state is real runtime mode
+          if TRI_STATE_IS_REAL_RUNTIME_MODE is not True:
+              failures.append("TRI_STATE_IS_REAL_RUNTIME_MODE must be True")
+
+          # Android model provisioning pipeline stages
+          if len(summary.get("android_model_provisioning_pipeline_stages", [])) != 8:
+              failures.append(
+                  f"Expected 8 provisioning stages, "
+                  f"got {len(summary.get('android_model_provisioning_pipeline_stages', []))}"
+              )
+
+          # Android models count
+          if summary.get("android_models_count") != 3:
+              failures.append(f"Expected 3 Android models, got {summary.get('android_models_count')}")
+
+          # Final verdict
+          if FINAL_VERDICT != OperabilityTier.IMPL_COMPLETE_DEVOPS_ORIENTED:
+              failures.append(
+                  f"Expected IMPL_COMPLETE_DEVOPS_ORIENTED verdict, "
+                  f"got {FINAL_VERDICT.value}"
+              )
+
+          # Chinese summary present
+          if len(CHINESE_SUMMARY) < 500:
+              failures.append("CHINESE_SUMMARY is unexpectedly short")
+
+          if failures:
+              print("❌ AUDIT INVARIANT FAILURES:")
+              for f in failures:
+                  print(f"   - {f}")
+              sys.exit(1)
+
+          print("=" * 70)
+          print("OPERATIONAL ENABLEMENT AUDIT — INVARIANT SUMMARY")
+          print("=" * 70)
+          print(f"  Final Verdict     : {FINAL_VERDICT.value}")
+          print(f"  V2 config sources : {summary['v2_config_sources_count']}")
+          print(f"  Tri-state modes   : {summary['tri_state_modes']}")
+          print(f"  Android models    : {summary['android_models_count']}")
+          print(f"  Pipeline stages   : {len(summary['android_model_provisioning_pipeline_stages'])}")
+          print(f"  cross_device def  : {ANDROID_CROSS_DEVICE_DEFAULT}")
+          print(f"  Desktop control   : {DESKTOP_BOARD_IS_CONTROL_SURFACE}")
+          print("=" * 70)
+          print("✅ All audit invariants passed.")
+          sys.exit(0)
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
