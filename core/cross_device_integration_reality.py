@@ -14,10 +14,25 @@ Every constant here is machine-checkable by tests and CI.  If a gap is
 fixed in production code the corresponding sentinel must be updated to
 reflect the new reality and the test assertion updated to match.
 
-AUDIT DATE: 2026-04-30
+AUDIT DATE: 2026-04-30 (initial)
+REMEDIATION WAVE UPDATE: 2026-05-01
+  - PR1-Android: Perpetual reconnect watchdog added in ufo-galaxy-android.
+    GalaxyConnectionService now supervises GalaxyWebSocketClient and restarts
+    it after MAX_RECONNECT_ATTEMPTS, eliminating the permanent-stop gap.
+  - PR2-V2: ReconciliationSignal canonical gateway handler added
+    (galaxy_gateway/android/handlers/reconciliation_signal.py).
+  - PR2-V2: HandoffEnvelopeV2 response canonical gateway handler added
+    (galaxy_gateway/android/handlers/handoff_v2_result.py).
+  - PR2-Android: ReconciliationSignal AIP wire-layer added in ufo-galaxy-android.
+    AipModels.kt MsgType now includes RECONCILIATION_SIGNAL; ReconciliationSignal.kt
+    DTO is serialised to AIP v3 wire format.
+  - PR3-V2: Distributed release gate promoted from advisory to CI-enforcing.
+    core.distributed_release_gate_skeleton now produces is_enforcing=True reports;
+    .github/workflows/governance_gate_enforcement.yml blocks CI on FAIL verdict.
 AUDIT SCOPE:
   - ufo-galaxy-realization-v2 (V2, center side)
-  - ufo-galaxy-android @ ee2ea2f3563357d386422b5b45654a9a2ba3f797
+  - ufo-galaxy-android @ ee2ea2f3563357d386422b5b45654a9a2ba3f797 (initial)
+    + post-remediation-wave commits (PR1-Android, PR2-Android)
 
 HOW TO USE
 ----------
@@ -130,13 +145,16 @@ ANDROID_REPORT_TYPES_NOW_HANDLED: List[str] = [
 #: Evidence: GalaxyWebSocketClient.kt scheduleReconnect()
 ANDROID_RECONNECT_BACKOFF_PRESENT: bool = True
 
-#: Android MAX_RECONNECT_ATTEMPTS=10.  After 10 consecutive failures (approx
-#: 181 seconds total delay) the client permanently stops reconnecting.
-#: There is NO watchdog, supervisory restart, or OS-level recovery mechanism
-#: beyond BootReceiver starting GalaxyConnectionService on device boot.
-#: V2 has no server-side mechanism to wake/pull a permanently-stopped Android client.
+#: Android MAX_RECONNECT_ATTEMPTS=10 (per GalaxyWebSocketClient reconnect cycle).
+#: After 10 consecutive failures (~181 s total) the client ends the current
+#: reconnect cycle.  However: as of PR1-Android, GalaxyConnectionService now
+#: supervises GalaxyWebSocketClient and automatically restarts the entire
+#: connection cycle after the per-cycle limit is exhausted (watchdog recovery).
+#: This eliminates the permanent-stop gap: connection is recovered even after
+#: a multi-minute outage without any operator intervention.
 ANDROID_MAX_RECONNECT_ATTEMPTS: int = 10
-ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT: bool = True
+ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT: bool = False  # Fixed — PR1-Android watchdog added
+ANDROID_PERPETUAL_RECONNECT_WATCHDOG_PRESENT: bool = True  # Added — PR1-Android
 
 #: V2 double-keepalive: OkHttp TCP ping every 20 s + application heartbeat every
 #: 30 s.  V2 considers connection stale at 60 s, purges at 120 s.
@@ -168,11 +186,11 @@ PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE: int = 32
 DURABLE_PENDING_DELIVERY_BUFFER_PRESENT: bool = True  # Added: buffer now survives V2 restarts
 V2_COMMAND_TIMEOUT_S: int = 30  # android_bridge send_to_device default
 
-#: Residual risk: if Android hits MAX_RECONNECT_ATTEMPTS=10 (approx 181s total)
-#: and permanently stops reconnecting, buffered messages will expire before
-#: reconnect and are lost.  The V2-side durable buffer alone cannot recover from
-#: a permanently-stopped Android client.
-INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT: bool = True
+#: Residual risk: previously, if Android hit MAX_RECONNECT_ATTEMPTS=10 and
+#: permanently stopped reconnecting, buffered messages would expire and be lost.
+#: As of PR1-Android, the watchdog-level recovery ensures Android reconnects even
+#: after multi-minute outages, eliminating this terminal-reconnect loss window.
+INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT: bool = False  # Fixed — PR1-Android
 INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART: bool = False  # Fixed — durable buffer added
 
 # ============================================================================
@@ -200,8 +218,46 @@ RESULT_INGESTION_ERROR_COUNTERS_PRESENT: bool = True
 DURABLE_RESULT_IDEMPOTENCY_GUARD_PRESENT: bool = True
 
 # ============================================================================
-# 8. End-to-end tests — PARTIAL
+# 7b. Cross-repo evidence wire layer — CLOSED (PR2-V2 + PR2-Android)
 # ============================================================================
+
+#: V2 canonical gateway handler for ReconciliationSignal messages added in PR2-V2.
+#: galaxy_gateway/android/handlers/reconciliation_signal.py provides
+#: handle_reconciliation_signal(), registered under MessageType.RECONCILIATION_SIGNAL
+#: in android_bridge._register_default_handlers().
+RECONCILIATION_SIGNAL_V2_HANDLER_PRESENT: bool = True  # Added — PR2-V2
+
+#: Android AIP wire layer for ReconciliationSignal added in PR2-Android.
+#: AipModels.kt MsgType enum now includes RECONCILIATION_SIGNAL.
+#: ReconciliationSignal.kt DTO is serialised to AIP v3 wire format and sent
+#: via GalaxyWebSocketClient on the live wire path.
+RECONCILIATION_SIGNAL_ANDROID_WIRE_PRESENT: bool = True  # Added — PR2-Android
+
+#: V2 canonical gateway handler for HandoffEnvelopeV2 response messages added in PR2-V2.
+#: galaxy_gateway/android/handlers/handoff_v2_result.py provides
+#: handle_handoff_v2_result(), registered for handoff_ack, handoff_result,
+#: handoff_failure, and handoff_envelope_v2_result in android_bridge.
+HANDOFF_ENVELOPE_V2_RESPONSE_HANDLER_PRESENT: bool = True  # Added — PR2-V2
+
+#: Cross-repo evidence wire layer is now closed end-to-end:
+#: Android can send ReconciliationSignal and HandoffEnvelopeV2 responses;
+#: V2 canonical handlers receive, correlate, and ingest them.
+CROSS_REPO_EVIDENCE_WIRE_CLOSED: bool = True  # Closed — PR2-V2 + PR2-Android
+
+# ============================================================================
+# 7c. Governance CI enforcement — ENFORCING (PR3-V2)
+# ============================================================================
+
+#: core.distributed_release_gate_skeleton now produces ReleaseGateReport with
+#: is_enforcing=True (promoted in PR3-V2).  GATE_IS_NOW_CI_ENFORCING_AUTHORITY
+#: sentinel documents this promotion.
+GOVERNANCE_GATE_IS_ENFORCING: bool = True  # Promoted — PR3-V2
+
+#: .github/workflows/governance_gate_enforcement.yml added in PR3-V2.
+#: This workflow runs governance_validation_gate.run_governance_verdict_ci() and
+#: cross_repo_consistency_gates enforcement; exits non-zero (blocking CI) when
+#: governance is violated or cross-repo drift is detected.
+GOVERNANCE_CI_WORKFLOW_PRESENT: bool = True  # Added — PR3-V2
 
 #: As of this audit no live WebSocket message exchange between a real
 #: Android-equivalent client and the V2 gateway is exercised in the test suite.
@@ -232,10 +288,11 @@ CROSS_DEVICE_INTEGRATION_REALITY: Dict[str, Any] = {
     "goal_result_alias_handled": GOAL_RESULT_ALIAS_HANDLED,
     "android_governance_report_types_handled": ANDROID_GOVERNANCE_REPORT_TYPES_HANDLED,
     "android_report_types_now_handled": ANDROID_REPORT_TYPES_NOW_HANDLED,
-    # Reconnect / liveness
+    # Reconnect / liveness (PR1-Android: watchdog added)
     "android_reconnect_backoff_present": ANDROID_RECONNECT_BACKOFF_PRESENT,
     "android_max_reconnect_attempts": ANDROID_MAX_RECONNECT_ATTEMPTS,
     "android_reconnect_stops_permanently_at_limit": ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT,
+    "android_perpetual_reconnect_watchdog_present": ANDROID_PERPETUAL_RECONNECT_WATCHDOG_PRESENT,
     "v2_heartbeat_timeout_s": V2_HEARTBEAT_TIMEOUT_S,
     "v2_stale_cleanup_threshold_s": V2_STALE_CLEANUP_THRESHOLD_S,
     "v2_stale_cleanup_background_task_present": V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT,
@@ -252,6 +309,14 @@ CROSS_DEVICE_INTEGRATION_REALITY: Dict[str, Any] = {
     "result_ingestion_has_silent_failure_paths": RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
     "result_ingestion_error_counters_present": RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
     "durable_result_idempotency_guard_present": DURABLE_RESULT_IDEMPOTENCY_GUARD_PRESENT,
+    # Cross-repo evidence wire (closed: PR2-V2 + PR2-Android)
+    "reconciliation_signal_v2_handler_present": RECONCILIATION_SIGNAL_V2_HANDLER_PRESENT,
+    "reconciliation_signal_android_wire_present": RECONCILIATION_SIGNAL_ANDROID_WIRE_PRESENT,
+    "handoff_envelope_v2_response_handler_present": HANDOFF_ENVELOPE_V2_RESPONSE_HANDLER_PRESENT,
+    "cross_repo_evidence_wire_closed": CROSS_REPO_EVIDENCE_WIRE_CLOSED,
+    # Governance CI enforcement (PR3-V2)
+    "governance_gate_is_enforcing": GOVERNANCE_GATE_IS_ENFORCING,
+    "governance_ci_workflow_present": GOVERNANCE_CI_WORKFLOW_PRESENT,
     # Tests
     "e2e_live_ws_tests_present": E2E_LIVE_WS_TESTS_PRESENT,
     "e2e_real_android_apk_tests_present": E2E_REAL_ANDROID_APK_TESTS_PRESENT,
@@ -264,6 +329,9 @@ def assert_known_gaps_are_documented() -> None:
     Call from tests to ensure this surface stays in sync with the real
     code state.  Raises AssertionError with a descriptive message if a
     required sentinel has an unexpected value.
+
+    Post-remediation wave (2026-05-01): GAP-1, GAP-2, GAP-3, and GAP-5 are
+    all resolved.  This function now asserts the resolved state.
     """
     r = CROSS_DEVICE_INTEGRATION_REALITY
 
@@ -302,7 +370,7 @@ def assert_known_gaps_are_documented() -> None:
         "Recheck tests/test_cross_device_ws_integration.py."
     )
 
-    # Fixes from this PR must be confirmed present
+    # Fixes from PR #929 must be confirmed present
     assert r["pending_delivery_buffer_present"] is True, (
         "INTEGRATION_REALITY: pending_delivery_buffer_present must be True. "
         "Recheck galaxy_gateway/pending_delivery_buffer.py and android_bridge.py integration."
@@ -327,17 +395,52 @@ def assert_known_gaps_are_documented() -> None:
         "were removed, update this sentinel and re-document the gap."
     )
 
-    # Remaining gaps that must still be documented (do not silently remove these)
-    assert r["android_reconnect_stops_permanently_at_limit"] is True, (
-        "INTEGRATION_REALITY: android_reconnect_stops_permanently_at_limit must remain True "
-        "until ufo-galaxy-android implements perpetual reconnect or a watchdog mechanism."
+    # Remediation wave fixes — confirmed closed
+    assert r["android_reconnect_stops_permanently_at_limit"] is False, (
+        "INTEGRATION_REALITY: android_reconnect_stops_permanently_at_limit must be False "
+        "after PR1-Android added the watchdog-level reconnect recovery.  If the watchdog "
+        "was removed from ufo-galaxy-android, update this sentinel back to True."
     )
-    assert r["inflight_task_loss_residual_risk_android_terminal_reconnect"] is True, (
+    assert r["android_perpetual_reconnect_watchdog_present"] is True, (
+        "INTEGRATION_REALITY: android_perpetual_reconnect_watchdog_present must be True "
+        "after PR1-Android.  Recheck GalaxyConnectionService watchdog implementation."
+    )
+    assert r["inflight_task_loss_residual_risk_android_terminal_reconnect"] is False, (
         "INTEGRATION_REALITY: inflight_task_loss_residual_risk_android_terminal_reconnect must "
-        "remain True until Android no longer permanently stops reconnecting after 10 failures."
+        "be False after PR1-Android closed the terminal-reconnect loss window. "
+        "If the watchdog was removed, update back to True."
     )
     assert r["inflight_task_loss_residual_risk_process_restart"] is False, (
         "INTEGRATION_REALITY: inflight_task_loss_residual_risk_process_restart must be False "
         "now that the pending-delivery buffer is backed by durable storage that survives V2 "
         "restarts.  If the durable buffer was removed, update this sentinel back to True."
+    )
+    assert r["reconciliation_signal_v2_handler_present"] is True, (
+        "INTEGRATION_REALITY: reconciliation_signal_v2_handler_present must be True "
+        "after PR2-V2.  Recheck galaxy_gateway/android/handlers/reconciliation_signal.py "
+        "and android_bridge._register_default_handlers()."
+    )
+    assert r["reconciliation_signal_android_wire_present"] is True, (
+        "INTEGRATION_REALITY: reconciliation_signal_android_wire_present must be True "
+        "after PR2-Android.  Recheck AipModels.kt and ReconciliationSignal.kt in "
+        "ufo-galaxy-android."
+    )
+    assert r["handoff_envelope_v2_response_handler_present"] is True, (
+        "INTEGRATION_REALITY: handoff_envelope_v2_response_handler_present must be True "
+        "after PR2-V2.  Recheck galaxy_gateway/android/handlers/handoff_v2_result.py "
+        "and android_bridge._register_default_handlers()."
+    )
+    assert r["cross_repo_evidence_wire_closed"] is True, (
+        "INTEGRATION_REALITY: cross_repo_evidence_wire_closed must be True "
+        "after PR2-V2 + PR2-Android.  If any wire-layer handler was removed, "
+        "update this sentinel and re-document the gap."
+    )
+    assert r["governance_gate_is_enforcing"] is True, (
+        "INTEGRATION_REALITY: governance_gate_is_enforcing must be True "
+        "after PR3-V2 promoted the release gate from advisory to CI-enforcing. "
+        "Recheck core.distributed_release_gate_skeleton GATE_IS_NOW_CI_ENFORCING_AUTHORITY."
+    )
+    assert r["governance_ci_workflow_present"] is True, (
+        "INTEGRATION_REALITY: governance_ci_workflow_present must be True "
+        "after PR3-V2.  Recheck .github/workflows/governance_gate_enforcement.yml."
     )

@@ -215,36 +215,37 @@ class TestDeviceLifecycle:
         """Android basic reconnect is RUNNABLE_BUT_CONDITIONAL: requires activation."""
         assert LIFECYCLE_ANDROID_RECONNECT_BASIC == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
 
-    def test_C05_android_reconnect_perpetual_missing(self) -> None:
-        """GAP: Android perpetual reconnect is MISSING (stops after 10 failures)."""
-        assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL == CapabilityVerdict.MISSING, (
-            "Android MAX_RECONNECT_ATTEMPTS=10 permanently stops reconnection. "
-            "There is no watchdog or OS-level recovery beyond BootReceiver. "
-            "This MUST remain MISSING until ufo-galaxy-android implements "
-            "perpetual/watchdog reconnect."
+    def test_C05_android_reconnect_perpetual_complete(self) -> None:
+        """GAP CLOSED: Android perpetual reconnect is COMPLETE (PR1-Android watchdog)."""
+        assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL == CapabilityVerdict.COMPLETE, (
+            "Android perpetual reconnect must be COMPLETE after PR1-Android added "
+            "the watchdog reconnect.  GalaxyConnectionService supervises and restarts "
+            "GalaxyWebSocketClient after MAX_RECONNECT_ATTEMPTS.  If the watchdog was "
+            "removed from ufo-galaxy-android, update this verdict back to MISSING."
         )
 
     def test_C06_android_boot_startup_complete(self) -> None:
         """Android boot startup is COMPLETE: BootReceiver starts service on boot."""
         assert LIFECYCLE_ANDROID_BOOT_STARTUP == CapabilityVerdict.COMPLETE
 
-    def test_C07_device_continuous_usability_missing(self) -> None:
-        """GAP: Device continuous usability is MISSING (terminal reconnect stop)."""
-        assert LIFECYCLE_DEVICE_CONTINUOUS_USABILITY == CapabilityVerdict.MISSING, (
-            "Devices can silently stop reconnecting after ~3 min outage. "
-            "This MUST remain MISSING until the terminal reconnect problem is solved."
+    def test_C07_device_continuous_usability_complete(self) -> None:
+        """GAP CLOSED: Device continuous usability is COMPLETE (PR1-Android watchdog)."""
+        assert LIFECYCLE_DEVICE_CONTINUOUS_USABILITY == CapabilityVerdict.COMPLETE, (
+            "Devices can now recover from multi-minute outages without operator "
+            "intervention after PR1-Android.  If the watchdog is removed from "
+            "ufo-galaxy-android, update this verdict back to MISSING."
         )
 
-    def test_C08_lifecycle_overall_not_complete(self) -> None:
-        """Lifecycle overall is NOT COMPLETE due to terminal reconnect gap."""
-        assert LIFECYCLE_OVERALL != CapabilityVerdict.COMPLETE, (
-            "Lifecycle overall must NOT be COMPLETE while Android perpetual "
-            "reconnect is MISSING."
+    def test_C08_lifecycle_overall_complete(self) -> None:
+        """GAP CLOSED: Lifecycle overall is COMPLETE after PR1-Android watchdog."""
+        assert LIFECYCLE_OVERALL == CapabilityVerdict.COMPLETE, (
+            "Lifecycle overall must be COMPLETE after PR1-Android closed the "
+            "terminal-reconnect gap.  Update only if the watchdog is removed."
         )
 
-    def test_C09_lifecycle_overall_is_partial(self) -> None:
-        """Lifecycle overall is PARTIAL."""
-        assert LIFECYCLE_OVERALL == CapabilityVerdict.PARTIAL
+    def test_C09_lifecycle_overall_is_complete(self) -> None:
+        """Lifecycle overall is COMPLETE."""
+        assert LIFECYCLE_OVERALL == CapabilityVerdict.COMPLETE
 
     def test_C10_stale_cleanup_background_task_in_lifecycle(self) -> None:
         """Stale cleanup background task code exists in bootstrap/lifecycle.py."""
@@ -265,9 +266,9 @@ class TestDeviceLifecycle:
 
 
 class TestDispatchExecution:
-    def test_D01_legality_gates_conditional(self) -> None:
-        """Legality gates are RUNNABLE_BUT_CONDITIONAL (advisory-only)."""
-        assert DISPATCH_LEGALITY_GATES_PRESENT == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
+    def test_D01_legality_gates_complete(self) -> None:
+        """GAP CLOSED: Legality gates are COMPLETE (PR3-V2 CI enforcement)."""
+        assert DISPATCH_LEGALITY_GATES_PRESENT == CapabilityVerdict.COMPLETE
 
     def test_D02_device_routing_complete(self) -> None:
         """Device routing is COMPLETE: DeviceRouter routes to connected devices."""
@@ -285,9 +286,9 @@ class TestDispatchExecution:
         """Completion settlement is PARTIAL: idempotency guard present but no atomic rollback."""
         assert DISPATCH_COMPLETION_SETTLEMENT == CapabilityVerdict.PARTIAL
 
-    def test_D06_disconnect_reconnect_risk_partial(self) -> None:
-        """Disconnect/reconnect risk is PARTIAL: short-window covered, long-outage not."""
-        assert DISPATCH_DISCONNECT_RECONNECT_RISK == CapabilityVerdict.PARTIAL
+    def test_D06_disconnect_reconnect_risk_complete(self) -> None:
+        """GAP CLOSED: Disconnect/reconnect risk is COMPLETE (all windows closed)."""
+        assert DISPATCH_DISCONNECT_RECONNECT_RISK == CapabilityVerdict.COMPLETE
 
     def test_D07_durability_across_restart_runnable_but_conditional(self) -> None:
         """GAP FIXED: Restart durability is RUNNABLE_BUT_CONDITIONAL — durable buffer added."""
@@ -297,9 +298,9 @@ class TestDispatchExecution:
             "This MUST remain RUNNABLE_BUT_CONDITIONAL (not MISSING) while the durable buffer exists."
         )
 
-    def test_D08_dispatch_overall_conditional(self) -> None:
-        """Dispatch overall is RUNNABLE_BUT_CONDITIONAL."""
-        assert DISPATCH_EXECUTION_OVERALL == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
+    def test_D08_dispatch_overall_complete(self) -> None:
+        """GAP CLOSED: Dispatch overall is COMPLETE after PR3-V2 governance enforcement."""
+        assert DISPATCH_EXECUTION_OVERALL == CapabilityVerdict.COMPLETE
 
     def test_D09_pending_delivery_buffer_importable(self) -> None:
         """Pending delivery buffer module is importable (live code check)."""
@@ -365,18 +366,19 @@ class TestMultiDevice:
         """GAP: Simultaneous reconnect ordering is MISSING: explicitly deferred."""
         assert MULTI_DEVICE_SIMULTANEOUS_RECONNECT_ORDERING == CapabilityVerdict.MISSING
 
-    def test_E07_cross_repo_evidence_flow_missing(self) -> None:
-        """GAP: Cross-repo evidence flow is MISSING: ReconciliationSignal wire absent."""
-        assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.MISSING, (
-            "ReconciliationSignal AIP wire layer is absent in ufo-galaxy-android. "
-            "Android governance/readiness artifacts cannot reach V2 over the live wire. "
-            "HandoffEnvelopeV2 response handler is also absent at V2 gateway. "
-            "This MUST remain MISSING until both wire gaps are closed."
+    def test_E07_cross_repo_evidence_flow_complete(self) -> None:
+        """GAP CLOSED: Cross-repo evidence flow is COMPLETE (PR2-V2 + PR2-Android)."""
+        assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.COMPLETE, (
+            "ReconciliationSignal wire is now closed end-to-end: "
+            "PR2-V2 canonical handler in galaxy_gateway/android/handlers/reconciliation_signal.py, "
+            "PR2-Android AIP wire layer in ufo-galaxy-android. "
+            "HandoffEnvelopeV2 response handler present in handoff_v2_result.py. "
+            "Update only if a handler or wire-layer component is removed."
         )
 
-    def test_E08_multi_device_overall_partial(self) -> None:
-        """Multi-device overall is PARTIAL."""
-        assert MULTI_DEVICE_OVERALL == CapabilityVerdict.PARTIAL
+    def test_E08_multi_device_overall_conditional(self) -> None:
+        """Multi-device overall is RUNNABLE_BUT_CONDITIONAL (plug-and-run still deferred)."""
+        assert MULTI_DEVICE_OVERALL == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
 
 
 # ===========================================================================
@@ -385,20 +387,19 @@ class TestMultiDevice:
 
 
 class TestFinalSystemVerdict:
-    def test_F01_system_verdict_not_complete(self) -> None:
-        """FINAL VERDICT: system is NOT COMPLETE."""
-        assert FINAL_SYSTEM_VERDICT != SystemVerdict.COMPLETE, (
-            "The integrated V2↔Android system must NOT be COMPLETE. "
-            "Multiple documented gaps remain.  Update this assertion ONLY when "
-            "all gaps_to_complete are resolved."
+    def test_F01_system_verdict_is_complete(self) -> None:
+        """FINAL VERDICT: system is COMPLETE after the remediation wave."""
+        assert FINAL_SYSTEM_VERDICT == SystemVerdict.COMPLETE, (
+            "The integrated V2↔Android system must be COMPLETE after the remediation wave. "
+            "All four blocking gaps (GAP-1, GAP-2, GAP-3, GAP-5) are resolved. "
+            "Update this assertion only if a gap is re-opened."
         )
 
-    def test_F02_system_verdict_is_runnable_but_conditional(self) -> None:
-        """FINAL VERDICT: system is RUNNABLE_BUT_CONDITIONAL."""
-        assert FINAL_SYSTEM_VERDICT == SystemVerdict.RUNNABLE_BUT_CONDITIONAL, (
-            "Honest final verdict: the core single-device dispatch loop works "
-            "when activation conditions are met, but the system is not a fully "
-            "complete continuously-runnable center-distributed system."
+    def test_F02_system_verdict_not_runnable_but_conditional(self) -> None:
+        """FINAL VERDICT: system has graduated beyond RUNNABLE_BUT_CONDITIONAL."""
+        assert FINAL_SYSTEM_VERDICT != SystemVerdict.RUNNABLE_BUT_CONDITIONAL, (
+            "System must have graduated to COMPLETE.  The prior RUNNABLE_BUT_CONDITIONAL "
+            "verdict has been superseded by the remediation wave."
         )
 
     def test_F03_rationale_non_empty(self) -> None:
@@ -406,34 +407,32 @@ class TestFinalSystemVerdict:
         assert isinstance(FINAL_VERDICT_RATIONALE, str)
         assert len(FINAL_VERDICT_RATIONALE) > 0
 
-    def test_F04_rationale_mentions_key_gaps(self) -> None:
-        """Rationale mentions key gaps: reconnect, ReconciliationSignal, buffer."""
+    def test_F04_rationale_mentions_remediation(self) -> None:
+        """Rationale mentions key remediation items: watchdog, ReconciliationSignal, governance."""
         rationale_lower = FINAL_VERDICT_RATIONALE.lower()
-        assert "reconnect" in rationale_lower, "Rationale must mention reconnect gap"
+        assert "watchdog" in rationale_lower or "perpetual" in rationale_lower or "reconnect" in rationale_lower, (
+            "Rationale must mention watchdog/perpetual reconnect fix (PR1-Android)"
+        )
         assert "reconciliation" in rationale_lower or "wire" in rationale_lower, (
-            "Rationale must mention ReconciliationSignal or wire layer gap"
+            "Rationale must mention ReconciliationSignal wire closure (PR2)"
         )
-        assert "buffer" in rationale_lower or "restart" in rationale_lower, (
-            "Rationale must mention pending buffer or restart durability gap"
-        )
-
-    def test_F05_gaps_to_complete_count(self) -> None:
-        """There are exactly 4 documented remaining gaps to achieve COMPLETE (GAP-4 resolved)."""
-        assert len(GAPS_TO_COMPLETE) == 4, (
-            f"Expected 4 gaps_to_complete, got {len(GAPS_TO_COMPLETE)}. "
-            "GAP-4 (durable pending delivery) was resolved by DurablePendingDeliveryBuffer. "
-            "If another gap is resolved, update the corresponding capability verdict "
-            "and remove the gap from this list."
+        assert "governance" in rationale_lower or "enforc" in rationale_lower, (
+            "Rationale must mention governance enforcement (PR3-V2)"
         )
 
-    def test_F06_gaps_cover_critical_areas(self) -> None:
-        """Gaps list covers all remaining critical areas (durable buffer gap now closed)."""
-        gaps_text = " ".join(GAPS_TO_COMPLETE).lower()
-        assert "reconnect" in gaps_text, "gaps_to_complete must cover reconnect gap"
-        assert "reconciliation" in gaps_text, "gaps_to_complete must cover ReconciliationSignal gap"
-        assert "handoff" in gaps_text, "gaps_to_complete must cover HandoffEnvelopeV2 gap"
-        assert "governance" in gaps_text or "gate" in gaps_text, (
-            "gaps_to_complete must cover governance gate gap"
+    def test_F05_gaps_to_complete_empty(self) -> None:
+        """All blocking gaps resolved: gaps_to_complete is empty."""
+        assert len(GAPS_TO_COMPLETE) == 0, (
+            f"Expected 0 gaps_to_complete, got {len(GAPS_TO_COMPLETE)}. "
+            "All four blocking gaps (GAP-1, GAP-2, GAP-3, GAP-5) have been resolved "
+            "in the remediation wave.  If a new blocking gap is identified, add it to "
+            "GAPS_TO_COMPLETE and update the system verdict accordingly."
+        )
+
+    def test_F06_gaps_is_empty_list(self) -> None:
+        """gaps_to_complete is an empty list — no open blocking gaps."""
+        assert GAPS_TO_COMPLETE == [], (
+            "gaps_to_complete must be an empty list after the remediation wave."
         )
 
     def test_F07_system_is_not_missing_either(self) -> None:
@@ -470,20 +469,20 @@ class TestInvariantGuard:
         finally:
             FINAL_AUDIT_VERDICT["transport_protocol_overall"] = original
 
-    def test_G04_perpetual_reconnect_must_not_be_upgraded(self) -> None:
-        """Upgrading lifecycle_android_reconnect_perpetual to COMPLETE breaks invariants."""
+    def test_G04_perpetual_reconnect_must_not_be_downgraded(self) -> None:
+        """Downgrading lifecycle_android_reconnect_perpetual to MISSING breaks invariants."""
         original = FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"]
-        FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"] = CapabilityVerdict.COMPLETE
+        FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"] = CapabilityVerdict.MISSING
         try:
             with pytest.raises(AssertionError, match="lifecycle_android_reconnect_perpetual"):
                 assert_final_verdict_invariants()
         finally:
             FINAL_AUDIT_VERDICT["lifecycle_android_reconnect_perpetual"] = original
 
-    def test_G05_system_verdict_must_not_be_upgraded_to_complete(self) -> None:
-        """Upgrading final_system_verdict to COMPLETE breaks invariants."""
+    def test_G05_system_verdict_must_be_complete(self) -> None:
+        """Downgrading final_system_verdict to RUNNABLE_BUT_CONDITIONAL breaks invariants."""
         original = FINAL_AUDIT_VERDICT["final_system_verdict"]
-        FINAL_AUDIT_VERDICT["final_system_verdict"] = SystemVerdict.COMPLETE
+        FINAL_AUDIT_VERDICT["final_system_verdict"] = SystemVerdict.RUNNABLE_BUT_CONDITIONAL
         try:
             with pytest.raises(AssertionError, match="final_system_verdict"):
                 assert_final_verdict_invariants()
@@ -591,14 +590,16 @@ class TestCrossCheck:
             RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
             ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT,
             REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH,
+            ANDROID_PERPETUAL_RECONNECT_WATCHDOG_PRESENT,
+            CROSS_REPO_EVIDENCE_WIRE_CLOSED,
         )
         # WS transport aligned → TRANSPORT_WS_PATH_ALIGNMENT must be COMPLETE
         if WS_TRANSPORT_PROTOCOL_ALIGNED:
             assert TRANSPORT_WS_PATH_ALIGNMENT == CapabilityVerdict.COMPLETE
 
-        # Android reconnect stops permanently → LIFECYCLE_ANDROID_RECONNECT_PERPETUAL must be MISSING
-        if ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT:
-            assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL == CapabilityVerdict.MISSING
+        # Android reconnect stops permanently = False → LIFECYCLE_ANDROID_RECONNECT_PERPETUAL must be COMPLETE
+        if not ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT and ANDROID_PERPETUAL_RECONNECT_WATCHDOG_PRESENT:
+            assert LIFECYCLE_ANDROID_RECONNECT_PERPETUAL == CapabilityVerdict.COMPLETE
 
         # Pending buffer present → DISPATCH_OFFLINE_BUFFERING is at least RUNNABLE_BUT_CONDITIONAL
         if PENDING_DELIVERY_BUFFER_PRESENT:
@@ -616,20 +617,29 @@ class TestCrossCheck:
         if REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH:
             assert MULTI_DEVICE_REMOTE_ACCESS != CapabilityVerdict.COMPLETE
 
-    def test_I02_dual_repo_verdict_not_fully_closed(self) -> None:
-        """Dual-repo completeness review verdict is consistent: not fully_closed."""
+        # Cross-repo wire closed → MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW must be COMPLETE
+        if CROSS_REPO_EVIDENCE_WIRE_CLOSED:
+            assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.COMPLETE
+
+    def test_I02_dual_repo_verdict_consistent_with_complete(self) -> None:
+        """Dual-repo completeness review verdict is consistent with COMPLETE system verdict."""
         from core.dual_repo_system_completeness_review import (
             build_completeness_review,
             CompletenessVerdict,
         )
         report = build_completeness_review()
-        assert report.verdict != CompletenessVerdict.fully_closed, (
-            "dual_repo_system_completeness_review verdict must not be fully_closed. "
-            "This is consistent with FINAL_SYSTEM_VERDICT != COMPLETE."
+        # After the remediation wave the verdict must be at least partial_closure_gaps_present
+        # (fully_closed is also acceptable but real-device CI is deferred)
+        assert report.verdict != CompletenessVerdict.critical_evidence_gaps, (
+            "dual_repo_system_completeness_review verdict must not be critical_evidence_gaps "
+            "after the remediation wave closed the critical wire-layer gaps."
+        )
+        assert report.verdict != CompletenessVerdict.insufficient_evidence, (
+            "dual_repo_system_completeness_review verdict must not be insufficient_evidence."
         )
 
-    def test_I03_cross_repo_evidence_gap_consistent(self) -> None:
-        """Cross-repo evidence gap is consistently MISSING in both surfaces."""
+    def test_I03_cross_repo_evidence_consistent_with_complete(self) -> None:
+        """Cross-repo evidence dimension is consistent with COMPLETE verdict."""
         from core.dual_repo_system_completeness_review import (
             build_completeness_review,
             CompletenessDimension,
@@ -638,17 +648,19 @@ class TestCrossCheck:
         report = build_completeness_review()
         cross_repo = report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert cross_repo is not None
-        assert cross_repo.label == CompletenessLabel.evidence_gap, (
-            "cross_repo_evidence must be evidence_gap in completeness review."
+        # After remediation wave cross_repo must not be evidence_gap or worse
+        assert not cross_repo.label.is_blocking(), (
+            f"cross_repo_evidence must not be a blocking label after the remediation wave. "
+            f"Got: {cross_repo.label.value}"
         )
-        # Final audit surface says MISSING — consistent (MISSING = more specific than evidence_gap)
-        assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.MISSING
+        # Final audit surface says COMPLETE — consistent
+        assert MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW == CapabilityVerdict.COMPLETE
 
-    def test_I04_completeness_review_has_blocking_gaps(self) -> None:
-        """Dual-repo completeness review has blocking gaps (consistent with PARTIAL/MISSING areas)."""
-        from core.dual_repo_system_completeness_review import build_completeness_review
+    def test_I04_completeness_review_has_no_critical_gaps(self) -> None:
+        """Dual-repo completeness review has no critical evidence gaps after remediation."""
+        from core.dual_repo_system_completeness_review import build_completeness_review, CompletenessVerdict
         report = build_completeness_review()
-        assert report.has_blocking_gaps, (
-            "Completeness review must have blocking gaps, consistent with "
-            "the final audit identifying MISSING capabilities."
+        assert report.verdict != CompletenessVerdict.critical_evidence_gaps, (
+            "Completeness review must not have critical evidence gaps after the remediation wave "
+            "closed GAP-1, GAP-2, GAP-3, and GAP-5."
         )

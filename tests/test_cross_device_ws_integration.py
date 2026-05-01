@@ -203,8 +203,10 @@ class TestCrossDeviceIntegrationReality:
         assert REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH is True, (
             "GAP_EXPOSED: Remote access requires Tailscale/VPN — still a real constraint."
         )
-        assert ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT is True, (
-            "GAP_EXPOSED: Android reconnect stops permanently at 10 attempts — still a real gap."
+        assert ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT is False, (
+            "REMEDIATION_WAVE: Android perpetual reconnect watchdog added (PR1-Android). "
+            "GalaxyConnectionService now supervises and restarts after MAX_RECONNECT_ATTEMPTS. "
+            "If the watchdog is removed from ufo-galaxy-android, update this sentinel back to True."
         )
         # V2-fixed gaps — sentinels must now be False
         assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is False, (
@@ -215,9 +217,10 @@ class TestCrossDeviceIntegrationReality:
             "FIXED: observable error counters were added to task_lifecycle.py. "
             "If this fails, the counters were removed — update the sentinel back to True."
         )
-        # Residual risks still present even after fix
-        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True, (
-            "RESIDUAL: in-flight loss still possible if Android permanently stops reconnecting."
+        # Residual risks — resolved after remediation wave
+        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is False, (
+            "REMEDIATION_WAVE: PR1-Android watchdog eliminates the terminal-reconnect loss window. "
+            "If the watchdog was removed from ufo-galaxy-android, update sentinel back to True."
         )
         assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False, (
             "FIXED: durable pending-delivery buffer added; V2 restarts no longer lose buffered msgs. "
