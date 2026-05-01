@@ -340,9 +340,9 @@ def test_get_result_ingestion_error_counts_snapshot():
 
 
 def test_residual_risks_still_documented():
-    """Residual risks that are NOT yet fixed must remain True."""
+    """Residual risks that are NOT yet fixed must remain True; fixed ones must be False."""
     assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True
-    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is True
+    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False
 
 
 def test_assert_known_gaps_are_documented_passes():
@@ -361,6 +361,7 @@ def test_reality_dict_contains_all_expected_keys():
         "pending_delivery_buffer_present",
         "pending_delivery_buffer_ttl_s",
         "pending_delivery_buffer_max_queue_per_device",
+        "durable_pending_delivery_buffer_present",
         "result_ingestion_has_silent_failure_paths",
         "result_ingestion_error_counters_present",
         "inflight_task_loss_residual_risk_android_terminal_reconnect",

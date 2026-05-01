@@ -219,6 +219,7 @@ class TestCrossDeviceIntegrationReality:
         assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True, (
             "RESIDUAL: in-flight loss still possible if Android permanently stops reconnecting."
         )
-        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is True, (
-            "RESIDUAL: pending buffer is in-process only; V2 restarts still lose buffered msgs."
+        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False, (
+            "FIXED: durable pending-delivery buffer added; V2 restarts no longer lose buffered msgs. "
+            "If this fails, the durable buffer was removed — update the sentinel back to True."
         )

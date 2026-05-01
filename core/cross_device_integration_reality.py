@@ -155,20 +155,25 @@ V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT: bool = True  # Added in this audit PR
 #:   - Messages buffered when device is offline are flushed on reconnect_device().
 #:   - Buffer TTL=60s, capacity=32 msgs/device; oldest msgs evicted at capacity.
 #:   - Non-bufferable types (heartbeats, GUI interactions) are NOT buffered.
+#: The buffer is backed by a durable JSON snapshot file so that buffered messages
+#: survive V2 process restarts within the TTL window.  Expired messages are
+#: discarded on load so stale payloads are never replayed.
 #: Remaining gap: if the device never reconnects within the TTL window (e.g. it
 #: hit MAX_RECONNECT_ATTEMPTS=10 and stopped), buffered messages expire and are
-#: discarded.  There is still no cross-process durable persistence for the buffer.
+#: discarded.
 INFLIGHT_TASK_LOSS_ON_DISCONNECT: bool = False  # Fixed — pending-delivery buffer added
 PENDING_DELIVERY_BUFFER_PRESENT: bool = True
 PENDING_DELIVERY_BUFFER_TTL_S: float = 60.0
 PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE: int = 32
+DURABLE_PENDING_DELIVERY_BUFFER_PRESENT: bool = True  # Added: buffer now survives V2 restarts
 V2_COMMAND_TIMEOUT_S: int = 30  # android_bridge send_to_device default
 
 #: Residual risk: if Android hits MAX_RECONNECT_ATTEMPTS=10 (approx 181s total)
 #: and permanently stops reconnecting, buffered messages will expire before
-#: reconnect and are lost.  The buffer does NOT survive V2 process restarts.
+#: reconnect and are lost.  The V2-side durable buffer alone cannot recover from
+#: a permanently-stopped Android client.
 INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT: bool = True
-INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART: bool = True
+INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART: bool = False  # Fixed — durable buffer added
 
 # ============================================================================
 # 7. Result ingestion — IMPROVED (observable error counters added)
@@ -234,11 +239,12 @@ CROSS_DEVICE_INTEGRATION_REALITY: Dict[str, Any] = {
     "v2_heartbeat_timeout_s": V2_HEARTBEAT_TIMEOUT_S,
     "v2_stale_cleanup_threshold_s": V2_STALE_CLEANUP_THRESHOLD_S,
     "v2_stale_cleanup_background_task_present": V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT,
-    # In-flight task continuity (fixed: pending-delivery buffer)
+    # In-flight task continuity (fixed: pending-delivery buffer + durable persistence)
     "inflight_task_loss_on_disconnect": INFLIGHT_TASK_LOSS_ON_DISCONNECT,
     "pending_delivery_buffer_present": PENDING_DELIVERY_BUFFER_PRESENT,
     "pending_delivery_buffer_ttl_s": PENDING_DELIVERY_BUFFER_TTL_S,
     "pending_delivery_buffer_max_queue_per_device": PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
+    "durable_pending_delivery_buffer_present": DURABLE_PENDING_DELIVERY_BUFFER_PRESENT,
     "v2_command_timeout_s": V2_COMMAND_TIMEOUT_S,
     "inflight_task_loss_residual_risk_android_terminal_reconnect": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
     "inflight_task_loss_residual_risk_process_restart": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
@@ -306,6 +312,11 @@ def assert_known_gaps_are_documented() -> None:
         "pending-delivery buffer is in place.  If the buffer was removed, update this sentinel "
         "and re-document the gap."
     )
+    assert r["durable_pending_delivery_buffer_present"] is True, (
+        "INTEGRATION_REALITY: durable_pending_delivery_buffer_present must be True. "
+        "Recheck galaxy_gateway/pending_delivery_buffer.py DurablePendingDeliveryBuffer and "
+        "the module-level singleton."
+    )
     assert r["result_ingestion_error_counters_present"] is True, (
         "INTEGRATION_REALITY: result_ingestion_error_counters_present must be True. "
         "Recheck galaxy_gateway/android/handlers/task_lifecycle.py for RESULT_*_ERRORS counters."
@@ -325,7 +336,8 @@ def assert_known_gaps_are_documented() -> None:
         "INTEGRATION_REALITY: inflight_task_loss_residual_risk_android_terminal_reconnect must "
         "remain True until Android no longer permanently stops reconnecting after 10 failures."
     )
-    assert r["inflight_task_loss_residual_risk_process_restart"] is True, (
-        "INTEGRATION_REALITY: inflight_task_loss_residual_risk_process_restart must remain True "
-        "until the pending-delivery buffer is backed by durable storage that survives V2 restarts."
+    assert r["inflight_task_loss_residual_risk_process_restart"] is False, (
+        "INTEGRATION_REALITY: inflight_task_loss_residual_risk_process_restart must be False "
+        "now that the pending-delivery buffer is backed by durable storage that survives V2 "
+        "restarts.  If the durable buffer was removed, update this sentinel back to True."
     )

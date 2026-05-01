@@ -282,30 +282,34 @@ DISPATCH_RESULT_INGESTION_OBSERVABLE: CapabilityVerdict = CapabilityVerdict.COMP
 DISPATCH_COMPLETION_SETTLEMENT: CapabilityVerdict = CapabilityVerdict.PARTIAL
 
 #: Disconnect/reconnect risks: if Android hits MAX_RECONNECT_ATTEMPTS=10 and
-#: permanently stops, buffered messages expire (60s TTL) and are lost.  Even
-#: when Android does reconnect, V2-side pending buffer is in-process only and
-#: will not survive a V2 restart.
-#: Risk classification: PARTIAL — buffer closes the short-disconnect window
-#: but leaves the long-outage and V2-restart windows open.
+#: permanently stops, buffered messages expire (60s TTL) and are lost.  The
+#: V2-side durable buffer survives V2 restarts within the TTL window — a V2
+#: restart no longer causes pending messages to be lost.  The remaining risk
+#: is the Android perpetual-stop gap (outside V2 control).
+#: Risk classification: PARTIAL — buffer + durability close short-disconnect
+#: and V2-restart windows; the Android terminal-reconnect window remains open.
 DISPATCH_DISCONNECT_RECONNECT_RISK: CapabilityVerdict = CapabilityVerdict.PARTIAL
 
-#: Durability across V2 process restart: pending-delivery buffer is NOT durable.
-#: DurableResultIdempotencyGuard persists result IDs (prevents duplicate ingestion)
-#: but does NOT persist pending dispatch messages.
-DISPATCH_DURABILITY_ACROSS_RESTART: CapabilityVerdict = CapabilityVerdict.MISSING
+#: Durability across V2 process restart: the pending-delivery buffer is now
+#: backed by a durable JSON snapshot (DurablePendingDeliveryBuffer).  Messages
+#: buffered before a V2 restart are restored on startup and replayed to
+#: reconnecting devices, subject to TTL expiry.
+#: DurableResultIdempotencyGuard continues to prevent duplicate result ingestion.
+DISPATCH_DURABILITY_ACROSS_RESTART: CapabilityVerdict = CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
 
 # Summary
 DISPATCH_EXECUTION_OVERALL: CapabilityVerdict = CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL
 DISPATCH_EXECUTION_NOTES: List[str] = [
     "Legality gates present but advisory-only — do not block dispatch in production.",
     "Device routing: COMPLETE — DeviceRouter routes to connected devices.",
-    "Offline buffering: RUNNABLE_BUT_CONDITIONAL — 60s TTL, in-process only.",
+    "Offline buffering: RUNNABLE_BUT_CONDITIONAL — 60s TTL, durable across V2 restarts.",
     "Result ingestion: COMPLETE observability via error counters (PR #929).",
     "Completion settlement: PARTIAL — idempotency guard present but truth-chain "
     "steps are individually non-fatal without full atomic rollback.",
-    "Disconnect risk: PARTIAL — short-disconnect buffer present; long-outage and "
-    "V2-restart windows remain unprotected.",
-    "Restart durability: MISSING — pending buffer lost on V2 restart.",
+    "Disconnect risk: PARTIAL — short-disconnect and V2-restart windows now closed; "
+    "Android terminal-reconnect window remains open.",
+    "Restart durability: RUNNABLE_BUT_CONDITIONAL — pending buffer survives V2 restarts "
+    "via durable JSON snapshot; expired messages are discarded on load.",
 ]
 
 
@@ -407,13 +411,13 @@ FINAL_VERDICT_RATIONALE: str = (
     "Core single-device dispatch loop works when activation conditions are met. "
     "Critical gaps: (1) Android stops reconnecting permanently after 10 failures; "
     "(2) ReconciliationSignal AIP wire layer is absent — Android governance/readiness "
-    "artifacts cannot reach V2; (3) governance gates are advisory-only; "
-    "(4) pending buffer is in-process only — lost on V2 restart. "
+    "artifacts cannot reach V2; (3) governance gates are advisory-only. "
+    "V2-side durability improved: pending buffer now survives restarts via durable snapshot. "
     "System is production-usable for short single-device sessions on stable networks "
     "but is NOT yet a reliable, continuously-runnable, multi-device center-distributed system."
 )
 
-#: The five specific remaining gaps that would need to be resolved to upgrade
+#: The remaining gaps that would need to be resolved to upgrade
 #: the system verdict from RUNNABLE_BUT_CONDITIONAL to COMPLETE:
 GAPS_TO_COMPLETE: List[str] = [
     "GAP-1: Android perpetual reconnect — implement watchdog / perpetual reconnect beyond "
@@ -422,8 +426,6 @@ GAPS_TO_COMPLETE: List[str] = [
     "serialize DTO to AIP v3, add V2 gateway handler and ingress wiring.",
     "GAP-3: HandoffEnvelopeV2 response handler — add handle_handoff_response in "
     "galaxy_gateway/android/handlers/ and register in android_bridge.py.",
-    "GAP-4: Durable pending delivery — back the pending-delivery buffer with persistent "
-    "storage that survives V2 process restarts.",
     "GAP-5: Governance gate enforcement — wire distributed_release_gate_skeleton to "
     "CI/CD pipeline so governance violations automatically block releases.",
 ]
@@ -534,12 +536,12 @@ def assert_final_verdict_invariants() -> None:
         "rest of the session.  Update only when this is resolved."
     )
 
-    # --- Dispatch: must be at most RUNNABLE_BUT_CONDITIONAL ---
-    assert v["dispatch_durability_across_restart"] == CapabilityVerdict.MISSING, (
-        "FINAL_AUDIT: dispatch_durability_across_restart must be MISSING. "
-        "The pending-delivery buffer is in-process only.  A V2 restart loses "
-        "all buffered dispatch messages.  Update only when the buffer is "
-        "backed by durable storage."
+    # --- Dispatch: durability now RUNNABLE_BUT_CONDITIONAL (durable buffer added) ---
+    assert v["dispatch_durability_across_restart"] == CapabilityVerdict.RUNNABLE_BUT_CONDITIONAL, (
+        "FINAL_AUDIT: dispatch_durability_across_restart must be RUNNABLE_BUT_CONDITIONAL. "
+        "The pending-delivery buffer is now backed by a durable JSON snapshot that survives "
+        "V2 restarts.  Messages are restored on startup and replayed on reconnect, subject "
+        "to TTL expiry.  Update only if the durable buffer is removed."
     )
 
     # --- Multi-device: plug-and-run and cross-repo evidence must be MISSING ---
@@ -567,9 +569,9 @@ def assert_final_verdict_invariants() -> None:
     assert v["final_system_verdict"] != SystemVerdict.COMPLETE, (
         "FINAL_AUDIT: final_system_verdict must NOT be COMPLETE. "
         "Multiple documented gaps remain: Android perpetual reconnect missing, "
-        "ReconciliationSignal wire absent, durable buffer absent, governance "
-        "gates advisory-only.  Update this assertion only when all gaps_to_complete "
-        "are resolved and the verdict is deliberately upgraded."
+        "ReconciliationSignal wire absent, governance gates advisory-only. "
+        "Update this assertion only when all gaps_to_complete are resolved and "
+        "the verdict is deliberately upgraded."
     )
     assert v["final_system_verdict"] == SystemVerdict.RUNNABLE_BUT_CONDITIONAL, (
         "FINAL_AUDIT: final_system_verdict must be RUNNABLE_BUT_CONDITIONAL. "
@@ -581,10 +583,10 @@ def assert_final_verdict_invariants() -> None:
     # --- Gaps list must be non-empty ---
     assert isinstance(v["gaps_to_complete"], list) and len(v["gaps_to_complete"]) > 0, (
         "FINAL_AUDIT: gaps_to_complete must be a non-empty list. "
-        "The audit documents at least 5 remaining gaps."
+        "The audit documents remaining gaps."
     )
-    assert len(v["gaps_to_complete"]) == 5, (
-        "FINAL_AUDIT: gaps_to_complete must contain exactly 5 items (GAP-1 through GAP-5). "
-        "If a gap is resolved, remove it from the list AND upgrade the corresponding "
-        "capability verdict, then decrement this count."
+    assert len(v["gaps_to_complete"]) == 4, (
+        "FINAL_AUDIT: gaps_to_complete must contain exactly 4 items (GAP-1, GAP-2, GAP-3, GAP-5). "
+        "GAP-4 (durable pending delivery) was resolved in this PR. "
+        "If another gap is resolved, remove it and decrement this count."
     )
