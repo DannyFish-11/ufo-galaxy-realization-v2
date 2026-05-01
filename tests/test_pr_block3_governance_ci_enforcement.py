@@ -36,7 +36,7 @@ Group B — run_governance_verdict_ci exit codes
   B04. strict=True + WARN outcome → exit code 1.
   B05. strict=False + WARN outcome → exit code 0.
   B06. JSON verdict artifact is written when output_path is provided.
-  B07. JSON artifact contains is_enforcing field from the release gate report.
+  B07. JSON artifact classifies blocking vs advisory fail reasons.
 
 Group C — Cross-repo consistency gate enforcement
   C01. build_consistency_gate_snapshot() returns a ConsistencyGateSnapshot.
@@ -365,7 +365,7 @@ def test_B06_json_artifact_written_when_output_path_provided():
 
 
 @_skip_gov
-def test_B07_json_verdict_has_blocking_and_advisory_reasons():
+def test_B07_json_verdict_has_blocking_and_advisory_classifications():
     """JSON verdict must classify blocking vs advisory fail reasons."""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = os.path.join(tmpdir, "verdict.json")
