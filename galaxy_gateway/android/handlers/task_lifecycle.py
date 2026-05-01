@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 # These counters make previously-silent failure paths detectable without
 # requiring log-scraping.  A non-zero value signals that the result
 # ingestion truth chain has partially failed and warrants investigation.
+#
+# Note: these are module-level integers rather than a class so that they can
+# be imported and read directly by tests and monitoring exporters with a
+# single import.  Use get_result_ingestion_error_counts() for a snapshot dict.
 # ---------------------------------------------------------------------------
 
 #: Counts how many times the PR-13 execution-signal reconciler raised an
@@ -42,6 +46,33 @@ RESULT_DEVICE_ROUTER_ERRORS: int = 0
 #: Counts how many times the OpenClawd memory backflow raised an unexpected
 #: exception.
 RESULT_MEMORY_BACKFLOW_ERRORS: int = 0
+
+
+def get_result_ingestion_error_counts() -> dict:
+    """Return a snapshot dict of all result-ingestion error counters.
+
+    Intended for use by tests, health-check endpoints, and metrics exporters.
+    The returned dict has stable string keys so callers are not coupled to the
+    module-level variable names.
+
+    Example::
+
+        counts = get_result_ingestion_error_counts()
+        if any(counts.values()):
+            log_alert("truth chain errors detected", counts)
+    """
+    return {
+        "reconcile_errors": RESULT_RECONCILE_ERRORS,
+        "truth_ingress_errors": RESULT_TRUTH_INGRESS_ERRORS,
+        "device_router_errors": RESULT_DEVICE_ROUTER_ERRORS,
+        "memory_backflow_errors": RESULT_MEMORY_BACKFLOW_ERRORS,
+        "total_errors": (
+            RESULT_RECONCILE_ERRORS
+            + RESULT_TRUTH_INGRESS_ERRORS
+            + RESULT_DEVICE_ROUTER_ERRORS
+            + RESULT_MEMORY_BACKFLOW_ERRORS
+        ),
+    }
 
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:

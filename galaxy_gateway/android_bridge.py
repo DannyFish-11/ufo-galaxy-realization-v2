@@ -100,9 +100,19 @@ from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
-# Pending-delivery buffer — re-delivers buffered messages to devices that
-# reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
-from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
+# Bufferable message types for the pending-delivery buffer.  Only task-dispatch
+# message types are buffered; interactive/GUI/control messages are timing-sensitive
+# and must NOT be re-delivered after a reconnect because the window for their
+# execution would have long passed.
+_BUFFERABLE_MESSAGE_TYPES: frozenset = frozenset({
+    "task_assign",
+    "task_execute",
+    "task_submit",
+    "goal_execution",
+    "action_execute",
+    "action_sequence_execute",
+    "system_command",
+})
 
 # =============================================================================
 # OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
@@ -124,11 +134,14 @@ try:
 except ImportError:  # pragma: no cover
     _get_lifecycle_coordinator = None  # type: ignore[assignment]
 
+# Pending-delivery buffer — re-delivers buffered messages to devices that
+# reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
+from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
 # PR-3: Execution Spine Integration — bridge dispatch authority sentinel
-# =============================================================================
 
 #: Affirms that AndroidBridge no longer holds independent dispatch authority.
 #: Dispatch authority belongs exclusively to CommandRouter (via the canonical
@@ -899,26 +912,31 @@ class AndroidBridge:
                              timeout: float = 30.0) -> Optional[Dict[str, Any]]:
         """发送消息到设备.
 
+        Return values
+        -------------
+        * ``{"success": True}`` — message delivered to live WebSocket (no wait).
+        * Response dict — when *wait_response* is True and a response arrived.
+        * ``{"buffered": True, "device_id": ..., "type": ...}`` — device is
+          temporarily offline **and** the message type is bufferable; the message
+          was enqueued in the pending-delivery buffer for re-delivery on reconnect.
+          Callers that need to distinguish "sent" from "buffered" should check for
+          the ``"buffered"`` key.
+        * ``None`` — device is offline and the message type is not bufferable, or
+          the device WebSocket send raised an exception.
+
         When the device is temporarily offline, task-type messages are enqueued
-        in the pending-delivery buffer so that they can be re-delivered when
-        the device reconnects.  Control messages (heartbeats, pings, GUI
-        interactions that require an immediate interactive response) are NOT
-        buffered because re-delivering them after a reconnect would be
-        semantically incorrect.
+        in the pending-delivery buffer (``_BUFFERABLE_MESSAGE_TYPES``) so that
+        they can be re-delivered when the device reconnects.  Control messages
+        (heartbeats, pings, GUI interactions that require an immediate interactive
+        response) are NOT buffered because re-delivering them after a reconnect
+        would be semantically incorrect.
         """
         async with self._lock:
             device = self._devices.get(device_id)
 
         if not device or not device.connected:
             msg_type = message.get("type", "")
-            # Buffer task-dispatch messages so they survive brief disconnects.
-            # Do NOT buffer interactive/GUI/control messages — they are timing-sensitive.
-            _bufferable_types = {
-                "task_assign", "task_execute", "task_submit",
-                "goal_execution", "action_execute", "action_sequence_execute",
-                "system_command",
-            }
-            if msg_type in _bufferable_types:
+            if msg_type in _BUFFERABLE_MESSAGE_TYPES:
                 await _pending_delivery_buffer.enqueue(device_id, message)
                 logger.warning(
                     "send_to_device: device_id=%s offline — message buffered for "

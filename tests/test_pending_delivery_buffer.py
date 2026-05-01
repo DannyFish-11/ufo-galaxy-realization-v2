@@ -91,27 +91,15 @@ async def test_flush_removes_queue_for_device():
 @pytest.mark.asyncio
 async def test_multiple_messages_delivered_in_order():
     buf = PendingDeliveryBuffer()
-    received: List[str] = []
-
-    async def send_fn(msg):
-        received.append(msg["task_id"])
-
-    for tid in ("a", "b", "c"):
-        await buf.enqueue("dev1", _msg(task_id=tid))
-
-    await buf.flush("dev1", AsyncMock(side_effect=lambda m: received.append(m["task_id"])))
-
-    # Use a proper ordered capture
-    received.clear()
     for tid in ("x", "y", "z"):
-        await buf.enqueue("dev2", _msg(task_id=tid))
+        await buf.enqueue("dev1", _msg(task_id=tid))
 
     cap: List[str] = []
 
     async def ordered_send(msg):
         cap.append(msg["task_id"])
 
-    await buf.flush("dev2", ordered_send)
+    await buf.flush("dev1", ordered_send)
     assert cap == ["x", "y", "z"]
 
 
@@ -322,6 +310,33 @@ def test_observable_error_counters_importable():
     assert isinstance(RESULT_TRUTH_INGRESS_ERRORS, int)
     assert isinstance(RESULT_DEVICE_ROUTER_ERRORS, int)
     assert isinstance(RESULT_MEMORY_BACKFLOW_ERRORS, int)
+
+
+def test_get_result_ingestion_error_counts_snapshot():
+    """get_result_ingestion_error_counts() must return a dict with the expected keys."""
+    from galaxy_gateway.android.handlers.task_lifecycle import (
+        get_result_ingestion_error_counts,
+    )
+    counts = get_result_ingestion_error_counts()
+    expected_keys = {
+        "reconcile_errors",
+        "truth_ingress_errors",
+        "device_router_errors",
+        "memory_backflow_errors",
+        "total_errors",
+    }
+    assert set(counts.keys()) == expected_keys
+    # All counts start at >= 0 (integers)
+    for v in counts.values():
+        assert isinstance(v, int)
+        assert v >= 0
+    # total_errors must be the sum of the four components
+    assert counts["total_errors"] == (
+        counts["reconcile_errors"]
+        + counts["truth_ingress_errors"]
+        + counts["device_router_errors"]
+        + counts["memory_backflow_errors"]
+    )
 
 
 def test_residual_risks_still_documented():
