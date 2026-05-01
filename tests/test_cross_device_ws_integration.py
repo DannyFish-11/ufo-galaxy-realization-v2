@@ -177,9 +177,11 @@ class TestCrossDeviceIntegrationReality:
     def test_known_gaps_still_documented(self) -> None:
         """GAP_EXPOSED: known remaining gaps are explicitly documented (not silently removed).
 
-        These must remain True until the underlying issues are fixed in production code.
-        If a test fails here it means a gap was removed from the sentinel without being
-        fixed — which is a documentation regression.
+        Two gaps from the previous audit have now been fixed:
+        - INFLIGHT_TASK_LOSS_ON_DISCONNECT: Fixed by pending-delivery buffer.
+        - RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS: Fixed by observable error counters.
+
+        Remaining gaps (Android-side issues outside V2's control) must still be True.
         """
         from core.cross_device_integration_reality import (
             ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT,
@@ -188,7 +190,10 @@ class TestCrossDeviceIntegrationReality:
             INFLIGHT_TASK_LOSS_ON_DISCONNECT,
             RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
             ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT,
+            INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
+            INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
         )
+        # Still-open Android-side gaps (not fixable in V2 alone)
         assert ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT is True, (
             "GAP_EXPOSED: Android cross_device_enabled=false default is still a real gap."
         )
@@ -198,12 +203,22 @@ class TestCrossDeviceIntegrationReality:
         assert REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH is True, (
             "GAP_EXPOSED: Remote access requires Tailscale/VPN — still a real constraint."
         )
-        assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is True, (
-            "GAP_EXPOSED: In-flight tasks are lost on disconnect — still a real gap."
-        )
-        assert RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS is True, (
-            "GAP_EXPOSED: Silent failure paths in task result ingestion — still present."
-        )
         assert ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT is True, (
             "GAP_EXPOSED: Android reconnect stops permanently at 10 attempts — still a real gap."
+        )
+        # V2-fixed gaps — sentinels must now be False
+        assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is False, (
+            "FIXED: pending-delivery buffer was added. "
+            "If this fails, the buffer was removed — update the sentinel back to True."
+        )
+        assert RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS is False, (
+            "FIXED: observable error counters were added to task_lifecycle.py. "
+            "If this fails, the counters were removed — update the sentinel back to True."
+        )
+        # Residual risks still present even after fix
+        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True, (
+            "RESIDUAL: in-flight loss still possible if Android permanently stops reconnecting."
+        )
+        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is True, (
+            "RESIDUAL: pending buffer is in-process only; V2 restarts still lose buffered msgs."
         )

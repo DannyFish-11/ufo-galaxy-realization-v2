@@ -20,6 +20,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Observable error counters — machine-checkable by tests and monitoring.
+# These counters make previously-silent failure paths detectable without
+# requiring log-scraping.  A non-zero value signals that the result
+# ingestion truth chain has partially failed and warrants investigation.
+# ---------------------------------------------------------------------------
+
+#: Counts how many times the PR-13 execution-signal reconciler raised an
+#: unexpected exception.  Incremented even when the exception is non-fatal.
+RESULT_RECONCILE_ERRORS: int = 0
+
+#: Counts how many times the PR-4V2 participant-truth ingress raised an
+#: unexpected exception.
+RESULT_TRUTH_INGRESS_ERRORS: int = 0
+
+#: Counts how many times the DeviceRouter completion notification raised
+#: an unexpected exception.
+RESULT_DEVICE_ROUTER_ERRORS: int = 0
+
+#: Counts how many times the OpenClawd memory backflow raised an unexpected
+#: exception.
+RESULT_MEMORY_BACKFLOW_ERRORS: int = 0
+
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:
     from core.openclawd_memory_backflow import store_task_result
@@ -168,8 +191,15 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
                 outcome.reject_reason,
             )
     except Exception as exc:
-        logger.debug("PR-13 reconcile failed (non-fatal): %s", exc)
-
+        global RESULT_RECONCILE_ERRORS  # noqa: PLW0603
+        RESULT_RECONCILE_ERRORS += 1
+        logger.warning(
+            "PR-13 reconcile failed (non-fatal, errors=%d): type=%s task_id=%r exc=%s",
+            RESULT_RECONCILE_ERRORS,
+            message.get("type", "?"),
+            message.get("task_id"),
+            exc,
+        )
 
 def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> None:
     """Best-effort ingest *message* as Android participant truth into V2 canonical state.
@@ -180,9 +210,9 @@ def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> N
     :class:`~core.android_participant_truth_ingress.AndroidParticipantTruthKind`)
     before passing to the ingress function.
 
-    Failures are logged at DEBUG level and never propagated — this is an
-    additive PR-4V2 path that complements the existing PR-13 ``_try_reconcile``
-    path; it must not disrupt existing handler behaviour.
+    Failures are logged at WARNING level and the observable error counter is
+    incremented so that monitoring can detect truth-ingress regressions without
+    log-scraping.
     """
     if _ingest_participant_truth is None:
         return
@@ -209,7 +239,16 @@ def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> N
                 outcome.reject_reason,
             )
     except Exception as exc:
-        logger.debug("PR-4V2 participant truth ingest failed (non-fatal): %s", exc)
+        global RESULT_TRUTH_INGRESS_ERRORS  # noqa: PLW0603
+        RESULT_TRUTH_INGRESS_ERRORS += 1
+        logger.warning(
+            "PR-4V2 participant truth ingest failed (non-fatal, errors=%d): "
+            "truth_kind=%s task_id=%r exc=%s",
+            RESULT_TRUTH_INGRESS_ERRORS,
+            truth_kind,
+            message.get("task_id"),
+            exc,
+        )
 
 
 def _check_result_ingress_continuity_legality(
@@ -422,9 +461,12 @@ async def handle_task_result(
                 task_id,
             )
         except Exception as _dr_exc:
-            logger.debug(
-                "PR-1 P0: device_router.handle_task_result skipped (non-fatal): "
+            global RESULT_DEVICE_ROUTER_ERRORS  # noqa: PLW0603
+            RESULT_DEVICE_ROUTER_ERRORS += 1
+            logger.warning(
+                "PR-1 P0: device_router.handle_task_result failed (non-fatal, errors=%d): "
                 "task_id=%r exc=%s",
+                RESULT_DEVICE_ROUTER_ERRORS,
                 task_id,
                 _dr_exc,
             )
@@ -443,9 +485,13 @@ async def handle_task_result(
                 task_id, device_id, route_mode,
             )
         except Exception as bf_err:
+            global RESULT_MEMORY_BACKFLOW_ERRORS  # noqa: PLW0603
+            RESULT_MEMORY_BACKFLOW_ERRORS += 1
             logger.warning(
-                "Memory backflow failed (non-fatal): task_id=%s error=%s",
-                task_id, bf_err,
+                "Memory backflow failed (non-fatal, errors=%d): task_id=%s error=%s",
+                RESULT_MEMORY_BACKFLOW_ERRORS,
+                task_id,
+                bf_err,
             )
 
 

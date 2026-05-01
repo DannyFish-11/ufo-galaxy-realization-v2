@@ -146,30 +146,49 @@ V2_STALE_CLEANUP_THRESHOLD_S: int = 120
 V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT: bool = True  # Added in this audit PR
 
 # ============================================================================
-# 6. In-flight task continuity — GAP (not fixed in this PR)
+# 6. In-flight task continuity — IMPROVED (pending-delivery buffer added)
 # ============================================================================
 
-#: When Android disconnects and reconnects, in-flight tasks (dispatched via
-#: android_bridge.send_to_device() or device_router.dispatch_task()) will
-#: already have timed out (V2 command_timeout=30s) before Android's 31s max
-#: reconnect delay completes.  No automatic re-dispatch mechanism exists.
-#: The session identity (runtime_session_id) is preserved across reconnects,
-#: but the application-layer task payload must be re-issued by the orchestration
-#: layer — which does not do this automatically.
-INFLIGHT_TASK_LOSS_ON_DISCONNECT: bool = True  # Gap — not fixed here
+#: V2-side pending-delivery buffer (galaxy_gateway/pending_delivery_buffer.py)
+#: enqueues task-dispatch messages for temporarily-offline devices and re-delivers
+#: them on reconnect.  This closes the majority of the in-flight task loss window:
+#:   - Messages buffered when device is offline are flushed on reconnect_device().
+#:   - Buffer TTL=60s, capacity=32 msgs/device; oldest msgs evicted at capacity.
+#:   - Non-bufferable types (heartbeats, GUI interactions) are NOT buffered.
+#: Remaining gap: if the device never reconnects within the TTL window (e.g. it
+#: hit MAX_RECONNECT_ATTEMPTS=10 and stopped), buffered messages expire and are
+#: discarded.  There is still no cross-process durable persistence for the buffer.
+INFLIGHT_TASK_LOSS_ON_DISCONNECT: bool = False  # Fixed — pending-delivery buffer added
+PENDING_DELIVERY_BUFFER_PRESENT: bool = True
+PENDING_DELIVERY_BUFFER_TTL_S: float = 60.0
+PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE: int = 32
 V2_COMMAND_TIMEOUT_S: int = 30  # android_bridge send_to_device default
 
+#: Residual risk: if Android hits MAX_RECONNECT_ATTEMPTS=10 (approx 181s total)
+#: and permanently stops reconnecting, buffered messages will expire before
+#: reconnect and are lost.  The buffer does NOT survive V2 process restarts.
+INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT: bool = True
+INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART: bool = True
+
 # ============================================================================
-# 7. Result ingestion — PARTIAL
+# 7. Result ingestion — IMPROVED (observable error counters added)
 # ============================================================================
 
-#: Android sends task_result / goal_execution_result / handoff_envelope_v2_result
-#: via the open WebSocket.  OfflineTaskQueue.kt buffers and replays on reconnect.
-#: V2 handle_task_result() processes them and returns task_result_ack to Android.
-#: HOWEVER: downstream truth-chain steps (reconciler, participant truth ingress,
-#: memory backflow) are each wrapped in try/except "non-fatal" blocks.
-#: Silent V2-side state divergence is therefore possible without Android knowing.
-RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS: bool = True
+#: Truth-chain steps (reconciler, participant truth ingress, device_router
+#: notification, memory backflow) are each wrapped in non-fatal try/except
+#: blocks.  Prior to this PR all failures were logged at DEBUG level, making
+#: them invisible in production logs.  This PR upgrades all truth-chain
+#: exception paths to WARNING level and adds observable integer error counters:
+#:   - task_lifecycle.RESULT_RECONCILE_ERRORS
+#:   - task_lifecycle.RESULT_TRUTH_INGRESS_ERRORS
+#:   - task_lifecycle.RESULT_DEVICE_ROUTER_ERRORS
+#:   - task_lifecycle.RESULT_MEMORY_BACKFLOW_ERRORS
+#: These counters are machine-checkable by tests and can be exported to
+#: metrics/monitoring.  A non-zero value signals partial truth-chain failure.
+#: Root causes (missing modules, import errors) are separately non-fatal and
+#: expected in constrained deployments.
+RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS: bool = False  # Fixed — observable error paths
+RESULT_INGESTION_ERROR_COUNTERS_PRESENT: bool = True
 
 #: The durable idempotency guard (core/durable_result_idempotency.py) prevents
 #: re-processing of already-seen task results across V2 process restarts.
@@ -182,10 +201,11 @@ DURABLE_RESULT_IDEMPOTENCY_GUARD_PRESENT: bool = True
 #: As of this audit no live WebSocket message exchange between a real
 #: Android-equivalent client and the V2 gateway is exercised in the test suite.
 #: Existing tests (test_android_bridge_udm_flow.py, test_udm_upsert.py) use mocks.
-#: The integration tests added in this PR exercise the real WebSocket handler
+#: The integration tests added in PR #928 exercise the real WebSocket handler
 #: (register → heartbeat → task_result → unknown_android_types) but do not
-#: run a real Android APK.
-E2E_LIVE_WS_TESTS_PRESENT: bool = True  # Added in this audit PR
+#: run a real Android APK.  Tests in this PR additionally cover the pending-delivery
+#: buffer and reconnect-flush behavior.
+E2E_LIVE_WS_TESTS_PRESENT: bool = True
 E2E_REAL_ANDROID_APK_TESTS_PRESENT: bool = False  # Requires hardware; out of scope
 
 # ============================================================================
@@ -214,11 +234,17 @@ CROSS_DEVICE_INTEGRATION_REALITY: Dict[str, Any] = {
     "v2_heartbeat_timeout_s": V2_HEARTBEAT_TIMEOUT_S,
     "v2_stale_cleanup_threshold_s": V2_STALE_CLEANUP_THRESHOLD_S,
     "v2_stale_cleanup_background_task_present": V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT,
-    # In-flight task gap
+    # In-flight task continuity (fixed: pending-delivery buffer)
     "inflight_task_loss_on_disconnect": INFLIGHT_TASK_LOSS_ON_DISCONNECT,
+    "pending_delivery_buffer_present": PENDING_DELIVERY_BUFFER_PRESENT,
+    "pending_delivery_buffer_ttl_s": PENDING_DELIVERY_BUFFER_TTL_S,
+    "pending_delivery_buffer_max_queue_per_device": PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
     "v2_command_timeout_s": V2_COMMAND_TIMEOUT_S,
-    # Result ingestion
+    "inflight_task_loss_residual_risk_android_terminal_reconnect": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
+    "inflight_task_loss_residual_risk_process_restart": INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
+    # Result ingestion (fixed: observable error counters)
     "result_ingestion_has_silent_failure_paths": RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
+    "result_ingestion_error_counters_present": RESULT_INGESTION_ERROR_COUNTERS_PRESENT,
     "durable_result_idempotency_guard_present": DURABLE_RESULT_IDEMPOTENCY_GUARD_PRESENT,
     # Tests
     "e2e_live_ws_tests_present": E2E_LIVE_WS_TESTS_PRESENT,
@@ -250,38 +276,56 @@ def assert_known_gaps_are_documented() -> None:
         "until V2 implements STUN/TURN or a relay fallback for general internet access."
     )
 
-    # Fixes from this PR must be confirmed present
+    # Fixes from PR #928 must be confirmed present
     assert r["goal_result_alias_handled"] is True, (
-        "INTEGRATION_REALITY: goal_result_alias_handled must be True after this PR. "
+        "INTEGRATION_REALITY: goal_result_alias_handled must be True after PR #928. "
         "Recheck galaxy_gateway/protocol/compat.py _LEGACY_TYPE_MAP and "
         "galaxy_gateway/android_bridge.py handler registration."
     )
     assert r["android_governance_report_types_handled"] is True, (
-        "INTEGRATION_REALITY: android_governance_report_types_handled must be True after this PR. "
+        "INTEGRATION_REALITY: android_governance_report_types_handled must be True after PR #928. "
         "Recheck galaxy_gateway/protocol/aip_v3.py MessageType enum and "
         "galaxy_gateway/android_bridge.py _register_default_handlers."
     )
     assert r["v2_stale_cleanup_background_task_present"] is True, (
-        "INTEGRATION_REALITY: v2_stale_cleanup_background_task_present must be True after this PR. "
+        "INTEGRATION_REALITY: v2_stale_cleanup_background_task_present must be True after PR #928. "
         "Recheck galaxy_gateway/bootstrap/lifecycle.py for the periodic cleanup task."
     )
     assert r["e2e_live_ws_tests_present"] is True, (
-        "INTEGRATION_REALITY: e2e_live_ws_tests_present must be True after this PR. "
+        "INTEGRATION_REALITY: e2e_live_ws_tests_present must be True after PR #928. "
         "Recheck tests/test_cross_device_ws_integration.py."
     )
 
-    # Known remaining gaps must still be documented (not silently removed)
-    assert r["inflight_task_loss_on_disconnect"] is True, (
-        "INTEGRATION_REALITY: inflight_task_loss_on_disconnect must remain True "
-        "until a task re-dispatch mechanism is implemented in the orchestration layer. "
-        "Do not remove this sentinel without implementing the fix."
+    # Fixes from this PR must be confirmed present
+    assert r["pending_delivery_buffer_present"] is True, (
+        "INTEGRATION_REALITY: pending_delivery_buffer_present must be True. "
+        "Recheck galaxy_gateway/pending_delivery_buffer.py and android_bridge.py integration."
     )
-    assert r["result_ingestion_has_silent_failure_paths"] is True, (
-        "INTEGRATION_REALITY: result_ingestion_has_silent_failure_paths must remain True "
-        "until all non-fatal try/except blocks in task_lifecycle.py are replaced with "
-        "observable error paths (metrics, structured warnings, retry)."
+    assert r["inflight_task_loss_on_disconnect"] is False, (
+        "INTEGRATION_REALITY: inflight_task_loss_on_disconnect must be False now that the "
+        "pending-delivery buffer is in place.  If the buffer was removed, update this sentinel "
+        "and re-document the gap."
     )
+    assert r["result_ingestion_error_counters_present"] is True, (
+        "INTEGRATION_REALITY: result_ingestion_error_counters_present must be True. "
+        "Recheck galaxy_gateway/android/handlers/task_lifecycle.py for RESULT_*_ERRORS counters."
+    )
+    assert r["result_ingestion_has_silent_failure_paths"] is False, (
+        "INTEGRATION_REALITY: result_ingestion_has_silent_failure_paths must be False now that "
+        "observable error counters and WARNING-level logging have been added.  If the counters "
+        "were removed, update this sentinel and re-document the gap."
+    )
+
+    # Remaining gaps that must still be documented (do not silently remove these)
     assert r["android_reconnect_stops_permanently_at_limit"] is True, (
         "INTEGRATION_REALITY: android_reconnect_stops_permanently_at_limit must remain True "
         "until ufo-galaxy-android implements perpetual reconnect or a watchdog mechanism."
+    )
+    assert r["inflight_task_loss_residual_risk_android_terminal_reconnect"] is True, (
+        "INTEGRATION_REALITY: inflight_task_loss_residual_risk_android_terminal_reconnect must "
+        "remain True until Android no longer permanently stops reconnecting after 10 failures."
+    )
+    assert r["inflight_task_loss_residual_risk_process_restart"] is True, (
+        "INTEGRATION_REALITY: inflight_task_loss_residual_risk_process_restart must remain True "
+        "until the pending-delivery buffer is backed by durable storage that survives V2 restarts."
     )

@@ -100,6 +100,10 @@ from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
+# Pending-delivery buffer — re-delivers buffered messages to devices that
+# reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
+from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
+
 # =============================================================================
 # OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
 # =============================================================================
@@ -893,11 +897,35 @@ class AndroidBridge:
     async def send_to_device(self, device_id: str, message: Dict[str, Any],
                              wait_response: bool = False,
                              timeout: float = 30.0) -> Optional[Dict[str, Any]]:
-        """发送消息到设备"""
+        """发送消息到设备.
+
+        When the device is temporarily offline, task-type messages are enqueued
+        in the pending-delivery buffer so that they can be re-delivered when
+        the device reconnects.  Control messages (heartbeats, pings, GUI
+        interactions that require an immediate interactive response) are NOT
+        buffered because re-delivering them after a reconnect would be
+        semantically incorrect.
+        """
         async with self._lock:
             device = self._devices.get(device_id)
 
         if not device or not device.connected:
+            msg_type = message.get("type", "")
+            # Buffer task-dispatch messages so they survive brief disconnects.
+            # Do NOT buffer interactive/GUI/control messages — they are timing-sensitive.
+            _bufferable_types = {
+                "task_assign", "task_execute", "task_submit",
+                "goal_execution", "action_execute", "action_sequence_execute",
+                "system_command",
+            }
+            if msg_type in _bufferable_types:
+                await _pending_delivery_buffer.enqueue(device_id, message)
+                logger.warning(
+                    "send_to_device: device_id=%s offline — message buffered for "
+                    "redelivery on reconnect (type=%s)",
+                    device_id, msg_type,
+                )
+                return {"buffered": True, "device_id": device_id, "type": msg_type}
             logger.warning("Device not connected: %s", device_id)
             return None
 
@@ -1205,7 +1233,13 @@ class AndroidBridge:
 
         for device_id in stale_devices:
             await self.disconnect_device(device_id)
+            # Discard buffered messages for permanently-stale devices so they
+            # do not accumulate memory across long disconnections.
+            await _pending_delivery_buffer.discard_device(device_id)
             logger.warning("Device timed out: %s", device_id)
+
+        # Also sweep expired entries across all device queues.
+        await _pending_delivery_buffer.purge_expired()
 
     async def reconnect_device(self, device_id: str, websocket: Any) -> bool:
         """重新连接设备（WebSocket 断线重连时调用）."""
@@ -1278,6 +1312,32 @@ class AndroidBridge:
             )
 
         logger.info("设备重连成功: %s", device_id)
+
+        # Flush any messages that were buffered while the device was offline.
+        # This re-delivers task-type messages that arrived during the disconnect
+        # window, closing the INFLIGHT_TASK_LOSS_ON_DISCONNECT gap.
+        try:
+            async def _ws_send(msg: Dict[str, Any]) -> None:
+                async with self._lock:
+                    dev = self._devices.get(device_id)
+                if dev and dev.connected and dev.websocket is not None:
+                    await dev.websocket.send_json(msg)
+                else:
+                    raise RuntimeError(f"device {device_id} not connected during buffer flush")
+
+            _delivered, _skipped = await _pending_delivery_buffer.flush(device_id, _ws_send)
+            if _delivered or _skipped:
+                logger.info(
+                    "android_bridge: reconnect buffer flush — device_id=%s "
+                    "delivered=%d skipped(expired)=%d",
+                    device_id, _delivered, _skipped,
+                )
+        except Exception as _buf_exc:
+            logger.warning(
+                "android_bridge: reconnect buffer flush failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, _buf_exc,
+            )
 
         # PR-G: emit device lifecycle (reconnect) so the observability sink records
         # the reconnect event in the production path.
