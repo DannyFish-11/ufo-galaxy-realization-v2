@@ -447,7 +447,7 @@ def check_android_vlm_service_existence() -> CognitionCheckResult:
         )
 
 
-def check_android_model_checksums_registry() -> CognitionCheckResult:
+def check_android_model_checksums_populated() -> CognitionCheckResult:
     """Check whether Android model SHA-256 checksums are populated.
 
     Evidence: galaxy_gateway/android_vlm_service.py — ANDROID_MODEL_CHECKSUMS.
@@ -723,7 +723,7 @@ def build_cognition_audit_snapshot() -> Dict[str, Any]:
         # Section 4: multimodal
         check_multimodal_ingress_bus_existence(),
         check_android_vlm_service_existence(),
-        check_android_model_checksums_registry(),  # expected to flag gap
+        check_android_model_checksums_populated(),  # expected to flag gap
         # Section 5: transport / recovery
         check_pending_delivery_buffer_guarantees(),
         check_nats_bus_graceful_degradation(),
