@@ -136,6 +136,7 @@ try:
         DISTRIBUTED_RELEASE_GATE_SKELETON_AUTHORITY,
         DISTRIBUTED_RELEASE_GATE_SKELETON_PR7V2_SENTINEL,
         GATE_SKELETON_IS_NON_ENFORCING_POLICY,
+        GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
         GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_POLICY,
         DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY,
         ANDROID_COMPANION_EVIDENCE_IS_GATE_WORTHY_AFTER_V2_INGESTION_POLICY,
@@ -230,6 +231,7 @@ def test_A06_all_exports_present():
         "DISTRIBUTED_RELEASE_GATE_SKELETON_AUTHORITY",
         "DISTRIBUTED_RELEASE_GATE_SKELETON_PR7V2_SENTINEL",
         "GATE_SKELETON_IS_NON_ENFORCING_POLICY",
+        "GATE_IS_NOW_CI_ENFORCING_AUTHORITY",
         "GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_POLICY",
         "DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY",
         "ANDROID_COMPANION_EVIDENCE_IS_GATE_WORTHY_AFTER_V2_INGESTION_POLICY",
@@ -246,6 +248,14 @@ def test_A06_all_exports_present():
     ]
     for name in required:
         assert hasattr(mod, name), f"missing export: {name}"
+
+
+@_skip_if_unavailable
+def test_A07_ci_enforcing_authority_sentinel_content():
+    """PR Block 3: GATE_IS_NOW_CI_ENFORCING_AUTHORITY references enforcement promotion."""
+    assert GATE_IS_NOW_CI_ENFORCING_AUTHORITY
+    assert "PR-Block3" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY
+    assert "is_enforcing=True" in GATE_IS_NOW_CI_ENFORCING_AUTHORITY
 
 
 # ===========================================================================
@@ -539,9 +549,10 @@ def test_E05_report_has_all_category_evaluations():
 
 
 @_skip_if_unavailable
-def test_E06_is_enforcing_is_false():
+def test_E06_is_enforcing_is_true():
+    """PR Block 3: enforcement promoted — reports must carry is_enforcing=True."""
     report = evaluate_distributed_release_gate()
-    assert report.is_enforcing is False
+    assert report.is_enforcing is True
 
 
 @_skip_if_unavailable
@@ -695,14 +706,16 @@ def test_F08_deferred_ci_enforcement_is_deferred():
 
 
 # ===========================================================================
-# Group G — Non-enforcing guarantee
+# Group G — Enforcement posture
+# (PR Block 3: gate promoted from non-enforcing skeleton to CI-enforcing)
 # ===========================================================================
 
 
 @_skip_if_unavailable
-def test_G01_report_is_enforcing_always_false():
+def test_G01_report_is_enforcing_is_true():
+    """PR Block 3: evaluate_distributed_release_gate() must return is_enforcing=True."""
     report = evaluate_distributed_release_gate()
-    assert report.is_enforcing is False
+    assert report.is_enforcing is True
 
 
 @_skip_if_unavailable

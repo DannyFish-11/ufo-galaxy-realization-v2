@@ -504,7 +504,9 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         notes=(
             "ReleaseGate.require_enabled() is real but get_release_gate() "
             "returns a new instance each call; no state persistence. "
-            "Not wired into a hard CI or deploy gate."
+            "Distributed release gate now enforcing: "
+            "core.distributed_release_gate_skeleton produces is_enforcing=True "
+            "reports; governance_gate_enforcement.yml blocks CI on FAIL verdict."
         ),
     ),
     ModuleSemanticEntry(
@@ -514,7 +516,8 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         notes=(
             "build_consistency_gate_snapshot() returns structured results; "
             "non-breaking by design (reports drift but does not raise). "
-            "Must be explicitly invoked in CI to have effect."
+            "Wired into CI via governance_gate_enforcement.yml: "
+            "failed_gates > 0 causes CI exit 1, blocking merges on drift."
         ),
     ),
     ModuleSemanticEntry(
@@ -522,8 +525,10 @@ MODULE_SEMANTIC_TYPE_REGISTRY: List[ModuleSemanticEntry] = [
         ModuleSemanticType.SEMI_EXECUTABLE,
         naming_pattern="GATE",
         notes=(
-            "GovernanceValidationGate.evaluate() is advisory/report-only; "
-            "does not block execution by default."
+            "run_governance_verdict_ci() is called by governance_gate_enforcement.yml "
+            "on every push/PR to main; exit code 1 on FAIL blocks CI. "
+            "GovernanceValidationGate.validate() is still advisory when called "
+            "without enforce=True, but CI now enforces the FAIL path."
         ),
     ),
     ModuleSemanticEntry(

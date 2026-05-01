@@ -1,0 +1,234 @@
+name: Governance Gate Enforcement (PR Block 3)
+
+# =============================================================================
+# PR Block 3: Distributed Governance / Release Gate CI Enforcement
+#
+# This workflow converts the previously advisory-only governance and cross-repo
+# consistency gate surfaces into real CI-blocking checks.  It:
+#
+#   1. Runs the governance / readiness verdict gate
+#      (core.governance_validation_gate.run_governance_verdict_ci) and exits 1
+#      when any gate_worthy governance category is blocked or the readiness
+#      gate is BLOCKED — preventing merges that violate distributed governance
+#      invariants.
+#
+#   2. Runs all cross-repo consistency gates
+#      (core.cross_repo_consistency_gates.build_consistency_gate_snapshot) and
+#      exits 1 when any gate reports a hard FAIL verdict, blocking merges that
+#      introduce cross-repository protocol drift.
+#
+#   3. Uploads JSON gate verdict artifacts for audit and downstream inspection.
+#
+# Design:
+#   • governance-verdict job — hard-blocks on FAIL; advisory WARNs pass.
+#   • consistency-gates job  — hard-blocks when any gate has verdict == "fail".
+#   • Both jobs run in parallel; both must pass for the workflow to succeed.
+#
+# Grounding:
+#   The governance verdict gate is grounded in real evidence produced by
+#   core.v2_readiness_governance_evidence_surface (PR-6V2-EVIDENCE) and the
+#   distributed release gate skeleton (core.distributed_release_gate_skeleton,
+#   PR-7V2 / PR Block 3, is_enforcing=True).
+#
+#   The consistency gate is grounded in the cross-repository protocol
+#   consistency catalogue (core.cross_repo_protocol_consistency, PR-4).
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Governance / readiness verdict gate (hard-blocking)
+  # ---------------------------------------------------------------------------
+  governance-verdict:
+    name: Governance Verdict Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run governance / readiness verdict CI gate
+        id: governance
+        run: |
+          python -m core.governance_validation_gate \
+            --output governance_verdict.json
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload governance verdict artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-verdict
+          path: governance_verdict.json
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # 2. Cross-repo consistency gates (hard-blocking on drift)
+  # ---------------------------------------------------------------------------
+  consistency-gates:
+    name: Cross-Repo Consistency Gates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run cross-repo consistency gates
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.cross_repo_consistency_gates import (
+              build_consistency_gate_snapshot,
+          )
+
+          snapshot = build_consistency_gate_snapshot()
+
+          # ------------------------------------------------------------------
+          # Write JSON artifact
+          # ------------------------------------------------------------------
+          with open("consistency_gates_snapshot.json", "w") as f:
+              json.dump(snapshot.to_dict(), f, indent=2)
+
+          # ------------------------------------------------------------------
+          # Print human-readable summary
+          # ------------------------------------------------------------------
+          print("=" * 60)
+          print("Cross-Repo Consistency Gate Snapshot")
+          print("=" * 60)
+          print(snapshot.summary)
+          print()
+          print(f"  Total gates  : {snapshot.total_gates}")
+          print(f"  Passed       : {snapshot.passed_gates}")
+          print(f"  Warned       : {snapshot.warned_gates}")
+          print(f"  Failed       : {snapshot.failed_gates}")
+          print(f"  Drift        : {snapshot.drift_detected}")
+          print()
+
+          for result in snapshot.gate_results:
+              icon = "✅" if result.passed else ("⚠️ " if result.verdict == "warn" else "❌")
+              print(f"  {icon} [{result.gate_id:<26}] {result.verdict.upper()}")
+              if result.issues:
+                  for issue in result.issues:
+                      print(f"       ↳ {issue}")
+          print("=" * 60)
+
+          # ------------------------------------------------------------------
+          # Hard-block on any gate FAIL
+          # ------------------------------------------------------------------
+          if snapshot.failed_gates > 0:
+              print()
+              print(
+                  f"❌ CROSS-REPO CONSISTENCY: {snapshot.failed_gates} gate(s) FAILED — "
+                  "blocking CI to prevent cross-repository drift from merging."
+              )
+              sys.exit(1)
+
+          print("\n✅ CROSS-REPO CONSISTENCY: all gates passed or warned — CI approved.")
+          sys.exit(0)
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Upload consistency gate snapshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consistency-gates-snapshot
+          path: consistency_gates_snapshot.json
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # 3. Governance enforcement test suite
+  # ---------------------------------------------------------------------------
+  governance-tests:
+    name: Governance Enforcement Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run PR Block 3 governance enforcement tests
+        run: |
+          python -m pytest \
+            tests/test_pr_block3_governance_ci_enforcement.py \
+            -v \
+            --tb=short \
+            --no-header \
+            -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Verify is_enforcing=True in release gate
+        run: |
+          python - <<'EOF'
+          import sys
+          import os
+
+          sys.path.insert(0, os.getcwd())
+
+          from core.distributed_release_gate_skeleton import (
+              evaluate_distributed_release_gate,
+              GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
+          )
+
+          report = evaluate_distributed_release_gate()
+
+          if not report.is_enforcing:
+              print(
+                  "❌ ENFORCEMENT VERIFICATION FAILED: "
+                  f"release gate report has is_enforcing={report.is_enforcing!r}. "
+                  "Expected True after PR Block 3 promotion."
+              )
+              sys.exit(1)
+
+          print("✅ Release gate enforcement verified:")
+          print(f"   is_enforcing    : {report.is_enforcing}")
+          print(f"   overall_verdict : {report.overall_verdict}")
+          print(f"   authority       : {GATE_IS_NOW_CI_ENFORCING_AUTHORITY[:60]}...")
+          sys.exit(0)
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
