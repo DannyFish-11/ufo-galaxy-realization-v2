@@ -1273,6 +1273,10 @@ class DualRepoSystemRealityAuditor:
             test_refs.append(
                 ".github/workflows/system_acceptance.yml"
             )
+        if _file_exists(".github/workflows/governance_gate_enforcement.yml"):
+            test_refs.append(
+                ".github/workflows/governance_gate_enforcement.yml"
+            )
 
         gaps: List[str] = []
         for m in missing:
@@ -1318,7 +1322,8 @@ class DualRepoSystemRealityAuditor:
             rationale = (
                 f"All {total} governance modules importable; "
                 f"{len(test_refs)} test/CI reference(s) found.  "
-                "Note: release gate is still skeleton/non-enforcing."
+                "Release gate is enforcing (is_enforcing=True); "
+                "CI workflow blocks on governance failure."
             )
         else:
             maturity = MaturityLabel.mainchained

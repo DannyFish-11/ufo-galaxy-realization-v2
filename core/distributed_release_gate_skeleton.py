@@ -133,6 +133,7 @@ __all__ = [
     "DISTRIBUTED_RELEASE_GATE_SKELETON_AUTHORITY",
     "DISTRIBUTED_RELEASE_GATE_SKELETON_PR7V2_SENTINEL",
     "GATE_SKELETON_IS_NON_ENFORCING_POLICY",
+    "GATE_IS_NOW_CI_ENFORCING_AUTHORITY",
     "GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_POLICY",
     "DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY",
     "ANDROID_COMPANION_EVIDENCE_IS_GATE_WORTHY_AFTER_V2_INGESTION_POLICY",
@@ -175,15 +176,37 @@ DISTRIBUTED_RELEASE_GATE_SKELETON_PR7V2_SENTINEL: str = (
 
 GATE_SKELETON_IS_NON_ENFORCING_POLICY: str = (
     "POLICY::GATE_SKELETON_IS_NON_ENFORCING_V1: "
-    "The DistributedReleaseGateSkeleton produces a structured gate verdict "
-    "but does NOT block CI, reject releases, or raise exceptions based on "
-    "the verdict.  Enforcement (e.g. CI pipeline blocking, merge gates) is "
-    "explicitly deferred to later PRs that build on top of this skeleton.  "
-    "Consumers of ReleaseGateReport MUST NOT interpret the verdict as a "
-    "hard block unless a subsequent PR has explicitly enabled enforcement."
+    "The DistributedReleaseGateSkeleton originally produced a structured gate "
+    "verdict but did NOT block CI, reject releases, or raise exceptions based "
+    "on the verdict.  This policy described the skeleton-only (non-enforcing) "
+    "state.  As of PR Block 3, enforcement has been promoted: the gate now "
+    "produces reports with is_enforcing=True and the CI workflow "
+    "(.github/workflows/governance_gate_enforcement.yml) hard-blocks merges "
+    "when gate_worthy categories are blocked.  This sentinel is preserved for "
+    "downstream import compatibility and historical reference."
 )
-"""Policy: the gate skeleton is non-enforcing; it structures evidence without
-blocking releases.  Enforcement is deferred to later PRs."""
+"""Policy: documents the original non-enforcing state; superseded by
+GATE_IS_NOW_CI_ENFORCING_AUTHORITY which signals active enforcement."""
+
+GATE_IS_NOW_CI_ENFORCING_AUTHORITY: str = (
+    "GATE_IS_NOW_CI_ENFORCING_AUTHORITY::"
+    "core.distributed_release_gate_skeleton::PR-Block3::"
+    "governance-gate-ci-enforcement-promotion::"
+    "is_enforcing=True::CI-workflow=governance_gate_enforcement.yml"
+)
+"""Sentinel: enforcement has been promoted from advisory skeleton to real CI gate.
+
+As of PR Block 3 this module produces ReleaseGateReport instances with
+``is_enforcing=True``.  The companion CI workflow
+``.github/workflows/governance_gate_enforcement.yml`` runs the
+:func:`core.governance_validation_gate.run_governance_verdict_ci` function
+on every push/PR to main and exits non-zero when any gate_worthy category is
+blocked, preventing merges that violate distributed governance invariants.
+
+Import this sentinel to assert that the current code is running under the
+PR Block 3 enforced governance posture rather than the original skeleton-only
+advisory state.
+"""
 
 GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_POLICY: str = (
     "POLICY::GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_V1: "
@@ -630,7 +653,12 @@ class DistributedReleaseGateSkeleton:
 
     - Lists every category with its strength and verdict.
     - Aggregates an overall verdict across gate_worthy categories.
-    - Is always non-enforcing (``is_enforcing=False``) in this PR.
+    - Produces reports with ``is_enforcing=True`` (PR Block 3 promotion).
+
+    The companion CI workflow
+    ``.github/workflows/governance_gate_enforcement.yml`` consumes the
+    governance verdict and hard-blocks CI when gate_worthy categories are
+    blocked, turning this from an advisory skeleton into a real release gate.
 
     Usage
     -----
@@ -643,20 +671,10 @@ class DistributedReleaseGateSkeleton:
 
         report = evaluate_distributed_release_gate()
         print(report.overall_verdict)   # "open" | "blocked" | "deferred" | "unknown"
-        print(report.is_enforcing)      # False — skeleton only, not yet enforcing
+        print(report.is_enforcing)      # True — enforcement promoted in PR Block 3
 
-    Extension guide
-    ---------------
-    To promote the skeleton to a hard gate in a later PR:
-
-    1. Import :func:`evaluate_distributed_release_gate`.
-    2. Assert ``report.overall_verdict == ReleaseGateVerdict.open.value``.
-    3. Assert ``report.blocked_gate_worthy_count == 0``.
-    4. Document the enforcement decision in a PR that explicitly sets
-       ``is_enforcing=True`` on the report (see
-       :meth:`_build_report` ``is_enforcing`` parameter).
-    5. Graduate any deferred categories to ``gate_worthy`` in
-       :data:`_CATEGORY_STRENGTH` if they become enforcement-ready.
+    See :data:`GATE_IS_NOW_CI_ENFORCING_AUTHORITY` for the enforcement
+    promotion sentinel.
     """
 
     def evaluate(self) -> ReleaseGateReport:
@@ -698,6 +716,7 @@ class DistributedReleaseGateSkeleton:
         return self._build_report(
             evaluations=evaluations,
             surface_report_id=surface_report_id,
+            is_enforcing=True,
         )
 
     def _evaluate_category(
