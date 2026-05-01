@@ -758,9 +758,15 @@ class DualRepoSystemCompletenessReviewer:
             )
 
         # Label assignment
+        # Note: label is only 'complete' when ALL structural sub-areas are gap-free,
+        # ensuring test E16 invariant (complete label requires empty gap_items).
         total_core = len(core_modules)
         available_count = len(available)
-        if available_count == total_core and dispatch_available == len(dispatch_modules):
+        if (
+            available_count == total_core
+            and dispatch_available == len(dispatch_modules)
+            and gateway_available == len(gateway_modules)
+        ):
             label = CompletenessLabel.complete
         elif available_count >= total_core * 0.7:
             label = CompletenessLabel.structure_only
