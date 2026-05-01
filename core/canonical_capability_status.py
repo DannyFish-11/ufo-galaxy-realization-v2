@@ -157,7 +157,7 @@ LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = (
 )
 
 LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED: str = (
-    "STATUS::LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED_V1: "
+    "STATUS::LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED_V2: "
     "Android local AI inference is DEGRADED because the required native "
     "runtime libraries are absent from the APK build: "
     "(1) llama.cpp Android binding is NOT in app/build.gradle — required for "

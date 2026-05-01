@@ -33,6 +33,10 @@ _COLOUR_WARN = "\033[33m"
 _COLOUR_ERROR = "\033[31m"
 _COLOUR_DIM = "\033[90m"
 
+_MAX_DISPLAYED_CAPABILITIES = 5  # max device capabilities shown inline
+_MAX_DISPLAYED_CHAINS = 5        # max task chains shown
+_MAX_DISPLAYED_STEPS = 4         # max steps shown per chain
+
 DEVICE_CHAIN_SURFACE_AUTHORITY: str = (
     "DEVICE_CHAIN_SURFACE_AUTHORITY_V1: "
     "windows_client.status_board_v2.device_chain_surface renders the "
@@ -105,9 +109,9 @@ class DeviceChainSurface:
                     dot = _ansi.c("○", _COLOUR_DIM)
                     state_label = _ansi.c(state, _COLOUR_DIM)
                 caps = dev.get("capabilities") or []
-                cap_summary = ", ".join(str(c) for c in caps[:5])
-                if len(caps) > 5:
-                    cap_summary += f" +{len(caps) - 5}"
+                cap_summary = ", ".join(str(c) for c in caps[:_MAX_DISPLAYED_CAPABILITIES])
+                if len(caps) > _MAX_DISPLAYED_CAPABILITIES:
+                    cap_summary += f" +{len(caps) - _MAX_DISPLAYED_CAPABILITIES}"
                 stage = dev.get("execution_stage") or ""
                 stage_str = f"  stage={stage}" if stage else ""
                 lines.append(
@@ -155,7 +159,7 @@ class DeviceChainSurface:
             else:
                 lines.append(_ansi.c("  (no active task chains)", _COLOUR_DIM))
         else:
-            for chain in chains[:5]:  # show at most 5 chains
+            for chain in chains[:_MAX_DISPLAYED_CHAINS]:  # show at most _MAX_DISPLAYED_CHAINS chains
                 chain_id = chain.get("chain_id") or chain.get("id") or "?"
                 status = (chain.get("status") or "unknown").lower()
                 if status in ("completed", "success"):
@@ -170,7 +174,7 @@ class DeviceChainSurface:
                 lines.append(f"  chain={chain_id}  [{s_label}]  {summary}")
 
                 steps: List[Dict] = chain.get("steps") or []
-                for step in steps[:4]:  # show at most 4 steps per chain
+                for step in steps[:_MAX_DISPLAYED_STEPS]:  # show at most _MAX_DISPLAYED_STEPS per chain
                     step_dev = step.get("device_id") or "local"
                     step_type = step.get("step_type") or "?"
                     step_state = (step.get("state") or "?").lower()
@@ -186,10 +190,10 @@ class DeviceChainSurface:
                             _COLOUR_DIM,
                         )
                     )
-                if len(steps) > 4:
+                if len(steps) > _MAX_DISPLAYED_STEPS:
                     lines.append(
                         _ansi.c(
-                            f"       … +{len(steps) - 4} more steps",
+                            f"       … +{len(steps) - _MAX_DISPLAYED_STEPS} more steps",
                             _COLOUR_DIM,
                         )
                     )

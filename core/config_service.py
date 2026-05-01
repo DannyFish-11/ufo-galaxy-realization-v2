@@ -297,12 +297,12 @@ class ConfigService:
 
     #: Valid endpoint names for :meth:`set_endpoint_url`.
     VALID_ENDPOINT_NAMES: frozenset = frozenset(
-        {
+        [
             "galaxy_gateway_url",   # V2 HTTP gateway (e.g. http://host:9000)
             "android_ws_url",       # Android WebSocket endpoint (e.g. ws://host:8765/ws/device/{id})
             "nats_url",             # NATS control-plane bus (e.g. nats://host:4222)
             "status_board_port",    # Status board HTTP projection port (integer as string)
-        }
+        ]
     )
 
     def set_endpoint_url(self, endpoint_name: str, url: str) -> None:
