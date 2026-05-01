@@ -1,0 +1,122 @@
+name: Fresh Code-Grounded Dual-Repo Integrated Audit
+
+# =============================================================================
+# Fresh Integrated Code Reality Audit CI
+#
+# This workflow runs the machine-checkable sentinels in
+# core/fresh_dual_repo_code_audit.py and the test suite in
+# tests/test_fresh_dual_repo_code_audit.py.
+#
+# Purpose:
+#   Ensure that the fresh code-grounded audit invariants remain consistent
+#   with actual implementation state.  The sentinel module encodes findings
+#   derived from direct code inspection of both repositories; the tests
+#   enforce that those findings have not been silently invalidated.
+#
+# Key invariants enforced:
+#   1. Transport is COMPLETE (WS path aligned, all message types handled).
+#   2. ReconciliationSignal wire is NOT MISSING (PR-51 Android + V2 handler).
+#   3. Android perpetual reconnect is NOT MISSING (PR-Block1 watchdog).
+#   4. Governance is COMPLETE (CI-enforcing, not advisory).
+#   5. Final verdict is OPERATIONALLY_CLOSED_CONDITIONAL.
+#   6. Activation barriers are honestly documented.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/fresh_dual_repo_code_audit.py"
+      - "tests/test_fresh_dual_repo_code_audit.py"
+      - ".github/workflows/fresh_integrated_code_audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/fresh_dual_repo_code_audit.py"
+      - "tests/test_fresh_dual_repo_code_audit.py"
+      - ".github/workflows/fresh_integrated_code_audit.yml"
+  workflow_dispatch:
+
+jobs:
+  fresh-audit-tests:
+    name: Fresh Integrated Code Reality Audit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
+
+      - name: Run fresh audit test suite
+        run: |
+          python -m pytest \
+            tests/test_fresh_dual_repo_code_audit.py \
+            -v \
+            --tb=short \
+            --no-header \
+            -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Run fresh audit invariant assertions directly
+        run: |
+          python - <<'EOF'
+          import sys
+          import os
+          sys.path.insert(0, os.getcwd())
+
+          from core.fresh_dual_repo_code_audit import (
+              assert_fresh_audit_invariants,
+              FRESH_SYSTEM_VERDICT,
+              FRESH_VERDICT_RATIONALE,
+              FRESH_AUDIT_UPGRADES_FROM_PRIOR,
+              REMAINING_ACTIVATION_BARRIERS,
+              FreshSystemVerdict,
+          )
+
+          # Run all invariants
+          assert_fresh_audit_invariants()
+
+          # Print summary
+          print("=" * 60)
+          print("FRESH CODE-GROUNDED INTEGRATED AUDIT — INVARIANT SUMMARY")
+          print("=" * 60)
+          print()
+          print(f"  Final Verdict     : {FRESH_SYSTEM_VERDICT.value}")
+          print()
+          print(f"  Verdict Rationale :")
+          for line in FRESH_VERDICT_RATIONALE.split(". "):
+              print(f"    {line.strip()}.")
+          print()
+          print(f"  Upgrades from prior audits ({len(FRESH_AUDIT_UPGRADES_FROM_PRIOR)}):")
+          for i, u in enumerate(FRESH_AUDIT_UPGRADES_FROM_PRIOR, 1):
+              print(f"    {i}. {u[:100]}...")
+          print()
+          print(f"  Remaining activation barriers ({len(REMAINING_ACTIVATION_BARRIERS)}):")
+          for i, b in enumerate(REMAINING_ACTIVATION_BARRIERS, 1):
+              print(f"    {i}. {b[:100]}...")
+          print()
+          print("=" * 60)
+
+          if FRESH_SYSTEM_VERDICT != FreshSystemVerdict.OPERATIONALLY_CLOSED_CONDITIONAL:
+              print(
+                  "❌ UNEXPECTED VERDICT: expected OPERATIONALLY_CLOSED_CONDITIONAL "
+                  f"but got {FRESH_SYSTEM_VERDICT.value}"
+              )
+              sys.exit(1)
+
+          print("✅ Fresh integrated audit: all invariants passed.")
+          print(f"   Verdict: {FRESH_SYSTEM_VERDICT.value}")
+          sys.exit(0)
+          EOF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
