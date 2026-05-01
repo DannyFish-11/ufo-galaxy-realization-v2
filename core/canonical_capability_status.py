@@ -33,7 +33,10 @@ Coverage
 --------
 The registry explicitly classifies the following capabilities (among others):
 
-- **local_ai / on-device inference** — structural-only; not default-active.
+- **local_ai / on-device inference** — DEGRADED; model download pipeline is
+  complete but the inference runtime (llama.cpp for MobileVLM, NCNN for
+  SeeClick) is not bundled in the Android APK build.  The capability degrades
+  to remote-fallback rather than a NoOp stub.
 - **webrtc** — experimental; not mainline.
 - **mesh / federation** — structural-only; not mainline.
 - **advanced_handoff** — experimental.
@@ -92,6 +95,7 @@ __all__ = [
     "STRUCTURAL_CAPABILITY_IS_NOT_OPERATIONAL_POLICY",
     "DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY",
     "LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS",
+    "LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED",
     "WEBRTC_IS_EXPERIMENTAL_STATUS",
     "MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS",
     # Enumeration
@@ -139,13 +143,32 @@ DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY: str = (
 )
 
 LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = (
-    "STATUS::LOCAL_AI_STRUCTURAL_ONLY_V1: "
+    "STATUS::LOCAL_AI_DEGRADED_V2: "
     "Android local AI / on-device inference (local_ai, local_grounding, "
-    "local_planner, on_device_inference) is classified as STRUCTURAL_ONLY. "
-    "The default implementations are NoOp stubs that return errors without "
-    "performing inference.  This capability is NOT active mainline and must "
-    "not be treated as an operational capability until explicit activation "
-    "and a passing integration test confirm otherwise."
+    "local_planner, on_device_inference) is classified as DEGRADED. "
+    "The model download pipeline (8-stage Hugging Face provisioning), "
+    "service interfaces, and capability-report wiring are all implemented. "
+    "However, the inference runtime libraries (llama.cpp for MobileVLM GGUF, "
+    "NCNN for SeeClick) are NOT bundled in the Android APK build.gradle. "
+    "This means model files can be downloaded but inference cannot execute. "
+    "The system degrades to remote-fallback (V2-side OpenClawd) rather than "
+    "silent NoOp.  Previously classified as STRUCTURAL_ONLY — upgraded to "
+    "DEGRADED to reflect the implemented (but runtime-incomplete) pipeline."
+)
+
+LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED: str = (
+    "STATUS::LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED_V1: "
+    "Android local AI inference is DEGRADED because the required native "
+    "runtime libraries are absent from the APK build: "
+    "(1) llama.cpp Android binding is NOT in app/build.gradle — required for "
+    "MobileVLM V2-1.7B GGUF execution via LocalPlannerService. "
+    "(2) NCNN Android AAR is NOT in app/build.gradle — required for SeeClick "
+    "CNN inference via LocalGroundingService. "
+    "Source: app/build.gradle dependencies section in ufo-galaxy-android repo. "
+    "Fix: add 'io.github.ggml-org:llama.cpp-android:<version>' and "
+    "'com.tencent.ncnn:ncnn-android:<version>' to app/build.gradle "
+    "dependencies block.  See android_client/build.gradle.template for the "
+    "reference configuration."
 )
 
 WEBRTC_IS_EXPERIMENTAL_STATUS: str = (
@@ -375,40 +398,47 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             rationale="Advanced cross-device handoff (beyond canonical task_assign "
                       "path) is structural/experimental.  Not mainline.",
         ),
-        # --- Structural only ---
+        # --- Degraded: local AI inference pipeline exists but runtime not bundled ---
         CapabilityStatusRecord(
             capability_id="local_ai",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local AI / On-Device Inference",
-            rationale="Default implementations are NoOp stubs that return errors "
-                      "without performing inference.  Devices do not register with "
-                      "local_ai unless explicitly configured and a model is loaded.  "
-                      "Must not be treated as active capability.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="Model download pipeline (8-stage HuggingFace provisioning) and "
+                      "service interfaces are implemented.  However, llama.cpp and NCNN "
+                      "inference runtime libraries are not bundled in app/build.gradle, "
+                      "so inference cannot execute.  Degrades to remote fallback (OpenClawd). "
+                      "Fix: add llama.cpp-android and ncnn-android to app/build.gradle.",
+            source_sentinel=LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED,
         ),
         CapabilityStatusRecord(
             capability_id="local_grounding",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Grounding",
-            rationale="LocalGroundingService defaults to NoOpGroundingService. "
-                      "Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="LocalGroundingService interface is implemented; SeeClick model "
+                      "download pipeline is in place.  NCNN Android AAR is absent from "
+                      "build.gradle — inference not executable.  Degrades gracefully.",
+            source_sentinel=LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED,
         ),
         CapabilityStatusRecord(
             capability_id="local_planner",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Planner",
-            rationale="LocalPlannerService defaults to NoOp. Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="LocalPlannerService interface is implemented; MobileVLM model "
+                      "download pipeline is in place.  llama.cpp binding absent from "
+                      "build.gradle — inference not executable.  Degrades gracefully.",
+            source_sentinel=LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED,
         ),
         CapabilityStatusRecord(
             capability_id="on_device_inference",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="On-Device Inference",
-            rationale="On-device inference (LocalInferenceRuntimeManager) is "
-                      "structural scaffolding.  Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="LocalInferenceRuntimeManager lifecycle is defined; model assets "
+                      "provision correctly.  Native inference runtime libraries (llama.cpp, "
+                      "NCNN) are not yet in build.gradle.  Full activation requires those "
+                      "deps to be added and the build re-published.",
+            source_sentinel=LOCAL_AI_DEGRADED_INFERENCE_RUNTIME_NOT_BUNDLED,
         ),
+        # --- Structural only ---
         CapabilityStatusRecord(
             capability_id="mesh",
             status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,

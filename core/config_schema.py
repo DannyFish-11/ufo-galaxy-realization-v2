@@ -101,6 +101,11 @@ CONFIG_KEYS: FrozenSet[str] = frozenset(
         # Routing preferences
         "routing.native_multimodal_policy",
         "routing.default_provider",
+        # Server / endpoint URLs (non-secret; connection addresses only)
+        "endpoints.galaxy_gateway_url",
+        "endpoints.android_ws_url",
+        "endpoints.nats_url",
+        "endpoints.status_board_port",
     }
 )
 
@@ -126,12 +131,20 @@ class ConfigDefaults:
         "default_provider": "openai",
     }
 
+    ENDPOINTS: Dict[str, Any] = {
+        "galaxy_gateway_url": "",     # e.g. http://localhost:9000
+        "android_ws_url": "",         # e.g. ws://100.x.x.x:8765/ws/device/{device_id}
+        "nats_url": "",               # e.g. nats://localhost:4222
+        "status_board_port": 8299,    # status board HTTP projection port
+    }
+
     @classmethod
     def as_dict(cls) -> Dict[str, Any]:
         """Return the full default config dict (suitable for runtime/config.json)."""
         return {
             "providers": {k: dict(v) for k, v in cls.PROVIDERS.items()},
             "routing": dict(cls.ROUTING),
+            "endpoints": dict(cls.ENDPOINTS),
         }
 
 

@@ -717,15 +717,31 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
     ),
     WorkstreamGapEntry(
         gap_id="GAP_ANDROID_LOCAL_AI_DEFAULT_OFF",
-        title="Android local AI / on-device inference not activated by default",
+        title="Android local AI inference runtime libraries not bundled in APK build",
         severity=GapSeverity.P1,
         description=(
-            "Android-side local LLM/grounding capability exists in the "
-            "architecture but is not activated by default. Devices register "
-            "without local AI capability unless explicitly configured. "
-            "No automated test verifies local AI activation path."
+            "Android local AI model download pipeline (8-stage HuggingFace "
+            "provisioning for MobileVLM V2-1.7B and SeeClick), service "
+            "interfaces (LocalPlannerService, LocalGroundingService), and "
+            "capability-report wiring are all implemented.  However, the "
+            "native inference runtime libraries are absent from app/build.gradle: "
+            "(1) llama.cpp Android binding is missing — required for MobileVLM "
+            "GGUF execution via LocalPlannerService; "
+            "(2) NCNN Android AAR is missing — required for SeeClick CNN "
+            "inference via LocalGroundingService. "
+            "V2-side status: core/canonical_capability_status.py now classifies "
+            "local_ai, local_grounding, local_planner, on_device_inference as "
+            "DEGRADED (upgraded from STRUCTURAL_ONLY) — V2-side done. "
+            "Remaining work: add llama.cpp-android and ncnn-android to "
+            "ufo-galaxy-android app/build.gradle.  Reference template at "
+            "android_client/build.gradle.template."
         ),
         resolved=False,
+        resolution_evidence=(
+            "V2-side partial: canonical_capability_status.py upgraded local_ai "
+            "group from STRUCTURAL_ONLY to DEGRADED.  Android build.gradle "
+            "changes still required in ufo-galaxy-android repo."
+        ),
     ),
     WorkstreamGapEntry(
         gap_id="GAP_RELEASE_GATE_HARD_ENFORCEMENT",

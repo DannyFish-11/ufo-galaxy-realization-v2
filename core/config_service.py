@@ -292,6 +292,86 @@ class ConfigService:
         logger.info("native_multimodal_policy → %s", mode)
 
     # ------------------------------------------------------------------
+    # Endpoint URL writes
+    # ------------------------------------------------------------------
+
+    #: Valid endpoint names for :meth:`set_endpoint_url`.
+    VALID_ENDPOINT_NAMES: frozenset = frozenset(
+        {
+            "galaxy_gateway_url",   # V2 HTTP gateway (e.g. http://host:9000)
+            "android_ws_url",       # Android WebSocket endpoint (e.g. ws://host:8765/ws/device/{id})
+            "nats_url",             # NATS control-plane bus (e.g. nats://host:4222)
+            "status_board_port",    # Status board HTTP projection port (integer as string)
+        }
+    )
+
+    def set_endpoint_url(self, endpoint_name: str, url: str) -> None:
+        """
+        Persist a server/endpoint URL to ``runtime/config.json``.
+
+        Parameters
+        ----------
+        endpoint_name:
+            One of ``"galaxy_gateway_url"``, ``"android_ws_url"``,
+            ``"nats_url"``, ``"status_board_port"``.
+        url:
+            The URL or port value to store.  Must be non-empty.
+
+        Raises
+        ------
+        ValueError
+            If ``endpoint_name`` is not a recognised endpoint, or if
+            ``url`` is empty.
+        """
+        endpoint_name = (endpoint_name or "").strip()
+        if endpoint_name not in self.VALID_ENDPOINT_NAMES:
+            raise ValueError(
+                f"Unknown endpoint '{endpoint_name}'. "
+                f"Valid endpoints: {sorted(self.VALID_ENDPOINT_NAMES)}"
+            )
+        url = (url or "").strip()
+        if not url:
+            raise ValueError(f"URL for endpoint '{endpoint_name}' must be non-empty.")
+        config = self._store.read_config()
+        endpoints = config.get("endpoints", {})
+        if not isinstance(endpoints, dict):
+            endpoints = {}
+        endpoints[endpoint_name] = url
+        config["endpoints"] = endpoints
+        self._store.write_config(config)
+        logger.info("Endpoint URL set: %s → %s", endpoint_name, url)
+
+    def get_endpoint_url(self, endpoint_name: str, default: str = "") -> str:
+        """
+        Read a server/endpoint URL from the effective configuration.
+
+        Returns *default* when the endpoint is not configured.
+        """
+        config = self._store.get_effective_config()
+        endpoints = config.get("endpoints", {})
+        if not isinstance(endpoints, dict):
+            return default
+        return str(endpoints.get(endpoint_name, default))
+
+    def get_all_endpoint_urls(self) -> dict:
+        """
+        Return all configured endpoint URLs as a dict.
+
+        Keys are the endpoint names; values are the stored strings (or
+        empty string when not configured).
+        """
+        config = self._store.get_effective_config()
+        endpoints = config.get("endpoints", {})
+        if not isinstance(endpoints, dict):
+            endpoints = {}
+        result = {}
+        from core.config_schema import ConfigDefaults  # noqa: PLC0415
+        defaults = ConfigDefaults.ENDPOINTS
+        for name in self.VALID_ENDPOINT_NAMES:
+            result[name] = str(endpoints.get(name, defaults.get(name, "")))
+        return result
+
+    # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 

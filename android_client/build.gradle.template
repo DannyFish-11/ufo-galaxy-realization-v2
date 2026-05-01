@@ -1,0 +1,112 @@
+// android_client/build.gradle.template
+// ======================================
+// Reference build.gradle template for ufo-galaxy-android / app/build.gradle.
+//
+// This template documents the REQUIRED native inference runtime dependencies
+// that must be added to the Android APK build to activate local AI capability
+// (local_ai, local_grounding, local_planner, on_device_inference).
+//
+// Current gap (GAP_ANDROID_LOCAL_AI_DEFAULT_OFF):
+//   The model download pipeline (8-stage HuggingFace provisioning for
+//   MobileVLM V2-1.7B and SeeClick), service interfaces
+//   (LocalPlannerService, LocalGroundingService), and capability-report
+//   wiring are all implemented.  However the two inference runtime
+//   libraries below are absent from the actual app/build.gradle in
+//   the ufo-galaxy-android repository.  Add them to close the gap.
+//
+// Required actions in ufo-galaxy-android/app/build.gradle:
+//   1. Add llama.cpp Android binding  → enables MobileVLM V2-1.7B inference
+//   2. Add NCNN Android AAR           → enables SeeClick CNN inference
+//
+// ============================================================================
+// NOTE: Replace <VERSION> placeholders with the latest stable release tags.
+//       Check https://github.com/ggml-org/llama.cpp/releases and
+//             https://github.com/Tencent/ncnn/releases for current versions.
+// ============================================================================
+
+android {
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 26
+        targetSdk 34
+
+        // ABI filter — only include the ABIs your target devices use.
+        // arm64-v8a covers modern Android phones (recommended).
+        // Add x86_64 for emulator testing.
+        ndk {
+            abiFilters "arm64-v8a", "x86_64"
+        }
+    }
+
+    // Required for llama.cpp and NCNN native libraries.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+}
+
+dependencies {
+    // -----------------------------------------------------------------------
+    // REQUIRED: llama.cpp Android binding
+    // Used by: LocalPlannerService → MobileVLM V2-1.7B GGUF inference
+    // Without this: LocalPlannerService cannot execute; degrades to remote.
+    // -----------------------------------------------------------------------
+    implementation 'io.github.ggml-org:llama.cpp-android:<VERSION>'
+    // Alternatively, if using a custom fork or different distribution:
+    // implementation 'com.github.ggerganov:llama.cpp:master-SNAPSHOT'
+
+    // -----------------------------------------------------------------------
+    // REQUIRED: NCNN Android AAR
+    // Used by: LocalGroundingService → SeeClick CNN inference
+    // Without this: LocalGroundingService cannot execute; degrades to remote.
+    // -----------------------------------------------------------------------
+    implementation 'com.tencent.ncnn:ncnn-android:<VERSION>'
+
+    // -----------------------------------------------------------------------
+    // OPTIONAL: MLC-LLM Android runtime (alternative to llama.cpp)
+    // More memory-efficient quantisation; supports more model formats.
+    // Use if you want to support INT4/INT8 quantised MobileVLM variants.
+    // -----------------------------------------------------------------------
+    // implementation 'ai.mlc:mlc-llm-android:<VERSION>'
+
+    // -----------------------------------------------------------------------
+    // OPTIONAL: MNN (Mobile Neural Network) runtime
+    // Alternative inference engine; use if NCNN is not preferred.
+    // -----------------------------------------------------------------------
+    // implementation 'com.alibaba.mnn:MNN-android:<VERSION>'
+
+    // -----------------------------------------------------------------------
+    // EXISTING dependencies (already in the real build.gradle — kept for
+    // reference; do not duplicate them):
+    // -----------------------------------------------------------------------
+    // implementation 'androidx.core:core-ktx:<VERSION>'
+    // implementation 'androidx.appcompat:appcompat:<VERSION>'
+    // implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:<VERSION>'
+    // implementation 'com.squareup.okhttp3:okhttp:<VERSION>'
+    // implementation 'com.google.code.gson:gson:<VERSION>'
+    // ...
+}
+
+// ============================================================================
+// After adding the above dependencies:
+//
+// 1. Run:  ./gradlew assembleDebug  (or assembleRelease)
+// 2. Verify no linker errors for llama.cpp / ncnn symbols.
+// 3. On first app launch, ModelDownloadManager will provision:
+//    - MobileVLM V2-1.7B GGUF  (~1.0 GB)
+//    - SeeClick model params     (~0.4 GB)
+//    - SeeClick model weights    (~0.25 GB)
+//    Total: ~1.65 GB on-device storage required.
+// 4. After provisioning succeeds, LocalInferenceRuntimeManager transitions:
+//    UNLOADED → LOADING → READY
+// 5. The device will then register with local_ai capability in
+//    capability_report, and V2-side canonical_capability_status.py
+//    will reflect ACTIVE_MAINLINE for local_ai instead of DEGRADED.
+//
+// SHA-256 verification:
+//   The ModelAssetConfig sha256 fields are currently null (TODO in source).
+//   After adding the runtime deps, fill in the correct SHA-256 hashes
+//   for each model asset in the ModelAssetConfig declarations.
+// ============================================================================

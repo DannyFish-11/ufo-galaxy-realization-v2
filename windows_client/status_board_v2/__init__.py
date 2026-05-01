@@ -72,6 +72,20 @@ PR-15 upgrades the board to the canonical desktop control surface:
 - All PR-9 through PR-14 exports verified present
   and re-exportable from this package __all__ (PR-15)
 
+The operator console is extended beyond PR-15 with:
+
+- URL / API-key config surface                        → UrlConfigSurface
+- URL config surface authority sentinel               → URL_CONFIG_SURFACE_AUTHORITY
+- Multi-device / cross-device task chain surface      → DeviceChainSurface
+- Device chain surface authority sentinel             → DEVICE_CHAIN_SURFACE_AUTHORITY
+
+New CLI arguments added to ``app.py``::
+
+    --set-url ENDPOINT_NAME=URL      # set server endpoint URLs (android_ws_url, galaxy_gateway_url, nats_url)
+    --set-api-key PROVIDER=KEY       # store API key for a provider (never echoed)
+    --show-url-config                # render URL/key config panel in every frame
+    --show-device-chain              # render multi-device task chain panel in every frame
+
 CONTROL SURFACE — PR-15
 -----------------------
 As of PR-15 this package includes a bounded configuration entry path:
@@ -114,6 +128,8 @@ from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
 from .adapter_surface import AdapterSurface
+from .url_config_surface import UrlConfigSurface, URL_CONFIG_SURFACE_AUTHORITY
+from .device_chain_surface import DeviceChainSurface, DEVICE_CHAIN_SURFACE_AUTHORITY
 from .topology_layout import (
     build_constellation_layout,
     TopologyConstellationLayout,
@@ -167,6 +183,12 @@ __all__ = [
     "ReturnSurface",
     # PR-10: first usable adapter-driven status board surface
     "AdapterSurface",
+    # Operator URL/key config surface
+    "UrlConfigSurface",
+    "URL_CONFIG_SURFACE_AUTHORITY",
+    # Multi-device / cross-device task chain surface
+    "DeviceChainSurface",
+    "DEVICE_CHAIN_SURFACE_AUTHORITY",
     # PR-11: topology / constellation layout foundation
     "build_constellation_layout",
     "TopologyConstellationLayout",

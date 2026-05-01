@@ -78,6 +78,12 @@ class ControlOperation(str, Enum):
     SET_ROUTING_POLICY = "set_routing_policy"
     """Set the native multimodal routing policy (``strict`` | ``prefer`` | ``allow_fallback``)."""
 
+    SET_SERVER_URL = "set_server_url"
+    """Set a server/endpoint URL (galaxy_gateway_url, android_ws_url, nats_url, status_board_port)."""
+
+    SET_API_KEY = "set_api_key"
+    """Store an API key for a provider via the credential vault / secrets store."""
+
 
 # ---------------------------------------------------------------------------
 # Control feedback
@@ -251,6 +257,16 @@ class ConfigControlSurface:
             result = self.apply_routing_policy(
                 mode=kwargs.get("mode", ""),
             )
+        elif operation == ControlOperation.SET_SERVER_URL:
+            result = self.apply_server_url(
+                endpoint_name=kwargs.get("endpoint_name", ""),
+                url=kwargs.get("url", ""),
+            )
+        elif operation == ControlOperation.SET_API_KEY:
+            result = self.apply_api_key(
+                provider=kwargs.get("provider", ""),
+                api_key=kwargs.get("api_key", ""),
+            )
         else:
             result = ControlApplyResult(
                 succeeded=False,
@@ -388,6 +404,155 @@ class ConfigControlSurface:
             "ConfigControlSurface: routing policy applied — %s, reload_triggered=%s",
             applied_key,
             reload_triggered,
+        )
+        return result
+
+    def apply_server_url(self, endpoint_name: str, url: str) -> ControlApplyResult:
+        """
+        Persist a server/endpoint URL to ``runtime/config.json``.
+
+        Parameters
+        ----------
+        endpoint_name:
+            One of ``"galaxy_gateway_url"``, ``"android_ws_url"``,
+            ``"nats_url"``, ``"status_board_port"``.
+        url:
+            The URL or port value.  Must be non-empty.
+
+        Returns
+        -------
+        ControlApplyResult
+        """
+        op = ControlOperation.SET_SERVER_URL.value
+        endpoint_name = (endpoint_name or "").strip()
+        url = (url or "").strip()
+        if not endpoint_name:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="endpoint_name must be non-empty",
+            )
+            self._last_result = result
+            return result
+        if not url:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="url must be non-empty",
+            )
+            self._last_result = result
+            return result
+
+        try:
+            self._service.set_endpoint_url(endpoint_name, url)
+        except ValueError as exc:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=str(exc),
+            )
+            self._last_result = result
+            return result
+        except Exception as exc:  # pragma: no cover
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"write failed: {exc}",
+            )
+            self._last_result = result
+            return result
+
+        applied_key = f"endpoints.{endpoint_name} → {url}"
+        reload_supported, reload_triggered, reload_reason = self._trigger_reload()
+
+        result = ControlApplyResult(
+            succeeded=True,
+            operation=op,
+            last_applied_key=applied_key,
+            reload_triggered=reload_triggered,
+            reload_supported=reload_supported,
+            reason=reload_reason,
+        )
+        self._last_result = result
+        logger.info(
+            "ConfigControlSurface: server URL applied — %s, reload_triggered=%s",
+            applied_key,
+            reload_triggered,
+        )
+        return result
+
+    def apply_api_key(self, provider: str, api_key: str) -> ControlApplyResult:
+        """
+        Store an API key for a provider via the canonical credential vault.
+
+        The key is written to ``runtime/secrets.env`` and never echoed in
+        feedback strings or log output.
+
+        Parameters
+        ----------
+        provider:
+            Provider name (e.g. ``"openai"``).
+        api_key:
+            The API key value.  Must be non-empty.
+
+        Returns
+        -------
+        ControlApplyResult
+        """
+        op = ControlOperation.SET_API_KEY.value
+        provider = (provider or "").strip()
+        api_key = (api_key or "").strip()
+        if not provider:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="provider name must be non-empty",
+            )
+            self._last_result = result
+            return result
+        if not api_key:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="api_key must be non-empty",
+            )
+            self._last_result = result
+            return result
+
+        try:
+            self._service.set_provider_api_key(provider, api_key)
+        except ValueError as exc:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=str(exc),
+            )
+            self._last_result = result
+            return result
+        except Exception as exc:  # pragma: no cover
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"write failed: {exc}",
+            )
+            self._last_result = result
+            return result
+
+        # Do not include the key value in any feedback string.
+        applied_key = f"secrets.{provider.upper()}_API_KEY → [stored, value hidden]"
+
+        result = ControlApplyResult(
+            succeeded=True,
+            operation=op,
+            last_applied_key=applied_key,
+            reload_triggered=False,
+            reload_supported=False,
+            reason="API key written to runtime/secrets.env; value is never echoed",
+        )
+        self._last_result = result
+        logger.info(
+            "ConfigControlSurface: API key stored for provider '%s'",
+            provider,
         )
         return result
 

@@ -643,10 +643,10 @@ class TestCanonicalCapabilityStatus:
             )
 
     def test_structural_only_capabilities_are_not_mainline(self) -> None:
-        """local_ai, mesh, federation are STRUCTURAL_ONLY, not mainline."""
+        """mesh, federation are STRUCTURAL_ONLY, not mainline."""
         from core.canonical_capability_status import is_mainline_active, CapabilityRuntimeStatus, get_capability_status
 
-        structural_caps = ["local_ai", "local_grounding", "local_planner", "mesh", "federation"]
+        structural_caps = ["mesh", "federation"]
         for cap in structural_caps:
             assert not is_mainline_active(cap), (
                 f"Expected '{cap}' to NOT be active mainline (it is structural only)"
@@ -654,6 +654,20 @@ class TestCanonicalCapabilityStatus:
             rec = get_capability_status(cap)
             assert rec.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY, (
                 f"Expected '{cap}' status=STRUCTURAL_ONLY, got {rec.status!r}"
+            )
+
+    def test_degraded_local_ai_capabilities_are_not_mainline(self) -> None:
+        """local_ai, local_grounding, local_planner are DEGRADED (inference runtime not bundled)."""
+        from core.canonical_capability_status import is_mainline_active, CapabilityRuntimeStatus, get_capability_status
+
+        degraded_caps = ["local_ai", "local_grounding", "local_planner", "on_device_inference"]
+        for cap in degraded_caps:
+            assert not is_mainline_active(cap), (
+                f"Expected '{cap}' to NOT be active mainline (it is degraded)"
+            )
+            rec = get_capability_status(cap)
+            assert rec.status == CapabilityRuntimeStatus.DEGRADED, (
+                f"Expected '{cap}' status=DEGRADED (inference runtime not bundled), got {rec.status!r}"
             )
 
     def test_experimental_capabilities_are_not_mainline(self) -> None:
