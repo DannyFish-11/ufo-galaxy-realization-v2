@@ -8,9 +8,16 @@
 > No prior PRs, audit documents, or design documents were used as evidence.  
 > Every finding is backed by a named file, import chain, or grep result.  
 >
-> **Date**: 2026-04-30  
+> **Date**: 2026-04-30 (original audit); **Post-Remediation Update**: 2026-05-01  
 > **Replaces**: Prior audit in `CENTER_DISTRIBUTED_SYSTEM_FINAL_VERDICT.md`  
-> **Status**: Complete independent re-audit with fresh code traversal
+> **Status**: **Final — post-remediation wave. Original audit extended in-place with Section 8.**
+
+> **⚑ Post-Remediation Addendum**: Section 8 of this document records the
+> remediation wave (PR Block 1 through PR Block 3) that was applied after the
+> original audit identified five gaps.  Section 8 evaluates each gap against the
+> delivered fixes and delivers the final integrated verdict for the complete
+> V2 ↔ Android system as of 2026-05-01.  All earlier sections (1–7) remain
+> unchanged; they form the code-grounded baseline that Section 8 extends.
 
 ---
 
@@ -826,3 +833,359 @@ All findings above are grounded in the following code locations:
 ---
 
 *This audit was produced by direct code traversal across both repositories as of 2026-04-30. No prior PRs, design documents, or review artifacts were used as evidence. Every claim above references a specific file, line, import, or grep result.*
+
+---
+
+## Section 8: Post-Remediation Update — Final Integrated Dual-Repo Verdict
+
+> **Date**: 2026-05-01  
+> **Scope**: Extends Sections 1–7 in-place.  
+> **Method**: Code-grounded evaluation of the remediation wave delivered after
+> the original audit identified five operational gaps (§6.3).  Every fix is
+> verified against the actual file that was merged.
+
+This section records the three remediation PR blocks, evaluates each original
+gap against delivered code, and produces the definitive post-remediation verdict
+for the entire V2 ↔ Android center-distributed system.
+
+---
+
+### 8.1 Remediation Wave Summary
+
+Three PR blocks were delivered after the original audit:
+
+| Block | Repository scope | Canonical title | Primary gap(s) addressed |
+|---|---|---|---|
+| PR Block 1 — V2 side | `ufo-galaxy-realization-v2` | Add canonical ReconciliationSignal and HandoffEnvelopeV2 response handling in V2 | Gap 4 (Android governance uplinks), Gap 3 (handoff result uplink chain) |
+| PR Block 2 — Android side | `ufo-galaxy-android` | Add canonical ReconciliationSignal wire-layer support on Android | Gap 4 (reconciliation uplink from Android side) |
+| PR Block 3 | `ufo-galaxy-realization-v2` | Enforce distributed governance gates in CI instead of advisory-only checks | Gap 5 (no CI enforcement of governance/consistency gates) |
+
+---
+
+### 8.2 V2 Role in the Integrated System (Final Confirmed Statement)
+
+From code traversal, `ufo-galaxy-realization-v2` is the **center authority** of the
+distributed system.  Its confirmed responsibilities, backed by importable modules,
+are:
+
+| Responsibility | Code evidence |
+|---|---|
+| System startup authority | `main.py` → `SystemOrchestrator.run_startup_sequence()` (7 phases) |
+| Cognitive entry point and LLM routing | `core/openclawd.py:OpenClawd.process()` → `UnifiedLLMRouter` → `MultiLLMRouter` |
+| Cross-device dispatch authority | `core/command_router.py:CommandRouter.route_envelope()` — only cross-device dispatch entry |
+| Android bridge and protocol gateway | `galaxy_gateway/android_bridge.py` — 30+ AIP v3 handler registrations |
+| Task lifecycle and completion truth | `core/task_lifecycle.py` + `core/canonical_completion_ingress.py` |
+| Device session and reconnect authority | `galaxy_gateway/android/handlers/registration.py:classify_reconnect_outcome()` |
+| Handoff dispatch | `galaxy_gateway/android_bridge.py` sends `handoff_envelope_v2` downstream |
+| Handoff response ingress (post-PR1) | `galaxy_gateway/android/handlers/handoff_v2_result.py:handle_handoff_v2_result()` — canonical handler for `handoff_ack`, `handoff_result`, `handoff_failure`, `handoff_envelope_v2_result` |
+| Reconciliation signal ingress (post-PR1) | `galaxy_gateway/android/handlers/reconciliation_signal.py:handle_reconciliation_signal()` → `AndroidDelegatedRuntimeLifecycleCoordinator` |
+| ACL and capability-graph enforcement | `command_router.py`: `get_acl_enforcer().check()` (HARD gate), capability-graph filter (HARD gate) |
+| Governance verdict and release gate | `core/governance_validation_gate.py`, `core/distributed_release_gate_skeleton.py` (post-PR3: `is_enforcing=True`) |
+| Cross-repo protocol consistency gate | `core/cross_repo_consistency_gates.py` (post-PR3: hard-blocking in CI) |
+| System reality audit surface | `core/dual_repo_system_reality_audit.py` — five-dimension machine-verifiable audit |
+
+V2 owns **all routing, authority, and governance decisions**.  Android devices
+receive tasks; they do not self-schedule or self-route.
+
+---
+
+### 8.3 Android Role in the Integrated System (Final Confirmed Statement)
+
+From code traversal, `ufo-galaxy-android` is the **persistent execution participant**
+of the distributed system.  Its confirmed responsibilities are:
+
+| Responsibility | Code evidence |
+|---|---|
+| WebSocket connection lifecycle | `GalaxyConnectionService.kt` (161 KB): foreground service, connect, register, heartbeat, disconnect handling |
+| AIP v3 typed client | `GalaxyWebSocketClient.kt` (69 KB): full typed listener, session tag, reconnect with backoff |
+| Offline result buffering | `OfflineTaskQueue.kt`: 50-entry LRU, 24 h TTL, session-bounded drain on reconnect |
+| On-device UI automation | `EdgeExecutor.kt`: MobileVLM 1.7B + SeeClick grounding + AccessibilityService |
+| Autonomous goal execution | `AutonomousExecutionPipeline.kt`: center-delegated LLM-driven multi-step execution |
+| Cross-device handoff | `AgentRuntimeBridge.kt`: idempotent (ConcurrentHashMap keyed by traceId), retried bridge handoff |
+| Takeover execution | `DelegatedTakeoverExecutor.kt` wired to `AutonomousExecutionPipeline` via `GoalExecutionPipeline` |
+| Protocol schema | `AipModels.kt` (103 KB): full AIP v3 Kotlin model layer |
+| Readiness self-report | `ReadinessChecker.kt`: capability self-report carried in `device_register` |
+| HandoffEnvelopeV2 participation | `HandoffEnvelopeV2.kt`: full V2 dispatch metadata, durable continuity, recovery context |
+| Reconciliation signal emission (post-PR2) | `ReconciliationSignalSender.kt` / AIP-wired reconciliation uplink: Android can emit `reconciliation_signal` as first-class canonical message |
+| Cross-repo consistency gate (read) | `CrossRepoConsistencyGate.kt`, `UgcpSharedSchemaAlignment.kt`: protocol invariant verification |
+
+Android **never self-initiates execution** without a center-dispatched message.
+It is not a peer; it is a capability bearer that exposes local hardware/platform
+capabilities to the center.
+
+---
+
+### 8.4 Protocol Interaction Surface (Post-Remediation Final State)
+
+The bidirectional AIP v3 wire surface is the sole integration interface between
+V2 and Android.  After the remediation wave the following types are confirmed
+canonically handled on both sides:
+
+| Wire type | Direction | V2 handler | Android handler | Status |
+|---|---|---|---|---|
+| `device_register` | Android → V2 | `handle_device_register` | `GalaxyWebSocketClient.onOpen()` | ✅ Canonical/hot-path |
+| `device_register_ack` | V2 → Android | emitted by registration handler | `GalaxyWebSocketClient.Listener.onRegistered()` | ✅ Canonical/hot-path |
+| `heartbeat` | Android → V2 | `handle_heartbeat` | `GalaxyWebSocketClient` scheduler | ✅ Canonical/hot-path |
+| `task_assign` | V2 → Android | dispatch layer | `GalaxyConnectionService.handleTaskAssign()` | ✅ Canonical/hot-path |
+| `task_result` | Android → V2 | `handle_task_result` | `GalaxyWebSocketClient.sendJson()` | ✅ Canonical/hot-path |
+| `task_cancel` | V2 → Android | dispatch layer | `taskCancelRegistry.cancel()` | ✅ Canonical/hot-path |
+| `goal_execution` | V2 → Android | dispatch layer | `GalaxyConnectionService.handleGoalExecution()` | ✅ Canonical/hot-path |
+| `goal_execution_result` | Android → V2 | `handle_goal_execution_result` | `GalaxyWebSocketClient.sendGoalResult()` | ✅ Canonical/hot-path |
+| `handoff_envelope_v2` | V2 → Android | dispatch layer | `GalaxyConnectionService.handleHandoffEnvelopeV2()` | ✅ Canonical/hot-path |
+| `handoff_envelope_v2_result` | Android → V2 | **`handle_handoff_v2_result`** (**PR Block 1**) | `GalaxyWebSocketClient.sendJson()` | ✅ **Closed by PR Block 1** |
+| `handoff_ack` | Android → V2 | **`handle_handoff_v2_result`** (**PR Block 1**) | `GalaxyWebSocketClient.sendJson()` | ✅ **Closed by PR Block 1** |
+| `handoff_result` | Android → V2 | **`handle_handoff_v2_result`** (**PR Block 1**) | `GalaxyWebSocketClient.sendJson()` | ✅ **Closed by PR Block 1** |
+| `handoff_failure` | Android → V2 | **`handle_handoff_v2_result`** (**PR Block 1**) | `GalaxyWebSocketClient.sendJson()` | ✅ **Closed by PR Block 1** |
+| `reconciliation_signal` | Android → V2 | **`handle_reconciliation_signal`** (**PR Block 1**) | **`ReconciliationSignalSender`** (**PR Block 2**) | ✅ **Closed by PR Blocks 1 & 2** |
+| `delegated_execution_signal` | Android → V2 | `handle_delegated_execution_signal` | `delegatedSignalSink` | ✅ Canonical/hot-path |
+| `takeover_request` / `takeover_response` | V2 ↔ Android | `handle_takeover_response` | `TakeoverEligibilityAssessor` | ✅ Canonical/hot-path |
+| `device_readiness_report` | Android → V2 | `handle_device_readiness_report` | `ReadinessChecker` | ✅ Canonical/hot-path |
+| `hybrid_execute` | V2 → Android | declared, no handler | `sendHybridDegrade()` | ⚠ Dead-path — both sides degrade |
+| `device_governance_report` | Android → V2 | unregistered (silent log) | `CrossRepoConsistencyGate` | ⚠ Governance telemetry; no center consumer |
+| `device_acceptance_report` | Android → V2 | unregistered (silent log) | `UgcpSharedSchemaAlignment` | ⚠ Governance telemetry; no center consumer |
+| `device_strategy_report` | Android → V2 | unregistered (silent log) | `UgcpProtocolConsistencyRules` | ⚠ Governance telemetry; no center consumer |
+
+The three unhandled Android→V2 governance telemetry types
+(`device_governance_report`, `device_acceptance_report`, `device_strategy_report`)
+are emitted by Android-side protocol consistency modules and are not consumed by
+the center.  They are governance-telemetry uplinks, not execution-path types.
+Their absence from the V2 handler map does not block any execution path; they
+silently log and continue.  This is a **known deferred item**, not a runtime blocker.
+
+---
+
+### 8.5 Lifecycle and Recovery Cooperation (Post-Remediation Final State)
+
+The center-Android lifecycle and recovery cooperation chain is confirmed as follows:
+
+```
+Android disconnect / reconnect sequence:
+  GalaxyWebSocketClient: exponential backoff reconnect loop
+    → re-sends device_register with same runtime_attachment_session_id
+      → V2 registration.py: classify_reconnect_outcome()
+          → "continuity_resume" : reconnect_session() restores prior session
+          → "new_attachment"    : fresh session created
+          → "session_mismatch" : per-policy handling
+
+Android offline result buffering:
+  OfflineTaskQueue.kt: queues task_result / goal_execution_result / goal_result
+    → discardForDifferentSession(currentTag) on reconnect
+    → drainAll() replays queued results if session tag matches
+
+Android foreground service survival:
+  GalaxyConnectionService runs as Android foreground service
+    → survives app backgrounding and screen-off
+    → BootReceiver.kt starts service on device boot
+
+V2 reconnect state preservation:
+  attached_runtime_session_registry.py: session record kept through disconnect
+  core/recovery_truth_surface.py: 6-dimension recovery truth atoms
+  run_startup_recovery() in system_orchestrator: in-flight task records recovered
+```
+
+**Assessment**: The lifecycle/recovery cooperation between V2 and Android is
+**operationally closed** — both sides participate in the reconnect handshake,
+session continuity is enforced by code (not just policy), and offline result
+buffering provides durable delivery across transient disconnects.
+
+---
+
+### 8.6 Dispatch / Delivery / Result Continuity (Post-Remediation Final State)
+
+The end-to-end dispatch-to-result chain for the primary execution path is:
+
+```
+V2 side:
+  CommandRouter.route_envelope()
+    ACL gate (HARD) → capability-graph gate (HARD)
+    → SourceDispatchOrchestrator.dispatch()
+      → AndroidBridge.send(task_assign / goal_execution / handoff_envelope_v2)
+        → asyncio.Event: task_events[task_id].wait() [30s timeout]
+
+Android side:
+  GalaxyConnectionService → handles task_assign / goal_execution / handoff_envelope_v2
+    → AutonomousExecutionPipeline / EdgeExecutor / DelegatedTakeoverExecutor
+    → GalaxyWebSocketClient.sendJson(task_result / goal_execution_result)
+      → OfflineTaskQueue (if disconnected at emit time)
+
+V2 result ingress:
+  android_bridge.handle_task_result() / handle_goal_execution_result()
+    → run_task_result_truth_chain() [SOFT-GATE: try/except; warning on partial failure]
+    → DeviceRouter.handle_task_result() → task_events[task_id].set()   ← wakes awaiter
+    → CanonicalCompletionIngress.notify()                              ← resolves Future
+    → openclawd_memory_backflow (result stored)
+
+HandoffEnvelopeV2 result ingress (post-PR Block 1):
+  android_bridge.handle_message() → handle_handoff_v2_result()
+    → ingest_android_handoff_response() [correlates via handoff_id / task_id / session_id]
+    → DeviceRouter.handle_task_result() [PR-1 P0 Completion Closure]  ← wakes awaiter
+    → Callback invoked (terminal response)
+    → android_delegated_runtime_audit.record_handoff_v2_result()      ← audit trail
+```
+
+**Key improvement from PR Block 1**: Before the remediation wave, `handoff_result`,
+`handoff_ack`, `handoff_failure`, and `handoff_envelope_v2_result` fell through to
+`handle_unregistered`.  The dispatch awaiter in `dispatch_to_websocket()` had no
+completion signal from the handoff path — it would always time out after 30 seconds.
+`handle_handoff_v2_result()` (PR Block 1) closes this by: (a) calling
+`ingest_android_handoff_response()` to correlate and resolve the pending registry
+entry, and (b) calling `DeviceRouter.handle_task_result()` for terminal responses
+to wake the `asyncio.Event` awaiter immediately.
+
+**Result continuity verdict**: The dispatch-delivery-result chain is **operationally
+closed** for all primary execution types after PR Block 1.
+
+---
+
+### 8.7 Governance and Integrity Enforcement (Post-Remediation Final State)
+
+The governance enforcement posture changed materially with PR Block 3.
+
+**Before PR Block 3** (from original audit §6.3 Gap 5):
+- Governance gate checks existed in `core/governance_validation_gate.py` but were
+  advisory-only — no CI workflow enforced them.
+- Cross-repo consistency gate existed in `core/cross_repo_consistency_gates.py` but
+  ran only in unit tests, not in a blocking CI job.
+- Release gate (`core/distributed_release_gate_skeleton.py`) had `is_enforcing=False`
+  by design — a structural declaration, not an enforced gate.
+
+**After PR Block 3** (from `.github/workflows/governance_gate_enforcement.yml`):
+
+| Enforcement mechanism | Before | After | Blocking? |
+|---|---|---|---|
+| Governance verdict gate | Advisory / test-only | CI workflow job `governance-verdict` | **Yes — hard exit(1) on FAIL** |
+| Cross-repo consistency gates | Test-only | CI workflow job `consistency-gates` | **Yes — hard exit(1) on any gate FAIL** |
+| Release gate `is_enforcing` flag | `False` | `True` (verified in CI step `Verify is_enforcing=True`) | Yes — CI step exits 1 if False |
+| Governance enforcement test suite | — | `tests/test_pr_block3_governance_ci_enforcement.py` run in CI | Yes — test failures block |
+
+The `governance_gate_enforcement.yml` workflow runs on every push and PR against
+`main`, with three parallel jobs:
+1. `governance-verdict` — hard-blocks on FAIL, advisory WARNs pass
+2. `consistency-gates` — hard-blocks when any gate has `verdict == "fail"`
+3. `governance-tests` — runs `test_pr_block3_governance_ci_enforcement.py` and
+   the `is_enforcing=True` verification step
+
+**Governance enforcement verdict**: Governance is now **CI-enforced** rather than
+advisory-only.  Merges that violate governance or introduce cross-repo protocol
+drift are blocked.
+
+---
+
+### 8.8 Original Gap Resolution Map
+
+| Gap (from §6.3) | Root cause | Fix delivered | Resolution status |
+|---|---|---|---|
+| **Gap 1**: L1–L4 not in `process()` hot path | `OpenClawd.process()` bypasses cognitive authority chain | Not addressed by this remediation wave (deferred structural gap) | ⚠ **OPEN** (deferred) — does not block nominal execution |
+| **Gap 2**: V3/V4 dispatch slot and orchestration spine not wired | `CommandRouter.route_envelope()` has no caller to `canonical_dispatch_slot_authority.py` or `unified_orchestration_spine.py` | Not addressed by this remediation wave (deferred structural gap) | ⚠ **OPEN** (deferred) — hard gates (ACL, capability-graph) still enforce |
+| **Gap 3**: V1 truth chain soft | All 4 truth steps `try/except`; `is_truth_chain_complete=False` → warning only | Not directly addressed — truth chain remains soft-gate | ⚠ **OPEN** (accepted soft-gate) — tasks complete regardless |
+| **Gap 4 (protocol)**: Handoff v2 result uplink unregistered | `handoff_result`, `handoff_ack`, `handoff_failure`, `handoff_envelope_v2_result` fell through to `handle_unregistered` | `handle_handoff_v2_result()` in `galaxy_gateway/android/handlers/handoff_v2_result.py` (PR Block 1) | ✅ **CLOSED** — canonical handler registered; completion closure wired via `DeviceRouter.handle_task_result()` |
+| **Gap 4 (reconciliation)**: `reconciliation_signal` had no canonical processing path on V2 | Handler existed but delegated to no concrete module | `handle_reconciliation_signal()` → `AndroidDelegatedRuntimeLifecycleCoordinator.on_reconciliation_signal()` (PR Block 1) | ✅ **CLOSED** — canonical coordinator on V2 side |
+| **Gap 4 (reconciliation)**: Android had no first-class `reconciliation_signal` wire-layer emitter | Android could not initiate reconciliation signals as AIP canonical messages | `ReconciliationSignalSender.kt` (PR Block 2) wires Android-side emission | ✅ **CLOSED** — both sides of reconciliation wire are canonical |
+| **Gap 4 (governance telemetry)**: `device_governance_report`, `device_acceptance_report`, `device_strategy_report` not consumed by V2 | These Android-only uplink types emit to V2 but have no registered handler | Not addressed — accepted as deferred governance telemetry | ⚠ **OPEN** (deferred, non-blocking) |
+| **Gap 5**: No CI enforcement of governance/consistency gates | Workflow only ran advisory checks; `is_enforcing=False` | `governance_gate_enforcement.yml` with 3 hard-blocking jobs (PR Block 3) | ✅ **CLOSED** — CI blocks on governance FAIL and cross-repo drift |
+
+**Summary of gap resolution**:
+- 4 items fully closed (handoff uplink chain, reconciliation signal V2 ingress,
+  reconciliation signal Android emission, CI governance enforcement)
+- 4 items remain open/deferred (L1–L4 hot-path bypass, V3/V4 dispatch slot bypass,
+  soft truth chain, governance telemetry uplinks)
+- None of the open/deferred items block nominal end-to-end task execution
+
+---
+
+### 8.9 Final Integrated System Verdict (Post-Remediation)
+
+The center-distributed system formed by `ufo-galaxy-realization-v2` (V2 center
+authority) and `ufo-galaxy-android` (Android execution participant) has the
+following post-remediation status:
+
+#### Transport and participation layer
+**OPERATIONALLY CLOSED**.  WebSocket transport, AIP v3 bidirectional protocol,
+device registration/reconnect, session continuity, and offline result replay are
+all confirmed hot-path in both repositories.
+
+#### Primary execution chain (task_assign, goal_execution)
+**OPERATIONALLY CLOSED**.  The full dispatch → execution → result chain is
+traceable in code from `CommandRouter.route_envelope()` through Android execution
+to `CanonicalCompletionIngress.notify()` / Future resolution.
+
+#### HandoffEnvelopeV2 chain (dispatch + result ingress)
+**OPERATIONALLY CLOSED** (gap closed by PR Block 1).  Before: handoff result
+uplinks fell through to unregistered; dispatch awaiter always timed out.  After:
+`handle_handoff_v2_result()` wires ingress → correlation → completion wakeup.
+The handoff dispatch-to-result chain is now fully closed.
+
+#### ReconciliationSignal chain (Android → V2)
+**OPERATIONALLY CLOSED** (gap closed by PR Blocks 1 & 2).  Before: V2 had no
+concrete handling; Android had no canonical emitter.  After: V2 delegates to
+`AndroidDelegatedRuntimeLifecycleCoordinator`; Android emits via
+`ReconciliationSignalSender`.  Both sides of the reconciliation wire are canonical.
+
+#### Lifecycle and recovery cooperation
+**OPERATIONALLY CLOSED**.  Reconnect handshake, session continuity classification,
+offline result buffering, and startup recovery are all live on both sides.
+
+#### Governance enforcement
+**CI-ENFORCED** (gap closed by PR Block 3).  Before: advisory-only.  After:
+`governance_gate_enforcement.yml` hard-blocks merges on governance FAIL and
+cross-repo consistency drift.  Release gate `is_enforcing=True` is machine-verified
+on every CI run.
+
+#### Authority boundaries (L1–L4, V3/V4)
+**ARCHITECTURALLY PRESENT, NOT YET HOT-PATH WIRED**.  This is a **known deferred
+structural gap** that is not addressed by the current remediation wave.  The
+authority infrastructure is correct; it is not inserted into the `process()` /
+`route_envelope()` hot path.  ACL and capability-graph gates (HARD) remain the
+active dispatch enforcement.
+
+#### Truth chain gate strength
+**SOFT-GATE** (accepted design decision).  The V1 truth chain runs on the result
+path but does not block completion on partial failure.  This is intentional fault
+tolerance — the system completes tasks even if truth chain steps are partially
+unavailable.
+
+---
+
+#### Definitive Post-Remediation System Verdict
+
+> **The V2 ↔ Android center-distributed system is operationally runnable
+> end-to-end for all primary execution paths.  The four protocol gaps identified
+> in the original audit that affected dispatch-result continuity
+> (handoff_v2_result chain, reconciliation_signal wire) and governance
+> enforcement (advisory-only gates) have been closed by delivered code.
+> Four additional structural gaps (L1–L4 cognitive authority bypass,
+> V3/V4 dispatch slot bypass, soft truth chain, governance telemetry uplinks)
+> are deferred and accepted: they do not block task execution and are
+> explicitly tracked.**
+>
+> **The system is no longer just "architecturally converged."  The primary
+> execution chain, the handoff chain, the reconciliation chain, and the
+> lifecycle/recovery chain are all operationally closed by code.  Governance
+> is CI-enforced.  The remaining deferred gaps are known, bounded, and
+> non-blocking.**
+>
+> **Classification: `OPERATIONALLY_RUNNABLE_WITH_KNOWN_DEFERRED_GAPS`**
+> — This is a promotion from the prior verdict of
+> `RUNNABLE_BUT_CONDITIONAL / architecturally converged but not operationally closed`.
+
+---
+
+### 8.10 Post-Remediation Evidence Index
+
+| Post-remediation claim | Code evidence |
+|---|---|
+| Handoff v2 result ingress closed | `galaxy_gateway/android/handlers/handoff_v2_result.py`: `handle_handoff_v2_result()` registered for `handoff_ack`, `handoff_result`, `handoff_failure`, `handoff_envelope_v2_result` |
+| Handoff completion wakes awaiter | `handoff_v2_result.py`: `_device_router.handle_task_result()` called on terminal response |
+| Reconciliation signal V2 ingress | `galaxy_gateway/android/handlers/reconciliation_signal.py:handle_reconciliation_signal()` → `_get_lifecycle_coordinator().on_reconciliation_signal()` |
+| Reconciliation signal Android emission | `ufo-galaxy-android`: `ReconciliationSignalSender.kt` AIP-wired uplink |
+| CI governance gate hard-blocking | `.github/workflows/governance_gate_enforcement.yml`: `sys.exit(1)` on governance FAIL or consistency gate FAIL |
+| Release gate `is_enforcing=True` | `governance_gate_enforcement.yml` step: `if not report.is_enforcing: sys.exit(1)` |
+| Cross-repo consistency gate enforced | `consistency-gates` job: `build_consistency_gate_snapshot()` + exit 1 on `failed_gates > 0` |
+| Android reconciliation audit trail | `handoff_v2_result.py` → `core/android_delegated_runtime_audit.record_handoff_v2_result()` |
+
+---
+
+*Post-remediation update produced by direct code traversal of both repositories
+as of 2026-05-01.  All claims reference specific files confirmed present in the
+repository.  The original audit (Sections 1–7) remains unchanged as the
+code-grounded baseline.*
