@@ -78,6 +78,15 @@ class ControlOperation(str, Enum):
     SET_ROUTING_POLICY = "set_routing_policy"
     """Set the native multimodal routing policy (``strict`` | ``prefer`` | ``allow_fallback``)."""
 
+    SET_NETWORK_URL = "set_network_url"
+    """Set a network endpoint URL (gateway, NATS, ATS, Android gateway, WebRTC STUN)."""
+
+    SET_PROVIDER_API_KEY = "set_provider_api_key"
+    """Store a provider API key in ``runtime/secrets.env``."""
+
+    SET_ANDROID_INFERENCE_MODE = "set_android_inference_mode"
+    """Set the Android inference mode (``center`` | ``local`` | ``hybrid``)."""
+
 
 # ---------------------------------------------------------------------------
 # Control feedback
@@ -251,6 +260,20 @@ class ConfigControlSurface:
             result = self.apply_routing_policy(
                 mode=kwargs.get("mode", ""),
             )
+        elif operation == ControlOperation.SET_NETWORK_URL:
+            result = self.apply_network_url(
+                url_key=kwargs.get("url_key", ""),
+                url_value=kwargs.get("url_value", ""),
+            )
+        elif operation == ControlOperation.SET_PROVIDER_API_KEY:
+            result = self.apply_provider_api_key(
+                provider=kwargs.get("provider", ""),
+                api_key=kwargs.get("api_key", ""),
+            )
+        elif operation == ControlOperation.SET_ANDROID_INFERENCE_MODE:
+            result = self.apply_android_inference_mode(
+                mode=kwargs.get("mode", ""),
+            )
         else:
             result = ControlApplyResult(
                 succeeded=False,
@@ -386,6 +409,218 @@ class ConfigControlSurface:
         self._last_result = result
         logger.info(
             "ConfigControlSurface: routing policy applied — %s, reload_triggered=%s",
+            applied_key,
+            reload_triggered,
+        )
+        return result
+
+    def apply_network_url(self, url_key: str, url_value: str) -> ControlApplyResult:
+        """
+        Set a network endpoint URL via the canonical configuration authority.
+
+        Parameters
+        ----------
+        url_key:
+            One of ``"gateway_url"``, ``"android_gateway_url"``,
+            ``"nats_url"``, ``"ats_url"``, ``"webrtc_stun_url"``.
+        url_value:
+            The URL string.  Must be non-empty.
+
+        Returns
+        -------
+        ControlApplyResult
+        """
+        op = ControlOperation.SET_NETWORK_URL.value
+        url_key = (url_key or "").strip()
+        url_value = (url_value or "").strip()
+        if not url_key:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="url_key must be non-empty",
+            )
+            self._last_result = result
+            return result
+        if not url_value:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"URL value for '{url_key}' must be non-empty",
+            )
+            self._last_result = result
+            return result
+
+        try:
+            self._service.set_network_url(url_key, url_value)
+        except ValueError as exc:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=str(exc),
+            )
+            self._last_result = result
+            return result
+        except Exception as exc:  # pragma: no cover
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"write failed: {exc}",
+            )
+            self._last_result = result
+            return result
+
+        applied_key = f"network.{url_key} → {url_value}"
+        reload_supported, reload_triggered, reload_reason = self._trigger_reload()
+
+        result = ControlApplyResult(
+            succeeded=True,
+            operation=op,
+            last_applied_key=applied_key,
+            reload_triggered=reload_triggered,
+            reload_supported=reload_supported,
+            reason=reload_reason,
+        )
+        self._last_result = result
+        logger.info(
+            "ConfigControlSurface: network URL set — %s, reload_triggered=%s",
+            applied_key,
+            reload_triggered,
+        )
+        return result
+
+    def apply_provider_api_key(self, provider: str, api_key: str) -> ControlApplyResult:
+        """
+        Store a provider API key in ``runtime/secrets.env``.
+
+        The key value is never echoed in logs or feedback output.
+
+        Parameters
+        ----------
+        provider:
+            Provider name (e.g. ``"openai"``).
+        api_key:
+            The API key value.  Must be non-empty.
+
+        Returns
+        -------
+        ControlApplyResult
+        """
+        op = ControlOperation.SET_PROVIDER_API_KEY.value
+        provider = (provider or "").strip()
+        api_key = (api_key or "").strip()
+        if not provider:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="provider name must be non-empty",
+            )
+            self._last_result = result
+            return result
+        if not api_key:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="api_key must be non-empty",
+            )
+            self._last_result = result
+            return result
+
+        try:
+            self._service.set_provider_api_key(provider, api_key)
+        except ValueError as exc:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=str(exc),
+            )
+            self._last_result = result
+            return result
+        except Exception as exc:  # pragma: no cover
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"write failed: {exc}",
+            )
+            self._last_result = result
+            return result
+
+        # Never log the key value itself
+        applied_key = f"providers.{provider}.api_key → [set]"
+        reload_supported, reload_triggered, reload_reason = self._trigger_reload()
+
+        result = ControlApplyResult(
+            succeeded=True,
+            operation=op,
+            last_applied_key=applied_key,
+            reload_triggered=reload_triggered,
+            reload_supported=reload_supported,
+            reason=reload_reason,
+        )
+        self._last_result = result
+        logger.info(
+            "ConfigControlSurface: API key set for provider '%s', reload_triggered=%s",
+            provider,
+            reload_triggered,
+        )
+        return result
+
+    def apply_android_inference_mode(self, mode: str) -> ControlApplyResult:
+        """
+        Set the Android inference mode via the canonical configuration authority.
+
+        Parameters
+        ----------
+        mode:
+            One of ``"center"`` | ``"local"`` | ``"hybrid"``.
+
+        Returns
+        -------
+        ControlApplyResult
+        """
+        op = ControlOperation.SET_ANDROID_INFERENCE_MODE.value
+        mode = (mode or "").strip()
+        if not mode:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error="inference mode must be non-empty",
+            )
+            self._last_result = result
+            return result
+
+        try:
+            self._service.set_android_inference_mode(mode)
+        except ValueError as exc:
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=str(exc),
+            )
+            self._last_result = result
+            return result
+        except Exception as exc:  # pragma: no cover
+            result = ControlApplyResult(
+                succeeded=False,
+                operation=op,
+                error=f"write failed: {exc}",
+            )
+            self._last_result = result
+            return result
+
+        applied_key = f"android.inference_mode → {mode}"
+        reload_supported, reload_triggered, reload_reason = self._trigger_reload()
+
+        result = ControlApplyResult(
+            succeeded=True,
+            operation=op,
+            last_applied_key=applied_key,
+            reload_triggered=reload_triggered,
+            reload_supported=reload_supported,
+            reason=reload_reason,
+        )
+        self._last_result = result
+        logger.info(
+            "ConfigControlSurface: android inference mode set — %s, reload_triggered=%s",
             applied_key,
             reload_triggered,
         )
