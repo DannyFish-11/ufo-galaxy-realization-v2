@@ -96,6 +96,9 @@ dashboard/frontend/dist/
 unified_kb/
 knowledge_db/
 data/rag_memory/
+# Durable buffer runtime files (generated at runtime, not source-controlled)
+data/pending_delivery_buffer.json
+data/result_idempotency_set.json
 
 # Local unified configuration authority (PR-3)
 # Real operator config and secrets must not be committed.

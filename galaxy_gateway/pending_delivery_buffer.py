@@ -30,14 +30,19 @@ Guarantees
   ``PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE`` messages (default 32).  Oldest
   messages are evicted when the cap is exceeded so the buffer never causes
   unbounded memory growth.
-* **TTL** — each buffered message carries an enqueue timestamp.  Flush skips
-  (and discards) messages older than ``PENDING_DELIVERY_TTL_SECONDS`` (default
-  60 s, i.e. safely beyond the 30 s command timeout).
+* **TTL** — each buffered message carries an enqueue timestamp (wall-clock
+  ``time.time()``).  Flush skips (and discards) messages older than
+  ``PENDING_DELIVERY_TTL_SECONDS`` (default 60 s, i.e. safely beyond the
+  30 s command timeout).  Using wall-clock time lets TTL checks remain
+  accurate after a V2 process restart.
 * **Thread-safety** — all mutations are protected by ``asyncio.Lock`` because
   the buffer is shared across concurrent coroutines within a single event loop.
-* **In-process only** — the buffer is not durable.  A V2 process restart
-  causes pending messages to be lost.  Callers that need durability must
-  implement their own persistence layer.
+* **Durable persistence** — when *store_path* is supplied (as it is for the
+  module-level singleton), the buffer is atomically serialised to a JSON file
+  after every mutation.  On the next V2 start the file is loaded back and
+  messages that have not yet expired are restored to memory, enabling
+  reconnect-time flush to re-deliver them.  The format is
+  ``pending_delivery_buffer_v1`` (see :meth:`_persist_locked`).
 
 INTEGRATION POINTS
 ------------------
@@ -51,7 +56,10 @@ INTEGRATION POINTS
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import tempfile
 import time
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
@@ -72,19 +80,35 @@ PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE: int = 32
 #: long disconnections are not re-delivered.
 PENDING_DELIVERY_TTL_SECONDS: float = 60.0
 
+# ---------------------------------------------------------------------------
+# Default durable-store path (follows same convention as durable_result_idempotency)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_PENDING_DELIVERY_STORE_PATH: str = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "pending_delivery_buffer.json",
+)
+
 
 class _BufferedMessage:
     """A single message parked in the pending-delivery buffer."""
 
     __slots__ = ("message", "enqueued_at", "attempt_count")
 
-    def __init__(self, message: Dict[str, Any]) -> None:
+    def __init__(
+        self,
+        message: Dict[str, Any],
+        enqueued_at: Optional[float] = None,
+    ) -> None:
         self.message: Dict[str, Any] = message
-        self.enqueued_at: float = time.monotonic()
+        # Wall-clock time (time.time()) so the timestamp survives process
+        # restarts when the buffer is loaded back from durable storage.
+        self.enqueued_at: float = enqueued_at if enqueued_at is not None else time.time()
         self.attempt_count: int = 0
 
     def is_expired(self, ttl: float = PENDING_DELIVERY_TTL_SECONDS) -> bool:
-        return (time.monotonic() - self.enqueued_at) > ttl
+        return (time.time() - self.enqueued_at) > ttl
 
 
 class PendingDeliveryBuffer:
@@ -98,12 +122,19 @@ class PendingDeliveryBuffer:
     ttl_seconds:
         Messages older than this many seconds are discarded on flush
         and on explicit :meth:`purge_expired` calls.
+    store_path:
+        Optional path to a JSON file for durable persistence.  When
+        provided the buffer is loaded from this file at init and
+        atomically re-saved after every mutation, so buffered messages
+        survive V2 process restarts.  When ``None`` the buffer is
+        in-memory only (original behaviour).
     """
 
     def __init__(
         self,
         max_queue_per_device: int = PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
         ttl_seconds: float = PENDING_DELIVERY_TTL_SECONDS,
+        store_path: Optional[str] = None,
     ) -> None:
         self._max_queue: int = max_queue_per_device
         self._ttl: float = ttl_seconds
@@ -116,6 +147,126 @@ class PendingDeliveryBuffer:
         self.delivered_total: int = 0
         self.evicted_total: int = 0  # dropped due to capacity
         self.expired_total: int = 0   # dropped due to TTL
+
+        # Durable persistence (optional)
+        self._store_path: Optional[str] = None
+        if store_path:
+            self._store_path = store_path
+            try:
+                os.makedirs(
+                    os.path.dirname(os.path.abspath(store_path)), exist_ok=True
+                )
+            except Exception as exc:
+                logger.warning(
+                    "PendingDeliveryBuffer: could not create store directory: %s", exc
+                )
+            self._load_from_disk()
+
+    # ------------------------------------------------------------------
+    # Durable persistence helpers
+    # ------------------------------------------------------------------
+
+    def _load_from_disk(self) -> None:
+        """Load buffered messages from the durable store file.
+
+        Called once from :meth:`__init__` (before the event loop is
+        running, so no asyncio lock needed).  Messages that have already
+        expired are discarded during loading so they never reach replay.
+        The capacity limit is also enforced on the loaded queues.
+        """
+        if not self._store_path or not os.path.exists(self._store_path):
+            return
+        try:
+            with open(self._store_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            now = time.time()
+            loaded_devices = 0
+            loaded_messages = 0
+            for device_id, messages in data.get("queues", {}).items():
+                queue: Deque[_BufferedMessage] = deque()
+                for entry in messages:
+                    enqueued_at = float(entry.get("enqueued_at", 0.0))
+                    # Discard already-expired messages immediately — they
+                    # would be skipped on flush anyway and holding them in
+                    # memory would be wasteful.
+                    if (now - enqueued_at) > self._ttl:
+                        self.expired_total += 1
+                        continue
+                    msg = dict(entry.get("message", {}))
+                    bm = _BufferedMessage(msg, enqueued_at=enqueued_at)
+                    queue.append(bm)
+                    loaded_messages += 1
+                # Enforce the capacity limit (the persisted file could have
+                # been written with a higher cap or tampered with).
+                while len(queue) > self._max_queue:
+                    queue.popleft()
+                    self.evicted_total += 1
+                if queue:
+                    self._queues[device_id] = queue
+                    loaded_devices += 1
+            logger.info(
+                "PendingDeliveryBuffer: loaded %d messages for %d devices "
+                "from durable store %s",
+                loaded_messages,
+                loaded_devices,
+                self._store_path,
+            )
+        except Exception as exc:
+            logger.warning(
+                "PendingDeliveryBuffer: failed to load durable store %s: %s",
+                self._store_path,
+                exc,
+            )
+
+    def _persist_locked(self) -> None:
+        """Atomically write the current buffer state to the durable store.
+
+        The caller **must** already hold :attr:`_lock`.  Writes are atomic
+        (write-to-temp-file then rename) so a partial write never corrupts
+        the previously saved state.  Non-fatal: failures are logged at
+        WARNING level and do not raise.
+        """
+        if not self._store_path:
+            return
+        try:
+            queues_data: Dict[str, List[Dict[str, Any]]] = {}
+            for device_id, queue in self._queues.items():
+                if queue:
+                    queues_data[device_id] = [
+                        {
+                            "message": bm.message,
+                            "enqueued_at": bm.enqueued_at,
+                        }
+                        for bm in queue
+                    ]
+            payload = json.dumps(
+                {
+                    "schema": "pending_delivery_buffer_v1",
+                    "saved_at": time.time(),
+                    "ttl_seconds": self._ttl,
+                    "max_queue_per_device": self._max_queue,
+                    "queues": queues_data,
+                },
+                ensure_ascii=False,
+            )
+            store_dir = os.path.dirname(os.path.abspath(self._store_path))
+            fd, tmp_path = tempfile.mkstemp(dir=store_dir, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(payload)
+                os.replace(tmp_path, self._store_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+        except Exception as exc:
+            logger.warning(
+                "PendingDeliveryBuffer: failed to persist to %s: %s",
+                self._store_path,
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Enqueue
@@ -149,6 +300,7 @@ class PendingDeliveryBuffer:
                 len(queue),
                 message.get("type", "?"),
             )
+            self._persist_locked()
 
     # ------------------------------------------------------------------
     # Flush
@@ -173,6 +325,10 @@ class PendingDeliveryBuffer:
         """
         async with self._lock:
             queue = self._queues.pop(device_id, deque())
+            # Persist the removal immediately so that if the process dies
+            # mid-flush the messages are not re-delivered on the next restart.
+            if queue:
+                self._persist_locked()
 
         if not queue:
             return 0, 0
@@ -189,7 +345,7 @@ class PendingDeliveryBuffer:
                     "pending_delivery_buffer: discarding expired message "
                     "for device_id=%s age=%.1fs type=%s",
                     device_id,
-                    time.monotonic() - buffered.enqueued_at,
+                    time.time() - buffered.enqueued_at,
                     buffered.message.get("type", "?"),
                 )
                 continue
@@ -204,7 +360,7 @@ class PendingDeliveryBuffer:
                     "device_id=%s type=%s age=%.1fs",
                     device_id,
                     buffered.message.get("type", "?"),
-                    time.monotonic() - buffered.enqueued_at,
+                    time.time() - buffered.enqueued_at,
                 )
             except Exception as exc:
                 skipped += 1
@@ -264,6 +420,8 @@ class PendingDeliveryBuffer:
                     empty_keys.append(device_id)
             for key in empty_keys:
                 self._queues.pop(key, None)
+            if removed:
+                self._persist_locked()
         return removed
 
     async def discard_device(self, device_id: str) -> int:
@@ -277,13 +435,14 @@ class PendingDeliveryBuffer:
         async with self._lock:
             queue = self._queues.pop(device_id, deque())
             count = len(queue)
-        if count:
-            logger.debug(
-                "pending_delivery_buffer: discarded %d pending messages for "
-                "deregistered device_id=%s",
-                count,
-                device_id,
-            )
+            if count:
+                logger.debug(
+                    "pending_delivery_buffer: discarded %d pending messages for "
+                    "deregistered device_id=%s",
+                    count,
+                    device_id,
+                )
+                self._persist_locked()
         return count
 
     def stats(self) -> Dict[str, Any]:
@@ -295,6 +454,7 @@ class PendingDeliveryBuffer:
             "expired_total": self.expired_total,
             "active_device_queues": len(self._queues),
             "total_pending_messages": sum(len(q) for q in self._queues.values()),
+            "is_durable": self._store_path is not None,
         }
 
 
@@ -303,6 +463,9 @@ class PendingDeliveryBuffer:
 # ---------------------------------------------------------------------------
 
 #: The shared pending-delivery buffer instance used by AndroidBridge.
-#: Tests may replace this with a fresh instance via
+#: Backed by a durable JSON store so buffered messages survive V2 process
+#: restarts.  Tests may replace this with a fresh in-memory instance via
 #: ``galaxy_gateway.pending_delivery_buffer.pending_delivery_buffer = PendingDeliveryBuffer()``.
-pending_delivery_buffer: PendingDeliveryBuffer = PendingDeliveryBuffer()
+pending_delivery_buffer: PendingDeliveryBuffer = PendingDeliveryBuffer(
+    store_path=_DEFAULT_PENDING_DELIVERY_STORE_PATH
+)

@@ -30,6 +30,7 @@ from core.cross_device_integration_reality import (
     CROSS_DEVICE_INTEGRATION_REALITY,
     INFLIGHT_TASK_LOSS_ON_DISCONNECT,
     PENDING_DELIVERY_BUFFER_PRESENT,
+    PENDING_DELIVERY_BUFFER_IS_DURABLE,
     PENDING_DELIVERY_BUFFER_TTL_S,
     PENDING_DELIVERY_BUFFER_MAX_QUEUE_PER_DEVICE,
     RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
@@ -276,6 +277,10 @@ def test_pending_delivery_buffer_sentinel_is_true():
     assert PENDING_DELIVERY_BUFFER_PRESENT is True
 
 
+def test_pending_delivery_buffer_is_durable():
+    assert PENDING_DELIVERY_BUFFER_IS_DURABLE is True
+
+
 def test_buffer_ttl_and_capacity_match_module():
     from galaxy_gateway.pending_delivery_buffer import (
         PENDING_DELIVERY_TTL_SECONDS,
@@ -340,9 +345,9 @@ def test_get_result_ingestion_error_counts_snapshot():
 
 
 def test_residual_risks_still_documented():
-    """Residual risks that are NOT yet fixed must remain True."""
+    """Android terminal reconnect is still a residual risk; process restart is now fixed."""
     assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True
-    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is True
+    assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False
 
 
 def test_assert_known_gaps_are_documented_passes():
@@ -359,6 +364,7 @@ def test_reality_dict_contains_all_expected_keys():
         "remote_access_requires_tailscale_or_vpnish",
         "inflight_task_loss_on_disconnect",
         "pending_delivery_buffer_present",
+        "pending_delivery_buffer_is_durable",
         "pending_delivery_buffer_ttl_s",
         "pending_delivery_buffer_max_queue_per_device",
         "result_ingestion_has_silent_failure_paths",
