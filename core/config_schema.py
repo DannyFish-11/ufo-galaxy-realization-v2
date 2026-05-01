@@ -101,6 +101,27 @@ CONFIG_KEYS: FrozenSet[str] = frozenset(
         # Routing preferences
         "routing.native_multimodal_policy",
         "routing.default_provider",
+        # Network / endpoint URLs (non-secret — no credentials embedded)
+        "network.gateway_url",
+        "network.android_gateway_url",
+        "network.nats_url",
+        "network.ats_url",
+        "network.webrtc_stun_url",
+        # Android integration settings
+        "android.inference_mode",        # "center" | "local" | "hybrid"
+        "android.vlm_service_enabled",
+    }
+)
+
+# ---------------------------------------------------------------------------
+# Valid values for network / integration enumerations
+# ---------------------------------------------------------------------------
+
+VALID_ANDROID_INFERENCE_MODES: FrozenSet[str] = frozenset(
+    {
+        "center",   # All inference performed on V2 center via gateway
+        "local",    # Inference performed on Android device (requires llama.cpp/NCNN)
+        "hybrid",   # Local first, fall back to center on failure
     }
 )
 
@@ -126,12 +147,27 @@ class ConfigDefaults:
         "default_provider": "openai",
     }
 
+    NETWORK: Dict[str, Any] = {
+        "gateway_url": "",
+        "android_gateway_url": "",
+        "nats_url": "",
+        "ats_url": "",
+        "webrtc_stun_url": "",
+    }
+
+    ANDROID: Dict[str, Any] = {
+        "inference_mode": "center",
+        "vlm_service_enabled": True,
+    }
+
     @classmethod
     def as_dict(cls) -> Dict[str, Any]:
         """Return the full default config dict (suitable for runtime/config.json)."""
         return {
             "providers": {k: dict(v) for k, v in cls.PROVIDERS.items()},
             "routing": dict(cls.ROUTING),
+            "network": dict(cls.NETWORK),
+            "android": dict(cls.ANDROID),
         }
 
 

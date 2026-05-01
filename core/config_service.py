@@ -45,6 +45,7 @@ from typing import Any, Dict, List, Optional
 
 from core.config_schema import (
     CONFIG_SCHEMA_AUTHORITY,
+    VALID_ANDROID_INFERENCE_MODES,
     VALID_NATIVE_MM_POLICIES,
     VALID_PROVIDERS,
     ConfigDefaults,
@@ -292,6 +293,107 @@ class ConfigService:
         logger.info("native_multimodal_policy → %s", mode)
 
     # ------------------------------------------------------------------
+    # Network / endpoint URL writes
+    # ------------------------------------------------------------------
+
+    _NETWORK_URL_KEYS: Dict[str, str] = {
+        "gateway_url":         "network.gateway_url",
+        "android_gateway_url": "network.android_gateway_url",
+        "nats_url":            "network.nats_url",
+        "ats_url":             "network.ats_url",
+        "webrtc_stun_url":     "network.webrtc_stun_url",
+    }
+
+    def set_network_url(self, url_key: str, url_value: str) -> None:
+        """
+        Set a network endpoint URL in ``runtime/config.json``.
+
+        URL values are **not** treated as secrets — they contain no credentials.
+        If you need to embed credentials in a URL, use ``set_secret`` instead.
+
+        Parameters
+        ----------
+        url_key:
+            One of ``"gateway_url"``, ``"android_gateway_url"``,
+            ``"nats_url"``, ``"ats_url"``, ``"webrtc_stun_url"``.
+        url_value:
+            The URL string.  Must be non-empty.
+        """
+        url_key = url_key.strip()
+        if url_key not in self._NETWORK_URL_KEYS:
+            raise ValueError(
+                f"Unknown network URL key '{url_key}'. "
+                f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}"
+            )
+        if not url_value or not url_value.strip():
+            raise ValueError(f"URL value for '{url_key}' must be non-empty.")
+        config = self._store.read_config()
+        network = config.get("network", {})
+        if not isinstance(network, dict):
+            network = {}
+        network[url_key] = url_value.strip()
+        config["network"] = network
+        self._store.write_config(config)
+        logger.info("Network URL set: %s → %s", url_key, url_value.strip())
+
+    def get_network_url(self, url_key: str) -> str:
+        """
+        Read a network endpoint URL from the effective configuration.
+
+        Returns an empty string when the URL has not been set.
+
+        Parameters
+        ----------
+        url_key:
+            One of ``"gateway_url"``, ``"android_gateway_url"``,
+            ``"nats_url"``, ``"ats_url"``, ``"webrtc_stun_url"``.
+        """
+        url_key = url_key.strip()
+        if url_key not in self._NETWORK_URL_KEYS:
+            raise ValueError(
+                f"Unknown network URL key '{url_key}'. "
+                f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}"
+            )
+        config = self._store.read_config()
+        network = config.get("network", {})
+        if not isinstance(network, dict):
+            return ""
+        return str(network.get(url_key, ""))
+
+    # ------------------------------------------------------------------
+    # Android inference mode writes
+    # ------------------------------------------------------------------
+
+    def set_android_inference_mode(self, mode: str) -> None:
+        """
+        Set the Android inference mode in ``runtime/config.json``.
+
+        This controls whether planning/grounding inference is performed on the
+        Android device (requires llama.cpp/NCNN) or delegated to the V2 center
+        via the gateway VLM service.
+
+        Parameters
+        ----------
+        mode:
+            One of ``VALID_ANDROID_INFERENCE_MODES``:
+            ``"center"`` | ``"local"`` | ``"hybrid"``.
+        """
+        mode = mode.strip()
+        if mode not in VALID_ANDROID_INFERENCE_MODES:
+            raise ValueError(
+                f"Invalid android inference mode '{mode}'. "
+                f"Valid values: {sorted(VALID_ANDROID_INFERENCE_MODES)}"
+            )
+        config = self._store.read_config()
+        android = config.get("android", {})
+        if not isinstance(android, dict):
+            android = {}
+        android["inference_mode"] = mode
+        config["android"] = android
+        self._store.write_config(config)
+        logger.info("android.inference_mode → %s", mode)
+
+    # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
@@ -365,6 +467,27 @@ class ConfigService:
             result.invalid_values["routing.native_multimodal_policy"] = (
                 f"Invalid value '{policy}'. "
                 f"Expected one of: {sorted(VALID_NATIVE_MM_POLICIES)}"
+            )
+
+        # ── Network URL warnings ──────────────────────────────────────
+        network_cfg = config.get("network", {})
+        if not isinstance(network_cfg, dict):
+            network_cfg = {}
+        gateway_url = network_cfg.get("gateway_url", "")
+        android_gateway_url = network_cfg.get("android_gateway_url", "")
+        if not gateway_url:
+            result.warnings.append(
+                "network.gateway_url is not set — cross-device gateway will "
+                "use the default local address.  Set via status board or "
+                "ConfigService.set_network_url('gateway_url', ...)."
+            )
+        # Only warn about android_gateway_url if gateway_url is also absent,
+        # since Android falls back to gateway_url when android_gateway_url is blank.
+        if not android_gateway_url and not gateway_url:
+            result.warnings.append(
+                "network.android_gateway_url is not set — Android devices will "
+                "use the default gateway URL.  Set via status board or "
+                "ConfigService.set_network_url('android_gateway_url', ...)."
             )
 
         # ── Summary ──────────────────────────────────────────────────

@@ -30,6 +30,31 @@ Apply a routing policy before entering monitor mode::
 
     python -m windows_client.status_board_v2 --apply-routing-policy prefer
 
+EXTENDED CONTROL OPERATIONS (URL / API key / Android mode)
+-----------------------------------------------------------
+Set a network endpoint URL::
+
+    python -m windows_client.status_board_v2 --set-url gateway_url=ws://10.0.0.1:8765
+    python -m windows_client.status_board_v2 --set-url android_gateway_url=ws://10.0.0.1:8765
+    python -m windows_client.status_board_v2 --set-url nats_url=nats://10.0.0.1:4222
+    python -m windows_client.status_board_v2 --set-url ats_url=https://10.0.0.1:8443
+    python -m windows_client.status_board_v2 --set-url webrtc_stun_url=stun:stun.l.google.com:19302
+
+Set a provider API key (written to runtime/secrets.env)::
+
+    python -m windows_client.status_board_v2 --set-api-key openai=sk-...
+    python -m windows_client.status_board_v2 --set-api-key anthropic=sk-ant-...
+
+Set Android inference mode (center = no local llama.cpp/NCNN needed)::
+
+    python -m windows_client.status_board_v2 --set-android-inference-mode center
+
+MANAGEMENT CONSOLE
+------------------
+Show the integrated management console (devices, task chains, models, readiness)::
+
+    python -m windows_client.status_board_v2 --management
+
 Both control arguments can be combined with all existing arguments.  The
 board renders control feedback in the first frames after an apply action.
 
@@ -67,6 +92,12 @@ Usage
 
     # Apply a routing policy then enter monitor mode:
     python -m windows_client.status_board_v2 --apply-routing-policy prefer
+
+    # Set gateway URL and enter monitor mode:
+    python -m windows_client.status_board_v2 --set-url gateway_url=ws://10.0.0.1:8765
+
+    # Show management console in monitor mode:
+    python -m windows_client.status_board_v2 --management
 """
 
 from __future__ import annotations
@@ -89,6 +120,8 @@ from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
 from .config_control import ConfigControlSurface, ControlApplyResult
+from .url_config_surface import URLConfigSurface
+from .management_console import ManagementConsole
 
 _RESET = _ansi.RESET
 _BOLD = _ansi.BOLD
@@ -105,6 +138,10 @@ class StatusBoardV2App:
     As of PR-15 this class optionally accepts a :class:`ConfigControlSurface`
     and renders its feedback panel when a control operation has been applied.
     All projection/monitoring behaviour is unchanged.
+
+    The ``show_management`` flag activates the integrated management console
+    (cross-device status, task chains, model fill-in, long-run readiness) and
+    the URL configuration surface.
     """
 
     def __init__(
@@ -116,6 +153,7 @@ class StatusBoardV2App:
         from_stdin: bool = False,
         no_color: bool = False,
         control_surface: Optional[ConfigControlSurface] = None,
+        show_management: bool = False,
     ) -> None:
         _ansi.ANSI_ENABLED = sys.stdout.isatty() and not no_color
 
@@ -141,6 +179,11 @@ class StatusBoardV2App:
 
         # PR-15: optional control surface for config feedback rendering
         self._control: Optional[ConfigControlSurface] = control_surface
+
+        # Management console + URL config surface
+        self._show_management = show_management
+        self._url_config: Optional[URLConfigSurface] = URLConfigSurface() if show_management else None
+        self._management: Optional[ManagementConsole] = ManagementConsole() if show_management else None
 
     # ------------------------------------------------------------------
     # Public interface
@@ -198,6 +241,12 @@ class StatusBoardV2App:
                 parts.append(_ansi.c(_BOARD_SEPARATOR, _BOLD))
                 parts.append(_ansi.c("  ── Config Control ──", _BOLD))
                 parts.append(_ansi.c(feedback, colour))
+
+        # Management console + URL config surface
+        if self._show_management and self._management and self._url_config:
+            parts.append(_ansi.c(_BOARD_SEPARATOR, _BOLD))
+            parts.append(self._url_config.render(projection))
+            parts.append(self._management.render(projection))
 
         parts.append(_ansi.c(_BOARD_SEPARATOR, _BOLD))
         return "\n".join(parts)
@@ -267,6 +316,30 @@ def _apply_toggle_arg(control: ConfigControlSurface, arg: str):
     return control.apply_toggle(provider.strip(), enabled)
 
 
+def _apply_url_arg(control: ConfigControlSurface, arg: str):
+    """Parse ``KEY=URL`` and call ``control.apply_network_url``."""
+    if "=" not in arg:
+        return ControlApplyResult(
+            succeeded=False,
+            operation="set_network_url",
+            error=f"--set-url expects KEY=URL format, got '{arg}'",
+        )
+    key, _, url = arg.partition("=")
+    return control.apply_network_url(key.strip(), url.strip())
+
+
+def _apply_api_key_arg(control: ConfigControlSurface, arg: str):
+    """Parse ``PROVIDER=KEY`` and call ``control.apply_provider_api_key``."""
+    if "=" not in arg:
+        return ControlApplyResult(
+            succeeded=False,
+            operation="set_provider_api_key",
+            error=f"--set-api-key expects PROVIDER=KEY format, got '{arg}'",
+        )
+    provider, _, key = arg.partition("=")
+    return control.apply_provider_api_key(provider.strip(), key.strip())
+
+
 def _format_control_result(result) -> str:
     """Format a ControlApplyResult for immediate CLI output."""
     lines = result.render_lines()
@@ -282,28 +355,38 @@ def run(
     no_color: bool = False,
     apply_toggle: Optional[str] = None,
     apply_routing_policy: Optional[str] = None,
+    set_url: Optional[str] = None,
+    set_api_key: Optional[str] = None,
+    set_android_inference_mode: Optional[str] = None,
+    show_management: bool = False,
 ) -> None:
-    """Convenience function: create and run the status board app.
-
-    Parameters
-    ----------
-    apply_toggle:
-        Optional one-shot provider toggle in ``PROVIDER=BOOL`` form
-        (e.g. ``"openai=true"``).  Applied before entering the monitor loop.
-    apply_routing_policy:
-        Optional one-shot routing policy (e.g. ``"prefer"``).
-        Applied before entering the monitor loop.
-    """
+    """Convenience function: create and run the status board app."""
     control: Optional[ConfigControlSurface] = None
 
     # Apply any one-shot control operations before entering the monitor loop.
-    if apply_toggle or apply_routing_policy:
+    needs_control = any([
+        apply_toggle,
+        apply_routing_policy,
+        set_url,
+        set_api_key,
+        set_android_inference_mode,
+    ])
+    if needs_control:
         control = ConfigControlSurface()
         if apply_toggle:
             result = _apply_toggle_arg(control, apply_toggle)
             print(_format_control_result(result))
         if apply_routing_policy:
             result = control.apply_routing_policy(apply_routing_policy.strip())
+            print(_format_control_result(result))
+        if set_url:
+            result = _apply_url_arg(control, set_url)
+            print(_format_control_result(result))
+        if set_api_key:
+            result = _apply_api_key_arg(control, set_api_key)
+            print(_format_control_result(result))
+        if set_android_inference_mode:
+            result = control.apply_android_inference_mode(set_android_inference_mode.strip())
             print(_format_control_result(result))
 
     app = StatusBoardV2App(
@@ -314,6 +397,7 @@ def run(
         from_stdin=from_stdin,
         no_color=no_color,
         control_surface=control,
+        show_management=show_management,
     )
     app.run()
 
@@ -330,7 +414,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "Displays RuntimeProjection: phase, domain, model topology, "
             "devices, and metrics.  "
             "PR-15: supports bounded config control via --apply-toggle / "
-            "--apply-routing-policy."
+            "--apply-routing-policy.  "
+            "Extended: --set-url / --set-api-key / --set-android-inference-mode / "
+            "--management."
         ),
     )
     p.add_argument(
@@ -390,6 +476,55 @@ def _build_parser() -> argparse.ArgumentParser:
             "Writes through canonical ConfigService to runtime/config.json."
         ),
     )
+    # Extended control: URL configuration
+    p.add_argument(
+        "--set-url",
+        default=None,
+        metavar="KEY=URL",
+        help=(
+            "Set a network endpoint URL before entering monitor mode.  "
+            "Format: KEY=URL.  "
+            "Keys: gateway_url, android_gateway_url, nats_url, ats_url, "
+            "webrtc_stun_url.  "
+            "Example: --set-url gateway_url=ws://10.0.0.1:8765.  "
+            "Writes through canonical ConfigService to runtime/config.json."
+        ),
+    )
+    # Extended control: API key
+    p.add_argument(
+        "--set-api-key",
+        default=None,
+        metavar="PROVIDER=KEY",
+        help=(
+            "Store a provider API key before entering monitor mode.  "
+            "Format: PROVIDER=KEY  (e.g. openai=sk-...).  "
+            "Writes through canonical ConfigService to runtime/secrets.env."
+        ),
+    )
+    # Extended control: Android inference mode
+    p.add_argument(
+        "--set-android-inference-mode",
+        default=None,
+        metavar="MODE",
+        help=(
+            "Set the Android inference mode.  "
+            "Accepted values: center | local | hybrid.  "
+            "'center' = Android delegates all VLM inference to V2 center "
+            "(no llama.cpp/NCNN needed in APK).  "
+            "Writes through canonical ConfigService to runtime/config.json."
+        ),
+    )
+    # Management console
+    p.add_argument(
+        "--management",
+        action="store_true",
+        default=False,
+        help=(
+            "Show the integrated management console: connected devices, "
+            "task chains, model/provider fill-in status, and long-run "
+            "readiness checklist."
+        ),
+    )
     return p
 
 
@@ -405,6 +540,10 @@ def main() -> None:
         no_color=args.no_color,
         apply_toggle=args.apply_toggle,
         apply_routing_policy=args.apply_routing_policy,
+        set_url=args.set_url,
+        set_api_key=args.set_api_key,
+        set_android_inference_mode=args.set_android_inference_mode,
+        show_management=args.management,
     )
 
 
