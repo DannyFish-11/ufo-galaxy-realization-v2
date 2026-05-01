@@ -158,7 +158,11 @@ async def test_flush_removes_device_from_durable_store():
         await buf1.enqueue("dev1", _msg(task_id="once"))
 
         buf2 = PendingDeliveryBuffer(ttl_seconds=60.0, store_path=store)
-        await buf2.flush("dev1", asyncio.coroutine(lambda _: None) if False else (lambda _: asyncio.sleep(0)))
+
+        async def noop(_: Dict[str, Any]) -> None:
+            pass
+
+        await buf2.flush("dev1", noop)
 
         # Third "restart" — queue must be gone
         buf3 = PendingDeliveryBuffer(ttl_seconds=60.0, store_path=store)
@@ -214,7 +218,7 @@ async def test_fresh_messages_survive_and_expired_ones_dont():
     store = _fresh_store()
     try:
         past_ts = time.time() - 120.0
-        future_ts = time.time() - 5.0   # 5 s old — well within TTL
+        recent_ts = time.time() - 5.0   # 5 s old — well within TTL
         data = {
             "schema": "pending_delivery_buffer_v1",
             "saved_at": time.time(),
@@ -223,7 +227,7 @@ async def test_fresh_messages_survive_and_expired_ones_dont():
             "queues": {
                 "dev1": [
                     {"message": _msg(task_id="stale"), "enqueued_at": past_ts},
-                    {"message": _msg(task_id="fresh"), "enqueued_at": future_ts},
+                    {"message": _msg(task_id="fresh"), "enqueued_at": recent_ts},
                 ]
             },
         }
