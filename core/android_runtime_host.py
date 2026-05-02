@@ -459,22 +459,27 @@ ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5 = (
 # ---------------------------------------------------------------------------
 
 ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT: str = (
-    "ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT_V1: "
-    "Android on-device local AI (LocalGroundingService / LocalPlannerService / "
-    "LocalInferenceRuntimeManager) is UNAVAILABLE by default in the current "
-    "runtime.  The default implementations (NoOpGroundingService et al.) return "
-    "errors without performing inference.  Devices do not register with a "
-    "local_ai capability unless explicitly configured and a model is loaded.  "
-    "This capability must not be treated as active, operational, or mainline "
-    "until explicit activation and a passing integration test confirm otherwise."
+    "ANDROID_LOCAL_AI_UNAVAILABLE_BY_DEFAULT_V2: "
+    "Android on-device local AI (LlamaCppPlannerService / NcnnGroundingService / "
+    "LocalInferenceRuntimeManager) is NOT ACTIVE / UNAVAILABLE in the default runtime "
+    "configuration. As of 2026-05-02, the inference runtimes ARE bundled (llama.cpp "
+    "b4833, NCNN ncnn-android-vulkan:20240410) and real JNI implementations exist. "
+    "However, inference_mode defaults to 'center' so local inference is OFF unless "
+    "explicitly set to 'local' by the operator AND model files (~1.65 GB) have been "
+    "downloaded. Devices do not advertise local_ai capability until explicitly "
+    "configured and models are provisioned. This capability remains UNAVAILABLE by "
+    "default and must not be treated as active without explicit operator action."
 )
 
 ANDROID_LOCAL_AI_IS_ROADMAP_NOT_DEFAULT: str = (
-    "ANDROID_LOCAL_AI_IS_ROADMAP_NOT_DEFAULT_V1: "
-    "Android local AI / on-device grounding / local planner is a ROADMAP "
-    "capability.  It exists as structural code but is not activated in the "
-    "default runtime.  Claims of Android local AI operational status must "
-    "be backed by a confirmed capability registration and a passing smoke test."
+    "ANDROID_LOCAL_AI_NOT_DEFAULT_ACTIVE_V2: "
+    "Android local AI / on-device grounding / local planner is NOT active by default. "
+    "The inference runtimes are now bundled (this is no longer a ROADMAP gap) and "
+    "real JNI implementations exist (LlamaCppPlannerService, NcnnGroundingService). "
+    "However, inference_mode defaults to 'center', so local inference is not activated "
+    "unless the operator explicitly configures inference_mode=local and downloads models. "
+    "The ROADMAP gap (missing build deps) has been resolved; the remaining gap is "
+    "operator-driven activation and first-run model provisioning."
 )
 
 ANDROID_LOCAL_AI_DEFAULT_CAPABILITY_FLAG: bool = False
