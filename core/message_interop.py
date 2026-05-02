@@ -311,6 +311,7 @@ def normalize_to_task_envelope(
         or payload.get("target_device_id")
         or payload.get("target_worker_id")
         or payload.get("target")
+        or payload.get("device_id")
         or []
     )
     if isinstance(targets_raw, str):

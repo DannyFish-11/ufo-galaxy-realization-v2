@@ -169,6 +169,7 @@ def _make_fake_plan(
     fake_plan.governance_snapshot = None
     fake_plan.policy_alignment = None
     fake_plan.mesh_session = None
+    fake_plan.metadata = None
     return fake_plan
 
 
@@ -183,6 +184,7 @@ def _make_fake_plan_no_target(*, mode: Any) -> Any:
     fake_plan.governance_snapshot = None
     fake_plan.policy_alignment = None
     fake_plan.mesh_session = None
+    fake_plan.metadata = None
     return fake_plan
 
 

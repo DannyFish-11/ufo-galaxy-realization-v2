@@ -1938,7 +1938,7 @@ class CommandRouter:
                         _v3_blocked_targets,
                         envelope.task_id,
                     )
-                    return {
+                    _v3_blocked_result: Dict[str, Any] = {
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
                         "trace_id": envelope.trace_id,
@@ -1964,6 +1964,9 @@ class CommandRouter:
                         },
                         "latency_ms": 0.0,
                     }
+                    if envelope.remote_execution_mode is not None:
+                        _v3_blocked_result["remote_execution_mode"] = envelope.remote_execution_mode.value
+                    return _v3_blocked_result
 
             except Exception as _v3_exc:
                 logger.debug(

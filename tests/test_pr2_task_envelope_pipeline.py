@@ -21,6 +21,7 @@ PR-2 smoke tests — 核心链路统一为 TaskEnvelope
 import asyncio
 import uuid
 import pytest
+from unittest.mock import patch
 
 from core.schemas.task_envelope import TaskEnvelope
 
@@ -39,6 +40,45 @@ def _make_mock_executor(captured_calls=None):
 
     _executor.calls = calls
     return _executor
+
+
+def _make_approved_slots_result(device_ids):
+    """Return a CanonicalDispatchSlotsResult approving all given device IDs.
+
+    Used to bypass the V3 canonical dispatch slot gate in unit tests that
+    focus on routing logic rather than slot-legality enforcement.
+    """
+    from core.canonical_dispatch_slot_authority import (
+        CanonicalDispatchSlot,
+        CanonicalDispatchSlotStatus,
+        CanonicalDispatchSlotsResult,
+    )
+    slots = [
+        CanonicalDispatchSlot(
+            device_id=d,
+            execution_mode="cross_device",
+            slot_approved=True,
+            status=CanonicalDispatchSlotStatus.SLOT_APPROVED.value,
+            reason="test override — all dimensions bypassed",
+        )
+        for d in device_ids
+    ]
+    return CanonicalDispatchSlotsResult(
+        execution_mode="cross_device",
+        approved_slots=slots,
+        blocked_slots=[],
+        can_proceed=True,
+        block_reason="",
+    )
+
+
+def _patch_v3_slot_gate(device_ids):
+    """Context manager: patch get_canonical_dispatch_slots to approve *device_ids*."""
+    approved = _make_approved_slots_result(device_ids)
+    return patch(
+        "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+        return_value=approved,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +105,8 @@ class TestRouteEnvelopePrimaryPath:
             tool_name="ping",
             args={"verbose": True},
         )
-        result = await router.route_envelope(envelope)
+        with _patch_v3_slot_gate(["device_a"]):
+            result = await router.route_envelope(envelope)
 
         assert result["success"] is True
         assert result["task_id"] == "te-task-1"
@@ -88,7 +129,8 @@ class TestRouteEnvelopePrimaryPath:
             tool_name="status",
             args={},
         )
-        await router.route_envelope(envelope)
+        with _patch_v3_slot_gate(["device_x"]):
+            await router.route_envelope(envelope)
 
         call_params = executor.calls[0]["params"]
         # PR-2: _galaxy_task_id and _galaxy_trace_id must be injected
@@ -113,13 +155,14 @@ class TestDispatchCompatLayer:
         executor = _make_mock_executor()
         router = self._make_router(executor)
 
-        result = await router.route_command(
-            device_id="dev1",
-            command="health_check",
-            payload={},
-            command_id="cmd-pr2",
-            task_id="task-pr2",
-        )
+        with _patch_v3_slot_gate(["dev1"]):
+            result = await router.route_command(
+                device_id="dev1",
+                command="health_check",
+                payload={},
+                command_id="cmd-pr2",
+                task_id="task-pr2",
+            )
         assert result["success"] is True
         assert executor.calls, "executor should have been called"
 
@@ -216,7 +259,8 @@ class TestDeviceRouterDispatchTaskEnvelope:
                     "params": {},
                 },
             }
-            result = await dr.dispatch_task(task, device)
+            with _patch_v3_slot_gate(["test_device"]):
+                result = await dr.dispatch_task(task, device)
             # route_envelope was called → executor was invoked
             assert executor.calls, "route_envelope should have called the executor"
             assert executor.calls[0]["target"] == "test_device"
