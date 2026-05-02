@@ -1,572 +1,306 @@
-# 统一命令协议文档
+# Galaxy - 命令路由协议
 
 ## 概述
 
-Galaxy 统一命令协议提供了一个标准化的接口，用于向多个设备/节点并行下发命令，支持同步和异步执行模式，并提供统一的结果聚合和追踪机制。
+命令路由引擎是 Galaxy 的核心调度层，负责将用户/AI 的指令分发到目标节点或设备，并聚合执行结果。
 
-## TaskEnvelope — 规范内部消息格式（PR-3）
-
-所有内部路由路径现在统一使用 **TaskEnvelope** 作为主要消息格式。外部 API 格式不变；传统端点（legacy endpoints）通过适配器函数自动转换为 TaskEnvelope，向后完全兼容。
-
-### Schema 定义
-
-```python
-# core/schemas/task_envelope.py
-class TaskEnvelope(BaseModel):
-    task_id:    str           # 全局唯一任务标识符（自动生成）
-    trace_id:   str           # 分布式追踪标识符（跨全链路传播）
-    source:     str           # 发起方：'api' / 'ws' / 'scheduler' / device_id …
-    targets:    List[str]     # 目标设备 / worker / node ID 列表
-    tool_name:  str           # 工具/命令/技能/MCP-tool 名称
-    args:       Dict[str, Any]# 传递给工具的命名参数
-    priority:   int           # 优先级 1（最高）– 10（最低），默认 5
-    timeout:    float         # 超时秒数（> 0），默认 30.0
-    created_at: datetime      # UTC 创建时间（自动设置）
-    metadata:   Dict[str, Any]# 扩展元数据（mode, notify_ws, relay_chain …）
-```
-
-### 适配器函数
-
-| 函数 | 适用场景 |
-|------|----------|
-| `envelope_from_command_request(...)` | UnifiedCommandRequest / CommandDispatchRequest → TaskEnvelope |
-| `envelope_from_relay_request(...)` | ProxyRelay RelayRequest → TaskEnvelope |
-| `envelope_from_mcp_call(...)` | MCP 工具调用 → TaskEnvelope |
-
-### 可观测性
-
-所有内部日志统一包含 `trace_id` 和 `task_id` 字段：
-
-```
-INFO  Galaxy.CommandRouter - route_command | trace_id=trace_abc123 task_id=task_xyz ...
-INFO  Galaxy.API           - 收到统一命令: trace_id=trace_abc123 task_id=task_xyz ...
-INFO  Galaxy.API           - MCP 工具调用: trace_id=trace_abc123 task_id=task_xyz ...
-```
-
-GatewayTraceStore 的每条记录也携带 `trace_id`，可通过可观测 API 查询。
-
-### 新代码集成示例
-
-```python
-from core.schemas.task_envelope import TaskEnvelope
-from core.command_router import get_command_router
-
-router = get_command_router()
-
-envelope = TaskEnvelope(
-    source="my_service",
-    targets=["Node_42"],
-    tool_name="screenshot",
-    args={"format": "png"},
-    priority=3,
-)
-result = await router.route_envelope(envelope)
-# result["trace_id"] 可用于跨服务日志关联
-```
+融合元气 AI Bot 精髓：
+- **极速** - Redis 缓存热命令，P99 < 100ms
+- **智能** - AI 意图解析自动映射命令
+- **流畅** - WebSocket 实时推送执行进度
+- **可靠** - 超时重试 + 熔断降级
 
 ---
 
-## 核心特性
+## 1. REST API
 
-- ✅ **多目标支持**: 同时向多个设备发送命令
-- ✅ **请求追踪**: 每个请求有唯一的 request_id，全链路携带 trace_id
-- ✅ **执行模式**: 支持 sync（同步）和 async（异步）模式
-- ✅ **超时控制**: 可配置命令执行超时时间
-- ✅ **结果聚合**: 自动聚合多个目标的执行结果
-- ✅ **WebSocket 推送**: 异步模式下通过 WebSocket 实时推送结果
-- ✅ **鉴权机制**: 支持 API Token 和 Device ID 鉴权
+### POST /api/v1/command
 
-## API 端点
+分发命令到目标节点/设备。
 
-### 1. 提交命令
-
-**端点**: `POST /api/v1/command`
-
-**功能**: 向一个或多个目标设备提交命令执行请求
-
-#### 请求格式
+**请求体：**
 
 ```json
 {
-  "request_id": "uuid-string（可选，服务端自动生成）",
-  "command": "命令名称",
-  "targets": ["device_id_1", "device_id_2"],
-  "params": {},
-  "mode": "sync|async",
-  "timeout": 30
+  "source": "api",
+  "targets": ["Node_02_Tasker", "Node_06_Filesystem"],
+  "command": "execute",
+  "params": {
+    "action": "list_tasks",
+    "filter": "pending"
+  },
+  "mode": "parallel",
+  "timeout": 30.0,
+  "max_retries": 2,
+  "notify_ws": true,
+  "priority": 5,
+  "metadata": {
+    "user_id": "user_001"
+  }
 }
 ```
 
-#### 请求字段说明
+**参数说明：**
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| request_id | string | 否 | 请求唯一标识符，若不提供则自动生成 UUID |
-| command | string | 是 | 命令名称（如：screenshot, click, swipe等）|
-| targets | array[string] | 是 | 目标设备 ID 列表，至少包含一个目标 |
-| params | object | 否 | 命令参数，根据具体命令而定 |
-| mode | string | 否 | 执行模式，可选值: "sync"（默认）或 "async" |
-| timeout | integer | 否 | 超时时间（秒），默认 30 秒 |
+| source | string | 否 | 来源标识: api / ws / scheduler / ai |
+| targets | string[] | 是 | 目标节点或设备 ID 列表 |
+| command | string | 是 | 命令名称 |
+| params | object | 否 | 命令参数 |
+| mode | string | 否 | 执行模式: sync / async / parallel / serial |
+| timeout | float | 否 | 超时秒数（默认 30） |
+| max_retries | int | 否 | 最大重试次数（默认 2） |
+| notify_ws | bool | 否 | 是否通过 WebSocket 推送结果（默认 true） |
+| priority | int | 否 | 优先级 1-10（1=最高，默认 5） |
+| metadata | object | 否 | 自定义元数据 |
 
-#### 响应格式
+**执行模式：**
 
-**同步模式 (mode="sync")**:
-
-```json
-{
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "done",
-  "created_at": "2026-02-12T10:00:00.000Z",
-  "completed_at": "2026-02-12T10:00:05.123Z",
-  "results": {
-    "device_id_1": {
-      "status": "done",
-      "output": {
-        "message": "Command executed successfully",
-        "data": {}
-      },
-      "error": null,
-      "started_at": "2026-02-12T10:00:00.000Z",
-      "completed_at": "2026-02-12T10:00:05.100Z"
-    },
-    "device_id_2": {
-      "status": "failed",
-      "output": null,
-      "error": "Device not connected",
-      "started_at": "2026-02-12T10:00:00.000Z",
-      "completed_at": "2026-02-12T10:00:00.050Z"
-    }
-  }
-}
-```
-
-**异步模式 (mode="async")**:
-
-```json
-{
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "created_at": "2026-02-12T10:00:00.000Z",
-  "message": "Command queued for async execution. Use GET /api/v1/command/{request_id}/status to check status."
-}
-```
-
-#### 响应状态码
-
-| 状态码 | 说明 |
-|--------|------|
-| 200 | 命令提交成功（sync 模式下表示执行完成）|
-| 400 | 请求参数错误 |
-| 401 | 未授权（缺少或无效的 Token）|
-| 408 | 请求超时 |
-| 500 | 服务器内部错误 |
-
----
-
-### 2. 查询命令状态
-
-**端点**: `GET /api/v1/command/{request_id}/status`
-
-**功能**: 查询异步命令的执行状态和结果
-
-#### 路径参数
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| request_id | string | 命令请求的唯一标识符 |
-
-#### 响应格式
-
-```json
-{
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "done",
-  "created_at": "2026-02-12T10:00:00.000Z",
-  "completed_at": "2026-02-12T10:00:05.123Z",
-  "results": {
-    "device_id_1": {
-      "status": "done",
-      "output": {
-        "message": "Command executed successfully"
-      },
-      "error": null,
-      "started_at": "2026-02-12T10:00:00.000Z",
-      "completed_at": "2026-02-12T10:00:05.100Z"
-    }
-  }
-}
-```
-
-#### 响应状态码
-
-| 状态码 | 说明 |
-|--------|------|
-| 200 | 查询成功 |
-| 401 | 未授权 |
-| 404 | 找不到指定的命令请求 |
-
----
-
-## 命令状态枚举
-
-| 状态 | 说明 |
+| 模式 | 行为 |
 |------|------|
-| queued | 已入队等待执行 |
-| running | 正在执行 |
-| done | 执行完成 |
-| failed | 执行失败 |
+| `sync` | 等待所有目标返回结果后响应 |
+| `async` | 立即返回 `request_id`，后台执行，通过 WebSocket 推送结果 |
+| `parallel` | 多目标并行执行，等待全部完成 |
+| `serial` | 多目标按顺序执行 |
+
+**响应体：**
+
+```json
+{
+  "success": true,
+  "request_id": "cmd_a1b2c3d4e5f6",
+  "status": "success",
+  "targets": {
+    "Node_02_Tasker": {
+      "target": "Node_02_Tasker",
+      "status": "success",
+      "result": { "tasks": [...] },
+      "error": null,
+      "latency_ms": 45.23,
+      "retries": 0
+    },
+    "Node_06_Filesystem": {
+      "target": "Node_06_Filesystem",
+      "status": "success",
+      "result": { "files": [...] },
+      "error": null,
+      "latency_ms": 12.56,
+      "retries": 0
+    }
+  },
+  "total_latency_ms": 48.91,
+  "created_at": "2026-01-15T10:30:00",
+  "completed_at": "2026-01-15T10:30:00"
+}
+```
+
+**状态码：**
+
+| status | 说明 |
+|--------|------|
+| `pending` | 等待执行 |
+| `dispatching` | 正在分发 |
+| `running` | 执行中 |
+| `success` | 全部成功 |
+| `partial` | 部分成功 |
+| `failed` | 全部失败 |
+| `timeout` | 超时 |
+| `cancelled` | 已取消 |
+
+### GET /api/v1/command/{request_id}
+
+查询命令执行状态和结果。
+
+```bash
+curl http://localhost:8099/api/v1/command/cmd_a1b2c3d4e5f6
+```
+
+### DELETE /api/v1/command/{request_id}
+
+取消正在执行的命令。
+
+### GET /api/v1/command
+
+获取命令路由引擎统计信息。
 
 ---
 
-## WebSocket 推送
+## 2. WebSocket 协议
 
-异步模式下，命令执行完成后会通过 WebSocket 推送结果给所有订阅的客户端。
+### 设备 WebSocket: /ws/device/{device_id}
 
-### 推送消息格式
+**发送命令（客户端 → 服务器）：**
+
+```json
+{
+  "type": "command_dispatch",
+  "targets": ["Node_02_Tasker"],
+  "command": "execute",
+  "params": { "action": "list_tasks" },
+  "mode": "sync",
+  "timeout": 30.0
+}
+```
+
+**接收结果（服务器 → 客户端）：**
 
 ```json
 {
   "type": "command_result",
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "done",
-  "timestamp": "2026-02-12T10:00:05.123Z",
-  "results": {
-    "device_id_1": {
-      "status": "done",
-      "output": {},
-      "error": null,
-      "started_at": "2026-02-12T10:00:00.000Z",
-      "completed_at": "2026-02-12T10:00:05.100Z"
-    }
+  "request_id": "cmd_a1b2c3d4e5f6",
+  "data": {
+    "status": "success",
+    "targets": { ... },
+    "total_latency_ms": 48.91
   }
 }
 ```
 
-### WebSocket 连接
-
-**端点**: `ws://<host>:<port>/ws/status`
-
-连接后会自动接收系统状态更新和命令执行结果推送。
-
----
-
-## 鉴权机制
-
-统一命令端点支持两种鉴权方式：
-
-### 1. API Token 鉴权
-
-通过 `Authorization` header 传递 Bearer Token：
-
-```http
-Authorization: Bearer <API_TOKEN>
-```
-
-Token 从环境变量 `GALAXY_API_TOKEN` 读取。若环境变量未设置，系统进入开发模式，跳过鉴权。
-
-### 2. Device ID 标识
-
-通过 `X-Device-ID` header 标识发起请求的设备：
-
-```http
-X-Device-ID: <device_id>
-```
-
-### 鉴权示例
-
-**cURL 示例**:
-
-```bash
-curl -X POST http://localhost:8099/api/v1/command \
-  -H "Authorization: Bearer your-api-token-here" \
-  -H "X-Device-ID: my-device-001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "command": "screenshot",
-    "targets": ["device_1"],
-    "params": {"quality": 90},
-    "mode": "sync"
-  }'
-```
-
-**Python 示例**:
-
-```python
-import requests
-
-headers = {
-    "Authorization": "Bearer your-api-token-here",
-    "X-Device-ID": "my-device-001",
-    "Content-Type": "application/json"
-}
-
-payload = {
-    "command": "screenshot",
-    "targets": ["device_1"],
-    "params": {"quality": 90},
-    "mode": "sync"
-}
-
-response = requests.post(
-    "http://localhost:8099/api/v1/command",
-    headers=headers,
-    json=payload
-)
-
-print(response.json())
-```
-
----
-
-## 错误码说明
-
-| 错误码 | 错误信息 | 说明 |
-|--------|----------|------|
-| 400 | Invalid mode. Must be 'sync' or 'async' | 执行模式参数错误 |
-| 400 | Targets list cannot be empty | 目标列表为空 |
-| 400 | Invalid Device ID | Device ID 格式不正确 |
-| 401 | Missing Authorization header | 缺少 Authorization header |
-| 401 | Invalid Authorization header format | Authorization header 格式错误 |
-| 401 | Invalid API token | API Token 无效 |
-| 404 | Command not found | 找不到指定的命令请求 |
-| 408 | Command execution timeout | 命令执行超时 |
-| 500 | Internal server error | 服务器内部错误 |
-
----
-
-## 完整示例
-
-### 示例 1: 同步执行单个命令
-
-**请求**:
-
-```bash
-curl -X POST http://localhost:8099/api/v1/command \
-  -H "Content-Type: application/json" \
-  -d '{
-    "command": "get_status",
-    "targets": ["device_001"],
-    "mode": "sync",
-    "timeout": 10
-  }'
-```
-
-**响应**:
+**AI 意图解析（客户端 → 服务器）：**
 
 ```json
 {
-  "request_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "status": "done",
-  "created_at": "2026-02-12T10:30:00.000Z",
-  "completed_at": "2026-02-12T10:30:02.345Z",
-  "results": {
-    "device_001": {
-      "status": "done",
-      "output": {
-        "battery": 85,
-        "network": "WiFi",
-        "storage": "60%"
-      },
-      "error": null,
-      "started_at": "2026-02-12T10:30:00.000Z",
-      "completed_at": "2026-02-12T10:30:02.345Z"
-    }
-  }
+  "type": "ai_intent",
+  "text": "帮我查看所有待办任务",
+  "request_id": "req_001"
 }
 ```
 
----
-
-### 示例 2: 异步执行多目标命令
-
-**步骤 1: 提交命令**
-
-```bash
-curl -X POST http://localhost:8099/api/v1/command \
-  -H "Content-Type: application/json" \
-  -d '{
-    "command": "screenshot",
-    "targets": ["device_001", "device_002", "device_003"],
-    "params": {"quality": 80},
-    "mode": "async"
-  }'
-```
-
-**响应**:
+**意图结果（服务器 → 客户端）：**
 
 ```json
 {
-  "request_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-  "status": "queued",
-  "created_at": "2026-02-12T10:35:00.000Z",
-  "message": "Command queued for async execution. Use GET /api/v1/command/{request_id}/status to check status."
+  "type": "ai_intent_result",
+  "request_id": "req_001",
+  "intent": "task_manage",
+  "command": "task_manage",
+  "targets": ["Node_02_Tasker"],
+  "confidence": 0.85,
+  "suggestions": ["查看所有任务", "创建新任务", "按优先级排序"]
 }
 ```
 
-**步骤 2: 轮询状态**
+### 状态 WebSocket: /ws/status
 
-```bash
-curl http://localhost:8099/api/v1/command/b2c3d4e5-f6a7-8901-bcde-f12345678901/status
-```
+**自动推送事件：**
 
-**响应**:
+| type | 说明 |
+|------|------|
+| `initial_status` | 连接时的系统快照 |
+| `device_connected` | 设备上线 |
+| `device_disconnected` | 设备离线 |
+| `device_status_update` | 设备状态更新 |
+| `command_result` | 命令执行结果 |
+
+**客户端可发送：**
+
+| 消息 | 说明 |
+|------|------|
+| `"ping"` | 心跳，返回 pong |
+| `{"type": "subscribe_commands"}` | 确认订阅命令结果 |
+| `{"type": "get_metrics"}` | 获取性能指标 |
+| `{"type": "get_health"}` | 获取健康状态 |
+
+---
+
+## 3. AI 意图 API
+
+### POST /api/v1/ai/intent
+
+解析自然语言意图。
 
 ```json
 {
-  "request_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-  "status": "done",
-  "created_at": "2026-02-12T10:35:00.000Z",
-  "completed_at": "2026-02-12T10:35:08.567Z",
-  "results": {
-    "device_001": {
-      "status": "done",
-      "output": {
-        "screenshot_url": "/screenshots/device_001_20260212.png"
-      },
-      "error": null,
-      "started_at": "2026-02-12T10:35:00.100Z",
-      "completed_at": "2026-02-12T10:35:05.200Z"
-    },
-    "device_002": {
-      "status": "done",
-      "output": {
-        "screenshot_url": "/screenshots/device_002_20260212.png"
-      },
-      "error": null,
-      "started_at": "2026-02-12T10:35:00.150Z",
-      "completed_at": "2026-02-12T10:35:06.300Z"
-    },
-    "device_003": {
-      "status": "failed",
-      "output": null,
-      "error": "Device not connected",
-      "started_at": "2026-02-12T10:35:00.200Z",
-      "completed_at": "2026-02-12T10:35:00.250Z"
-    }
-  }
+  "text": "帮我整理一下今天的任务",
+  "session_id": "session_001",
+  "context": {}
 }
 ```
 
+### POST /api/v1/ai/conversation
+
+添加对话轮次到记忆系统。
+
+### GET /api/v1/ai/conversation/{session_id}
+
+获取对话上下文。
+
+### GET /api/v1/ai/recommendations/{session_id}
+
+获取智能推荐。
+
 ---
 
-## 与现有端点对比
+## 4. 监控 API
 
-### 已废弃端点（保持向后兼容）
+### GET /api/v1/monitoring/dashboard
 
-以下端点已被统一命令端点替代，但保持向后兼容：
+完整监控仪表盘（健康 + 告警 + 指标 + 性能）。
 
-- `/api/commands` (galaxy_gateway/app.py)
-- `/api/command` (galaxy_gateway/gateway_service.py, main.py)
-- `/execute_command` (galaxy_gateway/gateway_service.py)
+### GET /api/v1/monitoring/health
 
-### 迁移指南
+健康检查聚合。
 
-**旧方式 (`/api/command`)**:
+### GET /api/v1/monitoring/alerts
 
-```json
-{
-  "user_input": "Take a screenshot",
-  "session_id": "session123"
-}
+告警列表。
+
+### GET /api/v1/monitoring/metrics
+
+系统指标。
+
+### GET /api/v1/monitoring/performance
+
+性能指标仪表盘（QPS、P50/P99 延迟、错误率）。
+
+---
+
+## 5. 架构流程
+
+```
+用户输入
+  │
+  ▼
+┌─────────────────┐
+│  AI 意图解析器   │ ← 规则引擎 (< 1ms) + LLM (高精度)
+│  IntentParser    │
+└────────┬────────┘
+         │ ParsedIntent
+         ▼
+┌─────────────────┐
+│  命令路由引擎    │ ← 缓存命中 → Redis (< 5ms)
+│  CommandRouter   │
+└────────┬────────┘
+         │ CommandRequest
+         ▼
+┌─────────────────┐    ┌──────────┐
+│  并行/串行调度   │───▶│ 节点执行  │
+│  Dispatcher      │    │ Node_XX  │
+└────────┬────────┘    └──────────┘
+         │ TargetResult
+         ▼
+┌─────────────────┐
+│  结果聚合器      │
+│  Aggregator      │
+└────────┬────────┘
+         │ CommandResult
+         ▼
+┌─────────────────┐    ┌──────────┐
+│  WebSocket 推送  │───▶│ 前端/App │
+│  Notifier        │    │ 实时更新  │
+└─────────────────┘    └──────────┘
 ```
 
-**新方式 (`/api/v1/command`)**:
-
-```json
-{
-  "command": "screenshot",
-  "targets": ["device_001"],
-  "params": {},
-  "mode": "sync"
-}
-```
-
 ---
 
-## 最佳实践
+## 6. 性能目标
 
-### 1. 使用 request_id 追踪
-
-建议在客户端生成 UUID 作为 request_id，便于端到端追踪：
-
-```python
-import uuid
-request_id = str(uuid.uuid4())
-```
-
-### 2. 选择合适的执行模式
-
-- **sync 模式**: 适用于需要立即获取结果的场景（如表单提交、即时查询）
-- **async 模式**: 适用于耗时操作或多目标并行执行（如批量截图、系统巡检）
-
-### 3. 设置合理的超时时间
-
-根据命令类型设置合适的超时：
-
-- 快速命令（如 click、input）: 5-10 秒
-- 中等命令（如 screenshot）: 15-30 秒
-- 耗时命令（如 install、backup）: 60-300 秒
-
-### 4. 处理部分失败
-
-多目标命令可能部分成功、部分失败。应用应正确处理每个目标的结果状态：
-
-```python
-for target, result in response["results"].items():
-    if result["status"] == "done":
-        print(f"{target}: 成功")
-    else:
-        print(f"{target}: 失败 - {result['error']}")
-```
-
----
-
-## 技术实现细节
-
-- **并行执行**: 使用 `asyncio.gather()` 实现多目标并行执行
-- **超时控制**: 使用 `asyncio.wait_for()` 实现超时控制
-- **后台任务**: 异步模式使用 `asyncio.create_task()` 创建后台任务
-- **结果存储**: 命令结果存储在内存字典中（生产环境建议使用 Redis）
-- **WebSocket 推送**: 使用全局 ConnectionManager 实现结果广播
-
----
-
-## 常见问题
-
-### Q1: 异步模式下如何获取结果？
-
-有两种方式：
-
-1. **轮询**: 定期调用 `GET /api/v1/command/{request_id}/status` 查询状态
-2. **WebSocket**: 连接 `/ws/status` 端点，等待 `command_result` 消息推送
-
-### Q2: 命令结果保存多久？
-
-当前实现将结果存储在内存中，进程重启后会丢失。生产环境建议使用持久化存储（如 Redis）并设置 TTL。
-
-### Q3: 支持哪些命令？
-
-命令名称由具体的设备/节点定义。常见命令包括：
-
-- GUI 操作: `click`, `swipe`, `input`, `scroll`
-- 系统操作: `screenshot`, `get_status`, `install`, `uninstall`
-- 自定义命令: 根据节点能力定义
-
-### Q4: 如何确保安全？
-
-1. 设置 `GALAXY_API_TOKEN` 环境变量启用鉴权
-2. 使用 HTTPS 加密传输
-3. 限制 API 访问 IP 范围
-4. 定期轮换 Token
-
----
-
-## 版本历史
-
-- **v1.0** (2026-02-12): 初始版本
-  - 支持多目标命令执行
-  - 支持 sync/async 模式
-  - 支持 request_id 追踪
-  - 支持超时控制
-  - 支持 WebSocket 推送
-  - 支持 Token 鉴权
+| 指标 | 目标 | 方案 |
+|------|------|------|
+| 缓存命中延迟 | < 5ms | Redis 缓存热命令 |
+| 单节点执行 | < 100ms | 异步执行 + 并发控制 |
+| 多节点并行 | < 200ms | asyncio.gather |
+| WebSocket 推送 | < 10ms | 非阻塞广播 |
+| P99 延迟 | < 500ms | 超时控制 + 熔断器 |
+| 可用性 | 99.99% | 重试 + 降级 + 告警 |

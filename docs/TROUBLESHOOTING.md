@@ -1,236 +1,202 @@
-# Galaxy — Troubleshooting Guide
+# Galaxy 故障排除指南
+
+## 目录
+
+1. [节点启动失败 / 健康检查超时](#节点启动失败--健康检查超时)
+2. [降级（Degraded）模式说明](#降级-degraded-模式说明)
+3. [节点先决条件](#节点先决条件)
+4. [常见错误与解决方案](#常见错误与解决方案)
+5. [快速诊断命令](#快速诊断命令)
 
 ---
 
-## Single-machine vs Multi-machine NATS
+## 节点启动失败 / 健康检查超时
 
-Galaxy uses NATS as its internal scheduling bus.  The right configuration
-depends on how many machines are involved.
+运行 `unified_launcher.py` 时，若控制台输出以下信息，说明对应节点启动失败：
 
-### Single-machine (default)
-
-No extra configuration needed.  Galaxy defaults to `nats://localhost:4222`.
-Start a local NATS server and Galaxy will connect automatically:
-
-```bash
-# Docker (easiest)
-docker run -d --rm -p 4222:4222 nats:latest
-
-# Or install nats-server directly
-nats-server -p 4222
+```
+节点 Node_XX_XXX 健康检查超时（10 次），视为启动失败
 ```
 
-Leave `GALAXY_NATS_URL` **unset** — Galaxy will use the local default and
-print a hint showing the current LAN IP so you can switch later.
+### 原因分类
 
-### Multi-machine (cross-device)
+| 原因 | 受影响节点 | 解决方案 |
+|------|-----------|---------|
+| 缺少 `.env` / API Key 未配置 | Node_01_OneAPI | 以降级模式运行，或配置 `.env` |
+| 语言运行时未安装（Windows） | Node_09_Sandbox | 安装缺失的运行时，或接受受限模式 |
+| LLM 路由不可达 | Node_110/111/112 | 先启动 Node_01，或接受降级模式 |
+| 本地 `core/` 包遮蔽项目 `core` | Node_110/111/112 | 已在 v2.3.x 修复 |
 
-Set `GALAXY_NATS_URL` to the server's LAN or public IP **before** starting
-Galaxy on every machine:
+---
+
+## 降级（Degraded）模式说明
+
+Galaxy 中的关键节点支持"降级模式"——即使依赖不满足，节点也会正常启动并通过健康检查，只是部分高级功能受限。
+
+### 各节点降级行为
+
+#### Node_01_OneAPI（端口 7995）
+
+**前提条件（可选）：**
+- `OPENROUTER_API_KEY`、`GROQ_API_KEY`、`ZHIPU_API_KEY`、`CLAUDE_API_KEY`、
+  `TOGETHER_API_KEY`、`PERPLEXITY_API_KEY` 中至少配置一个
+- 或 `LOCAL_LLM_ENABLED=true` 且 Node_79_LocalLLM 正在运行
+
+**降级时行为：**
+- 健康检查返回 `{"status": "degraded", ...}`，HTTP 200 ✅
+- `/v1/chat/completions` 调用返回错误 `{"error": "No provider available"}`
+- 启动日志输出警告：`未检测到任何 API Key，节点以降级模式运行`
+
+**启用完整功能：**
+```bash
+cp .env.example .env
+# 编辑 .env，填入至少一个 API Key
+```
+
+#### Node_09_Sandbox（端口 7996）
+
+**前提条件（可选）：**
+- `python3`（必须，基础功能）
+- `node`（JavaScript）、`ruby`、`php`、`go`、`rustc`、`gcc`、`g++` 等（可选）
+
+**降级时行为：**
+- 健康检查始终返回 `{"status": "healthy", ...}`，HTTP 200 ✅
+- `available_languages` 列表只包含已安装的运行时
+- Windows 上通常只有 `python` 和 `bash` 可用
+- 启动日志输出可用语言列表
+
+**扩展语言支持（Windows）：**
+- 安装 [Node.js](https://nodejs.org)、[Go](https://go.dev)、[Ruby](https://rubyinstaller.org) 等
+- 重启节点，`available_languages` 会自动更新
+
+#### Node_110_SmartOrchestrator（端口 7997）
+
+**前提条件（可选）：**
+- Node_01_OneAPI 或其他 LLM 路由正在运行
+- 环境变量 `LLM_ROUTER_URL`（默认 `http://localhost:7995`）
+
+**降级时行为：**
+- 健康检查返回 `{"status": "healthy", "mode": "degraded", ...}`，HTTP 200 ✅
+- 任务编排、工作流管理等核心功能仍可用
+- LLM 推理请求返回 mock 响应
+- 启动日志输出：`以降级 mock 模式启动`
+
+#### Node_111_ContextManager（端口 7998）
+
+**前提条件（可选）：**
+- Node_01_OneAPI 或其他 LLM 路由正在运行
+- 环境变量 `LLM_ROUTER_URL`（默认 `http://localhost:7995`）
+
+**降级时行为：**
+- 健康检查返回 `{"status": "healthy", "mode": "degraded", ...}`，HTTP 200 ✅
+- 上下文管理（内存存储）仍可用
+- 不依赖 LLM 的功能不受影响
+- 启动日志输出：`以降级 mock 模式启动`
+
+#### Node_112_SelfHealing（端口 7999）
+
+**前提条件（可选）：**
+- Node_01_OneAPI 或其他 LLM 路由正在运行
+- 环境变量 `LLM_ROUTER_URL`（默认 `http://localhost:7995`）
+
+**降级时行为：**
+- 健康检查返回 `{"status": "healthy", "mode": "degraded", ...}`，HTTP 200 ✅
+- 自愈引擎（规则模式）正常运行
+- LLM 驱动的智能诊断暂不可用，回退到基于规则的诊断
+- 启动日志输出：`以降级模式启动`
+
+---
+
+## 节点先决条件
+
+### 最小化启动（无需任何配置）
+
+所有上述节点在不配置 `.env` 的情况下均可启动，只是以降级模式运行：
 
 ```bash
-# On the machine running the NATS server (start it first)
-nats-server -p 4222
-
-# On every Galaxy instance (replace 192.168.1.10 with actual server IP)
-export GALAXY_NATS_URL=nats://192.168.1.10:4222
+# 直接启动，无需 .env
 python unified_launcher.py
 ```
 
-> **Tip:** Galaxy prints a suggested cross-device URL at startup when
-> `GALAXY_NATS_URL` is unset.  Copy that URL, set it on all machines, and
-> cross-device routing becomes available without any code changes.
-
----
-
-## Error: `[FATAL] NATS 不可用` / `[FATAL] NATS is required but not reachable`
-
-**Cause:** NATS server is not running. NATS is the internal scheduling mainline and is required.
-
-**Fix:**
-```bash
-# Start NATS
-nats-server -p 4222
-
-# Or via Docker
-docker run -d --rm -p 4222:4222 nats:latest
-
-# Verify
-nc -z localhost 4222 && echo "NATS OK" || echo "NATS NOT listening"
+预期输出：
+```
+⚠️  Node_01_OneAPI 以 degraded 模式启动 — 部分功能可能受限，但不影响系统启动
+✅  Node_09_Sandbox 健康检查通过
+⚠️  Node_110_SmartOrchestrator 以 degraded 模式启动 — 部分功能可能受限，但不影响系统启动
+⚠️  Node_111_ContextManager 以 degraded 模式启动 — 部分功能可能受限，但不影响系统启动
+⚠️  Node_112_SelfHealing 以 degraded 模式启动 — 部分功能可能受限，但不影响系统启动
 ```
 
----
-
-## Error: `NATS Gateway Adapter init failed`
-
-**Cause:** Gateway could not connect to NATS on startup.
-
-**Fix:**
-1. Ensure NATS is running on port 4222: `nats-server -p 4222`
-2. Check `GALAXY_NATS_URL` env var is correct: `echo $GALAXY_NATS_URL`
-3. Check firewall rules: `iptables -L | grep 4222`
-
----
-
-## Error: Port already in use (`Address already in use`)
-
-**Cause:** Another process is using port 9000 (Gateway), 8071 (Node_71), or 4222 (NATS).
-
-**Fix:**
-```bash
-# Find which process is using the port
-lsof -i :4222
-lsof -i :9000
-lsof -i :8071
-
-# Kill the process (replace PID)
-kill -9 <PID>
-
-# Windows equivalent
-netstat -ano | findstr :4222
-taskkill /PID <PID> /F
-```
-
----
-
-## Error: `nats-server: command not found`
-
-**Cause:** NATS server is not installed.
-
-**Fix:**
-```bash
-# macOS
-brew install nats-server
-
-# Debian/Ubuntu
-apt install nats-server
-
-# Manual (see https://github.com/nats-io/nats-server/releases for latest version)
-# Example for Linux amd64:
-curl -L https://github.com/nats-io/nats-server/releases/download/v2.10.24/nats-server-v2.10.24-linux-amd64.zip \
-     -o nats.zip
-unzip nats.zip && sudo mv nats-server-v2.10.24-linux-amd64/nats-server /usr/local/bin/
-
-# Windows: download from https://github.com/nats-io/nats-server/releases
-```
-
----
-
-## Error: `Node_71 /health: 不可达` (Node_71 unreachable)
-
-**Cause:** Node_71 multi-device coordinator is not running.
-
-**Fix:**
-```bash
-# Start Node_71 directly
-cd nodes/Node_71_MultiDevice
-python main.py
-
-# Or via Docker Compose
-docker compose up -d node-71
-```
-
----
-
-## Warning: `enhancements.multidevice is DISABLED by default`
-
-**Cause:** The legacy multidevice compatibility layer is disabled (this is intentional).
-
-**Fix (only if you need AIP v2 legacy clients):**
-```bash
-export GALAXY_ENABLE_LEGACY_MULTIDEVICE=true
-bash start.sh
-```
-
-> **Note:** The canonical multi-device engine is Node_71. Enable the legacy layer only for AIP v2 backward compatibility.
-
----
-
-## Error: `NATS status: disconnected` in `/health/nats` API
-
-**Cause:** Gateway started but NATS connection dropped after startup.
-
-**Fix:**
-1. Check NATS process: `ps aux | grep nats-server`
-2. Restart NATS: `nats-server -p 4222`
-3. Check Galaxy logs for reconnect attempts
-4. Run health check: `bash scripts/health_check.sh`
-
----
-
-## Error: `pip install failed` / Dependency errors
-
-**Cause:** Python dependencies missing or incompatible version.
-
-**Fix:**
-```bash
-pip install -r requirements.txt
-
-# If virtual environment is broken
-rm -rf venv
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
----
-
-## Error: Docker container `galaxy-nats` exits immediately
-
-**Cause:** Another NATS process is using port 4222, or the container name conflicts.
-
-**Fix:**
-```bash
-# Remove stale container
-docker rm galaxy-nats 2>/dev/null || true
-
-# Start fresh
-docker run -d --name galaxy-nats --rm -p 4222:4222 nats:latest
-
-# Check logs
-docker logs galaxy-nats
-```
-
----
-
-## Dashboard shows NATS as "disconnected" / "noop"
-
-**Cause:** NATS was not running when Galaxy started, or connection was lost.
-
-**Fix:**
-1. Start NATS: `nats-server -p 4222`
-2. Restart Galaxy: `bash start.sh`
-3. NATS is now required — Galaxy will fail to start if NATS is unreachable
-
----
-
-## Running the health check
+### 完整功能启动
 
 ```bash
-# Linux / macOS (standalone)
-bash scripts/health_check.sh
-
-# Windows
-.\scripts\health_check.ps1
-
-# With custom endpoints
-GALAXY_API_BASE=http://192.168.1.100:9000 bash scripts/health_check.sh
+cp .env.example .env
+# 编辑 .env，配置所需 API Key
+python unified_launcher.py
 ```
+
+### 推荐的启动顺序
+
+如果手动启动各节点，建议按以下顺序：
+
+1. `Node_00_StateMachine`（状态机，核心依赖）
+2. `Node_01_OneAPI`（LLM 路由，其他节点的依赖）
+3. `Node_09_Sandbox`、`Node_110_SmartOrchestrator`、`Node_111_ContextManager`、`Node_112_SelfHealing`（可并行）
 
 ---
 
-## Collecting diagnostics for a bug report
+## 常见错误与解决方案
+
+### `ModuleNotFoundError: No module named 'core.port_config'`
+
+**原因：** Node_110/111/112 各自有 `core/` 子目录，运行时遮蔽了项目根目录的 `core` 包。
+
+**解决方案（已在 v2.3.x 自动修复）：**
+各节点 `main.py` 顶部已添加 `sys.path` 修正代码，确保项目根目录优先。
+
+手动解决（如遇旧版本）：
+```bash
+PYTHONPATH=/path/to/project/root python3 nodes/Node_110_SmartOrchestrator/main.py
+```
+
+### 健康检查超时（旧版 Node_01_OneAPI）
+
+**原因：** 旧版本在 `/health` 端点中使用同步 `requests.get()` 调用本地 LLM，阻塞事件循环。
+
+**解决方案（已在 v2.3.x 修复）：**
+- 本地 LLM 探测移至 `lifespan` 启动阶段（非阻塞异步）
+- `/health` 端点直接返回缓存状态，无阻塞调用
+
+### 健康检查超时（旧版 Node_09_Sandbox，Windows）
+
+**原因：** 旧版本在 `/health` 端点中对每种语言运行 `subprocess.run(timeout=5)`，
+在 Windows 上多语言检测可能累计耗时 60+ 秒，超过启动器的 30 秒超时。
+
+**解决方案（已在 v2.3.x 修复）：**
+- 语言可用性检测移至 `lifespan` 启动阶段（并行、1 秒超时）
+- `/health` 端点直接返回缓存结果
+
+---
+
+## 快速诊断命令
 
 ```bash
-bash scripts/health_check.sh 2>&1 | tee /tmp/galaxy_health.txt
-cat /tmp/galaxy_health.txt
+# 检查节点状态
+curl http://localhost:7995/health  # Node_01_OneAPI
+curl http://localhost:7996/health  # Node_09_Sandbox
+curl http://localhost:7997/health  # Node_110_SmartOrchestrator
+curl http://localhost:7998/health  # Node_111_ContextManager
+curl http://localhost:7999/health  # Node_112_SelfHealing
+
+# 检查 Python 路径（排查 core 包遮蔽问题）
+cd nodes/Node_110_SmartOrchestrator
+python3 -c "import sys; print(sys.path[:3]); from core.port_config import get_node_port; print('OK')"
+
+# 检查 .env 配置
+python3 -c "
+from dotenv import dotenv_values
+cfg = dotenv_values('.env')
+llm_keys = [k for k in cfg if 'API_KEY' in k and cfg[k]]
+print(f'已配置 {len(llm_keys)} 个 API Key: {llm_keys}')
+"
 ```
-
-Include the output when filing a bug report.
-
----
-
-See also:
-- [DEPLOYMENT_COMPLETE.md](DEPLOYMENT_COMPLETE.md) — Complete deployment guide
-- [ACCEPTANCE_CHECKLIST.md](ACCEPTANCE_CHECKLIST.md) — Verification checklist
-- [COMPATIBILITY_TOGGLES.md](COMPATIBILITY_TOGGLES.md) — Legacy feature toggles

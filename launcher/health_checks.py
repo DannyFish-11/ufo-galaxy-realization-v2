@@ -2,11 +2,13 @@
 launcher/health_checks.py — Post-startup health verification.
 
 Responsibilities:
-- run_startup_health_check: probe key endpoints and ports immediately after
-  the system comes up, emit structured diagnostics, and guide the operator
+- run_startup_health_check: probe key endpoints and ports **after** the unified
+  FastAPI app has bound its HTTP socket (see ``UnifiedWebUI.start`` in
+  ``unified_launcher.py``), emit structured diagnostics, and guide the operator
   when checks fail.
 """
 
+import os
 import socket
 import subprocess
 import sys
@@ -17,14 +19,35 @@ from .bootstrap import print_status, print_section
 logger = logging.getLogger("Galaxy")
 
 
+def _nats_tcp_failure_is_critical() -> bool:
+    """Return True when unreachable NATS should fail the overall health summary."""
+    if os.environ.get("GALAXY_FABRIC_STRICT", "").lower() in ("true", "1", "yes"):
+        return True
+    cross = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1", "yes")
+    mode = os.environ.get("GALAXY_SYSTEM_MODE", "").strip().lower()
+    if cross or "cross_device" in mode:
+        return True
+    nats_on = os.environ.get("GALAXY_NATS_ENABLED", "").lower() in ("true", "1", "yes")
+    if nats_on:
+        return True
+    try:
+        from core.nats_bus import nats_bus
+        stats = nats_bus.get_stats()
+        if stats.get("noop_mode"):
+            return False
+    except Exception:
+        pass
+    return False
+
+
 async def run_startup_health_check(web_ui_port: int) -> None:
-    """启动后立即执行健康检查；失败时打印详细诊断。
+    """HTTP 服务已 listen 后执行健康检查；失败时打印详细诊断。
 
     Probes:
       1. ``/health`` on the launcher's HTTP server.
       2. ``/api/v1/system/info`` on the launcher's HTTP server.
       3. Node_71 ``/health`` (port 8071).
-      4. NATS port 4222 TCP reachability.
+      4. NATS port 4222 TCP reachability (non-fatal when bus is no-op / desktop-local).
       5. Docker container status (best-effort, if Docker is available).
 
     Args:
@@ -64,14 +87,20 @@ async def run_startup_health_check(web_ui_port: int) -> None:
     except Exception as exc:
         print_status(f"Node_71 /health: 不可达 — {exc}", "warning")
 
-    # 4) NATS port check
+    # 4) NATS port check (optional for single-machine / noop bus)
     try:
         with socket.create_connection((nats_host, nats_port), timeout=3):
             pass
         print_status(f"NATS port {nats_port}: 已监听", "success")
     except Exception as exc:
-        print_status(f"NATS port {nats_port}: 未监听 — {exc}", "error")
-        all_ok = False
+        if _nats_tcp_failure_is_critical():
+            print_status(f"NATS port {nats_port}: 未监听 — {exc}", "error")
+            all_ok = False
+        else:
+            print_status(
+                f"NATS port {nats_port}: 未监听（单机/no-op 模式可忽略）— {exc}",
+                "warning",
+            )
 
     # 5) Docker container status (best-effort)
     try:

@@ -402,7 +402,12 @@ class UnifiedWebUI:
                 self.config.host, self.config.web_ui_port
             )
             logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
-            await server.serve()
+            # Bind socket and run ASGI startup before probing HTTP — otherwise
+            # run_startup_health_check hits connection refused (WinError 10061).
+            await server.startup()
+            print_section("启动后健康检查")
+            await run_startup_health_check(self.config.web_ui_port)
+            await server.main_loop()
 
         except ImportError as e:
             logger.error("API 服务依赖未安装: %s", e)
@@ -626,11 +631,7 @@ class GalaxyUnified:
         print_status(f"NATS: {_nats_url_display}", "info")
         print_status("按 Ctrl+C 停止系统", "info")
 
-        # ── 启动后立即执行健康检查 ──────────────────────────────────────────
-        print_section("启动后健康检查")
-        await run_startup_health_check(self.config.web_ui_port)
-        
-        # 启动 Web UI（阻塞）
+        # 启动 Web UI（阻塞）；HTTP 健康探测在 UnifiedWebUI.start 内于 uvicorn bind 之后执行
         if self.config.enable_web_ui:
             await self.web_ui.start()
         else:

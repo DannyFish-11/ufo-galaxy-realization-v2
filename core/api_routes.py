@@ -330,6 +330,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _e:
         logger.warning("算子路由加载失败（可选）: %s", _e)
 
+    # Android center-side VLM HTTP surface (plan / ground / status / checksums).
+    # Module lives under galaxy_gateway but must register on the canonical API app.
+    try:
+        from galaxy_gateway.routes.android_vlm import router as _android_vlm_router
+        router.include_router(_android_vlm_router)
+    except Exception as _e:
+        logger.warning("Android VLM HTTP 路由加载失败（可选）: %s", _e)
+
     # PR-512: Runtime Closure Audit — closure gap sweep integration sentinel.
     #         The audit module is loaded lazily here so that its import errors
     #         never block API startup.  The sentinel asserts the audit layer is

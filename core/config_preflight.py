@@ -50,7 +50,7 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -164,7 +164,9 @@ _CHECKS: List[EnvCheck] = [
             "Generate a random token and set it in .env:\n"
             "  GALAXY_API_TOKEN=$(python3 -c \"import secrets; print(secrets.token_urlsafe(32))\")\n"
             "  Also set GALAXY_AUTH_ENABLED=true to enforce it.\n"
-            "  Without this token any client can send commands to the API."
+            "  Or set GALAXY_REQUIRE_API_TOKEN=true to treat a missing token as CRITICAL "
+            "even when Bearer auth is disabled (staging hardening).\n"
+            "  Without this token any client can send commands to the API when auth is off."
         ),
         groups=["core", "gateway", "all"],
     ),
@@ -433,6 +435,35 @@ def _groups_for_mode(mode: str) -> List[str]:
     return [mode, "core"]
 
 
+def _api_token_missing_is_critical() -> bool:
+    """CRITICAL only when Bearer auth is enforced or explicitly required."""
+    auth = os.environ.get("GALAXY_AUTH_ENABLED", "").lower() in ("true", "1", "yes")
+    require = os.environ.get("GALAXY_REQUIRE_API_TOKEN", "").lower() in ("true", "1", "yes")
+    return auth or require
+
+
+def _adjust_findings_for_token_policy(findings: List[Finding]) -> List[Finding]:
+    """Downgrade missing GALAXY_API_TOKEN from CRITICAL to WARNING when auth is off."""
+    out: List[Finding] = []
+    for f in findings:
+        if (
+            f.check.var == "GALAXY_API_TOKEN"
+            and not f.present
+            and f.check.severity == Severity.CRITICAL
+            and not _api_token_missing_is_critical()
+        ):
+            out.append(
+                Finding(
+                    check=replace(f.check, severity=Severity.WARNING),
+                    present=f.present,
+                    value_hint=f.value_hint,
+                )
+            )
+        else:
+            out.append(f)
+    return out
+
+
 def run_preflight(
     dry_run: bool = False,
     fail_fast: bool = True,
@@ -474,6 +505,8 @@ def run_preflight(
             continue
         present, hint = _is_set(check.var, check.allow_placeholder)
         findings.append(Finding(check=check, present=present, value_hint=hint))
+
+    findings = _adjust_findings_for_token_policy(findings)
 
     report = PreflightReport(findings=findings, mode=mode)
 

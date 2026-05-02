@@ -17,7 +17,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -384,6 +384,37 @@ class TestAndroidVLMServicePlanValidation:
         with patch.object(svc, "_get_router", return_value=None):
             result = await svc.ground(image_base64="aW1hZ2U=", query="find button")
         assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_ground_null_confidence_returns_zero_not_raises(self):
+        """LLM JSON often omits or nulls confidence; must not crash the handler."""
+        from galaxy_gateway.android_vlm_service import AndroidVLMService
+
+        svc = AndroidVLMService(router=None)
+        mock_router = MagicMock()
+        mock_router.route_multimodal_first.return_value = MagicMock(provider_id="test")
+
+        async def _fake_vision(*_a, **_kw):
+            return '{"bbox": [1, 2, 3, 4], "label": "btn", "confidence": null}'
+
+        with patch.object(svc, "_get_router", return_value=mock_router):
+            with patch(
+                "galaxy_gateway.android_vlm_service._chat_with_vision",
+                new_callable=AsyncMock,
+                side_effect=_fake_vision,
+            ):
+                result = await svc.ground(image_base64="aW1hZ2U=", query="submit")
+        assert result["success"] is True
+        assert result["confidence"] == 0.0
+
+
+class TestAndroidVLMCanonicalApiRoutes:
+    def test_create_api_routes_registers_android_vlm_status_path(self):
+        from core.api_routes import create_api_routes
+
+        api = create_api_routes()
+        paths = [getattr(r, "path", "") for r in api.routes]
+        assert "/api/v1/android/vlm/status" in paths
 
 
 class TestSafeParseJson:

@@ -120,6 +120,13 @@ app.include_router(sessions_router)
 app.include_router(chat_router)
 app.include_router(llm_router)
 
+try:
+    from galaxy_gateway.routes.android_vlm import router as android_vlm_router
+    app.include_router(android_vlm_router)
+    logger.info("Android VLM routes mounted (/api/v1/android/vlm/*)")
+except Exception as _vlm_err:
+    logger.warning("Android VLM route mount skipped: %s", _vlm_err)
+
 
 # ── WebSocket endpoints (order-sensitive — must be registered after routers) ──
 register_websocket_routes(app)

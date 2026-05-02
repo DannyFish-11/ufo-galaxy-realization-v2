@@ -324,7 +324,7 @@ class AndroidVLMService:
             "success":    True,
             "bbox":       parsed.get("bbox", []),
             "label":      parsed.get("label", ""),
-            "confidence": float(parsed.get("confidence", 0.0)),
+            "confidence": _safe_parse_confidence(parsed.get("confidence", 0.0)),
             "provider":   result.get("provider", ""),
         }
 
@@ -407,6 +407,16 @@ def reset_android_vlm_service() -> None:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _safe_parse_confidence(raw: Any) -> float:
+    """Parse model ``confidence`` field; never raise (avoids HTTP 500 on odd JSON)."""
+    if raw is None:
+        return 0.0
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
 
 def _safe_parse_json(text: str) -> Dict[str, Any]:
     """Extract and parse JSON from a model response, returning {} on failure."""
