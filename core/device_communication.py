@@ -630,6 +630,46 @@ class DeviceCommunication:
                 logger.error("设备错误: %s - %s", device_id, v3_msg.get("payload"))
                 return None
 
+            # device_state_snapshot — Android runtime state projection to V2
+            if msg_type == "device_state_snapshot":
+                try:
+                    from core.android_device_state_store import absorb_device_state_snapshot
+                    absorb_device_state_snapshot(
+                        device_id,
+                        v3_msg.get("payload", v3_msg),
+                    )
+                except Exception as _snap_err:
+                    logger.warning(
+                        "Failed to absorb device_state_snapshot from %s: %s",
+                        device_id, _snap_err,
+                    )
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="device_state_snapshot",
+                    device_id=device_id,
+                    correlation_id=v3_msg.get("message_id", ""),
+                )
+
+            # device_execution_event — Android execution phase event
+            if msg_type == "device_execution_event":
+                try:
+                    from core.android_device_state_store import absorb_device_execution_event
+                    absorb_device_execution_event(
+                        device_id,
+                        v3_msg.get("payload", v3_msg),
+                    )
+                except Exception as _evt_err:
+                    logger.warning(
+                        "Failed to absorb device_execution_event from %s: %s",
+                        device_id, _evt_err,
+                    )
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="device_execution_event",
+                    device_id=device_id,
+                    correlation_id=v3_msg.get("message_id", ""),
+                )
+
             # Step 3 — Unrecognised v3 type: try action-based dispatch, then
             # emit an event for any registered "message" callbacks.
             logger.debug("Unrecognised v3 message type from %s: %r", device_id, msg_type)
