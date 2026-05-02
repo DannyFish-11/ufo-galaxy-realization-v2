@@ -159,9 +159,12 @@ LOCAL_AI_IS_DEGRADED_STATUS: str = (
     "but it IS genuinely executable when configured and models are present."
 )
 
-# Keep the old sentinel name as an alias pointing to the updated status, so any code
-# importing LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS continues to compile.
-LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = LOCAL_AI_IS_DEGRADED_STATUS
+# Backward-compatibility alias: LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS was the original
+# name before the Android inference runtimes were bundled and the status was upgraded
+# from STRUCTURAL_ONLY to DEGRADED.  Any existing import of the old name continues to
+# compile.  New code should import LOCAL_AI_IS_DEGRADED_STATUS directly.
+# TODO: Remove this alias after all call sites are migrated (no current usages in core/).
+LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = LOCAL_AI_IS_DEGRADED_STATUS  # deprecated alias
 
 WEBRTC_IS_EXPERIMENTAL_STATUS: str = (
     "STATUS::WEBRTC_EXPERIMENTAL_V1: "
