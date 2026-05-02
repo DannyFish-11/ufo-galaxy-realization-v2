@@ -493,12 +493,13 @@ ANDROID_MODELS: List[Dict] = [
         "model_id":         "mobilevlm",
         "role":             "MobileVLM V2-1.7B — UI planning / task planning",
         "runtime_type":     "llama.cpp GGUF",
-        "file":             "mobilevlm-v2-1.7b.Q4_K_M.gguf",
-        "size_bytes_approx": 1_200_000_000,
+        "file":             "ggml-model-q4_k.gguf",
+        "size_bytes_approx": 950_000_000,
         "huggingface_repo": "ZiangWu/MobileVLM_V2-1.7B-GGUF",
-        "huggingface_url":  "https://huggingface.co/ZiangWu/MobileVLM_V2-1.7B-GGUF/resolve/main/mobilevlm-v2-1.7b.Q4_K_M.gguf",
-        "sha256":           None,  # Source: ModelAssetManager.MOBILEVLM_SHA256 = null (TODO comment)
-        "sha256_note":      "EXPLICITLY null in code — verification bypassed in current build",
+        "huggingface_url":  "https://huggingface.co/ZiangWu/MobileVLM_V2-1.7B-GGUF/resolve/main/ggml-model-q4_k.gguf",
+        "sha256":           "15d4bd09293404831902c23dd898aa2cc7b4b223b6c39a64e330601ef72d99db",
+        # Source: ModelAssetManager.kt MOBILEVLM_SHA256 — real non-null hash as of 2026-05-02
+        "sha256_note":      "Hardcoded in ModelAssetManager.kt; enforced by ModelDownloader.downloadSync()",
     },
     {
         "model_id":         "seeclick",
@@ -508,8 +509,8 @@ ANDROID_MODELS: List[Dict] = [
         "size_bytes_approx": 50_000_000,
         "huggingface_repo": "cckevinn/SeeClick",
         "huggingface_url":  "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.param",
-        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_SHA256 = null (TODO comment)
-        "sha256_note":      "EXPLICITLY null in code — verification bypassed in current build",
+        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_SHA256 = null (by design)
+        "sha256_note":      "Null at code time; computed via persistComputedChecksum after first download",
     },
     {
         "model_id":         "seeclick_bin",
@@ -519,14 +520,17 @@ ANDROID_MODELS: List[Dict] = [
         "size_bytes_approx": 400_000_000,
         "huggingface_repo": "cckevinn/SeeClick",
         "huggingface_url":  "https://huggingface.co/cckevinn/SeeClick/resolve/main/ncnn/seeclick.ncnn.bin",
-        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_BIN_SHA256 = null (TODO comment)
-        "sha256_note":      "EXPLICITLY null in code — verification bypassed in current build",
+        "sha256":           None,  # Source: ModelAssetManager.SEECLICK_BIN_SHA256 = null (by design)
+        "sha256_note":      "Null at code time; computed via persistComputedChecksum after first download",
     },
 ]
 """
 Three model assets tracked by ModelAssetManager.
 Sources: ModelAssetManager.kt companion object constants and ModelManifest.kt forKnownModel().
-Total download size: ~1.65 GB.
+Total download size: ~1.4 GB.
+SHA-256 status (2026-05-02):
+  - MobileVLM: hardcoded non-null hash (15d4bd09...); enforced at download time.
+  - SeeClick param/bin: null at code time; computed post-download and enforced thereafter.
 """
 
 ANDROID_MODEL_DOWNLOAD_MECHANISM: str = (
@@ -559,41 +563,54 @@ Source: UFOGalaxyApplication.kt ensureModelsAtStartup() function.
 """
 
 ANDROID_MODEL_PROVISIONING_LIMITATIONS: List[str] = [
-    "SHA-256 checksums are null for all 3 models — integrity verification is BYPASSED. "
-    "Source: ModelAssetManager.kt companion object MOBILEVLM_SHA256 / SEECLICK_SHA256 / SEECLICK_BIN_SHA256 = null "
-    "with explicit TODO comment 'set before production deployment'.",
+    # ── SHA-256 status ──────────────────────────────────────────────────────
+    "MobileVLM SHA-256 is now hardcoded: MOBILEVLM_SHA256 = "
+    "'15d4bd09293404831902c23dd898aa2cc7b4b223b6c39a64e330601ef72d99db'. "
+    "Integrity verification is enforced by ModelDownloader.downloadSync() for MobileVLM. "
+    "Source: ModelAssetManager.kt companion object MOBILEVLM_SHA256.",
 
-    "llama.cpp runtime for MobileVLM is NOT in build.gradle dependencies. "
-    "ModelManifest specifies RuntimeType.LLAMA_CPP but no llama.cpp Android library "
-    "(e.g., 'io.github.ggml-org:llama.cpp-android' or similar) appears in app/build.gradle. "
-    "The local inference path requires llama.cpp to be present and runnable on-device. "
-    "Source: app/build.gradle dependencies section (no llama.cpp dependency listed).",
+    "SeeClick SHA-256 (param and bin) is null at code time — computed via "
+    "persistComputedChecksum after first successful download and stored in .checksums.json. "
+    "On subsequent runs the stored hash is enforced. First download has no pre-seeded hash. "
+    "Source: ModelAssetManager.kt SEECLICK_SHA256 / SEECLICK_BIN_SHA256 = null (by design).",
 
-    "NCNN runtime for SeeClick is NOT in build.gradle dependencies. "
-    "ModelManifest specifies RuntimeType.NCNN but no NCNN Android AAR appears in app/build.gradle. "
-    "Source: app/build.gradle dependencies section (no ncnn dependency listed).",
+    # ── Runtime bundling ────────────────────────────────────────────────────
+    "llama.cpp Android JNI runtime IS NOW in build.gradle: "
+    "'com.github.ggerganov:llama.cpp:b4833' (resolved from JitPack). "
+    "LlamaCppPlannerService uses external fun JNI declarations mapped to libllama.so. "
+    "Source: app/build.gradle; planner/LlamaCppPlannerService.kt.",
 
-    "DegradedPlannerService and DegradedGroundingService exist as fallbacks but only "
-    "provide stub/degraded behavior — they do NOT perform real MobileVLM or SeeClick inference. "
-    "Source: inference/DegradedPlannerService.kt and inference/DegradedGroundingService.kt.",
+    "NCNN Android inference runtime IS NOW in build.gradle: "
+    "'com.github.nihui:ncnn-android-vulkan:20240410' (resolved from JitPack). "
+    "NcnnGroundingService uses external fun JNI declarations mapped to libncnn.so. "
+    "Source: app/build.gradle; grounding/NcnnGroundingService.kt.",
 
-    "Total model download size is ~1.65 GB (1.2 GB MobileVLM + ~0.45 GB SeeClick). "
-    "A first-run on a device without Wi-Fi or with limited storage will likely fail. "
+    # ── Remaining operational prerequisites ────────────────────────────────
+    "Total model download size is ~1.65 GB (MobileVLM ~900 MB + SeeClick ~450 MB + param). "
+    "A first-run on a device without Wi-Fi or with < 2 GB free storage will likely fail. "
+    "No GUI progress indicator for model download is currently available. "
     "Source: ModelManifest.kt minDiskSpaceBytes values.",
 ]
 """
-Critical gaps between the declared model provisioning architecture and a fully runnable state.
+Operational notes for the Android model provisioning path.
+Updated to reflect current code reality (2026-05-02):
+  - llama.cpp and NCNN ARE now bundled in app/build.gradle.
+  - MobileVLM SHA-256 IS now hardcoded and enforced.
+  - SeeClick SHA-256 is computed post-first-download (by design).
+  - First-run model download (~1.65 GB) is the primary remaining gate.
 """
 
 ANDROID_MODEL_PROVISIONING_VERDICT: str = (
-    "PIPELINE_COMPLETE_BUT_INFERENCE_RUNTIME_NOT_BUNDLED: "
-    "The provisioning pipeline (download → verify → activate) is architecturally complete. "
-    "Model files can be auto-downloaded from HuggingFace at first run. "
-    "However, the actual inference server (llama.cpp for MobileVLM, NCNN for SeeClick) "
-    "is not present in app/build.gradle. Without these native runtimes, the downloaded "
-    "model files cannot be loaded and executed. The 'local AI loop' capability is "
-    "structurally defined but cannot execute on a plain debug/release APK built from "
-    "this source tree."
+    "INFERENCE_RUNTIME_BUNDLED_MODEL_DOWNLOAD_REQUIRED_AT_FIRST_RUN: "
+    "The provisioning pipeline (download → verify → activate) is architecturally complete "
+    "and the inference runtimes (llama.cpp for MobileVLM, NCNN for SeeClick) ARE now "
+    "bundled in app/build.gradle. LlamaCppPlannerService and NcnnGroundingService provide "
+    "real JNI calls to libllama.so and libncnn.so respectively. MobileVLM SHA-256 is "
+    "hardcoded and enforced; SeeClick checksum is computed after first download. "
+    "The system is GENUINELY EXECUTABLE after first-run model download (~1.65 GB). "
+    "Source: app/build.gradle (llama.cpp:b4833, ncnn-android-vulkan:20240410); "
+    "planner/LlamaCppPlannerService.kt; grounding/NcnnGroundingService.kt; "
+    "model/ModelAssetManager.kt MOBILEVLM_SHA256."
 )
 
 
@@ -727,10 +744,11 @@ ANDROID_RUNBOOK: List[RunbookStep] = [
         notes=(
             "Requires internet access and ~1.65 GB storage. "
             "Download runs automatically via ensureModelsAtStartup(). "
-            "NOTE: even after download, llama.cpp and NCNN runtimes are not bundled — "
-            "local AI inference may not work without additional native library setup. "
+            "As of 2026-05-02, llama.cpp (b4833) and NCNN (ncnn-android-vulkan:20240410) "
+            "ARE bundled in app/build.gradle — local AI inference is available once "
+            "model files are downloaded. MobileVLM SHA-256 is enforced. "
             "Source: UFOGalaxyApplication.kt ensureModelsAtStartup(); "
-            "ModelAssetManager.kt ANDROID_MODEL_PROVISIONING_LIMITATIONS."
+            "app/build.gradle; ModelAssetManager.kt MOBILEVLM_SHA256."
         ),
     ),
     RunbookStep(
@@ -772,14 +790,19 @@ The Android side has a complete network settings UI, runtime-editable config, an
 model provisioning pipeline.
 
 However, it is NOT yet a mature operator-configurable consumer application because:
-  1. Android local inference runtimes (llama.cpp, NCNN) are not bundled in build.gradle.
-  2. Model SHA-256 checksums are null (integrity verification bypassed).
+  1. Android model download (~1.65 GB) required at first run; no GUI progress indicator.
+  2. SeeClick SHA-256 checksums are computed post-download (not pre-seeded); first download unverified.
   3. Cross-device requires an external Tailscale/VPN network; no zero-config provisioning.
   4. GALAXY_SYSTEM_MODE and cross-device flags require manual env var setup on V2 side.
 
+NOTE (2026-05-02 update): The prior critical gap "Android local inference runtimes not bundled"
+is now RESOLVED. llama.cpp (b4833) and NCNN (ncnn-android-vulkan:20240410) ARE in build.gradle.
+Real JNI implementations (LlamaCppPlannerService, NcnnGroundingService) exist and are wired.
+MobileVLM SHA-256 is hardcoded and enforced.
+
 Verdict: IMPLEMENTATION_COMPLETE_DEVELOPER_OPS_ORIENTED — a developer or DevOps-skilled
 operator can fully configure, build, and run the system with documented manual steps.
-A non-technical end-user cannot do so without additional infrastructure and bundled runtimes.
+A non-technical end-user cannot do so without additional infrastructure and setup guidance.
 """
 
 FINAL_VERDICT_QUALIFICATIONS: List[str] = [
@@ -789,8 +812,11 @@ FINAL_VERDICT_QUALIFICATIONS: List[str] = [
     "cross_device_enabled persists via SharedPreferences — survives app restarts.",
     "Android model provisioning pipeline is architecturally complete (8 formal stages).",
     "Models are auto-downloaded from HuggingFace at first run (~1.65 GB total).",
-    "CRITICAL GAP: llama.cpp (for MobileVLM) and NCNN (for SeeClick) not in app/build.gradle.",
-    "CRITICAL GAP: All 3 model SHA-256 checksums are null — integrity verification disabled.",
+    "RESOLVED (2026-05-02): llama.cpp (b4833) and NCNN (ncnn-android-vulkan:20240410) ARE in build.gradle.",
+    "RESOLVED (2026-05-02): MobileVLM SHA-256 is hardcoded (15d4bd09...) and enforced at download.",
+    "RESOLVED (2026-05-02): Real JNI implementations exist: LlamaCppPlannerService, NcnnGroundingService.",
+    "REMAINING GAP: SeeClick SHA-256 computed post-download; not pre-seeded in code.",
+    "REMAINING GAP: No GUI progress indicator for first-run model download.",
     "DEPLOYMENT GAP: Cross-device requires Tailscale or equivalent; no NAT traversal built-in.",
     "CONFIGURATION GAP: V2 system-mode env vars require manual setup or process restart.",
 ]

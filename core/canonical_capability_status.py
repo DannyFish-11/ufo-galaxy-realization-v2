@@ -33,7 +33,7 @@ Coverage
 --------
 The registry explicitly classifies the following capabilities (among others):
 
-- **local_ai / on-device inference** — structural-only; not default-active.
+- **local_ai / on-device inference** — degraded; bundled runtimes but requires model download.
 - **webrtc** — experimental; not mainline.
 - **mesh / federation** — structural-only; not mainline.
 - **advanced_handoff** — experimental.
@@ -58,7 +58,8 @@ Sentinels::
     CAPABILITY_STATUS_REGISTRY_AUTHORITY
     STRUCTURAL_CAPABILITY_IS_NOT_OPERATIONAL_POLICY
     DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY
-    LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS
+    LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS   # alias for LOCAL_AI_IS_DEGRADED_STATUS (backward compat)
+    LOCAL_AI_IS_DEGRADED_STATUS
     WEBRTC_IS_EXPERIMENTAL_STATUS
     MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS
 
@@ -91,7 +92,8 @@ __all__ = [
     "CAPABILITY_STATUS_REGISTRY_AUTHORITY",
     "STRUCTURAL_CAPABILITY_IS_NOT_OPERATIONAL_POLICY",
     "DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY",
-    "LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS",
+    "LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS",   # backward-compat alias
+    "LOCAL_AI_IS_DEGRADED_STATUS",
     "WEBRTC_IS_EXPERIMENTAL_STATUS",
     "MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS",
     # Enumeration
@@ -138,15 +140,28 @@ DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY: str = (
     "the canonical mainline path is a policy violation."
 )
 
-LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = (
-    "STATUS::LOCAL_AI_STRUCTURAL_ONLY_V1: "
+LOCAL_AI_IS_DEGRADED_STATUS: str = (
+    "STATUS::LOCAL_AI_DEGRADED_V2: "
     "Android local AI / on-device inference (local_ai, local_grounding, "
-    "local_planner, on_device_inference) is classified as STRUCTURAL_ONLY. "
-    "The default implementations are NoOp stubs that return errors without "
-    "performing inference.  This capability is NOT active mainline and must "
-    "not be treated as an operational capability until explicit activation "
-    "and a passing integration test confirm otherwise."
+    "local_planner, on_device_inference) is classified as DEGRADED. "
+    "As of 2026-05-02, the inference runtimes ARE bundled in the Android APK: "
+    "llama.cpp (com.github.ggerganov:llama.cpp:b4833) for MobileVLM planning, and "
+    "NCNN (com.github.nihui:ncnn-android-vulkan:20240410) for SeeClick grounding. "
+    "Real JNI implementations (LlamaCppPlannerService, NcnnGroundingService) with "
+    "external fun declarations are present and wired in UFOGalaxyApplication. "
+    "MobileVLM SHA-256 is hardcoded and enforced. "
+    "The capability is DEGRADED (not STRUCTURAL_ONLY) because: "
+    "(1) models must be downloaded (~1.65 GB) at first run before local inference works, "
+    "(2) SeeClick SHA-256 is computed post-download rather than pre-seeded, "
+    "(3) inference_mode defaults to 'center' so local inference is not active unless "
+    "explicitly configured by the operator. "
+    "This is NOT active mainline and must not be treated as unconditionally operational, "
+    "but it IS genuinely executable when configured and models are present."
 )
+
+# Keep the old sentinel name as an alias pointing to the updated status, so any code
+# importing LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS continues to compile.
+LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS: str = LOCAL_AI_IS_DEGRADED_STATUS
 
 WEBRTC_IS_EXPERIMENTAL_STATUS: str = (
     "STATUS::WEBRTC_EXPERIMENTAL_V1: "
@@ -375,39 +390,47 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             rationale="Advanced cross-device handoff (beyond canonical task_assign "
                       "path) is structural/experimental.  Not mainline.",
         ),
-        # --- Structural only ---
+        # --- Degraded (runtime bundled; requires operator setup + model download) ---
         CapabilityStatusRecord(
             capability_id="local_ai",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local AI / On-Device Inference",
-            rationale="Default implementations are NoOp stubs that return errors "
-                      "without performing inference.  Devices do not register with "
-                      "local_ai unless explicitly configured and a model is loaded.  "
-                      "Must not be treated as active capability.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="llama.cpp and NCNN runtimes are now bundled in the APK "
+                      "(com.github.ggerganov:llama.cpp:b4833, ncnn-android-vulkan:20240410). "
+                      "Real JNI implementations (LlamaCppPlannerService, NcnnGroundingService) "
+                      "exist and are wired at startup. Classified DEGRADED (not STRUCTURAL_ONLY) "
+                      "because first-run model download (~1.65 GB) is required and "
+                      "inference_mode defaults to 'center'. Not active mainline by default.",
+            source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
             capability_id="local_grounding",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Grounding",
-            rationale="LocalGroundingService defaults to NoOpGroundingService. "
-                      "Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="NcnnGroundingService (real JNI, external fun to libncnn.so) is "
+                      "now the default when NCNN library loads successfully. "
+                      "SeeClick model download required at first run. "
+                      "Classified DEGRADED; not active mainline by default.",
+            source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
             capability_id="local_planner",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Planner",
-            rationale="LocalPlannerService defaults to NoOp. Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="LlamaCppPlannerService (real JNI, external fun to libllama.so) is "
+                      "now the default when llama.cpp library loads successfully. "
+                      "MobileVLM model download required at first run. "
+                      "Classified DEGRADED; not active mainline by default.",
+            source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
             capability_id="on_device_inference",
-            status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            status=CapabilityRuntimeStatus.DEGRADED,
             display_name="On-Device Inference",
-            rationale="On-device inference (LocalInferenceRuntimeManager) is "
-                      "structural scaffolding.  Not operational by default.",
-            source_sentinel=LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS,
+            rationale="LocalInferenceRuntimeManager is wired to real inference services "
+                      "(LlamaCppPlannerService, NcnnGroundingService). "
+                      "Classified DEGRADED; requires operator setup and model download.",
+            source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
             capability_id="mesh",

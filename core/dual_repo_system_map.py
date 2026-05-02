@@ -720,10 +720,15 @@ WORKSTREAM_GAP_REGISTRY: List[WorkstreamGapEntry] = [
         title="Android local AI / on-device inference not activated by default",
         severity=GapSeverity.P1,
         description=(
-            "Android-side local LLM/grounding capability exists in the "
-            "architecture but is not activated by default. Devices register "
-            "without local AI capability unless explicitly configured. "
-            "No automated test verifies local AI activation path."
+            "Android-side local LLM/grounding capability now has real runtime "
+            "implementations (LlamaCppPlannerService via llama.cpp:b4833, "
+            "NcnnGroundingService via ncnn-android-vulkan:20240410). The runtimes "
+            "are bundled and wired. However, inference_mode defaults to 'center', "
+            "so local inference is not active unless the operator explicitly sets "
+            "inference_mode=local AND models are downloaded (~1.65 GB). "
+            "No automated test verifies local AI activation end-to-end. "
+            "The structural gap (missing build deps) is resolved; the operational "
+            "gap (default-off, requires first-run setup) remains."
         ),
         resolved=False,
     ),

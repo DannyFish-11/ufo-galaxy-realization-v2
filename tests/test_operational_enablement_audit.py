@@ -404,14 +404,28 @@ class TestAndroidModelProvisioning:
         sc = next(m for m in ANDROID_MODELS if m["model_id"] == "seeclick")
         assert "cckevinn" in sc["huggingface_repo"]
 
-    def test_all_sha256_checksums_are_null(self):
+    def test_mobilevlm_sha256_is_now_hardcoded(self):
         """
-        All SHA-256 checksums are null (verification bypassed).
-        Source: ModelAssetManager.kt MOBILEVLM_SHA256 / SEECLICK_SHA256 / SEECLICK_BIN_SHA256 = null.
+        MobileVLM SHA-256 is now a real non-null hash (15d4bd09...).
+        Source: ModelAssetManager.kt MOBILEVLM_SHA256 (2026-05-02 update).
         """
-        for model in ANDROID_MODELS:
+        mobilevlm = next(m for m in ANDROID_MODELS if m["model_id"] == "mobilevlm")
+        assert mobilevlm["sha256"] is not None, (
+            "MobileVLM SHA-256 should be a real hash, not null"
+        )
+        assert len(mobilevlm["sha256"]) == 64, (
+            f"Expected 64-char SHA-256 hex string, got {len(mobilevlm['sha256'])}"
+        )
+
+    def test_seeclick_sha256_still_null(self):
+        """
+        SeeClick SHA-256 is null at code time (computed post-download by design).
+        Source: ModelAssetManager.kt SEECLICK_SHA256 / SEECLICK_BIN_SHA256 = null.
+        """
+        for model_id in ("seeclick", "seeclick_bin"):
+            model = next(m for m in ANDROID_MODELS if m["model_id"] == model_id)
             assert model["sha256"] is None, (
-                f"Expected null SHA-256 for {model['model_id']} but got {model['sha256']}"
+                f"Expected null SHA-256 for {model_id} (computed post-download)"
             )
 
     def test_eight_provisioning_pipeline_stages(self):
@@ -440,22 +454,30 @@ class TestAndroidModelProvisioning:
         """
         assert ANDROID_MODEL_PROVISIONING_AUTO_ON_STARTUP is True
 
-    def test_limitations_mention_missing_inference_runtimes(self):
+    def test_limitations_mention_inference_runtimes(self):
         """
-        Critical: llama.cpp and NCNN not in build.gradle.
-        Source: app/build.gradle dependencies (verified by direct inspection).
+        llama.cpp and NCNN are now bundled in app/build.gradle (b4833 and ncnn-android-vulkan).
+        The limitations list must still mention both runtimes (describing their current status).
+        Source: app/build.gradle dependencies (verified by direct inspection — 2026-05-02).
         """
         text = " ".join(ANDROID_MODEL_PROVISIONING_LIMITATIONS)
         assert "llama" in text.lower() or "llama.cpp" in text.lower()
         assert "ncnn" in text.lower() or "NCNN" in text
 
-    def test_limitations_mention_null_checksums(self):
+    def test_limitations_mention_checksums(self):
+        """SeeClick SHA-256 is still null at code time; MobileVLM is now hardcoded."""
         text = " ".join(ANDROID_MODEL_PROVISIONING_LIMITATIONS)
-        assert "null" in text.lower() or "SHA-256" in text
+        assert "null" in text.lower() or "SHA-256" in text or "sha256" in text.lower()
 
-    def test_provisioning_verdict_notes_missing_runtime(self):
-        assert "not bundled" in ANDROID_MODEL_PROVISIONING_VERDICT.lower() or \
-               "NOT" in ANDROID_MODEL_PROVISIONING_VERDICT
+    def test_provisioning_verdict_reflects_bundled_runtime(self):
+        """
+        The verdict now reflects that inference runtimes ARE bundled.
+        Prior verdict noted 'NOT_BUNDLED'; new verdict notes 'BUNDLED'.
+        Source: app/build.gradle with llama.cpp:b4833 + ncnn-android-vulkan:20240410.
+        """
+        verdict_lower = ANDROID_MODEL_PROVISIONING_VERDICT.lower()
+        # New verdict confirms runtimes are bundled and download is the gate
+        assert "bundled" in verdict_lower or "executable" in verdict_lower
 
     def test_total_model_size_over_1gb(self):
         total_bytes = sum(m["size_bytes_approx"] for m in ANDROID_MODELS)
@@ -541,12 +563,14 @@ class TestFinalVerdict:
         """
         assert len(FINAL_VERDICT_QUALIFICATIONS) >= 10
 
-    def test_qualifications_include_critical_gaps(self):
+    def test_qualifications_include_remaining_gaps(self):
         """
-        Critical gaps are explicitly listed.
+        Prior critical gaps (llama.cpp, NCNN, SHA-256) are now resolved.
+        The qualifications list should still document remaining gaps.
         """
         text = " ".join(FINAL_VERDICT_QUALIFICATIONS)
-        assert "CRITICAL" in text
+        # Some gaps remain (e.g., SeeClick SHA-256, GUI console, deployment)
+        assert "GAP" in text or "DEPLOYMENT" in text or "CONFIGURATION" in text
 
     def test_qualifications_acknowledge_working_features(self):
         text = " ".join(FINAL_VERDICT_QUALIFICATIONS)
