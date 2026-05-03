@@ -260,7 +260,7 @@ class SystemStateMachine:
             是否成功唤醒
         """
         if self._current_state != SystemState.DORMANT:
-            self._logger.warning(f"系统不在 DORMANT 壳层状态，当前状态: {self._current_state.value}")
+            self._logger.warning(f"System is not in the DORMANT shell state: {self._current_state.value}")
             return False
         
         # 发布硬件触发事件
@@ -407,12 +407,7 @@ class SystemStateMachine:
             self._logger.info("记录: 灵动岛出现动画完成")
         elif animation.animation_type == "sidesheet_expand":
             self._logger.info("记录: 侧边栏展开动画完成")
-        elif animation.animation_type == "fullscreen_expand":
-            self._logger.warning(
-                "Legacy animation type 'fullscreen_expand' is deprecated; use 'fullagent_expand' instead."
-            )
-            self._logger.info("记录: Full Agent 展开动画完成")
-        elif animation.animation_type == "fullagent_expand":
+        elif animation.animation_type in {"fullagent_expand", "fullscreen_expand"}:
             self._logger.info("记录: Full Agent 展开动画完成")
     
     def get_animation_state(self, animation_id: str) -> Optional[AnimationState]:
@@ -517,7 +512,7 @@ class HardwareTriggerManager:
             {
                 "state": state.value,
                 "action": "play_animation",
-                "animation_type": "fullagent_expand"
+                "animation_type": "fullscreen_expand"
             }
         )
     
