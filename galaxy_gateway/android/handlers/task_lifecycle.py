@@ -832,7 +832,16 @@ async def handle_task_cancel(
         task_id, device_id,
     )
 
-    cancelled, reason = _apply_canonical_task_cancellation(task_id)
+    try:
+        cancelled, reason = _apply_canonical_task_cancellation(task_id)
+    except Exception as exc:
+        logger.warning(
+            "Task cancel: canonical cancellation propagation failed: task_id=%s device_id=%s exc=%s",
+            task_id,
+            device_id,
+            exc,
+        )
+        cancelled, reason = False, "task_cancel_propagation_failed"
 
     if task_id and task_id in bridge._pending_responses:
         future = bridge._pending_responses.pop(task_id)
