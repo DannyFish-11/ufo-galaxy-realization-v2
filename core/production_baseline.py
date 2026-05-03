@@ -715,6 +715,28 @@ def build_production_baseline_summary(
             ),
         }
 
+    try:
+        from core.multimodal_runtime_profile import (
+            build_multimodal_runtime_profile_summary,
+        )
+
+        summary["multimodal_runtime_profile"] = build_multimodal_runtime_profile_summary()
+    except Exception:
+        summary["multimodal_runtime_profile"] = {
+            "profile": "unknown",
+            "authority": "MULTIMODAL_RUNTIME_PROFILE::UNAVAILABLE",
+        }
+
+    try:
+        from core.compat_freeze_enforcement import build_compat_freeze_summary
+
+        summary["compat_freeze"] = build_compat_freeze_summary()
+    except Exception:
+        summary["compat_freeze"] = {
+            "is_frozen": False,
+            "authority": "COMPAT_FREEZE_ENFORCEMENT::UNAVAILABLE",
+        }
+
     if include_manifest:
         summary["manifest"] = registry.to_dict()
 
