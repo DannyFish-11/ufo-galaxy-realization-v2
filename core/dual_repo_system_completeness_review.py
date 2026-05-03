@@ -1138,8 +1138,9 @@ class DualRepoSystemCompletenessReviewer:
             )
 
         gaps.append(
-            "Release gate not connected to CI/CD pipeline: governance verdict does "
-            "not automatically block releases; human review is still required"
+            "Release gate not connected to CI/CD pipeline: governance verdict is "
+            "advisory/non-blocking and does not automatically enforce release "
+            "blocking; human review is still required"
         )
         gaps.append(
             "Android-side governance artifacts not reaching V2 gates: "
@@ -1163,7 +1164,7 @@ class DualRepoSystemCompletenessReviewer:
         # Label: governance framework is complete structurally but enforcing state
         # is advisory only; this is evidence_gap (not deferred, because it's a
         # real gap in enforcement wiring)
-        if len(available_gov) == len(gov_modules) and skeleton_enforcing:
+        if len(available_gov) == len(gov_modules) and skeleton_enforcing and not gaps:
             label = CompletenessLabel.complete
         elif len(available_gov) >= len(gov_modules) * 0.7:
             label = CompletenessLabel.evidence_gap
