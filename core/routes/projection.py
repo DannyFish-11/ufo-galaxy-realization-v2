@@ -3377,11 +3377,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
                     summary = build_coordinator_summary(coordinator=coordinator)
                     coordinator_summaries.append(summary.to_dict())
-                    if getattr(coordinator, "result_merge_summary", None):
+                    result_merge_summary = getattr(coordinator, "result_merge_summary", None)
+                    if result_merge_summary:
                         merged_results.append(
-                            coordinator.result_merge_summary.to_dict()
-                            if hasattr(coordinator.result_merge_summary, "to_dict")
-                            else dict(coordinator.result_merge_summary)
+                            result_merge_summary.to_dict()
+                            if hasattr(result_merge_summary, "to_dict")
+                            else dict(result_merge_summary)
                         )
             except Exception as exc:
                 logger.debug("multi-device projection: coordinator unavailable: %s", exc)

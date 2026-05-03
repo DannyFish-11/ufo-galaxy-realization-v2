@@ -855,8 +855,9 @@ class DeviceRouter:
             or list(analysis.get("target_device_ids") or [])
         )
         explicit_target_id = ctx.get("target_device_id") or analysis.get("target_device_id")
-        if explicit_target_id and explicit_target_id not in explicit_target_ids:
-            explicit_target_ids.append(str(explicit_target_id))
+        explicit_target_id_str = str(explicit_target_id) if explicit_target_id else ""
+        if explicit_target_id_str and explicit_target_id_str not in explicit_target_ids:
+            explicit_target_ids.append(explicit_target_id_str)
 
         deduped_ids: List[str] = []
         seen_ids = set()
