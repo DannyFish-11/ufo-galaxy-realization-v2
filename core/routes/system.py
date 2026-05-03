@@ -216,6 +216,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "subsystems": subsystems,
         })
 
+    @router.get("/api/v1/system/completion-status")
+    async def system_completion_status():
+        """获取统一的系统完成度/收口状态"""
+        try:
+            from core.system_completion_status import get_system_completion_status
+
+            report = get_system_completion_status(force_rebuild=True)
+            return JSONResponse(report.to_dict())
+        except Exception as e:
+            logger.exception("system completion status build failed: %s", e)
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                },
+                status_code=500,
+            )
+
     @router.get("/api/v1/agents/status")
     async def agents_status():
         """获取所有活跃 Agent 状态"""

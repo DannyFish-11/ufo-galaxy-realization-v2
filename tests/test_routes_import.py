@@ -150,6 +150,14 @@ class TestRoutePresence:
         assert r.status_code == 200
         assert r.json()["status"] == "healthy"
 
+    def test_system_completion_status(self, client):
+        r = client.get("/api/v1/system/completion-status")
+        assert r.status_code == 200
+        data = r.json()
+        assert "system_closure_pct" in data
+        assert "remaining_to_100" in data
+        assert "status_alignment" in data
+
     def test_api_config(self, client):
         r = client.get("/api/config")
         assert r.status_code == 200
