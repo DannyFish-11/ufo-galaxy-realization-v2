@@ -236,7 +236,7 @@ def _read_canonical_runtime_status(task_id: Optional[str]) -> Optional[str]:
             if mapped:
                 return mapped
     except Exception as exc:
-        logger.debug("task_lifecycle: TaskGraphRuntime status lookup skipped: %s", exc)
+        logger.warning("task_lifecycle: TaskGraphRuntime status lookup skipped: %s", exc)
 
     try:
         from core.canonical_task import get_canonical_task_runtime
@@ -288,7 +288,7 @@ def _apply_canonical_task_cancellation(task_id: Optional[str]) -> tuple[bool, Op
                 task_entry["status"] = TaskStatus.CANCELLED.value
                 task_entry["cancelled_at"] = time.time()
     except Exception as exc:
-        logger.debug("task_lifecycle: task_queue cancellation skipped: %s", exc)
+        logger.warning("task_lifecycle: task_queue cancellation skipped: %s", exc)
 
     try:
         from core.canonical_task import TaskLifecycle, get_canonical_task_runtime

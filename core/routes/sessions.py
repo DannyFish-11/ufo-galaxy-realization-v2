@@ -88,8 +88,8 @@ async def migrate_session_via_canonical_manager(
 
     try:
         sm._persist_state()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("migrate_session_via_canonical_manager: persist_state failed: %s", exc)
 
     history = sm.get_full_history(session_id)
     if effective_source:
@@ -131,8 +131,8 @@ async def migrate_session_via_canonical_manager(
                 "context_keys_merged": list((context_override or {}).keys()),
             },
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("migrate_session_via_canonical_manager: audit append failed: %s", exc)
 
     return {
         "success": True,
