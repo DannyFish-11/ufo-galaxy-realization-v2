@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-05-01T04:23:12.950776",
+  "timestamp": "2026-05-03T02:04:58.693597",
   "capabilities": [
     {
       "name": "Node_00_StateMachine",
@@ -1221,7 +1221,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.931336"
+      "last_updated": "2026-05-03T02:04:58.668378"
     },
     {
       "name": "resolver_visible_cap",
@@ -1232,7 +1232,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.934337"
+      "last_updated": "2026-05-03T02:04:58.672296"
     },
     {
       "name": "meta_cap",
@@ -1243,7 +1243,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.937336"
+      "last_updated": "2026-05-03T02:04:58.676114"
     },
     {
       "name": "nodesc_cap",
@@ -1254,7 +1254,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.940265"
+      "last_updated": "2026-05-03T02:04:58.679906"
     },
     {
       "name": "local_only_cap",
@@ -1265,7 +1265,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.943121"
+      "last_updated": "2026-05-03T02:04:58.683643"
     },
     {
       "name": "sink_test_cap",
@@ -1276,7 +1276,7 @@
       "input_schema": {},
       "output_schema": {},
       "status": "online",
-      "last_updated": "2026-05-01T04:23:12.950225"
+      "last_updated": "2026-05-03T02:04:58.692873"
     }
   ]
 }
