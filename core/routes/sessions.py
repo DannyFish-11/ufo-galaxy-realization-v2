@@ -65,7 +65,8 @@ async def migrate_session_via_canonical_manager(
             "error": f"Session '{session_id}' not found",
         }
 
-    effective_source = source_device or getattr(session, "active_device", "") or ""
+    active_device = getattr(session, "active_device", "") or ""
+    effective_source = source_device or active_device
     if effective_source and effective_source not in session.devices:
         return {
             "success": False,
@@ -106,7 +107,7 @@ async def migrate_session_via_canonical_manager(
             "type": "session_sync",
             "session_id": session_id,
             "history": history,
-            "context": dict(getattr(session, "metadata", {})),
+            "context": getattr(session, "metadata", {}),
             "migrated_from": effective_source,
         },
     )

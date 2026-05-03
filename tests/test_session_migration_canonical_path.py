@@ -35,6 +35,24 @@ async def test_canonical_session_migration_helper_updates_session_manager_state(
     assert "desktop_1" in session.devices
     assert session.metadata["migration_context"]["cursor"] == "keep"
     assert ws.send_to_device.await_count == 2
+    ws.send_to_device.assert_any_await(
+        "phone_1",
+        {
+            "type": "session_migrated",
+            "session_id": "session_1",
+            "target_device": "desktop_1",
+        },
+    )
+    ws.send_to_device.assert_any_await(
+        "desktop_1",
+        {
+            "type": "session_sync",
+            "session_id": "session_1",
+            "history": [{"role": "user", "content": "hello"}],
+            "context": {"migration_context": {"cursor": "keep"}},
+            "migrated_from": "phone_1",
+        },
+    )
 
 
 @pytest.mark.asyncio
