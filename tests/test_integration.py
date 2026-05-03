@@ -117,12 +117,12 @@ class TestStateMachineIntegration(unittest.TestCase):
 
     def setUp(self):
         self.state_machine = SystemStateMachine()
-        # Reset singleton state so each test starts from SLEEPING
-        self.state_machine._current_state = SystemState.SLEEPING
+        # Reset singleton state so each test starts from DORMANT
+        self.state_machine._current_state = SystemState.DORMANT
     
     def test_initial_state(self):
         """测试初始状态"""
-        self.assertEqual(self.state_machine.current_state, SystemState.SLEEPING)
+        self.assertEqual(self.state_machine.current_state, SystemState.DORMANT)
     
     def test_wakeup(self):
         """测试唤醒（硬件触发 → UI 集成点）"""
@@ -145,8 +145,8 @@ class TestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, SystemState.SIDESHEET)
         
         # 展开到全屏
-        self.state_machine.expand_to_fullscreen()
-        self.assertEqual(self.state_machine.current_state, SystemState.FULLSCREEN)
+        self.state_machine.expand_to_fullagent()
+        self.assertEqual(self.state_machine.current_state, SystemState.FULLAGENT)
         
         # 折叠到灵动岛
         self.state_machine.collapse_to_island()
@@ -193,8 +193,8 @@ class TestHardwareTriggerManager(unittest.TestCase):
 
     def setUp(self):
         self.trigger_manager = HardwareTriggerManager()
-        # Reset singleton state so each test starts from SLEEPING
-        self.trigger_manager.state_machine._current_state = SystemState.SLEEPING
+        # Reset singleton state so each test starts from DORMANT
+        self.trigger_manager.state_machine._current_state = SystemState.DORMANT
     
     def test_hardware_button_trigger(self):
         """测试硬件按键触发（硬件触发 → UI 集成点）"""

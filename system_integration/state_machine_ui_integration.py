@@ -8,10 +8,10 @@ This module implements the state machine for the **Windows desktop clothing**
 of the unified subject.  The clothing is the presentation/UI shell that wraps
 the subject for display on a Windows PC.
 
-``SystemState`` here (``SLEEPING`` / ``WAKING`` / ``ISLAND`` / ``SIDESHEET`` /
-``FULLSCREEN`` / ``EXECUTING`` / ``ERROR``) describes the **UI shell state** —
-how the desktop clothing is configured at runtime.  These states are a
-presentation-layer concern and are NOT the subject's tri-state lifecycle.
+``SystemState`` here (``DORMANT`` / ``ISLAND`` / ``SIDESHEET`` / ``FULLAGENT``)
+describes the **UI shell state** — how the desktop clothing is configured at
+runtime.  These states are a presentation-layer concern and are NOT the
+subject's tri-state lifecycle.
 
 **Three distinct state systems — do not conflate**::
 
@@ -24,7 +24,7 @@ presentation-layer concern and are NOT the subject's tri-state lifecycle.
        → Internal state protocol inside OpenClawd (subject core)
 
     3. UI shell / clothing states (this module)
-       SLEEPING / WAKING / ISLAND / SIDESHEET / FULLSCREEN / EXECUTING / ERROR
+       DORMANT / ISLAND / SIDESHEET / FULLAGENT
        → Presentation layer; how the desktop clothing renders
        → Does NOT drive or represent the tri-state lifecycle
 
@@ -60,13 +60,16 @@ class SystemState(Enum):
 
     See module docstring for the full state-system distinction.
     """
-    SLEEPING = "sleeping"           # Clothing in sleep/collapsed state
-    WAKING = "waking"               # Clothing transitioning to active
+    DORMANT = "dormant"             # Clothing hidden / collapsed
     ISLAND = "island"               # Compact clothing mode (island style)
     SIDESHEET = "sidesheet"         # Side panel clothing expansion
-    FULLSCREEN = "fullscreen"       # Full-screen clothing expansion
-    EXECUTING = "executing"         # Clothing showing active execution
-    ERROR = "error"                 # Clothing showing error state
+    FULLAGENT = "fullagent"         # Full clothing expansion
+
+    # Deprecated compatibility aliases. Keep old names readable by legacy
+    # callers while routing all runtime semantics through the canonical shell
+    # vocabulary above.
+    SLEEPING = DORMANT
+    FULLSCREEN = FULLAGENT
 
 
 class TriggerType(Enum):
@@ -121,7 +124,7 @@ class SystemStateMachine:
         self._initialized = True
         
         # 当前状态
-        self._current_state = SystemState.SLEEPING
+        self._current_state = SystemState.DORMANT
         
         # 状态转换历史
         self._transition_history: List[StateTransition] = []
@@ -256,7 +259,7 @@ class SystemStateMachine:
         Returns:
             是否成功唤醒
         """
-        if self._current_state != SystemState.SLEEPING:
+        if self._current_state != SystemState.DORMANT:
             self._logger.warning(f"系统不在休眠状态，当前状态: {self._current_state.value}")
             return False
         
@@ -294,7 +297,7 @@ class SystemStateMachine:
     def sleep(self):
         """使系统进入休眠状态"""
         self.transition_to(
-            SystemState.SLEEPING,
+            SystemState.DORMANT,
             trigger_type=TriggerType.SCHEDULED,
             trigger_source="system"
         )
@@ -308,18 +311,22 @@ class SystemStateMachine:
                 trigger_source="user"
             )
     
-    def expand_to_fullscreen(self):
-        """展开到全屏状态"""
+    def expand_to_fullagent(self):
+        """展开到完整 Agent 壳层状态"""
         if self._current_state in [SystemState.ISLAND, SystemState.SIDESHEET]:
             self.transition_to(
-                SystemState.FULLSCREEN,
+                SystemState.FULLAGENT,
                 trigger_type=TriggerType.GESTURE,
                 trigger_source="user"
             )
+
+    def expand_to_fullscreen(self):
+        """兼容旧接口，转发到统一后的 FULLAGENT 状态。"""
+        self.expand_to_fullagent()
     
     def collapse_to_island(self):
         """折叠到灵动岛状态"""
-        if self._current_state in [SystemState.SIDESHEET, SystemState.FULLSCREEN]:
+        if self._current_state in [SystemState.SIDESHEET, SystemState.FULLAGENT]:
             self.transition_to(
                 SystemState.ISLAND,
                 trigger_type=TriggerType.GESTURE,
@@ -400,8 +407,8 @@ class SystemStateMachine:
             self._logger.info("记录: 灵动岛出现动画完成")
         elif animation.animation_type == "sidesheet_expand":
             self._logger.info("记录: 侧边栏展开动画完成")
-        elif animation.animation_type == "fullscreen_expand":
-            self._logger.info("记录: 全屏展开动画完成")
+        elif animation.animation_type in {"fullagent_expand", "fullscreen_expand"}:
+            self._logger.info("记录: Full Agent 展开动画完成")
     
     def get_animation_state(self, animation_id: str) -> Optional[AnimationState]:
         """获取动画状态"""
@@ -460,10 +467,10 @@ class HardwareTriggerManager:
             self._on_sidesheet_enter
         )
         
-        # 当进入FULLSCREEN状态时，通知UI展开全屏
+        # 当进入FULLAGENT状态时，通知UI展开完整 Agent 壳层
         self.state_machine.register_state_enter_callback(
-            SystemState.FULLSCREEN,
-            self._on_fullscreen_enter
+            SystemState.FULLAGENT,
+            self._on_fullagent_enter
         )
     
     def _on_island_enter(self, state: SystemState):
@@ -495,9 +502,9 @@ class HardwareTriggerManager:
             }
         )
     
-    def _on_fullscreen_enter(self, state: SystemState):
-        """全屏状态进入回调"""
-        self._logger.info("进入全屏状态，通知UI展开")
+    def _on_fullagent_enter(self, state: SystemState):
+        """Full Agent 状态进入回调"""
+        self._logger.info("进入 Full Agent 状态，通知UI展开")
         
         event_bus.publish_sync(
             EventType.UI_STATE_CHANGED,
@@ -505,7 +512,7 @@ class HardwareTriggerManager:
             {
                 "state": state.value,
                 "action": "play_animation",
-                "animation_type": "fullscreen_expand"
+                "animation_type": "fullagent_expand"
             }
         )
     
@@ -558,7 +565,7 @@ class HardwareTriggerManager:
         elif gesture_type == "swipe_down":
             self.state_machine.collapse_to_island()
         elif gesture_type == "double_tap":
-            self.state_machine.expand_to_fullscreen()
+            self.state_machine.expand_to_fullagent()
     
     def on_voice_command(self, command: str):
         """
@@ -577,7 +584,7 @@ class HardwareTriggerManager:
                 self._logger.error(f"语音回调错误: {e}")
         
         # 如果系统在休眠，先唤醒
-        if self.state_machine.current_state == SystemState.SLEEPING:
+        if self.state_machine.current_state == SystemState.DORMANT:
             self.state_machine.wakeup(
                 trigger_type=TriggerType.VOICE,
                 trigger_source="voice_command"
