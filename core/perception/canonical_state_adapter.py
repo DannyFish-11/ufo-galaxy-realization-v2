@@ -226,6 +226,26 @@ class CanonicalStateAdapter:
         """
         return self._meta.get("multimodal_context")
 
+    def perception_boundary_summary(self) -> Dict[str, Any]:
+        """Return the governed perception fact-boundary summary."""
+
+        try:
+            from core.perception.perception_fact_boundary import (
+                build_perception_fact_boundary_summary,
+            )
+
+            return build_perception_fact_boundary_summary(self._meta)
+        except Exception:
+            return {
+                "canonical_fact_surface": "response.metadata.canonical_perception_state",
+                "canonical_fact_present": self.canonical_perception_state() is not None,
+                "compat_surfaces_present": (
+                    ["response.metadata.multimodal_context"]
+                    if self.multimodal_context_compat() is not None
+                    else []
+                ),
+            }
+
     # ------------------------------------------------------------------
     # Convenience: validate canonical state presence
     # ------------------------------------------------------------------
@@ -245,7 +265,6 @@ class CanonicalStateAdapter:
         are safe for JSON serialisation.
         """
         ucp = self.unified_control_plan()
-        route = self.multimodal_route_decision()
         return {
             "has_canonical_perception": self.has_canonical_perception(),
             "has_unified_control_plan": self.has_unified_control_plan(),
@@ -265,4 +284,5 @@ class CanonicalStateAdapter:
             "canonical_route_in_ucp": (
                 ucp.get("multimodal_route_decision") is not None if ucp else False
             ),
+            "perception_boundary": self.perception_boundary_summary(),
         }

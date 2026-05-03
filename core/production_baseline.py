@@ -699,6 +699,22 @@ def build_production_baseline_summary(
             response_metadata
         )
 
+    try:
+        from core.perception.perception_fact_boundary import (
+            build_perception_fact_boundary_summary,
+        )
+
+        summary["perception_boundary"] = build_perception_fact_boundary_summary(
+            response_metadata
+        )
+    except Exception:
+        summary["perception_boundary"] = {
+            "canonical_fact_surface": "response.metadata.canonical_perception_state",
+            "canonical_fact_present": bool(
+                response_metadata and response_metadata.get("canonical_perception_state") is not None
+            ),
+        }
+
     if include_manifest:
         summary["manifest"] = registry.to_dict()
 
