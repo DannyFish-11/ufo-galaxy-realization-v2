@@ -32,11 +32,15 @@ from typing import Any, Dict, List, Optional
 
 from core.dual_repo_system_completeness_review import (
     CompletenessLabel,
+    CompletenessReviewReport,
     CompletenessVerdict,
     build_completeness_review,
 )
 from core.dual_repo_system_map import DUAL_REPO_MAIN_CHAIN, build_system_map_snapshot
-from core.system_final_acceptance_verdict import evaluate_system_acceptance
+from core.system_final_acceptance_verdict import (
+    SystemAcceptanceReport,
+    evaluate_system_acceptance,
+)
 from tools.architecture.architecture_completion import (
     get_architecture_completion_scorecard,
 )
@@ -146,18 +150,21 @@ class SystemCompletionStatus:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
 
-def _compute_system_closure_pct(review) -> float:
-    if not review.dimensions:
+def _compute_system_closure_pct(completeness_review: CompletenessReviewReport) -> float:
+    if not completeness_review.dimensions:
         return 0.0
 
     pct = round(
-        sum(_LABEL_COMPLETION_PCT.get(entry.label, 0.0) for entry in review.dimensions)
-        / len(review.dimensions),
+        sum(
+            _LABEL_COMPLETION_PCT.get(entry.label, 0.0)
+            for entry in completeness_review.dimensions
+        )
+        / len(completeness_review.dimensions),
         2,
     )
 
     if (
-        review.verdict != CompletenessVerdict.fully_closed
+        completeness_review.verdict != CompletenessVerdict.fully_closed
         and pct >= 100.0
     ):
         return 99.0
@@ -188,11 +195,15 @@ def _append_unique_item(
     )
 
 
-def _build_remaining_to_100(review, acceptance, system_map: Dict[str, Any]) -> List[RemainingClosureItem]:
+def _build_remaining_to_100(
+    completeness_review: CompletenessReviewReport,
+    acceptance_report: SystemAcceptanceReport,
+    system_map: Dict[str, Any],
+) -> List[RemainingClosureItem]:
     items: List[RemainingClosureItem] = []
     seen: set[str] = set()
 
-    for gap in review.blocking_gaps:
+    for gap in completeness_review.blocking_gaps:
         _append_unique_item(
             items,
             seen,
@@ -202,7 +213,7 @@ def _build_remaining_to_100(review, acceptance, system_map: Dict[str, Any]) -> L
             evidence="core.dual_repo_system_completeness_review",
         )
 
-    for risk in acceptance.unresolved_risk_summary:
+    for risk in acceptance_report.unresolved_risk_summary:
         dimension = risk.get("dimension", "unknown")
         description = risk.get("risk_description", "").strip()
         if not description:
@@ -239,8 +250,8 @@ def _build_summary(
     architecture_pct: float,
     runtime_readiness: str,
     closure_pct: float,
-    review,
-    acceptance,
+    completeness_review: CompletenessReviewReport,
+    acceptance_report: SystemAcceptanceReport,
     remaining_items: List[RemainingClosureItem],
 ) -> str:
     lines = [
@@ -248,13 +259,16 @@ def _build_summary(
         f"- 架构完成度: {architecture_pct:.2f}%",
         f"- 架构运行态: {runtime_readiness}",
         f"- 整系统真实收口度: {closure_pct:.2f}%",
-        f"- 双仓完整性结论: {review.verdict.value}",
-        f"- 系统最终验收结论: {acceptance.verdict.value}",
-        f"- 阻塞项数量: {len(review.blocking_gaps)}",
-        f"- 延期项数量: {len(review.deferred_acknowledged)}",
+        f"- 双仓完整性结论: {completeness_review.verdict.value}",
+        f"- 系统最终验收结论: {acceptance_report.verdict.value}",
+        f"- 阻塞项数量: {len(completeness_review.blocking_gaps)}",
+        f"- 延期项数量: {len(completeness_review.deferred_acknowledged)}",
     ]
 
-    if architecture_pct >= 100.0 and review.verdict != CompletenessVerdict.fully_closed:
+    if (
+        architecture_pct >= 100.0
+        and completeness_review.verdict != CompletenessVerdict.fully_closed
+    ):
         lines.append("- 状态错位: 架构面已显示 100%，但整系统仍未真正 100% 收口。")
 
     if remaining_items:
@@ -295,8 +309,8 @@ def build_system_completion_status() -> SystemCompletionStatus:
         architecture_pct=architecture_pct,
         runtime_readiness=live_status.runtime_readiness,
         closure_pct=closure_pct,
-        review=review,
-        acceptance=acceptance,
+        completeness_review=review,
+        acceptance_report=acceptance,
         remaining_items=remaining_items,
     )
 
