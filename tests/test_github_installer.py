@@ -306,6 +306,43 @@ class TestGitHubInstallerInstall:
         mock_install_deps.assert_not_called()
         mock_register.assert_not_called()
 
+    @pytest.mark.parametrize(
+        ("missing_field", "expected_fragment"),
+        [
+            ("handler_file", "'handler_file' is required"),
+            ("handler_function", "'handler_function' is required"),
+        ],
+    )
+    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer._register_skill")
+    @patch("core.github_installer._fetch_repo")
+    def test_skill_contract_reports_specific_missing_handler_fields(
+        self,
+        mock_fetch,
+        mock_register,
+        mock_install_deps,
+        tmp_path,
+        missing_field,
+        expected_fragment,
+    ):
+        skill_manifest = {
+            "id": "broken-skill",
+            "name": "Broken Skill",
+            "handler_file": "handler.py",
+            "handler_function": "execute",
+            "dependencies": ["example-dependency"],
+        }
+        skill_manifest.pop(missing_field)
+        mock_fetch.side_effect = self._patch_fetch(tmp_path, skill_manifest=skill_manifest)
+
+        inst = self._make_installer(tmp_path)
+        result = _run(inst.install("https://github.com/owner/broken-skill"))
+
+        assert result["success"] is False
+        assert any(expected_fragment in violation for violation in result["violations"])
+        mock_install_deps.assert_not_called()
+        mock_register.assert_not_called()
+
     @patch("core.github_installer._fetch_repo")
     def test_install_no_manifest(self, mock_fetch, tmp_path):
         """No mcp_tool.json or skill.json — should succeed with 'unknown' type."""
