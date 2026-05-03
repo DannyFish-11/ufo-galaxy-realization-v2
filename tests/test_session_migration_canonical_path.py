@@ -69,7 +69,8 @@ async def test_gateway_session_route_uses_canonical_helper() -> None:
     spec.loader.exec_module(gateway_sessions)
 
     fake_result = {"success": True, "history_count": 3}
-    with pytest.MonkeyPatch.context() as mp:
+    mp = pytest.MonkeyPatch()
+    try:
         async def _fake_migrate_session_via_canonical_manager(**kwargs):
             return dict(fake_result)
 
@@ -82,6 +83,8 @@ async def test_gateway_session_route_uses_canonical_helper() -> None:
             gateway_sessions.SessionMigrateRequest(target_device_id="desktop_2"),
             auth={"authenticated": True},
         )
+    finally:
+        mp.undo()
 
     assert response["success"] is True
     assert response["history_count"] == 3
