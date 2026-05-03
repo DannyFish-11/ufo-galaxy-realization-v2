@@ -87,20 +87,25 @@ async def migrate_session(
 ):
     """Trigger session migration to a target device."""
     try:
-        from galaxy_gateway.session_roaming import session_roaming
+        from core.routes.sessions import migrate_session_via_canonical_manager
 
-        success = await session_roaming.migrate_session(
-            session_id, request.target_device_id
+        result = await migrate_session_via_canonical_manager(
+            session_id=session_id,
+            target_device=request.target_device_id,
         )
-        if not success:
+        if not result.get("success"):
             raise HTTPException(
-                status_code=400,
-                detail="Migration failed (session not found or already closed)",
+                status_code=int(result.get("status_code", 400)),
+                detail=result.get(
+                    "error",
+                    "Migration failed (session not found or canonical path rejected the request)",
+                ),
             )
         return {
             "success": True,
             "session_id": session_id,
             "target_device_id": request.target_device_id,
+            "history_count": result.get("history_count", 0),
         }
     except HTTPException:
         raise

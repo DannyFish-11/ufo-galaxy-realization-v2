@@ -970,13 +970,13 @@ class AndroidBridge:
 
     async def click(self, device_id: str, x: int, y: int,
                     element_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Android GUI action adapter — translate click to AIP protocol and send."""
+        """PR-S3 Android GUI action adapter — translate click to AIP protocol and send."""
         msg = MessageBuilder.gui_click(device_id, x, y, element_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
     async def swipe(self, device_id: str, start_x: int, start_y: int,
                     end_x: int, end_y: int, duration_ms: int = 300) -> Optional[Dict[str, Any]]:
-        """Android GUI action adapter — translate swipe to AIP protocol and send."""
+        """PR-S3 Android GUI action adapter — translate swipe to AIP protocol and send."""
         msg = MessageBuilder.gui_swipe(device_id, start_x, start_y, end_x, end_y, duration_ms)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
