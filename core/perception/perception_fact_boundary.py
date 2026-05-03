@@ -189,6 +189,6 @@ def build_perception_fact_boundary_summary(
         "derived_surfaces_present": derived_surfaces_present,
         "compat_surfaces_present": compat_surfaces_present,
         "present_surfaces": present_surfaces,
-        "requires_compat_migration": bool(compat_surfaces_present),
+        "requires_compat_migration": len(compat_surfaces_present) > 0,
         "surface_catalog": [record.to_dict() for record in PERCEPTION_SURFACE_CATALOG],
     }
