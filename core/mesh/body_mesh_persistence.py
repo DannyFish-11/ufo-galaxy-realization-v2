@@ -436,12 +436,17 @@ def restore_body_mesh_from_snapshot(
             )
             # Restore body_score if present
             body_score = entry_dict.get("body_score", 0.0)
-            if body_score and hasattr(registry, "score_entry"):
-                # score_entry(device_id, health_score): body_score = role_weight × health
-                # We cannot perfectly reverse this; store the raw body_score in metadata
-                # and set health=1.0 so score = role_weight.  The real score will be
-                # re-computed when health metrics are next refreshed.
-                pass
+            if hasattr(registry, "get"):
+                try:
+                    restored_entry = registry.get(device_id)
+                    if restored_entry is not None:
+                        restored_entry.body_score = float(body_score or 0.0)
+                except Exception as exc:
+                    logger.debug(
+                        "restore_body_mesh_from_snapshot: failed to restore body_score for %s: %s",
+                        device_id,
+                        exc,
+                    )
 
             restored += 1
         except Exception as exc:

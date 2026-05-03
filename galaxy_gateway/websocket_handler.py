@@ -723,10 +723,13 @@ async def handle_session_migrate(connection_id: str, aip_msg):
         session_id = payload.get("session_id", "")
         target_device_id = payload.get("target_device_id", device_id)
 
-        from galaxy_gateway.session_roaming import session_roaming
+        from core.routes.sessions import migrate_session_via_canonical_manager
 
-        success = await session_roaming.migrate_session(
-            session_id, target_device_id
+        result = await migrate_session_via_canonical_manager(
+            session_id=session_id,
+            source_device=device_id,
+            target_device=target_device_id,
+            context_override=payload.get("context", {}),
         )
 
         response = {
@@ -739,13 +742,13 @@ async def handle_session_migrate(connection_id: str, aip_msg):
             "payload": {
                 "session_id": session_id,
                 "target_device_id": target_device_id,
-                "success": success,
+                "success": bool(result.get("success")),
             },
         }
         await connection_manager.send_message(connection_id, response)
 
         logger.info(
-            f"✅ 会话迁移{'成功' if success else '失败'}: "
+            f"✅ 会话迁移{'成功' if result.get('success') else '失败'}: "
             f"session={session_id} -> device={target_device_id}"
         )
 

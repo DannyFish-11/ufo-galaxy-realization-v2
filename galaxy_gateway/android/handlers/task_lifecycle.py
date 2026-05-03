@@ -140,6 +140,27 @@ RESULT_INGRESS_CONTINUITY_LEGALITY_POLICY = (
 _SIGNAL_GUARD_CAPACITY: int = 512
 _processed_signals: OrderedDict = OrderedDict()
 
+_NON_TERMINAL_STATUS_VALUES = frozenset(
+    {
+        "created",
+        "queued",
+        "admitted",
+        "planned",
+        "routed",
+        "dispatch",
+        "dispatched",
+        "pending",
+        "running",
+        "result",
+        "partial_result",
+        "continue",
+    }
+)
+_CANCELLED_STATUS_VALUES = frozenset({"cancelled", "canceled"})
+_TERMINAL_COMPLETED_STATUS_VALUES = frozenset(
+    {"completed", "failed", "degraded", "success", "error"}
+)
+
 
 def _signal_guard_accept(message: Dict[str, Any]) -> bool:
     """Return True and record the signal if it has not been seen before.
@@ -170,6 +191,162 @@ def _signal_guard_accept(message: Dict[str, Any]) -> bool:
         _processed_signals.popitem(last=False)
     _processed_signals[key] = True
     return True
+
+
+def _extract_status_value(raw_status: Any) -> str:
+    """Normalise any runtime lifecycle/status object to a lower-case string."""
+    if hasattr(raw_status, "value"):
+        raw_status = raw_status.value
+    return str(raw_status or "").strip().lower()
+
+
+def _map_runtime_status_to_task_status(raw_status: Any) -> Optional[str]:
+    """Map runtime/canonical lifecycle values to AIP task status values."""
+    status = _extract_status_value(raw_status)
+    if not status:
+        return None
+    if status in _CANCELLED_STATUS_VALUES:
+        return TaskStatus.CANCELLED.value
+    if status in {"failed", "degraded", "error"}:
+        return TaskStatus.FAILED.value
+    if status in {"completed", "success"}:
+        return TaskStatus.COMPLETED.value
+    if status in {"running", "result", "partial_result", "continue"}:
+        return TaskStatus.RUNNING.value
+    if status in _NON_TERMINAL_STATUS_VALUES:
+        return TaskStatus.PENDING.value
+    return None
+
+
+def _read_canonical_runtime_status(task_id: Optional[str]) -> Optional[str]:
+    """Return authoritative task status from canonical runtimes when available."""
+    if not task_id:
+        return None
+
+    try:
+        from core.task_graph_runtime import get_task_graph_runtime
+
+        node = get_task_graph_runtime().get_node_by_task_id(task_id)
+        if node is not None:
+            mapped = _map_runtime_status_to_task_status(getattr(node, "state", None))
+            if mapped:
+                return mapped
+    except Exception as exc:
+        logger.warning("task_lifecycle: TaskGraphRuntime status lookup skipped: %s", exc)
+
+    try:
+        from core.canonical_task import get_canonical_task_runtime
+
+        task = get_canonical_task_runtime().get_by_task_id(task_id)
+        if task is not None:
+            mapped = _map_runtime_status_to_task_status(getattr(task, "lifecycle", None))
+            if mapped:
+                return mapped
+    except Exception as exc:
+        logger.debug("task_lifecycle: CanonicalTaskRuntime status lookup skipped: %s", exc)
+
+    try:
+        from core.routes._shared import task_queue
+
+        if task_id in task_queue:
+            mapped = _map_runtime_status_to_task_status(task_queue[task_id].get("status"))
+            if mapped:
+                return mapped
+    except Exception as exc:
+        logger.debug("task_lifecycle: task_queue status lookup skipped: %s", exc)
+
+    return None
+
+
+def _apply_canonical_task_cancellation(task_id: Optional[str]) -> tuple[bool, Optional[str]]:
+    """Cancel a task across canonical runtime surfaces when it is known."""
+    if not task_id:
+        return False, "task_not_found"
+
+    known = False
+    cancellable = False
+    already_cancelled = False
+    already_completed = False
+
+    try:
+        from core.routes._shared import task_queue
+
+        task_entry = task_queue.get(task_id)
+        if task_entry is not None:
+            known = True
+            status = _extract_status_value(task_entry.get("status"))
+            if status in _CANCELLED_STATUS_VALUES:
+                already_cancelled = True
+            elif status in _TERMINAL_COMPLETED_STATUS_VALUES:
+                already_completed = True
+            else:
+                cancellable = True
+                task_entry["status"] = TaskStatus.CANCELLED.value
+                task_entry["cancelled_at"] = time.time()
+    except Exception as exc:
+        logger.warning("task_lifecycle: task_queue cancellation skipped: %s", exc)
+
+    try:
+        from core.canonical_task import TaskLifecycle, get_canonical_task_runtime
+
+        runtime = get_canonical_task_runtime()
+        task = runtime.get_by_task_id(task_id)
+        if task is not None:
+            known = True
+            status = _extract_status_value(getattr(task, "lifecycle", None))
+            if status in _CANCELLED_STATUS_VALUES:
+                already_cancelled = True
+            elif status in _TERMINAL_COMPLETED_STATUS_VALUES:
+                already_completed = True
+            else:
+                cancellable = True
+                runtime.update_lifecycle(task_id, TaskLifecycle.CANCELLED)
+    except Exception as exc:
+        logger.debug("task_lifecycle: CanonicalTaskRuntime cancellation skipped: %s", exc)
+
+    try:
+        from core.task_graph_runtime import (
+            GraphNodeState,
+            WorkflowContributorKind,
+            get_task_graph_runtime,
+        )
+
+        runtime = get_task_graph_runtime()
+        node = runtime.get_node_by_task_id(task_id)
+        if node is not None:
+            known = True
+            status = _extract_status_value(getattr(node, "state", None))
+            if status in _CANCELLED_STATUS_VALUES:
+                already_cancelled = True
+            elif status in _TERMINAL_COMPLETED_STATUS_VALUES:
+                already_completed = True
+            else:
+                cancellable = True
+                runtime.transition(
+                    task_id,
+                    GraphNodeState.CANCELLED,
+                    reason="android_task_cancel",
+                    contributor=WorkflowContributorKind.UNKNOWN,
+                )
+    except Exception as exc:
+        logger.debug("task_lifecycle: TaskGraphRuntime cancellation skipped: %s", exc)
+
+    if cancellable:
+        try:
+            from core.openclawd import get_openclawd
+
+            get_openclawd().cancel_task(task_id)
+        except Exception as exc:
+            logger.debug("task_lifecycle: OpenClawd cancel propagation skipped: %s", exc)
+        return True, None
+
+    if already_cancelled:
+        return True, "task_already_cancelled"
+    if known and already_completed:
+        return False, "task_already_completed"
+    if known:
+        return True, None
+    return False, "task_not_found"
 
 
 def _try_reconcile(message: Dict[str, Any]) -> None:
@@ -640,10 +817,11 @@ async def handle_error(
 async def handle_task_cancel(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """处理任务取消请求，取消待处理 Future 并返回 task_cancel_ack。
+    """处理任务取消请求，传播到 canonical runtime 并返回 task_cancel_ack。
 
-    链路：Android → task_cancel → 查找 _pending_responses[task_id]
-    → 标记 Future 为已取消 → 更新设备 current_task_id → 返回 task_cancel_ack
+    链路：Android → task_cancel → canonical task cancellation propagation
+    (TaskGraphRuntime / CanonicalTaskRuntime / OpenClawd cancel registry / task_queue)
+    → 清理 bridge 本地 Future → 返回 task_cancel_ack
     """
     task_id = message.get("task_id")
     device_id = message.get("device_id")
@@ -654,8 +832,16 @@ async def handle_task_cancel(
         task_id, device_id,
     )
 
-    cancelled = False
-    reason: Optional[str] = None
+    try:
+        cancelled, reason = _apply_canonical_task_cancellation(task_id)
+    except Exception as exc:
+        logger.warning(
+            "Task cancel: canonical cancellation propagation failed: task_id=%s device_id=%s exc=%s",
+            task_id,
+            device_id,
+            exc,
+        )
+        cancelled, reason = False, "task_cancel_propagation_failed"
 
     if task_id and task_id in bridge._pending_responses:
         future = bridge._pending_responses.pop(task_id)
@@ -666,16 +852,16 @@ async def handle_task_cancel(
                 "Task cancelled successfully: task_id=%s device_id=%s",
                 task_id, device_id,
             )
-        else:
+        elif not cancelled:
             reason = "task_already_completed"
             logger.info(
                 "Task cancel: future already done: task_id=%s device_id=%s",
                 task_id, device_id,
             )
-    else:
-        reason = "task_not_found"
+    elif not cancelled and reason == "task_not_found":
         logger.info(
-            "Task cancel: task not found in pending_responses: task_id=%s device_id=%s",
+            "Task cancel: task not found in canonical runtime or pending_responses: "
+            "task_id=%s device_id=%s",
             task_id, device_id,
         )
 
@@ -700,10 +886,10 @@ async def handle_task_cancel(
 async def handle_task_status(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """处理任务状态查询，返回结构化 task_status_response。
+    """处理任务状态查询，优先返回 canonical runtime truth。
 
-    链路：Android → task_status → 查询 current_task_id / _pending_responses
-    → 返回 task_status_response
+    链路：Android → task_status → TaskGraphRuntime / CanonicalTaskRuntime / task_queue
+    → bridge 本地兜底 → 返回 task_status_response
     """
     task_id = message.get("task_id")
     device_id = message.get("device_id")
@@ -714,8 +900,10 @@ async def handle_task_status(
         task_id, device_id,
     )
 
-    # 基于 _pending_responses 和设备缓存确定真实状态
-    if task_id and task_id in bridge._pending_responses:
+    status = _read_canonical_runtime_status(task_id)
+
+    # Canonical runtime unavailable时，回退到 bridge 本地状态。
+    if status is None and task_id and task_id in bridge._pending_responses:
         future = bridge._pending_responses[task_id]
         if future.cancelled():
             status = TaskStatus.CANCELLED.value
@@ -723,7 +911,7 @@ async def handle_task_status(
             status = TaskStatus.COMPLETED.value
         else:
             status = TaskStatus.RUNNING.value
-    else:
+    elif status is None:
         # 检查设备当前任务
         async with bridge._lock:
             device = bridge._devices.get(device_id or "")
@@ -750,4 +938,3 @@ async def handle_task_status(
         status=status,
         correlation_id=correlation_id,
     )
-

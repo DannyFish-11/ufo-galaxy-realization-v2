@@ -168,6 +168,39 @@ def _extract_runtime_attachment_session_id(message: Dict[str, Any]) -> str:
         return value
     return str(uuid.uuid4())
 
+
+def _normalize_assimilation_capabilities(raw_capabilities: Any) -> List[str]:
+    """Normalize Android capability payloads into canonical capability names."""
+    if raw_capabilities is None:
+        return []
+    if isinstance(raw_capabilities, int):
+        try:
+            from galaxy_gateway.android.capabilities import DeviceCapability
+
+            return DeviceCapability.to_list(raw_capabilities)
+        except Exception:
+            return []
+    if isinstance(raw_capabilities, str):
+        return [raw_capabilities.strip().lower()] if raw_capabilities.strip() else []
+    if isinstance(raw_capabilities, (list, tuple, set, frozenset)):
+        normalized: List[str] = []
+        for item in raw_capabilities:
+            value = str(item or "").strip().lower()
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
+    return []
+
+
+def _enum_or_string(value: Any) -> Optional[str]:
+    """Return a stable string for enum-like values used in metadata payloads."""
+    if value is None:
+        return None
+    if hasattr(value, "value"):
+        return str(value.value)
+    text = str(value).strip()
+    return text or None
+
 # ---------------------------------------------------------------------------
 # Role derivation helpers
 # ---------------------------------------------------------------------------
@@ -401,6 +434,41 @@ async def handle_device_register(
                 "android_bridge: BodyMeshRegistry registration non-fatal: device_id=%s error=%s",
                 device_id, _mesh_exc,
             )
+
+        # D4 / CROSS-004: project registered Android device capabilities into the
+        # canonical CapabilityAssimilationLayer so routing queries can treat the
+        # device as a first-class executor immediately after registration.
+        try:
+            from core.capability_assimilation import assimilate_device
+
+            _capability_names = _normalize_assimilation_capabilities(
+                message.get("capabilities", device.capabilities)
+            )
+            assimilate_device(
+                device_id,
+                capabilities=_capability_names,
+                host=str(getattr(device, "ip_address", "") or "localhost"),
+                port=int(getattr(device, "port", 0) or 0),
+                tags=[str(getattr(device, "platform", "") or "android")],
+                metadata={
+                    "registration_trigger": "android_device_register",
+                    "platform": _enum_or_string(device.platform),
+                    "device_type": _enum_or_string(device.device_type),
+                    "model": getattr(device, "model", None),
+                },
+            )
+            logger.info(
+                "CapabilityAssimilationLayer: assimilated device_id=%s capabilities=%s",
+                device_id,
+                _capability_names,
+            )
+        except Exception as _assim_exc:
+            logger.warning(
+                "android_bridge: capability assimilation non-fatal: device_id=%s error=%s",
+                device_id,
+                _assim_exc,
+            )
+            record_registration_gap(device_id, "capability_assimilation")
 
         # PR-I: notify the auto-enrollment service so that MeshMembership and
         # Formation auto-enrollment are triggered as part of the registration chain.

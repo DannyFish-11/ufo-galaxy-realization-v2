@@ -40,6 +40,7 @@ Public API
 
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -54,6 +55,48 @@ CAPABILITY_REGISTRY_AUTHORITY = (
     "core.capability_registry"
     " — canonical device capability resolution layer (PR-11)"
 )
+
+CAPABILITY_REGISTRY_ROUTING_GUARD = (
+    "CAPABILITY_REGISTRY_ROUTING_GUARD_V1: "
+    "routing-context modules must not use core.capability_registry as a "
+    "selection/routing authority. Canonical routing must use "
+    "core.capability_network_runtime_policy query helpers instead."
+)
+
+_ROUTING_CONTEXT_MODULE_BASENAMES = frozenset(
+    {
+        "command_router.py",
+        "formation_resolver.py",
+        "cross_device_candidates.py",
+        "device_router.py",
+    }
+)
+_MISUSE_EVENT_LIMIT = 100
+
+
+@dataclass
+class CapabilityRegistryMisuseEvent:
+    """Structured event recorded when routing code uses the capability registry."""
+
+    operation: str
+    caller_module: str
+    caller_function: str
+    device_id: str = ""
+    required_capabilities: List[str] = field(default_factory=list)
+    reason: str = CAPABILITY_REGISTRY_ROUTING_GUARD
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "operation": self.operation,
+            "caller_module": self.caller_module,
+            "caller_function": self.caller_function,
+            "device_id": self.device_id,
+            "required_capabilities": list(self.required_capabilities),
+            "reason": self.reason,
+        }
+
+
+_capability_registry_misuse_events: List[CapabilityRegistryMisuseEvent] = []
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -149,6 +192,66 @@ class CapabilityMatchResult:
 # ---------------------------------------------------------------------------
 # Internal helpers — source aggregation (all imports are lazy + defensive)
 # ---------------------------------------------------------------------------
+
+
+def _record_capability_registry_misuse_event(
+    event: CapabilityRegistryMisuseEvent,
+) -> None:
+    _capability_registry_misuse_events.append(event)
+    if len(_capability_registry_misuse_events) > _MISUSE_EVENT_LIMIT:
+        del _capability_registry_misuse_events[:-_MISUSE_EVENT_LIMIT]
+
+
+def _guard_routing_context_usage(
+    *,
+    operation: str,
+    device_id: str = "",
+    required_capabilities: Optional[List[str]] = None,
+) -> None:
+    """Record misuse when routing-context modules consult the compat registry."""
+
+    try:
+        stack = inspect.stack()
+    except Exception:
+        return
+
+    for frameinfo in stack[2:]:
+        filename = (getattr(frameinfo, "filename", "") or "").replace("\\", "/")
+        basename = filename.rsplit("/", 1)[-1]
+        if basename not in _ROUTING_CONTEXT_MODULE_BASENAMES:
+            continue
+
+        event = CapabilityRegistryMisuseEvent(
+            operation=operation,
+            caller_module=filename,
+            caller_function=getattr(frameinfo, "function", ""),
+            device_id=device_id,
+            required_capabilities=list(required_capabilities or []),
+        )
+        _record_capability_registry_misuse_event(event)
+        logger.warning(
+            "capability_registry misuse detected | operation=%s caller=%s function=%s "
+            "device_id=%s required_capabilities=%s policy=%s",
+            operation,
+            filename,
+            getattr(frameinfo, "function", ""),
+            device_id,
+            list(required_capabilities or []),
+            CAPABILITY_REGISTRY_ROUTING_GUARD,
+        )
+        return
+
+
+def get_capability_registry_misuse_events() -> List[CapabilityRegistryMisuseEvent]:
+    """Return recorded routing-context misuse events."""
+
+    return list(_capability_registry_misuse_events)
+
+
+def reset_capability_registry_misuse_events() -> None:
+    """Reset recorded routing-context misuse events (tests only)."""
+
+    _capability_registry_misuse_events.clear()
 
 
 def _collect_from_device_registry(device_id: str) -> Dict[str, Any]:
@@ -250,6 +353,10 @@ def get_device_capability_summary(device_id: str) -> DeviceCapabilitySummary:
         A :class:`DeviceCapabilitySummary` with ``available=True`` when the
         device was found in at least one source.
     """
+    _guard_routing_context_usage(
+        operation="get_device_capability_summary",
+        device_id=device_id,
+    )
     summary = DeviceCapabilitySummary(device_id=device_id)
 
     # ── Source 1: DeviceRegistry ──────────────────────────────────────────
@@ -310,6 +417,11 @@ def device_matches_capabilities(
         A :class:`CapabilityMatchResult` with ``matched=True`` when every
         required capability is covered by the device's resolved capabilities.
     """
+    _guard_routing_context_usage(
+        operation="device_matches_capabilities",
+        device_id=device_id,
+        required_capabilities=required_capabilities,
+    )
     summary = get_device_capability_summary(device_id)
     resolved_set = set(summary.resolved_capabilities)
 
@@ -361,6 +473,10 @@ def get_devices_matching_capabilities(
         requirement.  Returns an empty list if the registry is unavailable or
         no device matches.
     """
+    _guard_routing_context_usage(
+        operation="get_devices_matching_capabilities",
+        required_capabilities=required_capabilities,
+    )
     all_device_ids: List[str] = []
     try:
         from core.device_registry import device_registry

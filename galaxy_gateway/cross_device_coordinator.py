@@ -129,6 +129,7 @@ import tempfile
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from galaxy_gateway.device_router import device_router
+from galaxy_gateway.observability import get_gateway_metrics
 from core.device_types import DeviceType
 
 logger = logging.getLogger(__name__)
@@ -321,6 +322,7 @@ class CrossDeviceCoordinator:
         _caller = _substrate_caller or _ctx.get(_SUBSTRATE_CALLER_CTX_KEY, "")
         _is_canonical = bool(_caller)
         if not _is_canonical:
+            get_gateway_metrics().inc("legacy_dispatch_total")
             logger.warning(
                 "LEGACY_DISPATCH | CrossDeviceCoordinator.execute_cross_device_task "
                 "called without a canonical substrate caller.  "

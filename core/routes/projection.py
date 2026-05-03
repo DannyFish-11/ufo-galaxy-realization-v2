@@ -3369,6 +3369,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             # --- coordinator summaries (PR-37) ---
             coordinator_summaries: list = []
+            merged_results: list = []
             try:
                 coordinator = registry.get_mesh_session_coordinator(mesh_id="default_mesh")
                 if coordinator is not None:
@@ -3376,6 +3377,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
                     summary = build_coordinator_summary(coordinator=coordinator)
                     coordinator_summaries.append(summary.to_dict())
+                    result_merge_summary = getattr(coordinator, "result_merge_summary", None)
+                    if result_merge_summary:
+                        merged_results.append(
+                            result_merge_summary.to_dict()
+                            if hasattr(result_merge_summary, "to_dict")
+                            else dict(result_merge_summary)
+                        )
             except Exception as exc:
                 logger.debug("multi-device projection: coordinator unavailable: %s", exc)
 
@@ -3400,6 +3408,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 _canonical_enrichment = _enrichment.to_dict()
                 _canonical_surfacing_state = _enrichment.surfacing_state.value
                 _canonical_surfacing_gaps = list(_enrichment.surfacing_gap_reasons)
+                if merged_results and _canonical_enrichment.get("formation_metadata") is not None:
+                    _merged_with_formation: list = []
+                    for item in merged_results:
+                        enriched_item = dict(item)
+                        metadata = dict(enriched_item.get("metadata") or {})
+                        metadata.setdefault(
+                            "formation",
+                            _canonical_enrichment.get("formation_metadata"),
+                        )
+                        enriched_item["metadata"] = metadata
+                        _merged_with_formation.append(enriched_item)
+                    merged_results = _merged_with_formation
             except Exception as _enrich_exc:
                 logger.debug(
                     "multi-device projection: canonical enrichment unavailable: %s",
@@ -3413,6 +3433,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 mesh_memberships=mesh_memberships,
                 mesh_sessions=mesh_sessions,
                 coordinator_summaries=coordinator_summaries,
+                merged_results=merged_results,
                 metadata={
                     # PR-522: canonical enrichment (primary authority)
                     "canonical_enrichment": _canonical_enrichment,
@@ -4071,7 +4092,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             }
         except Exception as exc:
             logger.debug("_assemble_runtime_truth_payload: outward truth unavailable: %s", exc)
-            payload.setdefault("outward_truth", None)
+            payload["outward_truth"] = _minimal_outward_truth_payload()
             payload.setdefault(
                 "task_truth",
                 {
@@ -4116,7 +4137,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "device_presence": {"registered": 0, "online": 0},
             "dispatch_semantics": None,
             "execution_path_observability": None,
-            "outward_truth": None,
+            "outward_truth": _minimal_outward_truth_payload(),
             "task_truth": {
                 "active_task_count": 0,
                 "recent_failure_count": 0,
@@ -4133,6 +4154,24 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "board_facing_default": True,
             "_fallback": True,
         }
+
+
+def _minimal_outward_truth_payload() -> Dict[str, Any]:
+    """Return the smallest valid outward-truth payload for degraded projection paths."""
+
+    return {
+        "compiled_at": time.time(),
+        "authority": globals().get(
+            "_ORT_AUTHORITY",
+            "core.outward_runtime_truth.compile_outward_truth",
+        ),
+        "operator_snapshot": {
+            "active_task_count": 0,
+            "recent_failure_count": 0,
+            "reachable_executor_count": 0,
+        },
+        "_fallback": True,
+    }
 
 
 def _assemble_projection() -> Dict[str, Any]:
@@ -5383,6 +5422,13 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
             "_assemble_desktop_status_board_payload: outward truth unavailable: %s",
             exc,
         )
+        result["outward_truth"] = _minimal_outward_truth_payload()
+        result["task_truth"] = {
+            "active_task_count": 0,
+            "recent_failure_count": 0,
+            "reachable_executor_count": 0,
+            "source": "fallback",
+        }
 
     try:
         runtime_truth = _assemble_runtime_truth_payload()
@@ -5442,6 +5488,13 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         },
         "integration_authority": DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
         "integration_health": "unknown",
+        "outward_truth": _minimal_outward_truth_payload(),
+        "task_truth": {
+            "active_task_count": 0,
+            "recent_failure_count": 0,
+            "reachable_executor_count": 0,
+            "source": "fallback",
+        },
         "projection_surface_role": "desktop_status_board_truth",
         "board_facing_default": True,
         "_assembled_at": time.time(),

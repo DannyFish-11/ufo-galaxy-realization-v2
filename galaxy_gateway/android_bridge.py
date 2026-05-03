@@ -98,6 +98,7 @@ from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
+from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
 # Bufferable message types for the pending-delivery buffer.  Only task-dispatch
@@ -744,6 +745,7 @@ class AndroidBridge:
         self._message_handlers[MessageType.GOAL_RESULT] = _wrap(handle_goal_execution_result)
         self._message_handlers[MessageType.TASK_CANCEL] = _wrap(handle_task_cancel)
         self._message_handlers[MessageType.TASK_STATUS] = _wrap(handle_task_status)
+        self._message_handlers[MessageType.SESSION_MIGRATE] = _wrap(handle_session_migrate)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
         self._message_handlers[MessageType.AGENT_STATUS] = _wrap(handle_agent_status)
         self._message_handlers[MessageType.AGENT_CONFIG_UPDATE] = _wrap(handle_generic_forward)
@@ -970,13 +972,13 @@ class AndroidBridge:
 
     async def click(self, device_id: str, x: int, y: int,
                     element_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Android GUI action adapter — translate click to AIP protocol and send."""
+        """PR-S3 Android GUI action adapter — translate click to AIP protocol and send."""
         msg = MessageBuilder.gui_click(device_id, x, y, element_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
     async def swipe(self, device_id: str, start_x: int, start_y: int,
                     end_x: int, end_y: int, duration_ms: int = 300) -> Optional[Dict[str, Any]]:
-        """Android GUI action adapter — translate swipe to AIP protocol and send."""
+        """PR-S3 Android GUI action adapter — translate swipe to AIP protocol and send."""
         msg = MessageBuilder.gui_swipe(device_id, start_x, start_y, end_x, end_y, duration_ms)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
@@ -1469,6 +1471,9 @@ class AndroidBridge:
 
     async def _handle_task_status(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         return await handle_task_status(self, websocket, message)
+
+    async def _handle_session_migrate(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+        return await handle_session_migrate(self, websocket, message)
 
     async def _handle_unregistered(self, websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         return await handle_unregistered(self, websocket, message)

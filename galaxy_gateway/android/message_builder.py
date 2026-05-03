@@ -99,6 +99,27 @@ class MessageBuilder:
         return msg
 
     @classmethod
+    def session_migrate_ack(
+        cls,
+        device_id: str,
+        session_id: Optional[str],
+        target_device_id: Optional[str],
+        success: bool,
+        correlation_id: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """会话迁移确认"""
+        msg = cls._base_message(MessageType.SESSION_MIGRATE_ACK, device_id)
+        msg["session_id"] = session_id
+        msg["target_device_id"] = target_device_id
+        msg["success"] = success
+        if correlation_id:
+            msg["correlation_id"] = correlation_id
+        if error:
+            msg["error"] = error
+        return msg
+
+    @classmethod
     def goal_execution_result(cls, device_id: str, payload: Dict[str, Any],
                               correlation_id: Optional[str] = None,
                               trace_id: Optional[str] = None) -> Dict[str, Any]:

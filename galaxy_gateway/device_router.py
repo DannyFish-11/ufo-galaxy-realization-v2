@@ -842,6 +842,58 @@ class DeviceRouter:
         """根据能力获取设备列表"""
         return [d for d in self.devices.values() if capability in d.capabilities]
 
+    def _resolve_explicit_target_devices(
+        self,
+        analysis: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> List[Device]:
+        """Resolve externally selected target devices before substrate-side selection."""
+
+        ctx = context or {}
+        explicit_target_ids = (
+            list(ctx.get("target_device_ids") or [])
+            or list(analysis.get("target_device_ids") or [])
+        )
+        explicit_target_id = ctx.get("target_device_id") or analysis.get("target_device_id")
+        explicit_target_id_str = str(explicit_target_id) if explicit_target_id else ""
+        if explicit_target_id_str and explicit_target_id_str not in explicit_target_ids:
+            explicit_target_ids.append(explicit_target_id_str)
+
+        deduped_ids: List[str] = []
+        seen_ids = set()
+        for device_id in explicit_target_ids:
+            if not device_id or device_id in seen_ids:
+                continue
+            seen_ids.add(device_id)
+            deduped_ids.append(str(device_id))
+
+        if not deduped_ids:
+            return []
+
+        resolved_devices: List[Device] = []
+        missing_ids: List[str] = []
+        for device_id in deduped_ids:
+            device = self.get_device(device_id)
+            if device is None:
+                missing_ids.append(device_id)
+                continue
+            resolved_devices.append(device)
+
+        if missing_ids:
+            logger.warning(
+                "DeviceRouter.route_task: explicit target device(s) not present in router "
+                "session cache and were skipped: %s",
+                missing_ids,
+            )
+
+        if resolved_devices:
+            logger.debug(
+                "DeviceRouter.route_task: using externally resolved target devices=%s",
+                [d.device_id for d in resolved_devices],
+            )
+
+        return resolved_devices
+
     async def route_task(self, command: str, context: Dict = None) -> Dict:
         """路由任务到合适的设备。
 
@@ -1146,8 +1198,10 @@ class DeviceRouter:
                 metrics.inc("routing_success")
                 return result
 
-            # 3. 选择合适的设备
-            target_devices = self._select_devices(analysis)
+            # 3. 优先使用外部解析的目标设备，只有缺失时才退回到底层选择逻辑
+            target_devices = self._resolve_explicit_target_devices(analysis, ctx)
+            if not target_devices:
+                target_devices = self._select_devices(analysis)
 
             if not target_devices:
                 emit_gateway_log(
@@ -1585,6 +1639,7 @@ class DeviceRouter:
         # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
         _is_canonical_call = bool(_substrate_caller)
         if not _is_canonical_call:
+            get_gateway_metrics().inc("legacy_dispatch_total")
             logger.warning(
                 "LEGACY_DISPATCH | DeviceRouter._dispatch_cross_device_task "
                 "called without a canonical substrate caller.  "

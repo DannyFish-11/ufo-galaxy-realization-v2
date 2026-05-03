@@ -1502,6 +1502,69 @@ class TestMultiDeviceProjectionEndpointGraceful:
             data = response.json()
             assert "projection_id" in data
 
+    def test_endpoint_surfaces_coordinator_result_merge_and_formation_metadata(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from core.routes.projection import create_router
+
+        class _FakeCoordinator:
+            result_merge_summary = {
+                "merge_id": "merge_1",
+                "status": "success",
+                "result_unit_count": 2,
+                "merge_policy": "parallel",
+                "session_id": "sess_1",
+                "metadata": {},
+            }
+
+        class _FakeRegistry:
+            def get_mesh_memberships(self):
+                return []
+
+            def get_mesh_session(self, mesh_id="default_mesh"):
+                return None
+
+            def get_mesh_session_coordinator(self, mesh_id="default_mesh"):
+                return _FakeCoordinator()
+
+        class _FakeSummary:
+            def to_dict(self):
+                return _make_coordinator_dict("coord_1", has_result_merge_summary=True)
+
+        class _FakeEnrichment:
+            surfacing_state = type("_State", (), {"value": "full"})()
+            surfacing_gap_reasons = []
+
+            def to_dict(self):
+                return {
+                    "formation_metadata": {
+                        "formation_id": "formation_1",
+                        "primary_execution_device_id": "dev_primary",
+                    },
+                    "transport_local_only": False,
+                }
+
+        app = FastAPI()
+        with patch(
+            "core.mesh.body_mesh_registry.get_body_mesh_registry",
+            return_value=_FakeRegistry(),
+        ), patch(
+            "contracts.mesh_session_coordinator.build_coordinator_summary",
+            return_value=_FakeSummary(),
+        ), patch(
+            "core.multi_device_projection_canonicalization.enrich_multi_device_projection",
+            return_value=_FakeEnrichment(),
+        ):
+            app.include_router(create_router())
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.get("/api/v1/projection/runtime/multi-device")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["merged_results"]) == 1
+        assert data["merged_results"][0]["merge_id"] == "merge_1"
+        assert data["merged_results"][0]["metadata"]["formation"]["formation_id"] == "formation_1"
+
 
 # ---------------------------------------------------------------------------
 # 64. build_multi_device_runtime_projection — with Pydantic model objects

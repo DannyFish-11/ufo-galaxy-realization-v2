@@ -184,9 +184,23 @@ class BodyMeshRegistry:
         Return a JSON-serialisable snapshot of the full mesh.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        persistence_store: Any = None,
+        auto_persist: bool = True,
+        auto_restore: bool = False,
+    ) -> None:
         self._entries: Dict[str, BodyEntry] = {}
-        self._lock = threading.Lock()
+        # Re-entrant lock is required because persistence snapshots call back into
+        # registry.snapshot()/list_entries() while a mutation method still holds
+        # the registry lock.
+        self._lock = threading.RLock()
+        self._persistence_store = persistence_store
+        self._auto_persist = auto_persist
+        self._restore_in_progress = False
+        if auto_restore:
+            self.restore_from_persistence()
 
     # ------------------------------------------------------------------
     # Registration
@@ -241,6 +255,7 @@ class BodyMeshRegistry:
                     device_id,
                     [r.value for r in entry.roles],
                 )
+            self._persist_if_enabled()
             return entry
 
     def unregister(self, device_id: str) -> None:
@@ -251,6 +266,7 @@ class BodyMeshRegistry:
                 logger.info("BodyMeshRegistry: unregistered device=%s", device_id)
             else:
                 logger.debug("BodyMeshRegistry: unregister unknown device=%s", device_id)
+            self._persist_if_enabled()
 
     # ------------------------------------------------------------------
     # Queries
@@ -297,6 +313,7 @@ class BodyMeshRegistry:
                     device_id,
                     entry.body_score,
                 )
+                self._persist_if_enabled()
 
     # ------------------------------------------------------------------
     # Assignment
@@ -357,6 +374,65 @@ class BodyMeshRegistry:
             "total": len(entries),
             "entries": [e.to_dict() for e in entries],
         }
+
+    # ------------------------------------------------------------------
+    # Persistence wiring (B4)
+    # ------------------------------------------------------------------
+
+    def restore_from_persistence(self) -> int:
+        """Restore persisted entries into this registry instance.
+
+        Returns the number of restored entries. Failures are logged and treated
+        as an empty restore so callers never need a try/except wrapper.
+        """
+        try:
+            from core.mesh.body_mesh_persistence import restore_body_mesh_from_snapshot
+        except Exception as exc:
+            logger.debug("BodyMeshRegistry: restore helper unavailable: %s", exc)
+            return 0
+
+        self._restore_in_progress = True
+        try:
+            restored = restore_body_mesh_from_snapshot(
+                registry=self,
+                store=self._get_persistence_store(),
+            )
+            if restored:
+                logger.info(
+                    "BodyMeshRegistry: restored %d persisted entries on startup",
+                    restored,
+                )
+            return restored
+        except Exception as exc:
+            logger.warning("BodyMeshRegistry: restore_from_persistence failed: %s", exc)
+            return 0
+        finally:
+            self._restore_in_progress = False
+
+    def _get_persistence_store(self) -> Any:
+        if self._persistence_store is not None:
+            return self._persistence_store
+        try:
+            from core.mesh.body_mesh_persistence import get_body_mesh_persistence_store
+
+            self._persistence_store = get_body_mesh_persistence_store()
+        except Exception as exc:
+            logger.debug("BodyMeshRegistry: persistence store unavailable: %s", exc)
+            self._persistence_store = None
+        return self._persistence_store
+
+    def _persist_if_enabled(self) -> None:
+        if not self._auto_persist or self._restore_in_progress:
+            return
+        store = self._get_persistence_store()
+        if store is None:
+            return
+        try:
+            from core.mesh.body_mesh_persistence import save_body_mesh_snapshot
+
+            save_body_mesh_snapshot(self, store=store)
+        except Exception as exc:
+            logger.warning("BodyMeshRegistry: persistence update failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Mesh Membership integration (PR-32)
@@ -575,7 +651,7 @@ def get_body_mesh_registry() -> BodyMeshRegistry:
     global _registry
     with _registry_lock:
         if _registry is None:
-            _registry = BodyMeshRegistry()
+            _registry = BodyMeshRegistry(auto_restore=True)
     return _registry
 
 
