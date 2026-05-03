@@ -753,8 +753,13 @@ class TestCompatWebSocketAuthorityChain:
         src = self._read_api_routes()
         branch_start = src.find('elif msg_type == "chat":')
         assert branch_start != -1, 'compat websocket "chat" branch not found'
-        next_branch = src.find("\n                elif ", branch_start + 1)
-        branch_body = src[branch_start:next_branch] if next_branch != -1 else src[branch_start:]
+        candidates = [
+            src.find("\n                elif ", branch_start + 1),
+            src.find("\n                    except ", branch_start + 1),
+        ]
+        valid = [c for c in candidates if c > branch_start]
+        next_boundary = min(valid) if valid else -1
+        branch_body = src[branch_start:next_boundary] if next_boundary != -1 else src[branch_start:]
         assert "clawd.process(" not in branch_body, (
             'compat websocket "chat" branch must not call OpenClawd.process() directly'
         )

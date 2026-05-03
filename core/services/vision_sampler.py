@@ -256,12 +256,12 @@ async def run_sampling_session(
     mm_context = MultiModalContext(images=images)
 
     # ── Call runtime shell ───────────────────────────────────────────────────
-    openclawd_response: Optional[Dict[str, Any]] = None
+    runtime_response: Optional[Dict[str, Any]] = None
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
 
         runtime = get_desktop_presence_runtime()
-        openclawd_response = await runtime.handle_request(
+        runtime_response = await runtime.handle_request(
             message=effective_prompt,
             source="vision_sampler",
             device_id=device_id,
@@ -279,6 +279,7 @@ async def run_sampling_session(
             "success": False,
             "frames_sampled": frames_sampled,
             "openclawd_response": None,
+            "runtime_response": None,
             "command_result": None,
             "error": f"Runtime shell error: {exc}",
         }
@@ -286,10 +287,10 @@ async def run_sampling_session(
     # ── Route action command if present ─────────────────────────────────────
     command_result: Optional[Dict[str, Any]] = None
     action = None
-    if openclawd_response:
+    if runtime_response:
         action = (
-            openclawd_response.get("action")
-            or openclawd_response.get("metadata", {}).get("action")
+            runtime_response.get("action")
+            or runtime_response.get("metadata", {}).get("action")
         )
 
     if action and isinstance(action, dict):
@@ -332,6 +333,7 @@ async def run_sampling_session(
     return {
         "success": True,
         "frames_sampled": frames_sampled,
-        "openclawd_response": openclawd_response,
+        "openclawd_response": runtime_response,
+        "runtime_response": runtime_response,
         "command_result": command_result,
     }

@@ -122,6 +122,7 @@ async def _process_via_runtime_shell(
 
     return {
         "success": bool(result.get("success", True)),
+        "runtime_session_id": result.get("runtime_session_id"),
         "analysis": {
             "response":         result.get("response", ""),
             "execution_path":   result.get("execution_path", ""),
@@ -152,9 +153,15 @@ async def _process_via_vision_pipeline(
         }
         return {
             "success": vision_result.success,
+            "runtime_session_id": None,
             "analysis": analysis,
             "source": "vision_pipeline",
         }
     except Exception as e:
         logger.warning("VisionPipeline unavailable: %s", e)
-        return {"success": False, "error": str(e), "source": "vision_pipeline"}
+        return {
+            "success": False,
+            "runtime_session_id": None,
+            "error": str(e),
+            "source": "vision_pipeline",
+        }
