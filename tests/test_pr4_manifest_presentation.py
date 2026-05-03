@@ -167,7 +167,10 @@ class TestRunExecutionReturnType:
         mock_exec = MagicMock()
         mock_exec.execute.side_effect = RuntimeError("boom")
         oc._decision_executor = mock_exec
-        result = oc._run_execution({}, entry_mode="local")
+        # Patch readiness gate to return None (pass-through) so the executor
+        # is reached and the exception is caught by the error handler.
+        with patch.object(oc, "_check_readiness", return_value=None):
+            result = oc._run_execution({}, entry_mode="local")
         assert isinstance(result, dict)
         assert result["action_taken"] == "error"
 

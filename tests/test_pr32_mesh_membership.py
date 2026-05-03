@@ -775,7 +775,7 @@ class TestProjectionEndpoint:
             mock_registry.get_mesh_memberships.return_value = []
             mock_reg.return_value = mock_registry
 
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = asyncio.run(handler())
             body = json.loads(response.body)
             assert "mesh_id" in body
             assert "total" in body
@@ -799,7 +799,7 @@ class TestProjectionEndpoint:
             "core.mesh.body_mesh_registry.get_body_mesh_registry",
             side_effect=RuntimeError("registry unavailable"),
         ):
-            response = asyncio.get_event_loop().run_until_complete(handler())
+            response = asyncio.run(handler())
             body = json.loads(response.body)
             assert body["total"] == 0
             assert "error" in body

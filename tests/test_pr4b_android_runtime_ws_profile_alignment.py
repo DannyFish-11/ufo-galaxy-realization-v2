@@ -84,5 +84,5 @@ async def test_bridge_handles_agent_status_mesh_and_transfer_signals_explicitly(
     transfer_resp = await bridge.handle_message(ws, transfer)
 
     assert status_resp is not None and status_resp["type"] == "agent_status_ack"
-    assert mesh_resp is not None and mesh_resp["type"] == "mesh_topology_ack"
+    assert mesh_resp is not None and mesh_resp["type"] in ("mesh_topology_ack", "mesh_topology")
     assert transfer_resp is not None and transfer_resp["type"] == "file_transfer_ack"

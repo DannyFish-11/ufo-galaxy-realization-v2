@@ -223,7 +223,18 @@ class TestGroupD_HandleTaskResult:
 
         with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
             with patch.object(_tl, "store_task_result", None):
-                _run(_tl.handle_task_result(bridge, None, msg))
+                # Force legacy path (truth chain unavailable) so
+                # _try_ingest_participant_truth is called directly.
+                with patch.object(_tl, "_run_task_result_truth_chain", None):
+                    # Allow continuity legality check (fail-open).
+                    with patch.object(_tl, "_evaluate_continuity_legality", None):
+                        # Bypass durable idempotency so the same task_id can be
+                        # reused across test sessions without being suppressed.
+                        with patch(
+                            "core.durable_result_idempotency.check_result_idempotency",
+                            return_value=False,
+                        ):
+                            _run(_tl.handle_task_result(bridge, None, msg))
 
         assert any(c.get("truth_kind") == "result" for c in calls)
 
@@ -246,7 +257,15 @@ class TestGroupD_HandleTaskResult:
 
             with patch.object(_tl, "_ingest_participant_truth", _fake_ingest):
                 with patch.object(_tl, "store_task_result", None):
-                    await _tl.handle_task_result(bridge, None, msg)
+                    # Force legacy path and allow continuity legality so the
+                    # function proceeds to resolve the pending future.
+                    with patch.object(_tl, "_run_task_result_truth_chain", None):
+                        with patch.object(_tl, "_evaluate_continuity_legality", None):
+                            with patch(
+                                "core.durable_result_idempotency.check_result_idempotency",
+                                return_value=False,
+                            ):
+                                await _tl.handle_task_result(bridge, None, msg)
 
             resolved.append(fut.done())
 

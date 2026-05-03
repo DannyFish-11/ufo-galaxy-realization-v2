@@ -175,7 +175,7 @@ class TestCognitiveFieldEngine:
             engine.add_tick_listener(ticks.append)
             await engine._do_tick()
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
         assert len(ticks) == 1
         assert "activation" in ticks[0]
         assert "tick_count" in ticks[0]
@@ -187,7 +187,7 @@ class TestCognitiveFieldEngine:
         engine = CognitiveFieldEngine(state=state, enabled=True, tick_interval_s=60.0)
         engine._last_request_ts = 0.0  # simulate long idle
 
-        asyncio.get_event_loop().run_until_complete(engine._do_tick())
+        asyncio.run(engine._do_tick())
         assert state.manifest_pressure < 0.8
         assert state.activation < 0.7
 
@@ -195,8 +195,8 @@ class TestCognitiveFieldEngine:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
         from core.cognitive.continuous_state import CognitiveState
         engine = CognitiveFieldEngine(state=CognitiveState(), enabled=True, tick_interval_s=60.0)
-        asyncio.get_event_loop().run_until_complete(engine._do_tick())
-        asyncio.get_event_loop().run_until_complete(engine._do_tick())
+        asyncio.run(engine._do_tick())
+        asyncio.run(engine._do_tick())
         assert engine.tick_count == 2
 
     def test_disabled_engine_not_started(self) -> None:
@@ -208,7 +208,7 @@ class TestCognitiveFieldEngine:
             await engine.start()
             assert engine._task is None
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
 
     def test_remove_tick_listener(self) -> None:
         from core.cognitive.cognitive_field_engine import CognitiveFieldEngine
@@ -217,7 +217,7 @@ class TestCognitiveFieldEngine:
         engine = CognitiveFieldEngine(state=CognitiveState(), enabled=True, tick_interval_s=60.0)
         engine.add_tick_listener(ticks.append)
         engine.remove_tick_listener(ticks.append)
-        asyncio.get_event_loop().run_until_complete(engine._do_tick())
+        asyncio.run(engine._do_tick())
         assert len(ticks) == 0
 
     def test_singleton(self) -> None:
@@ -402,7 +402,7 @@ class TestDecayController:
         state = CognitiveState(manifest_pressure=0.9, activation=0.8)
         dc = DecayController(state=state, decay_rate=0.20, step_interval_s=0.001, num_steps=5)
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             dc._async_decay_sequence(task_id="t1", trace_id="tr1")
         )
         assert state.manifest_pressure < 0.9
@@ -414,7 +414,7 @@ class TestDecayController:
         state = CognitiveState(manifest_pressure=0.001, activation=0.001)
         dc = DecayController(state=state, decay_rate=0.99, step_interval_s=0.001, num_steps=20)
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             dc._async_decay_sequence(task_id="t2", trace_id="tr2")
         )
         # Should have stopped early
