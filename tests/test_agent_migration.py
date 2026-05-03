@@ -145,7 +145,7 @@ def test_3_sequential_execution():
 
         print("  ✅ 顺序执行模式正确")
 
-    asyncio.get_event_loop().run_until_complete(_test())
+    asyncio.run(_test())
 
 
 def test_4_react_execution():
@@ -220,7 +220,7 @@ def test_4_react_execution():
 
         print("  ✅ ReAct 执行模式正确")
 
-    asyncio.get_event_loop().run_until_complete(_test())
+    asyncio.run(_test())
 
 
 def test_5_full_migration_e2e():
@@ -341,7 +341,7 @@ def test_5_full_migration_e2e():
         print("\n  ✅ 完整 E2E 迁移验证通过!")
         print("     服务端打包 → WS传输 → 端侧校验 → ACK → ReAct执行 → 状态上报 → 结果回传")
 
-    asyncio.get_event_loop().run_until_complete(_test())
+    asyncio.run(_test())
 
 
 def test_6_aip_protocol_types():
