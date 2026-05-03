@@ -455,10 +455,10 @@ class TestBuildArchitectureLiveStatus:
         for p in s.canonical_paths:
             assert p.pr_introduced, f"Empty pr_introduced in {p}"
 
-    def test_44_legacy_zones_non_empty(self):
+    def test_44_legacy_zones_empty_after_mainline_closure(self):
         m = _import_module()
         s = m.build_architecture_live_status()
-        assert len(s.legacy_zones) > 0
+        assert len(s.legacy_zones) == 0
 
     def test_45_legacy_zones_have_path_and_status(self):
         m = _import_module()
@@ -717,25 +717,25 @@ class TestScorecardConsistency:
     def setup_method(self):
         _reset()
 
-    def test_73_canonical_count_gte_7(self):
+    def test_73_canonical_count_is_10(self):
         m = _import_module()
         s = m.build_architecture_live_status()
-        assert s.scorecard_summary["canonical_count"] >= 7
+        assert s.scorecard_summary["canonical_count"] == 10
 
-    def test_74_legacy_ambiguity_count_is_2(self):
+    def test_74_legacy_ambiguity_count_is_0(self):
         m = _import_module()
         s = m.build_architecture_live_status()
-        assert s.scorecard_summary["legacy_ambiguity_count"] == 2
+        assert s.scorecard_summary["legacy_ambiguity_count"] == 0
 
     def test_75_blocking_count_is_0_by_default(self):
         m = _import_module()
         s = m.build_architecture_live_status()
         assert s.scorecard_summary["blocking_count"] == 0
 
-    def test_76_runtime_readiness_is_partial_by_default(self):
+    def test_76_runtime_readiness_is_ready_by_default(self):
         m = _import_module()
         s = m.build_architecture_live_status()
-        assert s.runtime_readiness == "partial"
+        assert s.runtime_readiness == "ready"
 
 
 # ===========================================================================

@@ -752,6 +752,43 @@ class GitHubInstaller:
                     "ref": effective_ref,
                 }
 
+        # 5b. Early contract validation for Skill addons — reject before installing deps
+        if detected_type == "skill" and skill_manifest_path.exists():
+            if not isinstance(tool_manifest, dict):
+                return {
+                    "success": False,
+                    "error": (
+                        "skill.json contract validation failed: "
+                        f"skill.json must be a JSON object (dict), got {type(tool_manifest).__name__}"
+                    ),
+                    "violations": [
+                        f"skill.json must be a JSON object (dict), got {type(tool_manifest).__name__}"
+                    ],
+                    "owner": owner,
+                    "repo": repo,
+                    "ref": effective_ref,
+                }
+            try:
+                from core.skill_package_contract import (
+                    SkillPackageContractError,
+                    validate_skill_package_contract,
+                )
+                validate_skill_package_contract(tool_manifest)
+            except SkillPackageContractError as contract_exc:
+                logger.warning(
+                    "Skill package contract validation failed for %s/%s: %s",
+                    owner, repo, contract_exc.violations,
+                )
+                return {
+                    "success": False,
+                    "error": f"skill.json contract validation failed: {contract_exc}",
+                    "violations": contract_exc.violations,
+                    "error_code": contract_exc.error_code,
+                    "owner": owner,
+                    "repo": repo,
+                    "ref": effective_ref,
+                }
+
         addon_name = tool_manifest.get("name") or repo
 
         # 6. Install dependencies

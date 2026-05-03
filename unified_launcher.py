@@ -231,12 +231,9 @@ class UnifiedWebUI:
           所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
 
           当前系统表层方向：桌面三态运行层 + 桌面状态板（desktop tri-state runtime
-          + desktop status surface）。dashboard/frontend 是 **遗留表层**，不是
-          现行主系统表层，仅作过渡期兼容保留。
+          + desktop status surface）。dashboard/ 已删除，不再作为运行时表层。
 
           1. 以内建 FastAPI 应用为主应用（权威应用）。
-             可选：加载 dashboard.backend.main 的遗留路由作为非主路由
-             （低优先级，会被步骤 3 中 core.api_routes 的同路径路由覆盖）。
           2. 在其上叠加 core.startup 引导的子系统中间件
           3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
              监控、观测性、AI、chat 等全部路由）
@@ -246,24 +243,11 @@ class UnifiedWebUI:
         注意：此启动器 **不应** 定义自己的 inline API 路由。
         如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
         """
-        # dashboard/frontend 是遗留表层，其静态资源不存在属于正常情况，仅 debug 级记录。
-        frontend_index = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
-        frontend_dist = PROJECT_ROOT / "dashboard" / "frontend" / "dist"
-        if not frontend_index.exists():
-            logger.debug(
-                "Legacy dashboard frontend 静态资源未找到: %s（非当前主表层，可忽略）",
-                frontend_index,
-            )
-            if frontend_dist.exists():
-                logger.debug("检测到遗留构建产物目录 %s，但缺少 public/index.html", frontend_dist)
         try:
             from fastapi.responses import HTMLResponse, JSONResponse
             import uvicorn
 
             # === 步骤 1：以内建 FastAPI 应用为主应用（权威 API 基础） ===
-            # dashboard/frontend 是遗留表层（PR-8 已降级），不作为主应用基础。
-            # 遗留 dashboard 路由将在后续步骤以非主路由形式可选加载，
-            # 并会被 core.api_routes 的同路径路由覆盖。
             from fastapi import FastAPI
             from fastapi.middleware.cors import CORSMiddleware
             from nodes.common.cors_config import get_cors_origins
@@ -279,24 +263,6 @@ class UnifiedWebUI:
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
-
-            # Optional: load legacy dashboard routes (non-primary, superseded by core.api_routes).
-            # dashboard/backend/main.py is a LEGACY UI SURFACE (PR-8).  Any overlapping routes
-            # defined there will be superseded by the core.api_routes layer in Step 3.
-            try:
-                from dashboard.backend import main as _dashboard_backend_module
-                _legacy_app = getattr(_dashboard_backend_module, "app", None)
-                if _legacy_app is not None:
-                    _existing_paths = {getattr(r, "path", None) for r in self.app.routes}
-                    for _route in getattr(_legacy_app, "routes", []):
-                        if hasattr(_route, "path") and _route.path not in _existing_paths:
-                            self.app.routes.append(_route)
-                            _existing_paths.add(_route.path)
-                    logger.debug(
-                        "Legacy dashboard routes imported (non-primary; superseded by core.api_routes)"
-                    )
-            except Exception as _e:
-                logger.debug("Legacy dashboard backend not loaded (expected if removed): %s", _e)
 
             # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
             try:

@@ -64,7 +64,7 @@ def test_report_node_count_matches_real_node_directory_count():
     assert report.node_count == expected
 
 
-def test_text_rendering_exposes_completion_and_remaining_gaps():
+def test_text_rendering_exposes_completion_and_closure():
     report = _build_report()
     render_text_report = _load_module()["render_text_report"]
     text = render_text_report(report)
@@ -72,8 +72,14 @@ def test_text_rendering_exposes_completion_and_remaining_gaps():
     assert "Galaxy 主链真实现状" in text
     assert f"{report.completion_pct:.1f}%" in text
     assert report.runtime_readiness in text
-    assert "capability_integration_completeness" in text
-    assert "installability_ecosystem_readiness" in text
+    assert "当前无主链阻塞或遗留模糊维度" in text
+    assert "当前遗留模糊维度：无" in text
+    assert "当前未发现需要特别提示的遗留表层" in text
+    assert report.completion_pct == 100.0
+    assert report.runtime_readiness == "ready"
+    assert report.canonical_dimension_count == report.total_dimensions
+    assert report.main_blockers == []
+    assert report.active_legacy_surfaces == []
 
 
 def test_cli_json_output_is_machine_readable():

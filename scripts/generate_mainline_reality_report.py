@@ -154,7 +154,12 @@ def render_text_report(report: MainlineRealityReport) -> str:
         for item in report.active_legacy_surfaces
     ] or ["- 当前未发现需要特别提示的遗留表层"]
 
-    blocker_lines = [f"- {item}" for item in report.main_blockers] or ["- 当前无 blocking 级阻塞，但仍有收尾项"]
+    blocker_lines = [f"- {item}" for item in report.main_blockers] or ["- 当前无主链阻塞或遗留模糊维度"]
+    conclusion_status = (
+        "按代码里的权威评分，当前主链架构已收口到 ready 状态。"
+        if report.runtime_readiness == "ready" and not report.legacy_ambiguity_dimensions
+        else "按代码里的权威评分，现在更接近“主链已成型、仍在收口”的 partial 状态。"
+    )
 
     return "\n".join(
         [
@@ -195,8 +200,8 @@ def render_text_report(report: MainlineRealityReport) -> str:
                 "节点体系和跨设备链条都在。"
             ),
             (
-                "- 但它也不是完全收官的成品：按代码里的权威评分，"
-                "现在更接近“主链已成型、仍在收口”的 partial 状态。"
+                "- 但这个百分比仍只代表主链架构完成度；"
+                + conclusion_status
             ),
         ]
     )

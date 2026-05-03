@@ -783,9 +783,9 @@ class TestProjectionOutwardTruthCrossModule:
         )
         assert is_projection_driven_surface("windows_client.status_board_v2")
 
-    def test_ui_surface_authority_dashboard_is_legacy(self):
+    def test_ui_surface_authority_dashboard_is_deleted_not_legacy(self):
         from core.ui_surface_authority import is_legacy_surface
-        assert is_legacy_surface("dashboard.backend.main")
+        assert not is_legacy_surface("dashboard.backend.main")
 
     def test_projection_driven_label_matches_ui_surface_authority_role(self):
         from core.ui_surface_authority import UISurfaceRole
@@ -841,17 +841,17 @@ class TestInstallableAddonContractMetadata:
         dim = sc.dimension_by_name(CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS)
         assert dim is not None
 
-    def test_scorecard_installability_dimension_has_partial_maturity(self):
+    def test_scorecard_installability_dimension_is_complete(self):
         sc = get_architecture_completion_scorecard()
         dim = sc.dimension_by_name(CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS)
         assert dim is not None
-        assert dim.maturity_level == MaturityLevel.PARTIAL
+        assert dim.maturity_level == MaturityLevel.COMPLETE
 
-    def test_scorecard_capability_integration_dimension_has_partial_maturity(self):
+    def test_scorecard_capability_integration_dimension_is_complete(self):
         sc = get_architecture_completion_scorecard()
         dim = sc.dimension_by_name(CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS)
         assert dim is not None
-        assert dim.maturity_level == MaturityLevel.PARTIAL
+        assert dim.maturity_level == MaturityLevel.COMPLETE
 
     def test_mcp_addon_contract_type_is_canonical(self):
         assert "mcp_addon" in CANONICAL_ADDON_CONTRACT_TYPES

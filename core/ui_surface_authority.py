@@ -11,9 +11,9 @@ architecture.
 ------------------------
 The intended outward-facing model for system status is a **desktop status
 board that consumes projection output only**.  Historical UI surfaces
-(``dashboard/`` and ``windows_client/``) still exist for compatibility but
-must no longer imply architectural authority, define system structure, or
-maintain a parallel source of truth for system state.
+(``dashboard/`` and the root ``windows_client`` legacy shell) are retired and
+must not be reintroduced as architectural authorities or parallel state
+sources.
 
 This module is the authoritative registry for UI surface roles across the
 Galaxy codebase.  It answers three questions:
@@ -46,10 +46,11 @@ Authority model::
     │  contracts.desktop_status_projection                     │
     └──────────────────────────────────────────────────────────┘
 
-Legacy surfaces that must NOT define system structure or parallel state::
+Retired surfaces that must NOT be reintroduced as system structure or parallel state::
 
-    dashboard/          →  LEGACY_UI     (WebUI management panel)
-    windows_client/     →  LEGACY_SHELL  (host-specific legacy shell)
+    dashboard/                    →  DELETED  (former WebUI management panel)
+    windows_client/main.py         →  DELETED  (former host-specific shell)
+    windows_client/status_board.py →  DELETED  (former ad-hoc status board)
 
 Usage::
 
@@ -62,7 +63,7 @@ Usage::
         get_ui_surface_authority,
     )
 
-    assert is_legacy_surface("dashboard.backend.main")
+    assert not is_legacy_surface("dashboard.backend.main")
     assert is_projection_driven_surface("windows_client.status_board_v2")
     summary = build_ui_surface_authority_summary()
 """
@@ -124,6 +125,7 @@ class UISurfaceRole(str, Enum):
     LEGACY_UI = "legacy_ui"
     LEGACY_SHELL = "legacy_shell"
     COMPATIBILITY_ONLY = "compatibility_only"
+    DELETED = "deleted"
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +242,11 @@ class UISurfaceAuthorityRegistry:
     def legacy_surfaces(self) -> List[UISurfaceEntry]:
         """Return all ``LEGACY_*`` and ``COMPATIBILITY_ONLY`` entries."""
         return [e for e in self._registry.values()
-                if e.role != UISurfaceRole.PROJECTION_DRIVEN]
+                if e.role in (
+                    UISurfaceRole.LEGACY_UI,
+                    UISurfaceRole.LEGACY_SHELL,
+                    UISurfaceRole.COMPATIBILITY_ONLY,
+                )]
 
     def summary(self) -> Dict:
         """Return a structured summary dict (used by builders and tests)."""
@@ -288,96 +294,80 @@ _REGISTRY._register(
     ),
 
     # ------------------------------------------------------------------
-    # LEGACY_UI — dashboard/ (WebUI management panel)
+    # DELETED — dashboard/ (retired WebUI management panel)
     # ------------------------------------------------------------------
     UISurfaceEntry(
         surface_path="dashboard.backend.main",
-        role=UISurfaceRole.LEGACY_UI,
+        role=UISurfaceRole.DELETED,
         description=(
-            "Galaxy Dashboard — legacy WebUI management panel.  "
-            "Retained for compatibility only.  "
+            "Galaxy Dashboard — deleted non-mainline WebUI surface.  "
             "Does not define system structure or represent the canonical "
             "outward status truth."
         ),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
-        pr_demoted="PR-8",
+        pr_demoted="PR-mainline-closure",
         notes=(
-            "dashboard/ is a LEGACY UI SURFACE (PR-8).  "
-            "It must not be treated as the architectural source of truth "
-            "for system state.  The /api/v1/* routes in this module are "
-            "historical; the authoritative REST API is core/api_routes.py "
-            "and core/routes/*.  "
-            "For status presentation, consumers must read from "
+            "dashboard/ has been deleted as non-mainline noise. The "
+            "authoritative REST/API status surfaces are core/routes/* and "
             "GET /api/v1/projection/runtime (RuntimeProjection / "
-            "DesktopStatusProjection contract).  "
-            "dashboard/ may survive as a static-file server and management "
-            "convenience panel, but it is NOT the primary desktop interaction "
-            "model and must not maintain a parallel authoritative state."
+            "DesktopStatusProjection contract)."
         ),
     ),
     UISurfaceEntry(
         surface_path="dashboard",
-        role=UISurfaceRole.LEGACY_UI,
-        description="Galaxy Dashboard package — legacy UI surface (PR-8).",
+        role=UISurfaceRole.DELETED,
+        description="Galaxy Dashboard package — deleted non-mainline UI surface.",
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
-        pr_demoted="PR-8",
-        notes="See dashboard.backend.main entry for full notes. dashboard/ — LEGACY UI SURFACE.  Demoted in PR-8.",
+        pr_demoted="PR-mainline-closure",
+        notes="dashboard/ is DELETED; do not recreate it as a status authority.",
     ),
 
     # ------------------------------------------------------------------
-    # LEGACY_SHELL — windows_client/ (host-specific legacy shell)
+    # DELETED — windows_client/ root legacy shell/status surfaces
     # ------------------------------------------------------------------
     UISurfaceEntry(
         surface_path="windows_client.main",
-        role=UISurfaceRole.LEGACY_SHELL,
+        role=UISurfaceRole.DELETED,
         description=(
-            "Windows Client main entry-point — host-specific legacy shell.  "
-            "Retained for compatibility.  "
-            "Not the primary desktop interaction philosophy."
+            "Windows Client main entry-point — deleted host-specific legacy shell."
         ),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
-        pr_demoted="PR-8",
+        pr_demoted="PR-mainline-closure",
         notes=(
-            "windows_client/ is a HOST-SPECIFIC LEGACY SHELL (PR-8).  "
-            "It must not define the primary desktop interaction philosophy "
-            "or act as the outward-facing status authority.  "
-            "New desktop status consumers must use the projection-driven "
-            "windows_client.status_board_v2 which reads from "
-            "GET /api/v1/projection/runtime."
+            "windows_client/main.py is DELETED as non-mainline shell noise. "
+            "Desktop status consumers must use the projection-driven "
+            "windows_client.status_board_v2."
         ),
     ),
     UISurfaceEntry(
         surface_path="windows_client.status_board",
-        role=UISurfaceRole.LEGACY_SHELL,
+        role=UISurfaceRole.DELETED,
         description=(
-            "windows_client/status_board.py — legacy minimal status board.  "
-            "Polls /api/v1/continuum/state (ad-hoc, non-projection endpoint).  "
-            "Superseded by status_board_v2 which uses the canonical projection "
-            "endpoint /api/v1/projection/runtime."
+            "windows_client/status_board.py — deleted ad-hoc status board."
         ),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
-        pr_demoted="PR-8",
+        pr_demoted="PR-mainline-closure",
         notes=(
-            "status_board.py is a LEGACY STATUS BOARD (PR-8).  "
-            "It polls /api/v1/continuum/state which is an ad-hoc non-projection "
-            "endpoint.  The canonical replacement is status_board_v2/ which "
-            "consumes the RuntimeProjection contract from "
-            "GET /api/v1/projection/runtime.  "
-            "Do not extend this module; extend status_board_v2/ instead."
+            "status_board.py is DELETED. The canonical replacement is "
+            "status_board_v2/ which consumes the RuntimeProjection contract from "
+            "GET /api/v1/projection/runtime."
         ),
     ),
     UISurfaceEntry(
         surface_path="windows_client",
-        role=UISurfaceRole.LEGACY_SHELL,
-        description="windows_client/ package — host-specific legacy shell (PR-8).",
+        role=UISurfaceRole.DELETED,
+        description=(
+            "windows_client/ root shell surface — retired; package remains only "
+            "to host windows_client.status_board_v2 and runtime adapters."
+        ),
         canonical_contract=None,
         superseded_by="windows_client.status_board_v2",
-        pr_demoted="PR-8",
-        notes="See windows_client.main entry for full notes.",
+        pr_demoted="PR-mainline-closure",
+        notes="The root shell authority is deleted; status_board_v2 is the canonical surface.",
     ),
 )
 
@@ -395,7 +385,8 @@ def is_legacy_surface(surface_path: str) -> bool:
 
     Legacy surfaces include :attr:`~UISurfaceRole.LEGACY_UI`,
     :attr:`~UISurfaceRole.LEGACY_SHELL`, and
-    :attr:`~UISurfaceRole.COMPATIBILITY_ONLY`.
+    :attr:`~UISurfaceRole.COMPATIBILITY_ONLY`. Deleted audit records are not
+    treated as live legacy surfaces.
     """
     return _REGISTRY.is_legacy(surface_path)
 
@@ -427,7 +418,7 @@ def build_ui_surface_authority_summary() -> Dict:
         {
           "total_surfaces": 6,
           "projection_driven_count": 1,
-          "legacy_count": 5,
+          "legacy_count": 0,
           "projection_is_only_outward_truth": True,
           "surfaces": [...]
         }

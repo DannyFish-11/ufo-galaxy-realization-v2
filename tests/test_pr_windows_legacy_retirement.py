@@ -9,7 +9,7 @@ PR: Remove legacy Windows client stack / retire-windows-legacy-client-stack
 
 Test groups
 -----------
-  A) Hard-disabled stubs: verify legacy modules raise RuntimeError on import
+  A) Hard-disabled stubs/deletions: verify legacy modules raise RuntimeError on import
      and emit DeprecationWarning.
   B) Active Windows direction: verify status_board_v2 and windows_aip_client
      remain importable (not hard-disabled).
@@ -77,7 +77,6 @@ class TestHardDisabledLegacyModules:
         "windows_client.ui_sidebar",
         "windows_client.desktop_automation",
         "windows_client.windows_mcp_server",
-        "windows_client.main",
         "windows_client.windows_client_integrated",
         "windows_client.key_listener",
     ])
@@ -91,7 +90,6 @@ class TestHardDisabledLegacyModules:
         "windows_client.ui_sidebar",
         "windows_client.desktop_automation",
         "windows_client.windows_mcp_server",
-        "windows_client.main",
         "windows_client.windows_client_integrated",
         "windows_client.key_listener",
     ])
@@ -101,17 +99,9 @@ class TestHardDisabledLegacyModules:
             f"{module_name} must emit DeprecationWarning before raising RuntimeError"
         )
 
-    def test_main_stub_references_active_direction(self):
-        """windows_client/main.py stub must mention the active Windows direction."""
-        content = (_WC / "main.py").read_text()
-        assert "DesktopPresenceRuntime" in content or "status_board_v2" in content, (
-            "main.py stub must reference the active Windows direction"
-        )
-
-    def test_main_stub_mentions_tristate(self):
-        """windows_client/main.py stub must mention tri-state."""
-        content = (_WC / "main.py").read_text()
-        assert "tri-state" in content.lower() or "tristate" in content.lower() or "silent" in content.lower()
+    def test_main_stub_is_deleted(self):
+        """windows_client/main.py has moved from hard-disabled stub to deleted surface."""
+        assert not (_WC / "main.py").exists()
 
     def test_integrated_stub_references_active_direction(self):
         """windows_client_integrated.py stub must mention the active direction."""
@@ -268,7 +258,6 @@ class TestStubsReferenceDocumentation:
         "ui_sidebar.py",
         "desktop_automation.py",
         "windows_mcp_server.py",
-        "main.py",
         "windows_client_integrated.py",
         "key_listener.py",
     ])

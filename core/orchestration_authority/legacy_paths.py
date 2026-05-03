@@ -477,84 +477,70 @@ _register(
 # model is the projection-driven windows_client.status_board_v2 which reads
 # from GET /api/v1/projection/runtime (RuntimeProjection /
 # DesktopStatusProjection contract).  dashboard/ and windows_client/ (excluding
-# status_board_v2) are hereby classified as legacy compatibility surfaces.
+# status_board_v2) are retained only as deleted audit records.
 _register(
     LegacyPathEntry(
         module_path="dashboard.backend.main",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
-            "dashboard/backend/main.py is a LEGACY UI SURFACE (PR-8).  "
-            "The /api/v1/* routes defined here are historical; the authoritative "
-            "REST API is core/api_routes.py and the core/routes/* sub-modules.  "
-            "For outward-facing system status, consumers must read from "
-            "GET /api/v1/projection/runtime (RuntimeProjection / "
-            "DesktopStatusProjection contract) rather than dashboard-owned "
-            "endpoints.  dashboard/ may remain as a static-file server and "
-            "management convenience panel, but it must not define system "
-            "structure or maintain a parallel authoritative state."
+            "dashboard/backend/main.py has been deleted as a non-mainline UI "
+            "surface. The authoritative REST API is core/api_routes.py and "
+            "core/routes/*; outward-facing status consumers read "
+            "GET /api/v1/projection/runtime."
         ),
-        pr_guardrail_added="PR-8",
+        pr_guardrail_added="PR-mainline-closure",
         notes=(
-            "dashboard/ — LEGACY UI SURFACE.  "
-            "Demoted in PR-8: not the architectural source of truth for system "
-            "state.  Do not add new status-authority endpoints here."
+            "dashboard/ — DELETED non-mainline UI surface. Do not recreate "
+            "status-authority endpoints here."
         ),
     ),
     LegacyPathEntry(
         module_path="dashboard",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
-            "dashboard/ package is a LEGACY UI SURFACE (PR-8).  "
-            "See dashboard.backend.main entry for migration guidance."
+            "dashboard/ package has been deleted. Use "
+            "windows_client.status_board_v2 and projection routes instead."
         ),
-        pr_guardrail_added="PR-8",
-        notes="dashboard/ — LEGACY UI SURFACE.  Demoted in PR-8.",
+        pr_guardrail_added="PR-mainline-closure",
+        notes="dashboard/ — DELETED non-mainline UI surface.",
     ),
     LegacyPathEntry(
         module_path="windows_client.main",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
-            "windows_client/main.py is a HOST-SPECIFIC LEGACY SHELL (PR-8).  "
-            "It must not define the primary desktop interaction philosophy or "
-            "act as the outward-facing status authority.  "
-            "New desktop status consumers must use the projection-driven "
-            "windows_client.status_board_v2 which reads from "
-            "GET /api/v1/projection/runtime."
+            "windows_client/main.py has been deleted as host-specific legacy "
+            "shell noise. Desktop status consumers must use "
+            "windows_client.status_board_v2."
         ),
-        pr_guardrail_added="PR-8",
+        pr_guardrail_added="PR-mainline-closure",
         notes=(
-            "windows_client/ — HOST-SPECIFIC LEGACY SHELL.  "
-            "Demoted in PR-8: projection is the single outward truth for "
-            "status presentation."
+            "windows_client/main.py — DELETED host-specific legacy shell. "
+            "Projection is the single outward truth for status presentation."
         ),
     ),
     LegacyPathEntry(
         module_path="windows_client.status_board",
-        status=LegacyPathStatus.DEPRECATED,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
-            "windows_client/status_board.py is a LEGACY STATUS BOARD (PR-8).  "
-            "It polls /api/v1/continuum/state which is an ad-hoc non-projection "
-            "endpoint.  The canonical replacement is windows_client.status_board_v2 "
-            "which consumes the RuntimeProjection contract from "
-            "GET /api/v1/projection/runtime.  "
-            "Do not extend this module; extend status_board_v2/ instead."
+            "windows_client/status_board.py has been deleted. The canonical "
+            "replacement is windows_client.status_board_v2, which consumes the "
+            "RuntimeProjection contract from GET /api/v1/projection/runtime."
         ),
-        pr_guardrail_added="PR-8",
+        pr_guardrail_added="PR-mainline-closure",
         notes=(
-            "windows_client/status_board.py — LEGACY STATUS BOARD (deprecated).  "
-            "Superseded by status_board_v2/ in PR-8.  "
-            "Uses ad-hoc /api/v1/continuum/state endpoint instead of projection."
+            "windows_client/status_board.py — DELETED ad-hoc status board. "
+            "Superseded by status_board_v2/."
         ),
     ),
     LegacyPathEntry(
         module_path="windows_client",
-        status=LegacyPathStatus.LEGACY_COMPATIBILITY,
+        status=LegacyPathStatus.DELETED,
         recommendation=(
-            "windows_client/ package is a HOST-SPECIFIC LEGACY SHELL (PR-8).  "
-            "See windows_client.main entry for migration guidance."
+            "windows_client/ root shell authority is deleted; the package remains "
+            "only to host windows_client.status_board_v2 and runtime adapters."
         ),
-        pr_guardrail_added="PR-8",
-        notes="windows_client/ — HOST-SPECIFIC LEGACY SHELL.  Demoted in PR-8.",
+        pr_guardrail_added="PR-mainline-closure",
+        notes="windows_client/ root shell authority — DELETED; status_board_v2 is canonical.",
     ),
 )
 
