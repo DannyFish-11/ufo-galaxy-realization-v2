@@ -1638,6 +1638,7 @@ class DeviceRouter:
         # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
         _is_canonical_call = bool(_substrate_caller)
         if not _is_canonical_call:
+            get_gateway_metrics().inc("legacy_dispatch_total")
             logger.warning(
                 "LEGACY_DISPATCH | DeviceRouter._dispatch_cross_device_task "
                 "called without a canonical substrate caller.  "

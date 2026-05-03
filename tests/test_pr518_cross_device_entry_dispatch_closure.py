@@ -311,6 +311,27 @@ class TestC_CoordinatorSubstrateGuard(unittest.TestCase):
                     )
                 )
 
+    def test_C6_non_canonical_call_increments_legacy_dispatch_counter(self):
+        """C6. Non-canonical cross-device call increments observable counter."""
+        from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+        from galaxy_gateway.observability import get_gateway_metrics
+
+        coord = CrossDeviceCoordinator()
+        metrics = get_gateway_metrics()
+        before = metrics.legacy_dispatch_total
+
+        with patch.object(
+            coord, "_analyze_cross_device_task", return_value="generic"
+        ), patch.object(
+            coord, "_execute_generic_cross_device_task",
+            new_callable=AsyncMock, return_value={"success": True},
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                coord.execute_cross_device_task("test command")
+            )
+
+        self.assertEqual(metrics.legacy_dispatch_total, before + 1)
+
 
 # ---------------------------------------------------------------------------
 # D) GAP-517-003: DeviceRouter._dispatch_cross_device_task substrate guard
@@ -370,13 +391,17 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
             router, "dispatch_task",
             new_callable=AsyncMock, return_value={"success": True},
         ):
-            with self.assertNoLogs("galaxy_gateway.device_router", level="WARNING"):
+            with self.assertLogs("galaxy_gateway.device_router", level="WARNING") as cm:
                 asyncio.get_event_loop().run_until_complete(
                     router._dispatch_cross_device_task(
                         task, [dev],
                         _substrate_caller="device_router.route_task",
                     )
                 )
+            self.assertFalse(
+                any("LEGACY_DISPATCH" in msg for msg in cm.output),
+                f"Unexpected LEGACY_DISPATCH warning: {cm.output}",
+            )
 
     def test_D4_route_task_passes_substrate_caller(self):
         """D4. route_task() passes _substrate_caller to _dispatch_cross_device_task."""
@@ -386,6 +411,31 @@ class TestD_DeviceRouterSubstrateGuard(unittest.TestCase):
         # Verify that _dispatch_cross_device_task is called with substrate_caller
         self.assertIn("_substrate_caller", src)
         self.assertIn("device_router.route_task", src)
+
+    def test_D5_non_canonical_call_increments_legacy_dispatch_counter(self):
+        """D5. Non-canonical router substrate call increments observable counter."""
+        from galaxy_gateway.device_router import DeviceRouter, Device
+        from galaxy_gateway.observability import get_gateway_metrics
+
+        router = DeviceRouter()
+        dev = Device(device_id="dev_counter", device_type="android_phone", capabilities=[])
+        task = {"task_id": "t_counter", "trace_id": "tr_counter", "command": "test_cmd", "payload": {}}
+        metrics = get_gateway_metrics()
+        before = metrics.legacy_dispatch_total
+
+        with patch(
+            "galaxy_gateway.device_router.is_cross_device_enabled", return_value=True
+        ), patch.object(
+            router, "_decompose_task", return_value=[task]
+        ), patch.object(
+            router, "dispatch_task",
+            new_callable=AsyncMock, return_value={"success": True},
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                router._dispatch_cross_device_task(task, [dev])
+            )
+
+        self.assertEqual(metrics.legacy_dispatch_total, before + 1)
 
 
 # ---------------------------------------------------------------------------

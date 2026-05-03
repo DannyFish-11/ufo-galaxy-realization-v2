@@ -392,6 +392,22 @@ class DevicePoolManager:
         """
         effective_strategy = strategy or self.strategy
         exclude_set = set(exclude or [])
+        canonical_candidate_ids: Optional[set[str]] = None
+
+        try:
+            from core.capability_network_runtime_policy import query_routable_executors
+
+            canonical_executors = query_routable_executors(required_capabilities)
+            canonical_candidate_ids = {
+                str(executor.node_id)
+                for executor in canonical_executors
+                if getattr(executor, "node_id", None)
+            }
+        except Exception as exc:
+            logger.debug(
+                "DevicePoolManager.select_device: canonical capability/runtime query unavailable: %s",
+                exc,
+            )
 
         with self._lock:
             candidates = [
@@ -399,6 +415,10 @@ class DevicePoolManager:
                 if dev.device_id not in exclude_set
                 and not dev.is_full
                 and self._is_eligible(dev.device_id)
+                and (
+                    canonical_candidate_ids is None
+                    or dev.device_id in canonical_candidate_ids
+                )
                 and (not device_type or dev.device_type == device_type)
                 and (
                     not required_capabilities

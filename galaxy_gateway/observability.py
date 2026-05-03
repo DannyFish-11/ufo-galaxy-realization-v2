@@ -300,6 +300,7 @@ class GatewayMetrics:
     routing_total             Total task routing attempts.
     routing_success           Successful task routings.
     routing_failure           Failed task routings.
+    legacy_dispatch_total     Observable count of non-canonical legacy dispatches.
 
     Histograms
     ----------
@@ -324,6 +325,7 @@ class GatewayMetrics:
         self.routing_total: int = 0
         self.routing_success: int = 0
         self.routing_failure: int = 0
+        self.legacy_dispatch_total: int = 0
 
         # --- histograms ---
         self.signaling_latency_ms = _LatencyHistogram()
@@ -369,6 +371,9 @@ class GatewayMetrics:
                     "success": self.routing_success,
                     "failure": self.routing_failure,
                     "latency_ms": self.routing_latency_ms.snapshot(),
+                },
+                "legacy_dispatch": {
+                    "total": self.legacy_dispatch_total,
                 },
             }
 
@@ -421,6 +426,9 @@ class GatewayMetrics:
             _counter("galaxy_gateway_routing_failure_total",
                      "Failed task routings",
                      self.routing_failure)
+            _counter("galaxy_legacy_dispatch_total",
+                     "Observable count of legacy dispatch path activations",
+                     self.legacy_dispatch_total)
 
         lines.extend(self.signaling_latency_ms.to_prometheus_lines(
             "galaxy_gateway_signaling_latency_ms",
