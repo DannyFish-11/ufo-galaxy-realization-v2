@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -22,6 +22,13 @@ from typing import Any, Dict, List
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+
+@dataclass(frozen=True)
+class LegacySurfaceSummary:
+    path: str
+    status: str
+    superseded_by: str
 
 
 @dataclass(frozen=True)
@@ -38,7 +45,7 @@ class MainlineRealityReport:
     total_dimensions: int
     legacy_ambiguity_dimensions: List[str] = field(default_factory=list)
     main_blockers: List[str] = field(default_factory=list)
-    active_legacy_surfaces: List[Dict[str, str]] = field(default_factory=list)
+    active_legacy_surfaces: List[LegacySurfaceSummary] = field(default_factory=list)
     key_code_evidence: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -55,7 +62,7 @@ class MainlineRealityReport:
             "total_dimensions": self.total_dimensions,
             "legacy_ambiguity_dimensions": list(self.legacy_ambiguity_dimensions),
             "main_blockers": list(self.main_blockers),
-            "active_legacy_surfaces": list(self.active_legacy_surfaces),
+            "active_legacy_surfaces": [asdict(item) for item in self.active_legacy_surfaces],
             "key_code_evidence": list(self.key_code_evidence),
         }
 
@@ -78,17 +85,17 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
     live_status = get_architecture_live_status(force_rebuild=True)
 
     blockers: List[str] = []
-    for dimension in scorecard.dimensions:
-        if dimension.legacy_ambiguity_remains or dimension.maturity_level.is_blocking():
-            for blocker in dimension.blockers or []:
-                blockers.append(f"{dimension.dimension.value}: {blocker}")
+    for dimension_item in scorecard.dimensions:
+        if dimension_item.legacy_ambiguity_remains or dimension_item.maturity_level.is_blocking():
+            for blocker in dimension_item.blockers or []:
+                blockers.append(f"{dimension_item.dimension.value}: {blocker}")
 
     legacy_surfaces = [
-        {
-            "path": zone.path,
-            "status": zone.status,
-            "superseded_by": zone.superseded_by or "",
-        }
+        LegacySurfaceSummary(
+            path=zone.path,
+            status=zone.status,
+            superseded_by=zone.superseded_by or "",
+        )
         for zone in live_status.legacy_zones[:5]
     ]
 
@@ -143,7 +150,7 @@ def build_mainline_reality_report(repo_root: Path = REPO_ROOT) -> MainlineRealit
 
 def render_text_report(report: MainlineRealityReport) -> str:
     legacy_lines = [
-        f"- {item['path']}（{item['status']}）→ {item['superseded_by'] or '无'}"
+        f"- {item.path}（{item.status}）→ {item.superseded_by or '无'}"
         for item in report.active_legacy_surfaces
     ] or ["- 当前未发现需要特别提示的遗留表层"]
 

@@ -15,11 +15,15 @@ from tools.architecture.architecture_live_status import get_architecture_live_st
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "scripts" / "generate_mainline_reality_report.py"
-MODULE = runpy.run_path(str(SCRIPT_PATH))
+
+
+def _load_module():
+    return runpy.run_path(str(SCRIPT_PATH))
 
 
 def _build_report():
-    return MODULE["build_mainline_reality_report"](REPO_ROOT)
+    module = _load_module()
+    return module["build_mainline_reality_report"](REPO_ROOT)
 
 
 def test_report_tracks_authoritative_scorecard_and_live_status():
@@ -62,7 +66,7 @@ def test_report_node_count_matches_real_node_directory_count():
 
 def test_text_rendering_exposes_completion_and_remaining_gaps():
     report = _build_report()
-    render_text_report = MODULE["render_text_report"]
+    render_text_report = _load_module()["render_text_report"]
     text = render_text_report(report)
 
     assert "Galaxy 主链真实现状" in text
