@@ -170,25 +170,17 @@ class TestAllProvidersDown:
 
 
 # ============================================================================
-# Test 5: Dashboard Router 单例
+# Test 5: Dashboard deletion
 # ============================================================================
 
 class TestDashboardRouterSingleton:
-    """验证 Dashboard 使用全局 Router 单例"""
+    """验证 dashboard 旧表层已删除。"""
 
-    def test_dashboard_imports_singleton(self):
-        """Dashboard 应使用 get_llm_router 而非 MultiLLMRouter()"""
-        import ast
-        with open("dashboard/backend/main.py", "r", encoding="utf-8") as f:
-            source = f.read()
-        # 检查使用 get_llm_router 而非 MultiLLMRouter()
-        assert "get_llm_router" in source, "Dashboard 应导入 get_llm_router"
-        # 不应直接实例化 MultiLLMRouter
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name) and node.func.id == "MultiLLMRouter":
-                    pytest.fail("Dashboard 不应直接实例化 MultiLLMRouter()，应使用 get_llm_router()")
+    def test_dashboard_backend_deleted(self):
+        """dashboard/backend/main.py 不应再作为非主线表层存在。"""
+        from pathlib import Path
+
+        assert not Path("dashboard/backend/main.py").exists()
 
 
 # ============================================================================
@@ -249,22 +241,20 @@ class TestTeamGatherResilience:
 
 
 # ============================================================================
-# Test 9: Windows Client 编码修复
+# Test 9: Windows Client legacy shell deletion
 # ============================================================================
 
 class TestWindowsClientEncoding:
-    """验证 Windows Client 中文路径修复"""
+    """验证旧 windows_client/main.py 已删除，避免继续承载旧壳逻辑。"""
 
-    def test_uses_pathlib(self):
-        """windows_client/main.py 应使用 pathlib.Path"""
-        with open("windows_client/main.py", "r", encoding="utf-8") as f:
-            source = f.read()
-        assert "from pathlib import Path" in source, "应使用 pathlib.Path"
-        assert "Path(__file__).resolve()" in source, "应使用 Path(__file__).resolve()"
+    def test_legacy_main_deleted(self):
+        """windows_client/main.py 不应再作为根层旧壳存在。"""
+        from pathlib import Path
 
-    def test_utf8_encoding_set(self):
-        """windows_client/main.py 应设置 UTF-8 编码环境"""
-        with open("windows_client/main.py", "r", encoding="utf-8") as f:
-            source = f.read()
-        assert "PYTHONIOENCODING" in source, "应设置 PYTHONIOENCODING"
-        assert "PYTHONUTF8" in source, "应设置 PYTHONUTF8"
+        assert not Path("windows_client/main.py").exists()
+
+    def test_status_board_v2_remains_canonical(self):
+        """删除旧壳后仍保留 canonical status_board_v2 包。"""
+        from pathlib import Path
+
+        assert Path("windows_client/status_board_v2/__init__.py").exists()

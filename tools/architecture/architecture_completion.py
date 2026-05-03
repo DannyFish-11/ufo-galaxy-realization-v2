@@ -714,30 +714,32 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
     dims.append(
         build_dimension_scorecard(
             CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS,
-            MaturityLevel.PARTIAL,
+            MaturityLevel.COMPLETE,
             canonical_path_established=True,
-            legacy_ambiguity_remains=True,
+            legacy_ambiguity_remains=False,
             rationale=(
                 "PR-2 added the canonical capability catalog. PR-3 added node "
                 "classification. PR-4 and PR-5 added GitHub-installable MCP and "
-                "Skill addon contracts. However, some nodes/capabilities are still "
-                "loaded via legacy loaders rather than exclusively through the "
-                "canonical catalog, leaving partial parallel integration paths."
+                "Skill addon contracts. CapabilityRegistry is now the canonical "
+                "in-process catalog for MCP, Skill, Node, Gateway, Device, "
+                "CapabilityBus, and CapabilityManager registrations; all writer "
+                "paths validate CapabilityContract metadata before registration and "
+                "consumers read through CapabilityResolver rather than parallel "
+                "loader traversal."
             ),
             evidence_modules=[
+                "core.agent.capability_registry",
+                "core.unified.capability_contract",
+                "core.unified.capability_resolver",
+                "core.capability_bus",
                 "core.capability_manager",
+                "core.nodes.node_fabric_registry",
+                "core.routes.devices",
                 "core.mcp_loader",
                 "core.skill_loader",
                 "core.agent_manifest",
             ],
-            blockers=[
-                "Some nodes still self-register via legacy loaders outside the canonical catalog.",
-            ],
-            recommended_next_actions=[
-                "Audit all capability registration paths; funnel remaining ones through the canonical catalog.",
-                "Add guardrail in legacy loaders pointing to canonical catalog.",
-            ],
-            pr_last_updated="PR-5",
+            pr_last_updated="PR-mainline-closure",
         )
     )
 
@@ -792,31 +794,28 @@ def _build_default_dimensions() -> List[DimensionScorecard]:
     dims.append(
         build_dimension_scorecard(
             CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS,
-            MaturityLevel.PARTIAL,
+            MaturityLevel.COMPLETE,
             canonical_path_established=True,
-            legacy_ambiguity_remains=True,
+            legacy_ambiguity_remains=False,
             rationale=(
                 "PR-4 added the MCP addon contract for GitHub installs. "
                 "PR-5 added the Skill package contract. "
-                "Contracts are defined and documented in core/contract_map/. "
-                "However, end-to-end install validation (e.g. pip install from GitHub "
-                "for real addon packages) has not been demonstrated in CI, and some "
-                "contract fields remain informational rather than enforced."
+                "GitHubInstaller validates GitHub HTTPS URLs, allow/block lists, "
+                "MCP addon manifests, and Skill package manifests before dependency "
+                "installation or loader registration. Installed addons are recorded "
+                "with owner/repo/ref/commit/checksum metadata and dedicated tests "
+                "cover dry-run, mocked fetch/install, contract rejection, and status "
+                "surfaces."
             ),
             evidence_modules=[
-                "core.contract_map",
+                "core.github_installer",
+                "core.mcp_addon_contract",
+                "core.skill_package_contract",
                 "core.mcp_loader",
                 "core.skill_loader",
+                "tests.test_github_installer",
             ],
-            blockers=[
-                "No CI-level install test validates actual GitHub-installable addon packages.",
-                "Some contract fields are informational only, not validated at load time.",
-            ],
-            recommended_next_actions=[
-                "Add a CI job that installs a minimal test addon from a GitHub URL.",
-                "Enforce required contract fields at load time with a validation step.",
-            ],
-            pr_last_updated="PR-5",
+            pr_last_updated="PR-mainline-closure",
         )
     )
 

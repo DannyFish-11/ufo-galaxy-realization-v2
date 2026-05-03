@@ -48,7 +48,7 @@ main.py  (bootstrap launcher — subprocess delegation only)
 | Gateway HTTP surface | `galaxy_gateway/app.py` | CANONICAL — gateway-scoped routes |
 
 **Rule:** New API endpoints MUST be added to `core/routes/` sub-modules.
-`dashboard/backend/main.py` MUST NOT receive new endpoints.
+`dashboard/backend/main.py` is deleted and MUST NOT be recreated.
 
 ---
 
@@ -57,9 +57,9 @@ main.py  (bootstrap launcher — subprocess delegation only)
 | Surface | Location | Status |
 |---------|----------|--------|
 | **Active Windows status board** | `windows_client/status_board_v2/` | **CANONICAL** |
-| Legacy status board | `windows_client/status_board.py` | LEGACY — see `windows_client/_legacy/` |
-| Dashboard frontend | `dashboard/frontend/` | **DELETED** (PR-1) — do not recreate |
-| Dashboard backend | `dashboard/backend/main.py` | LEGACY headless backend — retirement pending |
+| Legacy Windows shell | `windows_client/main.py` | **DELETED** — do not recreate |
+| Legacy status board | `windows_client/status_board.py` | **DELETED** — do not recreate |
+| Dashboard package | `dashboard/` | **DELETED** — do not recreate |
 
 Authoritative status projection endpoint: `GET /api/v1/projection/runtime`
 Contract: `contracts/desktop_status_projection.py` (`DesktopStatusProjection`)

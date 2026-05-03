@@ -213,13 +213,13 @@ class TestUISurfaceEntryDataclass:
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("dashboard.backend.main")
         assert entry is not None
-        assert entry.to_dict()["role"] == "legacy_ui"
+        assert entry.to_dict()["role"] == "deleted"
 
     def test_67_windows_client_main_entry_to_dict_role(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client.main")
         assert entry is not None
-        assert entry.to_dict()["role"] == "legacy_shell"
+        assert entry.to_dict()["role"] == "deleted"
 
     def test_68_status_board_v2_entry_to_dict_role(self):
         m = _import_ui_surface_authority()
@@ -238,31 +238,31 @@ class TestRegistrySurfaceClassification:
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("dashboard.backend.main")
         assert entry is not None
-        assert entry.role == m.UISurfaceRole.LEGACY_UI
+        assert entry.role == m.UISurfaceRole.DELETED
 
     def test_09_dashboard_package_is_legacy_ui(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("dashboard")
         assert entry is not None
-        assert entry.role == m.UISurfaceRole.LEGACY_UI
+        assert entry.role == m.UISurfaceRole.DELETED
 
     def test_10_windows_client_main_is_legacy_shell(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client.main")
         assert entry is not None
-        assert entry.role == m.UISurfaceRole.LEGACY_SHELL
+        assert entry.role == m.UISurfaceRole.DELETED
 
     def test_11_windows_client_status_board_is_legacy_shell(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client.status_board")
         assert entry is not None
-        assert entry.role == m.UISurfaceRole.LEGACY_SHELL
+        assert entry.role == m.UISurfaceRole.DELETED
 
     def test_12_windows_client_package_is_legacy_shell(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client")
         assert entry is not None
-        assert entry.role == m.UISurfaceRole.LEGACY_SHELL
+        assert entry.role == m.UISurfaceRole.DELETED
 
     def test_13_status_board_v2_is_projection_driven(self):
         m = _import_ui_surface_authority()
@@ -274,23 +274,23 @@ class TestRegistrySurfaceClassification:
 class TestIsLegacySurface:
     def test_14_is_legacy_dashboard_backend_main(self):
         m = _import_ui_surface_authority()
-        assert m.is_legacy_surface("dashboard.backend.main") is True
+        assert m.is_legacy_surface("dashboard.backend.main") is False
 
     def test_15_is_legacy_windows_client_main(self):
         m = _import_ui_surface_authority()
-        assert m.is_legacy_surface("windows_client.main") is True
+        assert m.is_legacy_surface("windows_client.main") is False
 
     def test_16_is_legacy_windows_client_status_board(self):
         m = _import_ui_surface_authority()
-        assert m.is_legacy_surface("windows_client.status_board") is True
+        assert m.is_legacy_surface("windows_client.status_board") is False
 
     def test_17_is_legacy_dashboard_package(self):
         m = _import_ui_surface_authority()
-        assert m.is_legacy_surface("dashboard") is True
+        assert m.is_legacy_surface("dashboard") is False
 
     def test_18_is_legacy_windows_client_package(self):
         m = _import_ui_surface_authority()
-        assert m.is_legacy_surface("windows_client") is True
+        assert m.is_legacy_surface("windows_client") is False
 
     def test_19_is_not_legacy_status_board_v2(self):
         m = _import_ui_surface_authority()
@@ -325,7 +325,7 @@ class TestGetSurfaceHelpers:
     def test_25_get_role_returns_role(self):
         m = _import_ui_surface_authority()
         role = m.get_ui_surface_role("dashboard.backend.main")
-        assert role == m.UISurfaceRole.LEGACY_UI
+        assert role == m.UISurfaceRole.DELETED
 
     def test_26_get_role_returns_none_for_unknown(self):
         m = _import_ui_surface_authority()
@@ -356,7 +356,7 @@ class TestBuildUISurfaceAuthoritySummary:
     def test_30_summary_legacy_count_ge_4(self):
         m = _import_ui_surface_authority()
         summary = m.build_ui_surface_authority_summary()
-        assert summary["legacy_count"] >= 4
+        assert summary["legacy_count"] == 0
 
     def test_31_summary_surfaces_list_non_empty(self):
         m = _import_ui_surface_authority()
@@ -398,7 +398,7 @@ class TestRegistrySingleton:
     def test_34_legacy_surfaces_non_empty(self):
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()
-        assert len(reg.legacy_surfaces()) >= 4
+        assert len(reg.legacy_surfaces()) == 0
 
     def test_35_all_entries_complete(self):
         m = _import_ui_surface_authority()
@@ -421,7 +421,7 @@ class TestLegacyPathsPR8Entries:
         m = _import_legacy_paths()
         entry = m.get_legacy_entry("dashboard.backend.main")
         assert entry is not None
-        assert entry.status == m.LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert entry.status == m.LegacyPathStatus.DELETED
 
     def test_38_legacy_paths_has_dashboard(self):
         m = _import_legacy_paths()
@@ -435,7 +435,7 @@ class TestLegacyPathsPR8Entries:
         m = _import_legacy_paths()
         entry = m.get_legacy_entry("windows_client.main")
         assert entry is not None
-        assert entry.status == m.LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert entry.status == m.LegacyPathStatus.DELETED
 
     def test_41_legacy_paths_has_windows_client_status_board(self):
         m = _import_legacy_paths()
@@ -445,7 +445,7 @@ class TestLegacyPathsPR8Entries:
         m = _import_legacy_paths()
         entry = m.get_legacy_entry("windows_client.status_board")
         assert entry is not None
-        assert entry.status == m.LegacyPathStatus.DEPRECATED
+        assert entry.status == m.LegacyPathStatus.DELETED
 
     def test_43_legacy_paths_has_windows_client(self):
         m = _import_legacy_paths()
@@ -466,12 +466,12 @@ class TestLegacyPathsPR8Entries:
     def test_47_classify_dashboard_is_legacy_compat(self):
         m = _import_legacy_paths()
         status = m.classify_path_status("dashboard")
-        assert status == m.LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert status == m.LegacyPathStatus.DELETED
 
     def test_48_classify_windows_client_is_legacy_compat(self):
         m = _import_legacy_paths()
         status = m.classify_path_status("windows_client")
-        assert status == m.LegacyPathStatus.LEGACY_COMPATIBILITY
+        assert status == m.LegacyPathStatus.DELETED
 
     def test_49_status_board_recommendation_mentions_v2(self):
         m = _import_legacy_paths()
@@ -493,7 +493,7 @@ class TestLegacyPathsPR8Entries:
                      "windows_client"):
             entry = m.get_legacy_entry(path)
             assert entry is not None, f"Missing entry for {path}"
-            assert entry.pr_guardrail_added == "PR-8", (
+            assert entry.pr_guardrail_added == "PR-mainline-closure", (
                 f"{path} pr_guardrail_added={entry.pr_guardrail_added}"
             )
 
@@ -532,7 +532,7 @@ class TestPR7EntriesUnchanged:
         m = _import_legacy_paths()
         entry = m.get_legacy_entry("galaxy_gateway.device_router.DeviceRouter.route_task")
         assert entry is not None
-        assert entry.pr_guardrail_added == "PR-7"
+        assert entry.pr_guardrail_added == "PR-S3"
 
 
 # ---------------------------------------------------------------------------
@@ -541,11 +541,10 @@ class TestPR7EntriesUnchanged:
 
 
 class TestModuleDocstrings:
-    def test_54_dashboard_init_docstring_contains_legacy(self):
+    def test_54_dashboard_package_deleted(self):
         import pathlib
-        path = pathlib.Path(__file__).parent.parent / "dashboard" / "__init__.py"
-        text = path.read_text(encoding="utf-8")
-        assert "LEGACY UI SURFACE" in text
+        path = pathlib.Path(__file__).parent.parent / "dashboard"
+        assert not path.exists()
 
     def test_55_windows_client_init_docstring_contains_legacy(self):
         import pathlib
@@ -553,26 +552,23 @@ class TestModuleDocstrings:
         text = path.read_text(encoding="utf-8")
         assert "HOST-SPECIFIC LEGACY SHELL" in text
 
-    def test_56_status_board_docstring_contains_legacy(self):
+    def test_56_status_board_file_deleted(self):
         import pathlib
         path = (pathlib.Path(__file__).parent.parent
                 / "windows_client" / "status_board.py")
-        text = path.read_text(encoding="utf-8")
-        assert "LEGACY STATUS BOARD" in text
+        assert not path.exists()
 
-    def test_56b_status_board_docstring_mentions_superseded(self):
+    def test_56b_status_board_v2_package_remains(self):
         import pathlib
         path = (pathlib.Path(__file__).parent.parent
-                / "windows_client" / "status_board.py")
-        text = path.read_text(encoding="utf-8")
-        assert "status_board_v2" in text
+                / "windows_client" / "status_board_v2" / "__init__.py")
+        assert path.exists()
 
-    def test_56c_dashboard_backend_main_docstring_contains_legacy(self):
+    def test_56c_dashboard_backend_main_deleted(self):
         import pathlib
         path = (pathlib.Path(__file__).parent.parent
                 / "dashboard" / "backend" / "main.py")
-        text = path.read_text(encoding="utf-8")
-        assert "LEGACY UI SURFACE" in text
+        assert not path.exists()
 
 
 class TestStatusBoardV2ProjectionDriven:
@@ -669,16 +665,16 @@ class TestAdditionalInvariants:
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("dashboard")
         assert entry is not None and entry.notes is not None
-        assert "LEGACY UI SURFACE" in entry.notes or "LEGACY" in entry.notes
+        assert "DELETED" in entry.notes
 
     def test_76_windows_client_main_notes_contains_legacy(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client.main")
         assert entry is not None and entry.notes is not None
-        assert "LEGACY" in entry.notes
+        assert "DELETED" in entry.notes
 
     def test_77_windows_client_status_board_notes_contains_legacy(self):
         m = _import_ui_surface_authority()
         entry = m.get_ui_surface_entry("windows_client.status_board")
         assert entry is not None and entry.notes is not None
-        assert "LEGACY STATUS BOARD" in entry.notes
+        assert "DELETED" in entry.notes

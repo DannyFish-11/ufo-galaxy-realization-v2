@@ -269,9 +269,11 @@ class TestGitHubInstallerInstall:
     @patch("core.github_installer._fetch_repo")
     def test_install_skill(self, mock_fetch, mock_register, tmp_path):
         skill_manifest = {
+            "id": "test-skill",
             "name": "test-skill",
-            "entrypoint": "handler.py",
             "description": "Test Skill",
+            "handler_file": "handler.py",
+            "handler_function": "execute",
         }
         mock_fetch.side_effect = self._patch_fetch(tmp_path, skill_manifest=skill_manifest)
         mock_register.return_value = {"success": True, "type": "skill", "name": "test-skill"}
@@ -283,6 +285,26 @@ class TestGitHubInstallerInstall:
         assert result["type"] == "skill"
         assert result["name"] == "test-skill"
         mock_register.assert_called_once()
+
+    @patch("core.github_installer._install_deps")
+    @patch("core.github_installer._register_skill")
+    @patch("core.github_installer._fetch_repo")
+    def test_invalid_skill_contract_rejected_before_deps(self, mock_fetch, mock_register, mock_install_deps, tmp_path):
+        skill_manifest = {
+            "id": "broken-skill",
+            "name": "Broken Skill",
+            "dependencies": ["example-dependency"],
+        }
+        mock_fetch.side_effect = self._patch_fetch(tmp_path, skill_manifest=skill_manifest)
+
+        inst = self._make_installer(tmp_path)
+        result = _run(inst.install("https://github.com/owner/broken-skill"))
+
+        assert result["success"] is False
+        assert "skill.json contract validation failed" in result["error"]
+        assert result["violations"]
+        mock_install_deps.assert_not_called()
+        mock_register.assert_not_called()
 
     @patch("core.github_installer._fetch_repo")
     def test_install_no_manifest(self, mock_fetch, tmp_path):

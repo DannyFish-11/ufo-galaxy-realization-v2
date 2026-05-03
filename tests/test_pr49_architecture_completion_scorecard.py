@@ -650,10 +650,10 @@ class TestDefaultDimensionLevels:
         rec = sc.dimension_by_name(m.CompletionDimension.CONTRACT_SCHEMA_NORMALIZATION)
         assert rec.maturity_level == m.MaturityLevel.CANONICALIZED
 
-    def test_63_capability_integration_is_partial(self):
+    def test_63_capability_integration_is_complete(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS)
-        assert rec.maturity_level == m.MaturityLevel.PARTIAL
+        assert rec.maturity_level == m.MaturityLevel.COMPLETE
 
     def test_64_projection_outward_truth_is_canonicalized(self):
         sc, m = self._sc()
@@ -665,10 +665,10 @@ class TestDefaultDimensionLevels:
         rec = sc.dimension_by_name(m.CompletionDimension.CROSS_DEVICE_EXECUTION_CONSISTENCY)
         assert rec.maturity_level == m.MaturityLevel.CANONICALIZED
 
-    def test_66_installability_is_partial(self):
+    def test_66_installability_is_complete(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS)
-        assert rec.maturity_level == m.MaturityLevel.PARTIAL
+        assert rec.maturity_level == m.MaturityLevel.COMPLETE
 
     def test_67_diagnostics_observability_is_complete(self):
         sc, m = self._sc()
@@ -692,15 +692,15 @@ class TestDefaultDimensionFlags:
         m.reset_architecture_completion_scorecard()
         return m.get_architecture_completion_scorecard(), m
 
-    def test_69_capability_integration_legacy_ambiguity_true(self):
+    def test_69_capability_integration_legacy_ambiguity_false(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS)
-        assert rec.legacy_ambiguity_remains is True
+        assert rec.legacy_ambiguity_remains is False
 
-    def test_70_installability_legacy_ambiguity_true(self):
+    def test_70_installability_legacy_ambiguity_false(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS)
-        assert rec.legacy_ambiguity_remains is True
+        assert rec.legacy_ambiguity_remains is False
 
     def test_71_diagnostics_canonical_path_established(self):
         sc, m = self._sc()
@@ -712,9 +712,9 @@ class TestDefaultDimensionFlags:
         rec = sc.dimension_by_name(m.CompletionDimension.AUTHORITY_CLARITY)
         assert rec.canonical_path_established is True
 
-    def test_73_legacy_ambiguity_count_is_2(self):
+    def test_73_legacy_ambiguity_count_is_0(self):
         sc, _ = self._sc()
-        assert sc.legacy_ambiguity_count == 2
+        assert sc.legacy_ambiguity_count == 0
 
     def test_74_canonical_count_gte_7(self):
         sc, _ = self._sc()
@@ -739,15 +739,15 @@ class TestDefaultDimensionFlags:
         for d in sc.dimensions:
             assert d.pr_last_updated, f"Missing pr_last_updated for {d.dimension}"
 
-    def test_79_capability_integration_has_blockers(self):
+    def test_79_capability_integration_has_no_blockers(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS)
-        assert rec.blockers and len(rec.blockers) > 0
+        assert not rec.blockers
 
-    def test_80_installability_has_blockers(self):
+    def test_80_installability_has_no_blockers(self):
         sc, m = self._sc()
         rec = sc.dimension_by_name(m.CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS)
-        assert rec.blockers and len(rec.blockers) > 0
+        assert not rec.blockers
 
 
 # ===========================================================================
@@ -851,25 +851,19 @@ class TestSerialization:
         assert "residual_debt_register" in clarity
         assert "PR12" in clarity["sentinel"]
 
-    def test_92_transitional_dimensions_match_expected_incomplete_dimensions(self):
+    def test_92_transitional_dimensions_empty_after_mainline_closure(self):
         m = _import_module()
         m.reset_architecture_completion_scorecard()
         sc = m.get_architecture_completion_scorecard()
         transitional = set(sc.completion_clarity_snapshot()["transitional_dimensions"])
-        assert transitional == {
-            m.CompletionDimension.CAPABILITY_INTEGRATION_COMPLETENESS.value,
-            m.CompletionDimension.INSTALLABILITY_ECOSYSTEM_READINESS.value,
-        }
+        assert transitional == set()
 
-    def test_93_residual_debt_register_contains_blockers_or_next_actions(self):
+    def test_93_residual_debt_register_empty_after_mainline_closure(self):
         m = _import_module()
         m.reset_architecture_completion_scorecard()
         sc = m.get_architecture_completion_scorecard()
         entries = sc.completion_clarity_snapshot()["residual_debt_register"]
-        assert entries
-        joined = "\n".join(entries)
-        assert "capability_integration_completeness" in joined
-        assert "installability_ecosystem_readiness" in joined
+        assert entries == []
 
     def test_94_summary_lines_expose_transitional_count(self):
         m = _import_module()

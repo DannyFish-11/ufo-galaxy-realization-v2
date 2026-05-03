@@ -79,19 +79,14 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # Group 1: legacy marker files
     # ------------------------------------------------------------------
 
-    def test_01_dashboard_legacy_surface_md_exists(self):
-        self.assertTrue(
-            _exists("dashboard/LEGACY_SURFACE.md"),
-            "dashboard/LEGACY_SURFACE.md must exist as a demotion marker",
-        )
+    def test_01_dashboard_package_deleted(self):
+        self.assertFalse(_exists("dashboard"), "dashboard/ must be deleted")
 
-    def test_02_dashboard_legacy_surface_md_contains_legacy(self):
-        content = _read("dashboard/LEGACY_SURFACE.md")
-        self.assertIn("LEGACY", content)
+    def test_02_dashboard_legacy_surface_md_deleted(self):
+        self.assertFalse(_exists("dashboard/LEGACY_SURFACE.md"))
 
-    def test_03_dashboard_legacy_surface_md_contains_non_primary(self):
-        content = _read("dashboard/LEGACY_SURFACE.md")
-        self.assertIn("NON-PRIMARY", content)
+    def test_03_dashboard_backend_deleted(self):
+        self.assertFalse(_exists("dashboard/backend/main.py"))
 
     def test_04_dashboard_frontend_directory_fully_deleted(self):
         """PR-1 — dashboard/frontend/ must be fully deleted (not just demoted)."""
@@ -170,13 +165,9 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
             "The old _register_node_with_dashboard method must be renamed",
         )
 
-    def test_13_register_node_with_runtime_registry_exists(self):
+    def test_13_register_node_with_dashboard_absent(self):
         content = _read("unified_launcher.py")
-        self.assertIn(
-            "_register_node_with_runtime_registry",
-            content,
-            "The renamed _register_node_with_runtime_registry must be present",
-        )
+        self.assertNotIn("_register_node_with_dashboard", content)
 
     # ------------------------------------------------------------------
     # Group 4: frontend static asset warning demoted
@@ -214,23 +205,11 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # Group 6: PR-8 markers preserved (regression guard)
     # ------------------------------------------------------------------
 
-    def test_17_dashboard_init_preserves_legacy_ui_surface_marker(self):
-        """PR-1 retains the 'LEGACY UI SURFACE' marker from PR-8 for compatibility."""
-        content = _read("dashboard/__init__.py")
-        self.assertIn(
-            "LEGACY UI SURFACE",
-            content,
-            "dashboard/__init__.py must retain the 'LEGACY UI SURFACE' marker "
-            "(PR-8 compatibility; PR-1 additionally marks frontend as deleted)",
-        )
+    def test_17_dashboard_init_deleted(self):
+        self.assertFalse(_exists("dashboard/__init__.py"))
 
-    def test_18_dashboard_backend_main_preserves_legacy_ui_surface_marker(self):
-        content = _read("dashboard/backend/main.py")
-        self.assertIn(
-            "LEGACY UI SURFACE",
-            content,
-            "dashboard/backend/main.py must retain the PR-8 LEGACY UI SURFACE marker",
-        )
+    def test_18_dashboard_backend_main_deleted(self):
+        self.assertFalse(_exists("dashboard/backend/main.py"))
 
     # ------------------------------------------------------------------
     # Group 7: docstring updates
@@ -297,14 +276,14 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
     # Group 10: ui_surface_authority regression guard
     # ------------------------------------------------------------------
 
-    def test_25_ui_surface_authority_still_registers_dashboard_as_legacy(self):
+    def test_25_ui_surface_authority_registers_dashboard_as_deleted(self):
         m = _import_ui_surface_authority()
         role = m.get_ui_surface_role("dashboard")
         self.assertIsNotNone(role, "dashboard must still be registered in UISurfaceAuthorityRegistry")
         self.assertEqual(
             role,
-            m.UISurfaceRole.LEGACY_UI,
-            "dashboard must be registered as LEGACY_UI (PR-8 regression guard)",
+            m.UISurfaceRole.DELETED,
+            "dashboard must be registered as DELETED",
         )
 
     # ------------------------------------------------------------------
@@ -318,12 +297,8 @@ class TestDashboardFrontendDemotion(unittest.TestCase):
             "dashboard/frontend/ directory must be fully deleted in PR-1 (not just demoted)",
         )
 
-    def test_27_dashboard_legacy_md_mentions_tristate(self):
-        content = _read("dashboard/LEGACY_SURFACE.md")
-        self.assertIn(
-            "tri-state",
-            content,
-        )
+    def test_27_dashboard_legacy_md_deleted(self):
+        self.assertFalse(_exists("dashboard/LEGACY_SURFACE.md"))
 
     # ------------------------------------------------------------------
     # Group 12: start_galaxy.py — removed (direction now in MAINTAINER_RUNBOOK)
