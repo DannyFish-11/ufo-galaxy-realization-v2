@@ -145,6 +145,15 @@ _API_COMPATIBILITY_SURFACES: tuple[APICompatibilitySurface, ...] = (
 )
 
 
+def _normalize_chat_context(raw_context: Any) -> Optional[List[Dict]]:
+    """Normalize compat-surface chat context to the runtime-shell contract."""
+    if isinstance(raw_context, dict):
+        return [raw_context]
+    if isinstance(raw_context, list):
+        return raw_context
+    return None
+
+
 def get_api_compatibility_surface_registry() -> List[Dict[str, str]]:
     """Return an explicit list of compatibility-only API surfaces."""
     return [entry.to_dict() for entry in _API_COMPATIBILITY_SURFACES]
@@ -910,11 +919,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 elif msg_type == "chat":
                     try:
                         runtime = _get_desktop_presence_runtime()
-                        _context = data.get("context", [])
-                        if isinstance(_context, dict):
-                            _context = [_context]
-                        elif not isinstance(_context, list):
-                            _context = None
+                        _context = _normalize_chat_context(data.get("context", []))
 
                         result = await runtime.handle_request(
                             message=data.get("message", ""),

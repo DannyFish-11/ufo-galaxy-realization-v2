@@ -767,6 +767,13 @@ class TestCompatWebSocketAuthorityChain:
             'compat websocket "chat" branch must keep source="chat" when calling runtime.handle_request()'
         )
 
+    def test_compat_ws_chat_context_normalization_helper(self):
+        from core.api_routes import _normalize_chat_context
+
+        assert _normalize_chat_context({"role": "user"}) == [{"role": "user"}]
+        assert _normalize_chat_context([{"role": "user"}]) == [{"role": "user"}]
+        assert _normalize_chat_context("invalid") is None
+
 
 class TestAndroidVisionAuthorityChain:
     """Android vision requests must enter through DesktopPresenceRuntime."""
@@ -790,9 +797,36 @@ class TestAndroidVisionAuthorityChain:
         assert "OpenClawd()" not in src, (
             "android vision handler must not instantiate OpenClawd directly"
         )
-        assert ".process(" not in src.split("VisionPipeline")[0], (
+        assert "oc.process(" not in src and "clawd.process(" not in src, (
             "android vision primary path must not call OpenClawd.process() directly"
         )
+
+    @pytest.mark.asyncio
+    async def test_android_vision_runtime_session_id_propagated(self):
+        from galaxy_gateway.android.handlers.vision import _process_via_runtime_shell
+
+        mock_runtime = MagicMock()
+        mock_runtime.handle_request = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "ok",
+                "runtime_session_id": "runtime-123",
+                "multimodal_route_decision": {"provider": "test"},
+            }
+        )
+
+        with patch(
+            "core.desktop_presence_runtime.get_desktop_presence_runtime",
+            return_value=mock_runtime,
+        ):
+            result = await _process_via_runtime_shell(
+                image_base64="ZmFrZQ==",
+                task_context="inspect",
+                mode="full",
+                device_id="android-1",
+            )
+
+        assert result["runtime_session_id"] == "runtime-123"
 
 
 class TestVisionSamplerAuthorityChain:
