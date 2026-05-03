@@ -153,30 +153,23 @@ V2: android_delegated_signal_ingress → result_convergence → operator_surface
 - `core/android_participant_truth_ingress.py`：truth signal ingress
 - `core/android_evaluator_artifact_ingress.py`：evaluator artifact ingress
 - `core/android_handoff_v2_response_ingress.py`：handoff response ingress（V2 侧）
+- `galaxy_gateway/protocol/aip_v3.py`：`MessageType.RECONCILIATION_SIGNAL` 与 handoff response 类型已存在
+- `galaxy_gateway/android/handlers/reconciliation_signal.py`：ReconciliationSignal gateway handler 已存在
+- `galaxy_gateway/android/handlers/handoff_v2_result.py`：HandoffEnvelopeV2 response gateway handler 已存在
+- `galaxy_gateway/android_bridge.py`：已注册 ReconciliationSignal 与 HandoffEnvelopeV2 response handler
 
-**Critical Evidence Gaps（代码验证，见 `docs/joint_system_review/04_cross_repo_contract.md §2.3`）：**
+**已闭合的旧缺口（以当前真实代码为准）：**
 
-**Gap #1：ReconciliationSignal AIP wire 层缺失（最关键）**
+- 旧结论：ReconciliationSignal AIP wire 层缺失。  
+  当前结论：V2 AIP v3 `MessageType.RECONCILIATION_SIGNAL`、`reconciliation_signal.py` handler、`android_bridge.py` 注册路径均存在；该项不再是实现缺口。
+- 旧结论：HandoffEnvelopeV2 response gateway handler 缺失。  
+  当前结论：`handoff_v2_result.py` 已处理 `handoff_ack` / `handoff_result` / `handoff_failure` / `handoff_envelope_v2_result`，并调用 `core.android_handoff_v2_response_ingress.py`；该项不再是实现缺口。
 
-```text
-Android ReconciliationSignal.kt (PR-51) 内部 DTO 存在
-DelegatedRuntimeReadinessEvaluator 设计意图：通过 reconciliation signal channel 转发
-但 AipModels.kt 的 MsgType enum 无 reconciliation_signal 条目
-→ ReconciliationSignal 未被序列化到 AIP v3 wire 格式
-→ Android readiness/acceptance/governance/strategy artifact 无法到达 V2
-→ V2 的 readiness/governance verdict 缺少 Android 端维度输入
-```
+**仍未达到 100% 的点：**
 
-**Gap #2：HandoffEnvelopeV2 response gateway handler 缺失（高优先级）**
-
-```text
-Android 有 handoff_envelope_v2_result MsgType 和 HandoffEnvelopeV2ResultPayload
-V2 有 core/android_handoff_v2_response_ingress.py
-但 galaxy_gateway/android/handlers/ 无 handoff_response.py
-android_bridge.py 无 handle_handoff_response import
-→ Android handoff result 到达 V2 后进入 else 分支（未处理）
-→ handoff 链路是单向信道
-```
+- wire/handler 已闭合，但仍需要真实运行时激活（Android `cross_device_enabled=true`、正确 V2 gateway URL、有效 WebSocket 会话）才能产生 live evidence。
+- delegated flow 在当前环境仍未完成一次真实端到端运行证明；这归入 runtime closure 维度。
+- 真实 Android 设备 evidence artifact 与真实设备 CI 自动化仍缺失；这归入 real-device / multi-device 维度。
 
 ### 4.4 治理 / 发布 Readiness 成熟度
 
@@ -188,10 +181,11 @@ android_bridge.py 无 handle_handoff_response import
 - `core/governance_validation_gate.py`：governance validation
 - `core/release_blocking_gate.py`：阻断门控
 
-**Evidence Gaps（诚实）：**
-- `distributed_release_gate_skeleton.is_enforcing = False`：当前处于 advisory/非阻断模式，不会真正阻断发布
-- Release gate 未接入 CI/CD pipeline：governance verdict 不会自动阻止 release
-- Android 侧 governance artifact 因 wire 层缺失无法进入 V2 gate（见 Gap #1）
+**当前真实代码状态：**
+- `distributed_release_gate_skeleton.evaluate_distributed_release_gate()` 当前返回 `is_enforcing = True`
+- `.github/workflows/governance_gate_enforcement.yml` 已把 governance verdict 与 cross-repo consistency gates 接入 CI，失败时硬阻断
+- `.github/workflows/dual_repo_reality_audit.yml` 已把 dual-repo reality audit 接入 CI
+- Android 侧治理/ready/acceptance 信号的 wire 实现不再是已知缺失项；剩余问题是 runtime evidence 与真实设备证据是否实际产生并进入 gate
 
 **术语统一状态：**
 - `release_governance_taxonomy`（PR-8）已统一定义 blocking vs advisory, evidence_gap vs deferred vs unresolved 等核心术语
@@ -218,38 +212,40 @@ android_bridge.py 无 handle_handoff_response import
 
 > 以下为代码验证的 gap，不是设计意图的不足，而是当前代码中确实存在的断层。
 
-### Gap #1（Critical）：ReconciliationSignal AIP wire 层缺失
+### 已闭合（不再列为当前 gap）：ReconciliationSignal AIP wire 层
 
-- **影响维度**：cross_repo_evidence, governance_release_readiness
-- **代码验证**：`docs/joint_system_review/04_cross_repo_contract.md §2.3`
-- **具体断层**：`AipModels.kt` MsgType enum 无 `reconciliation_signal` 条目
-- **后果**：V2 readiness/governance verdict 缺少 Android 端维度；Android DeviceReadinessArtifact 等无法到达 V2
+- **当前代码验证**：`galaxy_gateway/protocol/aip_v3.py` 已包含 `reconciliation_signal`；`galaxy_gateway/android/handlers/reconciliation_signal.py` 已存在；`galaxy_gateway/android_bridge.py` 已注册 handler。
+- **结论**：旧文档中的“wire 层缺失”是过期结论，当前不再作为 blocking gap。
 
-### Gap #2（High）：HandoffEnvelopeV2 response gateway handler 缺失
+### 已闭合（不再列为当前 gap）：HandoffEnvelopeV2 response gateway handler
 
-- **影响维度**：cross_repo_evidence, runtime_closure
-- **代码验证**：`docs/joint_system_review/04_cross_repo_contract.md §1.2`
-- **具体断层**：`galaxy_gateway/android/handlers/` 无 `handoff_response.py`；`android_bridge.py` 无对应 import
-- **后果**：handoff 链路是单向信道（V2 发出但不接收反馈）
+- **当前代码验证**：`galaxy_gateway/android/handlers/handoff_v2_result.py` 已处理 `handoff_ack`、`handoff_result`、`handoff_failure`、`handoff_envelope_v2_result`；`android_bridge.py` 已注册这些消息类型。
+- **结论**：handoff 链路不再是单向信道；旧缺口已由当前代码闭合。
 
-### Gap #3（Medium）：Release gate 处于 advisory 非阻断模式
+### 已闭合（不再列为当前 gap）：Release gate 处于 advisory 非阻断模式
 
 - **影响维度**：governance_release_readiness
-- **代码验证**：`core/distributed_release_gate_skeleton.py` `is_enforcing` 属性
-- **具体断层**：`evaluate_distributed_release_gate()` 返回 `is_enforcing = False`
-- **后果**：governance verdict 不会自动阻止 release
+- **当前代码验证**：`evaluate_distributed_release_gate()` 返回 `is_enforcing = True`；`.github/workflows/governance_gate_enforcement.yml` 硬阻断 governance/cross-repo consistency 失败。
+- **结论**：治理发布 gate 已从 advisory 升级为 CI enforcement。
 
-### Gap #4（Medium）：Delegated flow 从未被端到端运行过
+### Gap #1（Medium）：Delegated flow 从未被端到端运行过
 
 - **影响维度**：runtime_closure
 - **代码验证**：`core/delegated_flow_decision_history.py` HistoryEvidenceStatus
 - **具体断层**：在全新环境中 `runtime_closure_established = False`，`evidence_status = no_history_yet`
 - **后果**：无法证明 delegated canonical path 在 runtime 层面确实工作
 
-### Gap #5（Medium）：无真实设备 CI 自动化
+### Gap #2（Medium）：无真实 Android 设备 evidence artifact
 
 - **影响维度**：real_device_multi_device
 - **代码验证**：`ANDROID_PARTICIPANT_EVIDENCE_PATH` 在 CI 中未设置
+- **具体断层**：当前环境无真实 Android 参与端输出的 evidence JSON artifact
+- **后果**：真实设备闭合仍无法由本仓单独证明
+
+### Gap #3（Medium）：无真实设备 CI 自动化
+
+- **影响维度**：real_device_multi_device
+- **代码验证**：当前 CI workflow 未运行接入真实 Android 设备的 job
 - **具体断层**：real-device 场景无 automated CI 覆盖
 - **后果**：多设备 / 真实设备结论无自动化验证支持
 
@@ -264,7 +260,7 @@ android_bridge.py 无 handle_handoff_response import
 | Android offline queue replay ordering authority | `core/recovery_truth_surface.py` `deferred_boundaries` | Android 离线队列重放顺序权威：已 deferred |
 | Ephemeral transport binding after reconnect | `core/recovery_truth_surface.py` `deferred_boundaries` | 重连后 transport 绑定：已 deferred |
 | Multi-device simultaneous reconnect ordering | `core/recovery_truth_surface.py` `deferred_boundaries` | 多设备同时重连顺序权威：已 deferred |
-| Real-device CI automation | `core/android_participant_evidence_ingress.py` 文件合约已就绪，CI pipeline 未建立 | 文件合约可以桥接，但 CI 层待完成 |
+| Real-device CI automation | `core/android_participant_evidence_ingress.py` 文件合约已就绪，CI pipeline 未建立 | 文件合约可以桥接，但真实设备 CI 层待完成 |
 | Legacy path default-off enforcement | `docs/joint_system_review/05_maturity_assessment.md §4` | 依赖信号流完整建立后 |
 | Auto-rollback on governance violation | `core/delegated_flow_post_graduation_governance.py` 框架存在 | 自动触发器未连接 |
 | Takeover executor full implementation | `AipModels.kt` KDoc "full takeover executor deferred to PR-5" | Android 侧延迟 |
@@ -333,33 +329,27 @@ android_bridge.py 无 handle_handoff_response import
 
 ### 必须完成（blocking）
 
-1. **建立 ReconciliationSignal AIP wire 层**（最高优先级）
-   - 在 `AipModels.kt` 新增 `MsgType.RECONCILIATION_SIGNAL`
-   - 新建 `ReconciliationSignalPayload` data class
-   - 在 `RuntimeController.kt` 实现发送路径
-   - 在 V2 新增 `galaxy_gateway/android/handlers/reconciliation_signal.py`
-   - 在 `android_participant_truth_ingress.py` 处理 `PARTICIPANT_STATE` kind
-
-2. **挂接 HandoffEnvelopeV2 response gateway handler**
-   - 在 V2 新增 `galaxy_gateway/android/handlers/handoff_response.py`
-   - 在 `android_bridge.py` 注册 handler
-   - 确保调用 `core/android_handoff_v2_response_ingress.py`
-
-3. **将 release gate 接入 CI/CD pipeline**
-   - `distributed_release_gate_skeleton` 的 `is_enforcing` 改为 True 或接入 CI 触发器
-   - governance verdict 可自动阻止不合规的 release
-
-4. **端到端运行 delegated flow 一次**（以证明 runtime closure）
+1. **端到端运行 delegated flow 一次**（以证明 runtime closure）
    - `delegated_flow_decision_history` 记录到 `observed_and_closed` 状态
    - `runtime_closure_established = True`
 
+2. **采集并摄取真实 Android 设备 evidence artifact**
+   - 设置 `ANDROID_PARTICIPANT_EVIDENCE_PATH`
+   - 由真实 Android participant 产生 readiness / acceptance / governance / strategy evidence
+   - V2 通过现有 ingress 路径验证证据并进入 gate
+
 ### 建议完成（advisory）
 
-5. **建立真实设备 CI 自动化**
+3. **建立真实设备 CI 自动化**
    - 设置 `ANDROID_PARTICIPANT_EVIDENCE_PATH` 在 CI 中指向真实设备证据文件
    - 建立 multi-device e2e 测试 job
 
-6. **完成 deferred 边界中的 offline queue replay ordering**
+4. **补齐零配置部署能力**
+   - Android 默认 `cross_device_enabled=false` 仍需要人工打开
+   - 默认 gateway URL 仍需要人工配置
+   - 可考虑 QR pairing / auto-discovery / provisioning profile
+
+5. **完成 deferred 边界中的 offline queue replay ordering**
    - 从 `deferred` 升级到有明确 authority 规则的实现
 
 ### 已经是 accepted limitation（不影响 release 判断的前提下）
@@ -367,6 +357,12 @@ android_bridge.py 无 handle_handoff_response import
 - 多设备同时重连 ordering：已明确 deferred，不是 blocking
 - Legacy path default-off：依赖以上 blocking 项完成后推进
 - Auto-rollback on governance violation：中期目标
+
+### 已确认闭合（不再作为“距离 100%”缺口）
+
+- ReconciliationSignal AIP wire 层：当前 V2 MessageType、gateway handler、AndroidBridge 注册路径均存在
+- HandoffEnvelopeV2 response gateway handler：当前 `handoff_v2_result.py` 已处理 uplink response 并接入 V2 ingress
+- Release gate CI enforcement：当前 `governance_gate_enforcement.yml` 与 `is_enforcing=True` 已提供硬阻断
 
 ---
 
