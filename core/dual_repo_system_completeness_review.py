@@ -1164,7 +1164,7 @@ class DualRepoSystemCompletenessReviewer:
         # Label: governance framework is complete structurally but enforcing state
         # is advisory only; this is evidence_gap (not deferred, because it's a
         # real gap in enforcement wiring)
-        if len(available_gov) == len(gov_modules) and skeleton_enforcing and not gaps:
+        if len(available_gov) == len(gov_modules) and skeleton_enforcing and len(gaps) == 0:
             label = CompletenessLabel.complete
         elif len(available_gov) >= len(gov_modules) * 0.7:
             label = CompletenessLabel.evidence_gap
