@@ -28,7 +28,7 @@
 import logging
 import uuid
 from typing import Optional, Callable, Dict, Any, Set, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..protocol import (
     AIPMessage, MessageType, TaskStatus, ResultStatus,
@@ -250,7 +250,7 @@ class MessageHandler:
             task_info = self.pending_tasks[task_id]
             task_info["status"] = message.task_status or TaskStatus.COMPLETED
             task_info["results"] = message.results
-            task_info["completed_at"] = datetime.utcnow()
+            task_info["completed_at"] = datetime.now(timezone.utc)
             
             logger.info(f"Task {task_id} completed with status: {task_info['status']}")
             
@@ -353,7 +353,7 @@ class MessageHandler:
 
         if task_id and task_id in self.pending_tasks:
             self.pending_tasks[task_id]["status"] = TaskStatus.COMPLETED
-            self.pending_tasks[task_id]["completed_at"] = datetime.utcnow()
+            self.pending_tasks[task_id]["completed_at"] = datetime.now(timezone.utc)
 
         return AIPMessage(
             type=MessageType.TASK_END,
@@ -470,7 +470,7 @@ class MessageHandler:
             "device_id": device_id,
             "task_type": task_type,
             "status": TaskStatus.PENDING,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "callback": callback
         }
         self.pending_tasks[task_id] = task_info

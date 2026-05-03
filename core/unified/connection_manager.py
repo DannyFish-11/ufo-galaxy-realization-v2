@@ -39,7 +39,7 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import WebSocket
@@ -114,7 +114,7 @@ class UnifiedConnectionManager:
             self._connections[device_id] = UnifiedConnectionInfo(
                 device_id=device_id,
                 state=UnifiedConnectionState.CONNECTED,
-                connected_at=datetime.utcnow(),
+                connected_at=datetime.now(timezone.utc),
                 last_seen=now,
                 routable=True,
                 metadata=metadata or {},
@@ -127,7 +127,7 @@ class UnifiedConnectionManager:
             {
                 "type": "device_connected",
                 "device_id": device_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
 
@@ -149,7 +149,7 @@ class UnifiedConnectionManager:
             {
                 "type": "device_disconnected",
                 "device_id": device_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
 
@@ -178,7 +178,7 @@ class UnifiedConnectionManager:
             return False
         now = time.time()
         info.last_seen = now
-        info.last_heartbeat = datetime.utcnow()
+        info.last_heartbeat = datetime.now(timezone.utc)
         info.routable = True
         if info.state not in (
             UnifiedConnectionState.CONNECTED,
@@ -226,7 +226,7 @@ class UnifiedConnectionManager:
             if existing is not None:
                 existing.state = UnifiedConnectionState.CONNECTED
                 existing.last_seen = now
-                existing.last_heartbeat = datetime.utcnow()
+                existing.last_heartbeat = datetime.now(timezone.utc)
                 existing.routable = True
                 existing.total_reconnects += 1
                 if metadata:
@@ -235,7 +235,7 @@ class UnifiedConnectionManager:
                 self._connections[device_id] = UnifiedConnectionInfo(
                     device_id=device_id,
                     state=UnifiedConnectionState.CONNECTED,
-                    connected_at=datetime.utcnow(),
+                    connected_at=datetime.now(timezone.utc),
                     last_seen=now,
                     routable=True,
                     metadata=metadata or {},
@@ -248,7 +248,7 @@ class UnifiedConnectionManager:
             {
                 "type": "device_reconnected",
                 "device_id": device_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
 
@@ -527,7 +527,7 @@ class UnifiedConnectionManager:
             "command_id": command_id,
             "command": command,
             "params": params,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         sent = await self.send_to_device(device_id, message)
@@ -562,7 +562,7 @@ class UnifiedConnectionManager:
         payload = {
             "type": "command_result",
             "data": command_result_dict,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await self._broadcast_status(payload)
 

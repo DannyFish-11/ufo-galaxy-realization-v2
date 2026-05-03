@@ -22,7 +22,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def build_aip_message(
         "device_id": device_id,
         "task_id": task_id,
         "trace_id": trace_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "payload": {
             "command": command,
             **(payload or {}),

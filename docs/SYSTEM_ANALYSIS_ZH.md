@@ -367,33 +367,41 @@ Galaxy 是一个**架构宏大、实现不均匀**的 L4 级智能 Agent 系统�
 
 1. **核心文件过于庞大**：`openclawd.py`（7926行）和 `command_router.py`（4902行）亟需拆分
 2. **架构清理不彻底**：多轮 PR 后遗留大量兼容层、垫片文件和 legacy 模块
-3. **测试环境脆弱**：34个测试文件因缺少依赖无法收集，`pytest-asyncio` 配置无效
+3. **测试环境脆弱**：34个测试文件因缺少依赖无法收集，`pytest-asyncio` 已在 `requirements-dev.txt` 和 `pytest.ini` 中正确配置，但需安装
 4. **文档替代实现**：200+ 文档文件与 295 个含 stub 标记的源码文件同时存在，表明部分功能停留在"文档设计"阶段
 
 ### 5.2 优先改进建议
 
 **P0 — 立即处理（阻断测试/CI）：**
-1. 安装缺失依赖：`pip install httpx pytest-asyncio`，修复剩余 34 个测试收集错误
-2. 在 `pytest.ini` 中添加 `asyncio_mode = auto` 并安装 `pytest-asyncio`，确保异步测试正确执行
-3. 填充生产模型 SHA-256 哈希（`core/operational_enablement_audit.py` 第854行附近）
+1. 安装缺失依赖：`pip install httpx pytest-asyncio`，修复剩余 34 个测试收集错误（`pytest-asyncio` 已在 `requirements-dev.txt` 中声明，`pytest.ini` 已配置 `asyncio_mode = auto`）
+2. 填充生产模型 SHA-256 哈希（`core/operational_enablement_audit.py` 第854行附近）
 
 **P1 — 短期（1-2周）：**
-4. 拆分 `core/openclawd.py`：将 Ingest、Continuum、Branch、Manifest 四个阶段分离为独立模块
-5. 拆分 `core/command_router.py`：按路由规则类型拆分子模块
-6. 将 `requirements.txt` 分层：`requirements-base.txt`、`requirements-windows.txt`、`requirements-dev.txt`
-7. 为 `core/output/` 各渠道（TTS、3D Avatar、Overlay）的 stub 创建明确的未实现异常而非静默返回
+3. 拆分 `core/openclawd.py`：将 Ingest、Continuum、Branch、Manifest 四个阶段分离为独立模块
+4. 拆分 `core/command_router.py`：按路由规则类型拆分子模块
+5. 将 `requirements.txt` 分层：`requirements-base.txt`、`requirements-windows.txt`、`requirements-dev.txt`
+6. 为 `core/output/` 各渠道（TTS、3D Avatar、Overlay）的 stub 创建明确的未实现异常而非静默返回
 
 **P2 — 中期（1个月）：**
-8. 清理架构验证模块冗余：合并 `architecture_invariants.py`、`architecture_truth_guards.py`、`dual_repo_system_reality_audit.py` 等重叠功能
-9. 为 `SystemIntegration` 单例执行依赖注入重构（已有 `ARCHITECTURE_REVIEW.md` 计划文档）
-10. 统一错误体系：合并 `core/error_framework.py` 与 `core/unified/exceptions.py` 中的 `GalaxyError`
-11. 清理 `android_*` 遗留模块：确认哪些仍需保留，删除已迁移至独立仓库的重复代码
-12. 为所有兼容性垫片文件（`architecture_diagnostics.py` 等）添加弃用警告并设定移除里程碑
+7. 清理架构验证模块冗余：合并 `architecture_invariants.py`、`architecture_truth_guards.py`、`dual_repo_system_reality_audit.py` 等重叠功能
+8. 为 `SystemIntegration` 单例执行依赖注入重构（已有 `ARCHITECTURE_REVIEW.md` 计划文档）
+9. 清理 `android_*` 遗留模块：确认哪些仍需保留（目前15个模块均在运行时路径中被引用，无法简单删除），长期目标是将跨仓库协议层迁移至独立的 SDK
 
 **P3 — 长期（持续）：**
-13. 停止以 PR 编号命名测试文件，改用行为描述命名（如 `test_android_runtime_dispatch.py`）
-14. 建立 `pass$` 空方法体清理计划，逐步替换为 `raise NotImplementedError` 或实际实现
-15. 更新所有 `datetime.utcnow()` 调用为 `datetime.now(datetime.UTC)`
+10. 停止以 PR 编号命名测试文件，改用行为描述命名（如 `test_android_runtime_dispatch.py`）
+11. 建立 `pass$` 空方法体清理计划，逐步替换为 `raise NotImplementedError` 或实际实现
+
+---
+
+## 六、已修复问题记录
+
+以下问题已在本仓库代码中完成修复：
+
+| 编号 | 问题 | 修复方式 | 涉及文件 |
+|------|------|----------|----------|
+| F1 | `GalaxyError` 双重定义 | `core/unified/exceptions.py::GalaxyError` 改为继承 `core.error_framework.GalaxyError`；同时修复中间类的 `code` 参数传递 bug | `core/unified/exceptions.py` |
+| F2 | `datetime.utcnow()` 废弃调用 | 全部替换为 `datetime.now(timezone.utc)`；相关文件同步补充 `timezone` 导入 | `core/api_market.py`、`core/unified/connection_manager.py`、`galaxy_gateway/transport/websocket_server.py`、`galaxy_gateway/handlers/device_manager.py`、`galaxy_gateway/handlers/message_handler.py`、`galaxy_gateway/routing/dispatch.py`、`galaxy_gateway/orchestrator/task_orchestrator.py` |
+| F3 | 兼容性垫片无弃用警告 | 三个 core 垫片模块加入 `DeprecationWarning`，明确告知调用者迁移至 `tools.architecture.*` | `core/architecture_diagnostics.py`、`core/architecture_status_report.py`、`core/architecture_live_status.py` |
 
 ---
 

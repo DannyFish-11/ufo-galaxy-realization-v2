@@ -507,11 +507,11 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_REGISTER_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "payload": {
                 "status": "registered" if success else "failed",
                 "message": "设备注册成功" if success else "设备注册失败",
-                "registered_at": datetime.utcnow().isoformat(),
+                "registered_at": datetime.now(timezone.utc).isoformat(),
             },
         }
 
@@ -529,8 +529,8 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
                     "device_name": device_name,
                     "capabilities": capabilities,
                     "os_version": device_info.get("os_version", ""),
-                    "registered_at": datetime.utcnow().isoformat(),
-                    "last_seen": datetime.utcnow().isoformat(),
+                    "registered_at": datetime.now(timezone.utc).isoformat(),
+                    "last_seen": datetime.now(timezone.utc).isoformat(),
                     "status": "online",
                     "online": True,
                     "source": "gateway_ws",
@@ -570,7 +570,7 @@ async def handle_heartbeat(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_HEARTBEAT_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "payload": {"status": "ok"},
         }
 
@@ -618,7 +618,7 @@ async def handle_command(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.COMMAND_RESULT.value,
             "device_id": aip_msg.device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "payload": result,
         }
 
@@ -639,7 +639,7 @@ async def handle_status(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_STATUS.value,
             "device_id": aip_msg.device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "payload": status,
         }
 
@@ -701,7 +701,7 @@ async def handle_wake_event(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": "wake_event_ack",
                 "device_id": device_id,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
                 "payload": wake_result,
             }
             await connection_manager.send_message(connection_id, response)
@@ -735,7 +735,7 @@ async def handle_session_migrate(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.SESSION_MIGRATE_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "payload": {
                 "session_id": session_id,
                 "target_device_id": target_device_id,

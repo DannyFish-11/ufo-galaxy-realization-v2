@@ -14,7 +14,7 @@ API 端点:
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import time
 import hashlib
@@ -264,7 +264,7 @@ async def publish_skill(
         "content": req.content,
         "downloads": 0,
         "rating": 0.0,
-        "published_at": datetime.utcnow().isoformat() + "Z",
+        "published_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     if existing_idx is not None:
