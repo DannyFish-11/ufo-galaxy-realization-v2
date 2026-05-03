@@ -191,6 +191,16 @@ def _normalize_assimilation_capabilities(raw_capabilities: Any) -> List[str]:
         return normalized
     return []
 
+
+def _enum_or_string(value: Any) -> Optional[str]:
+    """Return a stable string for enum-like values used in metadata payloads."""
+    if value is None:
+        return None
+    if hasattr(value, "value"):
+        return str(value.value)
+    text = str(value).strip()
+    return text or None
+
 # ---------------------------------------------------------------------------
 # Role derivation helpers
 # ---------------------------------------------------------------------------
@@ -442,8 +452,8 @@ async def handle_device_register(
                 tags=[str(getattr(device, "platform", "") or "android")],
                 metadata={
                     "registration_trigger": "android_device_register",
-                    "platform": getattr(device.platform, "value", device.platform),
-                    "device_type": getattr(device.device_type, "value", device.device_type),
+                    "platform": _enum_or_string(device.platform),
+                    "device_type": _enum_or_string(device.device_type),
                     "model": getattr(device, "model", None),
                 },
             )

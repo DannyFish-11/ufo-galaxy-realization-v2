@@ -192,6 +192,9 @@ class BodyMeshRegistry:
         auto_restore: bool = False,
     ) -> None:
         self._entries: Dict[str, BodyEntry] = {}
+        # Re-entrant lock is required because persistence snapshots call back into
+        # registry.snapshot()/list_entries() while a mutation method still holds
+        # the registry lock.
         self._lock = threading.RLock()
         self._persistence_store = persistence_store
         self._auto_persist = auto_persist
