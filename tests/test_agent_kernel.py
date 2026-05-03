@@ -343,7 +343,7 @@ class TestAgentKernel:
         # Mock execution planner to avoid real agent calls
         from core.agent.execution_planner import ExecutionResult, ExecutionPlanner
 
-        async def fake_execute(plan):
+        async def fake_execute(plan, **kwargs):
             from core.agent.intent_router import IntentMode
             return ExecutionResult(
                 success=True,
@@ -498,7 +498,7 @@ class TestSoulInjectionConstraint:
 
         received_plans = []
 
-        async def capture_plan(plan):
+        async def capture_plan(plan, **kwargs):
             received_plans.append(plan)
             return ExecutionResult(success=True, mode="single_agent", reply="ok")
 

@@ -69,16 +69,15 @@ def bridge():
 class TestRegisterHeartbeatTaskResultChain:
     """CLOSED: the canonical Android message lifecycle works end-to-end via the bridge."""
 
-    def test_device_register_returns_ack(self, bridge: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_device_register_returns_ack(self, bridge: Any) -> None:
         """CLOSED: device_register returns device_register_ack with success=True."""
         did = _did("reg")
         ws = _make_ws()
         msg = _v3("device_register", did, platform="android", name="Test Phone",
                    model="Pixel 7")
 
-        ack = asyncio.get_event_loop().run_until_complete(
-            bridge.handle_message(ws, msg)
-        )
+        ack = await bridge.handle_message(ws, msg)
 
         assert ack is not None, "CLOSED: device_register must return a response"
         assert ack.get("type") == "device_register_ack", (
@@ -89,28 +88,25 @@ class TestRegisterHeartbeatTaskResultChain:
         )
         assert ack.get("device_id") == did
 
-    def test_heartbeat_returns_ack(self, bridge: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_heartbeat_returns_ack(self, bridge: Any) -> None:
         """CLOSED: heartbeat returns heartbeat_ack after registration."""
         did = _did("hb")
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
 
         # Register first
-        loop.run_until_complete(
-            bridge.handle_message(ws, _v3("device_register", did))
-        )
+        await bridge.handle_message(ws, _v3("device_register", did))
 
         # Now heartbeat
-        hb_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3("heartbeat", did))
-        )
+        hb_ack = await bridge.handle_message(ws, _v3("heartbeat", did))
 
         assert hb_ack is not None, "CLOSED: heartbeat must return a response"
         assert hb_ack.get("type") == "heartbeat_ack", (
             f"CLOSED: heartbeat must return heartbeat_ack; got {hb_ack.get('type')!r}"
         )
 
-    def test_task_result_dispatched_to_handler(self, bridge: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_task_result_dispatched_to_handler(self, bridge: Any) -> None:
         """PARTIAL: task_result is dispatched to the handler (continuity gate may reject).
 
         GAP_EXPOSED: The V1 continuity legality gate rejects task_result messages that
@@ -125,25 +121,20 @@ class TestRegisterHeartbeatTaskResultChain:
         did = _did("tr")
         task_id = f"task-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
 
-        reg_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3("device_register", did))
-        )
+        reg_ack = await bridge.handle_message(ws, _v3("device_register", did))
         assert reg_ack is not None
         # Extract the runtime_session_id from the registration ack so the
         # continuity gate will accept the subsequent task_result.
         runtime_session_id = reg_ack.get("runtime_attachment_session_id", "")
 
-        tr_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3(
-                "task_result", did,
-                task_id=task_id,
-                status="completed",
-                payload={"output": "hello"},
-                runtime_session_id=runtime_session_id,
-            ))
-        )
+        tr_ack = await bridge.handle_message(ws, _v3(
+            "task_result", did,
+            task_id=task_id,
+            status="completed",
+            payload={"output": "hello"},
+            runtime_session_id=runtime_session_id,
+        ))
 
         # Must NOT be UNKNOWN_MESSAGE_TYPE regardless of continuity gate outcome.
         assert "UNKNOWN_MESSAGE_TYPE" not in _json.dumps(tr_ack or {}), (
@@ -157,7 +148,8 @@ class TestRegisterHeartbeatTaskResultChain:
                 f"Note: downstream truth-chain steps are best-effort."
             )
 
-    def test_goal_result_alias_handled(self, bridge: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_goal_result_alias_handled(self, bridge: Any) -> None:
         """CLOSED: Android error-path 'goal_result' alias is handled (not UNKNOWN_MESSAGE_TYPE).
 
         GAP FIXED IN THIS PR: Android GalaxyConnectionService.kt emits 'goal_result'
@@ -166,16 +158,11 @@ class TestRegisterHeartbeatTaskResultChain:
         did = _did("gr")
         task_id = f"goal-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
 
-        loop.run_until_complete(
-            bridge.handle_message(ws, _v3("device_register", did))
-        )
+        await bridge.handle_message(ws, _v3("device_register", did))
 
-        gr_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3("goal_result", did, task_id=task_id,
-                                          status="failed"))
-        )
+        gr_ack = await bridge.handle_message(ws, _v3("goal_result", did, task_id=task_id,
+                                                      status="failed"))
 
         # goal_result should NOT return an error-type response
         assert gr_ack is None or gr_ack.get("type") != "error", (
@@ -202,6 +189,7 @@ class TestAndroidReportTypesNowHandled:
     were absent from MessageType enum causing ValueError + UNKNOWN_MESSAGE_TYPE.
     """
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("android_type", [
         "cancel_result",
         "device_readiness_report",
@@ -209,22 +197,17 @@ class TestAndroidReportTypesNowHandled:
         "device_acceptance_report",
         "device_strategy_report",
     ])
-    def test_android_report_type_not_unknown(
+    async def test_android_report_type_not_unknown(
         self, bridge: Any, android_type: str
     ) -> None:
         """CLOSED: Android report type must not return UNKNOWN_MESSAGE_TYPE."""
         did = _did("rpt")
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
 
         # Register first
-        loop.run_until_complete(
-            bridge.handle_message(ws, _v3("device_register", did))
-        )
+        await bridge.handle_message(ws, _v3("device_register", did))
 
-        rpt_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3(android_type, did, payload={}))
-        )
+        rpt_ack = await bridge.handle_message(ws, _v3(android_type, did, payload={}))
 
         import json
         assert "UNKNOWN_MESSAGE_TYPE" not in json.dumps(rpt_ack or {}), (
@@ -235,6 +218,7 @@ class TestAndroidReportTypesNowHandled:
             f"CLOSED: Android type '{android_type}' must not return error; got {rpt_ack!r}"
         )
 
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("android_type", [
         "cancel_result",
         "device_readiness_report",
@@ -242,21 +226,16 @@ class TestAndroidReportTypesNowHandled:
         "device_acceptance_report",
         "device_strategy_report",
     ])
-    def test_android_report_type_returns_generic_ack(
+    async def test_android_report_type_returns_generic_ack(
         self, bridge: Any, android_type: str
     ) -> None:
         """CLOSED: Android report type returns a structured generic ACK."""
         did = _did("rpt-ack")
         ws = _make_ws()
-        loop = asyncio.get_event_loop()
 
-        loop.run_until_complete(
-            bridge.handle_message(ws, _v3("device_register", did))
-        )
+        await bridge.handle_message(ws, _v3("device_register", did))
 
-        rpt_ack = loop.run_until_complete(
-            bridge.handle_message(ws, _v3(android_type, did, payload={}))
-        )
+        rpt_ack = await bridge.handle_message(ws, _v3(android_type, did, payload={}))
 
         assert rpt_ack is not None, (
             f"CLOSED: Android type '{android_type}' must return a response (got None)"

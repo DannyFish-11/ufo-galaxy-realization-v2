@@ -357,6 +357,10 @@ class TestSubstrateAuthorityStamping:
     def _run_envelope(self, mode: str, success: bool = True) -> Dict[str, Any]:
         from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.canonical_dispatch_slot_authority import (
+            CanonicalDispatchSlot,
+            CanonicalDispatchSlotsResult,
+        )
 
         tid = _tid()
         env = TaskEnvelope(
@@ -373,8 +377,26 @@ class TestSubstrateAuthorityStamping:
         router._config = {}
 
         base = self._make_base_result(tid, success=success)
-        with patch.object(router, "_execute_command", new=AsyncMock(return_value=base)):
-            return asyncio.run(router.route_envelope(env))
+        # Bypass the V3 slot gate so that the mocked _execute_command is reached
+        _approved_slot = CanonicalDispatchSlot(
+            device_id="dev_x",
+            execution_mode=mode,
+            slot_approved=True,
+            status="slot_approved",
+            registered=True,
+            transport_alive=True,
+        )
+        _approved_result = CanonicalDispatchSlotsResult(
+            execution_mode=mode,
+            approved_slots=[_approved_slot],
+            can_proceed=True,
+        )
+        with patch(
+            "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+            return_value=_approved_result,
+        ):
+            with patch.object(router, "_execute_command", new=AsyncMock(return_value=base)):
+                return asyncio.run(router.route_envelope(env))
 
     def test_substrate_role_stamped_on_success(self):
         result = self._run_envelope("command_only", success=True)
@@ -422,6 +444,10 @@ class TestSubstrateAuthorityStamping:
         """Failed results carry failure_domain from the error code."""
         from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.canonical_dispatch_slot_authority import (
+            CanonicalDispatchSlot,
+            CanonicalDispatchSlotsResult,
+        )
 
         tid = _tid()
         env = TaskEnvelope(
@@ -444,8 +470,25 @@ class TestSubstrateAuthorityStamping:
             "error_code": "DEVICE_NOT_FOUND",
             "error_message": "device not found",
         }
-        with patch.object(router, "_execute_command", new=AsyncMock(return_value=failed_result)):
-            result = asyncio.run(router.route_envelope(env))
+        _approved_slot = CanonicalDispatchSlot(
+            device_id="dev_x",
+            execution_mode="command_only",
+            slot_approved=True,
+            status="slot_approved",
+            registered=True,
+            transport_alive=True,
+        )
+        _approved_result = CanonicalDispatchSlotsResult(
+            execution_mode="command_only",
+            approved_slots=[_approved_slot],
+            can_proceed=True,
+        )
+        with patch(
+            "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+            return_value=_approved_result,
+        ):
+            with patch.object(router, "_execute_command", new=AsyncMock(return_value=failed_result)):
+                result = asyncio.run(router.route_envelope(env))
 
         assert result.get("failure_domain") == "remote_device_unavailable"
         assert result.get("failure_is_retryable") is True
@@ -555,6 +598,10 @@ class TestOrchestrationToSubstrateBoundary:
         )
         from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.canonical_dispatch_slot_authority import (
+            CanonicalDispatchSlot,
+            CanonicalDispatchSlotsResult,
+        )
 
         decisions = [
             OrchestrationDecision(agent_id=f"ag{i}", target_device_id=f"dev_{i}",
@@ -576,6 +623,21 @@ class TestOrchestrationToSubstrateBoundary:
                 "command": "cmd", "via": "command_router", "latency_ms": 1.0,
             }
 
+        def _make_approved_result(device_id: str) -> CanonicalDispatchSlotsResult:
+            slot = CanonicalDispatchSlot(
+                device_id=device_id,
+                execution_mode="command_only",
+                slot_approved=True,
+                status="slot_approved",
+                registered=True,
+                transport_alive=True,
+            )
+            return CanonicalDispatchSlotsResult(
+                execution_mode="command_only",
+                approved_slots=[slot],
+                can_proceed=True,
+            )
+
         substrate_results = []
         with patch.object(router, "_execute_command", new=AsyncMock(side_effect=_fake_execute)):
             for dec in decisions:
@@ -589,7 +651,11 @@ class TestOrchestrationToSubstrateBoundary:
                     args={},
                     remote_execution_mode=dec.resolved_execution_mode or "command_only",
                 )
-                res = asyncio.run(router.route_envelope(env))
+                with patch(
+                    "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+                    return_value=_make_approved_result(dec.target_device_id),
+                ):
+                    res = asyncio.run(router.route_envelope(env))
                 substrate_results.append(
                     OrchestrationMemberResult(
                         agent_id=dec.agent_id,

@@ -120,7 +120,23 @@ def inject_trace_metadata(data: dict) -> dict:
 
     # PR-2: runtime_session_id
     if not out.get("runtime_session_id"):
-        out["runtime_session_id"] = f"session_{uuid.uuid4().hex[:12]}"
+        # Try to resolve the real runtime_session_id from the attached session registry
+        # so that continuity checks see a consistent identity rather than a freshly
+        # generated surrogate.  Fall back to the generated surrogate when the registry
+        # is unavailable or the device has no active session.
+        _resolved_session_id: Optional[str] = None
+        _device_id_for_session = out.get("device_id")
+        if _device_id_for_session:
+            try:
+                from core.attached_runtime_session_registry import (
+                    lookup_session_by_device as _lsbd,
+                )
+                _session_entry = _lsbd(_device_id_for_session)
+                if _session_entry is not None:
+                    _resolved_session_id = _session_entry.runtime_session_id
+            except Exception:
+                pass
+        out["runtime_session_id"] = _resolved_session_id or f"session_{uuid.uuid4().hex[:12]}"
         injected.append("runtime_session_id")
 
     # PR-2: idempotency_key — derive from task_id when available

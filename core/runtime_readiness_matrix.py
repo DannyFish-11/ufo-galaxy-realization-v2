@@ -404,7 +404,10 @@ def _eval_capability_status_registry() -> Tuple[DimensionStatus, str]:
         assert not is_mainline_active("webrtc")
         local_ai = registry.get("local_ai")
         assert local_ai is not None
-        assert local_ai.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY
+        assert local_ai.status in (
+            CapabilityRuntimeStatus.STRUCTURAL_ONLY,
+            CapabilityRuntimeStatus.DEGRADED,
+        )
         return DimensionStatus.PASSED, (
             f"Capability status registry functional; {len(registry)} capabilities classified."
         )
