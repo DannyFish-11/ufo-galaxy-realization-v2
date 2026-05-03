@@ -207,18 +207,14 @@ def _map_runtime_status_to_task_status(raw_status: Any) -> Optional[str]:
         return None
     if status in _CANCELLED_STATUS_VALUES:
         return TaskStatus.CANCELLED.value
-    if status in _TERMINAL_COMPLETED_STATUS_VALUES:
-        return (
-            TaskStatus.FAILED.value
-            if status in {"failed", "degraded", "error"}
-            else TaskStatus.COMPLETED.value
-        )
+    if status in {"failed", "degraded", "error"}:
+        return TaskStatus.FAILED.value
+    if status in {"completed", "success"}:
+        return TaskStatus.COMPLETED.value
+    if status in {"running", "result", "partial_result", "continue"}:
+        return TaskStatus.RUNNING.value
     if status in _NON_TERMINAL_STATUS_VALUES:
-        return (
-            TaskStatus.RUNNING.value
-            if status in {"running", "result", "partial_result", "continue"}
-            else TaskStatus.PENDING.value
-        )
+        return TaskStatus.PENDING.value
     return None
 
 
