@@ -407,7 +407,12 @@ class SystemStateMachine:
             self._logger.info("记录: 灵动岛出现动画完成")
         elif animation.animation_type == "sidesheet_expand":
             self._logger.info("记录: 侧边栏展开动画完成")
-        elif animation.animation_type in {"fullagent_expand", "fullscreen_expand"}:
+        elif animation.animation_type == "fullscreen_expand":
+            self._logger.warning(
+                "Legacy animation type 'fullscreen_expand' is deprecated; use 'fullagent_expand' instead."
+            )
+            self._logger.info("记录: Full Agent 展开动画完成")
+        elif animation.animation_type == "fullagent_expand":
             self._logger.info("记录: Full Agent 展开动画完成")
     
     def get_animation_state(self, animation_id: str) -> Optional[AnimationState]:

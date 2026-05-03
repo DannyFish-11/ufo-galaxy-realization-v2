@@ -16,6 +16,7 @@ def test_legacy_state_names_alias_to_canonical_shell_vocabulary():
 def test_fullagent_transition_uses_canonical_state():
     state_machine = SystemStateMachine()
     state_machine.sleep()
+    assert state_machine.current_state is SystemState.DORMANT
 
     assert state_machine.wakeup()
     assert state_machine.current_state is SystemState.ISLAND
@@ -27,6 +28,7 @@ def test_fullagent_transition_uses_canonical_state():
 def test_legacy_fullscreen_transition_calls_canonical_fullagent_state():
     state_machine = SystemStateMachine()
     state_machine.sleep()
+    assert state_machine.current_state is SystemState.DORMANT
     assert state_machine.wakeup()
 
     state_machine.expand_to_fullscreen()
