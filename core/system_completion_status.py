@@ -78,6 +78,10 @@ _LABEL_COMPLETION_PCT = {
     CompletenessLabel.complete: 100.0,
 }
 
+# 防止在“均分刚好 100，但 verdict 仍未 fully_closed”的情况下对外输出虚假的
+# 100% 收口信号。此时最多只展示为“接近完成但尚未真正闭环”。
+MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT = 99.0
+
 
 @dataclass(frozen=True)
 class RemainingClosureItem:
@@ -167,7 +171,7 @@ def _compute_system_closure_pct(completeness_review: CompletenessReviewReport) -
         completeness_review.verdict != CompletenessVerdict.fully_closed
         and pct >= 100.0
     ):
-        return 99.0
+        return MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT
 
     return pct
 
