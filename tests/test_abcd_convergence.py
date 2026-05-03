@@ -113,7 +113,7 @@ class TestAOrchestrationEntry:
             return_value=fake_runtime,
         ):
             req = OrchestrationRequest(task_description="hello")
-            result = asyncio.get_event_loop().run_until_complete(orchestrate_task(req))
+            result = asyncio.run(orchestrate_task(req))
 
         assert result.task_id is not None
         assert result.status in ("completed", "failed", "delegated")
@@ -334,7 +334,11 @@ class TestCSchedulingUnification:
             "CommandRouter must reference get_device_pool_manager for automatic target selection"
 
     def test_command_router_uses_pool_when_no_target(self):
-        """CommandRouter.route_envelope must consult DevicePoolManager when no explicit target."""
+        """CommandRouter.route_envelope must consult DevicePoolManager when no explicit target.
+
+        DevicePoolManager is the fallback selector when capability_graph_selection
+        is unavailable or returns no match.
+        """
         from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
 
@@ -346,6 +350,12 @@ class TestCSchedulingUnification:
 
         fake_pool = MagicMock()
         fake_pool.select_device = _fake_select
+
+        # ACL result that allows the request through
+        fake_acl_result = MagicMock()
+        fake_acl_result.allowed = True
+        fake_acl_enforcer = MagicMock()
+        fake_acl_enforcer.check.return_value = fake_acl_result
 
         router = CommandRouter()
         env = TaskEnvelope(
@@ -359,8 +369,18 @@ class TestCSchedulingUnification:
         )
 
         import asyncio
-        with patch("core.command_router.get_device_pool_manager", return_value=fake_pool):
-            asyncio.get_event_loop().run_until_complete(router.route_envelope(env))
+        # Disable capability_graph_selection so DevicePoolManager fallback is reached.
+        with patch(
+            "core.capability_graph_selection.select_best_provider",
+            return_value=None,
+        ), patch(
+            "core.device_pool_manager.get_device_pool_manager",
+            return_value=fake_pool,
+        ), patch(
+            "core.acl_enforcer.get_acl_enforcer",
+            return_value=fake_acl_enforcer,
+        ):
+            asyncio.run(router.route_envelope(env))
 
         assert selected, \
             "CommandRouter must consult DevicePoolManager when no explicit target is given"

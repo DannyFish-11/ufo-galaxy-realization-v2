@@ -1314,7 +1314,7 @@ class DeviceRouter:
         """选择合适的设备（优先选择自主执行能力的设备），并尊重 exec_mode。
 
         PR-4: Delegates to :func:`galaxy_gateway.routing.device_selection.select_devices`
-        for the exec_mode filtering, autonomous preference, and pool-manager
+        for the exec_mode filtering, autonomous preference, and DevicePoolManager
         selection steps.  This method retains responsibility for resolving
         ``target_device_type`` and obtaining the candidate list from the
         local session cache.

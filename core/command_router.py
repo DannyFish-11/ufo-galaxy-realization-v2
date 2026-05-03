@@ -1966,6 +1966,35 @@ class CommandRouter:
                     }
                     if envelope.remote_execution_mode is not None:
                         _v3_blocked_result["remote_execution_mode"] = envelope.remote_execution_mode.value
+                    _v3_blocked_result["execution_substrate_role"] = "execution_substrate"
+                    _v3_blocked_result["arch_layer_id"] = "execution_substrate"
+                    # Stamp lifecycle state (always "failed" since success=False)
+                    try:
+                        from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS_v3
+                        _v3_blocked_result["lifecycle_state"] = _ELS_v3.FAILED.value
+                        if envelope.remote_execution_mode is not None:
+                            _v3_blocked_result["lifecycle_via_waiting_remote"] = True
+                    except Exception:
+                        pass
+                    # Stamp failure domain from V3_SLOT_BLOCKED error code
+                    try:
+                        from core.failure_domains import classify_from_error_code as _cfe_v3
+                        _fd_v3 = _cfe_v3(GatewayErrorCode.V3_SLOT_BLOCKED.value)
+                        _v3_blocked_result["failure_domain"] = _fd_v3.domain.value
+                        _v3_blocked_result["failure_is_retryable"] = _fd_v3.is_retryable
+                    except Exception:
+                        pass
+                    # Stamp introspection snapshot
+                    _v3_blocked_result["introspection_snapshot"] = {
+                        "authority_role": "execution_substrate",
+                        "execution_path": "local",
+                        "execution_substrate_role": "execution_substrate",
+                        "execution_mode": _v3_blocked_result.get("remote_execution_mode"),
+                        "lifecycle_state": _v3_blocked_result.get("lifecycle_state"),
+                        "failure_domain": _v3_blocked_result.get("failure_domain"),
+                        "failure_is_retryable": _v3_blocked_result.get("failure_is_retryable"),
+                        "success": False,
+                    }
                     return _v3_blocked_result
 
             except Exception as _v3_exc:

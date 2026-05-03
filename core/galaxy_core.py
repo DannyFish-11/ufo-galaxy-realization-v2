@@ -265,7 +265,7 @@ class GalaxyCore:
         # Construct AIPMessage for protocol validation only; the message object
         # is not dispatched here because register_device stores device info
         # locally in self.devices.  AIPMessage / AIPMessageType may be None
-        # when the optional enhancements.multidevice package is not installed.
+        # when the optional device-protocol extension package is not installed.
         if AIPMessage is not None and AIPMessageType is not None:
             AIPMessage(  # protocol validation — raises ValidationError on bad input
                 type=AIPMessageType.DEVICE_REGISTER,
