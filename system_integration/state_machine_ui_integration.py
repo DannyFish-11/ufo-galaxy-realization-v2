@@ -321,7 +321,7 @@ class SystemStateMachine:
             )
 
     def expand_to_fullscreen(self):
-        """兼容旧接口，转发到统一后的 FULLAGENT 状态。"""
+        """Legacy compatibility method; forwards to canonical FULLAGENT state."""
         self.expand_to_fullagent()
     
     def collapse_to_island(self):

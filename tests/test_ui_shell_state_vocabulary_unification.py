@@ -30,3 +30,11 @@ def test_legacy_fullscreen_transition_calls_canonical_fullagent_state():
 
     state_machine.expand_to_fullscreen()
     assert state_machine.current_state is SystemState.FULLAGENT
+
+
+def test_sleep_returns_to_canonical_dormant_state():
+    state_machine = SystemStateMachine()
+    state_machine._current_state = SystemState.FULLAGENT
+
+    state_machine.sleep()
+    assert state_machine.current_state is SystemState.DORMANT
