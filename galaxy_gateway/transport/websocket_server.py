@@ -21,7 +21,7 @@ import asyncio
 import json
 import logging
 from typing import Dict, Optional, Callable, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict
@@ -95,7 +95,7 @@ class WebSocketManager:
         try:
             await websocket.accept()
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             self.connections[device_id] = DeviceConnection(
                 device_id=device_id,
                 websocket=websocket,
@@ -202,7 +202,7 @@ class WebSocketManager:
 
             # 更新心跳时间
             if device_id in self.connections:
-                self.connections[device_id].last_heartbeat = datetime.utcnow()
+                self.connections[device_id].last_heartbeat = datetime.now(timezone.utc)
 
             # Dispatch based on canonical event.kind
             if event.kind == IngressEventKind.DEVICE_HEARTBEAT:
@@ -270,7 +270,7 @@ class WebSocketManager:
             try:
                 await asyncio.sleep(self.heartbeat_interval)
                 
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 timeout_threshold = now - timedelta(seconds=self.heartbeat_timeout)
                 
                 for device_id in list(self.connections.keys()):

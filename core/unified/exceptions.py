@@ -4,9 +4,22 @@ core/unified/exceptions.py
 Galaxy 系统统一异常体系。
 
 所有统一模块必须通过此文件中定义的异常类报告错误，禁止直接抛出裸异常。
+
+设计说明
+--------
+``GalaxyError`` 继承自 ``core.error_framework.GalaxyError``，统一了两套错误体系：
+
+- ``core.error_framework.GalaxyError``：框架层，携带 category/severity/recovery 元数据
+- 本文件的 ``GalaxyError``：unified 层包装，额外携带结构化的 ``code`` 字段和
+  ``extra`` 关键字参数，供设备管理和 LLM 路由等高层模块使用
+
+任何 ``isinstance(err, core.error_framework.GalaxyError)`` 检查对本文件中的所有
+异常类同样成立，不再存在双重定义。
 """
 
 from __future__ import annotations
+
+from ..error_framework import GalaxyError as _FrameworkGalaxyError
 
 
 # ============================================================================
@@ -14,10 +27,15 @@ from __future__ import annotations
 # ============================================================================
 
 
-class GalaxyError(Exception):
-    """Galaxy 系统顶级异常"""
+class GalaxyError(_FrameworkGalaxyError):
+    """Galaxy 系统顶级异常（unified 层）
+
+    在 ``core.error_framework.GalaxyError`` 之上增加了 ``code``（结构化错误代码）
+    和 ``extra``（任意关键字上下文）字段，以满足设备管理、LLM 路由等模块的分类需求。
+    """
 
     def __init__(self, message: str, code: str = "GALAXY_ERROR", **extra: object) -> None:
+        # 调用框架基类，使用默认的 category/severity/recovery。
         super().__init__(message)
         self.message = message
         self.code = code
@@ -35,8 +53,8 @@ class GalaxyError(Exception):
 class ConnectionError(GalaxyError):
     """连接层通用异常"""
 
-    def __init__(self, message: str, device_id: str = "", **extra: object) -> None:
-        super().__init__(message, code="CONNECTION_ERROR", **extra)
+    def __init__(self, message: str, device_id: str = "", code: str = "CONNECTION_ERROR", **extra: object) -> None:
+        super().__init__(message, code=code, **extra)
         self.device_id = device_id
 
 
@@ -81,8 +99,8 @@ class DeviceTimeoutError(ConnectionError):
 class DeviceManagerError(GalaxyError):
     """设备管理器通用异常"""
 
-    def __init__(self, message: str, **extra: object) -> None:
-        super().__init__(message, code="DEVICE_MANAGER_ERROR", **extra)
+    def __init__(self, message: str, code: str = "DEVICE_MANAGER_ERROR", **extra: object) -> None:
+        super().__init__(message, code=code, **extra)
 
 
 class DeviceAlreadyRegisteredError(DeviceManagerError):

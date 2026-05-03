@@ -21,7 +21,7 @@ import asyncio
 import logging
 import uuid
 from typing import Dict, List, Optional, Callable, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from ..protocol import (
@@ -80,7 +80,7 @@ class Task:
         self.priority = priority
         self.timeout = timeout
         self.status = TaskStatus.PENDING
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.started_at: Optional[datetime] = None
         self.completed_at: Optional[datetime] = None
         self.assigned_device: Optional[str] = None
@@ -294,7 +294,7 @@ class TaskOrchestrator:
         """
         logger.info(f"Processing task: {task.task_id}")
         task.status = TaskStatus.RUNNING
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(timezone.utc)
 
         # PR-2: retrieve or construct the envelope for this task.
         envelope = self._task_envelopes.get(task.task_id)
@@ -391,7 +391,7 @@ class TaskOrchestrator:
                 except Exception:
                     pass
         finally:
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(timezone.utc)
     
     async def _select_device(self, task: Task) -> Optional[str]:
         """选择执行任务的设备（优先选择自主执行能力的设备）"""
@@ -552,11 +552,11 @@ class TaskOrchestrator:
     
     async def _wait_for_completion(self, task: Task):
         """等待任务完成"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         
         while True:
             # 检查超时
-            elapsed = (datetime.utcnow() - start_time).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
             if elapsed > task.timeout:
                 task.status = TaskStatus.FAILED
                 task.error = "Task timeout"
@@ -608,7 +608,7 @@ class TaskOrchestrator:
             return False
         
         task.status = TaskStatus.CANCELLED
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
         
         # 发送取消消息到设备
         if task.assigned_device:

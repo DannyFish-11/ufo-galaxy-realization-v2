@@ -12,7 +12,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ class DeviceManager:
 
         self.devices[device_id] = device_info
         self.device_status[device_id] = "online"
-        self.device_last_seen[device_id] = datetime.utcnow()
+        self.device_last_seen[device_id] = datetime.now(timezone.utc)
 
         return True
 
@@ -103,7 +103,7 @@ class DeviceManager:
 
         if udm_ok and device_id in self.devices:
             self.device_status[device_id] = status
-            self.device_last_seen[device_id] = datetime.utcnow()
+            self.device_last_seen[device_id] = datetime.now(timezone.utc)
     
     def get_device(self, device_id: str) -> Optional[DeviceInfo]:
         """获取设备信息"""
@@ -206,7 +206,7 @@ class DeviceManager:
             correlation_id=message.message_id,
             payload={
                 "status": "registered",
-                "server_time": datetime.utcnow().isoformat()
+                "server_time": datetime.now(timezone.utc).isoformat()
             }
         )
     
