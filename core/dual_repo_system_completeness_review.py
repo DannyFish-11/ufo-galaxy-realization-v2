@@ -1020,32 +1020,35 @@ class DualRepoSystemCompletenessReviewer:
             if not (_try_import(m) or _module_file_exists(m))
         ]
 
-        reconciliation_type_registered = _file_contains(
+        reconciliation_type_source_present = _file_contains(
             "galaxy_gateway/protocol/aip_v3.py",
             "RECONCILIATION_SIGNAL",
             "reconciliation_signal",
         )
-        handoff_types_registered = _file_contains(
+        handoff_types_source_present = _file_contains(
             "galaxy_gateway/protocol/aip_v3.py",
             "HANDOFF_ACK",
             "HANDOFF_RESULT",
             "HANDOFF_FAILURE",
             "HANDOFF_ENVELOPE_V2_RESULT",
         )
-        bridge_handlers_registered = _file_contains(
+        bridge_handlers_source_present = _file_contains(
             "galaxy_gateway/android_bridge.py",
             "handle_reconciliation_signal",
             "handle_handoff_v2_result",
             "MessageType.RECONCILIATION_SIGNAL",
             "MessageType.HANDOFF_ENVELOPE_V2_RESULT",
         )
+        reconciliation_type_runtime_verified: Optional[bool] = None
+        handoff_types_runtime_verified: Optional[bool] = None
+        bridge_handlers_runtime_verified: Optional[bool] = None
         try:
             from galaxy_gateway.protocol.aip_v3 import MessageType  # type: ignore[import]
 
-            reconciliation_type_registered = (
+            reconciliation_type_runtime_verified = (
                 MessageType.RECONCILIATION_SIGNAL.value == "reconciliation_signal"
             )
-            handoff_types_registered = all(
+            handoff_types_runtime_verified = all(
                 hasattr(MessageType, name)
                 for name in (
                     "HANDOFF_ACK",
@@ -1060,7 +1063,7 @@ class DualRepoSystemCompletenessReviewer:
         try:
             import galaxy_gateway.android_bridge as android_bridge  # type: ignore[import]
 
-            bridge_handlers_registered = all(
+            bridge_handlers_runtime_verified = all(
                 hasattr(android_bridge, name)
                 for name in (
                     "handle_reconciliation_signal",
@@ -1069,6 +1072,22 @@ class DualRepoSystemCompletenessReviewer:
             )
         except Exception:
             pass
+
+        reconciliation_type_registered = (
+            reconciliation_type_runtime_verified
+            if reconciliation_type_runtime_verified is not None
+            else reconciliation_type_source_present
+        )
+        handoff_types_registered = (
+            handoff_types_runtime_verified
+            if handoff_types_runtime_verified is not None
+            else handoff_types_source_present
+        )
+        bridge_handlers_registered = (
+            bridge_handlers_runtime_verified
+            if bridge_handlers_runtime_verified is not None
+            else bridge_handlers_source_present
+        )
 
         completed: List[str] = []
         gaps: List[str] = []
