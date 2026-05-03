@@ -68,22 +68,20 @@ Group D — build_completeness_review() / get_completeness_review() — live pro
   D18. reset_completeness_review() causes next call to return new object.
 
 Group E — Honest labeling: deferred/evidence_gap not misclassified as complete
-  E01. cross_repo_evidence dimension MUST NOT be labeled 'complete'
-       (ReconciliationSignal wire layer is documented as missing).
-  E02. cross_repo_evidence label MUST be 'evidence_gap' or worse
-       (documented critical gap: AIP wire layer absent).
-  E03. cross_repo_evidence gap_items MUST be non-empty.
-  E04. cross_repo_evidence gap_items MUST contain text referencing
-       ReconciliationSignal or AIP wire.
+  E01. cross_repo_evidence dimension MUST be complete when current V2 wire
+       handlers and AIP message types are present.
+  E02. cross_repo_evidence completed_items MUST reference ReconciliationSignal.
+  E03. cross_repo_evidence completed_items MUST reference HandoffEnvelopeV2.
+  E04. cross_repo_evidence MUST NOT report stale missing-wire gap_items.
   E05. runtime_closure dimension MUST NOT be labeled 'complete' in a
        fresh environment (delegated flow never exercised).
   E06. runtime_closure deferred_items MUST be non-empty (deferred boundaries).
   E07. runtime_closure deferred_items MUST mention 'offline queue' or 'replay'.
-  E08. governance_release_readiness gap_items MUST be non-empty.
-  E09. governance_release_readiness gap_items MUST mention 'advisory' or
-       'non-blocking' or 'enforcement' or 'is_enforcing'.
+  E08. governance_release_readiness MUST be complete when is_enforcing=True
+       and CI workflows are present.
+  E09. governance_release_readiness completed_items MUST mention CI enforcement.
   E10. real_device_multi_device deferred_items MUST be non-empty.
-  E11. Verdict MUST NOT be 'fully_closed' (multiple evidence gaps present).
+  E11. Verdict MUST NOT be 'fully_closed' (runtime/real-device evidence gaps present).
   E12. blocking_gaps MUST be non-empty (at least one gap must be reported).
   E13. Deferred items MUST NOT be empty (system has acknowledged deferrals).
   E14. CompletenessLabel.evidence_gap is_blocking() MUST be True.
@@ -511,38 +509,42 @@ class TestHonestLabeling:
     'fully_closed' because the *structure* exists.
     """
 
-    def test_E01_cross_repo_not_labeled_complete(self, live_report):
+    def test_E01_cross_repo_labeled_complete_when_wire_paths_present(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
-        assert entry.label != CompletenessLabel.complete, (
-            "cross_repo_evidence MUST NOT be 'complete': "
-            "ReconciliationSignal AIP wire layer is documented as absent. "
-            "See docs/joint_system_review/04_cross_repo_contract.md §2.3"
+        assert entry.label == CompletenessLabel.complete, (
+            "cross_repo_evidence MUST be 'complete' when current V2 code has "
+            "MessageType.RECONCILIATION_SIGNAL plus registered reconciliation "
+            "and handoff_v2_result gateway handlers."
         )
 
-    def test_E02_cross_repo_labeled_evidence_gap_or_worse(self, live_report):
+    def test_E02_cross_repo_completed_mentions_reconciliation(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
-        # evidence_gap ordinal is 3; label must be <= 3 (i.e. is_blocking)
-        assert entry.label.is_blocking(), (
-            f"cross_repo_evidence label {entry.label.value!r} must be blocking "
-            "(evidence_gap or worse): AIP wire layer for ReconciliationSignal is absent"
+        completed_text = " ".join(entry.completed_items).lower()
+        assert "reconciliation" in completed_text, (
+            "cross_repo_evidence completed_items must mention the closed "
+            "ReconciliationSignal wire path"
         )
 
-    def test_E03_cross_repo_gap_items_non_empty(self, live_report):
+    def test_E03_cross_repo_completed_mentions_handoff(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
-        assert len(entry.gap_items) > 0, (
-            "cross_repo_evidence must have at least one gap_item "
-            "(ReconciliationSignal wire layer or HandoffEnvelopeV2 handler)"
+        completed_text = " ".join(entry.completed_items).lower()
+        assert "handoff" in completed_text, (
+            "cross_repo_evidence completed_items must mention the closed "
+            "HandoffEnvelopeV2 response path"
         )
 
-    def test_E04_cross_repo_gap_mentions_reconciliation_or_aip(self, live_report):
+    def test_E04_cross_repo_no_stale_missing_wire_gaps(self, live_report):
         entry = live_report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
         gap_text = " ".join(entry.gap_items).lower()
-        assert "reconciliation" in gap_text or "aip" in gap_text or "wire" in gap_text, (
-            "cross_repo_evidence gap_items must mention ReconciliationSignal or AIP wire"
+        assert "wire layer absent" not in gap_text
+        assert "handler absent" not in gap_text
+        assert "is not registered" not in gap_text, (
+            "cross_repo_evidence must not report stale missing-wire gaps when "
+            "current handlers and MessageType entries are present"
         )
 
     def test_E05_runtime_not_labeled_complete_fresh_env(self, live_report):
@@ -574,30 +576,28 @@ class TestHonestLabeling:
             "(from recovery_truth_surface deferred_boundaries)"
         )
 
-    def test_E08_governance_gap_items_non_empty(self, live_report):
+    def test_E08_governance_complete_when_ci_enforced(self, live_report):
         entry = live_report.get_dimension(
             CompletenessDimension.governance_release_readiness
         )
         assert entry is not None
-        assert len(entry.gap_items) > 0, (
-            "governance_release_readiness must have at least one gap_item "
-            "(release gate is advisory, not yet enforcing)"
+        assert entry.label == CompletenessLabel.complete, (
+            "governance_release_readiness must be complete when release gate "
+            "is_enforcing=True and governance CI workflows are present"
         )
 
-    def test_E09_governance_gap_mentions_advisory_or_enforcement(self, live_report):
+    def test_E09_governance_completed_mentions_ci_enforcement(self, live_report):
         entry = live_report.get_dimension(
             CompletenessDimension.governance_release_readiness
         )
         assert entry is not None
-        gap_text = " ".join(entry.gap_items).lower()
+        completed_text = " ".join(entry.completed_items).lower()
         assert (
-            "advisory" in gap_text
-            or "non-blocking" in gap_text
-            or "enforc" in gap_text
-            or "is_enforcing" in gap_text
+            "is_enforcing=true" in completed_text
+            and "governance_gate_enforcement.yml" in completed_text
         ), (
-            "governance gap_items must mention advisory/enforcement status "
-            "(is_enforcing=False on distributed_release_gate_skeleton)"
+            "governance completed_items must mention enforced release gate "
+            "status and CI workflow wiring"
         )
 
     def test_E10_real_device_deferred_items_non_empty(self, live_report):
@@ -611,14 +611,13 @@ class TestHonestLabeling:
     def test_E11_verdict_not_fully_closed(self, live_report):
         assert live_report.verdict != CompletenessVerdict.fully_closed, (
             "System verdict MUST NOT be 'fully_closed': "
-            "multiple evidence gaps exist (cross-repo wire layer, "
-            "advisory-only governance, no real-device CI)"
+            "runtime proof and real-device evidence/CI gaps still remain"
         )
 
     def test_E12_blocking_gaps_non_empty(self, live_report):
         assert len(live_report.blocking_gaps) > 0, (
-            "blocking_gaps MUST be non-empty: at least ReconciliationSignal "
-            "wire layer and HandoffEnvelopeV2 response handler are documented gaps"
+            "blocking_gaps MUST be non-empty while delegated-flow runtime proof "
+            "and real-device evidence/CI gaps remain"
         )
 
     def test_E13_deferred_acknowledged_non_empty(self, live_report):

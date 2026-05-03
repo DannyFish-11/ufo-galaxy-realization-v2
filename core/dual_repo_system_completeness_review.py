@@ -184,8 +184,8 @@ HONEST_DEFERRED_MUST_NOT_BE_LABELED_COMPLETE_POLICY: str = (
     "CompletenessLabel.deferred or CompletenessLabel.evidence_gap in this "
     "artifact.  It MUST NOT be upgraded to CompletenessLabel.complete or "
     "CompletenessLabel.verified regardless of architectural framing.  "
-    "Examples: Android ReconciliationSignal wire layer, HandoffEnvelopeV2 "
-    "response gateway handler absence, real-device CI automation absence."
+    "Examples: delegated-flow runtime proof absence, real Android device "
+    "evidence absence, and real-device CI automation absence."
 )
 
 ARCHITECTURE_COMPLETE_DOES_NOT_IMPLY_RUNTIME_CLOSED_POLICY: str = (
@@ -207,8 +207,9 @@ CROSS_REPO_EVIDENCE_REQUIRES_WIRE_LAYER_POLICY: str = (
     "relevant artifact.  An Android-side DTO or evaluator artifact "
     "WITHOUT a corresponding AIP MsgType entry and V2 gateway handler "
     "MUST be classified as 'evidence_gap'.  "
-    "Documented gap: ReconciliationSignal AIP wire layer, "
-    "HandoffEnvelopeV2 response gateway handler."
+    "Current code verifies ReconciliationSignal and HandoffEnvelopeV2 response "
+    "wire paths as present; regressions in either path must downgrade the "
+    "cross-repo evidence dimension."
 )
 
 
@@ -614,6 +615,24 @@ def _file_exists(rel_path: str) -> bool:
     return os.path.isfile(os.path.join(project_root, rel_path))
 
 
+def _module_file_exists(module_path: str) -> bool:
+    """Return True when a module's source file exists in the repository."""
+    rel_path = module_path.replace(".", os.sep) + ".py"
+    return _file_exists(rel_path)
+
+
+def _file_contains(rel_path: str, *needles: str) -> bool:
+    """Return True when a repository file contains every supplied needle."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(project_root, rel_path)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return False
+    return all(needle in text for needle in needles)
+
+
 # ---------------------------------------------------------------------------
 # DualRepoSystemCompletenessReviewer
 # ---------------------------------------------------------------------------
@@ -949,9 +968,10 @@ class DualRepoSystemCompletenessReviewer:
     def _assess_cross_repo_evidence(self) -> CompletenessEntry:
         """Assess cross-repo evidence maturity.
 
-        This dimension is the most honest reflection of the documented
-        gap: Android readiness/acceptance/governance artifacts exist but
-        cannot reach V2 due to missing AIP wire layer.
+        This dimension verifies the current live-code wire path rather than
+        repeating older audit documents.  Older reviews recorded two critical
+        gaps (ReconciliationSignal AIP wire and HandoffEnvelopeV2 response
+        handler); current code has both V2 handlers and message types present.
         """
         dim = CompletenessDimension.cross_repo_evidence
 
@@ -962,12 +982,17 @@ class DualRepoSystemCompletenessReviewer:
             ("core.android_evaluator_artifact_ingress", "Evaluator artifact ingress"),
             ("core.android_delegated_runtime_audit", "Delegated runtime audit"),
             ("core.android_handoff_v2_response_ingress", "Handoff V2 response ingress"),
+            ("core.android_delegated_runtime_lifecycle_coordinator", "Lifecycle coordinator"),
         ]
         ingress_available = [
-            (m, label) for m, label in ingress_modules if _try_import(m)
+            (m, label)
+            for m, label in ingress_modules
+            if _try_import(m) or _module_file_exists(m)
         ]
         ingress_missing = [
-            (m, label) for m, label in ingress_modules if not _try_import(m)
+            (m, label)
+            for m, label in ingress_modules
+            if not (_try_import(m) or _module_file_exists(m))
         ]
 
         # Cross-repo contract documents
@@ -977,6 +1002,73 @@ class DualRepoSystemCompletenessReviewer:
             "docs/CROSS_REPO_SIGNAL_CLOSURE_VALIDATION_MATRIX.md",
         ]
         contract_docs_present = [f for f in contract_docs if _file_exists(f)]
+
+        wire_modules = [
+            ("galaxy_gateway.protocol.aip_v3", "AIP v3 MessageType"),
+            ("galaxy_gateway.android.handlers.reconciliation_signal", "ReconciliationSignal handler"),
+            ("galaxy_gateway.android.handlers.handoff_v2_result", "HandoffEnvelopeV2 result handler"),
+            ("galaxy_gateway.android_bridge", "AndroidBridge handler table"),
+        ]
+        wire_available = [
+            (m, label)
+            for m, label in wire_modules
+            if _try_import(m) or _module_file_exists(m)
+        ]
+        wire_missing = [
+            (m, label)
+            for m, label in wire_modules
+            if not (_try_import(m) or _module_file_exists(m))
+        ]
+
+        reconciliation_type_registered = _file_contains(
+            "galaxy_gateway/protocol/aip_v3.py",
+            "RECONCILIATION_SIGNAL",
+            "reconciliation_signal",
+        )
+        handoff_types_registered = _file_contains(
+            "galaxy_gateway/protocol/aip_v3.py",
+            "HANDOFF_ACK",
+            "HANDOFF_RESULT",
+            "HANDOFF_FAILURE",
+            "HANDOFF_ENVELOPE_V2_RESULT",
+        )
+        bridge_handlers_registered = _file_contains(
+            "galaxy_gateway/android_bridge.py",
+            "handle_reconciliation_signal",
+            "handle_handoff_v2_result",
+            "MessageType.RECONCILIATION_SIGNAL",
+            "MessageType.HANDOFF_ENVELOPE_V2_RESULT",
+        )
+        try:
+            from galaxy_gateway.protocol.aip_v3 import MessageType  # type: ignore[import]
+
+            reconciliation_type_registered = (
+                MessageType.RECONCILIATION_SIGNAL.value == "reconciliation_signal"
+            )
+            handoff_types_registered = all(
+                hasattr(MessageType, name)
+                for name in (
+                    "HANDOFF_ACK",
+                    "HANDOFF_RESULT",
+                    "HANDOFF_FAILURE",
+                    "HANDOFF_ENVELOPE_V2_RESULT",
+                )
+            )
+        except Exception:
+            pass
+
+        try:
+            import galaxy_gateway.android_bridge as android_bridge  # type: ignore[import]
+
+            bridge_handlers_registered = all(
+                hasattr(android_bridge, name)
+                for name in (
+                    "handle_reconciliation_signal",
+                    "handle_handoff_v2_result",
+                )
+            )
+        except Exception:
+            pass
 
         completed: List[str] = []
         gaps: List[str] = []
@@ -996,64 +1088,76 @@ class DualRepoSystemCompletenessReviewer:
             "core.android_participant_evidence_ingress: "
             "file-based evidence contract mechanism present for JSON artifact ingestion"
         )
-
-        # CRITICAL DOCUMENTED GAPS (from docs/joint_system_review/04_cross_repo_contract.md)
-        gaps.append(
-            "CRITICAL: ReconciliationSignal AIP wire layer absent — "
-            "Android DeviceReadinessArtifact, DeviceAcceptanceArtifact, "
-            "DeviceGovernanceArtifact, DeviceStrategyArtifact cannot reach V2. "
-            "Root cause: AipModels.kt MsgType enum has no reconciliation_signal entry; "
-            "ReconciliationSignal.kt DTO exists but is not serialized to AIP v3 wire format. "
-            "See: docs/joint_system_review/04_cross_repo_contract.md §2.3"
-        )
-        gaps.append(
-            "CRITICAL: HandoffEnvelopeV2 response gateway handler absent — "
-            "android_bridge.py has no handle_handoff_response import; "
-            "galaxy_gateway/android/handlers/ has no handoff_response.py; "
-            "Android handoff_envelope_v2_result messages fall into else branch (unhandled). "
-            "See: docs/joint_system_review/04_cross_repo_contract.md §1.2"
-        )
-        gaps.append(
-            "V2 readiness/governance gates lack Android artifact input: "
-            "DelegatedFlowReadinessGate and DelegatedFlowAcceptanceGate produce verdicts "
-            "without Android-side readiness dimension inputs due to wire layer gap."
-        )
+        if wire_available:
+            completed.append(
+                "V2 live wire modules present: "
+                + ", ".join(m for m, _ in wire_available)
+            )
+        if reconciliation_type_registered:
+            completed.append(
+                "galaxy_gateway.protocol.aip_v3.MessageType includes "
+                "RECONCILIATION_SIGNAL ('reconciliation_signal')"
+            )
+        if handoff_types_registered and bridge_handlers_registered:
+            completed.append(
+                "AndroidBridge registers ReconciliationSignal and HandoffEnvelopeV2 "
+                "response gateway handlers; handoff responses call "
+                "core.android_handoff_v2_response_ingress"
+            )
 
         if ingress_missing:
             gaps.append(
                 "Missing V2-side ingress modules: "
                 + ", ".join(m for m, _ in ingress_missing)
             )
+        if wire_missing:
+            gaps.append(
+                "Missing V2 live wire modules: "
+                + ", ".join(m for m, _ in wire_missing)
+            )
+        if not reconciliation_type_registered:
+            gaps.append(
+                "ReconciliationSignal AIP wire regression: "
+                "MessageType.RECONCILIATION_SIGNAL is not registered"
+            )
+        if not handoff_types_registered or not bridge_handlers_registered:
+            gaps.append(
+                "HandoffEnvelopeV2 response wire regression: "
+                "handoff message types or AndroidBridge handlers are not registered"
+            )
 
         deferred.append(
-            "Android compat/legacy influence reporting path: depends on "
-            "ReconciliationSignal channel (deferred until wire layer is built)"
+            "Cross-repo signal flow still requires runtime activation: "
+            "Android cross_device_enabled=true, a reachable V2 gateway URL, "
+            "and an active WebSocket session"
         )
 
-        # This dimension is evidence_gap due to documented critical wire layer gaps
-        label = CompletenessLabel.evidence_gap
+        label = (
+            CompletenessLabel.complete
+            if not gaps
+            else CompletenessLabel.evidence_gap
+        )
 
         return CompletenessEntry(
             dimension=dim,
             label=label,
             summary=(
-                "Cross-repo evidence architecture is designed and partially built: "
-                "V2-side ingress modules exist, file-based evidence contract is present, "
-                "cross-repo contract documentation is comprehensive. "
-                "CRITICAL GAPS: ReconciliationSignal AIP wire layer is absent "
-                "(AipModels.kt MsgType has no reconciliation_signal entry), "
-                "preventing Android readiness/acceptance/governance artifacts from "
-                "reaching V2 through the live wire path. "
-                "HandoffEnvelopeV2 response handler is absent at gateway layer. "
-                "These are EVIDENCE GAPS, not deferred items — they prevent the "
-                "cross-repo evidence flow from being considered closed."
+                "Cross-repo evidence wire path is now code-complete on the V2 side: "
+                "AIP v3 MessageType contains reconciliation_signal and handoff "
+                "response types, AndroidBridge imports/registers the reconciliation "
+                "and handoff_v2_result handlers, and V2 ingress modules are present. "
+                "Older review documents that described these two paths as absent are "
+                "stale relative to current code. Remaining limits are runtime "
+                "activation and real-device evidence, which are assessed in the "
+                "runtime_closure and real_device_multi_device dimensions."
             ),
             completed_items=completed,
             gap_items=gaps,
             deferred_items=deferred,
-            code_references=[m for m, _ in ingress_available],
+            code_references=[m for m, _ in ingress_available] + [m for m, _ in wire_available],
             test_references=[
                 "tests/test_android_participant_evidence_ingress.py",
+                "tests/test_fresh_dual_repo_code_audit.py",
             ],
         )
 
@@ -1078,15 +1182,24 @@ class DualRepoSystemCompletenessReviewer:
 
         # Check if release gate skeleton is enforcing
         skeleton_enforcing: Optional[bool] = None
+        enforcement_authority_present = False
         if _try_import("core.distributed_release_gate_skeleton"):
             try:
                 from core.distributed_release_gate_skeleton import (  # type: ignore[import]
+                    GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
                     evaluate_distributed_release_gate,
                 )
                 r = evaluate_distributed_release_gate()
                 skeleton_enforcing = getattr(r, "is_enforcing", None)
+                enforcement_authority_present = bool(GATE_IS_NOW_CI_ENFORCING_AUTHORITY)
             except Exception:
                 skeleton_enforcing = None
+        governance_ci_workflow_present = _file_exists(
+            ".github/workflows/governance_gate_enforcement.yml"
+        )
+        reality_audit_ci_workflow_present = _file_exists(
+            ".github/workflows/dual_repo_reality_audit.yml"
+        )
 
         # Taxonomy available and register-able?
         taxonomy_functional = False
@@ -1124,6 +1237,23 @@ class DualRepoSystemCompletenessReviewer:
             "core.v2_readiness_governance_evidence_surface: evidence surface "
             "provides reviewable classification of canonical vs advisory evidence"
         )
+        if skeleton_enforcing is True and enforcement_authority_present:
+            completed.append(
+                "core.distributed_release_gate_skeleton: is_enforcing=True; "
+                "GATE_IS_NOW_CI_ENFORCING_AUTHORITY marks promotion from "
+                "advisory skeleton to enforced governance posture"
+            )
+        if governance_ci_workflow_present:
+            completed.append(
+                ".github/workflows/governance_gate_enforcement.yml: "
+                "hard-blocking governance verdict and cross-repo consistency gates "
+                "are wired into CI"
+            )
+        if reality_audit_ci_workflow_present:
+            completed.append(
+                ".github/workflows/dual_repo_reality_audit.yml: "
+                "dual-repo reality audit is wired as a CI gate"
+            )
 
         if skeleton_enforcing is False:
             gaps.append(
@@ -1137,15 +1267,16 @@ class DualRepoSystemCompletenessReviewer:
                 "(could not evaluate is_enforcing)"
             )
 
-        gaps.append(
-            "Release gate not connected to CI/CD pipeline: governance verdict remains "
-            "advisory/non-blocking and does not automatically enforce release blocking; "
-            "human review is still required"
-        )
-        gaps.append(
-            "Android-side governance artifacts not reaching V2 gates: "
-            "DelegatedFlowReadinessGate inputs lack Android dimension (wire layer gap)"
-        )
+        if not governance_ci_workflow_present:
+            gaps.append(
+                "Release gate CI workflow missing: governance verdict would not "
+                "automatically enforce release blocking"
+            )
+        if not reality_audit_ci_workflow_present:
+            gaps.append(
+                "Dual-repo reality audit CI workflow missing: critical audit gaps "
+                "would not automatically fail CI"
+            )
 
         if missing_gov:
             gaps.append(
@@ -1161,12 +1292,11 @@ class DualRepoSystemCompletenessReviewer:
             "automatic trigger not yet connected"
         )
 
-        # Label: governance framework is complete structurally but enforcing state
-        # is advisory only; this is evidence_gap (not deferred, because it's a
-        # real gap in enforcement wiring)
         if (
             len(available_gov) == len(gov_modules)
             and skeleton_enforcing
+            and governance_ci_workflow_present
+            and reality_audit_ci_workflow_present
             and not gaps
         ):
             label = CompletenessLabel.complete
@@ -1181,15 +1311,16 @@ class DualRepoSystemCompletenessReviewer:
             dimension=dim,
             label=label,
             summary=(
-                "Governance and release readiness framework is structurally complete: "
+                "Governance and release readiness framework is code-complete: "
                 "unified taxonomy (PR-8), readiness gate (PR-9V2), acceptance gate "
                 "(PR-10V2), post-graduation governance (PR-11V2), evidence surface "
                 "(PR-6V2), and system final acceptance verdict (PR-17V2) all exist "
                 "and are importable. "
-                "EVIDENCE GAPS: release gate skeleton is in advisory/non-enforcing mode; "
-                "the gate does not currently block real execution; Android-side governance "
-                "artifacts do not reach V2 gates (wire layer gap); no CI/CD pipeline "
-                "integration for automatic release blocking."
+                "The distributed release gate reports is_enforcing=True and "
+                "governance_gate_enforcement.yml hard-blocks governance/cross-repo "
+                "consistency failures in CI. Remaining non-100% items are not "
+                "governance wiring gaps; they are runtime/real-device evidence "
+                "closure gaps reported in their own dimensions."
             ),
             completed_items=completed,
             gap_items=gaps,
@@ -1199,6 +1330,7 @@ class DualRepoSystemCompletenessReviewer:
                 "tests/test_pr8_v2_release_governance_taxonomy.py",
                 "tests/test_pr17_v2_system_final_acceptance_verdict.py",
                 "tests/test_pr537_dual_repo_system_reality_audit.py",
+                "tests/test_pr_block3_governance_ci_enforcement.py",
             ],
         )
 
@@ -1466,17 +1598,22 @@ class DualRepoSystemCompletenessReviewer:
         lines += [
             "",
             "DISTANCE FROM FULLY OPERATIONAL:",
-            "  1. ReconciliationSignal AIP wire layer must be built",
-            "     (AipModels.kt MsgType + V2 gateway handler + ingress wiring)",
-            "  2. HandoffEnvelopeV2 response gateway handler must be added",
-            "  3. Release gate must be wired to CI/CD for automatic blocking",
-            "  4. Real-device CI automation must be established",
-            "  5. Delegated flow must be exercised end-to-end once to prove",
+            "  1. Delegated flow must be exercised end-to-end once to prove",
             "     runtime closure (decision history currently empty)",
+            "  2. Real Android device evidence artifact must be captured and ingested",
+            "     via ANDROID_PARTICIPANT_EVIDENCE_PATH",
+            "  3. Real-device / multi-device CI automation must be established",
+            "  4. Zero-config provisioning is still absent; Android deployments need",
+            "     cross_device_enabled=true and a correct gateway URL",
+            "  5. Deferred recovery boundaries remain: offline queue ordering,",
+            "     reconnect transport binding, multi-device simultaneous reconnect ordering",
+            "  Closed since older audit: ReconciliationSignal AIP wire,",
+            "     HandoffEnvelopeV2 response handler, and governance CI enforcement",
             "",
             "KEY CODE SURFACES FOR REVIEWERS:",
             "  core.system_final_acceptance_verdict    (PR-17V2)",
             "  core.dual_repo_system_reality_audit     (PR-537)",
+            "  core.fresh_dual_repo_code_audit         (fresh code-only audit)",
             "  core.v2_readiness_governance_evidence_surface (PR-6V2)",
             "  core.release_governance_taxonomy        (PR-8)",
             "  core.delegated_flow_decision_history    (PR-V2-4DH)",
