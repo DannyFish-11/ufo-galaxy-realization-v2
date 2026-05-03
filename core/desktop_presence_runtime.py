@@ -349,7 +349,8 @@ class DesktopPresenceRuntime:
         Args:
             message: Natural-language request text.
             source: **Observability tag only** — indicates which adapter surface
-                originated the request (``"chat"``, ``"e2e"``, ``"openclawd"``).
+                originated the request (``"chat"``, ``"e2e"``, ``"openclawd"``,
+                ``"android_vision"``, ``"vision_sampler"``).
                 This does NOT confer subject-core authority to the caller; all
                 sources enter the same shell → liminal → manifest → silent path.
             device_id: Optional source-device identifier.
@@ -602,7 +603,7 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "openclawd"):
+        if source in ("chat", "openclawd", "android_vision", "vision_sampler"):
             return await self._handle_via_openclawd(
                 rsession=rsession,
                 message=message,

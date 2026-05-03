@@ -4,10 +4,9 @@ galaxy_gateway/android/handlers/vision.py
 Handles vision_request messages from Android devices.
 
 The handler creates a canonical MultiModalContext from the incoming screenshot
-and routes it through the center's OpenClawd multimodal pipeline.  This
-ensures that all Android visual inputs are processed through the same native
-multimodal path as desktop inputs, enabling proper fusion with other modalities
-and using the best available multimodal provider via MultiLLMRouter.
+and routes it through the runtime shell.  This ensures that Android visual
+inputs enter the same DesktopPresenceRuntime → OpenClawd authority chain as
+other request surfaces, while still using the native multimodal fusion path.
 """
 
 from __future__ import annotations
@@ -29,10 +28,11 @@ async def handle_vision_request(
 ) -> Optional[Dict[str, Any]]:
     """处理视觉请求：Android 上传截图 → 多模态管道分析 → task_assign 回推
 
-    Routes the Android screenshot through the canonical multimodal pipeline:
+    Routes the Android screenshot through the canonical runtime-shell pipeline:
     1. Wraps the screenshot in a ``MultiModalContext`` (canonical schema).
-    2. Delegates to ``OpenClawd.process()`` via the multimodal path so the
-       center's native multimodal routing and VLM fusion apply.
+    2. Delegates to ``DesktopPresenceRuntime.handle_request()`` so the
+       runtime shell remains the single ingress authority and OpenClawd still
+       receives the multimodal payload through its native fusion path.
     3. Falls back to the legacy ``VisionPipeline`` if OpenClawd is unavailable.
     """
     device_id = message.get("device_id")
@@ -50,10 +50,10 @@ async def handle_vision_request(
             "image_base64 is required for vision_request",
         )
 
-    # ── Primary path: route through OpenClawd multimodal pipeline ──────────
+    # ── Primary path: route through the runtime shell multimodal pipeline ───
     vision_payload: Dict[str, Any] = {}
     try:
-        vision_payload = await _process_via_openclawd(
+        vision_payload = await _process_via_runtime_shell(
             image_base64=image_base64,
             task_context=task_context,
             mode=mode,
@@ -61,7 +61,7 @@ async def handle_vision_request(
         )
     except Exception as exc:
         logger.warning(
-            "OpenClawd multimodal path unavailable (%s), falling back to VisionPipeline",
+            "runtime-shell multimodal path unavailable (%s), falling back to VisionPipeline",
             exc,
         )
         vision_payload = await _process_via_vision_pipeline(
@@ -86,17 +86,17 @@ async def handle_vision_request(
     return response
 
 
-async def _process_via_openclawd(
+async def _process_via_runtime_shell(
     image_base64: str,
     task_context: str,
     mode: str,
     device_id: str,
 ) -> Dict[str, Any]:
-    """Route the vision request through OpenClawd's multimodal pipeline."""
-    from core.openclawd import OpenClawd
+    """Route the vision request through the runtime shell multimodal path."""
+    from core.desktop_presence_runtime import get_desktop_presence_runtime
     from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
-    oc = OpenClawd()
+    runtime = get_desktop_presence_runtime()
 
     # Build canonical multimodal context from the Android screenshot
     mm_context = MultiModalContext(
@@ -112,10 +112,12 @@ async def _process_via_openclawd(
     )
 
     prompt = task_context or "Analyse this Android screen and describe what you see."
-    result = await oc.process(
+    result = await runtime.handle_request(
         message=prompt,
+        source="android_vision",
         multimodal_context=mm_context,
         device_id=device_id or None,
+        mode=mode,
     )
 
     return {
@@ -125,8 +127,9 @@ async def _process_via_openclawd(
             "execution_path":   result.get("execution_path", ""),
             "runtime_domain":   result.get("runtime_domain", ""),
             "multimodal_route": result.get("multimodal_route_decision", {}),
+            "runtime_session_id": result.get("runtime_session_id"),
         },
-        "source": "openclawd_multimodal",
+        "source": "runtime_shell_multimodal",
     }
 
 

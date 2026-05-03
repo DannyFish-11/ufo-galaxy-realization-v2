@@ -5,8 +5,8 @@ Galaxy — Vision Sampler Service
 =================================
 
 Server-side service that pulls frames from Node_95 WebRTC Receiver at a
-configurable frame rate, feeds them into OpenClawd as multi-modal context,
-and optionally routes any returned action command via command_router.
+configurable frame rate, feeds them into the runtime shell as multi-modal
+context, and optionally routes any returned action command via command_router.
 
 Usage example::
 
@@ -122,9 +122,10 @@ async def run_sampling_session(
     The function pulls frames from Node_95 at *fps* frames per second for
     *duration* seconds, packages them as base64-encoded images into a
     :class:`~core.schemas.multimodal.MultiModalContext`, calls
-    ``OpenClawd.process()``, and — if the response carries an ``action``
-    payload — wraps it in a :class:`~core.schemas.task_envelope.TaskEnvelope`
-    and routes it via ``command_router.route_envelope`` (PR-1 unified entry).
+    ``DesktopPresenceRuntime.handle_request()`` so the canonical runtime shell
+    owns the ingress, and — if the response carries an ``action`` payload —
+    wraps it in a :class:`~core.schemas.task_envelope.TaskEnvelope` and routes
+    it via ``command_router.route_envelope``.
 
     Args:
         device_id: The target device identifier used to fetch frames.
@@ -132,10 +133,10 @@ async def run_sampling_session(
                    the Node_95 capture rate are silently clamped by the
                    upstream receiver.
         duration:  Total sampling window in seconds (default 10.0).
-        prompt:    Optional instruction passed to OpenClawd.  Falls back to a
-                   built-in observe-and-suggest prompt when omitted.
-        mode:      Optional mode hint forwarded to OpenClawd (e.g.
-                   ``"observe"``, ``"control"``).
+        prompt:    Optional instruction passed to the runtime shell.  Falls back to a
+                    built-in observe-and-suggest prompt when omitted.
+        mode:      Optional mode hint forwarded downstream (e.g.
+                    ``"observe"``, ``"control"``).
 
     Returns:
         A dict with the following keys::
@@ -254,30 +255,32 @@ async def run_sampling_session(
     # ── Build MultiModalContext ──────────────────────────────────────────────
     mm_context = MultiModalContext(images=images)
 
-    # ── Call OpenClawd ───────────────────────────────────────────────────────
+    # ── Call runtime shell ───────────────────────────────────────────────────
     openclawd_response: Optional[Dict[str, Any]] = None
     try:
-        from core.openclawd import get_openclawd
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
 
-        clawd = get_openclawd()
-        openclawd_response = await clawd.process(
+        runtime = get_desktop_presence_runtime()
+        openclawd_response = await runtime.handle_request(
             message=effective_prompt,
+            source="vision_sampler",
             device_id=device_id,
             multimodal_context=mm_context,
+            mode=mode,
         )
         logger.info(
-            "VisionSampler: OpenClawd processed %d frame(s) for device=%s",
+            "VisionSampler: runtime shell processed %d frame(s) for device=%s",
             frames_sampled,
             device_id,
         )
     except Exception as exc:
-        logger.error("VisionSampler: OpenClawd.process failed — %s", exc)
+        logger.error("VisionSampler: runtime shell request failed — %s", exc)
         return {
             "success": False,
             "frames_sampled": frames_sampled,
             "openclawd_response": None,
             "command_result": None,
-            "error": f"OpenClawd error: {exc}",
+            "error": f"Runtime shell error: {exc}",
         }
 
     # ── Route action command if present ─────────────────────────────────────

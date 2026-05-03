@@ -514,7 +514,9 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     primary device ingress authority.
     """
 
-    from core.openclawd import get_openclawd as _get_openclawd
+    from core.desktop_presence_runtime import (
+        get_desktop_presence_runtime as _get_desktop_presence_runtime,
+    )
     compat_ws_enabled = os.getenv("GALAXY_ENABLE_CORE_COMPAT_WS", "").lower() in (
         "1",
         "true",
@@ -907,12 +909,20 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
                 elif msg_type == "chat":
                     try:
-                        clawd = _get_openclawd()
-                        result = await clawd.process(
+                        runtime = _get_desktop_presence_runtime()
+                        _context = data.get("context", [])
+                        if isinstance(_context, dict):
+                            _context = [_context]
+                        elif not isinstance(_context, list):
+                            _context = None
+
+                        result = await runtime.handle_request(
                             message=data.get("message", ""),
+                            source="chat",
                             device_id=device_id,
                             session_id=data.get("session_id", device_id),
-                            context=data.get("context", []),
+                            context=_context,
+                            multimodal_context=data.get("multimodal_context"),
                         )
                         await websocket.send_json({
                             "type": "chat_reply",
@@ -920,6 +930,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             "reply": result.get("response", result.get("reply", "")),
                             "mode": result.get("intent", "chat"),
                             "success": result.get("success", True),
+                            "runtime_session_id": result.get("runtime_session_id"),
                         })
                     except Exception as e:
                         await websocket.send_json({

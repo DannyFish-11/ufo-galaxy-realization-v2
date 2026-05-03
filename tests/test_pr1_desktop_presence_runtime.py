@@ -731,3 +731,87 @@ class TestGatewayAuthorityChain:
             "this bypasses DesktopPresenceRuntime and violates the authority chain"
         )
 
+
+class TestCompatWebSocketAuthorityChain:
+    """Legacy core-direct websocket chat must still enter via the runtime shell."""
+
+    def _read_api_routes(self) -> str:
+        return pathlib.Path(__file__).parent.parent.joinpath(
+            "core/api_routes.py"
+        ).read_text(encoding="utf-8")
+
+    def test_compat_ws_chat_uses_runtime_shell(self):
+        src = self._read_api_routes()
+        assert "get_desktop_presence_runtime" in src, (
+            "core/api_routes.py compat websocket chat must obtain DesktopPresenceRuntime"
+        )
+        assert "runtime.handle_request(" in src, (
+            "core/api_routes.py compat websocket chat must call runtime.handle_request()"
+        )
+
+    def test_compat_ws_chat_does_not_call_openclawd_directly(self):
+        src = self._read_api_routes()
+        branch_start = src.find('elif msg_type == "chat":')
+        assert branch_start != -1, 'compat websocket "chat" branch not found'
+        next_branch = src.find("\n                elif ", branch_start + 1)
+        branch_body = src[branch_start:next_branch] if next_branch != -1 else src[branch_start:]
+        assert "clawd.process(" not in branch_body, (
+            'compat websocket "chat" branch must not call OpenClawd.process() directly'
+        )
+        assert 'source="chat"' in branch_body or "source='chat'" in branch_body, (
+            'compat websocket "chat" branch must keep source="chat" when calling runtime.handle_request()'
+        )
+
+
+class TestAndroidVisionAuthorityChain:
+    """Android vision requests must enter through DesktopPresenceRuntime."""
+
+    def _read_android_vision_handler(self) -> str:
+        return pathlib.Path(__file__).parent.parent.joinpath(
+            "galaxy_gateway/android/handlers/vision.py"
+        ).read_text(encoding="utf-8")
+
+    def test_android_vision_handler_uses_runtime_shell(self):
+        src = self._read_android_vision_handler()
+        assert "get_desktop_presence_runtime" in src, (
+            "android vision handler must obtain DesktopPresenceRuntime"
+        )
+        assert "runtime.handle_request(" in src, (
+            "android vision handler must route requests through runtime.handle_request()"
+        )
+
+    def test_android_vision_handler_does_not_instantiate_openclawd(self):
+        src = self._read_android_vision_handler()
+        assert "OpenClawd()" not in src, (
+            "android vision handler must not instantiate OpenClawd directly"
+        )
+        assert ".process(" not in src.split("VisionPipeline")[0], (
+            "android vision primary path must not call OpenClawd.process() directly"
+        )
+
+
+class TestVisionSamplerAuthorityChain:
+    """Vision sampler ingress must also enter through the runtime shell."""
+
+    def _read_vision_sampler(self) -> str:
+        return pathlib.Path(__file__).parent.parent.joinpath(
+            "core/services/vision_sampler.py"
+        ).read_text(encoding="utf-8")
+
+    def test_vision_sampler_uses_runtime_shell(self):
+        src = self._read_vision_sampler()
+        assert "get_desktop_presence_runtime" in src, (
+            "VisionSampler must obtain DesktopPresenceRuntime"
+        )
+        assert "runtime.handle_request(" in src, (
+            "VisionSampler must route multimodal sampling through runtime.handle_request()"
+        )
+
+    def test_vision_sampler_does_not_call_openclawd_directly(self):
+        src = self._read_vision_sampler()
+        assert "get_openclawd" not in src, (
+            "VisionSampler must not depend on get_openclawd() for request ingress"
+        )
+        assert "clawd.process(" not in src, (
+            "VisionSampler must not call OpenClawd.process() directly"
+        )
