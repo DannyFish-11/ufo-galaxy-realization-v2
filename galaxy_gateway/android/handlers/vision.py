@@ -128,7 +128,6 @@ async def _process_via_runtime_shell(
             "execution_path":   result.get("execution_path", ""),
             "runtime_domain":   result.get("runtime_domain", ""),
             "multimodal_route": result.get("multimodal_route_decision", {}),
-            "runtime_session_id": result.get("runtime_session_id"),
         },
         "source": "runtime_shell_multimodal",
     }

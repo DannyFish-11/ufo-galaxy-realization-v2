@@ -278,6 +278,8 @@ async def run_sampling_session(
         return {
             "success": False,
             "frames_sampled": frames_sampled,
+            # Backward-compat alias retained for callers still reading the
+            # historical field name from the pre-runtime-shell path.
             "openclawd_response": None,
             "runtime_response": None,
             "command_result": None,
@@ -333,6 +335,8 @@ async def run_sampling_session(
     return {
         "success": True,
         "frames_sampled": frames_sampled,
+        # Backward-compat alias retained for callers still reading the
+        # historical field name from the pre-runtime-shell path.
         "openclawd_response": runtime_response,
         "runtime_response": runtime_response,
         "command_result": command_result,
