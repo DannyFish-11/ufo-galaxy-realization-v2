@@ -260,7 +260,7 @@ class SystemStateMachine:
             是否成功唤醒
         """
         if self._current_state != SystemState.DORMANT:
-            self._logger.warning(f"系统不在休眠状态，当前状态: {self._current_state.value}")
+            self._logger.warning(f"系统不在 DORMANT 壳层状态，当前状态: {self._current_state.value}")
             return False
         
         # 发布硬件触发事件
