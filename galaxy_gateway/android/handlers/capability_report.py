@@ -13,21 +13,13 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from core.capability_runtime.capability_state import CapabilityAvailability
 from core.unified.capability_authority import CapabilityAuthority
 from core.unified.capability_contract import CapabilityContract, CapabilitySource
+from core.unified.gateway_capability_projection import normalize_gateway_exec_mode
 from galaxy_gateway.android.message_builder import MessageBuilder
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
-
-_VALID_EXEC_MODES = frozenset({"local", "remote", "both"})
-
-
-def _normalize_exec_mode(value: Any) -> str:
-    normalized = str(value or "both").lower()
-    if normalized not in _VALID_EXEC_MODES:
-        return "both"
-    return normalized
 
 
 def _sync_supported_actions_to_capability_authority(
@@ -37,6 +29,7 @@ def _sync_supported_actions_to_capability_authority(
     capability_schemas: List[Any],
     version: Any,
 ) -> int:
+    """Project Android-reported actions into canonical gateway capability contracts."""
     schema_by_action: dict[str, dict[str, Any]] = {}
     for schema_entry in capability_schemas:
         if isinstance(schema_entry, dict) and schema_entry.get("action"):
@@ -51,7 +44,7 @@ def _sync_supported_actions_to_capability_authority(
         if version and not schema_dict.get("version"):
             schema_dict["version"] = str(version)
 
-        exec_mode = _normalize_exec_mode(schema_dict.get("exec_mode"))
+        exec_mode = normalize_gateway_exec_mode(schema_dict.get("exec_mode"))
         capability_name = f"gateway__{device_id}__{action_str}"
         registered_at = time.time()
 

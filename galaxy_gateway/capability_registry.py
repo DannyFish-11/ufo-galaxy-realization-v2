@@ -181,8 +181,8 @@ class GatewayCapabilityRegistry:
     _instance_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        self._managed_names: set[str] = set()
-        self._managed_by_device: Dict[str, set[str]] = {}
+        self._locally_registered_capability_names: set[str] = set()
+        self._locally_registered_by_device: Dict[str, set[str]] = {}
         self._uses_global_projection = False
         self._lock = threading.Lock()
 
@@ -208,23 +208,23 @@ class GatewayCapabilityRegistry:
 
     def _record_managed_name(self, device_id: str, capability_name: str) -> None:
         with self._lock:
-            self._managed_names.add(capability_name)
-            if device_id not in self._managed_by_device:
-                self._managed_by_device[device_id] = set()
-            self._managed_by_device[device_id].add(capability_name)
+            self._locally_registered_capability_names.add(capability_name)
+            if device_id not in self._locally_registered_by_device:
+                self._locally_registered_by_device[device_id] = set()
+            self._locally_registered_by_device[device_id].add(capability_name)
 
     def _drop_managed_device(self, device_id: str) -> List[str]:
         with self._lock:
-            names = list(self._managed_by_device.pop(device_id, set()))
+            names = list(self._locally_registered_by_device.pop(device_id, set()))
             for name in names:
-                self._managed_names.discard(name)
+                self._locally_registered_capability_names.discard(name)
             return names
 
     def _filter_projection_schemas(self, schemas: List[Any]) -> List[Any]:
         if self._uses_global_projection:
             return list(schemas)
         with self._lock:
-            managed_names = set(self._managed_names)
+            managed_names = set(self._locally_registered_capability_names)
         return [schema for schema in schemas if getattr(schema, "canonical_name", "") in managed_names]
 
     # ── 单例 ──────────────────────────────────────────────────────────────────
