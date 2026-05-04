@@ -10,14 +10,19 @@ Gateway Capability Registry — exec_mode-aware routing store
 
     The canonical capability registration and lookup path is::
 
-        core.capability_bus.CapabilityBus  (get_capability_bus())
+        Writers → core.agent.capability_registry.CapabilityRegistry
+        Readers → core.unified.capability_resolver.CapabilityResolver
+
+    ``core.capability_bus.CapabilityBus`` remains a compatibility bridge that
+    forwards registrations into the same canonical capability truth.
 
     :class:`GatewayCapabilityRegistry` is an in-gateway per-device capability
-    schema store that was introduced before ``core.capability_bus`` existed.
+    schema store that was introduced before the canonical capability truth was
+    fully consolidated.
     It is retained so existing DeviceRouter / capability_report pathways that
     read from it do not immediately break.  New capability registration must
-    use :func:`core.capability_bus.get_capability_bus` and its
-    ``register_device_capability()`` / ``register_mcp_tool()`` methods.
+    target ``CapabilityRegistry`` (directly or through approved canonical
+    writer helpers / bridges).
 
     See ``core.orchestration_authority.legacy_paths`` for the registry entry
     (``galaxy_gateway.capability_registry.GatewayCapabilityRegistry``).
@@ -25,7 +30,8 @@ Gateway Capability Registry — exec_mode-aware routing store
 每台设备通过 ``capability_report`` 消息上报其动作 schema；本模块将这些
 schema 持久化在内存中，供路由层（DeviceRouter）在选择目标设备时参考
 ``exec_mode``（local / remote / both）。
-Legacy compat — for new capability registration use core.capability_bus.CapabilityBus.
+Legacy compat — authoritative capability truth lives in
+CapabilityRegistry / CapabilityResolver; this module is only a compat facade.
 
 数据结构
 --------
@@ -147,20 +153,20 @@ class GatewayCapabilityRegistry:
     .. deprecated:: PR-S7
         ``GatewayCapabilityRegistry`` is a **legacy compatibility capability
         store**.  It maintains an in-gateway per-device action-schema map that
-        was introduced before the canonical :mod:`core.capability_bus`
-        (CapabilityBus) existed.
+        was introduced before capability truth was consolidated on the
+        canonical registry / resolver path.
 
         Canonical replacement:
-            :func:`core.capability_bus.get_capability_bus` — the authoritative
-            capability registration and lookup authority.  Use
-            ``register_device_capability()`` for device capabilities and
-            ``register_mcp_tool()`` / ``register_skill()`` for MCP / Skill
-            capabilities.
+            Writers: :class:`core.agent.capability_registry.CapabilityRegistry`
+            Readers: :class:`core.unified.capability_resolver.CapabilityResolver`
+
+            ``core.capability_bus.CapabilityBus`` remains an approved compat
+            bridge, not an independent authority.
 
         ``GatewayCapabilityRegistry`` is retained so existing DeviceRouter and
         capability-report pathways that currently read from it do not
-        immediately break.  New capability registration and lookup must use
-        ``core.capability_bus.get_capability_bus()`` exclusively.
+        immediately break.  New capability registration / lookup must converge
+        on the canonical registry / resolver path.
     """
 
     _instance: Optional["GatewayCapabilityRegistry"] = None

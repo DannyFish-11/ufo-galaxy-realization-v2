@@ -5,8 +5,13 @@ Galaxy - 能力编排器 (Capability Orchestrator)
 .. deprecated::
     **This module is a legacy compatibility facade.**
 
-    The canonical capability authority is ``core.capability_bus.CapabilityBus``
-    (accessed via :func:`core.capability_bus.get_capability_bus`).
+    The canonical capability truth is
+    ``core.agent.capability_registry.CapabilityRegistry`` (writer authority)
+    plus ``core.unified.capability_resolver.CapabilityResolver`` (reader
+    authority).
+
+    ``core.capability_bus.CapabilityBus`` remains a legacy compatibility bridge
+    that forwards registrations into the same canonical capability truth.
 
     New code **must** use the canonical capability bus::
 
@@ -22,14 +27,17 @@ Galaxy - 能力编排器 (Capability Orchestrator)
         schemas = resolver.collect_tool_schemas()
 
     ``CapabilityOrchestrator`` is retained as a compatibility shim and is NOT
-    a parallel canonical capability truth source.  It will not see capabilities
-    registered through ``CapabilityBus`` unless explicitly bridged.
+    a parallel canonical capability truth source.  It projects from the
+    canonical registry / resolver path, so bridged ``CapabilityBus`` /
+    ``CapabilityManager`` registrations remain visible here.
 
 PR-7 governance
 ---------------
 This module is a **capability orchestrator facade/adapter only**.
 It must NOT redefine the system execution spine or act as a canonical
-capability authority.  The canonical authority is ``CapabilityBus``.
+capability authority.  The canonical capability authority is
+``CapabilityRegistry`` / ``CapabilityResolver``; ``CapabilityBus`` is only a
+compatibility bridge.
 
 Import :data:`CAPABILITY_ORCHESTRATOR_FACADE_ONLY` to assert that this
 governance constraint is present and active.

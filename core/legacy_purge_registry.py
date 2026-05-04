@@ -381,15 +381,17 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         pr="PR-S7",
         rationale=(
             "GatewayCapabilityRegistry is a legacy in-gateway per-device "
-            "action-schema store introduced before core.capability_bus "
-            "(CapabilityBus) existed.  PR-S7 adds a deprecation docstring, a "
+            "action-schema store introduced before canonical capability truth "
+            "was consolidated on CapabilityRegistry / CapabilityResolver.  "
+            "PR-S7 adds a deprecation docstring, a "
             "LEGACY PATH GUARDRAIL in __init__, and a LEGACY_PATH_REGISTRY "
             "entry.  Retained so existing DeviceRouter capability-report "
             "pathways do not immediately break; new capability registration "
-            "must use core.capability_bus.CapabilityBus."
+            "must converge on CapabilityRegistry / CapabilityResolver "
+            "(CapabilityBus remains a compat bridge)."
         ),
         canonical_replacement=(
-            "core/capability_bus.py  (core.capability_bus.get_capability_bus)"
+            "core/agent/capability_registry.py + core/unified/capability_resolver.py"
         ),
     ),
     PurgeDecision(

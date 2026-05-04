@@ -1321,9 +1321,11 @@ _register(
 #
 #   galaxy_gateway.capability_registry.GatewayCapabilityRegistry
 #       In-gateway per-device action-schema store introduced before
-#       core.capability_bus (CapabilityBus) existed.  Retained so existing
-#       DeviceRouter capability-report pathways do not immediately break;
-#       new capability registration must use core.capability_bus.CapabilityBus.
+#       canonical capability truth was consolidated on CapabilityRegistry /
+#       CapabilityResolver.  Retained so existing DeviceRouter
+#       capability-report pathways do not immediately break; new capability
+#       registration must converge on that canonical path (CapabilityBus
+#       remains a compat bridge).
 # ---------------------------------------------------------------------------
 _register(
     LegacyPathEntry(
@@ -1373,19 +1375,22 @@ _register(
         recommendation=(
             "GatewayCapabilityRegistry is a LEGACY COMPAT CAPABILITY STORE (PR-S7).  "
             "It is an in-gateway per-device action-schema map introduced before "
-            "core.capability_bus (CapabilityBus) existed.  "
+            "capability truth was consolidated on CapabilityRegistry / "
+            "CapabilityResolver.  "
             "Canonical capability registration and lookup is: "
-            "core.capability_bus.get_capability_bus() — use register_device_capability() "
-            "for device capabilities and register_mcp_tool() / register_skill() for "
-            "MCP / Skill capabilities.  "
+            "writers → core.agent.capability_registry.CapabilityRegistry; "
+            "readers → core.unified.capability_resolver.CapabilityResolver.  "
+            "CapabilityBus remains a compat bridge into the same truth source.  "
             "GatewayCapabilityRegistry is retained so existing DeviceRouter and "
             "capability-report pathways do not immediately break; new capability "
-            "registration and lookup must use core.capability_bus.CapabilityBus."
+            "registration and lookup must converge on the canonical registry / "
+            "resolver path."
         ),
         pr_guardrail_added="PR-S7",
         notes=(
             "GatewayCapabilityRegistry — LEGACY COMPAT in-gateway capability store (PR-S7).  "
-            "Canonical capability authority is core.capability_bus.CapabilityBus.  "
+            "Canonical capability authority is CapabilityRegistry / "
+            "CapabilityResolver; CapabilityBus is a compat bridge.  "
             "Delegating surface only; must not be used for new capability work."
         ),
     ),
