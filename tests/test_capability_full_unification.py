@@ -55,6 +55,49 @@ def test_gateway_capability_registry_uses_canonical_capability_authority():
     assert schema.version == "2.0"
 
 
+def test_canonical_gateway_capability_projection_reads_from_resolver():
+    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
+    from core.unified.gateway_capability_projection import query_gateway_capabilities
+
+    _reset_capability_state()
+    GatewayCapabilityRegistry().upsert(
+        "android-test-03",
+        "screenshot",
+        {"exec_mode": "local", "version": "5.0", "tags": ["vision"]},
+    )
+
+    schemas = query_gateway_capabilities(
+        action="screenshot",
+        exec_mode="local",
+        device_id="android-test-03",
+    )
+
+    assert len(schemas) == 1
+    assert schemas[0].device_id == "android-test-03"
+    assert schemas[0].action == "screenshot"
+    assert schemas[0].exec_mode == "local"
+    assert schemas[0].tags == ["vision"]
+
+
+def test_canonical_gateway_capability_projection_purge_removes_capability():
+    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
+    from core.unified.capability_resolver import get_capability_resolver
+    from core.unified.gateway_capability_projection import purge_gateway_capabilities_for_device
+
+    _reset_capability_state()
+    GatewayCapabilityRegistry().upsert(
+        "android-test-04",
+        "tap",
+        {"exec_mode": "local"},
+    )
+
+    removed = purge_gateway_capabilities_for_device("android-test-04")
+    record = get_capability_resolver().resolve_record("gateway__android-test-04__tap")
+
+    assert removed == 1
+    assert record is None
+
+
 @pytest.mark.asyncio
 async def test_android_capability_report_writes_directly_to_canonical_capability_authority():
     from galaxy_gateway.android.handlers.capability_report import handle_capability_report

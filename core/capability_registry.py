@@ -21,7 +21,7 @@ existing registry.  It acts as a thin aggregation/projection layer on top of:
 
   1. ``core.device_registry.DeviceRegistry``  (capability_index + Device objects)
   2. ``core.capability_bus.CapabilityBus``     (CapabilityBusEntry objects with DEVICE role)
-  3. ``galaxy_gateway.capability_registry.GatewayCapabilityRegistry``
+  3. Canonical gateway capability projection
      (per-device action schemas — legacy surface)
 
 Each source is imported lazily with a ``try/except`` so that import failures
@@ -51,10 +51,7 @@ logger = logging.getLogger("Galaxy.CapabilityRegistry")
 # Authority sentinel
 # ---------------------------------------------------------------------------
 
-CAPABILITY_REGISTRY_AUTHORITY = (
-    "core.capability_registry"
-    " — canonical device capability resolution layer (PR-11)"
-)
+CAPABILITY_REGISTRY_AUTHORITY = "core.capability_registry" " — canonical device capability resolution layer (PR-11)"
 
 CAPABILITY_REGISTRY_ROUTING_GUARD = (
     "CAPABILITY_REGISTRY_ROUTING_GUARD_V1: "
@@ -292,11 +289,7 @@ def _collect_from_capability_bus(device_id: str) -> Dict[str, Any]:
 
         bus = get_capability_bus()
         prefix = f"device__{device_id}__"
-        entries = [
-            e
-            for e in bus.list_by_role(CapabilityBusRole.DEVICE)
-            if e.name.startswith(prefix)
-        ]
+        entries = [e for e in bus.list_by_role(CapabilityBusRole.DEVICE) if e.name.startswith(prefix)]
         # Extract action suffix as capability name
         caps = [e.name[len(prefix):] for e in entries if e.name[len(prefix):] != ""]
         result["caps"] = caps
@@ -311,22 +304,23 @@ def _collect_from_capability_bus(device_id: str) -> Dict[str, Any]:
 
 
 def _collect_from_gateway_registry(device_id: str) -> Dict[str, Any]:
-    """Return ``{"caps": [...]}`` from GatewayCapabilityRegistry (legacy).
+    """Return ``{"caps": [...]}`` from the canonical gateway capability view.
 
     Returns an empty dict on any failure.
     """
     result: Dict[str, Any] = {"caps": [], "reason": None}
     try:
-        from galaxy_gateway.capability_registry import get_gateway_capability_registry
+        from core.unified.gateway_capability_projection import (
+            get_gateway_capabilities_for_device,
+        )
 
-        reg = get_gateway_capability_registry()
-        schemas = reg.get_by_device(device_id)
+        schemas = get_gateway_capabilities_for_device(device_id)
         caps = [s.action for s in schemas if s.action]
         result["caps"] = caps
     except Exception as exc:  # pragma: no cover — defensive
-        result["reason"] = f"gateway_capability_registry: import/access error — {exc}"
+        result["reason"] = f"gateway_capability_projection: import/access error — {exc}"
         logger.debug(
-            "capability_registry: gateway_capability_registry source unavailable for %s — %s",
+            "capability_registry: gateway_capability_projection source unavailable for %s — %s",
             device_id,
             exc,
         )
@@ -374,7 +368,7 @@ def get_device_capability_summary(device_id: str) -> DeviceCapabilitySummary:
     if cb_data.get("reason"):
         summary.reasons.append(cb_data["reason"])
 
-    # ── Source 3: GatewayCapabilityRegistry (legacy) ──────────────────────
+    # ── Source 3: canonical gateway capability projection ─────────────────
     gw_data = _collect_from_gateway_registry(device_id)
     summary.sources["gateway_capability_registry"] = gw_data.get("caps", [])
     if gw_data.get("reason"):
@@ -383,11 +377,7 @@ def get_device_capability_summary(device_id: str) -> DeviceCapabilitySummary:
     # ── Merge resolved capabilities (union, order-preserving, deduped) ──
     seen: set = set()
     resolved: List[str] = []
-    for cap in (
-        dr_data.get("caps", [])
-        + cb_data.get("caps", [])
-        + gw_data.get("caps", [])
-    ):
+    for cap in dr_data.get("caps", []) + cb_data.get("caps", []) + gw_data.get("caps", []):
         if cap and cap not in seen:
             seen.add(cap)
             resolved.append(cap)
@@ -439,13 +429,9 @@ def device_matches_capabilities(
 
     if not matched:
         if not summary.available:
-            result.reasons.append(
-                f"device_matches_capabilities: device {device_id!r} not found in any source"
-            )
+            result.reasons.append(f"device_matches_capabilities: device {device_id!r} not found in any source")
         if missing:
-            result.reasons.append(
-                f"device_matches_capabilities: missing capabilities — {missing}"
-            )
+            result.reasons.append(f"device_matches_capabilities: missing capabilities — {missing}")
         logger.debug(
             "capability_registry: device %s does not match requirements %s — missing=%s",
             device_id,

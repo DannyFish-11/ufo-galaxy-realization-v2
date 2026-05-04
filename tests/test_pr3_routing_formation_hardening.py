@@ -392,7 +392,7 @@ class TestSelectDevicesCapabilityGateExcluding:
 
         # Patch out external dependencies to isolate the capability gate.
         with patch(
-            "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
+            "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
             side_effect=ImportError("mocked"),
         ), patch(
             "galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -423,7 +423,7 @@ class TestSelectDevicesCapabilityGateExcluding:
         }
 
         with patch(
-            "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
+            "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
             side_effect=ImportError("mocked"),
         ), patch(
             "galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -455,7 +455,7 @@ class TestSelectDevicesCapabilityGatePassing:
         }
 
         with patch(
-            "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
+            "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
             side_effect=ImportError("mocked"),
         ), patch(
             "galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -491,7 +491,7 @@ class TestSelectDevicesGateInactive:
         }
 
         with patch(
-            "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
+            "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
             side_effect=ImportError("mocked"),
         ), patch(
             "galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -916,7 +916,7 @@ class TestAcceptanceCriterion2CapabilityConstraint:
         }
 
         with patch(
-            "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
+            "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
             side_effect=ImportError("mocked"),
         ), patch(
             "galaxy_gateway.routing.device_selection.get_device_pool_manager",

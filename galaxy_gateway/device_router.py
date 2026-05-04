@@ -285,7 +285,9 @@ def get_cross_device_coordinator():
 from core.device_types import DeviceType, resolve_device_type  # noqa: E402
 
 # Module-level import so the function can be patched in tests
-from galaxy_gateway.capability_registry import get_gateway_capability_registry  # noqa: E402
+from core.unified.gateway_capability_projection import (  # noqa: E402
+    purge_gateway_capabilities_for_device,
+)
 
 # ---------------------------------------------------------------------------
 # PR-S3: Single dispatch and orchestration authority sentinel.
@@ -799,7 +801,7 @@ class DeviceRouter:
           registration is **preserved** in UDM — this call must never erase
           device identity from the canonical registry.
         - Removes the device from the local operational session cache.
-        - Purges per-device entries from GatewayCapabilityRegistry.
+        - Purges per-device gateway capabilities through the canonical capability plane.
         """
         try:
             # ── PR-3: patch canonical runtime presence (offline) into UDM ──
@@ -811,9 +813,9 @@ class DeviceRouter:
             if device_id in self.devices:
                 del self.devices[device_id]
 
-                # Purge capabilities from GatewayCapabilityRegistry
+                # Purge gateway capabilities from the canonical capability plane
                 try:
-                    purged = get_gateway_capability_registry().purge(device_id)
+                    purged = purge_gateway_capabilities_for_device(device_id)
                     logger.debug(
                         "unregister_device: purged %d capabilities for device %s",
                         purged,
@@ -850,10 +852,7 @@ class DeviceRouter:
         """Resolve externally selected target devices before substrate-side selection."""
 
         ctx = context or {}
-        explicit_target_ids = (
-            list(ctx.get("target_device_ids") or [])
-            or list(analysis.get("target_device_ids") or [])
-        )
+        explicit_target_ids = list(ctx.get("target_device_ids") or []) or list(analysis.get("target_device_ids") or [])
         explicit_target_id = ctx.get("target_device_id") or analysis.get("target_device_id")
         explicit_target_id_str = str(explicit_target_id) if explicit_target_id else ""
         if explicit_target_id_str and explicit_target_id_str not in explicit_target_ids:
@@ -1033,6 +1032,7 @@ class DeviceRouter:
                 from core.source_execution_eligibility import (
                     check_source_execution_eligibility as _check_eligibility,
                 )
+
                 _eligibility = _check_eligibility(_posture_hint)
             except Exception:  # noqa: BLE001
                 _eligibility = None
@@ -1047,8 +1047,7 @@ class DeviceRouter:
                     reason=_eligibility.reason[:200],
                 )
                 logger.debug(
-                    "DeviceRouter.route_task posture_check | "
-                    "source_device_id=%s posture=%s eligible=%s",
+                    "DeviceRouter.route_task posture_check | " "source_device_id=%s posture=%s eligible=%s",
                     source_device_id,
                     _posture_hint,
                     _eligibility.eligible,
@@ -1127,6 +1126,7 @@ class DeviceRouter:
                             from core.multi_device_coordination_authority import (
                                 derive_coordination_role,
                             )
+
                             _derived_role = derive_coordination_role(
                                 source_runtime_posture=_bridge_posture,
                                 formation_role=ctx.get("formation_role", ""),
@@ -1879,6 +1879,7 @@ class DeviceRouter:
                     check_result_idempotency,
                     record_result_idempotency,
                 )
+
                 if check_result_idempotency(task_id):
                     # Already processed in a previous V2 process lifetime.
                     # Populate the in-memory set so subsequent calls skip level-2.
