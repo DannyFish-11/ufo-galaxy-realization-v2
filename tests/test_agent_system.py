@@ -551,12 +551,11 @@ class TestSystemIntegration:
     def test_capability_to_dict(self):
         from core.system_integration import Capability, CapabilityType
         cap = Capability(
-            id="cap_001",
             name="device_control",
-            type=CapabilityType.DEVICE,
+            source=CapabilityType.DEVICE,
             description="Control IoT devices",
-            source="smart_hub_001",
-            priority=8,
+            source_id="smart_hub_001",
+            metadata={"system_integration_id": "cap_001", "priority": 8},
         )
         d = cap.to_dict()
         assert d["id"] == "cap_001"

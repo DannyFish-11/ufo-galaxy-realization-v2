@@ -183,10 +183,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 source="chat",
                 device_id=req.device_id,
                 session_id=req.session_id,
+                user_id=req.user_id,
                 context=req.context,
                 required_capabilities=req.required_capabilities,
                 multimodal_context=req.multimodal_context,
                 entry_mode=_entry_mode,
+                runtime_attachment_session_id=req.context[-1].get(
+                    "runtime_attachment_session_id",
+                    "",
+                )
+                if req.context
+                else "",
             )
             metadata = result.get("metadata", {})
             trace_id = (
@@ -203,7 +210,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 confidence=metadata.get("confidence", 1.0),
                 mode=metadata.get("mode", "openclawd"),
                 model=metadata.get("model", ""),
-                session_id=metadata.get("session_id", req.session_id or ""),
+                session_id=metadata.get(
+                    "conversation_session_id",
+                    metadata.get("session_id", req.session_id or ""),
+                ),
                 data=metadata,
                 error=result.get("error", ""),
                 # ── PR-2: surface metadata — additive, non-breaking ──────────
@@ -247,15 +257,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 except Exception as _le:
                     logger.debug("Aggregation log skipped: %s", _le)
 
-            # 记录到会话管理器
-            try:
-                from core.session_manager import get_session_manager
-                sm = get_session_manager()
-                sid = req.session_id or req.device_id or "default"
-                sm.add_message(sid, "user", req.message, req.device_id)
-                sm.add_message(sid, "assistant", result.get("response", ""), req.device_id)
-            except Exception as _e:
-                logger.debug("Session recording skipped: %s", _e)
             return JSONResponse(resp_dict)
         except Exception as e:
             logger.error(f"OpenClawd 处理异常: {e}", exc_info=True)
@@ -268,4 +269,3 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(resp.to_json_response())
 
     return router
-

@@ -203,6 +203,9 @@ class KernelResponse(BaseModel):
     """使用的 LLM 模型名称"""
 
     session_id: str = ""
+    conversation_session_id: str = ""
+    control_session_id: str = ""
+    runtime_attachment_session_id: str = ""
     error: str = ""
     latency_ms: float = 0.0
     # PR-9: cognition/planning layer authority annotation (additive, non-breaking).
@@ -238,6 +241,9 @@ class KernelResponse(BaseModel):
             "confidence": self.intent.confidence,
             "model": self.model,
             "session_id": self.session_id,
+            "conversation_session_id": self.conversation_session_id or self.session_id,
+            "control_session_id": self.control_session_id,
+            "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "error": self.error,
             "latency_ms": self.latency_ms,
             "authority_role": self.authority_role,
@@ -336,6 +342,8 @@ class AgentKernel:
         self,
         message: str,
         session_id: str = "",
+        control_session_id: str = "",
+        runtime_attachment_session_id: str = "",
         device_id: str = "",
         context: Optional[List[Dict[str, str]]] = None,
         timeout: float = 90.0,
@@ -364,7 +372,14 @@ class AgentKernel:
 
         try:
             return await asyncio.wait_for(
-                self._process(message, sid, device_id, ctx),
+                self._process(
+                    message,
+                    sid,
+                    control_session_id,
+                    runtime_attachment_session_id,
+                    device_id,
+                    ctx,
+                ),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -375,6 +390,9 @@ class AgentKernel:
                 mode=IntentMode.CHAT_ONLY,
                 reply=f"请求处理超时（{timeout:.0f}s），请稍后重试。",
                 session_id=sid,
+                conversation_session_id=sid,
+                control_session_id=control_session_id,
+                runtime_attachment_session_id=runtime_attachment_session_id,
                 error="timeout",
                 latency_ms=latency,
             )
@@ -386,6 +404,9 @@ class AgentKernel:
                 mode=IntentMode.CHAT_ONLY,
                 reply=f"系统内部错误：{exc}",
                 session_id=sid,
+                conversation_session_id=sid,
+                control_session_id=control_session_id,
+                runtime_attachment_session_id=runtime_attachment_session_id,
                 error=str(exc),
                 latency_ms=latency,
             )
@@ -394,6 +415,8 @@ class AgentKernel:
         self,
         message: str,
         session_id: str,
+        control_session_id: str,
+        runtime_attachment_session_id: str,
         device_id: str,
         context: List[Dict[str, str]],
     ) -> KernelResponse:
@@ -484,6 +507,9 @@ class AgentKernel:
             result.intent = intent
             result.latency_ms = (time.monotonic() - t0) * 1000
             result.session_id = session_id
+            result.conversation_session_id = session_id
+            result.control_session_id = control_session_id
+            result.runtime_attachment_session_id = runtime_attachment_session_id
             return result
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
@@ -594,6 +620,9 @@ class AgentKernel:
             intent=intent,
             model=exec_result.model,
             session_id=session_id,
+            conversation_session_id=session_id,
+            control_session_id=control_session_id,
+            runtime_attachment_session_id=runtime_attachment_session_id,
             error=exec_result.error,
             latency_ms=(time.monotonic() - t0) * 1000,
             # PR-006: record which execution phase injected SOUL
@@ -607,7 +636,14 @@ class AgentKernel:
         )
 
         # ── 步骤 4: 记录会话 ──
-        self._record_session(session_id, message, resp.reply)
+        await self._record_session(
+            session_id,
+            message,
+            resp.reply,
+            control_session_id=control_session_id,
+            runtime_attachment_session_id=runtime_attachment_session_id,
+            device_id=device_id,
+        )
 
         return resp
 
@@ -722,13 +758,39 @@ class AgentKernel:
             return f"我已根据你的请求执行了任务。"
         return result.reply
 
-    def _record_session(self, session_id: str, user_msg: str, assistant_msg: str) -> None:
-        """异步记录会话历史（失败不中断主流程）。"""
+    async def _record_session(
+        self,
+        session_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        *,
+        control_session_id: str = "",
+        runtime_attachment_session_id: str = "",
+        device_id: str = "",
+    ) -> None:
+        """通过统一会话记忆入口记录会话历史（失败不中断主流程）。"""
         try:
-            from core.session_manager import get_session_manager
-            sm = get_session_manager()
-            sm.add_message(session_id, "user", user_msg)
-            sm.add_message(session_id, "assistant", assistant_msg)
+            from core.session_memory_facade import record_session_turn
+
+            metadata = {
+                "control_session_id": control_session_id,
+                "runtime_attachment_session_id": runtime_attachment_session_id,
+                "record_origin": "agent_kernel",
+            }
+            await record_session_turn(
+                conversation_session_id=session_id,
+                role="user",
+                content=user_msg,
+                device_id=device_id,
+                metadata=metadata,
+            )
+            await record_session_turn(
+                conversation_session_id=session_id,
+                role="assistant",
+                content=assistant_msg,
+                device_id=device_id,
+                metadata=metadata,
+            )
         except Exception:
             pass
 
@@ -793,6 +855,8 @@ def get_kernel() -> AgentKernel:
 async def handle_message(
     message: str,
     session_id: str = "",
+    control_session_id: str = "",
+    runtime_attachment_session_id: str = "",
     device_id: str = "",
     context: Optional[List[Dict[str, str]]] = None,
     timeout: float = 90.0,
@@ -805,6 +869,8 @@ async def handle_message(
     return await get_kernel().handle_message(
         message=message,
         session_id=session_id,
+        control_session_id=control_session_id,
+        runtime_attachment_session_id=runtime_attachment_session_id,
         device_id=device_id,
         context=context,
         timeout=timeout,

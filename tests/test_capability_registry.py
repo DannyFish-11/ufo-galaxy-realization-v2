@@ -12,14 +12,7 @@ Covers:
   - Thread-safety smoke test (basic)
 """
 
-import sys
 import threading
-from pathlib import Path
-
-import pytest
-
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from galaxy_gateway.capability_registry import (
     CapabilitySchema,
@@ -27,7 +20,6 @@ from galaxy_gateway.capability_registry import (
     GatewayCapabilityRegistry,
     get_gateway_capability_registry,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -103,10 +95,14 @@ class TestUpsert:
 
     def test_params_and_returns_stored(self):
         reg = _fresh_registry()
-        schema = reg.upsert("dev-1", "screenshot", {
-            "params": {"quality": "int"},
-            "returns": {"image": "bytes"},
-        })
+        schema = reg.upsert(
+            "dev-1",
+            "screenshot",
+            {
+                "params": {"quality": "int"},
+                "returns": {"image": "bytes"},
+            },
+        )
         assert schema.params == {"quality": "int"}
         assert schema.returns == {"image": "bytes"}
 
@@ -168,10 +164,10 @@ class TestPurge:
 class TestQuery:
     def setup_method(self):
         self.reg = _fresh_registry()
-        self.reg.upsert("dev-A", "tap",        {"exec_mode": "local",  "tags": ["ui"]})
-        self.reg.upsert("dev-A", "screenshot", {"exec_mode": "both",   "tags": ["ui", "capture"]})
-        self.reg.upsert("dev-B", "tap",        {"exec_mode": "remote", "tags": ["ui"]})
-        self.reg.upsert("dev-B", "screenshot", {"exec_mode": "local",  "tags": ["capture"]})
+        self.reg.upsert("dev-A", "tap", {"exec_mode": "local", "tags": ["ui"]})
+        self.reg.upsert("dev-A", "screenshot", {"exec_mode": "both", "tags": ["ui", "capture"]})
+        self.reg.upsert("dev-B", "tap", {"exec_mode": "remote", "tags": ["ui"]})
+        self.reg.upsert("dev-B", "screenshot", {"exec_mode": "local", "tags": ["capture"]})
 
     def test_query_no_filter_returns_all(self):
         results = self.reg.query()

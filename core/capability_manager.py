@@ -201,10 +201,9 @@ class CapabilityManager:
         is not broken if CapabilityRegistry is temporarily unavailable.
         """
         try:
-            from core.agent.capability_registry import (  # noqa: PLC0415
-                CapabilityRegistry,
-                CapabilityItem,
-            )
+            from core.agent.capability_registry import CapabilityItem  # noqa: PLC0415
+            from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
+            from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
             item = CapabilityItem(
                 name=capability.name,
                 description=capability.description or f"Capability: {capability.name}",
@@ -215,12 +214,32 @@ class CapabilityManager:
                 metadata={
                     "node_name": capability.node_name,
                     "category": capability.category,
+                    "capability_manager_status": capability.status.value,
+                    "capability_manager_output_schema": dict(capability.output_schema or {}),
+                    "capability_manager_last_updated": capability.last_updated,
                     "via_capability_manager": True,
                 },
             )
-            CapabilityRegistry.get_instance().register(item)
+            CapabilityAuthority.get_instance().upsert_contract(
+                item,
+                mutation_source="capability_manager.register_capability",
+                publication_source="capability_manager",
+                lifecycle_event="capability_registered",
+                sync_runtime_registry=False,
+            )
+            CapabilityAuthority.get_instance().update_runtime(
+                capability.name,
+                availability=(
+                    CapabilityAvailability.AVAILABLE.value
+                    if capability.status == CapabilityStatus.ONLINE
+                    else CapabilityAvailability.UNAVAILABLE.value
+                ),
+                metadata={"health": capability.status.value, "participant_kind": "node"},
+                mutation_source="capability_manager.register_capability",
+                lifecycle_event="capability_runtime_registered",
+            )
             logger.debug(
-                "CapabilityManager bridge → CapabilityRegistry: %s", capability.name
+                "CapabilityManager bridge → CapabilityAuthority: %s", capability.name
             )
         except Exception as exc:
             logger.debug(
@@ -319,6 +338,16 @@ class CapabilityManager:
             
             # 删除能力
             del self.capabilities[name]
+
+            try:
+                from core.unified.capability_authority import CapabilityAuthority
+
+                CapabilityAuthority.get_instance().remove(
+                    name,
+                    mutation_source="capability_manager.unregister_capability",
+                )
+            except Exception as exc:
+                logger.debug("CapabilityManager unregister canonical sync failed: %s", exc)
             
             logger.info(f"能力已注销: {name}")
             
@@ -348,11 +377,33 @@ class CapabilityManager:
             
             self.capabilities[name].status = status
             self.capabilities[name].last_updated = datetime.now().isoformat()
+            try:
+                from core.capability_runtime.capability_state import CapabilityAvailability
+                from core.unified.capability_authority import CapabilityAuthority
+
+                availability = {
+                    CapabilityStatus.ONLINE: CapabilityAvailability.AVAILABLE.value,
+                    CapabilityStatus.REGISTERED: CapabilityAvailability.DEGRADED.value,
+                    CapabilityStatus.UNKNOWN: CapabilityAvailability.UNKNOWN.value,
+                    CapabilityStatus.OFFLINE: CapabilityAvailability.UNAVAILABLE.value,
+                    CapabilityStatus.ERROR: CapabilityAvailability.UNAVAILABLE.value,
+                }[status]
+                CapabilityAuthority.get_instance().update_runtime(
+                    name,
+                    availability=availability,
+                    metadata={"health": status.value, "participant_kind": "node"},
+                    mutation_source="capability_manager.update_capability_status",
+                    lifecycle_event="capability_runtime_updated",
+                )
+            except Exception as exc:
+                logger.debug("CapabilityManager status sync failed: %s", exc)
             
             logger.debug(f"能力状态已更新: {name} -> {status.value}")
             
             # 持久化
             await self._save_capabilities()
+
+            self._bridge_to_canonical_registry(self.capabilities[name])
             
             return True
     
@@ -526,6 +577,7 @@ class CapabilityManager:
             for cap_data in capabilities_data:
                 cap = Capability.from_dict(cap_data)
                 self.capabilities[cap.name] = cap
+                self._bridge_to_canonical_registry(cap)
                 
                 # 重建索引
                 node_id = cap.node_id

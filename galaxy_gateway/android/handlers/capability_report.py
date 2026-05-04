@@ -10,6 +10,10 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from core.capability_runtime.capability_state import CapabilityAvailability
+from core.unified.capability_authority import CapabilityAuthority
+from core.unified.capability_contract import CapabilityContract, CapabilitySource
+from core.unified.gateway_capability_projection import normalize_gateway_exec_mode
 from galaxy_gateway.android.message_builder import MessageBuilder
 
 if TYPE_CHECKING:
@@ -18,9 +22,78 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _sync_supported_actions_to_capability_authority(
+    *,
+    device_id: str,
+    supported_actions: List[Any],
+    capability_schemas: List[Any],
+    version: Any,
+) -> int:
+    """Project Android-reported actions into canonical gateway capability contracts."""
+    schema_by_action: dict[str, dict[str, Any]] = {}
+    for schema_entry in capability_schemas:
+        if isinstance(schema_entry, dict) and schema_entry.get("action"):
+            schema_by_action[str(schema_entry["action"])] = dict(schema_entry)
+
+    authority = CapabilityAuthority.get_instance()
+    upserted = 0
+
+    for action in supported_actions:
+        action_str = action if isinstance(action, str) else str(action)
+        schema_dict = dict(schema_by_action.get(action_str, {}))
+        if version and not schema_dict.get("version"):
+            schema_dict["version"] = str(version)
+
+        exec_mode = normalize_gateway_exec_mode(schema_dict.get("exec_mode"))
+        capability_name = f"gateway__{device_id}__{action_str}"
+        registered_at = time.time()
+
+        authority.upsert_contract(
+            CapabilityContract(
+                name=capability_name,
+                description=f"[Gateway:{device_id}] Device capability: {action_str}",
+                source=CapabilitySource.GATEWAY,
+                source_id=device_id,
+                version=str(schema_dict.get("version") or "1.0"),
+                parameters=dict(schema_dict.get("params") or {}),
+                available=True,
+                tags=list(schema_dict.get("tags") or []),
+                metadata={
+                    "device_id": device_id,
+                    "action": action_str,
+                    "returns": dict(schema_dict.get("returns") or {}),
+                    "exec_mode": exec_mode,
+                    "registered_at": registered_at,
+                },
+            ),
+            mutation_source="android.capability_report",
+            publication_source="android_capability_report",
+            lifecycle_event="capability_registered",
+            sync_runtime_registry=False,
+        )
+        authority.update_runtime(
+            capability_name,
+            availability=CapabilityAvailability.AVAILABLE.value,
+            device_bindings=[device_id],
+            preferred_device_ids=[device_id],
+            metadata={
+                "participant_kind": "gateway",
+                "exec_mode": exec_mode,
+                "network_reachability": "reachable",
+                "report_origin": "android_capability_report",
+            },
+            mutation_source="android.capability_report",
+            lifecycle_event="capability_runtime_registered",
+        )
+        upserted += 1
+
+    return upserted
+
+
 # ---------------------------------------------------------------------------
 # Role derivation helper
 # ---------------------------------------------------------------------------
+
 
 def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
     """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
@@ -43,7 +116,9 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
         return []
 
     _PERCEPTION_KEYWORDS = frozenset({"camera", "photo", "scan", "mic", "audio", "record", "sensor"})
-    _ACTION_KEYWORDS = frozenset({"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"})
+    _ACTION_KEYWORDS = frozenset(
+        {"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"}
+    )
     _PRESENCE_KEYWORDS = frozenset({"screenshot", "screen", "display", "notify", "notification", "speak", "tts"})
 
     roles: List[Any] = []
@@ -74,10 +149,8 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
     return roles
 
 
-async def handle_capability_report(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
-    """处理设备能力上报，持久化 supported_actions 并同步到 CapabilityRegistry。
+async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+    """处理设备能力上报，持久化 supported_actions 并同步到 canonical capability plane。
 
     能力命名规则（稳定且可被 LLM tool schema 使用）：
         ``gateway__<device_id>__<action_name>``
@@ -107,7 +180,11 @@ async def handle_capability_report(
 
     logger.info(
         "Capability report from %s: platform=%s, actions=%s, version=%s, schemas=%d",
-        device_id, platform, supported_actions, version, len(capability_schemas),
+        device_id,
+        platform,
+        supported_actions,
+        version,
+        len(capability_schemas),
     )
 
     async with bridge._lock:
@@ -115,59 +192,28 @@ async def handle_capability_report(
             bridge._devices[device_id].supported_actions = list(supported_actions)
             bridge._devices[device_id].last_heartbeat = time.time()
 
-    # ── 1. Sync to GatewayCapabilityRegistry (exec_mode-aware) ────────────
+    # ── 1. Sync directly to the canonical capability plane ────────────────
     if device_id:
         try:
-            from galaxy_gateway.capability_registry import get_gateway_capability_registry
-            gw_reg = get_gateway_capability_registry()
-
-            schema_by_action: dict = {}
-            for schema_entry in capability_schemas:
-                if isinstance(schema_entry, dict) and schema_entry.get("action"):
-                    schema_by_action[schema_entry["action"]] = schema_entry
-
-            upserted = 0
-            for action in supported_actions:
-                action_str = action if isinstance(action, str) else str(action)
-                schema_dict = schema_by_action.get(action_str, {})
-                if version and not schema_dict.get("version"):
-                    schema_dict = {**schema_dict, "version": str(version)}
-                gw_reg.upsert(device_id, action_str, schema_dict)
-                upserted += 1
+            upserted = _sync_supported_actions_to_capability_authority(
+                device_id=device_id,
+                supported_actions=supported_actions,
+                capability_schemas=capability_schemas,
+                version=version,
+            )
 
             logger.info(
-                "capability_report: upserted %d capabilities for device %s to GatewayCapabilityRegistry",
-                upserted, device_id,
+                "capability_report: upserted %d capabilities for device %s to canonical capability authority",
+                upserted,
+                device_id,
             )
-        except Exception as gw_sync_err:
+        except Exception as canonical_sync_err:
             logger.warning(
-                "capability_report: GatewayCapabilityRegistry sync failed: %s", gw_sync_err
+                "capability_report: canonical capability sync failed: %s",
+                canonical_sync_err,
             )
 
-    # ── 2. Sync to LLM CapabilityRegistry (unchanged — backward compat) ───
-    if device_id and supported_actions:
-        try:
-            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
-            reg = CapabilityRegistry.get_instance()
-            for action in supported_actions:
-                action_str = action if isinstance(action, str) else str(action)
-                cap_name = f"gateway__{device_id}__{action_str}"
-                reg.register(CapabilityItem(
-                    name=cap_name,
-                    description=f"Android device {device_id} action: {action_str} (platform={platform})",
-                    source="gateway",
-                    source_id=device_id,
-                    available=True,
-                    metadata={"device_id": device_id, "platform": platform, "action": action_str},
-                ))
-            logger.info(
-                "capability_report: synced %d actions for device %s to CapabilityRegistry",
-                len(supported_actions), device_id,
-            )
-        except Exception as sync_err:
-            logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
-
-    # ── 3. Update BodyMeshRegistry roles based on supported_actions ───────────
+    # ── 2. Update BodyMeshRegistry roles based on supported_actions ───────────
     # This ensures that even if a device registered with no/partial capabilities,
     # a subsequent capability_report can update its body mesh role assignment.
     # Behaviour is idempotent: re-registration merges roles.
@@ -175,6 +221,7 @@ async def handle_capability_report(
     if device_id:
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             _cap_roles = _derive_roles_from_supported_actions(supported_actions)
             get_body_mesh_registry().register(
                 device_id,
@@ -183,19 +230,22 @@ async def handle_capability_report(
             )
             logger.info(
                 "BodyMeshRegistry: updated device_id=%s roles=%s via capability_report",
-                device_id, [r.value for r in _cap_roles],
+                device_id,
+                [r.value for r in _cap_roles],
             )
         except Exception as _bmr_exc:
             logger.debug(
                 "capability_report: BodyMeshRegistry update non-fatal: device_id=%s error=%s",
-                device_id, _bmr_exc,
+                device_id,
+                _bmr_exc,
             )
 
-    # ── 4. PR-I: notify auto-enrollment service so that MeshMembership and
+    # ── 3. PR-I: notify auto-enrollment service so that MeshMembership and
     #    Formation auto-enrollment are triggered after capability is reported.
     if device_id:
         try:
             from core.mesh.mesh_auto_enrollment import notify_capability_reported
+
             notify_capability_reported(
                 device_id,
                 roles=_cap_roles,
@@ -204,7 +254,8 @@ async def handle_capability_report(
         except Exception as _ae_exc:
             logger.debug(
                 "capability_report: auto_enrollment notify non-fatal: device_id=%s error=%s",
-                device_id, _ae_exc,
+                device_id,
+                _ae_exc,
             )
 
     return MessageBuilder.capability_report_ack(

@@ -643,7 +643,7 @@ class TestStandaloneHandlers:
             "supported_actions": ["tap", "swipe"],
             "message_id": "m1",
         }
-        with patch("galaxy_gateway.capability_registry.get_gateway_capability_registry",
+        with patch("galaxy_gateway.android.handlers.capability_report.CapabilityAuthority.get_instance",
                    side_effect=ImportError):
             resp = await handle_capability_report(bridge, ws, msg)
         assert resp["accepted"] is True

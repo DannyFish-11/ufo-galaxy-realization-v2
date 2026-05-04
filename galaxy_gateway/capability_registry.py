@@ -10,14 +10,19 @@ Gateway Capability Registry — exec_mode-aware routing store
 
     The canonical capability registration and lookup path is::
 
-        core.capability_bus.CapabilityBus  (get_capability_bus())
+        Writers → core.agent.capability_registry.CapabilityRegistry
+        Readers → core.unified.capability_resolver.CapabilityResolver
+
+    ``core.capability_bus.CapabilityBus`` remains a compatibility bridge that
+    forwards registrations into the same canonical capability truth.
 
     :class:`GatewayCapabilityRegistry` is an in-gateway per-device capability
-    schema store that was introduced before ``core.capability_bus`` existed.
+    schema store that was introduced before the canonical capability truth was
+    fully consolidated.
     It is retained so existing DeviceRouter / capability_report pathways that
     read from it do not immediately break.  New capability registration must
-    use :func:`core.capability_bus.get_capability_bus` and its
-    ``register_device_capability()`` / ``register_mcp_tool()`` methods.
+    target ``CapabilityRegistry`` (directly or through approved canonical
+    writer helpers / bridges).
 
     See ``core.orchestration_authority.legacy_paths`` for the registry entry
     (``galaxy_gateway.capability_registry.GatewayCapabilityRegistry``).
@@ -25,7 +30,8 @@ Gateway Capability Registry — exec_mode-aware routing store
 每台设备通过 ``capability_report`` 消息上报其动作 schema；本模块将这些
 schema 持久化在内存中，供路由层（DeviceRouter）在选择目标设备时参考
 ``exec_mode``（local / remote / both）。
-Legacy compat — for new capability registration use core.capability_bus.CapabilityBus.
+Legacy compat — authoritative capability truth lives in
+CapabilityRegistry / CapabilityResolver; this module is only a compat facade.
 
 数据结构
 --------
@@ -78,6 +84,14 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
+from core.unified.gateway_capability_projection import (
+    get_gateway_capabilities_for_device,
+    list_gateway_capability_device_ids,
+    normalize_gateway_exec_mode,
+    purge_gateway_capabilities_for_device,
+    query_gateway_capabilities,
+)
 
 logger = logging.getLogger("Galaxy.Gateway.CapabilityRegistry")
 
@@ -147,28 +161,29 @@ class GatewayCapabilityRegistry:
     .. deprecated:: PR-S7
         ``GatewayCapabilityRegistry`` is a **legacy compatibility capability
         store**.  It maintains an in-gateway per-device action-schema map that
-        was introduced before the canonical :mod:`core.capability_bus`
-        (CapabilityBus) existed.
+        was introduced before capability truth was consolidated on the
+        canonical registry / resolver path.
 
         Canonical replacement:
-            :func:`core.capability_bus.get_capability_bus` — the authoritative
-            capability registration and lookup authority.  Use
-            ``register_device_capability()`` for device capabilities and
-            ``register_mcp_tool()`` / ``register_skill()`` for MCP / Skill
-            capabilities.
+            Writers: :class:`core.agent.capability_registry.CapabilityRegistry`
+            Readers: :class:`core.unified.capability_resolver.CapabilityResolver`
+
+            ``core.capability_bus.CapabilityBus`` remains an approved compat
+            bridge, not an independent authority.
 
         ``GatewayCapabilityRegistry`` is retained so existing DeviceRouter and
         capability-report pathways that currently read from it do not
-        immediately break.  New capability registration and lookup must use
-        ``core.capability_bus.get_capability_bus()`` exclusively.
+        immediately break.  New capability registration / lookup must converge
+        on the canonical registry / resolver path.
     """
 
     _instance: Optional["GatewayCapabilityRegistry"] = None
     _instance_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        # 存储结构: { device_id -> { action -> CapabilitySchema } }
-        self._store: Dict[str, Dict[str, CapabilitySchema]] = {}
+        self._locally_registered_capability_names: set[str] = set()
+        self._locally_registered_by_device: Dict[str, set[str]] = {}
+        self._uses_global_projection = False
         self._lock = threading.Lock()
 
         # 计数器
@@ -180,11 +195,37 @@ class GatewayCapabilityRegistry:
         # uses core.capability_bus.CapabilityBus.
         try:
             from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
             emit_legacy_guardrail(
                 caller="galaxy_gateway.capability_registry.GatewayCapabilityRegistry",
             )
         except Exception:
             pass
+
+    @staticmethod
+    def _canonical_capability_name(device_id: str, action: str) -> str:
+        return f"gateway__{device_id}__{action}"
+
+    def _record_managed_name(self, device_id: str, capability_name: str) -> None:
+        with self._lock:
+            self._locally_registered_capability_names.add(capability_name)
+            if device_id not in self._locally_registered_by_device:
+                self._locally_registered_by_device[device_id] = set()
+            self._locally_registered_by_device[device_id].add(capability_name)
+
+    def _drop_managed_device(self, device_id: str) -> List[str]:
+        with self._lock:
+            names = list(self._locally_registered_by_device.pop(device_id, set()))
+            for name in names:
+                self._locally_registered_capability_names.discard(name)
+            return names
+
+    def _filter_projection_schemas(self, schemas: List[Any]) -> List[Any]:
+        if self._uses_global_projection:
+            return list(schemas)
+        with self._lock:
+            managed_names = set(self._locally_registered_capability_names)
+        return [schema for schema in schemas if getattr(schema, "canonical_name", "") in managed_names]
 
     # ── 单例 ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +236,7 @@ class GatewayCapabilityRegistry:
             with cls._instance_lock:
                 if cls._instance is None:
                     cls._instance = cls()
+                    cls._instance._uses_global_projection = True
         return cls._instance
 
     # ── 写操作 ────────────────────────────────────────────────────────────────
@@ -237,10 +279,54 @@ class GatewayCapabilityRegistry:
             registered_at=time.time(),
         )
 
+        try:
+            from core.unified.capability_contract import CapabilityContract, CapabilitySource
+            from core.capability_runtime.capability_state import CapabilityAvailability
+            from core.unified.capability_authority import CapabilityAuthority
+
+            capability_name = self._canonical_capability_name(device_id, action)
+            CapabilityAuthority.get_instance().upsert_contract(
+                CapabilityContract(
+                    name=capability_name,
+                    description=f"[Gateway:{device_id}] Device capability: {action}",
+                    source=CapabilitySource.GATEWAY,
+                    source_id=device_id,
+                    version=schema.version,
+                    parameters=schema.params,
+                    available=True,
+                    tags=list(schema.tags),
+                    metadata={
+                        "device_id": device_id,
+                        "action": action,
+                        "returns": schema.returns,
+                        "exec_mode": schema.exec_mode.value,
+                        "registered_at": schema.registered_at,
+                    },
+                ),
+                mutation_source="gateway_capability_registry.upsert",
+                publication_source="gateway_capability_registry",
+                lifecycle_event="capability_registered",
+                sync_runtime_registry=False,
+            )
+            CapabilityAuthority.get_instance().update_runtime(
+                capability_name,
+                availability=CapabilityAvailability.AVAILABLE.value,
+                device_bindings=[device_id],
+                preferred_device_ids=[device_id],
+                metadata={
+                    "participant_kind": "gateway",
+                    "exec_mode": schema.exec_mode.value,
+                    "network_reachability": "reachable",
+                },
+                mutation_source="gateway_capability_registry.upsert",
+                lifecycle_event="capability_runtime_registered",
+            )
+            self._record_managed_name(device_id, capability_name)
+        except Exception as exc:
+            logger.warning("capability_registry: canonical upsert failed: %s", exc)
+            raise
+
         with self._lock:
-            if device_id not in self._store:
-                self._store[device_id] = {}
-            self._store[device_id][action] = schema
             self._registration_count += 1
 
         logger.debug(
@@ -259,10 +345,20 @@ class GatewayCapabilityRegistry:
         int
             被清除的条目数量。
         """
-        with self._lock:
-            removed = self._store.pop(device_id, {})
+        removed_names = self._drop_managed_device(device_id)
+        if self._uses_global_projection:
+            count = purge_gateway_capabilities_for_device(device_id)
+        else:
+            count = 0
+            try:
+                from core.unified.capability_authority import CapabilityAuthority
 
-        count = len(removed)
+                authority = CapabilityAuthority.get_instance()
+                for name in removed_names:
+                    if authority.remove(name, mutation_source="gateway_capability_registry.purge"):
+                        count += 1
+            except Exception as exc:
+                logger.debug("capability_registry purge canonical sync failed: %s", exc)
         if count:
             logger.info(
                 "capability_registry: purged %d capabilities for device %s",
@@ -301,38 +397,26 @@ class GatewayCapabilityRegistry:
         -------
         list[CapabilitySchema]
         """
-        with self._lock:
-            if device_id is not None:
-                device_schemas = self._store.get(device_id, {}).values()
-                candidates = list(device_schemas)
-            else:
-                candidates = [
-                    schema
-                    for device_schemas in self._store.values()
-                    for schema in device_schemas.values()
-                ]
-
-        results = []
-        for schema in candidates:
-            # action 过滤
-            if action is not None and schema.action != action:
-                continue
-
-            # exec_mode 过滤
-            if exec_mode is not None and exec_mode != ExecMode.BOTH:
-                # local 请求：接受 local 或 both
-                if exec_mode == ExecMode.LOCAL and schema.exec_mode == ExecMode.REMOTE:
-                    continue
-                # remote 请求：接受 remote 或 both
-                if exec_mode == ExecMode.REMOTE and schema.exec_mode == ExecMode.LOCAL:
-                    continue
-
-            # tags 过滤
-            if tags:
-                if not all(t in schema.tags for t in tags):
-                    continue
-
-            results.append(schema)
+        results = [
+            CapabilitySchema(
+                device_id=schema.device_id,
+                action=schema.action,
+                params=dict(schema.params),
+                returns=dict(schema.returns),
+                version=schema.version,
+                exec_mode=ExecMode.from_str(schema.exec_mode),
+                tags=list(schema.tags),
+                registered_at=schema.registered_at,
+            )
+            for schema in self._filter_projection_schemas(
+                query_gateway_capabilities(
+                    action=action,
+                    exec_mode=normalize_gateway_exec_mode(exec_mode) if exec_mode is not None else None,
+                    device_id=device_id,
+                    tags=tags,
+                )
+            )
+        ]
 
         # 更新命中/未命中计数
         with self._lock:
@@ -345,29 +429,43 @@ class GatewayCapabilityRegistry:
 
     def get_by_device(self, device_id: str) -> List[CapabilitySchema]:
         """返回指定设备的全部能力 schema。"""
-        with self._lock:
-            return list(self._store.get(device_id, {}).values())
+        return [
+            CapabilitySchema(
+                device_id=schema.device_id,
+                action=schema.action,
+                params=dict(schema.params),
+                returns=dict(schema.returns),
+                version=schema.version,
+                exec_mode=ExecMode.from_str(schema.exec_mode),
+                tags=list(schema.tags),
+                registered_at=schema.registered_at,
+            )
+            for schema in self._filter_projection_schemas(get_gateway_capabilities_for_device(device_id))
+        ]
 
     def all_device_ids(self) -> List[str]:
         """返回注册表中所有设备 ID。"""
-        with self._lock:
-            return list(self._store.keys())
+        if self._uses_global_projection:
+            return list_gateway_capability_device_ids()
+        return sorted({schema.device_id for schema in self._filter_projection_schemas(query_gateway_capabilities())})
 
     # ── 计量 ──────────────────────────────────────────────────────────────────
 
     def stats(self) -> Dict[str, int]:
         """返回注册/命中/未命中计数。"""
+        schemas = self._filter_projection_schemas(query_gateway_capabilities())
         with self._lock:
             return {
                 "registrations": self._registration_count,
                 "hits": self._hit_count,
                 "misses": self._miss_count,
-                "devices": len(self._store),
-                "total_capabilities": sum(len(v) for v in self._store.values()),
+                "devices": len({schema.device_id for schema in schemas}),
+                "total_capabilities": len(schemas),
             }
 
 
 # ── 模块级快捷入口 ─────────────────────────────────────────────────────────────
+
 
 def get_gateway_capability_registry() -> GatewayCapabilityRegistry:
     """返回 GatewayCapabilityRegistry 全局单例（快捷函数）。"""

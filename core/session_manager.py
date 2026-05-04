@@ -162,6 +162,45 @@ class SessionManager:
         logger.info(f"会话已创建: {session_id} (user={user_id}, device={device_id})")
         return session
 
+    def ensure_session(
+        self,
+        session_id: str,
+        user_id: str = "",
+        device_id: str = "",
+    ) -> Session:
+        """确保指定 ID 的会话存在，并将设备加入该会话。"""
+        session = self._sessions.get(session_id)
+        if session is None:
+            owner = user_id or f"session::{session_id}"
+            devices = [device_id] if device_id else []
+            session = Session(
+                id=session_id,
+                user_id=owner,
+                devices=devices,
+                active_device=device_id,
+            )
+            self._sessions[session_id] = session
+            if owner:
+                self._user_active_session[owner] = session_id
+            self._persist_state()
+            logger.info(
+                "会话已确保存在: %s (user=%s, device=%s)",
+                session_id,
+                owner,
+                device_id,
+            )
+            return session
+
+        if user_id:
+            self._user_active_session[user_id] = session_id
+        if device_id and device_id not in session.devices:
+            session.devices.append(device_id)
+        if device_id:
+            session.active_device = device_id
+        session.updated_at = time.time()
+        self._persist_state()
+        return session
+
     def get_or_create_session(
         self, user_id: str, device_id: str = ""
     ) -> Session:

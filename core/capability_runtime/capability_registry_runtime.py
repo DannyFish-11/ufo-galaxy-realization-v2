@@ -108,7 +108,12 @@ class CapabilityRuntimeRegistry:
 
     # ── Write API ─────────────────────────────────────────────────────────
 
-    def register(self, state: CapabilityRuntimeState) -> None:
+    def register(
+        self,
+        state: CapabilityRuntimeState,
+        *,
+        _sync_authority: bool = True,
+    ) -> None:
         """Register or overwrite the runtime state for *state.name*.
 
         Parameters
@@ -138,8 +143,30 @@ class CapabilityRuntimeRegistry:
                 ),
             },
         )
+        if _sync_authority:
+            try:
+                from core.unified.capability_authority import CapabilityAuthority
 
-    def update(self, name: str, **fields: Any) -> None:
+                CapabilityAuthority.get_instance().update_runtime(
+                    state.name,
+                    availability=(
+                        state.availability.value
+                        if isinstance(state.availability, CapabilityAvailability)
+                        else str(state.availability)
+                    ),
+                    device_bindings=list(state.device_bindings),
+                    preferred_device_ids=list(state.preferred_device_ids),
+                    constraint_flags=dict(state.constraint_flags),
+                    reliability_flags=dict(state.reliability_flags),
+                    metadata=dict(state.metadata),
+                    mutation_source="capability_runtime_registry.register",
+                    lifecycle_event="capability_runtime_registered",
+                    sync_runtime_registry=False,
+                )
+            except Exception as exc:
+                logger.debug("CapabilityRuntimeRegistry.register authority sync skipped: %s", exc)
+
+    def update(self, name: str, _sync_authority: bool = True, **fields: Any) -> None:
         """Partially update the runtime state for capability *name*.
 
         Creates a new ``UNKNOWN`` state if not previously registered.
@@ -182,8 +209,30 @@ class CapabilityRuntimeRegistry:
                 "updated_fields": list(fields.keys()),
             },
         )
+        if _sync_authority:
+            try:
+                from core.unified.capability_authority import CapabilityAuthority
 
-    def deregister(self, name: str) -> bool:
+                CapabilityAuthority.get_instance().update_runtime(
+                    name,
+                    availability=(
+                        updated.availability.value
+                        if isinstance(updated.availability, CapabilityAvailability)
+                        else str(updated.availability)
+                    ),
+                    device_bindings=list(updated.device_bindings),
+                    preferred_device_ids=list(updated.preferred_device_ids),
+                    constraint_flags=dict(updated.constraint_flags),
+                    reliability_flags=dict(updated.reliability_flags),
+                    metadata=dict(updated.metadata),
+                    mutation_source="capability_runtime_registry.update",
+                    lifecycle_event="capability_runtime_updated",
+                    sync_runtime_registry=False,
+                )
+            except Exception as exc:
+                logger.debug("CapabilityRuntimeRegistry.update authority sync skipped: %s", exc)
+
+    def deregister(self, name: str, *, _sync_authority: bool = True) -> bool:
         """Remove capability *name* from the runtime registry.
 
         Returns
@@ -200,6 +249,17 @@ class CapabilityRuntimeRegistry:
                 name,
                 extra={"event": "capability_runtime_deregistered", "capability_name": name},
             )
+            if _sync_authority:
+                try:
+                    from core.unified.capability_authority import CapabilityAuthority
+
+                    CapabilityAuthority.get_instance().clear_runtime(
+                        name,
+                        mutation_source="capability_runtime_registry.deregister",
+                        sync_runtime_registry=False,
+                    )
+                except Exception as exc:
+                    logger.debug("CapabilityRuntimeRegistry.deregister authority sync skipped: %s", exc)
         return existed
 
     # ── Read API ──────────────────────────────────────────────────────────

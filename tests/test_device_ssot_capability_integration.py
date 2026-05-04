@@ -407,9 +407,14 @@ class TestCapabilityFacadeDemotion(unittest.TestCase):
             "capability_manager must have a deprecation notice in its module docstring",
         )
         self.assertIn(
-            "CapabilityBus",
+            "CapabilityRegistry",
             doc,
-            "capability_manager must point to CapabilityBus as the canonical authority",
+            "capability_manager must point to CapabilityRegistry as the canonical authority",
+        )
+        self.assertIn(
+            "CapabilityResolver",
+            doc,
+            "capability_manager must point to CapabilityResolver as the canonical read authority",
         )
 
     def test_capability_orchestrator_docstring_has_deprecated_marker(self):
@@ -422,9 +427,14 @@ class TestCapabilityFacadeDemotion(unittest.TestCase):
             "capability_orchestrator must have a deprecation notice in its module docstring",
         )
         self.assertIn(
-            "CapabilityBus",
+            "CapabilityRegistry",
             doc,
-            "capability_orchestrator must point to CapabilityBus as the canonical authority",
+            "capability_orchestrator must point to CapabilityRegistry as the canonical authority",
+        )
+        self.assertIn(
+            "CapabilityResolver",
+            doc,
+            "capability_orchestrator must point to CapabilityResolver as the canonical read authority",
         )
 
 

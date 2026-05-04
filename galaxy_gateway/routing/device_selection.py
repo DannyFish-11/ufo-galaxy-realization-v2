@@ -36,11 +36,15 @@ environments continue to operate.  Resolves SCHED-002.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
-from galaxy_gateway.capability_registry import get_gateway_capability_registry  # noqa: E402
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
+from core.unified.gateway_capability_projection import (  # noqa: E402
+    get_gateway_capabilities_for_device,
+    normalize_gateway_exec_mode,
+    query_gateway_capabilities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +90,8 @@ def select_devices(
     This function is the extracted implementation of
     ``DeviceRouter._select_devices``.  It applies, in order:
 
-    1. **exec_mode-aware filtering** via ``GatewayCapabilityRegistry`` — selects
+    1. **exec_mode-aware filtering** via the canonical gateway capability
+       projection — selects
        devices whose registered capabilities match the requested action and
        exec_mode.  Legacy devices (no capability_report yet) are kept as a
        fallback group.
@@ -144,10 +149,7 @@ def select_devices(
             _tvr = _vtd(_tid)
             # Detect whether the readiness module was actually consulted or
             # whether it degraded to "unavailable".
-            _readiness_consulted = not any(
-                r.startswith("readiness-unavailable")
-                for r in (_tvr.reasons or [])
-            )
+            _readiness_consulted = not any(r.startswith("readiness-unavailable") for r in (_tvr.reasons or []))
             if _readiness_consulted:
                 _at_least_one_readiness_check_succeeded = True
                 if _tvr.ready:
@@ -169,8 +171,7 @@ def select_devices(
         if _admitted:
             if _at_least_one_readiness_check_succeeded and len(_admitted) < len(devices):
                 logger.debug(
-                    "select_devices [SCHED-002]: admissibility pre-filter "
-                    "reduced candidates %d → %d",
+                    "select_devices [SCHED-002]: admissibility pre-filter " "reduced candidates %d → %d",
                     len(devices),
                     len(_admitted),
                 )
@@ -187,39 +188,31 @@ def select_devices(
             )
     except Exception as _adm_err:
         logger.debug(
-            "select_devices: admissibility pre-filter unavailable "
-            "(graceful degradation): %s",
+            "select_devices: admissibility pre-filter unavailable " "(graceful degradation): %s",
             _adm_err,
         )
 
-    # ── 1. exec_mode-aware filtering via GatewayCapabilityRegistry ──────────
+    # ── 1. exec_mode-aware filtering via canonical gateway capability view ──
     desired_exec_mode_str: Optional[str] = analysis.get("exec_mode")
     _actions = analysis.get("actions") or []
     desired_action: Optional[str] = _actions[0] if _actions else None
 
     if desired_exec_mode_str or desired_action:
         try:
-            from galaxy_gateway.capability_registry import ExecMode
-
-            gw_reg = get_gateway_capability_registry()
-            desired_exec_mode = ExecMode.from_str(desired_exec_mode_str)
+            desired_exec_mode = normalize_gateway_exec_mode(desired_exec_mode_str)
 
             filtered: List[Any] = []
             unregistered: List[Any] = []
             for device in devices:
-                schemas = gw_reg.query(
+                schemas = query_gateway_capabilities(
                     action=desired_action,
-                    exec_mode=(
-                        desired_exec_mode
-                        if desired_exec_mode != ExecMode.BOTH
-                        else None
-                    ),
+                    exec_mode=(desired_exec_mode if desired_exec_mode != "both" else None),
                     device_id=device.device_id,
                 )
                 if schemas:
                     filtered.append(device)
                 else:
-                    all_caps = gw_reg.get_by_device(device.device_id)
+                    all_caps = get_gateway_capabilities_for_device(device.device_id)
                     if not all_caps:
                         # Legacy device — no capability_report yet → keep
                         unregistered.append(device)
@@ -266,8 +259,7 @@ def select_devices(
             if gated:
                 devices = gated
                 logger.debug(
-                    "select_devices: capability gate passed — %d device(s) satisfy "
-                    "required_capabilities=%r",
+                    "select_devices: capability gate passed — %d device(s) satisfy " "required_capabilities=%r",
                     len(devices),
                     required_caps,
                 )
@@ -280,8 +272,7 @@ def select_devices(
                 return []
         except Exception as _gate_err:
             logger.warning(
-                "select_devices: capability gate unavailable, "
-                "required_capabilities treated as advisory: %s",
+                "select_devices: capability gate unavailable, " "required_capabilities treated as advisory: %s",
                 _gate_err,
             )
 
@@ -323,20 +314,12 @@ def select_devices(
         selected_id = pool.select_device(
             required_capabilities=required_caps or None,
             device_type=device_type_str,
-            exclude=[
-                d.device_id
-                for d in devices
-                if d.device_id not in preferred_ids
-            ],
+            exclude=[d.device_id for d in devices if d.device_id not in preferred_ids],
         )
         if selected_id:
-            matched = next(
-                (d for d in preferred if d.device_id == selected_id), None
-            )
+            matched = next((d for d in preferred if d.device_id == selected_id), None)
             if matched:
-                logger.debug(
-                    "select_devices: DevicePoolManager selected %s", selected_id
-                )
+                logger.debug("select_devices: DevicePoolManager selected %s", selected_id)
                 return [matched]
         # Pool returned no match — fall through to first-preferred fallback.
     except Exception as _pool_err:

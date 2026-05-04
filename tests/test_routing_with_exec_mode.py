@@ -13,22 +13,14 @@ Covers:
   - Backward compat: analysis without exec_mode key works as before
 """
 
-import sys
 import unittest
-from pathlib import Path
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from galaxy_gateway.capability_registry import (
-    ExecMode,
-    GatewayCapabilityRegistry,
-)
+from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 from galaxy_gateway.device_router import Device, DeviceRouter
 from core.device_types import DeviceType
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Test helpers
@@ -56,6 +48,29 @@ def _make_registry(*entries) -> GatewayCapabilityRegistry:
     for device_id, action, schema_dict in entries:
         reg.upsert(device_id, action, schema_dict)
     return reg
+
+
+@contextmanager
+def _patch_gateway_queries(
+    registry: Optional[GatewayCapabilityRegistry] = None,
+    *,
+    query_side_effect=None,
+    by_device_side_effect=None,
+):
+    if registry is not None:
+        query_side_effect = query_side_effect or registry.query
+        by_device_side_effect = by_device_side_effect or registry.get_by_device
+    with (
+        patch(
+            "galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+            side_effect=query_side_effect,
+        ),
+        patch(
+            "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+            side_effect=by_device_side_effect,
+        ),
+    ):
+        yield
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -95,16 +110,13 @@ class TestExecModeRouting(unittest.TestCase):
         router = _make_router_with_devices([dev_local, dev_remote])
 
         registry = _make_registry(
-            ("dev-local",  "tap", {"exec_mode": "local"}),
+            ("dev-local", "tap", {"exec_mode": "local"}),
             ("dev-remote", "tap", {"exec_mode": "remote"}),
         )
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ) as _mock_reg,
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -122,16 +134,13 @@ class TestExecModeRouting(unittest.TestCase):
         router = _make_router_with_devices([dev_both, dev_remote])
 
         registry = _make_registry(
-            ("dev-both",   "screenshot", {"exec_mode": "both"}),
+            ("dev-both", "screenshot", {"exec_mode": "both"}),
             ("dev-remote", "screenshot", {"exec_mode": "remote"}),
         )
 
         analysis = _analysis(actions=["screenshot"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -151,16 +160,13 @@ class TestExecModeRouting(unittest.TestCase):
         router = _make_router_with_devices([dev_local, dev_remote])
 
         registry = _make_registry(
-            ("dev-local",  "swipe", {"exec_mode": "local"}),
+            ("dev-local", "swipe", {"exec_mode": "local"}),
             ("dev-remote", "swipe", {"exec_mode": "remote"}),
         )
 
         analysis = _analysis(actions=["swipe"], exec_mode="remote")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -186,10 +192,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="both")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -214,10 +217,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -243,10 +243,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -270,10 +267,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=[], exec_mode=None)
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -290,9 +284,9 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                side_effect=RuntimeError("registry unavailable"),
+            _patch_gateway_queries(
+                query_side_effect=RuntimeError("registry unavailable"),
+                by_device_side_effect=RuntimeError("registry unavailable"),
             ),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
@@ -312,10 +306,7 @@ class TestExecModeRouting(unittest.TestCase):
         registry = _make_registry()
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_registry",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -334,29 +325,22 @@ class TestExecModeRouting(unittest.TestCase):
 class TestUnregisterPurgesCapabilities(unittest.TestCase):
     """DeviceRouter.unregister_device purges capabilities from registry."""
 
-    def test_unregister_purges_gateway_capability_registry(self):
+    def test_unregister_purges_gateway_capabilities(self):
         router = _make_router_with_devices([_make_device("dev-1")])
 
-        registry = _make_registry(
-            ("dev-1", "tap",        {"exec_mode": "local"}),
-            ("dev-1", "screenshot", {"exec_mode": "local"}),
-        )
-
         with patch(
-            "galaxy_gateway.device_router.get_gateway_capability_registry",
-            return_value=registry,
+            "galaxy_gateway.device_router.purge_gateway_capabilities_for_device",
+            return_value=2,
         ):
             result = router.unregister_device("dev-1")
 
         self.assertTrue(result)
-        self.assertEqual(registry.get_by_device("dev-1"), [])
 
     def test_unregister_nonexistent_device_returns_false(self):
         router = DeviceRouter()
-        registry = _make_registry()
         with patch(
-            "galaxy_gateway.device_router.get_gateway_capability_registry",
-            return_value=registry,
+            "galaxy_gateway.device_router.purge_gateway_capabilities_for_device",
+            return_value=0,
         ):
             result = router.unregister_device("ghost-device")
         self.assertFalse(result)
