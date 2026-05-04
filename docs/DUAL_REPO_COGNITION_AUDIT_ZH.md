@@ -2,7 +2,7 @@
 
 > **文档类型**：代码驱动型双仓系统认知审查  
 > **审查范围**：`DannyFish-11/ufo-galaxy-realization-v2`（V2 控制平面）
-> ＋ `DannyFish-11/ufo-galaxy-android`（Android 执行参与者）  
+> + `DannyFish-11/ufo-galaxy-android`（Android 执行参与者）  
 > **唯一信息来源**：当前代码文件（`core/`、`galaxy_gateway/`、`contracts/`、`system_integration/`）  
 > **不依据**：任何历史 Markdown 审计、设计文档、PR 描述或愿景说明  
 > **语言**：中文  
@@ -266,7 +266,7 @@ V2: android_delegated_signal_ingress → OperatorSurface / FlowLevelOperatorSurf
 - `system_integration/hardware_trigger.py`：硬件触发器已实现
 
 **未完成的部分：**
-- 没有完整的统一 operator console UI（scroll_paper_geek_ui.py 在本次代码审查中未找到）
+- 没有完整的统一 operator console UI（本次代码审查未在 `enhancements/clients/windows_client/` 目录中发现完整 UI 实现文件）
 - 没有面向多设备生态系统的完整可视化控制台界面
 
 ---
