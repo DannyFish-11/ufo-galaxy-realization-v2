@@ -174,19 +174,12 @@ class SystemIntegration:
         from core.unified.capability_resolver import get_capability_resolver
 
         registry = CapabilityRegistry.get_instance()
-        target = next(
-            (
-                name
-                for name, item in registry._items.items()
-                if str((item.metadata or {}).get("system_integration_id") or name) == id
-            ),
-            None,
-        )
-        if not target:
+        target_item = registry.find_by_system_integration_id(id)
+        if target_item is None:
             return False
-        registry.eject(target)
+        registry.eject(target_item.name)
         get_capability_resolver().invalidate_cache()
-        self._runtime_handlers.pop(target, None)
+        self._runtime_handlers.pop(target_item.name, None)
         return True
     
     # ========================================================================

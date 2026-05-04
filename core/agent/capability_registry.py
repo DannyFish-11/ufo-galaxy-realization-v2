@@ -174,6 +174,13 @@ class CapabilityRegistry:
             if i.available and (q in i.name.lower() or q in i.description.lower())
         ]
 
+    def find_by_system_integration_id(self, integration_id: str) -> Optional[CapabilityItem]:
+        """Return the registered item associated with a SystemIntegration ID."""
+        for item in self._items.values():
+            if str((item.metadata or {}).get("system_integration_id") or "") == str(integration_id):
+                return item
+        return None
+
     def register(self, item: Any) -> None:
         """手动注册一个能力条目或 canonical contract。"""
         try:

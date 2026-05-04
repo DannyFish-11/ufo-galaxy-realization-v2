@@ -169,7 +169,11 @@ def normalize_capability_provider_metadata(
     if src_raw in ("mcp", "skill"):
         capability_kind = CapabilityKind.TOOL.value
     elif src_raw == "builtin":
-        capability_kind = str((metadata or {}).get("capability_kind") or CapabilityKind.TOOL.value)
+        raw_kind = str((metadata or {}).get("capability_kind") or CapabilityKind.TOOL.value)
+        try:
+            capability_kind = CapabilityKind(raw_kind).value
+        except ValueError:
+            capability_kind = CapabilityKind.TOOL.value
     elif src_raw == "agent":
         capability_kind = CapabilityKind.AUTONOMOUS_BEHAVIOR.value
     elif src_raw == "autonomous":
