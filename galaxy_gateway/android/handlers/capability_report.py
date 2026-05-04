@@ -99,6 +99,7 @@ def _sync_supported_actions_to_capability_authority(
 # Role derivation helper
 # ---------------------------------------------------------------------------
 
+
 def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
     """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
     list of supported action strings reported by the device.
@@ -120,7 +121,9 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
         return []
 
     _PERCEPTION_KEYWORDS = frozenset({"camera", "photo", "scan", "mic", "audio", "record", "sensor"})
-    _ACTION_KEYWORDS = frozenset({"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"})
+    _ACTION_KEYWORDS = frozenset(
+        {"tap", "swipe", "type", "keyboard", "click", "input", "write", "exec", "shell", "install"}
+    )
     _PRESENCE_KEYWORDS = frozenset({"screenshot", "screen", "display", "notify", "notification", "speak", "tts"})
 
     roles: List[Any] = []
@@ -151,9 +154,7 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
     return roles
 
 
-async def handle_capability_report(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理设备能力上报，持久化 supported_actions 并同步到 CapabilityRegistry。
 
     能力命名规则（稳定且可被 LLM tool schema 使用）：
@@ -184,7 +185,11 @@ async def handle_capability_report(
 
     logger.info(
         "Capability report from %s: platform=%s, actions=%s, version=%s, schemas=%d",
-        device_id, platform, supported_actions, version, len(capability_schemas),
+        device_id,
+        platform,
+        supported_actions,
+        version,
+        len(capability_schemas),
     )
 
     async with bridge._lock:
@@ -204,7 +209,8 @@ async def handle_capability_report(
 
             logger.info(
                 "capability_report: upserted %d capabilities for device %s to canonical capability authority",
-                upserted, device_id,
+                upserted,
+                device_id,
             )
         except Exception as canonical_sync_err:
             logger.warning(
@@ -220,6 +226,7 @@ async def handle_capability_report(
     if device_id:
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             _cap_roles = _derive_roles_from_supported_actions(supported_actions)
             get_body_mesh_registry().register(
                 device_id,
@@ -228,12 +235,14 @@ async def handle_capability_report(
             )
             logger.info(
                 "BodyMeshRegistry: updated device_id=%s roles=%s via capability_report",
-                device_id, [r.value for r in _cap_roles],
+                device_id,
+                [r.value for r in _cap_roles],
             )
         except Exception as _bmr_exc:
             logger.debug(
                 "capability_report: BodyMeshRegistry update non-fatal: device_id=%s error=%s",
-                device_id, _bmr_exc,
+                device_id,
+                _bmr_exc,
             )
 
     # ── 3. PR-I: notify auto-enrollment service so that MeshMembership and
@@ -241,6 +250,7 @@ async def handle_capability_report(
     if device_id:
         try:
             from core.mesh.mesh_auto_enrollment import notify_capability_reported
+
             notify_capability_reported(
                 device_id,
                 roles=_cap_roles,
@@ -249,7 +259,8 @@ async def handle_capability_report(
         except Exception as _ae_exc:
             logger.debug(
                 "capability_report: auto_enrollment notify non-fatal: device_id=%s error=%s",
-                device_id, _ae_exc,
+                device_id,
+                _ae_exc,
             )
 
     return MessageBuilder.capability_report_ack(
