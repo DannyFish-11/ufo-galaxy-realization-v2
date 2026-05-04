@@ -14,6 +14,7 @@ Covers:
 """
 
 import unittest
+from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
@@ -47,6 +48,29 @@ def _make_registry(*entries) -> GatewayCapabilityRegistry:
     for device_id, action, schema_dict in entries:
         reg.upsert(device_id, action, schema_dict)
     return reg
+
+
+@contextmanager
+def _patch_gateway_queries(
+    registry: Optional[GatewayCapabilityRegistry] = None,
+    *,
+    query_side_effect=None,
+    by_device_side_effect=None,
+):
+    if registry is not None:
+        query_side_effect = query_side_effect or registry.query
+        by_device_side_effect = by_device_side_effect or registry.get_by_device
+    with (
+        patch(
+            "galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+            side_effect=query_side_effect,
+        ),
+        patch(
+            "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+            side_effect=by_device_side_effect,
+        ),
+    ):
+        yield
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -92,10 +116,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -119,10 +140,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["screenshot"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -148,10 +166,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["swipe"], exec_mode="remote")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -177,10 +192,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="both")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -205,10 +217,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -234,10 +243,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -261,10 +267,7 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=[], exec_mode=None)
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],
@@ -281,9 +284,9 @@ class TestExecModeRouting(unittest.TestCase):
 
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                side_effect=RuntimeError("registry unavailable"),
+            _patch_gateway_queries(
+                query_side_effect=RuntimeError("registry unavailable"),
+                by_device_side_effect=RuntimeError("registry unavailable"),
             ),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
@@ -303,10 +306,7 @@ class TestExecModeRouting(unittest.TestCase):
         registry = _make_registry()
         analysis = _analysis(actions=["tap"], exec_mode="local")
         with (
-            patch(
-                "galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                return_value=registry,
-            ),
+            _patch_gateway_queries(registry),
             patch(
                 "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                 side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"],

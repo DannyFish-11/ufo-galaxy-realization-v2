@@ -320,7 +320,9 @@ class TestDeviceSelection:
         analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
                     "task_role": None, "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=Exception("registry unavailable")), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
                    side_effect=Exception("registry unavailable")):
             with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
                        side_effect=Exception("pool unavailable")):
@@ -344,8 +346,10 @@ class TestDeviceSelection:
                     "requires_cross_device": False, "task_role": None,
                     "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                   return_value=reg):
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=reg.query), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                   side_effect=reg.get_by_device):
             with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                        side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
                 with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -370,8 +374,10 @@ class TestDeviceSelection:
                     "requires_cross_device": False, "task_role": None,
                     "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                   return_value=reg):
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=reg.query), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                   side_effect=reg.get_by_device):
             with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                        side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
                 with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -393,8 +399,10 @@ class TestDeviceSelection:
                     "requires_cross_device": False, "task_role": None,
                     "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
-                   return_value=reg):
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=reg.query), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
+                   side_effect=reg.get_by_device):
             with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                        side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
                 with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
@@ -416,7 +424,9 @@ class TestDeviceSelection:
         analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
                     "task_role": None, "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=Exception("skip")), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
                    side_effect=Exception("skip")):
             with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                        side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
@@ -436,7 +446,9 @@ class TestDeviceSelection:
         analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
                     "task_role": None, "required_capabilities": [], "target_device_type": "android"}
 
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=Exception("skip")), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
                    side_effect=Exception("skip")):
             with patch("galaxy_gateway.autonomous_filter.filter_autonomous_devices",
                        side_effect=lambda devs, **kw: [d for d in devs if d.status == "online"]):
@@ -658,7 +670,9 @@ class TestRoutingOrchestrator:
         candidates = [_make_device("d1", status="online")]
         analysis = {"exec_mode": None, "actions": [], "requires_cross_device": False,
                     "task_role": None, "required_capabilities": [], "target_device_type": "android"}
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=Exception("skip")), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
                    side_effect=Exception("skip")):
             with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
                        side_effect=Exception("skip")):
@@ -739,7 +753,9 @@ class TestDeviceRouterDelegation:
             "task_role": None,
             "required_capabilities": [],
         }
-        with patch("galaxy_gateway.routing.device_selection.get_gateway_capability_projection_view",
+        with patch("galaxy_gateway.routing.device_selection.query_gateway_capabilities",
+                   side_effect=Exception("skip")), patch(
+                   "galaxy_gateway.routing.device_selection.get_gateway_capabilities_for_device",
                    side_effect=Exception("skip")):
             with patch("galaxy_gateway.routing.device_selection.get_device_pool_manager",
                        side_effect=Exception("skip")):
