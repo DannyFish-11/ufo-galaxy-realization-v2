@@ -20,10 +20,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_VALID_EXEC_MODES = frozenset({"local", "remote", "both"})
+
 
 def _normalize_exec_mode(value: Any) -> str:
     normalized = str(value or "both").lower()
-    if normalized not in {"local", "remote", "both"}:
+    if normalized not in _VALID_EXEC_MODES:
         return "both"
     return normalized
 
@@ -155,7 +157,7 @@ def _derive_roles_from_supported_actions(supported_actions: List) -> List[Any]:
 
 
 async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
-    """处理设备能力上报，持久化 supported_actions 并同步到 CapabilityRegistry。
+    """处理设备能力上报，持久化 supported_actions 并同步到 canonical capability plane。
 
     能力命名规则（稳定且可被 LLM tool schema 使用）：
         ``gateway__<device_id>__<action_name>``
