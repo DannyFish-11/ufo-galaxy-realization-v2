@@ -321,12 +321,12 @@ class GatewayCapabilityRegistry:
         )
 
         try:
-            from core.agent.capability_registry import CapabilityRegistry
             from core.unified.capability_contract import CapabilityContract, CapabilitySource
-            from core.unified.capability_resolver import get_capability_resolver
+            from core.capability_runtime.capability_state import CapabilityAvailability
+            from core.unified.capability_authority import CapabilityAuthority
 
             capability_name = self._canonical_capability_name(device_id, action)
-            CapabilityRegistry.get_instance().register(
+            CapabilityAuthority.get_instance().upsert_contract(
                 CapabilityContract(
                     name=capability_name,
                     description=f"[Gateway:{device_id}] Device capability: {action}",
@@ -343,9 +343,25 @@ class GatewayCapabilityRegistry:
                         "exec_mode": schema.exec_mode.value,
                         "registered_at": schema.registered_at,
                     },
-                )
+                ),
+                mutation_source="gateway_capability_registry.upsert",
+                publication_source="gateway_capability_registry",
+                lifecycle_event="capability_registered",
+                sync_runtime_registry=False,
             )
-            get_capability_resolver().invalidate_cache()
+            CapabilityAuthority.get_instance().update_runtime(
+                capability_name,
+                availability=CapabilityAvailability.AVAILABLE.value,
+                device_bindings=[device_id],
+                preferred_device_ids=[device_id],
+                metadata={
+                    "participant_kind": "gateway",
+                    "exec_mode": schema.exec_mode.value,
+                    "network_reachability": "reachable",
+                },
+                mutation_source="gateway_capability_registry.upsert",
+                lifecycle_event="capability_runtime_registered",
+            )
             self._record_managed_name(device_id, capability_name)
         except Exception as exc:
             logger.warning("capability_registry: canonical upsert failed: %s", exc)
@@ -373,10 +389,8 @@ class GatewayCapabilityRegistry:
         removed_names = self._drop_managed_device(device_id)
         count = len(removed_names)
         try:
-            from core.agent.capability_registry import CapabilityRegistry
-            from core.unified.capability_resolver import get_capability_resolver
+            from core.unified.capability_authority import CapabilityAuthority
 
-            registry = CapabilityRegistry.get_instance()
             if not removed_names:
                 removed_names = [
                     getattr(contract, "name", "")
@@ -387,8 +401,10 @@ class GatewayCapabilityRegistry:
                 count = len([name for name in removed_names if name])
             for name in removed_names:
                 if name:
-                    registry.eject(name)
-            get_capability_resolver().invalidate_cache()
+                    CapabilityAuthority.get_instance().remove(
+                        name,
+                        mutation_source="gateway_capability_registry.purge",
+                    )
         except Exception as exc:
             logger.debug("capability_registry purge canonical sync failed: %s", exc)
 

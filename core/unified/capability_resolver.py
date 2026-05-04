@@ -71,6 +71,7 @@ from .capability_contract import (
     CapabilitySource,
     validate_capability_contract,
 )
+from .capability_record import UnifiedCapabilityRecord
 
 logger = logging.getLogger("Galaxy.Unified.CapabilityResolver")
 
@@ -158,6 +159,33 @@ class CapabilityResolver:
 
         return CapabilityContract.from_dict(d)
 
+    def _enrich_contract_runtime(self, contract: CapabilityContract) -> CapabilityContract:
+        """Merge one-plane runtime/lifecycle metadata into *contract*."""
+        registry = self._get_registry()
+        if registry is None:
+            return contract
+        raw = None
+        try:
+            raw = registry.get(contract.name)
+        except Exception:
+            raw = None
+        if raw is None:
+            return contract
+
+        metadata = dict(getattr(raw, "metadata", {}) or {})
+        runtime_state = dict(metadata.get("runtime_state") or {})
+        availability = str(runtime_state.get("availability") or "")
+        if availability:
+            contract.available = availability in (
+                "available",
+                "degraded",
+            )
+        contract.metadata = {
+            **dict(contract.metadata or {}),
+            **metadata,
+        }
+        return contract
+
     # ── Resolution API ──────────────────────────────────────────────────────
 
     def _rebuild_cache(self, registry: Any) -> None:
@@ -174,6 +202,7 @@ class CapabilityResolver:
             try:
                 contract = self._item_to_contract(raw)
                 validate_capability_contract(contract)
+                contract = self._enrich_contract_runtime(contract)
                 new_cache[contract.name] = contract
             except CapabilityContractError as exc:
                 errors.append({"name": getattr(raw, "name", "?"), "violations": exc.violations})
@@ -234,6 +263,7 @@ class CapabilityResolver:
         try:
             contract = self._item_to_contract(raw)
             validate_capability_contract(contract)
+            contract = self._enrich_contract_runtime(contract)
             with self._lock:
                 self._cache[name] = contract
             return contract
@@ -296,6 +326,35 @@ class CapabilityResolver:
         else:
             contracts = self.resolve_all()
         return [c.to_tool_schema() for c in contracts]
+
+    def resolve_record(self, name: str) -> Optional[UnifiedCapabilityRecord]:
+        """Return the unified one-plane record for *name*."""
+        contract = self.resolve(name)
+        if contract is None:
+            return None
+        runtime_payload = dict((contract.metadata or {}).get("runtime_state") or {})
+        runtime_state = None
+        if runtime_payload:
+            from core.capability_runtime.capability_state import CapabilityRuntimeState
+
+            runtime_state = CapabilityRuntimeState.from_dict(
+                {
+                    "name": contract.name,
+                    **runtime_payload,
+                }
+            )
+        return UnifiedCapabilityRecord.from_contract(contract, runtime_state=runtime_state)
+
+    def resolve_all_records(
+        self,
+        source: Optional[CapabilitySource] = None,
+    ) -> List[UnifiedCapabilityRecord]:
+        """Return unified one-plane records for all validated capabilities."""
+        return [
+            record
+            for record in (self.resolve_record(contract.name) for contract in self.resolve_all(source=source))
+            if record is not None
+        ]
 
     def validation_errors(self) -> List[Dict[str, Any]]:
         """Return the list of contract validation errors from the last cache build."""

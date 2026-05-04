@@ -371,14 +371,15 @@ class CapabilityBus:
         (the canonical consumer interface).  Failures are non-fatal.
         """
         try:
-            from core.agent.capability_registry import (  # noqa: PLC0415
-                CapabilityRegistry,
-                CapabilityItem,
-            )
+            from core.agent.capability_registry import CapabilityItem  # noqa: PLC0415
+            from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
+            from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
             role_val = entry.role.value if isinstance(entry.role, CapabilityBusRole) else str(entry.role)
             source = self._ROLE_TO_REGISTRY_SOURCE.get(role_val, "unknown")
-            available = (
-                entry.health != CapabilityHealthStatus.UNAVAILABLE
+            availability = (
+                CapabilityAvailability.UNAVAILABLE.value
+                if entry.health == CapabilityHealthStatus.UNAVAILABLE
+                else CapabilityAvailability.AVAILABLE.value
             )
             item = CapabilityItem(
                 name=entry.name,
@@ -386,7 +387,7 @@ class CapabilityBus:
                 source=source,
                 source_id=entry.source_id,
                 parameters=dict(entry.schema) if entry.schema else {},
-                available=available,
+                available=entry.health != CapabilityHealthStatus.UNAVAILABLE,
                 metadata={
                     **(dict(entry.metadata) if entry.metadata else {}),
                     "display_name": entry.display_name,
@@ -402,9 +403,30 @@ class CapabilityBus:
                     "registered_at": entry.registered_at,
                 },
             )
-            CapabilityRegistry.get_instance().register(item)
+            CapabilityAuthority.get_instance().upsert_contract(
+                item,
+                mutation_source="capability_bus.register",
+                publication_source="capability_bus",
+                lifecycle_event="capability_registered",
+                sync_runtime_registry=False,
+            )
+            CapabilityAuthority.get_instance().update_runtime(
+                entry.name,
+                availability=availability,
+                device_bindings=[entry.source_id] if role_val == CapabilityBusRole.DEVICE.value and entry.source_id else None,
+                metadata={
+                    "health": (
+                        entry.health.value
+                        if isinstance(entry.health, CapabilityHealthStatus)
+                        else str(entry.health)
+                    ),
+                    "participant_kind": role_val,
+                },
+                mutation_source="capability_bus.register",
+                lifecycle_event="capability_runtime_registered",
+            )
             logger.debug(
-                "CapabilityBus bridge → CapabilityRegistry: %s (source=%s)",
+                "CapabilityBus bridge → CapabilityAuthority: %s (source=%s)",
                 entry.name,
                 source,
             )
@@ -451,6 +473,15 @@ class CapabilityBus:
             if name in self._entries:
                 del self._entries[name]
                 logger.debug("CapabilityBus.unregister: %s", name)
+                try:
+                    from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
+                    CapabilityAuthority.get_instance().remove(
+                        name,
+                        mutation_source="capability_bus.unregister",
+                    )
+                except Exception as exc:
+                    logger.debug("CapabilityBus.unregister authority sync failed: %s", exc)
                 return True
         return False
 
@@ -465,6 +496,23 @@ class CapabilityBus:
             if name not in self._entries:
                 return False
             self._entries[name].health = health
+        try:
+            from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
+            from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
+            CapabilityAuthority.get_instance().update_runtime(
+                name,
+                availability=(
+                    CapabilityAvailability.UNAVAILABLE.value
+                    if health == CapabilityHealthStatus.UNAVAILABLE
+                    else CapabilityAvailability.AVAILABLE.value
+                ),
+                metadata={"health": health.value if isinstance(health, CapabilityHealthStatus) else str(health)},
+                mutation_source="capability_bus.set_health",
+                lifecycle_event="capability_runtime_updated",
+            )
+        except Exception as exc:
+            logger.debug("CapabilityBus.set_health authority sync failed: %s", exc)
         return True
 
     # ── Lookup / listing ─────────────────────────────────────────────────────

@@ -165,15 +165,14 @@ class CapabilityOrchestrator:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        from core.agent.capability_registry import CapabilityRegistry
         from core.unified.capability_contract import CapabilityContract, CapabilitySource
-        from core.unified.capability_resolver import get_capability_resolver
+        from core.unified.capability_authority import CapabilityAuthority
 
         try:
             source_enum = CapabilitySource(source)
         except ValueError:
             source_enum = CapabilitySource.UNKNOWN
-        CapabilityRegistry.get_instance().register(
+        CapabilityAuthority.get_instance().upsert_contract(
             CapabilityContract(
                 name=name,
                 description=description,
@@ -183,9 +182,12 @@ class CapabilityOrchestrator:
                 available=True,
                 tags=list(tags or []),
                 metadata=dict(metadata or {}),
-            )
+            ),
+            mutation_source="capability_orchestrator._register_canonical_contract",
+            publication_source="capability_orchestrator",
+            lifecycle_event="capability_registered",
+            sync_runtime_registry=False,
         )
-        get_capability_resolver().invalidate_cache()
 
     async def _seed_static_node_contracts(self) -> None:
         """Seed static node capabilities into the canonical registry."""

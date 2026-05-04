@@ -176,6 +176,7 @@ class UnifiedDeviceManager:
         # device as a first-class capability provider.  This is idempotent —
         # re-registering the same device_id merges/updates the existing record.
         self._assimilate_device_to_capability_layer(device)
+        self._sync_capabilities_to_authority(device)
 
     def register_device_from_dict(self, device_id: str, data: Dict[str, Any]) -> UnifiedDevice:
         """
@@ -224,7 +225,9 @@ class UnifiedDeviceManager:
 
         # Remove device capabilities from the canonical CapabilityBus before
         # dropping the device record so the bus stays consistent.
+        caps = self._normalize_capabilities(self._devices[device_id].capabilities)
         self._remove_capabilities_from_bus(device_id)
+        self._clear_capabilities_from_authority(device_id, caps)
 
         self._devices.pop(device_id)
         logger.info(
@@ -368,6 +371,58 @@ class UnifiedDeviceManager:
                 },
             )
 
+    def _sync_capabilities_to_authority(self, device: UnifiedDevice) -> None:
+        """Update unified capability-plane runtime truth for device capabilities."""
+        caps = self._normalize_capabilities(device.capabilities)
+        if not caps:
+            return
+        try:
+            from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
+            from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
+            authority = CapabilityAuthority.get_instance()
+            availability = (
+                CapabilityAvailability.AVAILABLE.value
+                if device.status == UnifiedDeviceStatus.ONLINE
+                else CapabilityAvailability.UNAVAILABLE.value
+            )
+            for cap_str in caps:
+                authority.update_runtime(
+                    f"device__{device.device_id}__{cap_str}",
+                    availability=availability,
+                    device_bindings=[device.device_id],
+                    preferred_device_ids=[device.device_id],
+                    metadata={
+                        "participant_kind": "device",
+                        "network_reachability": "reachable"
+                        if device.status == UnifiedDeviceStatus.ONLINE
+                        else "offline",
+                        "device_status": (
+                            device.status.value if hasattr(device.status, "value") else str(device.status)
+                        ),
+                    },
+                    mutation_source="unified_device_manager",
+                    lifecycle_event="capability_runtime_updated",
+                )
+        except Exception as exc:
+            logger.debug("CapabilityAuthority device sync skipped for %s: %s", device.device_id, exc)
+
+    def _clear_capabilities_from_authority(self, device_id: str, capabilities: List[str]) -> None:
+        """Remove device capability records from the unified capability plane."""
+        if not capabilities:
+            return
+        try:
+            from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
+            authority = CapabilityAuthority.get_instance()
+            for cap_str in capabilities:
+                authority.remove(
+                    f"device__{device_id}__{cap_str}",
+                    mutation_source="unified_device_manager.unregister_device",
+                )
+        except Exception as exc:
+            logger.debug("CapabilityAuthority device removal skipped for %s: %s", device_id, exc)
+
     # ------------------------------------------------------------------
     # 状态更新
     # ------------------------------------------------------------------
@@ -484,6 +539,9 @@ class UnifiedDeviceManager:
         # registration (e.g. a separate capability_report message).
         if "capabilities" in fields_changed:
             self._assimilate_device_to_capability_layer(device)
+            self._sync_capabilities_to_authority(device)
+        elif "status" in fields_changed:
+            self._sync_capabilities_to_authority(device)
 
         return device
 
@@ -511,6 +569,7 @@ class UnifiedDeviceManager:
                 "state_version": device.state_version,
             },
         )
+        self._sync_capabilities_to_authority(device)
 
     def heartbeat(self, device_id: str) -> None:
         """记录设备心跳；若设备处于离线/错误态则自动恢复为 ONLINE。
@@ -544,6 +603,8 @@ class UnifiedDeviceManager:
             get_device_health_scorer().heartbeat(device_id)
         except Exception:
             pass
+        if device is not None:
+            self._sync_capabilities_to_authority(device)
 
     async def check_heartbeat_timeouts(
         self,

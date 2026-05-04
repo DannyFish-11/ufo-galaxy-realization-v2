@@ -204,6 +204,7 @@ class CapabilityRegistry:
         except Exception:
             pass
         self._normalize_capability_plane_metadata(item)
+        self._annotate_unified_capability_plane(item, mutation_source="capability_registry.register")
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
@@ -227,6 +228,46 @@ class CapabilityRegistry:
                 getattr(item, "name", "?"),
                 exc,
             )
+
+    @staticmethod
+    def _annotate_unified_capability_plane(
+        item: CapabilityItem,
+        *,
+        mutation_source: str,
+    ) -> None:
+        """Attach unified-plane lifecycle/runtime metadata to *item*."""
+        metadata = dict(item.metadata or {})
+        plane = dict(metadata.get("capability_plane") or {})
+        runtime_state = dict(metadata.get("runtime_state") or {})
+        record_version = int(plane.get("record_version", 0) or 0) + 1
+        runtime_state.setdefault(
+            "availability",
+            "available" if item.available else "unknown",
+        )
+        runtime_state.setdefault("device_bindings", [])
+        runtime_state.setdefault("preferred_device_ids", [])
+        runtime_state.setdefault("constraint_flags", {})
+        runtime_state.setdefault("reliability_flags", {})
+        runtime_state.setdefault("metadata", {})
+        runtime_state["last_updated"] = time.time()
+        metadata["capability_id"] = item.name
+        metadata["authority_lineage"] = [
+            "capability_registry",
+            "capability_authority",
+            "capability_resolver",
+        ]
+        metadata["capability_plane"] = {
+            "authority": "UNIFIED_CAPABILITY_PLANE_AUTHORITY::CapabilityRegistry",
+            "record_version": record_version,
+            "lifecycle_event": plane.get("lifecycle_event") or "capability_registered",
+            "mutation_source": plane.get("mutation_source") or metadata.get("mutation_source") or mutation_source,
+            "publication_source": plane.get("publication_source") or item.source_id or item.source,
+            "last_updated": runtime_state["last_updated"],
+            "authority_lineage": list(metadata["authority_lineage"]),
+        }
+        metadata["runtime_state"] = runtime_state
+        item.metadata = metadata
+        item.available = runtime_state.get("availability") in {"available", "degraded"}
 
     def _validate_via_contract(self, item: CapabilityItem) -> bool:
         """PR-2: 通过统一能力合同校验 CapabilityItem。
@@ -337,6 +378,7 @@ class CapabilityRegistry:
             available=True,
         )
         self._normalize_capability_plane_metadata(item)
+        self._annotate_unified_capability_plane(item, mutation_source="capability_registry.inject_mcp_tool")
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
@@ -364,6 +406,7 @@ class CapabilityRegistry:
             available=True,
         )
         self._normalize_capability_plane_metadata(item)
+        self._annotate_unified_capability_plane(item, mutation_source="capability_registry.inject_skill")
         if not self._validate_via_contract(item):
             return
         self._items[key] = item
@@ -373,6 +416,12 @@ class CapabilityRegistry:
         """从能力总线移除一个条目（用于 MCP/Skill 卸载时清理）。"""
         removed = self._items.pop(name, None)
         if removed:
+            try:
+                from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
+
+                CapabilityRuntimeRegistry.get_instance().deregister(name, _sync_authority=False)
+            except Exception:
+                pass
             logger.debug("能力已从总线移除: %s", name)
 
     def inject_item(self, item: CapabilityItem) -> None:
@@ -387,6 +436,7 @@ class CapabilityRegistry:
         if not item.name:
             return
         self._normalize_capability_plane_metadata(item)
+        self._annotate_unified_capability_plane(item, mutation_source="capability_registry.inject_item")
         if not self._validate_via_contract(item):
             return
         self._items[item.name] = item
