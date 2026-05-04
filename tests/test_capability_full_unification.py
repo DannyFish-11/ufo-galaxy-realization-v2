@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,7 +14,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 def _reset_capability_state() -> None:
     from core.agent.capability_registry import CapabilityRegistry
+    from core.capability_runtime.capability_registry_runtime import CapabilityRuntimeRegistry
     from core.capability_orchestrator import CapabilityOrchestrator
+    from core.unified.capability_authority import CapabilityAuthority
     from core.unified.capability_resolver import reset_capability_resolver
     from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 
@@ -20,6 +24,10 @@ def _reset_capability_state() -> None:
     reg._items.clear()
     reg._validation_errors.clear()
     reset_capability_resolver()
+    with CapabilityRuntimeRegistry._instance_lock:
+        CapabilityRuntimeRegistry._instance = None
+    with CapabilityAuthority._instance_lock:
+        CapabilityAuthority._instance = None
     CapabilityOrchestrator._instance = None
     GatewayCapabilityRegistry._instance = None
 
@@ -46,6 +54,57 @@ def test_gateway_capability_registry_uses_canonical_capability_authority():
     assert canonical.metadata["contract_version"] == "2.0"
     assert canonical.metadata["contract_tags"] == ["ui", "touch"]
     assert schema.version == "2.0"
+
+
+@pytest.mark.asyncio
+async def test_android_capability_report_writes_directly_to_canonical_capability_authority():
+    from galaxy_gateway.android.handlers.capability_report import handle_capability_report
+    from core.capability_runtime.capability_state import CapabilityAvailability
+    from core.unified.capability_resolver import get_capability_resolver
+
+    _reset_capability_state()
+    bridge = SimpleNamespace(
+        _lock=asyncio.Lock(),
+        _devices={
+            "android-test-02": SimpleNamespace(
+                supported_actions=[],
+                last_heartbeat=0.0,
+            )
+        },
+    )
+
+    response = await handle_capability_report(
+        bridge,
+        websocket=object(),
+        message={
+            "type": "capability_report",
+            "device_id": "android-test-02",
+            "platform": "android",
+            "version": "4.0",
+            "supported_actions": ["tap"],
+            "capability_schemas": [
+                {
+                    "action": "tap",
+                    "exec_mode": "local",
+                    "tags": ["ui"],
+                    "params": {"type": "object", "properties": {"x": {"type": "number"}}},
+                    "returns": {"type": "object"},
+                }
+            ],
+        },
+    )
+
+    record = get_capability_resolver().resolve_record("gateway__android-test-02__tap")
+
+    assert response["accepted"] is True
+    assert record is not None
+    assert record.provider_id == "android-test-02"
+    assert record.exec_mode == "local"
+    assert record.tags == ["ui"]
+    assert record.availability == CapabilityAvailability.AVAILABLE.value
+    assert record.mutation_source == "android.capability_report"
+    assert record.parameters["properties"]["x"]["type"] == "number"
+    assert record.returns == {"type": "object"}
 
 
 @pytest.mark.asyncio
