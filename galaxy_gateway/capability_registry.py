@@ -183,6 +183,7 @@ class GatewayCapabilityRegistry:
     def __init__(self) -> None:
         self._managed_names: set[str] = set()
         self._managed_by_device: Dict[str, set[str]] = {}
+        self._uses_global_projection = False
         self._lock = threading.Lock()
 
         # 计数器
@@ -220,7 +221,7 @@ class GatewayCapabilityRegistry:
             return names
 
     def _filter_projection_schemas(self, schemas: List[Any]) -> List[Any]:
-        if self is self.__class__._instance:
+        if self._uses_global_projection:
             return list(schemas)
         with self._lock:
             managed_names = set(self._managed_names)
@@ -235,6 +236,7 @@ class GatewayCapabilityRegistry:
             with cls._instance_lock:
                 if cls._instance is None:
                     cls._instance = cls()
+                    cls._instance._uses_global_projection = True
         return cls._instance
 
     # ── 写操作 ────────────────────────────────────────────────────────────────
@@ -344,7 +346,7 @@ class GatewayCapabilityRegistry:
             被清除的条目数量。
         """
         removed_names = self._drop_managed_device(device_id)
-        if self is self.__class__._instance:
+        if self._uses_global_projection:
             count = purge_gateway_capabilities_for_device(device_id)
         else:
             count = 0
@@ -443,7 +445,7 @@ class GatewayCapabilityRegistry:
 
     def all_device_ids(self) -> List[str]:
         """返回注册表中所有设备 ID。"""
-        if self is self.__class__._instance:
+        if self._uses_global_projection:
             return list_gateway_capability_device_ids()
         return sorted({schema.device_id for schema in self._filter_projection_schemas(query_gateway_capabilities())})
 

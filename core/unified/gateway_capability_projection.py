@@ -66,6 +66,13 @@ def query_gateway_capabilities(
     device_id: Optional[str] = None,
     tags: Optional[List[str]] = None,
 ) -> List[GatewayCapabilitySchema]:
+    """Return canonical gateway capability schemas matching the supplied filters.
+
+    Exec-mode filtering follows the legacy gateway semantics:
+    - ``local`` accepts ``local`` and ``both``
+    - ``remote`` accepts ``remote`` and ``both``
+    - ``both`` or ``None`` does not narrow the result set by exec mode
+    """
     desired_exec_mode = _normalize_exec_mode(exec_mode) if exec_mode is not None else None
     candidates = [
         schema
