@@ -27,65 +27,15 @@ import inspect
 import json
 import logging
 import time
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Protocol
+from typing import Any, Dict, List, Optional, Callable
+
+from core.unified.capability_contract import (
+    CapabilityContract as Capability,
+    CapabilitySource as CapabilityType,
+)
 
 logger = logging.getLogger("Galaxy.SystemIntegration")
-
-
-class CapabilityContractLike(Protocol):
-    name: str
-    description: str
-    source: Any
-    source_id: str
-    parameters: Dict[str, Any]
-    available: bool
-    metadata: Dict[str, Any]
-
-
-# ============================================================================
-# 能力类型
-# ============================================================================
-
-class CapabilityType(str, Enum):
-    """能力类型"""
-    DEVICE = "device"       # 设备能力
-    MCP = "mcp"             # MCP 工具
-    SKILL = "skill"         # 技能
-    NODE = "node"           # 节点
-    AGENT = "agent"         # Agent
-    BUILTIN = "builtin"     # 内置
-
-
-@dataclass
-class Capability:
-    """能力定义"""
-    id: str
-    name: str
-    type: CapabilityType
-    description: str = ""
-    source: str = ""        # 来源 (device_id / mcp_server / skill_id / node_id)
-    handler: Optional[Callable] = None
-    parameters: Dict = field(default_factory=dict)
-    priority: int = 5       # 优先级 1-10
-    enabled: bool = True
-    metadata: Dict = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "type": self.type.value,
-            "description": self.description,
-            "source": self.source,
-            "parameters": self.parameters,
-            "priority": self.priority,
-            "enabled": self.enabled,
-            "metadata": self.metadata,
-        }
-
 
 # ============================================================================
 # 系统集成管理器
@@ -101,9 +51,10 @@ class SystemIntegration:
     _instance = None
     
     def __init__(self):
-        # 运行时执行器注册。能力真相统一来自 CapabilityRegistry/Resolver；
-        # 这里只保存执行处理器，不再维护第二套能力目录。
-        self._runtime_capabilities: Dict[str, Capability] = {}
+        # 运行时执行附件。能力 schema 与 authority 统一来自 CapabilityContract /
+        # CapabilityRegistry / CapabilityResolver；这里只保存执行器绑定和少量
+        # 运行时附加信息，不再维护第二套 capability schema。
+        self._runtime_handlers: Dict[str, Callable] = {}
         # 初始化标志
         self._initialized = False
         
@@ -191,101 +142,52 @@ class SystemIntegration:
         priority: int = 5,
         metadata: Dict = None,
     ) -> Capability:
-        """注册能力到统一能力注册表，并保存运行时执行器。"""
-        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
+        """注册能力到统一 canonical contract / registry。"""
+        from core.agent.capability_registry import CapabilityRegistry
         from core.unified.capability_resolver import get_capability_resolver
 
-        cap = Capability(
-            id=id,
+        contract = Capability(
             name=name,
-            type=type,
             description=description,
-            source=source,
-            handler=handler,
+            source=type,
+            source_id=source or id or name,
             parameters=parameters or {},
-            priority=priority,
-            metadata=metadata or {},
+            available=True,
+            metadata={
+                "system_integration_id": id,
+                "priority": priority,
+                **(metadata or {}),
+            },
         )
-        source_map = {
-            CapabilityType.DEVICE: "device",
-            CapabilityType.MCP: "mcp",
-            CapabilityType.SKILL: "skill",
-            CapabilityType.NODE: "node",
-            CapabilityType.AGENT: "unknown",
-            CapabilityType.BUILTIN: "unknown",
-        }
-        CapabilityRegistry.get_instance().register(
-            CapabilityItem(
-                name=name,
-                description=description or f"Capability: {name}",
-                source=source_map.get(type, "unknown"),
-                source_id=source or id or name,
-                parameters=parameters or {},
-                available=True,
-                metadata={
-                    "system_integration_id": id,
-                    "system_integration_type": type.value,
-                    "priority": priority,
-                    **(metadata or {}),
-                },
-            )
-        )
+        CapabilityRegistry.get_instance().register(contract)
         get_capability_resolver().invalidate_cache()
-        self._runtime_capabilities[name] = cap
+        if handler is not None:
+            self._runtime_handlers[name] = handler
+        else:
+            self._runtime_handlers.pop(name, None)
         logger.debug(f"注册能力: {id} ({type.value})")
-        return cap
+        return contract
     
     def unregister_capability(self, id: str) -> bool:
         """注销能力。"""
         from core.agent.capability_registry import CapabilityRegistry
         from core.unified.capability_resolver import get_capability_resolver
 
-        target = None
-        for name, cap in list(self._runtime_capabilities.items()):
-            if cap.id == id:
-                target = name
-                break
-        if target is None:
-            return False
-        CapabilityRegistry.get_instance().eject(target)
-        get_capability_resolver().invalidate_cache()
-        self._runtime_capabilities.pop(target, None)
-        return True
-
-    @staticmethod
-    def _contract_to_capability(contract: CapabilityContractLike) -> Capability:
-        source_type = getattr(contract, "source", None)
-        if isinstance(source_type, str):
-            source_value = source_type
-        else:
-            source_value = getattr(source_type, "value", str(source_type or "unknown"))
-        if source_value not in {"device", "mcp", "skill", "node", "gateway", "unknown"}:
-            logger.debug(
-                "SystemIntegration._contract_to_capability: unexpected source=%r for %s",
-                source_value,
-                getattr(contract, "name", "?"),
-            )
-            source_value = "unknown"
-        type_map = {
-            "device": CapabilityType.DEVICE,
-            "mcp": CapabilityType.MCP,
-            "skill": CapabilityType.SKILL,
-            "node": CapabilityType.NODE,
-            "gateway": CapabilityType.NODE,
-            "unknown": CapabilityType.BUILTIN,
-        }
-        metadata = dict(getattr(contract, "metadata", {}) or {})
-        return Capability(
-            id=str(metadata.get("system_integration_id") or contract.name),
-            name=contract.name,
-            type=type_map.get(source_value, CapabilityType.BUILTIN),
-            description=getattr(contract, "description", "") or "",
-            source=getattr(contract, "source_id", "") or "",
-            parameters=getattr(contract, "parameters", {}) or {},
-            priority=int(metadata.get("priority", 5) or 5),
-            enabled=bool(getattr(contract, "available", True)),
-            metadata=metadata,
+        registry = CapabilityRegistry.get_instance()
+        target = next(
+            (
+                name
+                for name, item in registry._items.items()
+                if str((item.metadata or {}).get("system_integration_id") or name) == id
+            ),
+            None,
         )
+        if not target:
+            return False
+        registry.eject(target)
+        get_capability_resolver().invalidate_cache()
+        self._runtime_handlers.pop(target, None)
+        return True
     
     # ========================================================================
     # 能力发现
@@ -309,11 +211,11 @@ class SystemIntegration:
 
         direct = resolver.resolve(name)
         if direct is not None:
-            candidates.append(self._merge_runtime_capability(self._contract_to_capability(direct)))
+            candidates.append(direct)
 
         if not candidates:
             for contract in resolver.find(name):
-                candidates.append(self._merge_runtime_capability(self._contract_to_capability(contract)))
+                candidates.append(contract)
 
         if type:
             candidates = [c for c in candidates if c.type == type]
@@ -336,11 +238,11 @@ class SystemIntegration:
         """检查能力是否可用"""
         if not cap.enabled:
             return False
-        
+
         if cap.type == CapabilityType.DEVICE:
             try:
                 from core.device_registry import device_registry
-                device = device_registry.get(cap.source)
+                device = device_registry.get(cap.source_id)
                 return device and device.is_online()
             except (ImportError, AttributeError):
                 return False
@@ -348,41 +250,24 @@ class SystemIntegration:
         elif cap.type == CapabilityType.MCP:
             try:
                 from core.mcp_loader import mcp_loader
-                server = mcp_loader.servers.get(cap.source)
+                server = mcp_loader.servers.get(cap.source_id)
                 return server and server.status.value == "running"
             except (ImportError, AttributeError):
                 return False
-        
+
         elif cap.type == CapabilityType.SKILL:
             return True  # 技能总是可用
-        
+
         elif cap.type == CapabilityType.NODE:
             return True  # 节点总是可用
-        
+
         elif cap.type == CapabilityType.AGENT:
             return True  # Agent 总是可用
-        
+
         elif cap.type == CapabilityType.BUILTIN:
             return True
-        
-        return False
 
-    def _merge_runtime_capability(self, cap: Capability) -> Capability:
-        runtime_cap = self._runtime_capabilities.get(cap.name)
-        if runtime_cap is None:
-            return cap
-        return Capability(
-            id=runtime_cap.id or cap.id,
-            name=cap.name,
-            type=runtime_cap.type or cap.type,
-            description=runtime_cap.description or cap.description,
-            source=runtime_cap.source or cap.source,
-            handler=runtime_cap.handler,
-            parameters=runtime_cap.parameters or cap.parameters,
-            priority=runtime_cap.priority or cap.priority,
-            enabled=runtime_cap.enabled and cap.enabled,
-            metadata={**cap.metadata, **runtime_cap.metadata},
-        )
+        return False
     
     def list_capabilities(
         self,
@@ -392,10 +277,7 @@ class SystemIntegration:
         """列出能力"""
         from core.unified.capability_resolver import get_capability_resolver
 
-        capabilities = [
-            self._merge_runtime_capability(self._contract_to_capability(contract))
-            for contract in get_capability_resolver().resolve_all()
-        ]
+        capabilities = list(get_capability_resolver().resolve_all())
         if type:
             capabilities = [cap for cap in capabilities if cap.type == type]
         if name:
@@ -429,9 +311,10 @@ class SystemIntegration:
         params: Dict,
     ) -> Any:
         """执行具体能力"""
-        if cap.handler is not None:
+        handler = self._runtime_handlers.get(cap.name)
+        if handler is not None:
             try:
-                result = cap.handler(**params)
+                result = handler(**params)
                 if inspect.isawaitable(result):
                     return await result
                 return result
@@ -463,10 +346,10 @@ class SystemIntegration:
         """执行设备能力"""
         try:
             from core.device_communication import device_comm
-            
-            device_id = cap.source
+
+            device_id = cap.source_id
             action = cap.name
-            
+
             return await device_comm.send_command(device_id, action, params)
         except Exception as e:
             logger.error(f"执行设备能力失败: {e}")
@@ -477,7 +360,7 @@ class SystemIntegration:
         try:
             from core.mcp_loader import mcp_loader
             
-            server_id = cap.source
+            server_id = cap.source_id
             tool_name = cap.name
             
             return await mcp_loader.call_tool(server_id, tool_name, params)
@@ -491,7 +374,7 @@ class SystemIntegration:
             from core.skill_loader import skill_loader
             from core.skill_md_loader import skill_md_loader
             
-            skill_id = cap.source
+            skill_id = cap.source_id
             
             # 尝试 skill_loader
             try:
@@ -512,7 +395,7 @@ class SystemIntegration:
     
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
         """执行节点能力 (unified executor with HTTP fallback)"""
-        node_name = cap.source
+        node_name = cap.source_id
 
         # Primary path: invoke via unified node executor (fusion_entry)
         try:
@@ -546,7 +429,7 @@ class SystemIntegration:
         try:
             from core.agent_factory import get_agent_factory_instance
             
-            agent_id = cap.source
+            agent_id = cap.source_id
             # Agent 执行逻辑
             # ...
             return {"success": True, "agent_id": agent_id}

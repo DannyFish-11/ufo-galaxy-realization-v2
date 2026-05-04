@@ -174,8 +174,23 @@ class CapabilityRegistry:
             if i.available and (q in i.name.lower() or q in i.description.lower())
         ]
 
-    def register(self, item: CapabilityItem) -> None:
-        """手动注册一个能力条目（unified contract 校验 → 失败则跳过）。"""
+    def register(self, item: Any) -> None:
+        """手动注册一个能力条目或 canonical contract。"""
+        try:
+            from core.unified.capability_contract import CapabilityContract
+
+            if isinstance(item, CapabilityContract):
+                item = CapabilityItem(
+                    name=item.name,
+                    description=item.description,
+                    source=item.source.value if hasattr(item.source, "value") else str(item.source),
+                    source_id=item.source_id,
+                    parameters=item.parameters,
+                    available=item.available,
+                    metadata=item.metadata,
+                )
+        except Exception:
+            pass
         self._normalize_capability_plane_metadata(item)
         if not self._validate_via_contract(item):
             return

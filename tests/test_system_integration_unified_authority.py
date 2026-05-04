@@ -19,6 +19,7 @@ def _reset_capability_state() -> None:
 async def test_system_integration_registers_into_canonical_registry_and_discovers_through_resolver():
     from core.agent.capability_registry import CapabilityRegistry
     from core.system_integration import CapabilityType, SystemIntegration
+    from core.unified.capability_contract import CapabilityContract
 
     _reset_capability_state()
     system = SystemIntegration.get_instance()
@@ -41,7 +42,8 @@ async def test_system_integration_registers_into_canonical_registry_and_discover
 
     assert registry_item is not None
     assert discovered is not None
+    assert isinstance(discovered, CapabilityContract)
     assert discovered.name == "unified_test_cap"
+    assert discovered.type == CapabilityType.BUILTIN
     assert executed["ok"] is True
     assert executed["params"]["value"] == "hello"
-

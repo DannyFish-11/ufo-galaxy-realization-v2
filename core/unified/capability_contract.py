@@ -80,6 +80,12 @@ class CapabilitySource(str, Enum):
     NODE = "node"
     """Provided by a node in the node fabric registry."""
 
+    AGENT = "agent"
+    """Provided by the agent system as a first-class capability source."""
+
+    BUILTIN = "builtin"
+    """Provided by Galaxy itself as a first-class builtin capability source."""
+
     UNKNOWN = "unknown"
     """Source could not be determined (legacy compat)."""
 
@@ -92,6 +98,8 @@ class CapabilityProviderType(str, Enum):
     NODE = "node"
     DEVICE = "device"
     GATEWAY = "gateway"
+    AGENT = "agent"
+    BUILTIN = "builtin"
     AUTONOMOUS = "autonomous"
     UNKNOWN = "unknown"
 
@@ -104,6 +112,8 @@ class CapabilityExecutionSurfaceType(str, Enum):
     NODE_RUNTIME = "node_runtime"
     DEVICE_RUNTIME = "device_runtime"
     GATEWAY_RUNTIME = "gateway_runtime"
+    AGENT_RUNTIME = "agent_runtime"
+    BUILTIN_RUNTIME = "builtin_runtime"
     AUTONOMOUS_RUNTIME = "autonomous_runtime"
     UNKNOWN = "unknown"
 
@@ -137,6 +147,8 @@ def normalize_capability_provider_metadata(
         "node": CapabilityProviderType.NODE.value,
         "device": CapabilityProviderType.DEVICE.value,
         "gateway": CapabilityProviderType.GATEWAY.value,
+        "agent": CapabilityProviderType.AGENT.value,
+        "builtin": CapabilityProviderType.BUILTIN.value,
         "autonomous": CapabilityProviderType.AUTONOMOUS.value,
     }
     execution_surface_map = {
@@ -145,6 +157,8 @@ def normalize_capability_provider_metadata(
         CapabilityProviderType.NODE.value: CapabilityExecutionSurfaceType.NODE_RUNTIME.value,
         CapabilityProviderType.DEVICE.value: CapabilityExecutionSurfaceType.DEVICE_RUNTIME.value,
         CapabilityProviderType.GATEWAY.value: CapabilityExecutionSurfaceType.GATEWAY_RUNTIME.value,
+        CapabilityProviderType.AGENT.value: CapabilityExecutionSurfaceType.AGENT_RUNTIME.value,
+        CapabilityProviderType.BUILTIN.value: CapabilityExecutionSurfaceType.BUILTIN_RUNTIME.value,
         CapabilityProviderType.AUTONOMOUS.value: CapabilityExecutionSurfaceType.AUTONOMOUS_RUNTIME.value,
     }
     provider_type = provider_type_map.get(src_raw, CapabilityProviderType.UNKNOWN.value)
@@ -154,6 +168,10 @@ def normalize_capability_provider_metadata(
 
     if src_raw in ("mcp", "skill"):
         capability_kind = CapabilityKind.TOOL.value
+    elif src_raw == "builtin":
+        capability_kind = str((metadata or {}).get("capability_kind") or CapabilityKind.TOOL.value)
+    elif src_raw == "agent":
+        capability_kind = CapabilityKind.AUTONOMOUS_BEHAVIOR.value
     elif src_raw == "autonomous":
         capability_kind = CapabilityKind.AUTONOMOUS_BEHAVIOR.value
     elif src_raw in ("node", "device", "gateway"):
@@ -238,13 +256,17 @@ class CapabilityContract:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "id": self.id,
             "contract_id": self.contract_id,
             "name": self.name,
             "description": self.description,
+            "type": self.type.value,
             "source": self.source.value if isinstance(self.source, CapabilitySource) else self.source,
             "source_id": self.source_id,
             "version": self.version,
             "parameters": dict(self.parameters),
+            "priority": self.priority,
+            "enabled": self.enabled,
             "available": self.available,
             "tags": list(self.tags),
             "metadata": dict(self.metadata),
@@ -265,9 +287,13 @@ class CapabilityContract:
             source_id=data.get("source_id", ""),
             version=data.get("version", "1.0.0"),
             parameters=data.get("parameters", {}),
-            available=bool(data.get("available", True)),
+            available=bool(data.get("available", data.get("enabled", True))),
             tags=list(data.get("tags", [])),
-            metadata=data.get("metadata", {}),
+            metadata={
+                **dict(data.get("metadata", {}) or {}),
+                **({"system_integration_id": data.get("id")} if data.get("id") else {}),
+                **({"priority": data.get("priority")} if data.get("priority") is not None else {}),
+            },
             contract_id=data.get("contract_id", f"cap_{uuid.uuid4().hex[:12]}"),
             created_at=float(data.get("created_at", time.time())),
         )
@@ -282,6 +308,27 @@ class CapabilityContract:
                 "parameters": self.parameters or {"type": "object", "properties": {}},
             },
         }
+
+    @property
+    def id(self) -> str:
+        return str((self.metadata or {}).get("system_integration_id") or self.name)
+
+    @property
+    def type(self) -> CapabilitySource:
+        if isinstance(self.source, CapabilitySource):
+            return self.source
+        try:
+            return CapabilitySource(self.source)
+        except ValueError:
+            return CapabilitySource.UNKNOWN
+
+    @property
+    def priority(self) -> int:
+        return int((self.metadata or {}).get("priority", 5) or 5)
+
+    @property
+    def enabled(self) -> bool:
+        return self.available
 
 
 # ---------------------------------------------------------------------------
