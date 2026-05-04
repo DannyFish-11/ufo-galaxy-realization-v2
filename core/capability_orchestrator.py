@@ -308,6 +308,10 @@ class CapabilityOrchestrator:
         if source_value == "mcp":
             cap_type = CapabilityType.MCP_TOOL
             source_id = getattr(contract, "source_id", "")
+            # Canonical MCP contract names are `mcp__<server_id>__<tool_name>`
+            # (or `mcp__gateway__<tool_name>` for gateway-backed tools).  Strip
+            # that prefix so the legacy orchestrator view keeps only the tool
+            # name in `Capability.name`.
             tool_name = re.sub(r"^mcp__(gateway__)?[^_]+__", "", getattr(contract, "name", ""))
             return Capability(
                 id=legacy_id or getattr(contract, "name", ""),
@@ -423,24 +427,28 @@ class CapabilityOrchestrator:
                 continue
             
             score = 0
+            matched = False
             
             # 名称匹配
             if query_lower in cap.name.lower():
                 score += 10
+                matched = True
             
             # 描述匹配
             if query_lower in cap.description.lower():
                 score += 5
+                matched = True
             
             # 标签匹配
             for tag in cap.tags:
                 if query_lower in tag.lower():
                     score += 3
+                    matched = True
             
-            # 优先级加成
-            score += cap.priority
-            
-            if score > 0:
+            if matched:
+                # 仅在有真实语义匹配时再叠加优先级，避免未知查询被“最高优先级”
+                # 能力误吸附，破坏 fallback-to-chat 行为。
+                score += cap.priority
                 results.append((cap, score))
         
         # 按分数排序

@@ -145,6 +145,9 @@ async def handle_capability_report(
             )
 
     # ── 2. Canonical capability sync is now owned by GatewayCapabilityRegistry ─
+    # `gw_reg.upsert()` in step 1 writes the authoritative gateway capability
+    # contract into CapabilityRegistry, so this handler no longer performs a
+    # second direct registry write here.
 
     # ── 3. Update BodyMeshRegistry roles based on supported_actions ───────────
     # This ensures that even if a device registered with no/partial capabilities,
