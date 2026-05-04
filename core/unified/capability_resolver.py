@@ -149,7 +149,11 @@ class CapabilityResolver:
                 "description": getattr(item, "description", ""),
                 "source": getattr(item, "source", "unknown"),
                 "source_id": getattr(item, "source_id", ""),
-                "version": metadata.get("contract_version", "1.0.0"),
+                "version": (
+                    getattr(item, "version", None)
+                    or metadata.get("contract_version")
+                    or "1.0.0"
+                ),
                 "parameters": getattr(item, "parameters", {}),
                 "available": getattr(item, "available", True),
                 "tags": list(metadata.get("contract_tags", [])),
