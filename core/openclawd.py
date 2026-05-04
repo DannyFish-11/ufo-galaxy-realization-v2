@@ -2910,6 +2910,9 @@ class OpenClawd:
         message: str,
         device_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        control_session_id: Optional[str] = None,
+        runtime_attachment_session_id: Optional[str] = None,
+        session_identity: Optional[Any] = None,
         context: Optional[List[Dict]] = None,
         required_capabilities: Optional[List[str]] = None,
         multimodal_context: Optional[Any] = None,
@@ -3021,6 +3024,10 @@ class OpenClawd:
         self._current_trace_id = trace_id
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
+        self._current_control_session_id = control_session_id or ""
+        self._current_runtime_attachment_session_id = (
+            runtime_attachment_session_id or ""
+        )
         try:
             from core.source_runtime_posture import SourceRuntimePosture
 
@@ -3057,8 +3064,22 @@ class OpenClawd:
             _dispatcher.session_id = session_id or ""
             _dispatcher.trace_id = trace_id or ""
 
-        if not session_id:
-            session_id = f"session_{uuid.uuid4().hex[:12]}"
+        conversation_session_id = (
+            getattr(session_identity, "conversation_session_id", "") or session_id or ""
+        )
+        if not conversation_session_id:
+            conversation_session_id = f"session_{uuid.uuid4().hex[:12]}"
+        session_id = conversation_session_id
+        control_session_id = control_session_id or getattr(
+            session_identity,
+            "control_session_id",
+            "",
+        )
+        runtime_attachment_session_id = runtime_attachment_session_id or getattr(
+            session_identity,
+            "runtime_attachment_session_id",
+            "",
+        )
 
         # ── Multimodal Perception Bus (PR 1) ─────────────────────────────────
         # Run MultimodalBus.ingest() for every request (text-only requests
@@ -3367,6 +3388,8 @@ class OpenClawd:
                     kernel_result = await kernel.handle_message(
                         message=_kernel_message,
                         session_id=session_id,
+                        control_session_id=control_session_id or "",
+                        runtime_attachment_session_id=runtime_attachment_session_id or "",
                         device_id=device_id or "",
                         context=context or [],
                     )
@@ -3563,6 +3586,9 @@ class OpenClawd:
                             "trace_id": trace_id,
                             "runtime_session_id": runtime_session_id or trace_id,
                             "session_id": session_id,
+                            "conversation_session_id": session_id,
+                            "control_session_id": control_session_id or "",
+                            "runtime_attachment_session_id": runtime_attachment_session_id or "",
                             "device_id": device_id,
                             "latency_ms": round(latency_ms, 1),
                             "confidence": kernel_result.intent.confidence,
@@ -4064,6 +4090,9 @@ class OpenClawd:
                     "trace_id": trace_id,
                     "runtime_session_id": runtime_session_id or trace_id,
                     "session_id": session_id,
+                    "conversation_session_id": session_id,
+                    "control_session_id": control_session_id or "",
+                    "runtime_attachment_session_id": runtime_attachment_session_id or "",
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
                     "confidence": parsed_intent.confidence if parsed_intent else 0.0,
@@ -4204,6 +4233,9 @@ class OpenClawd:
                     "request_id": request_id,
                     "trace_id": trace_id,
                     "session_id": session_id,
+                    "conversation_session_id": session_id,
+                    "control_session_id": control_session_id or "",
+                    "runtime_attachment_session_id": runtime_attachment_session_id or "",
                     "device_id": device_id,
                     "latency_ms": round(latency_ms, 1),
                     "entry_mode": _entry_mode,
@@ -6820,15 +6852,16 @@ class OpenClawd:
             except Exception as _ltm_err:
                 logger.debug("LongTermMemory inject failed (non-fatal): %s", _ltm_err)
 
-            # Block-3: Use working memory entries when available; fall back to
-            # _session_memory so all existing behaviour is preserved.
+            # Block-3: use the unified session memory facade as the primary
+            # short-term conversation context source.  It reads working memory
+            # first and falls back to SessionManager history.
             _wm_entries = []
             try:
-                from core.cognitive.working_memory import get_working_memory
+                from core.session_memory_facade import get_session_context
 
-                _wm_entries = get_working_memory().get(session_id=session_id, last_n=10)
+                _wm_entries = get_session_context(session_id, max_turns=10)
             except Exception as _wm_err:
-                logger.debug("WorkingMemory.get failed (non-fatal): %s", _wm_err)
+                logger.debug("session_memory_facade.get_session_context failed (non-fatal): %s", _wm_err)
 
             # 添加会话历史
             session_history = self._session_memory.get(session_id, [])
@@ -7492,25 +7525,26 @@ class OpenClawd:
         if len(self._session_memory[session_id]) > 40:
             self._session_memory[session_id] = self._session_memory[session_id][-20:]
 
-        # 同步到 ConversationMemory (如果可用)
         try:
-            from core.ai_intent import get_conversation_memory
-
-            memory = get_conversation_memory()
-            await memory.add_turn(session_id, role, content)
-        except Exception:
-            pass
-
-        # Block-3: mirror the turn into working memory for continuous cognition.
-        try:
-            from core.cognitive.working_memory import get_working_memory
+            from core.session_memory_facade import record_session_turn
 
             trace_id = getattr(self, "_current_trace_id", "") or ""
-            get_working_memory().add(
-                session_id=session_id,
+            await record_session_turn(
+                conversation_session_id=session_id,
                 role=role,
                 content=content,
+                device_id=getattr(self, "_current_device_id", "") or "",
                 trace_id=trace_id,
+                metadata={
+                    "control_session_id": getattr(self, "_current_control_session_id", "") or "",
+                    "runtime_attachment_session_id": getattr(
+                        self,
+                        "_current_runtime_attachment_session_id",
+                        "",
+                    )
+                    or "",
+                    "record_origin": "openclawd",
+                },
             )
         except Exception:
             pass

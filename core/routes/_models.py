@@ -45,6 +45,10 @@ class TaskRequest(BaseModel):
     payload: Dict[str, Any] = {}
     device_id: str = ""
     priority: int = 5
+    session_id: str = ""
+    conversation_session_id: str = ""
+    control_session_id: str = ""
+    runtime_attachment_session_id: str = ""
 
 
 class ChatRequest(BaseModel):

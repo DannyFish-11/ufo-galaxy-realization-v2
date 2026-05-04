@@ -383,6 +383,21 @@ class DesktopPresenceRuntime:
                 }
         """
         rsession = self._create_session(source)
+        from core.session_execution_lane import get_session_execution_lane_manager
+        from core.session_identity import build_canonical_session_identity
+
+        session_identity = build_canonical_session_identity(
+            session_id=session_id or "",
+            user_id=user_id or "",
+            device_id=device_id or "",
+            runtime_session_id=rsession.runtime_session_id,
+            payload=kwargs,
+        )
+        conversation_session_id = session_identity.conversation_session_id
+        control_session_id = session_identity.control_session_id
+        runtime_attachment_session_id = (
+            session_identity.runtime_attachment_session_id
+        )
 
         # Block-3: _cognitive_snap will hold the StateInterpreter result and is attached
         # to the response as an additive observability field.  Declared here (before the
@@ -437,7 +452,12 @@ class DesktopPresenceRuntime:
 
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
-        self._log_request_start(rsession, message, session_id, device_id)
+        self._log_request_start(
+            rsession,
+            message,
+            conversation_session_id,
+            device_id,
+        )
 
         # PR-12: Lightweight policy observation (non-blocking guardrail hint)
         # Resolves the current execution policy from tri-state/cognitive signals
@@ -451,28 +471,38 @@ class DesktopPresenceRuntime:
         except Exception as _ph_err:
             logger.debug("policy hint resolution failed (non-fatal): %s", _ph_err)
 
+        lane_snapshot = None
         try:
-            # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
-            rsession.advance(TriState.MANIFEST)
+            lane_manager = get_session_execution_lane_manager()
+            async with lane_manager.acquire(
+                conversation_session_id,
+                control_session_id=control_session_id,
+            ) as lane:
+                lane_snapshot = lane.to_dict()
+                # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
+                rsession.advance(TriState.MANIFEST)
 
-            result = await self._dispatch(
-                rsession=rsession,
-                message=message,
-                source=source,
-                device_id=device_id,
-                session_id=session_id or f"session_{rsession.runtime_session_id[:12]}",
-                user_id=user_id,
-                context=context,
-                required_capabilities=required_capabilities,
-                multimodal_context=multimodal_context,
-                use_constellation=use_constellation,
-                entry_mode=entry_mode,
-                # PR-18: forward the cognitive execution hint so OpenClawd can
-                # use it as an advisory signal for execution-path / delegation
-                # biasing.  Never mandatory; OpenClawd retains final authority.
-                cognitive_execution_hint=_cog_hint_obj,
-                **kwargs,
-            )
+                result = await self._dispatch(
+                    rsession=rsession,
+                    message=message,
+                    source=source,
+                    device_id=device_id,
+                    session_id=conversation_session_id,
+                    user_id=user_id,
+                    context=context,
+                    required_capabilities=required_capabilities,
+                    multimodal_context=multimodal_context,
+                    use_constellation=use_constellation,
+                    entry_mode=entry_mode,
+                    control_session_id=control_session_id,
+                    runtime_attachment_session_id=runtime_attachment_session_id,
+                    session_identity=session_identity,
+                    # PR-18: forward the cognitive execution hint so OpenClawd can
+                    # use it as an advisory signal for execution-path / delegation
+                    # biasing.  Never mandatory; OpenClawd retains final authority.
+                    cognitive_execution_hint=_cog_hint_obj,
+                    **kwargs,
+                )
 
         except Exception as exc:
             logger.error(
@@ -519,6 +549,18 @@ class DesktopPresenceRuntime:
         result.setdefault("trace_id", rsession.runtime_session_id)
         result["tristate"] = rsession.tristate.value
         result["entrypoint_source"] = source
+        result["conversation_session_id"] = conversation_session_id
+        result["control_session_id"] = control_session_id
+        if runtime_attachment_session_id:
+            result["runtime_attachment_session_id"] = runtime_attachment_session_id
+        metadata = result.setdefault("metadata", {})
+        metadata.setdefault("session_id", conversation_session_id)
+        metadata["conversation_session_id"] = conversation_session_id
+        metadata["control_session_id"] = control_session_id
+        if runtime_attachment_session_id:
+            metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
+        if lane_snapshot is not None:
+            metadata["session_execution_lane"] = lane_snapshot
         # Block-3: attach the continuous cognitive state snapshot (additive, optional).
         if _cognitive_snap is not None:
             result["cognitive_state"] = _cognitive_snap
@@ -660,6 +702,9 @@ class DesktopPresenceRuntime:
         required_capabilities: Optional[List[str]],
         multimodal_context: Optional[Any],
         entry_mode: Optional[str] = None,
+        control_session_id: str = "",
+        runtime_attachment_session_id: str = "",
+        session_identity: Optional[Any] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Invoke the subject core (OpenClawd) inside the liminal phase.
@@ -685,6 +730,9 @@ class DesktopPresenceRuntime:
             multimodal_context=multimodal_context,
             runtime_session_id=rsession.runtime_session_id,
             entry_mode=entry_mode,
+            control_session_id=control_session_id,
+            runtime_attachment_session_id=runtime_attachment_session_id,
+            session_identity=session_identity,
             cognitive_execution_hint=cognitive_execution_hint,
             **kwargs,
         )

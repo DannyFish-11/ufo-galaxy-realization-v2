@@ -122,6 +122,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.post("/api/v1/tasks")
     async def create_task(req: TaskRequest):
         """创建任务"""
+        from core.session_identity import build_canonical_session_identity
+
+        _session_identity = build_canonical_session_identity(
+            session_id=req.conversation_session_id or req.session_id,
+            device_id=req.device_id,
+            payload={
+                "conversation_session_id": req.conversation_session_id,
+                "control_session_id": req.control_session_id,
+                "runtime_attachment_session_id": req.runtime_attachment_session_id,
+                "session_id": req.session_id,
+            },
+        )
         # PR-507: Front-load canonical task creation — CanonicalTask is the
         # primary ontology object; task_id/trace_id flow from its identity.
         task_id: Optional[str] = None
@@ -171,7 +183,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "device_id": req.device_id,
             "priority": req.priority,
             "status": "pending",
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            "conversation_session_id": _session_identity.conversation_session_id,
+            "control_session_id": req.control_session_id
+            or _session_identity.control_session_id,
+            "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
         }
         task_queue[task_id] = task
 
@@ -192,6 +208,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     args=req.payload or {},
                     targets=[req.device_id],
                     source="api_tasks",
+                    metadata={
+                        "conversation_session_id": _session_identity.conversation_session_id,
+                        "control_session_id": req.control_session_id
+                        or _session_identity.control_session_id,
+                        "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
+                    },
                 )
                 result = await cmd_router.route_envelope(envelope)
                 # Treat the dispatch as successful when the router returns any
@@ -237,7 +259,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "task_id": task_id,
                     "trace_id": trace_id,
                     "task_type": req.task_type,
-                    "payload": req.payload
+                    "payload": req.payload,
+                    "conversation_session_id": _session_identity.conversation_session_id,
+                    "control_session_id": req.control_session_id
+                    or _session_identity.control_session_id,
+                    "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
                 })
                 task["status"] = "sent"
                 task["dispatch_authority"] = "compat_route_adapter"
