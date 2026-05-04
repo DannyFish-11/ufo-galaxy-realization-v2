@@ -30,7 +30,9 @@ class GatewayCapabilitySchema:
 
 
 def _record_to_schema(record: Any) -> Optional[GatewayCapabilitySchema]:
-    if record is None or getattr(record, "source_kind", "") != CapabilitySource.GATEWAY.value:
+    source_kind = getattr(record, "source_kind", "")
+    normalized_source_kind = getattr(source_kind, "value", source_kind)
+    if record is None or normalized_source_kind != CapabilitySource.GATEWAY.value:
         return None
 
     metadata = dict(getattr(record, "metadata", {}) or {})
