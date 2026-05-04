@@ -144,28 +144,7 @@ async def handle_capability_report(
                 "capability_report: GatewayCapabilityRegistry sync failed: %s", gw_sync_err
             )
 
-    # ── 2. Sync to LLM CapabilityRegistry (unchanged — backward compat) ───
-    if device_id and supported_actions:
-        try:
-            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
-            reg = CapabilityRegistry.get_instance()
-            for action in supported_actions:
-                action_str = action if isinstance(action, str) else str(action)
-                cap_name = f"gateway__{device_id}__{action_str}"
-                reg.register(CapabilityItem(
-                    name=cap_name,
-                    description=f"Android device {device_id} action: {action_str} (platform={platform})",
-                    source="gateway",
-                    source_id=device_id,
-                    available=True,
-                    metadata={"device_id": device_id, "platform": platform, "action": action_str},
-                ))
-            logger.info(
-                "capability_report: synced %d actions for device %s to CapabilityRegistry",
-                len(supported_actions), device_id,
-            )
-        except Exception as sync_err:
-            logger.warning("capability_report: CapabilityRegistry sync failed: %s", sync_err)
+    # ── 2. Canonical capability sync is now owned by GatewayCapabilityRegistry ─
 
     # ── 3. Update BodyMeshRegistry roles based on supported_actions ───────────
     # This ensures that even if a device registered with no/partial capabilities,

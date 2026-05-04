@@ -142,14 +142,18 @@ class CapabilityResolver:
         if isinstance(item, dict):
             d = item
         else:
+            metadata = getattr(item, "metadata", {}) or {}
             d = {
                 "name": getattr(item, "name", ""),
                 "description": getattr(item, "description", ""),
                 "source": getattr(item, "source", "unknown"),
                 "source_id": getattr(item, "source_id", ""),
+                "version": metadata.get("contract_version", "1.0.0"),
                 "parameters": getattr(item, "parameters", {}),
                 "available": getattr(item, "available", True),
-                "metadata": getattr(item, "metadata", {}),
+                "tags": list(metadata.get("contract_tags", [])),
+                "metadata": metadata,
+                "created_at": float(metadata.get("contract_created_at", time.time())),
             }
 
         return CapabilityContract.from_dict(d)

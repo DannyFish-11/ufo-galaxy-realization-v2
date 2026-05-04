@@ -215,10 +215,18 @@ class CapabilityManager:
                 metadata={
                     "node_name": capability.node_name,
                     "category": capability.category,
+                    "capability_manager_status": capability.status.value,
+                    "capability_manager_output_schema": dict(capability.output_schema or {}),
+                    "capability_manager_last_updated": capability.last_updated,
                     "via_capability_manager": True,
                 },
             )
             CapabilityRegistry.get_instance().register(item)
+            try:
+                from core.unified.capability_resolver import get_capability_resolver
+                get_capability_resolver().invalidate_cache()
+            except Exception:
+                pass
             logger.debug(
                 "CapabilityManager bridge → CapabilityRegistry: %s", capability.name
             )
@@ -319,6 +327,15 @@ class CapabilityManager:
             
             # 删除能力
             del self.capabilities[name]
+
+            try:
+                from core.agent.capability_registry import CapabilityRegistry
+                from core.unified.capability_resolver import get_capability_resolver
+
+                CapabilityRegistry.get_instance().eject(name)
+                get_capability_resolver().invalidate_cache()
+            except Exception as exc:
+                logger.debug("CapabilityManager unregister canonical sync failed: %s", exc)
             
             logger.info(f"能力已注销: {name}")
             
@@ -353,6 +370,8 @@ class CapabilityManager:
             
             # 持久化
             await self._save_capabilities()
+
+            self._bridge_to_canonical_registry(self.capabilities[name])
             
             return True
     
@@ -526,6 +545,7 @@ class CapabilityManager:
             for cap_data in capabilities_data:
                 cap = Capability.from_dict(cap_data)
                 self.capabilities[cap.name] = cap
+                self._bridge_to_canonical_registry(cap)
                 
                 # 重建索引
                 node_id = cap.node_id

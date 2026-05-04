@@ -54,6 +54,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -146,162 +147,251 @@ class CapabilityOrchestrator:
         self._initialized = False
         await self.initialize()
 
+    def _register_canonical_contract(
+        self,
+        *,
+        name: str,
+        description: str,
+        source: str,
+        source_id: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        from core.agent.capability_registry import CapabilityRegistry
+        from core.unified.capability_contract import CapabilityContract, CapabilitySource
+        from core.unified.capability_resolver import get_capability_resolver
+
+        try:
+            source_enum = CapabilitySource(source)
+        except ValueError:
+            source_enum = CapabilitySource.UNKNOWN
+        CapabilityRegistry.get_instance().register(
+            CapabilityContract(
+                name=name,
+                description=description,
+                source=source_enum,
+                source_id=source_id,
+                parameters=parameters or {},
+                available=True,
+                tags=list(tags or []),
+                metadata=dict(metadata or {}),
+            )
+        )
+        get_capability_resolver().invalidate_cache()
+
+    async def _seed_static_node_contracts(self) -> None:
+        """Seed static node capabilities into the canonical registry."""
+        try:
+            from core.port_config import get_node_port
+
+            config_path = Path("config/node_registry.json")
+            if not config_path.exists():
+                return
+            with open(config_path, encoding="utf-8") as f:
+                config = json.load(f)
+
+            for node_key, node_info in config.get("nodes", {}).items():
+                node_id = str(node_info.get("id", ""))
+                node_name = node_info.get("name", node_key)
+                try:
+                    port = get_node_port(node_key)
+                except Exception:
+                    port = 0
+                is_ready = node_info.get("production_ready", True)
+                self._register_canonical_contract(
+                    name=f"node__{node_id}__execute",
+                    description=f"节点: {node_name}",
+                    source="node",
+                    source_id=node_key,
+                    parameters={"port": port} if port else {},
+                    tags=["node"] + ([] if is_ready else ["placeholder"]),
+                    metadata={
+                        "legacy_capability_id": f"node_{node_id}",
+                        "legacy_name": node_name,
+                        "display_name": node_name,
+                        "priority": 5,
+                        "node_id": node_id,
+                        "node_key": node_key,
+                        "status": node_info.get("status", "unknown"),
+                        "production_ready": is_ready,
+                    },
+                )
+
+            try:
+                from core.node_discovery import get_node_discovery, DiscoveredNode, NodeRole
+
+                discovery = get_node_discovery()
+                for node_key, node_info in config.get("nodes", {}).items():
+                    try:
+                        port = get_node_port(node_key)
+                    except Exception:
+                        port = 0
+                    if port <= 0:
+                        continue
+                    discovery.register_node(
+                        DiscoveredNode(
+                            node_id=node_key,
+                            host="localhost",
+                            port=port,
+                            role=NodeRole.WORKER,
+                            capabilities=[node_info.get("name", node_key)],
+                        )
+                    )
+            except Exception as disc_err:
+                logger.debug(f"NodeDiscovery pre-populate skipped: {disc_err}")
+        except Exception as e:
+            logger.warning(f"加载节点失败: {e}")
+
+    def _seed_builtin_contracts(self) -> None:
+        builtins = [
+            {
+                "name": "builtin__chat",
+                "description": "与 AI 进行对话",
+                "legacy_capability_id": "builtin_chat",
+                "legacy_name": "对话",
+                "tags": ["chat", "ai"],
+                "priority": 1,
+            },
+            {
+                "name": "builtin__device_control",
+                "description": "控制设备执行操作",
+                "legacy_capability_id": "builtin_device_control",
+                "legacy_name": "设备控制",
+                "tags": ["device", "control"],
+                "priority": 8,
+            },
+            {
+                "name": "builtin__simulate",
+                "description": "通过数字孪生引擎模拟操作效果",
+                "legacy_capability_id": "builtin_simulate",
+                "legacy_name": "模拟执行",
+                "tags": ["simulate", "twin", "predict"],
+                "priority": 6,
+            },
+            {
+                "name": "builtin__cross_device",
+                "description": "跨设备任务协调：剪贴板同步、文件传输、媒体控制、通知同步",
+                "legacy_capability_id": "builtin_cross_device",
+                "legacy_name": "跨设备协同",
+                "tags": ["cross_device", "sync", "transfer", "clipboard", "multi_device"],
+                "priority": 7,
+            },
+        ]
+        for builtin in builtins:
+            self._register_canonical_contract(
+                name=builtin["name"],
+                description=builtin["description"],
+                source="builtin",
+                source_id=builtin["legacy_capability_id"],
+                tags=builtin["tags"],
+                metadata={
+                    "legacy_capability_id": builtin["legacy_capability_id"],
+                    "legacy_name": builtin["legacy_name"],
+                    "display_name": builtin["legacy_name"],
+                    "priority": builtin["priority"],
+                },
+            )
+
+    @staticmethod
+    def _contract_to_compat_capability(contract: Any) -> Optional[Capability]:
+        source = getattr(contract, "source", None)
+        source_value = source.value if hasattr(source, "value") else str(source or "unknown")
+        metadata = dict(getattr(contract, "metadata", {}) or {})
+        legacy_id = str(metadata.get("legacy_capability_id") or getattr(contract, "id", getattr(contract, "name", "")))
+        legacy_name = str(metadata.get("legacy_name") or getattr(contract, "name", ""))
+        tags = list(getattr(contract, "tags", []) or [])
+        priority = int(metadata.get("priority", 5) or 5)
+        enabled = bool(getattr(contract, "enabled", getattr(contract, "available", True)))
+        description = getattr(contract, "description", "") or ""
+
+        if source_value == "mcp":
+            cap_type = CapabilityType.MCP_TOOL
+            source_id = getattr(contract, "source_id", "")
+            tool_name = re.sub(r"^mcp__(gateway__)?[^_]+__", "", getattr(contract, "name", ""))
+            return Capability(
+                id=legacy_id or getattr(contract, "name", ""),
+                name=legacy_name or tool_name or getattr(contract, "name", ""),
+                description=description,
+                type=cap_type,
+                source=source_id,
+                parameters=getattr(contract, "parameters", {}) or {},
+                tags=tags or ["mcp"],
+                priority=priority,
+                enabled=enabled,
+            )
+        if source_value == "skill":
+            return Capability(
+                id=legacy_id or f"skill_{getattr(contract, 'source_id', '')}",
+                name=legacy_name or getattr(contract, "source_id", "") or getattr(contract, "name", ""),
+                description=description,
+                type=CapabilityType.SKILL,
+                source=getattr(contract, "source_id", ""),
+                parameters=getattr(contract, "parameters", {}) or {},
+                tags=tags or ["skill"],
+                priority=priority,
+                enabled=enabled,
+            )
+        if source_value == "node":
+            return Capability(
+                id=legacy_id,
+                name=legacy_name,
+                description=description,
+                type=CapabilityType.NODE,
+                source=getattr(contract, "source_id", ""),
+                parameters=getattr(contract, "parameters", {}) or {},
+                tags=tags or ["node"],
+                priority=priority,
+                enabled=enabled,
+            )
+        if source_value == "builtin":
+            return Capability(
+                id=legacy_id,
+                name=legacy_name,
+                description=description,
+                type=CapabilityType.BUILTIN,
+                source=getattr(contract, "source_id", ""),
+                parameters=getattr(contract, "parameters", {}) or {},
+                tags=tags,
+                priority=priority,
+                enabled=enabled,
+            )
+        return None
+
+    def _refresh_capability_projection(self) -> None:
+        from core.unified.capability_resolver import get_capability_resolver
+
+        projected: Dict[str, Capability] = {}
+        for contract in get_capability_resolver().resolve_all():
+            compat = self._contract_to_compat_capability(contract)
+            if compat is not None:
+                projected[compat.id] = compat
+        self.capabilities = projected
+
     async def initialize(self):
         """初始化 - 加载所有能力"""
         if self._initialized:
             return
-        
-        # 加载 MCP 工具
-        await self._load_mcp_tools()
-        
-        # 加载 Skill
-        await self._load_skills()
-        
-        # 加载节点能力
-        await self._load_nodes()
-        
-        # 加载内置能力
-        self._load_builtins()
-        
+
+        self._seed_builtin_contracts()
+        await self._seed_static_node_contracts()
+        self._refresh_capability_projection()
         self._initialized = True
         logger.info(f"已加载 {len(self.capabilities)} 个能力")
     
     async def _load_mcp_tools(self):
-        """加载 MCP 工具 — 从 mcp_loader 读取已加载的 MCP 服务器工具"""
-        try:
-            from core.mcp_loader import mcp_loader, MCPServerStatus
-
-            for server_id, server in mcp_loader.servers.items():
-                if server.status != MCPServerStatus.RUNNING:
-                    continue
-                for tool in server.tools:
-                    cap = Capability(
-                        id=f"mcp_{server.name}_{tool.name}",
-                        name=tool.name,
-                        description=tool.description,
-                        type=CapabilityType.MCP_TOOL,
-                        source=server.name,
-                        parameters=tool.inputSchema if hasattr(tool, "inputSchema") else {},
-                        tags=["mcp", server.name],
-                    )
-                    self.capabilities[cap.id] = cap
-        except Exception as e:
-            logger.warning(f"加载 MCP 工具失败: {e}")
+        self._refresh_capability_projection()
     
     async def _load_skills(self):
-        """加载技能 — 从 skill_loader 读取已加载的技能"""
-        try:
-            from core.skill_loader import skill_loader
-
-            for skill_dict in skill_loader.list_skills():
-                skill_id = skill_dict.get("id", "")
-                cap = Capability(
-                    id=f"skill_{skill_id}",
-                    name=skill_dict.get("name", skill_id),
-                    description=skill_dict.get("description", ""),
-                    type=CapabilityType.SKILL,
-                    source=skill_id,
-                    parameters=skill_dict.get("parameters", {}),
-                    tags=skill_dict.get("tags", []) + ["skill"],
-                )
-                self.capabilities[cap.id] = cap
-        except Exception as e:
-            logger.warning(f"加载技能失败: {e}")
+        self._refresh_capability_projection()
     
     async def _load_nodes(self):
-        """加载节点能力 — 同时写入 NodeDiscoveryService 注册表"""
-        try:
-            from core.port_config import get_node_port
-            config_path = Path("config/node_registry.json")
-            if config_path.exists():
-                with open(config_path, encoding="utf-8") as f:
-                    config = json.load(f)
-
-                for node_name, node_info in config.get("nodes", {}).items():
-                    # Resolve the canonical port for this node
-                    try:
-                        port = get_node_port(node_name)
-                    except Exception:
-                        port = 0
-
-                    is_ready = node_info.get("production_ready", True)
-                    cap = Capability(
-                        id=f"node_{node_info['id']}",
-                        name=node_info["name"],
-                        description=f"节点: {node_info['name']}",
-                        type=CapabilityType.NODE,
-                        source=node_name,
-                        tags=["node"] + ([] if is_ready else ["placeholder"]),
-                        parameters={"port": port},
-                    )
-                    self.capabilities[cap.id] = cap
-
-                # Pre-populate NodeDiscoveryService with static config entries
-                # so nodes are discoverable without hardcoded URLs or live UDP.
-                try:
-                    from core.node_discovery import get_node_discovery, DiscoveredNode, NodeRole
-                    discovery = get_node_discovery()
-                    for node_name, node_info in config.get("nodes", {}).items():
-                        try:
-                            port = get_node_port(node_name)
-                        except Exception:
-                            port = 0
-                        if port <= 0:
-                            continue
-                        dn = DiscoveredNode(
-                            node_id=node_name,
-                            host="localhost",
-                            port=port,
-                            role=NodeRole.WORKER,
-                            capabilities=[node_info.get("name", node_name)],
-                        )
-                        discovery.register_node(dn)
-                    logger.info(f"NodeDiscovery: pre-populated {len(config.get('nodes', {}))} static nodes")
-                except Exception as disc_err:
-                    logger.debug(f"NodeDiscovery pre-populate skipped: {disc_err}")
-
-        except Exception as e:
-            logger.warning(f"加载节点失败: {e}")
+        await self._seed_static_node_contracts()
+        self._refresh_capability_projection()
     
     def _load_builtins(self):
-        """加载内置能力"""
-        builtins = [
-            Capability(
-                id="builtin_chat",
-                name="对话",
-                description="与 AI 进行对话",
-                type=CapabilityType.BUILTIN,
-                tags=["chat", "ai"],
-                priority=1,
-            ),
-            Capability(
-                id="builtin_device_control",
-                name="设备控制",
-                description="控制设备执行操作",
-                type=CapabilityType.BUILTIN,
-                tags=["device", "control"],
-                priority=8,
-            ),
-            Capability(
-                id="builtin_simulate",
-                name="模拟执行",
-                description="通过数字孪生引擎模拟操作效果",
-                type=CapabilityType.BUILTIN,
-                tags=["simulate", "twin", "predict"],
-                priority=6,
-            ),
-            Capability(
-                id="builtin_cross_device",
-                name="跨设备协同",
-                description="跨设备任务协调：剪贴板同步、文件传输、媒体控制、通知同步",
-                type=CapabilityType.BUILTIN,
-                tags=["cross_device", "sync", "transfer", "clipboard", "multi_device"],
-                priority=7,
-            ),
-        ]
-        
-        for cap in builtins:
-            self.capabilities[cap.id] = cap
+        self._seed_builtin_contracts()
+        self._refresh_capability_projection()
     
     # ========================================================================
     # 能力发现
@@ -414,20 +504,11 @@ class CapabilityOrchestrator:
         """执行 MCP 工具"""
         from core.mcp_loader import mcp_loader
 
-        # cap.id 格式: mcp_{server_name}_{tool_name}
-        # cap.source = server_name
-        server_name = cap.source
+        server_id = cap.source
         tool_name = cap.name
 
-        # 查找 server_id（mcp_loader 用 id 而非 name 索引）
-        server_id = None
-        for sid, srv in mcp_loader.servers.items():
-            if srv.name == server_name:
-                server_id = sid
-                break
-
         if not server_id:
-            raise RuntimeError(f"MCP 服务器 {server_name} 未找到")
+            raise RuntimeError(f"MCP 服务器 {cap.source} 未找到")
 
         return await mcp_loader.call_tool(server_id, tool_name, params)
     

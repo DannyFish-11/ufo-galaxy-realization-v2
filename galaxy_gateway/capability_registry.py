@@ -167,8 +167,10 @@ class GatewayCapabilityRegistry:
     _instance_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        # 存储结构: { device_id -> { action -> CapabilitySchema } }
-        self._store: Dict[str, Dict[str, CapabilitySchema]] = {}
+        # Legacy API instances track the subset of canonical contracts they
+        # wrote, but the authoritative data now lives in CapabilityRegistry.
+        self._managed_names: set[str] = set()
+        self._managed_by_device: Dict[str, set[str]] = {}
         self._lock = threading.Lock()
 
         # 计数器
@@ -185,6 +187,78 @@ class GatewayCapabilityRegistry:
             )
         except Exception:
             pass
+
+    @staticmethod
+    def _canonical_capability_name(device_id: str, action: str) -> str:
+        return f"gateway__{device_id}__{action}"
+
+    def _record_managed_name(self, device_id: str, capability_name: str) -> None:
+        with self._lock:
+            self._managed_names.add(capability_name)
+            if device_id not in self._managed_by_device:
+                self._managed_by_device[device_id] = set()
+            self._managed_by_device[device_id].add(capability_name)
+
+    def _drop_managed_device(self, device_id: str) -> List[str]:
+        with self._lock:
+            names = list(self._managed_by_device.pop(device_id, set()))
+            for name in names:
+                self._managed_names.discard(name)
+            return names
+
+    def _iter_gateway_contracts(self) -> List[Any]:
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            from core.unified.capability_resolver import get_capability_resolver
+
+            with self._lock:
+                managed_names = list(self._managed_names)
+
+            if managed_names:
+                registry = CapabilityRegistry.get_instance()
+                return [
+                    item for item in (registry.get(name) for name in managed_names)
+                    if item is not None
+                ]
+
+            if self is not self.__class__._instance:
+                return []
+            return list(get_capability_resolver().resolve_all())
+        except Exception as exc:
+            logger.debug("gateway capability registry canonical read failed: %s", exc)
+            return []
+
+    @staticmethod
+    def _contract_to_schema(contract: Any) -> Optional[CapabilitySchema]:
+        source = getattr(contract, "source", None)
+        source_value = source.value if hasattr(source, "value") else str(source or "")
+        if source_value != "gateway":
+            return None
+
+        metadata = dict(getattr(contract, "metadata", {}) or {})
+        device_id = getattr(contract, "source_id", "") or metadata.get("device_id", "")
+        action = metadata.get("action") or getattr(contract, "name", "").split("__")[-1]
+        if not device_id or not action:
+            return None
+        return CapabilitySchema(
+            device_id=str(device_id),
+            action=str(action),
+            params=dict(getattr(contract, "parameters", {}) or {}),
+            returns=dict(metadata.get("returns") or {}),
+            version=str(
+                getattr(contract, "version", None)
+                or metadata.get("contract_version")
+                or "1.0"
+            ),
+            exec_mode=ExecMode.from_str(metadata.get("exec_mode")),
+            tags=list(
+                getattr(contract, "tags", [])
+                or metadata.get("contract_tags")
+                or metadata.get("tags")
+                or []
+            ),
+            registered_at=float(metadata.get("registered_at", getattr(contract, "created_at", time.time()))),
+        )
 
     # ── 单例 ──────────────────────────────────────────────────────────────────
 
@@ -237,10 +311,38 @@ class GatewayCapabilityRegistry:
             registered_at=time.time(),
         )
 
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            from core.unified.capability_contract import CapabilityContract, CapabilitySource
+            from core.unified.capability_resolver import get_capability_resolver
+
+            capability_name = self._canonical_capability_name(device_id, action)
+            CapabilityRegistry.get_instance().register(
+                CapabilityContract(
+                    name=capability_name,
+                    description=f"[Gateway:{device_id}] Device capability: {action}",
+                    source=CapabilitySource.GATEWAY,
+                    source_id=device_id,
+                    version=schema.version,
+                    parameters=schema.params,
+                    available=True,
+                    tags=list(schema.tags),
+                    metadata={
+                        "device_id": device_id,
+                        "action": action,
+                        "returns": schema.returns,
+                        "exec_mode": schema.exec_mode.value,
+                        "registered_at": schema.registered_at,
+                    },
+                )
+            )
+            get_capability_resolver().invalidate_cache()
+            self._record_managed_name(device_id, capability_name)
+        except Exception as exc:
+            logger.warning("capability_registry: canonical upsert failed: %s", exc)
+            raise
+
         with self._lock:
-            if device_id not in self._store:
-                self._store[device_id] = {}
-            self._store[device_id][action] = schema
             self._registration_count += 1
 
         logger.debug(
@@ -259,10 +361,28 @@ class GatewayCapabilityRegistry:
         int
             被清除的条目数量。
         """
-        with self._lock:
-            removed = self._store.pop(device_id, {})
+        removed_names = self._drop_managed_device(device_id)
+        count = len(removed_names)
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            from core.unified.capability_resolver import get_capability_resolver
 
-        count = len(removed)
+            registry = CapabilityRegistry.get_instance()
+            if not removed_names:
+                removed_names = [
+                    getattr(contract, "name", "")
+                    for contract in self._iter_gateway_contracts()
+                    if getattr(contract, "source_id", "") == device_id
+                    or (getattr(contract, "metadata", {}) or {}).get("device_id") == device_id
+                ]
+                count = len([name for name in removed_names if name])
+            for name in removed_names:
+                if name:
+                    registry.eject(name)
+            get_capability_resolver().invalidate_cache()
+        except Exception as exc:
+            logger.debug("capability_registry purge canonical sync failed: %s", exc)
+
         if count:
             logger.info(
                 "capability_registry: purged %d capabilities for device %s",
@@ -301,16 +421,16 @@ class GatewayCapabilityRegistry:
         -------
         list[CapabilitySchema]
         """
-        with self._lock:
-            if device_id is not None:
-                device_schemas = self._store.get(device_id, {}).values()
-                candidates = list(device_schemas)
-            else:
-                candidates = [
-                    schema
-                    for device_schemas in self._store.values()
-                    for schema in device_schemas.values()
-                ]
+        candidates = [
+            schema
+            for schema in (
+                self._contract_to_schema(contract)
+                for contract in self._iter_gateway_contracts()
+            )
+            if schema is not None
+        ]
+        if device_id is not None:
+            candidates = [schema for schema in candidates if schema.device_id == device_id]
 
         results = []
         for schema in candidates:
@@ -345,25 +465,31 @@ class GatewayCapabilityRegistry:
 
     def get_by_device(self, device_id: str) -> List[CapabilitySchema]:
         """返回指定设备的全部能力 schema。"""
-        with self._lock:
-            return list(self._store.get(device_id, {}).values())
+        return self.query(device_id=device_id)
 
     def all_device_ids(self) -> List[str]:
         """返回注册表中所有设备 ID。"""
-        with self._lock:
-            return list(self._store.keys())
+        return sorted({schema.device_id for schema in self.query()})
 
     # ── 计量 ──────────────────────────────────────────────────────────────────
 
     def stats(self) -> Dict[str, int]:
         """返回注册/命中/未命中计数。"""
+        schemas = [
+            schema
+            for schema in (
+                self._contract_to_schema(contract)
+                for contract in self._iter_gateway_contracts()
+            )
+            if schema is not None
+        ]
         with self._lock:
             return {
                 "registrations": self._registration_count,
                 "hits": self._hit_count,
                 "misses": self._miss_count,
-                "devices": len(self._store),
-                "total_capabilities": sum(len(v) for v in self._store.values()),
+                "devices": len({schema.device_id for schema in schemas}),
+                "total_capabilities": len(schemas),
             }
 
 

@@ -194,7 +194,12 @@ class CapabilityRegistry:
                     source_id=item.source_id,
                     parameters=item.parameters,
                     available=item.available,
-                    metadata=item.metadata,
+                    metadata={
+                        **dict(item.metadata or {}),
+                        "contract_version": item.version,
+                        "contract_tags": list(item.tags or []),
+                        "contract_created_at": item.created_at,
+                    },
                 )
         except Exception:
             pass

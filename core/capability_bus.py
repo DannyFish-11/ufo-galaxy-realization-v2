@@ -387,7 +387,20 @@ class CapabilityBus:
                 source_id=entry.source_id,
                 parameters=dict(entry.schema) if entry.schema else {},
                 available=available,
-                metadata=dict(entry.metadata) if entry.metadata else {},
+                metadata={
+                    **(dict(entry.metadata) if entry.metadata else {}),
+                    "display_name": entry.display_name,
+                    "capability_bus_role": role_val,
+                    "capability_bus_health": (
+                        entry.health.value
+                        if isinstance(entry.health, CapabilityHealthStatus)
+                        else str(entry.health)
+                    ),
+                    "capability_bus_schema": dict(entry.schema) if entry.schema else {},
+                    "capability_bus_tags": list(entry.tags),
+                    "node_key": entry.node_key,
+                    "registered_at": entry.registered_at,
+                },
             )
             CapabilityRegistry.get_instance().register(item)
             logger.debug(
