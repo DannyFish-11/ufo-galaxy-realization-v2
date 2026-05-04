@@ -178,7 +178,7 @@ class TestHandleDeviceStateSnapshot:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.get_event_loop().run_until_complete(
+            response = asyncio.run(
                 handle_device_state_snapshot(bridge, websocket, message)
             )
             assert response is not None
@@ -213,7 +213,7 @@ class TestHandleDeviceStateSnapshot:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.get_event_loop().run_until_complete(
+            response = asyncio.run(
                 handle_device_state_snapshot(bridge, websocket, message)
             )
             assert response is not None
@@ -250,7 +250,7 @@ class TestHandleDeviceExecutionEvent:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.get_event_loop().run_until_complete(
+            response = asyncio.run(
                 handle_device_execution_event(bridge, websocket, message)
             )
             assert response is not None

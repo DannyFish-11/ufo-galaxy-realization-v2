@@ -87,6 +87,12 @@ async def handle_device_state_snapshot(
             snap.active_runtime_type,
             snap.current_fallback_tier,
         )
+    except ImportError:
+        logger.error(
+            "device_state_snapshot: core.android_device_state_store not available; "
+            "snapshot from %s discarded",
+            device_id,
+        )
     except Exception as exc:
         logger.warning(
             "Failed to absorb device_state_snapshot from %s: %s",
@@ -140,6 +146,12 @@ async def handle_device_execution_event(
             evt.flow_id,
             evt.phase,
             evt.step_index,
+        )
+    except ImportError:
+        logger.error(
+            "device_execution_event: core.android_device_state_store not available; "
+            "event from %s discarded",
+            device_id,
         )
     except Exception as exc:
         logger.warning(
