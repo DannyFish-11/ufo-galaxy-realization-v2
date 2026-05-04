@@ -142,6 +142,15 @@ _KIND_TO_CLASS: Dict[str, str] = {
     IngressEventKind.HANDOFF_RESULT:             IngressMessageClass.EXECUTION,
     IngressEventKind.HANDOFF_FAILURE:            IngressMessageClass.EXECUTION,
     IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT: IngressMessageClass.EXECUTION,
+
+    # Android Runtime-State Transparency Uplink (PR-RT).
+    # DEVICE_STATE_SNAPSHOT: periodic full runtime-state snapshot from Android —
+    #   model readiness, llama/NCNN availability, fallback tier, queue depth, etc.
+    # DEVICE_EXECUTION_EVENT: per-step execution phase event during delegated tasks.
+    # Both carry structured state projection data (not task results); TRANSPORT
+    # is the appropriate semantic class.
+    IngressEventKind.DEVICE_STATE_SNAPSHOT: IngressMessageClass.TRANSPORT,
+    IngressEventKind.DEVICE_EXECUTION_EVENT: IngressMessageClass.TRANSPORT,
 }
 
 

@@ -53,6 +53,15 @@ Routes
       identity, runtime availability, queue depth, and fallback tier.
       Sourced from :mod:`core.android_device_state_store`.
 
+  GET /api/v1/operator/devices/ecosystem/{device_id}
+      Android runtime-state snapshot for a single device.
+      Returns HTTP 404 when no snapshot has been received for the device.
+
+  GET /api/v1/operator/devices/execution-events
+      Recent Android execution phase events across all connected devices.
+      Sourced from DEVICE_EXECUTION_EVENT messages absorbed by
+      :mod:`core.android_device_state_store`.
+
   GET /api/v1/operator/inspect/task/{task_id}
       Deep read-only projection for a single task.
       Returns 404 when the task is not present in any canonical runtime layer.
@@ -808,6 +817,56 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content=snap.to_dict())
         except Exception as exc:
             logger.error("device_ecosystem(%s) endpoint error: %s", device_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/devices/execution-events
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/devices/execution-events")
+    async def devices_execution_events() -> JSONResponse:
+        """Return recent Android execution phase events.
+
+        Sources ``DEVICE_EXECUTION_EVENT`` records absorbed by
+        :mod:`core.android_device_state_store`.  Returns the most recent
+        events across all connected Android devices, making delegated-execution
+        phase progression visible to the V2 operator surface.
+
+        Returns::
+
+            {
+              "total_events": int,
+              "events": [
+                {
+                  "device_id": str,
+                  "absorbed_at": float,
+                  "flow_id": str | null,
+                  "task_id": str | null,
+                  "phase": str | null,
+                  "step_index": int,
+                  "is_blocking": bool,
+                  "blocking_reason": str | null,
+                  "event_ts": float | null
+                },
+                ...
+              ],
+              "authority": "OPERATOR_ROUTES_V1"
+            }
+        """
+        try:
+            from core.android_device_state_store import get_android_device_state_store
+            store = get_android_device_state_store()
+            events = store.list_recent_execution_events(limit=100)
+            return JSONResponse(content={
+                "total_events": len(events),
+                "events": [e.to_dict() for e in events],
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("devices_execution_events endpoint error: %s", exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,
