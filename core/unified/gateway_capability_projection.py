@@ -17,8 +17,13 @@ def _normalize_exec_mode(value: Any) -> str:
     return normalized
 
 
+def normalize_gateway_exec_mode(value: Any) -> str:
+    return _normalize_exec_mode(value)
+
+
 @dataclass
 class GatewayCapabilitySchema:
+    canonical_name: str
     device_id: str
     action: str
     params: Dict[str, Any] = field(default_factory=dict)
@@ -42,6 +47,7 @@ def _record_to_schema(record: Any) -> Optional[GatewayCapabilitySchema]:
         return None
 
     return GatewayCapabilitySchema(
+        canonical_name=str(getattr(record, "canonical_name", "") or getattr(record, "name", "")),
         device_id=str(device_id),
         action=str(action),
         params=dict(getattr(record, "parameters", {}) or {}),

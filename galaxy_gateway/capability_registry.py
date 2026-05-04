@@ -85,6 +85,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.unified.gateway_capability_projection import (
+    get_gateway_capabilities_for_device,
+    list_gateway_capability_device_ids,
+    normalize_gateway_exec_mode,
+    purge_gateway_capabilities_for_device,
+    query_gateway_capabilities,
+)
+
 logger = logging.getLogger("Galaxy.Gateway.CapabilityRegistry")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -173,8 +181,6 @@ class GatewayCapabilityRegistry:
     _instance_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        # Legacy API instances track the subset of canonical contracts they
-        # wrote, but the authoritative data now lives in CapabilityRegistry.
         self._managed_names: set[str] = set()
         self._managed_by_device: Dict[str, set[str]] = {}
         self._lock = threading.Lock()
@@ -188,6 +194,7 @@ class GatewayCapabilityRegistry:
         # uses core.capability_bus.CapabilityBus.
         try:
             from core.orchestration_authority.legacy_paths import emit_legacy_guardrail
+
             emit_legacy_guardrail(
                 caller="galaxy_gateway.capability_registry.GatewayCapabilityRegistry",
             )
@@ -212,62 +219,12 @@ class GatewayCapabilityRegistry:
                 self._managed_names.discard(name)
             return names
 
-    def _iter_gateway_contracts(self) -> List[Any]:
-        try:
-            from core.agent.capability_registry import CapabilityRegistry
-            from core.unified.capability_resolver import get_capability_resolver
-
-            with self._lock:
-                managed_names = list(self._managed_names)
-
-            if managed_names:
-                registry = CapabilityRegistry.get_instance()
-                return [
-                    item for item in (registry.get(name) for name in managed_names)
-                    if item is not None
-                ]
-
-            if self is not self.__class__._instance:
-                return []
-            # Singleton reads may need to project pre-existing canonical gateway
-            # contracts that were not created through this process instance, so
-            # the singleton falls back to the global canonical resolver here.
-            return list(get_capability_resolver().resolve_all())
-        except Exception as exc:
-            logger.debug("gateway capability registry canonical read failed: %s", exc)
-            return []
-
-    @staticmethod
-    def _contract_to_schema(contract: Any) -> Optional[CapabilitySchema]:
-        source = getattr(contract, "source", None)
-        source_value = source.value if hasattr(source, "value") else str(source or "")
-        if source_value != "gateway":
-            return None
-
-        metadata = dict(getattr(contract, "metadata", {}) or {})
-        device_id = getattr(contract, "source_id", "") or metadata.get("device_id", "")
-        action = metadata.get("action") or getattr(contract, "name", "").split("__")[-1]
-        if not device_id or not action:
-            return None
-        return CapabilitySchema(
-            device_id=str(device_id),
-            action=str(action),
-            params=dict(getattr(contract, "parameters", {}) or {}),
-            returns=dict(metadata.get("returns") or {}),
-            version=str(
-                getattr(contract, "version", None)
-                or metadata.get("contract_version")
-                or "1.0"
-            ),
-            exec_mode=ExecMode.from_str(metadata.get("exec_mode")),
-            tags=list(
-                getattr(contract, "tags", [])
-                or metadata.get("contract_tags")
-                or metadata.get("tags")
-                or []
-            ),
-            registered_at=float(metadata.get("registered_at", getattr(contract, "created_at", time.time()))),
-        )
+    def _filter_projection_schemas(self, schemas: List[Any]) -> List[Any]:
+        if self is self.__class__._instance:
+            return list(schemas)
+        with self._lock:
+            managed_names = set(self._managed_names)
+        return [schema for schema in schemas if getattr(schema, "canonical_name", "") in managed_names]
 
     # ── 单例 ──────────────────────────────────────────────────────────────────
 
@@ -387,27 +344,19 @@ class GatewayCapabilityRegistry:
             被清除的条目数量。
         """
         removed_names = self._drop_managed_device(device_id)
-        count = len(removed_names)
-        try:
-            from core.unified.capability_authority import CapabilityAuthority
+        if self is self.__class__._instance:
+            count = purge_gateway_capabilities_for_device(device_id)
+        else:
+            count = 0
+            try:
+                from core.unified.capability_authority import CapabilityAuthority
 
-            if not removed_names:
-                removed_names = [
-                    getattr(contract, "name", "")
-                    for contract in self._iter_gateway_contracts()
-                    if getattr(contract, "source_id", "") == device_id
-                    or (getattr(contract, "metadata", {}) or {}).get("device_id") == device_id
-                ]
-                count = len([name for name in removed_names if name])
-            for name in removed_names:
-                if name:
-                    CapabilityAuthority.get_instance().remove(
-                        name,
-                        mutation_source="gateway_capability_registry.purge",
-                    )
-        except Exception as exc:
-            logger.debug("capability_registry purge canonical sync failed: %s", exc)
-
+                authority = CapabilityAuthority.get_instance()
+                for name in removed_names:
+                    if authority.remove(name, mutation_source="gateway_capability_registry.purge"):
+                        count += 1
+            except Exception as exc:
+                logger.debug("capability_registry purge canonical sync failed: %s", exc)
         if count:
             logger.info(
                 "capability_registry: purged %d capabilities for device %s",
@@ -446,38 +395,26 @@ class GatewayCapabilityRegistry:
         -------
         list[CapabilitySchema]
         """
-        candidates = [
-            schema
-            for schema in (
-                self._contract_to_schema(contract)
-                for contract in self._iter_gateway_contracts()
+        results = [
+            CapabilitySchema(
+                device_id=schema.device_id,
+                action=schema.action,
+                params=dict(schema.params),
+                returns=dict(schema.returns),
+                version=schema.version,
+                exec_mode=ExecMode.from_str(schema.exec_mode),
+                tags=list(schema.tags),
+                registered_at=schema.registered_at,
             )
-            if schema is not None
+            for schema in self._filter_projection_schemas(
+                query_gateway_capabilities(
+                    action=action,
+                    exec_mode=normalize_gateway_exec_mode(exec_mode) if exec_mode is not None else None,
+                    device_id=device_id,
+                    tags=tags,
+                )
+            )
         ]
-        if device_id is not None:
-            candidates = [schema for schema in candidates if schema.device_id == device_id]
-
-        results = []
-        for schema in candidates:
-            # action 过滤
-            if action is not None and schema.action != action:
-                continue
-
-            # exec_mode 过滤
-            if exec_mode is not None and exec_mode != ExecMode.BOTH:
-                # local 请求：接受 local 或 both
-                if exec_mode == ExecMode.LOCAL and schema.exec_mode == ExecMode.REMOTE:
-                    continue
-                # remote 请求：接受 remote 或 both
-                if exec_mode == ExecMode.REMOTE and schema.exec_mode == ExecMode.LOCAL:
-                    continue
-
-            # tags 过滤
-            if tags:
-                if not all(t in schema.tags for t in tags):
-                    continue
-
-            results.append(schema)
 
         # 更新命中/未命中计数
         with self._lock:
@@ -490,24 +427,31 @@ class GatewayCapabilityRegistry:
 
     def get_by_device(self, device_id: str) -> List[CapabilitySchema]:
         """返回指定设备的全部能力 schema。"""
-        return self.query(device_id=device_id)
+        return [
+            CapabilitySchema(
+                device_id=schema.device_id,
+                action=schema.action,
+                params=dict(schema.params),
+                returns=dict(schema.returns),
+                version=schema.version,
+                exec_mode=ExecMode.from_str(schema.exec_mode),
+                tags=list(schema.tags),
+                registered_at=schema.registered_at,
+            )
+            for schema in self._filter_projection_schemas(get_gateway_capabilities_for_device(device_id))
+        ]
 
     def all_device_ids(self) -> List[str]:
         """返回注册表中所有设备 ID。"""
-        return sorted({schema.device_id for schema in self.query()})
+        if self is self.__class__._instance:
+            return list_gateway_capability_device_ids()
+        return sorted({schema.device_id for schema in self._filter_projection_schemas(query_gateway_capabilities())})
 
     # ── 计量 ──────────────────────────────────────────────────────────────────
 
     def stats(self) -> Dict[str, int]:
         """返回注册/命中/未命中计数。"""
-        schemas = [
-            schema
-            for schema in (
-                self._contract_to_schema(contract)
-                for contract in self._iter_gateway_contracts()
-            )
-            if schema is not None
-        ]
+        schemas = self._filter_projection_schemas(query_gateway_capabilities())
         with self._lock:
             return {
                 "registrations": self._registration_count,
@@ -519,6 +463,7 @@ class GatewayCapabilityRegistry:
 
 
 # ── 模块级快捷入口 ─────────────────────────────────────────────────────────────
+
 
 def get_gateway_capability_registry() -> GatewayCapabilityRegistry:
     """返回 GatewayCapabilityRegistry 全局单例（快捷函数）。"""

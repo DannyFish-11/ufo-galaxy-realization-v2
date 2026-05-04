@@ -42,6 +42,7 @@ from typing import Any, Dict, List, Optional
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
 from core.unified.gateway_capability_projection import (  # noqa: E402
     get_gateway_capability_projection_view,
+    normalize_gateway_exec_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -197,17 +198,15 @@ def select_devices(
 
     if desired_exec_mode_str or desired_action:
         try:
-            from galaxy_gateway.capability_registry import ExecMode
-
             gw_reg = get_gateway_capability_projection_view()
-            desired_exec_mode = ExecMode.from_str(desired_exec_mode_str)
+            desired_exec_mode = normalize_gateway_exec_mode(desired_exec_mode_str)
 
             filtered: List[Any] = []
             unregistered: List[Any] = []
             for device in devices:
                 schemas = gw_reg.query(
                     action=desired_action,
-                    exec_mode=(desired_exec_mode if desired_exec_mode != ExecMode.BOTH else None),
+                    exec_mode=(desired_exec_mode if desired_exec_mode != "both" else None),
                     device_id=device.device_id,
                 )
                 if schemas:
