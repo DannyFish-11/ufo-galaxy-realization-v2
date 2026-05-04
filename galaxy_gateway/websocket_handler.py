@@ -158,6 +158,13 @@ _ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset({
     IngressEventKind.PEER_ANNOUNCE,
     IngressEventKind.PEER_EXCHANGE,
     IngressEventKind.MESH_TOPOLOGY,
+    # Android Runtime-State Transparency Uplink (PR-RT)
+    # These carry structured Android runtime-state projections into V2 and must
+    # be routed through android_bridge so the gateway path absorbs them via
+    # core.android_device_state_store.  Absent from this set they would fall
+    # through to the catch-all, miss the store, and return no ACK.
+    IngressEventKind.DEVICE_STATE_SNAPSHOT,
+    IngressEventKind.DEVICE_EXECUTION_EVENT,
 })
 
 

@@ -98,6 +98,10 @@ from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
+from galaxy_gateway.android.handlers.device_state_snapshot import (
+    handle_device_state_snapshot,
+    handle_device_execution_event,
+)
 from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
@@ -796,6 +800,18 @@ class AndroidBridge:
         # PR-7-V2: Android reconciliation signal canonical ingress
         self._message_handlers[MessageType.RECONCILIATION_SIGNAL] = _wrap(
             handle_reconciliation_signal
+        )
+
+        # PR-RT: Android Runtime-State Transparency Uplink handlers
+        # DEVICE_STATE_SNAPSHOT — periodic full Android runtime-state snapshot
+        # DEVICE_EXECUTION_EVENT — per-step execution phase event
+        # Both are absorbed via core.android_device_state_store and made
+        # available to V2 operator surfaces.
+        self._message_handlers[MessageType.DEVICE_STATE_SNAPSHOT] = _wrap(
+            handle_device_state_snapshot
+        )
+        self._message_handlers[MessageType.DEVICE_EXECUTION_EVENT] = _wrap(
+            handle_device_execution_event
         )
 
         # Android Lifecycle / Governance Uplink Reports

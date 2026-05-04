@@ -119,6 +119,13 @@ class IngressEventKind:
     HANDOFF_FAILURE: str = "handoff_failure"
     HANDOFF_ENVELOPE_V2_RESULT: str = "handoff_envelope_v2_result"
 
+    # Android Runtime-State Transparency Uplink (PR-RT)
+    # Both kinds carry structured Android runtime truth into V2 via the gateway.
+    # They are canonical Android domain messages and are routed through
+    # android_bridge → core.android_device_state_store.
+    DEVICE_STATE_SNAPSHOT: str = "device_state_snapshot"
+    DEVICE_EXECUTION_EVENT: str = "device_execution_event"
+
     # Unknown / unrecognised
     UNKNOWN: str = "unknown"
 
@@ -131,6 +138,7 @@ class IngressEventKind:
         FILE_TRANSFER, PEER_ANNOUNCE, PEER_EXCHANGE, MESH_TOPOLOGY, WAKE_EVENT,
         GOAL_EXECUTION_RESULT, GOAL_RESULT,
         HANDOFF_ACK, HANDOFF_RESULT, HANDOFF_FAILURE, HANDOFF_ENVELOPE_V2_RESULT,
+        DEVICE_STATE_SNAPSHOT, DEVICE_EXECUTION_EVENT,
         UNKNOWN,
     }
 

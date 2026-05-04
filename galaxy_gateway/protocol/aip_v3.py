@@ -306,6 +306,18 @@ class MessageType(str, Enum):
     DEVICE_ACCEPTANCE_REPORT = "device_acceptance_report"
     DEVICE_STRATEGY_REPORT = "device_strategy_report"
 
+    # === Android Runtime-State Transparency Uplink (PR-RT) ===
+    # These two types carry structured Android runtime state into V2.
+    # DEVICE_STATE_SNAPSHOT: periodic full snapshot of the Android device
+    #   runtime — llama/NCNN availability, model identity, readiness state,
+    #   offline queue depth, fallback tier, warmup result, health score.
+    # DEVICE_EXECUTION_EVENT: per-step execution phase event emitted during
+    #   delegated execution — flow_id, task_id, phase, step_index, blocking.
+    # Both are absorbed by core.android_device_state_store and made available
+    # to V2 operator surfaces via /api/v1/operator/devices/ecosystem.
+    DEVICE_STATE_SNAPSHOT = "device_state_snapshot"
+    DEVICE_EXECUTION_EVENT = "device_execution_event"
+
 
 class TaskStatus(str, Enum):
     """任务状态"""

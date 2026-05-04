@@ -745,6 +745,11 @@ class OperatorSnapshot:
     source_runtime_posture_counts: Dict[str, int] = field(default_factory=dict)
     recent_source_runtime_postures: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Android ecosystem summary (PR-RT)
+    # Sourced from core.android_device_state_store.  Reflects real-time
+    # Android runtime-state projections received via DEVICE_STATE_SNAPSHOT.
+    android_ecosystem: Dict[str, Any] = field(default_factory=dict)
+
     # Authority declaration
     authority: str = OPERATOR_SURFACE_AUTHORITY
     contract_version: str = OPERATOR_SURFACE_CONTRACT_VERSION
@@ -764,6 +769,7 @@ class OperatorSnapshot:
             "online_provider_count": self.online_provider_count,
             "source_runtime_posture_counts": dict(self.source_runtime_posture_counts),
             "recent_source_runtime_postures": list(self.recent_source_runtime_postures),
+            "android_ecosystem": dict(self.android_ecosystem),
             "authority": self.authority,
             "contract_version": self.contract_version,
             "projection_policy": self.projection_policy,
@@ -1466,6 +1472,13 @@ class OperatorSurface:
             snap.recent_source_runtime_postures = [record.to_dict() for record in posture_snap.recent_records[-10:]]
         except Exception as exc:
             logger.debug("operator_snapshot: source runtime posture unavailable: %s", exc)
+
+        # Android ecosystem — runtime-state projections from DEVICE_STATE_SNAPSHOT (PR-RT)
+        try:
+            from core.android_device_state_store import get_device_ecosystem_summary
+            snap.android_ecosystem = get_device_ecosystem_summary()
+        except Exception as exc:
+            logger.debug("operator_snapshot: android ecosystem unavailable: %s", exc)
 
         return snap
 
