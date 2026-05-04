@@ -255,7 +255,10 @@ class SystemIntegration:
     @staticmethod
     def _contract_to_capability(contract: CapabilityContractLike) -> Capability:
         source_type = getattr(contract, "source", None)
-        source_value = getattr(source_type, "value", str(source_type or "unknown"))
+        if isinstance(source_type, str):
+            source_value = source_type
+        else:
+            source_value = getattr(source_type, "value", str(source_type or "unknown"))
         type_map = {
             "device": CapabilityType.DEVICE,
             "mcp": CapabilityType.MCP,

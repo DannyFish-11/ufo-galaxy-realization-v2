@@ -135,3 +135,32 @@ async def test_desktop_runtime_threads_canonical_session_ids_and_lane_metadata(m
         result["metadata"]["session_execution_lane"]["conversation_session_id"]
         == result["conversation_session_id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_kernel_async_record_session_uses_unified_facade(monkeypatch) -> None:
+    from core.agent.kernel import AgentKernel
+
+    calls = []
+
+    async def _fake_record_session_turn(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "core.session_memory_facade.record_session_turn",
+        _fake_record_session_turn,
+    )
+
+    kernel = AgentKernel()
+    await kernel._record_session(
+        "session_kernel",
+        "u",
+        "a",
+        control_session_id="control_kernel",
+        runtime_attachment_session_id="attach_kernel",
+        device_id="device_kernel",
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["conversation_session_id"] == "session_kernel"
+    assert calls[0]["metadata"]["control_session_id"] == "control_kernel"

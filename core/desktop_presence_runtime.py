@@ -478,7 +478,6 @@ class DesktopPresenceRuntime:
                 conversation_session_id,
                 control_session_id=control_session_id,
             ) as lane:
-                lane_snapshot = lane.to_dict()
                 # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
                 rsession.advance(TriState.MANIFEST)
 
@@ -503,6 +502,7 @@ class DesktopPresenceRuntime:
                     cognitive_execution_hint=_cog_hint_obj,
                     **kwargs,
                 )
+                lane_snapshot = lane.to_dict()
 
         except Exception as exc:
             logger.error(

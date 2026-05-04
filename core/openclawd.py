@@ -3068,11 +3068,15 @@ class OpenClawd:
         #   1. session_identity.conversation_session_id (canonical ingress bridge)
         #   2. session_id argument (legacy caller field, now treated as conversation ID)
         #   3. empty string, which falls through to a generated conversation session below.
-        conversation_session_id = getattr(
+        conversation_session_id = ""
+        if session_identity is not None and getattr(
             session_identity,
             "conversation_session_id",
             "",
-        ) or session_id or ""
+        ):
+            conversation_session_id = session_identity.conversation_session_id
+        elif session_id:
+            conversation_session_id = session_id
         if not conversation_session_id:
             conversation_session_id = f"session_{uuid.uuid4().hex[:12]}"
         session_id = conversation_session_id
@@ -6860,7 +6864,8 @@ class OpenClawd:
 
             # Block-3: use the unified session memory facade as the primary
             # short-term conversation context source.  It reads working memory
-            # first and falls back to SessionManager history.
+            # first, then SessionManager history, and only then falls back to
+            # legacy _session_memory for backward compatibility.
             _wm_entries = []
             try:
                 from core.session_memory_facade import get_session_context
