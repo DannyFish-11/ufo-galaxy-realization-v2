@@ -316,7 +316,10 @@ class TestEcosystemPerDeviceHighValueFields:
             "snapshot_ts": 1700000001.0,
         })
         summary = get_device_ecosystem_summary()
-        device = next(d for d in summary["devices"] if d["device_id"] == "n_dev_01")
+        device = next(
+            (d for d in summary["devices"] if d["device_id"] == "n_dev_01"), None
+        )
+        assert device is not None, "device n_dev_01 not found in ecosystem devices"
         assert "snapshot_ts" in device
         assert device["snapshot_ts"] == 1700000001.0
 
@@ -326,7 +329,10 @@ class TestEcosystemPerDeviceHighValueFields:
             "grounding_fallback_tier": "center",
         })
         summary = get_device_ecosystem_summary()
-        device = next(d for d in summary["devices"] if d["device_id"] == "n_dev_02")
+        device = next(
+            (d for d in summary["devices"] if d["device_id"] == "n_dev_02"), None
+        )
+        assert device is not None, "device n_dev_02 not found in ecosystem devices"
         assert "planner_fallback_tier" in device
         assert device["planner_fallback_tier"] == "local"
 
@@ -336,25 +342,34 @@ class TestEcosystemPerDeviceHighValueFields:
             "grounding_fallback_tier": "center_delegated",
         })
         summary = get_device_ecosystem_summary()
-        device = next(d for d in summary["devices"] if d["device_id"] == "n_dev_03")
+        device = next(
+            (d for d in summary["devices"] if d["device_id"] == "n_dev_03"), None
+        )
+        assert device is not None, "device n_dev_03 not found in ecosystem devices"
         assert "grounding_fallback_tier" in device
         assert device["grounding_fallback_tier"] == "center_delegated"
 
     def test_N04_snapshot_ts_none_when_not_provided(self):
         absorb_device_state_snapshot("n_dev_04", {"model_ready": True})
         summary = get_device_ecosystem_summary()
-        device = next(d for d in summary["devices"] if d["device_id"] == "n_dev_04")
+        device = next(
+            (d for d in summary["devices"] if d["device_id"] == "n_dev_04"), None
+        )
+        assert device is not None, "device n_dev_04 not found in ecosystem devices"
         assert "snapshot_ts" in device
         assert device["snapshot_ts"] is None
 
-    def test_N05_camelcase_snapshot_ts_in_per_device_entry(self):
+    def test_N05_camelcase_fallback_tiers_in_per_device_entry(self):
         absorb_device_state_snapshot("n_dev_05", {
             "snapshot_ts": 1700000002.0,
             "plannerFallbackTier": "local",
             "groundingFallbackTier": "center",
         })
         summary = get_device_ecosystem_summary()
-        device = next(d for d in summary["devices"] if d["device_id"] == "n_dev_05")
+        device = next(
+            (d for d in summary["devices"] if d["device_id"] == "n_dev_05"), None
+        )
+        assert device is not None, "device n_dev_05 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000002.0
         assert device["planner_fallback_tier"] == "local"
         assert device["grounding_fallback_tier"] == "center"
@@ -451,7 +466,10 @@ class TestEcosystemHTTPRouteStructure:
         data = resp.json()
         assert data["total_devices_with_snapshot"] >= 1
         assert data["local_loop_ready_count"] >= 1
-        device = next(d for d in data["devices"] if d["device_id"] == "p_dev_01")
+        device = next(
+            (d for d in data["devices"] if d["device_id"] == "p_dev_01"), None
+        )
+        assert device is not None, "device p_dev_01 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000003.0
         assert device["planner_fallback_tier"] == "local"
         assert device["grounding_fallback_tier"] == "center"
@@ -564,7 +582,10 @@ class TestEndToEndBridgeToHTTP:
         data = resp.json()
         assert data["total_devices_with_snapshot"] >= 1
         assert data["local_loop_ready_count"] >= 1
-        device = next(d for d in data["devices"] if d["device_id"] == "e2e_device_01")
+        device = next(
+            (d for d in data["devices"] if d["device_id"] == "e2e_device_01"), None
+        )
+        assert device is not None, "device e2e_device_01 not found in ecosystem devices"
         assert device["snapshot_ts"] == 1700000005.0
         assert device["planner_fallback_tier"] == "local"
         assert device["grounding_fallback_tier"] == "center"
