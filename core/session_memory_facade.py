@@ -23,7 +23,12 @@ def _is_adjacent_duplicate(
         )
         if wm_entries:
             last = wm_entries[-1]
-            if last.get("role") == role and last.get("content") == content:
+            last_device_id = (last.get("metadata") or {}).get("device_id", "")
+            if (
+                last.get("role") == role
+                and last.get("content") == content
+                and (not device_id or last_device_id == device_id)
+            ):
                 return True
     except Exception:
         pass
@@ -72,6 +77,8 @@ async def record_session_turn(
     merged_metadata = dict(metadata or {})
     if trace_id:
         merged_metadata.setdefault("trace_id", trace_id)
+    if device_id:
+        merged_metadata.setdefault("device_id", device_id)
 
     sm = get_session_manager()
     sm.ensure_session(

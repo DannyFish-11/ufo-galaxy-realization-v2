@@ -211,7 +211,7 @@ class SystemIntegration:
             CapabilityType.MCP: "mcp",
             CapabilityType.SKILL: "skill",
             CapabilityType.NODE: "node",
-            CapabilityType.AGENT: "node",
+            CapabilityType.AGENT: "unknown",
             CapabilityType.BUILTIN: "unknown",
         }
         CapabilityRegistry.get_instance().register(
@@ -259,6 +259,13 @@ class SystemIntegration:
             source_value = source_type
         else:
             source_value = getattr(source_type, "value", str(source_type or "unknown"))
+        if source_value not in {"device", "mcp", "skill", "node", "gateway", "unknown"}:
+            logger.debug(
+                "SystemIntegration._contract_to_capability: unexpected source=%r for %s",
+                source_value,
+                getattr(contract, "name", "?"),
+            )
+            source_value = "unknown"
         type_map = {
             "device": CapabilityType.DEVICE,
             "mcp": CapabilityType.MCP,

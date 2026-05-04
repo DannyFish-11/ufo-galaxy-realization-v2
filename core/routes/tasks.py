@@ -134,6 +134,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "session_id": req.session_id,
             },
         )
+        _effective_control_session_id = (
+            req.control_session_id or _session_identity.control_session_id
+        )
         # PR-507: Front-load canonical task creation — CanonicalTask is the
         # primary ontology object; task_id/trace_id flow from its identity.
         task_id: Optional[str] = None
@@ -185,8 +188,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "status": "pending",
             "created_at": datetime.now().isoformat(),
             "conversation_session_id": _session_identity.conversation_session_id,
-            "control_session_id": req.control_session_id
-            or _session_identity.control_session_id,
+            "control_session_id": _effective_control_session_id,
             "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
         }
         task_queue[task_id] = task
@@ -210,8 +212,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     source="api_tasks",
                     metadata={
                         "conversation_session_id": _session_identity.conversation_session_id,
-                        "control_session_id": req.control_session_id
-                        or _session_identity.control_session_id,
+                        "control_session_id": _effective_control_session_id,
                         "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
                     },
                 )
@@ -261,8 +262,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     "task_type": req.task_type,
                     "payload": req.payload,
                     "conversation_session_id": _session_identity.conversation_session_id,
-                    "control_session_id": req.control_session_id
-                    or _session_identity.control_session_id,
+                    "control_session_id": _effective_control_session_id,
                     "runtime_attachment_session_id": _session_identity.runtime_attachment_session_id,
                 })
                 task["status"] = "sent"
