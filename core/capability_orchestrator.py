@@ -54,7 +54,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -308,11 +307,15 @@ class CapabilityOrchestrator:
         if source_value == "mcp":
             cap_type = CapabilityType.MCP_TOOL
             source_id = getattr(contract, "source_id", "")
-            # Canonical MCP contract names are `mcp__<server_id>__<tool_name>`
-            # (or `mcp__gateway__<tool_name>` for gateway-backed tools).  Strip
-            # that prefix so the legacy orchestrator view keeps only the tool
-            # name in `Capability.name`.
-            tool_name = re.sub(r"^mcp__(gateway__)?[^_]+__", "", getattr(contract, "name", ""))
+            contract_name = getattr(contract, "name", "")
+            # Canonical MCP names are either:
+            #   - `mcp__<server_id>__<tool_name>`
+            #   - `mcp__gateway__<tool_name>`
+            # The legacy orchestrator surface keeps only `<tool_name>`.
+            if contract_name.startswith("mcp__gateway__"):
+                tool_name = contract_name.split("__", 2)[-1]
+            else:
+                tool_name = contract_name.split("__", 2)[-1]
             return Capability(
                 id=legacy_id or getattr(contract, "name", ""),
                 name=legacy_name or tool_name or getattr(contract, "name", ""),

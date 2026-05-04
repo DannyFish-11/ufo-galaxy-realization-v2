@@ -223,6 +223,9 @@ class GatewayCapabilityRegistry:
 
             if self is not self.__class__._instance:
                 return []
+            # Singleton reads may need to project pre-existing canonical gateway
+            # contracts that were not created through this process instance, so
+            # the singleton falls back to the global canonical resolver here.
             return list(get_capability_resolver().resolve_all())
         except Exception as exc:
             logger.debug("gateway capability registry canonical read failed: %s", exc)
