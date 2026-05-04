@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from core.cognitive.working_memory import get_working_memory
 from core.session_manager import get_session_manager
+
+logger = logging.getLogger("Galaxy.SessionMemoryFacade")
 
 
 def _is_adjacent_duplicate(
@@ -59,6 +62,11 @@ async def record_session_turn(
         content=content,
         device_id=device_id,
     ):
+        logger.debug(
+            "record_session_turn: skipped adjacent duplicate turn session=%s role=%s",
+            conversation_session_id,
+            role,
+        )
         return
 
     merged_metadata = dict(metadata or {})
@@ -137,4 +145,3 @@ def get_session_context(
     except Exception:
         pass
     return []
-

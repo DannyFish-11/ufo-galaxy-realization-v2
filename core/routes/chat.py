@@ -188,7 +188,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 required_capabilities=req.required_capabilities,
                 multimodal_context=req.multimodal_context,
                 entry_mode=_entry_mode,
-                runtime_attachment_session_id=(req.context or [{}])[-1].get("runtime_attachment_session_id", "")
+                runtime_attachment_session_id=req.context[-1].get(
+                    "runtime_attachment_session_id",
+                    "",
+                )
                 if req.context
                 else "",
             )

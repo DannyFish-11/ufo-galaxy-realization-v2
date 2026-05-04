@@ -23,7 +23,6 @@ Galaxy - 系统集成层
     result = await system.execute("搜索 Python 教程")
 """
 
-import asyncio
 import inspect
 import json
 import logging
@@ -31,9 +30,19 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Protocol
 
 logger = logging.getLogger("Galaxy.SystemIntegration")
+
+
+class CapabilityContractLike(Protocol):
+    name: str
+    description: str
+    source: Any
+    source_id: str
+    parameters: Dict[str, Any]
+    available: bool
+    metadata: Dict[str, Any]
 
 
 # ============================================================================
@@ -244,7 +253,7 @@ class SystemIntegration:
         return True
 
     @staticmethod
-    def _contract_to_capability(contract: Any) -> Capability:
+    def _contract_to_capability(contract: CapabilityContractLike) -> Capability:
         source_type = getattr(contract, "source", None)
         source_value = getattr(source_type, "value", str(source_type or "unknown"))
         type_map = {
@@ -411,10 +420,14 @@ class SystemIntegration:
     ) -> Any:
         """执行具体能力"""
         if cap.handler is not None:
-            result = cap.handler(**params)
-            if inspect.isawaitable(result):
-                return await result
-            return result
+            try:
+                result = cap.handler(**params)
+                if inspect.isawaitable(result):
+                    return await result
+                return result
+            except Exception as exc:
+                logger.error("执行自定义能力失败: %s (%s)", cap.name, exc)
+                raise RuntimeError(f"执行能力失败: {cap.name}") from exc
 
         if cap.type == CapabilityType.DEVICE:
             return await self._execute_device(cap, params)

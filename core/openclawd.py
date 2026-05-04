@@ -3064,9 +3064,15 @@ class OpenClawd:
             _dispatcher.session_id = session_id or ""
             _dispatcher.trace_id = trace_id or ""
 
-        conversation_session_id = (
-            getattr(session_identity, "conversation_session_id", "") or session_id or ""
-        )
+        # Priority order is explicit:
+        #   1. session_identity.conversation_session_id (canonical ingress bridge)
+        #   2. session_id argument (legacy caller field, now treated as conversation ID)
+        #   3. empty string, which falls through to a generated conversation session below.
+        conversation_session_id = getattr(
+            session_identity,
+            "conversation_session_id",
+            "",
+        ) or session_id or ""
         if not conversation_session_id:
             conversation_session_id = f"session_{uuid.uuid4().hex[:12]}"
         session_id = conversation_session_id
