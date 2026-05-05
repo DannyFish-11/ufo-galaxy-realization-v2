@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galaxy Operator Console</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+      --orange: #e3b341;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 13px;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 {
+      font-size: 15px;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+    header .authority {
+      font-size: 10px;
+      color: var(--text-dim);
+      background: #1c2a3a;
+      border: 1px solid #2d4a6b;
+      border-radius: 3px;
+      padding: 2px 7px;
+    }
+    .refresh-bar {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .refresh-bar select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .refresh-bar button {
+      background: #1c2a3a;
+      color: var(--accent);
+      border: 1px solid #2d4a6b;
+      border-radius: 4px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .refresh-bar button:hover { background: #253850; }
+    .last-refresh {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 16px;
+      padding: 16px 20px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .card.full-width {
+      grid-column: 1 / -1;
+    }
+    .card-header {
+      background: #1c2028;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-header h2 {
+      font-size: 12px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+    .card-header .route-badge {
+      font-size: 10px;
+      color: var(--text-dim);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 6px;
+      margin-left: auto;
+    }
+    .card-body { padding: 12px 14px; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e2630;
+    }
+    .status-row:last-child { border-bottom: none; }
+    .status-label { color: var(--text-dim); min-width: 140px; }
+    .status-value { color: var(--text); word-break: break-all; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-green  { background: #0d2e1a; color: var(--green); border: 1px solid #1a5c2e; }
+    .badge-yellow { background: #2b2108; color: var(--yellow); border: 1px solid #5c3e00; }
+    .badge-red    { background: #2e0d0d; color: var(--red); border: 1px solid #5c1a1a; }
+    .badge-blue   { background: #0d1f2e; color: var(--accent); border: 1px solid #1a4a6b; }
+    .badge-purple { background: #1a0d2e; color: var(--purple); border: 1px solid #3a1a6b; }
+    .badge-gray   { background: #1c2028; color: var(--text-dim); border: 1px solid var(--border); }
+    .loading { color: var(--text-dim); font-style: italic; padding: 12px 0; }
+    .error-msg { color: var(--red); padding: 8px 0; }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .metric-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .metric-box .metric-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+    .metric-box .metric-lbl {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 3px;
+    }
+    .flow-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+    .flow-item:last-child { margin-bottom: 0; }
+    .flow-item-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .flow-id { font-size: 11px; color: var(--text-dim); }
+    .flow-phase { font-size: 11px; }
+    .flow-device { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+    .flow-meta { font-size: 10px; color: var(--text-dim); }
+    .event-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e2630;
+      font-size: 11px;
+    }
+    .event-item:last-child { border-bottom: none; }
+    .event-ts { color: var(--text-dim); min-width: 90px; flex-shrink: 0; }
+    .event-phase { min-width: 90px; flex-shrink: 0; }
+    .event-device { color: var(--text-dim); min-width: 80px; flex-shrink: 0; }
+    .event-blocking { color: var(--red); }
+    .device-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+    .device-item:last-child { margin-bottom: 0; }
+    .device-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .device-id { font-weight: 600; }
+    .device-meta { font-size: 10px; color: var(--text-dim); }
+    .device-health-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .health-cell {
+      background: #1c2028;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 3px 6px;
+      text-align: center;
+      font-size: 10px;
+    }
+    .health-cell .hc-label { color: var(--text-dim); }
+    .health-cell .hc-value { color: var(--text); }
+    .provider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #1e2630;
+    }
+    .provider-row:last-child { border-bottom: none; }
+    .provider-name { min-width: 130px; color: var(--text); }
+    .provider-stat { font-size: 10px; color: var(--text-dim); }
+    .no-data { color: var(--text-dim); font-style: italic; padding: 8px 0; }
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      background: #1c2028;
+    }
+    .tab {
+      padding: 6px 12px;
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; padding: 12px 14px; }
+    .tab-content.active { display: block; }
+    .collapsible-header {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .collapsible-header::before {
+      content: '▶';
+      font-size: 10px;
+      color: var(--text-dim);
+      transition: transform 0.15s;
+    }
+    .collapsible-header.open::before { transform: rotate(90deg); }
+    .collapsible-body { display: none; margin-top: 6px; }
+    .collapsible-body.open { display: block; }
+    .port-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 6px;
+    }
+    .port-cell {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 8px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+    }
+    .port-name { color: var(--text-dim); }
+    .port-num { color: var(--orange); font-weight: 600; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>⬡ Galaxy Operator Console</h1>
+  <span class="authority" id="auth-badge">OPERATOR_ROUTES_V1</span>
+  <div class="refresh-bar">
+    <span class="last-refresh" id="last-refresh">—</span>
+    <select id="refresh-interval" title="Auto-refresh interval">
+      <option value="0">Manual</option>
+      <option value="10000">10 s</option>
+      <option value="30000" selected>30 s</option>
+      <option value="60000">60 s</option>
+    </select>
+    <button id="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- ── System Overview ────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>System Overview</h2>
+      <span class="route-badge">/api/v1/readiness</span>
+    </div>
+    <div class="card-body" id="readiness-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Operator Snapshot ──────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Operator Snapshot</h2>
+      <span class="route-badge">/api/v1/operator/snapshot</span>
+    </div>
+    <div class="card-body" id="snapshot-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── LLM / Provider Health ──────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>LLM Provider Health</h2>
+      <span class="route-badge">/api/v1/operator/llm</span>
+    </div>
+    <div class="card-body" id="llm-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── NATS Bus ────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>NATS Bus</h2>
+      <span class="route-badge">/api/v1/operator/nats</span>
+    </div>
+    <div class="card-body" id="nats-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Heartbeat ──────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Heartbeat Scheduler</h2>
+      <span class="route-badge">/api/v1/operator/heartbeat</span>
+    </div>
+    <div class="card-body" id="heartbeat-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Port Registry ──────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Port Registry</h2>
+      <span class="route-badge">/api/v1/ports</span>
+    </div>
+    <div class="card-body" id="ports-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Device Ecosystem ───────────────────────────────────────── -->
+  <div class="card full-width">
+    <div class="card-header">
+      <h2>Device Ecosystem</h2>
+      <span class="route-badge">/api/v1/operator/devices/ecosystem</span>
+    </div>
+    <div class="card-body" id="ecosystem-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Active Flows ───────────────────────────────────────────── -->
+  <div class="card full-width">
+    <div class="card-header">
+      <h2>Active Flows</h2>
+      <span class="route-badge">/api/v1/operator/flows</span>
+    </div>
+    <div class="card-body" id="flows-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+  <!-- ── Execution Events ───────────────────────────────────────── -->
+  <div class="card full-width">
+    <div class="card-header">
+      <h2>Execution Events</h2>
+      <span class="route-badge">/api/v1/operator/devices/execution-events</span>
+    </div>
+    <div class="card-body" id="events-body">
+      <span class="loading">Loading…</span>
+    </div>
+  </div>
+
+</div><!-- /.grid -->
+
+<script>
+/* ============================================================
+   Galaxy Operator Console — data-binding layer
+   All truth sourced exclusively from OPERATOR_ROUTES_V1 APIs.
+   No parallel state model is created here.
+   ============================================================ */
+
+/* -- helpers ------------------------------------------------- */
+function esc(v) {
+  if (v == null) return '';
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtTs(ts) {
+  if (!ts) return '—';
+  try {
+    return new Date(ts * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  } catch (_) { return String(ts); }
+}
+
+function verdictBadge(v) {
+  const cls = {
+    READY: 'badge-green', DEGRADED: 'badge-yellow',
+    BLOCKED: 'badge-red', UNKNOWN: 'badge-gray',
+  }[v] || 'badge-gray';
+  return `<span class="badge ${cls}">${esc(v)}</span>`;
+}
+
+function phaseBadge(p) {
+  if (!p) return `<span class="badge badge-gray">—</span>`;
+  const active = ['planning','grounding','execution','replan'];
+  const bad = ['stagnation','failed'];
+  const done = ['completed'];
+  const cls = done.includes(p) ? 'badge-green'
+    : bad.includes(p) ? 'badge-red'
+    : active.includes(p) ? 'badge-blue'
+    : 'badge-purple';
+  return `<span class="badge ${cls}">${esc(p)}</span>`;
+}
+
+function boolBadge(b) {
+  return b
+    ? `<span class="badge badge-green">yes</span>`
+    : `<span class="badge badge-red">no</span>`;
+}
+
+function statusBadge(s) {
+  const cls = { healthy: 'badge-green', degraded: 'badge-yellow',
+                down: 'badge-red', connected: 'badge-green',
+                disconnected: 'badge-red' }[s] || 'badge-gray';
+  return `<span class="badge ${cls}">${esc(s ?? '—')}</span>`;
+}
+
+function row(label, val) {
+  return `<div class="status-row">
+    <span class="status-label">${esc(label)}</span>
+    <span class="status-value">${val}</span>
+  </div>`;
+}
+
+async function apiFetch(path) {
+  const r = await fetch(path, { cache: 'no-store' });
+  return r.json();
+}
+
+/* -- section renderers --------------------------------------- */
+
+function renderReadiness(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  let html = `<div style="margin-bottom:10px">${verdictBadge(d.verdict)}</div>`;
+  const dims = d.dimensions || [];
+  if (!dims.length) {
+    html += `<span class="no-data">No dimensions reported.</span>`;
+  } else {
+    dims.forEach(dim => {
+      const cls = { READY: 'badge-green', BLOCKED: 'badge-red',
+                    DEGRADED: 'badge-yellow', UNKNOWN: 'badge-gray' }[dim.status] || 'badge-gray';
+      html += row(dim.dimension,
+        `<span class="badge ${cls}">${esc(dim.status)}</span>`
+        + (dim.detail ? ` <span style="color:var(--text-dim);font-size:10px">${esc(dim.detail)}</span>` : ''));
+    });
+  }
+  return html;
+}
+
+function renderSnapshot(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const metrics = [
+    { val: d.total_tasks ?? '—', lbl: 'Tasks' },
+    { val: d.active_tasks ?? '—', lbl: 'Active' },
+    { val: d.total_devices ?? d.device_count ?? '—', lbl: 'Devices' },
+    { val: d.active_flow_count ?? '—', lbl: 'Flows' },
+    { val: d.total_capabilities ?? '—', lbl: 'Caps' },
+    { val: d.node_count ?? '—', lbl: 'Nodes' },
+  ];
+  let html = `<div class="metrics-grid">${
+    metrics.map(m =>
+      `<div class="metric-box"><div class="metric-val">${esc(String(m.val))}</div><div class="metric-lbl">${esc(m.lbl)}</div></div>`
+    ).join('')
+  }</div>`;
+  const ae = d.android_ecosystem;
+  if (ae) {
+    html += `<div style="margin-top:8px">`;
+    Object.entries(ae).forEach(([k, v]) => {
+      if (k === 'authority') return;
+      html += row(k, `<span class="status-value">${esc(JSON.stringify(v))}</span>`);
+    });
+    html += `</div>`;
+  }
+  return html;
+}
+
+function renderLlm(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const providers = d.providers || d.status || {};
+  const entries = Array.isArray(providers)
+    ? providers
+    : Object.entries(providers).map(([name, info]) => ({ name, ...info }));
+  if (!entries.length) return `<span class="no-data">No LLM providers reported.</span>`;
+  return entries.map(p =>
+    `<div class="provider-row">
+      <span class="provider-name">${esc(p.name || p.provider || '?')}</span>
+      ${statusBadge(p.status)}
+      <span class="provider-stat">ok:${esc(p.success_count ?? p.ok_count ?? '?')}</span>
+      <span class="provider-stat">err:${esc(p.error_count ?? '?')}</span>
+      <span class="provider-stat">${p.latency_ms != null ? esc(p.latency_ms) + ' ms' : ''}</span>
+    </div>`
+  ).join('');
+}
+
+function renderNats(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const connected = d.connected ?? (d.status === 'connected');
+  let html = row('Connected', boolBadge(connected));
+  if (d.nats_url) html += row('URL', `<span style="color:var(--accent)">${esc(d.nats_url)}</span>`);
+  const s = d.stats || {};
+  if (Object.keys(s).length) {
+    Object.entries(s).forEach(([k, v]) => {
+      html += row(k, `<span class="status-value">${esc(JSON.stringify(v))}</span>`);
+    });
+  }
+  return html;
+}
+
+function renderHeartbeat(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  let html = '';
+  html += row('Enabled', boolBadge(d.enabled));
+  html += row('Running', boolBadge(d.running));
+  if (d.cycle_count != null) html += row('Cycle count', `<span class="status-value">${esc(d.cycle_count)}</span>`);
+  if (d.interval_seconds != null) html += row('Interval', `<span class="status-value">${esc(d.interval_seconds)} s</span>`);
+  if (d.tier1_model) html += row('Tier-1 model', `<span class="status-value">${esc(d.tier1_model)}</span>`);
+  if (d.tier2_model) html += row('Tier-2 model', `<span class="status-value">${esc(d.tier2_model)}</span>`);
+  if (d.detail) html += `<div style="color:var(--text-dim);font-size:11px;margin-top:6px">${esc(d.detail)}</div>`;
+  return html;
+}
+
+function renderPorts(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const ports = d.ports || d;
+  const entries = [];
+  if (typeof ports === 'object' && !Array.isArray(ports)) {
+    Object.entries(ports).forEach(([k, v]) => {
+      if (k === 'authority') return;
+      entries.push({ name: k, num: v });
+    });
+  }
+  if (!entries.length) return `<span class="no-data">No port data.</span>`;
+  return `<div class="port-grid">${
+    entries.map(e =>
+      `<div class="port-cell"><span class="port-name">${esc(e.name)}</span><span class="port-num">${esc(String(e.num))}</span></div>`
+    ).join('')
+  }</div>`;
+}
+
+function renderEcosystem(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const devices = d.devices || [];
+  if (!devices.length) {
+    // Try count-level fallback (summary-only mode)
+    const keys = Object.keys(d).filter(k => k !== 'authority' && k !== 'error');
+    if (keys.length) {
+      return keys.map(k =>
+        `<div class="status-row"><span class="status-label">${esc(k)}</span><span class="status-value">${esc(JSON.stringify(d[k]))}</span></div>`
+      ).join('');
+    }
+    return `<span class="no-data">No devices connected.</span>`;
+  }
+  return devices.map(dev => {
+    const readyBadge = dev.ready != null ? boolBadge(dev.ready) :
+      (dev.runtime_available != null ? boolBadge(dev.runtime_available) : '');
+    return `<div class="device-item">
+      <div class="device-header">
+        <span class="device-id">${esc(dev.device_id || dev.id || '?')}</span>
+        ${readyBadge}
+        ${dev.model_id ? `<span class="device-meta">${esc(dev.model_id)}</span>` : ''}
+        ${dev.fallback_tier ? `<span class="badge badge-purple" style="margin-left:auto">${esc(dev.fallback_tier)}</span>` : ''}
+      </div>
+      <div class="device-health-row">
+        ${dev.queue_depth != null ? `<div class="health-cell"><div class="hc-label">queue</div><div class="hc-value">${esc(dev.queue_depth)}</div></div>` : ''}
+        ${dev.mobilevlm_present != null ? `<div class="health-cell"><div class="hc-label">vlm</div><div class="hc-value">${boolBadge(dev.mobilevlm_present)}</div></div>` : ''}
+        ${dev.seeclick_present != null ? `<div class="health-cell"><div class="hc-label">seeclick</div><div class="hc-value">${boolBadge(dev.seeclick_present)}</div></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFlows(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const flows = d.flows || [];
+  let html = `<div class="metrics-grid" style="margin-bottom:10px">
+    <div class="metric-box"><div class="metric-val">${esc(String(d.total ?? flows.length))}</div><div class="metric-lbl">Total</div></div>
+    <div class="metric-box"><div class="metric-val">${esc(String(d.active ?? '—'))}</div><div class="metric-lbl">Active</div></div>
+  </div>`;
+  if (!flows.length) return html + `<span class="no-data">No delegated flows.</span>`;
+  html += flows.map(f =>
+    `<div class="flow-item">
+      <div class="flow-item-header">
+        ${phaseBadge(f.phase)}
+        <span class="flow-id">${esc(f.delegated_flow_id || f.flow_id || '?')}</span>
+        ${f.device_id ? `<span class="flow-device">${esc(f.device_id)}</span>` : ''}
+        ${f._authority ? `<span class="badge badge-gray" style="font-size:9px">${esc(f._authority)}</span>` : ''}
+      </div>
+      <div class="flow-meta">
+        ${f.canonical_task_id ? `task: ${esc(f.canonical_task_id)}` : ''}
+        ${f.blocking_reason ? ` · <span style="color:var(--red)">${esc(f.blocking_reason)}</span>` : ''}
+      </div>
+    </div>`
+  ).join('');
+  return html;
+}
+
+function renderEvents(d) {
+  if (d.error) return `<span class="error-msg">Error: ${esc(d.error)}</span>`;
+  const events = d.events || [];
+  if (!events.length) return `<span class="no-data">No execution events.</span>`;
+  let html = `<div style="margin-bottom:8px;color:var(--text-dim);font-size:11px">
+    Latest ${Math.min(events.length, 50)} of ${esc(String(d.total_events ?? events.length))} events
+  </div>`;
+  html += events.slice(0, 50).map(e =>
+    `<div class="event-item">
+      <span class="event-ts">${fmtTs(e.absorbed_at || e.event_ts)}</span>
+      <span class="event-phase">${phaseBadge(e.phase)}</span>
+      <span class="event-device">${esc(e.device_id || '—')}</span>
+      <span style="color:var(--text-dim)">step:${esc(String(e.step_index ?? '—'))}</span>
+      ${e.is_blocking ? `<span class="event-blocking">BLOCKING</span>` : ''}
+      ${e.blocking_reason ? `<span class="event-blocking">${esc(e.blocking_reason)}</span>` : ''}
+    </div>`
+  ).join('');
+  return html;
+}
+
+/* -- fetch + render pipeline --------------------------------- */
+
+async function fetchAndRender(apiPath, bodyId, renderFn) {
+  const el = document.getElementById(bodyId);
+  if (!el) return;
+  try {
+    const data = await apiFetch(apiPath);
+    el.innerHTML = renderFn(data);
+  } catch (err) {
+    el.innerHTML = `<span class="error-msg">Fetch error: ${esc(String(err))}</span>`;
+  }
+}
+
+const SECTIONS = [
+  ['/api/v1/readiness',                           'readiness-body',  renderReadiness],
+  ['/api/v1/operator/snapshot',                   'snapshot-body',   renderSnapshot],
+  ['/api/v1/operator/llm',                        'llm-body',        renderLlm],
+  ['/api/v1/operator/nats',                       'nats-body',       renderNats],
+  ['/api/v1/operator/heartbeat',                  'heartbeat-body',  renderHeartbeat],
+  ['/api/v1/ports',                               'ports-body',      renderPorts],
+  ['/api/v1/operator/devices/ecosystem',          'ecosystem-body',  renderEcosystem],
+  ['/api/v1/operator/flows',                      'flows-body',      renderFlows],
+  ['/api/v1/operator/devices/execution-events',   'events-body',     renderEvents],
+];
+
+async function refreshAll() {
+  await Promise.all(SECTIONS.map(([path, id, fn]) => fetchAndRender(path, id, fn)));
+  document.getElementById('last-refresh').textContent =
+    new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+
+/* -- auto-refresh -------------------------------------------- */
+let _timer = null;
+function setupAutoRefresh() {
+  if (_timer) clearInterval(_timer);
+  const val = parseInt(document.getElementById('refresh-interval').value, 10);
+  if (val > 0) _timer = setInterval(refreshAll, val);
+}
+document.getElementById('refresh-interval').addEventListener('change', setupAutoRefresh);
+
+/* -- boot ---------------------------------------------------- */
+refreshAll();
+setupAutoRefresh();
+</script>
+</body>
+</html>

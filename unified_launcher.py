@@ -340,6 +340,21 @@ class UnifiedWebUI:
             else:
                 logger.warning("API Manager 静态文件未找到: %s", static_dir)
 
+            # === 步骤 5b：Operator Console 静态挂载 ===
+            # Serves static/operator-console/index.html at /operator-console.
+            # The console is a pure visualization layer over OPERATOR_ROUTES_V1
+            # APIs — no parallel truth model is introduced here.
+            operator_console_dir = PROJECT_ROOT / "static" / "operator-console"
+            operator_console_index = operator_console_dir / "index.html"
+            if operator_console_index.exists():
+                @self.app.get("/operator-console", response_class=HTMLResponse)
+                async def operator_console_index_route():
+                    return FileResponse(str(operator_console_index))
+
+                logger.info("Operator Console 已挂载: %s", operator_console_index)
+            else:
+                logger.warning("Operator Console index.html 未找到: %s", operator_console_index)
+
             # === 步骤 6：统一启动器专属路由（不覆盖 dashboard 的 / 路由） ===
             @self.app.get("/api/status")
             async def launcher_status():
