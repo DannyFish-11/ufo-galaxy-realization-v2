@@ -509,13 +509,37 @@ class TestHonestLabeling:
     'fully_closed' because the *structure* exists.
     """
 
-    def test_E01_cross_repo_labeled_complete_when_wire_paths_present(self, live_report):
+    def test_E01_cross_repo_wire_paths_structurally_confirmed(self, live_report):
+        """cross_repo_evidence wire paths are structurally confirmed.
+
+        When the current V2 code has MessageType.RECONCILIATION_SIGNAL plus
+        registered reconciliation and handoff_v2_result gateway handlers, the
+        dimension must not fall below 'evidence_gap'.  In a fresh environment
+        with no Android device connected, the label is 'evidence_gap' (code
+        is present but no runtime signal has been activated).  The label
+        becomes 'complete' only after a live Android participant connects and
+        transmits a state snapshot via the wire path.
+        """
         entry = live_report.get_dimension(CompletenessDimension.cross_repo_evidence)
         assert entry is not None
-        assert entry.label == CompletenessLabel.complete, (
-            "cross_repo_evidence MUST be 'complete' when current V2 code has "
-            "MessageType.RECONCILIATION_SIGNAL plus registered reconciliation "
-            "and handoff_v2_result gateway handlers."
+        # The dimension must not be structure_only or lower — the wire paths
+        # are code-complete, so the label is at least 'evidence_gap'.
+        assert entry.label not in (
+            CompletenessLabel.not_present,
+            CompletenessLabel.nominally_present,
+            CompletenessLabel.structure_only,
+        ), (
+            "cross_repo_evidence must be at least 'evidence_gap' when the V2 "
+            "wire paths (MessageType.RECONCILIATION_SIGNAL, gateway handlers) "
+            "are structurally present.  Got: " + entry.label.value
+        )
+        # In a fresh CI environment with no live device the label is 'evidence_gap'
+        # (runtime activation has not occurred).  The completed_items must still
+        # document the structural wire completeness.
+        completed_text = " ".join(entry.completed_items).lower()
+        assert "reconciliation" in completed_text or "ingress" in completed_text, (
+            "cross_repo_evidence completed_items must document structural wire "
+            "completeness (reconciliation or ingress modules present)"
         )
 
     def test_E02_cross_repo_completed_mentions_reconciliation(self, live_report):
