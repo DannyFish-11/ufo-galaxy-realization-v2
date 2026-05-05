@@ -96,6 +96,19 @@ class StateEventType(str, Enum):
     MESH_UPDATED       = "mesh.updated"        # body mesh topology changed
     TASK_CANCELLED     = "task.cancelled"      # task cancelled by cancel/interrupt signal
 
+    # ── Desktop shell / clothing state (PR-8 V2) ──────────────────────────
+    # These correspond to the UI shell expansion modes in
+    # system_integration/state_machine_ui_integration.py and
+    # system_integration/hardware_trigger.py.  They are emitted whenever the
+    # SystemStateMachine transitions between DORMANT / ISLAND / SIDESHEET /
+    # FULLAGENT.  They are distinct from the tri-state lifecycle events above:
+    # shell events describe how the desktop clothing is rendered; phase events
+    # describe the subject's existential state.
+    SHELL_DORMANT    = "shell.dormant"    # clothing hidden / collapsed
+    SHELL_ISLAND     = "shell.island"     # compact clothing (island mode)
+    SHELL_SIDESHEET  = "shell.sidesheet"  # side panel clothing expansion
+    SHELL_FULLAGENT  = "shell.fullagent"  # full clothing expansion
+
     # ── Entry-mode unification (PR-1 EntryMode) ────────────────────────────
     ENTRY_MODE_RESOLVED = "entry_mode.resolved"  # entry_mode stamped on a request
 
