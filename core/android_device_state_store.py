@@ -219,6 +219,9 @@ class DeviceStateSnapshot:
             "device_id": self.device_id,
             "absorbed_at": self.absorbed_at,
             "snapshot_ts": self.snapshot_ts,
+            # Derived freshness: seconds elapsed since V2 absorbed this snapshot.
+            # Allows operators to detect stale state without manual arithmetic.
+            "snapshot_age_seconds": round(time.time() - self.absorbed_at, 1),
             "llama_cpp_available": self.llama_cpp_available,
             "ncnn_available": self.ncnn_available,
             "active_runtime_type": self.active_runtime_type,
@@ -458,11 +461,14 @@ class _AndroidDeviceStateStore:
         pending_download = sum(1 for s in snapshots if s.pending_first_download)
 
         devices: List[Dict[str, Any]] = []
+        now = time.time()
         for snap in snapshots:
             devices.append({
                 "device_id": snap.device_id,
                 "absorbed_at": snap.absorbed_at,
                 "snapshot_ts": snap.snapshot_ts,
+                # Derived freshness: seconds since V2 absorbed this snapshot.
+                "snapshot_age_seconds": round(now - snap.absorbed_at, 1),
                 "readiness": snap.readiness_summary(),
                 "model": {
                     "model_id": snap.model_id,
@@ -492,6 +498,13 @@ class _AndroidDeviceStateStore:
             "overlay_ready_count": overlay_ready,
             "local_loop_ready_count": local_loop_ready,
             "pending_first_download_count": pending_download,
+            # Freshness summary: True when at least one snapshot has been received.
+            "snapshot_truth_received": total > 0,
+            # Most recent V2-side absorption time across all known devices, or None.
+            # Allows operators to answer "when did we last hear from any Android device?"
+            "last_snapshot_absorbed_at": (
+                max(s.absorbed_at for s in snapshots) if snapshots else None
+            ),
             "devices": devices,
         }
 

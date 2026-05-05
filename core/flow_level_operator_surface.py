@@ -406,6 +406,11 @@ class FlowOperatorProjection:
     # Timestamps
     created_at: Optional[float] = None
     last_updated_at: Optional[float] = None
+    # Unix timestamp of the most recent Android execution event absorbed for
+    # this flow (V2-side ingestion time).  None when no execution events have
+    # been received.  Derived from last_android_execution_event.absorbed_at
+    # so operators can scan execution recency without parsing the full event. (PR-5)
+    last_execution_event_at: Optional[float] = None
 
     # Operator notes
     review_notes: List[str] = field(default_factory=list)
@@ -440,6 +445,7 @@ class FlowOperatorProjection:
             "canonical_result_status": self.canonical_result_status,
             "created_at": self.created_at,
             "last_updated_at": self.last_updated_at,
+            "last_execution_event_at": self.last_execution_event_at,
             "review_notes": list(self.review_notes),
             "_source": self._source,
         }
@@ -520,6 +526,10 @@ class FlowLevelOperatorSurface:
         last_event, phase_summary = self._derive_android_execution_phase(flow_id)
         proj.current_execution_phase = phase_summary
         proj.last_android_execution_event = last_event
+        # Expose the V2-side absorption timestamp at the top level for quick
+        # recency scanning by operator tools. (PR-5)
+        if last_event is not None:
+            proj.last_execution_event_at = last_event.absorbed_at
         if last_event is not None and last_event.is_blocking:
             proj.blocking_reason = last_event.blocking_reason or (
                 f"Blocked at phase={last_event.phase.value}"

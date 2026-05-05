@@ -877,9 +877,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 device_id=device_id or None,
                 limit=limit,
             )
+            event_dicts = [e.to_dict() for e in events]
+            # last_event_at: absorbed_at of the most recent event in the result set,
+            # or None when no events have been received.  Allows operators to answer
+            # "when did we last see Android execution activity?" without scanning the list.
+            last_event_at = event_dicts[0]["absorbed_at"] if event_dicts else None
             return JSONResponse(content={
-                "total_events": len(events),
-                "events": [e.to_dict() for e in events],
+                "total_events": len(event_dicts),
+                "last_event_at": last_event_at,
+                "events": event_dicts,
                 "authority": "OPERATOR_ROUTES_V1",
             })
         except Exception as exc:

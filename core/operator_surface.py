@@ -204,6 +204,9 @@ ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
     "overlay_ready_count",
     "local_loop_ready_count",
     "pending_first_download_count",
+    # Freshness summary fields (PR-5)
+    "snapshot_truth_received",
+    "last_snapshot_absorbed_at",
 })
 """Whitelist of count-level keys retained in OperatorSnapshot.android_ecosystem.
 
@@ -789,8 +792,14 @@ class OperatorSnapshot:
     # GET /api/v1/operator/devices/ecosystem.
     # Keys present: total_devices_with_snapshot, local_ai_ready_count,
     # model_ready_count, accessibility_ready_count, overlay_ready_count,
-    # local_loop_ready_count, pending_first_download_count.
+    # local_loop_ready_count, pending_first_download_count,
+    # snapshot_truth_received, last_snapshot_absorbed_at.
     android_ecosystem: Dict[str, Any] = field(default_factory=dict)
+
+    # Convenience boolean: True when at least one DEVICE_STATE_SNAPSHOT has
+    # been absorbed from an Android device.  Derived from android_ecosystem.
+    # Allows a single-field readiness check without parsing the dict. (PR-5)
+    android_snapshot_truth_received: bool = False
 
     # Authority declaration
     authority: str = OPERATOR_SURFACE_AUTHORITY
@@ -813,6 +822,7 @@ class OperatorSnapshot:
             "source_runtime_posture_counts": dict(self.source_runtime_posture_counts),
             "recent_source_runtime_postures": list(self.recent_source_runtime_postures),
             "android_ecosystem": dict(self.android_ecosystem),
+            "android_snapshot_truth_received": self.android_snapshot_truth_received,
             "authority": self.authority,
             "contract_version": self.contract_version,
             "projection_policy": self.projection_policy,
@@ -1527,6 +1537,10 @@ class OperatorSurface:
             snap.android_ecosystem = {
                 k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
             }
+            # Convenience boolean derived from snapshot_truth_received (PR-5).
+            snap.android_snapshot_truth_received = bool(
+                snap.android_ecosystem.get("snapshot_truth_received", False)
+            )
             filtered = set(eco.keys()) - ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
             if filtered:
                 logger.debug(
