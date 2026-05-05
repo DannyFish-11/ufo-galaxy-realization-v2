@@ -1562,6 +1562,70 @@ class DesktopPresenceRuntime:
             rsession.elapsed_ms(),
         )
 
+    # ------------------------------------------------------------------
+    # PR-8 V2: Compact presence summary for operator surfaces
+    # ------------------------------------------------------------------
+
+    def presence_summary(self) -> Dict[str, Any]:
+        """Return a compact, read-only summary of active presence sessions.
+
+        This is a **shell-owned** view of the current tri-state distribution
+        across all in-flight runtime sessions.  It is intended for operator
+        surfaces and status boards that need to know whether the subject is
+        currently at rest (``silent``), processing (``liminal``), or actively
+        expressing (``manifest``).
+
+        This method is **read-only** — it never mutates session state.
+        It is best-effort: any internal failure returns an empty default dict
+        rather than raising.
+
+        Returns
+        -------
+        dict with keys:
+            ``active_session_count``
+                Total number of in-flight runtime sessions.
+            ``tristate_distribution``
+                Dict mapping each TriState value (``"silent"``,
+                ``"liminal"``, ``"manifest"``) to its session count.
+            ``dominant_tristate``
+                The most active non-silent phase in current sessions, or
+                ``"silent"`` when no request is in progress.  Follows the
+                priority order: ``manifest`` > ``liminal`` > ``silent``.
+        """
+        try:
+            sessions = list(self._active_sessions.values())
+            counts: Dict[str, int] = {
+                TriState.SILENT.value: 0,
+                TriState.LIMINAL.value: 0,
+                TriState.MANIFEST.value: 0,
+            }
+            for sess in sessions:
+                key = sess.tristate.value
+                counts[key] = counts.get(key, 0) + 1
+
+            # Dominant tri-state: manifest > liminal > silent
+            if counts.get(TriState.MANIFEST.value, 0) > 0:
+                dominant = TriState.MANIFEST.value
+            elif counts.get(TriState.LIMINAL.value, 0) > 0:
+                dominant = TriState.LIMINAL.value
+            else:
+                dominant = TriState.SILENT.value
+
+            return {
+                "active_session_count": len(sessions),
+                "tristate_distribution": dict(counts),
+                "dominant_tristate": dominant,
+            }
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime.presence_summary failed (non-fatal): %s", _err
+            )
+            return {
+                "active_session_count": 0,
+                "tristate_distribution": {},
+                "dominant_tristate": TriState.SILENT.value,
+            }
+
 
 # ---------------------------------------------------------------------------
 # Singleton accessor

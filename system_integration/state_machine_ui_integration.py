@@ -206,7 +206,7 @@ class SystemStateMachine:
         # 执行进入回调
         self._execute_state_enter_callbacks(new_state)
         
-        # 发布状态转换事件
+        # 发布状态转换事件 (legacy integration bus — always emitted for backward compat)
         event_bus.publish_sync(
             EventType.STATE_TRANSITION,
             "state_machine",
@@ -217,7 +217,35 @@ class SystemStateMachine:
                 "trigger_source": trigger_source
             }
         )
-        
+
+        # PR-8 V2: also emit the canonical SHELL_* event on the unified
+        # core.state_event_bus so operator surfaces and observability
+        # consumers see shell-state transitions alongside phase transitions.
+        # Best-effort: failure must not block the state transition.
+        try:
+            from core.state_event_bus import emit as _seb_emit, StateEventType as _SET
+
+            _shell_event_map = {
+                SystemState.DORMANT:    _SET.SHELL_DORMANT,
+                SystemState.ISLAND:     _SET.SHELL_ISLAND,
+                SystemState.SIDESHEET:  _SET.SHELL_SIDESHEET,
+                SystemState.FULLAGENT:  _SET.SHELL_FULLAGENT,
+            }
+            _et = _shell_event_map.get(new_state)
+            if _et is not None:
+                _seb_emit(
+                    _et,
+                    source="state_machine_ui_integration",
+                    payload={
+                        "from_state": old_state.value,
+                        "to_state": new_state.value,
+                        "trigger_type": trigger_type.value,
+                        "trigger_source": trigger_source,
+                    },
+                )
+        except Exception:
+            pass
+
         self._logger.info(f"状态转换: {old_state.value} -> {new_state.value} "
                          f"(触发: {trigger_type.value})")
         

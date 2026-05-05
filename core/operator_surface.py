@@ -797,6 +797,25 @@ class OperatorSnapshot:
     contract_version: str = OPERATOR_SURFACE_CONTRACT_VERSION
     projection_policy: str = OPERATOR_SURFACE_PROJECTION_POLICY
 
+    # ── PR-8 V2: Desktop shell / presence manifestation summary ───────────
+    # Reflects the current shell expansion mode and subject presence tri-state
+    # without creating a parallel truth store.  Values are read from the
+    # canonical singletons (SystemStateMachine and DesktopPresenceRuntime)
+    # at snapshot time.
+    #
+    # desktop_shell_state: current UI shell mode (dormant/island/sidesheet/
+    #     fullagent).  Empty string when the SystemStateMachine singleton
+    #     is unavailable (e.g. headless test environments).
+    # presence_tristate: dominant subject tri-state across all in-flight
+    #     runtime sessions (silent/liminal/manifest).  Reports "silent"
+    #     when no session is active.
+    # manifestation_summary: compact aggregated view combining both layers
+    #     so operator surfaces can inspect the current AI body manifestation
+    #     state in a single field.
+    desktop_shell_state: str = ""
+    presence_tristate: str = ""
+    manifestation_summary: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "snapshot_id": self.snapshot_id,
@@ -816,6 +835,10 @@ class OperatorSnapshot:
             "authority": self.authority,
             "contract_version": self.contract_version,
             "projection_policy": self.projection_policy,
+            # PR-8 V2: shell/presence manifestation fields
+            "desktop_shell_state": self.desktop_shell_state,
+            "presence_tristate": self.presence_tristate,
+            "manifestation_summary": dict(self.manifestation_summary),
         }
 
 
@@ -1535,7 +1558,7 @@ class OperatorSurface:
                     sorted(filtered),
                 )
         except Exception as exc:
-            logger.debug("operator_snapshot: android ecosystem unavailable: %s", exc)
+            logger.debug("operator_snapshot: delegated flow count unavailable: %s", exc)
 
         # Delegated flow count — active flows from DelegatedFlowEntityRuntime (PR-4)
         # For per-flow detail see GET /api/v1/operator/flows.
@@ -1548,6 +1571,37 @@ class OperatorSurface:
             )
         except Exception as exc:
             logger.debug("operator_snapshot: delegated flow count unavailable: %s", exc)
+
+        # PR-8 V2: Desktop shell state — read the current UI clothing mode from
+        # the SystemStateMachine singleton.  Gracefully degrades when the module
+        # is unavailable (e.g. headless / non-desktop deployments).
+        try:
+            from system_integration.state_machine_ui_integration import (
+                SystemStateMachine as _SSM,
+            )
+            _ssm = _SSM()
+            snap.desktop_shell_state = _ssm.current_state.value
+        except Exception as exc:
+            logger.debug("operator_snapshot: desktop shell state unavailable: %s", exc)
+
+        # PR-8 V2: Presence tri-state — read the dominant tri-state from the
+        # DesktopPresenceRuntime singleton.  This tells operator surfaces
+        # whether the subject is currently at rest, processing, or manifesting.
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime as _get_dpr
+            _psum = _get_dpr().presence_summary()
+            snap.presence_tristate = _psum.get("dominant_tristate", "silent")
+        except Exception as exc:
+            logger.debug("operator_snapshot: presence tristate unavailable: %s", exc)
+
+        # PR-8 V2: Compose manifestation_summary by combining shell and presence
+        # state.  This is a derived, read-only view — no new truth is stored.
+        if snap.desktop_shell_state or snap.presence_tristate:
+            snap.manifestation_summary = {
+                "desktop_shell_state": snap.desktop_shell_state,
+                "presence_tristate": snap.presence_tristate,
+                "_source": "operator_surface.operator_snapshot",
+            }
 
         return snap
 
