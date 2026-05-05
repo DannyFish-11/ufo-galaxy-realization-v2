@@ -449,7 +449,7 @@ def _module_file_exists(module_path: str) -> bool:
         spec = importlib.util.find_spec(module_path)
         if spec is not None:
             return True
-    except Exception:
+    except (ModuleNotFoundError, ImportError, AttributeError, ValueError):
         pass
 
     # Fallback: convert dotted path to filesystem path relative to any sys.path entry
@@ -492,10 +492,26 @@ def _try_import_with_attr(module_path: str, attr_name: str) -> bool:
     try:
         mod = importlib.import_module(module_path)
         return hasattr(mod, attr_name)
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         pass
     # Fall back to file existence
     return _module_file_exists(module_path)
+
+
+# ---------------------------------------------------------------------------
+# Named constants for module candidates
+# ---------------------------------------------------------------------------
+
+# Candidate module paths for the body mesh registry — checked in priority order
+_MESH_MODULE_CANDIDATES: tuple = ("core.mesh_coordinator", "core.mesh")
+
+
+def _find_mesh_module() -> Optional[str]:
+    """Return the first importable mesh module path, or None if none exist."""
+    for candidate in _MESH_MODULE_CANDIDATES:
+        if _try_import(candidate):
+            return candidate
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -531,13 +547,10 @@ def _validate_system_identity() -> ClaimValidation:
         gaps.append("core.openclawd.OpenClawd not found")
 
     # BodyMeshRegistry / mesh model
-    mesh_anchor: Optional[str] = None
-    for candidate in ("core.mesh_coordinator", "core.mesh"):
-        if _try_import(candidate):
-            mesh_anchor = candidate
-            anchors.append(candidate)
-            break
-    if mesh_anchor is None:
+    mesh_anchor = _find_mesh_module()
+    if mesh_anchor is not None:
+        anchors.append(mesh_anchor)
+    else:
         gaps.append("No BodyMeshRegistry / mesh_coordinator module importable")
 
     # DesktopPresenceRuntime — tri-state lifecycle (SILENT/LIMINAL/MANIFEST)
@@ -787,13 +800,10 @@ def _validate_network_is_body() -> ClaimValidation:
         gaps.append("registration handler not found")
 
     # Proof 2: BodyMeshRegistry / mesh model
-    mesh_found = False
-    for candidate in ("core.mesh_coordinator", "core.mesh"):
-        if _try_import(candidate):
-            anchors.append(f"{candidate} [body mesh registry]")
-            mesh_found = True
-            break
-    if not mesh_found:
+    mesh_module = _find_mesh_module()
+    if mesh_module is not None:
+        anchors.append(f"{mesh_module} [body mesh registry]")
+    else:
         gaps.append("BodyMeshRegistry / mesh_coordinator not found")
 
     # Proof 3: Hybrid execution path

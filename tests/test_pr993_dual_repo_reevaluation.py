@@ -167,56 +167,56 @@ class TestClaimValidations:
     """Individual claim validation records must be well-formed."""
 
     @pytest.fixture(scope="class")
-    def by_id(self) -> dict:
+    def claim_validations_by_id(self) -> dict:
         report = build_pr993_reevaluation()
         return {c.claim_id: c for c in report.claim_validations}
 
-    def test_no_claim_is_missing_runtime_evidence(self, by_id: dict) -> None:
+    def test_no_claim_is_missing_runtime_evidence(self, claim_validations_by_id: dict) -> None:
         """No top-level PR #993 claim should fall into the lowest evidence tier.
 
         All claims have at least structural/importable code evidence.
         """
-        for claim_id, claim in by_id.items():
+        for claim_id, claim in claim_validations_by_id.items():
             assert claim.evidence_strength != EvidenceStrength.MISSING_RUNTIME_EVIDENCE, (
                 f"Claim {claim_id.value} unexpectedly has MISSING_RUNTIME_EVIDENCE. "
                 f"Gap note: {claim.gap_note}"
             )
 
-    def test_system_identity_is_strongly_or_partially(self, by_id: dict) -> None:
+    def test_system_identity_is_strongly_or_partially(self, claim_validations_by_id: dict) -> None:
         """System identity claim should be at least PARTIALLY_ESTABLISHED."""
-        claim = by_id[PR993ClaimId.SYSTEM_IDENTITY_DISTRIBUTED_AI_BODY]
+        claim = claim_validations_by_id[PR993ClaimId.SYSTEM_IDENTITY_DISTRIBUTED_AI_BODY]
         assert claim.evidence_strength in (
             EvidenceStrength.STRONGLY_ESTABLISHED,
             EvidenceStrength.PARTIALLY_ESTABLISHED,
         ), f"Unexpected evidence strength: {claim.evidence_strength}"
 
-    def test_v2_governance_has_code_anchors(self, by_id: dict) -> None:
+    def test_v2_governance_has_code_anchors(self, claim_validations_by_id: dict) -> None:
         """V2 governance claim must have real code anchors."""
-        claim = by_id[PR993ClaimId.V2_SOLE_GOVERNANCE_AUTHORITY]
+        claim = claim_validations_by_id[PR993ClaimId.V2_SOLE_GOVERNANCE_AUTHORITY]
         assert len(claim.code_anchors) >= 4, (
             f"V2 governance claim should have at least 4 code anchors; "
             f"got {len(claim.code_anchors)}: {claim.code_anchors}"
         )
 
-    def test_android_runtime_carrier_has_code_anchors(self, by_id: dict) -> None:
+    def test_android_runtime_carrier_has_code_anchors(self, claim_validations_by_id: dict) -> None:
         """Android runtime carrier claim must have real code anchors."""
-        claim = by_id[PR993ClaimId.ANDROID_IS_RUNTIME_CARRIER_NOT_CLIENT]
+        claim = claim_validations_by_id[PR993ClaimId.ANDROID_IS_RUNTIME_CARRIER_NOT_CLIENT]
         assert len(claim.code_anchors) >= 3, (
             f"Android runtime carrier claim should have at least 3 code anchors; "
             f"got {len(claim.code_anchors)}"
         )
 
-    def test_network_is_body_has_multiple_proofs(self, by_id: dict) -> None:
+    def test_network_is_body_has_multiple_proofs(self, claim_validations_by_id: dict) -> None:
         """Network-is-body claim must have at least 3 of the 5 structural proofs."""
-        claim = by_id[PR993ClaimId.NETWORK_IS_THE_BODY]
+        claim = claim_validations_by_id[PR993ClaimId.NETWORK_IS_THE_BODY]
         assert len(claim.code_anchors) >= 3, (
             f"Network-is-body claim should have at least 3 proof anchors; "
             f"got {len(claim.code_anchors)}"
         )
 
-    def test_beyond_poc_has_four_chain_anchors(self, by_id: dict) -> None:
+    def test_beyond_poc_has_four_chain_anchors(self, claim_validations_by_id: dict) -> None:
         """Beyond-PoC claim must confirm all 4 execution chains by import."""
-        claim = by_id[PR993ClaimId.SYSTEM_BEYOND_POC]
+        claim = claim_validations_by_id[PR993ClaimId.SYSTEM_BEYOND_POC]
         # Should have registration, capability_report, delegated_signal, handoff_v2_result
         assert len(claim.code_anchors) >= 4, (
             f"Beyond-PoC claim should have at least 4 chain anchors; "
@@ -224,14 +224,14 @@ class TestClaimValidations:
         )
 
     def test_remaining_work_closure_is_partially_established(
-        self, by_id: dict
+        self, claim_validations_by_id: dict
     ) -> None:
         """Remaining-work-is-closure claim should be PARTIALLY_ESTABLISHED.
 
         PR #993 itself acknowledged Axis 2 wire path as incomplete.
         A STRONGLY_ESTABLISHED verdict here would be inaccurate.
         """
-        claim = by_id[PR993ClaimId.REMAINING_WORK_IS_CLOSURE_NOT_CAPABILITY]
+        claim = claim_validations_by_id[PR993ClaimId.REMAINING_WORK_IS_CLOSURE_NOT_CAPABILITY]
         assert claim.evidence_strength == EvidenceStrength.PARTIALLY_ESTABLISHED, (
             f"remaining_work_closure expected PARTIALLY_ESTABLISHED; "
             f"got {claim.evidence_strength}. "
@@ -240,10 +240,10 @@ class TestClaimValidations:
         )
 
     def test_all_claims_have_android_side_evidence_string(
-        self, by_id: dict
+        self, claim_validations_by_id: dict
     ) -> None:
         """All claims must have a non-empty android_side_evidence string."""
-        for claim_id, claim in by_id.items():
+        for claim_id, claim in claim_validations_by_id.items():
             assert claim.android_side_evidence, (
                 f"Claim {claim_id.value} has empty android_side_evidence. "
                 "All claims must document Android-side evidence."
@@ -259,72 +259,72 @@ class TestCanonicalPathStatuses:
     """Canonical path status records must accurately reflect code reality."""
 
     @pytest.fixture(scope="class")
-    def by_id(self) -> dict:
+    def path_statuses_by_id(self) -> dict:
         report = build_pr993_reevaluation()
         return {p.path_id: p for p in report.canonical_path_statuses}
 
-    def test_android_registration_is_v2_implemented(self, by_id: dict) -> None:
+    def test_android_registration_is_v2_implemented(self, path_statuses_by_id: dict) -> None:
         """Android registration V2 side must be implemented."""
-        path = by_id[CanonicalPathId.ANDROID_REGISTRATION]
+        path = path_statuses_by_id[CanonicalPathId.ANDROID_REGISTRATION]
         assert path.v2_side_implemented, (
             "galaxy_gateway.android.handlers.registration should be importable."
         )
 
-    def test_android_registration_is_android_implemented(self, by_id: dict) -> None:
+    def test_android_registration_is_android_implemented(self, path_statuses_by_id: dict) -> None:
         """Android registration Android side must be implemented."""
-        path = by_id[CanonicalPathId.ANDROID_REGISTRATION]
+        path = path_statuses_by_id[CanonicalPathId.ANDROID_REGISTRATION]
         assert path.android_side_implemented
 
-    def test_runtime_snapshot_is_not_runtime_closed(self, by_id: dict) -> None:
+    def test_runtime_snapshot_is_not_runtime_closed(self, path_statuses_by_id: dict) -> None:
         """Runtime snapshot uplink should NOT claim runtime_closed.
 
         No CI cross-repo emulator evidence exists.
         """
-        path = by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
+        path = path_statuses_by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
         assert not path.runtime_closed, (
             "runtime_snapshot_uplink should not be runtime_closed — "
             "no CI emulator-backed cross-repo proof exists."
         )
 
-    def test_runtime_snapshot_closure_label(self, by_id: dict) -> None:
+    def test_runtime_snapshot_closure_label(self, path_statuses_by_id: dict) -> None:
         """Runtime snapshot uplink should be surface_alignment_only."""
-        path = by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
+        path = path_statuses_by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
         assert path.closure_label == "surface_alignment_only", (
             f"Expected 'surface_alignment_only'; got {path.closure_label!r}."
         )
 
-    def test_execution_event_is_not_runtime_closed(self, by_id: dict) -> None:
+    def test_execution_event_is_not_runtime_closed(self, path_statuses_by_id: dict) -> None:
         """Execution event uplink should not be runtime_closed."""
-        path = by_id[CanonicalPathId.EXECUTION_EVENT_UPLINK]
+        path = path_statuses_by_id[CanonicalPathId.EXECUTION_EVENT_UPLINK]
         assert not path.runtime_closed
 
-    def test_task_dispatch_result_is_v2_implemented(self, by_id: dict) -> None:
+    def test_task_dispatch_result_is_v2_implemented(self, path_statuses_by_id: dict) -> None:
         """Task dispatch/execute/result path V2 side must be implemented."""
-        path = by_id[CanonicalPathId.TASK_DISPATCH_EXECUTE_RESULT]
+        path = path_statuses_by_id[CanonicalPathId.TASK_DISPATCH_EXECUTE_RESULT]
         assert path.v2_side_implemented, (
             "DeviceRouter, task_lifecycle handler, handoff_v2_result should be importable."
         )
 
     def test_orchestration_consumes_android_truth_is_not_runtime_closed(
-        self, by_id: dict
+        self, path_statuses_by_id: dict
     ) -> None:
         """Orchestration-consumes-Android-truth should not be runtime_closed.
 
         The store is never filled in CI so the consume path has no real input.
         """
-        path = by_id[CanonicalPathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH]
+        path = path_statuses_by_id[CanonicalPathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH]
         assert not path.runtime_closed
 
-    def test_all_paths_have_description(self, by_id: dict) -> None:
+    def test_all_paths_have_description(self, path_statuses_by_id: dict) -> None:
         """All canonical path statuses must have a non-empty description."""
-        for path_id, path in by_id.items():
+        for path_id, path in path_statuses_by_id.items():
             assert path.description, (
                 f"CanonicalPathId.{path_id.name} has empty description."
             )
 
-    def test_open_paths_have_gap_description(self, by_id: dict) -> None:
+    def test_open_paths_have_gap_description(self, path_statuses_by_id: dict) -> None:
         """All non-closed paths must have a non-empty gap_description."""
-        for path_id, path in by_id.items():
+        for path_id, path in path_statuses_by_id.items():
             if not path.runtime_closed:
                 assert path.gap_description, (
                     f"CanonicalPathId.{path_id.name} is not runtime_closed but "
