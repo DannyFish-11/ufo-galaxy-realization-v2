@@ -622,7 +622,7 @@ def _source_contains(module_path: str, pattern: str) -> bool:
         if spec and spec.origin and os.path.isfile(spec.origin):
             with open(spec.origin, encoding="utf-8", errors="replace") as fh:
                 return pattern in fh.read()
-    except Exception:  # noqa: BLE001
+    except (ImportError, ModuleNotFoundError, AttributeError, OSError, UnicodeDecodeError):
         pass
     # Fallback: scan sys.path
     rel_path = module_path.replace(".", os.sep) + ".py"
@@ -632,7 +632,7 @@ def _source_contains(module_path: str, pattern: str) -> bool:
             try:
                 with open(candidate, encoding="utf-8", errors="replace") as fh:
                     return pattern in fh.read()
-            except Exception:  # noqa: BLE001
+            except (OSError, UnicodeDecodeError):
                 pass
     return False
 
@@ -1937,6 +1937,15 @@ def build_comprehensive_joint_audit() -> ComprehensiveAuditReport:
 
 # ---------------------------------------------------------------------------
 # Singleton cache
+#
+# Thread-safe double-checked singleton using an explicit Lock.  The report is
+# built lazily on the first call to get_comprehensive_joint_audit() and then
+# cached for the lifetime of the process.  Thread safety is needed because
+# multiple test threads (or concurrent request handlers) might call
+# get_comprehensive_joint_audit() simultaneously.
+#
+# reset_comprehensive_joint_audit() clears the cache and is provided
+# exclusively for test isolation — production code should not call it.
 # ---------------------------------------------------------------------------
 
 _CACHE_LOCK = threading.Lock()

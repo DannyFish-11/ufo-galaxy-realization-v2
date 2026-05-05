@@ -126,7 +126,7 @@ class TestModuleImport:
         assert "多模态" in COMPREHENSIVE_AUDIT_VERDICT_ZH
 
     def test_verdict_zh_mentions_three_state(self) -> None:
-        assert "三态" in COMPREHENSIVE_AUDIT_VERDICT_ZH or "three" in COMPREHENSIVE_AUDIT_VERDICT_ZH.lower()
+        assert "三态" in COMPREHENSIVE_AUDIT_VERDICT_ZH
 
     def test_audit_evidence_label_enum_has_7_tiers(self) -> None:
         tiers = list(AuditEvidenceLabel)
@@ -411,8 +411,8 @@ class TestDimensionEntries:
             d for d in report.dimension_entries
             if d.dimension == AuditDimension.NATURAL_LANGUAGE_DRIVING
         )
-        all_gaps_text = " ".join(entry.gap_items + entry.partial_items)
-        assert "LLM" in all_gaps_text or "lm" in all_gaps_text.lower() or "e2e" in all_gaps_text.lower()
+        all_gaps_text_lower = " ".join(entry.gap_items + entry.partial_items).lower()
+        assert "llm" in all_gaps_text_lower or "e2e" in all_gaps_text_lower
 
     def test_multimodal_gap_items_mention_disabled_by_default(
         self, report: ComprehensiveAuditReport
