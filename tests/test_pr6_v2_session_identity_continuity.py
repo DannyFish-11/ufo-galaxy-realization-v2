@@ -240,14 +240,14 @@ class TestE2EPathSessionIdentity:
     """_handle_via_e2e forwards control_session_id and runtime_attachment_session_id."""
 
     def test_handle_via_e2e_accepts_control_session_id(self):
-        """B1: _handle_via_e2e signature accepts control_session_id."""
+        """B1a: _handle_via_e2e signature accepts control_session_id."""
         import inspect
         from core.desktop_presence_runtime import DesktopPresenceRuntime
         sig = inspect.signature(DesktopPresenceRuntime._handle_via_e2e)
         assert "control_session_id" in sig.parameters
 
     def test_handle_via_e2e_accepts_runtime_attachment_session_id(self):
-        """B1: _handle_via_e2e signature accepts runtime_attachment_session_id."""
+        """B1b: _handle_via_e2e signature accepts runtime_attachment_session_id."""
         import inspect
         from core.desktop_presence_runtime import DesktopPresenceRuntime
         sig = inspect.signature(DesktopPresenceRuntime._handle_via_e2e)
@@ -257,11 +257,9 @@ class TestE2EPathSessionIdentity:
         """B2: _dispatch forwards control_session_id from kwargs to _handle_via_e2e."""
         import inspect
         from core.desktop_presence_runtime import DesktopPresenceRuntime
-        # We verify by checking the source of _dispatch references control_session_id
+        # Verify by checking that _dispatch's source references control_session_id
         # in the e2e branch via kwargs.get
-        import dis, io
-        f = DesktopPresenceRuntime._dispatch
-        source = inspect.getsource(f)
+        source = inspect.getsource(DesktopPresenceRuntime._dispatch)
         assert "control_session_id" in source
         assert "kwargs.get" in source
 
@@ -462,12 +460,11 @@ class TestReconnectRecoveryContinuity:
         coord._recover_body_mesh(report)
         assert report.body_mesh_entries_restored == 2
 
-    def test_session_truth_recovery_step_in_run_recovery_order(self):
-        """D1 (regression): _recover_session_truth is called in run_recovery."""
+    def test_session_truth_recovery_runs_after_inflight_task_recovery(self):
+        """D5: _recover_session_truth runs after _recover_inflight_tasks in run_recovery."""
         import inspect
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
         source = inspect.getsource(RuntimeRestartRecoveryCoordinator.run_recovery)
-        # _recover_session_truth must appear after _recover_inflight_tasks in the source
         pos_inflight = source.find("_recover_inflight_tasks")
         pos_truth = source.find("_recover_session_truth")
         assert pos_truth > 0, "_recover_session_truth missing from run_recovery"
