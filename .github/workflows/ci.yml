@@ -198,6 +198,41 @@ jobs:
           test -x scripts/quick_verify.sh
           echo "✅ scripts/quick_verify.sh is executable."
 
+  android-runtime-state-e2e:
+    # Android → V2 runtime state canonical path evidence.
+    # Proves that Android-originated device_state_snapshot travels the full
+    # canonical path:
+    #   device_register → device_state_snapshot → android_device_state_store
+    # AND that the state becomes visible in V2 operator/ecosystem surfaces.
+    #
+    # Two test modules cooperate:
+    #   - tests/integration/test_android_runtime_state_snapshot_e2e.py
+    #     (bridge-layer, operator surface, regression guards, handler guards)
+    #   - tests/integration/websocket/test_android_snapshot_ws_transport.py
+    #     (WebSocket transport-layer: /ws/device/{id} → handler → store)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run Android runtime state e2e tests (bridge layer)
+        run: |
+          python -m pytest \
+            tests/integration/test_android_runtime_state_snapshot_e2e.py \
+            -v --tb=short
+          echo "✅ Android→V2 bridge-layer e2e tests passed."
+      - name: Run Android runtime state e2e tests (WebSocket transport layer)
+        run: |
+          python -m pytest \
+            tests/integration/websocket/test_android_snapshot_ws_transport.py \
+            -v --tb=short
+          echo "✅ Android→V2 WebSocket transport-layer e2e tests passed."
+
   conformance-tests:
     # PR-7 Final: AIP v3 envelope, gateway routing, NATS trace, and UDM SSOT
     # conformance tests — must all pass before merging to main.
