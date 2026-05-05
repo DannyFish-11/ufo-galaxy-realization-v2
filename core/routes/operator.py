@@ -815,7 +815,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     content={"detail": f"no state snapshot for device '{device_id}'"},
                     status_code=404,
                 )
-            return JSONResponse(content=snap.to_dict())
+            return JSONResponse(content={"authority": "OPERATOR_ROUTES_V1", **snap.to_dict()})
         except Exception as exc:
             logger.error("device_ecosystem(%s) endpoint error: %s", device_id, exc)
             return JSONResponse(
@@ -870,9 +870,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         """
         try:
-            from core.android_device_state_store import get_android_device_state_store
-            store = get_android_device_state_store()
-            events = store.list_recent_execution_events(
+            from core.android_device_state_store import list_recent_execution_events
+            events = list_recent_execution_events(
                 flow_id=flow_id or None,
                 device_id=device_id or None,
                 limit=limit,
