@@ -577,23 +577,67 @@ class FlowLevelOperatorSurface:
     ) -> Tuple[Optional[AndroidCanonicalExecutionEvent], str]:
         """Derive the current Android execution phase for *flow_id*.
 
-        Inspects the FlowTruthAlignmentRuntime for the most recent decision
-        whose metadata encodes an Android execution phase signal.  Returns a
-        tuple of (last_event_or_None, phase_string).
+        Resolution order
+        ----------------
+        1.  **Entity metadata** (primary) — checks ``_last_android_execution_event``
+            written by :func:`~core.android_device_state_store._forward_execution_event_to_flow_surface`
+            when a ``DEVICE_EXECUTION_EVENT`` is absorbed.  This is the most
+            direct path: a real Android execution event carries an explicit
+            phase string that should take precedence over inferred mappings.
+        2.  **FlowTruthAlignmentRuntime** (fallback) — checks the most recent
+            truth alignment record for an ``android_execution_phase`` evidence
+            field, then falls back to ``_truth_kind_to_execution_phase`` mapping.
+            This path fires when no direct execution events have been received
+            but truth alignment has progressed (e.g. result delivery, cancel).
 
-        When no execution events have been absorbed for this flow the returned
-        phase string is ``AndroidExecutionPhase.unknown.value``.
+        Returns a tuple of (last_event_or_None, phase_string).  When no
+        execution events have been absorbed for this flow the returned phase
+        string is ``AndroidExecutionPhase.unknown.value``.
         """
         last_event: Optional[AndroidCanonicalExecutionEvent] = None
         phase_str = AndroidExecutionPhase.unknown.value
 
+        # ── 1. Entity metadata (primary) ─────────────────────────────────
+        try:
+            from core.delegated_flow_entity import get_delegated_flow_entity_runtime
+            runtime = get_delegated_flow_entity_runtime()
+            entity = runtime.get(flow_id)
+            if entity is not None:
+                meta = getattr(entity, "metadata", None) or {}
+                ace_dict = meta.get("_last_android_execution_event")
+                if isinstance(ace_dict, dict):
+                    ev_phase = AndroidExecutionPhase.from_string(
+                        ace_dict.get("phase", "unknown")
+                    )
+                    last_event = AndroidCanonicalExecutionEvent(
+                        event_id=ace_dict.get("event_id", ""),
+                        flow_id=flow_id,
+                        phase=ev_phase,
+                        step_index=ace_dict.get("step_index", -1),
+                        detail=ace_dict.get("detail", ""),
+                        is_blocking=bool(ace_dict.get("is_blocking", False)),
+                        blocking_reason=ace_dict.get("blocking_reason", ""),
+                        policy_gate=ace_dict.get("policy_gate", ""),
+                        absorbed_at=ace_dict.get("absorbed_at", 0.0),
+                        android_ts=ace_dict.get("android_ts"),
+                        evidence=dict(ace_dict.get("evidence") or {}),
+                    )
+                    phase_str = ev_phase.value
+                    return last_event, phase_str
+        except Exception as exc:
+            logger.debug(
+                "_derive_android_execution_phase(%s) entity-metadata path failed: %s",
+                flow_id, exc,
+            )
+
+        # ── 2. FlowTruthAlignmentRuntime (fallback) ───────────────────────
         try:
             from core.flow_level_truth_ownership import (
                 get_flow_truth_alignment_runtime,
             )
-            runtime = get_flow_truth_alignment_runtime()
+            ftar = get_flow_truth_alignment_runtime()
             # get_by_flow_id returns list newest-first
-            flow_records = runtime.get_by_flow_id(flow_id)
+            flow_records = ftar.get_by_flow_id(flow_id)
             if not flow_records:
                 return last_event, phase_str
 
@@ -625,7 +669,8 @@ class FlowLevelOperatorSurface:
             )
         except Exception as exc:
             logger.debug(
-                "_derive_android_execution_phase(%s) failed: %s", flow_id, exc
+                "_derive_android_execution_phase(%s) truth-alignment path failed: %s",
+                flow_id, exc,
             )
 
         return last_event, phase_str
