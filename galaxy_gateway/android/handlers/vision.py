@@ -58,6 +58,7 @@ async def handle_vision_request(
             task_context=task_context,
             mode=mode,
             device_id=device_id or "",
+            task_id=task_id,
         )
     except Exception as exc:
         logger.warning(
@@ -91,6 +92,7 @@ async def _process_via_runtime_shell(
     task_context: str,
     mode: str,
     device_id: str,
+    task_id: str = "",
 ) -> Dict[str, Any]:
     """Route the vision request through the runtime shell multimodal path."""
     from core.desktop_presence_runtime import get_desktop_presence_runtime
@@ -111,12 +113,19 @@ async def _process_via_runtime_shell(
         metadata={"device_id": device_id, "mode": mode},
     )
 
+    # Derive a stable session_id for this vision request so the carrier can
+    # be correlated with the same authority-chain session across calls.
+    _session_id = task_id or f"android_vision_{device_id}"
+
     prompt = task_context or "Analyse this Android screen and describe what you see."
     result = await runtime.handle_request(
         message=prompt,
         source="android_vision",
-        multimodal_context=mm_context,
         device_id=device_id or None,
+        session_id=_session_id,
+        user_id=device_id or "android",
+        multimodal_context=mm_context,
+        entry_mode="local",
         mode=mode,
     )
 

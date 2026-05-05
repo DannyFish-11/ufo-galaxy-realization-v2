@@ -926,8 +926,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             source="chat",
                             device_id=device_id,
                             session_id=data.get("session_id", device_id),
+                            user_id=data.get("user_id") or device_id or "default",
                             context=_context,
                             multimodal_context=data.get("multimodal_context"),
+                            entry_mode=data.get("entry_mode", "local"),
                         )
                         await websocket.send_json({
                             "type": "chat_reply",

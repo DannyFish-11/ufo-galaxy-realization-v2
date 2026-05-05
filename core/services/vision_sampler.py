@@ -261,11 +261,17 @@ async def run_sampling_session(
         from core.desktop_presence_runtime import get_desktop_presence_runtime
 
         runtime = get_desktop_presence_runtime()
+        # Derive a stable session_id for this sampling run so the carrier can
+        # be correlated through the authority chain.
+        _session_id = f"vision_sampler_{device_id}"
         runtime_response = await runtime.handle_request(
             message=effective_prompt,
             source="vision_sampler",
             device_id=device_id,
+            session_id=_session_id,
+            user_id=device_id or "vision_sampler",
             multimodal_context=mm_context,
+            entry_mode="local",
             mode=mode,
         )
         logger.info(
