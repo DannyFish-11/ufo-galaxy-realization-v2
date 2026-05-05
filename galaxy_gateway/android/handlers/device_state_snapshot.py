@@ -76,6 +76,7 @@ async def handle_device_state_snapshot(
     message_id = message.get("message_id") or str(uuid.uuid4())
     payload = message.get("payload") or {}
 
+    status = "absorbed"
     try:
         from core.android_device_state_store import absorb_device_state_snapshot
         snap = absorb_device_state_snapshot(device_id, payload)
@@ -93,16 +94,18 @@ async def handle_device_state_snapshot(
             "snapshot from %s discarded",
             device_id,
         )
+        status = "error"
     except Exception as exc:
         logger.warning(
             "Failed to absorb device_state_snapshot from %s: %s",
             device_id, exc,
         )
+        status = "error"
 
     return {
         "type": "device_state_snapshot_ack",
         "device_id": device_id,
-        "status": "absorbed",
+        "status": status,
         "correlation_id": message_id,
     }
 
@@ -137,6 +140,7 @@ async def handle_device_execution_event(
     message_id = message.get("message_id") or str(uuid.uuid4())
     payload = message.get("payload") or {}
 
+    status = "absorbed"
     try:
         from core.android_device_state_store import absorb_device_execution_event
         evt = absorb_device_execution_event(device_id, payload)
@@ -153,15 +157,17 @@ async def handle_device_execution_event(
             "event from %s discarded",
             device_id,
         )
+        status = "error"
     except Exception as exc:
         logger.warning(
             "Failed to absorb device_execution_event from %s: %s",
             device_id, exc,
         )
+        status = "error"
 
     return {
         "type": "device_execution_event_ack",
         "device_id": device_id,
-        "status": "absorbed",
+        "status": status,
         "correlation_id": message_id,
     }

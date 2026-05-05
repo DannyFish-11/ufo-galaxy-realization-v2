@@ -440,6 +440,7 @@ class _AndroidDeviceStateStore:
         model_ready = sum(1 for s in snapshots if s.model_ready)
         accessibility_ready = sum(1 for s in snapshots if s.accessibility_ready)
         overlay_ready = sum(1 for s in snapshots if s.overlay_ready)
+        local_loop_ready = sum(1 for s in snapshots if s.local_loop_ready)
         pending_download = sum(1 for s in snapshots if s.pending_first_download)
 
         devices: List[Dict[str, Any]] = []
@@ -447,6 +448,7 @@ class _AndroidDeviceStateStore:
             devices.append({
                 "device_id": snap.device_id,
                 "absorbed_at": snap.absorbed_at,
+                "snapshot_ts": snap.snapshot_ts,
                 "readiness": snap.readiness_summary(),
                 "model": {
                     "model_id": snap.model_id,
@@ -459,6 +461,8 @@ class _AndroidDeviceStateStore:
                 "active_runtime_type": snap.active_runtime_type,
                 "offline_queue_depth": snap.offline_queue_depth,
                 "current_fallback_tier": snap.current_fallback_tier,
+                "planner_fallback_tier": snap.planner_fallback_tier,
+                "grounding_fallback_tier": snap.grounding_fallback_tier,
                 "warmup_result": snap.warmup_result,
             })
 
@@ -468,6 +472,7 @@ class _AndroidDeviceStateStore:
             "model_ready_count": model_ready,
             "accessibility_ready_count": accessibility_ready,
             "overlay_ready_count": overlay_ready,
+            "local_loop_ready_count": local_loop_ready,
             "pending_first_download_count": pending_download,
             "devices": devices,
         }
