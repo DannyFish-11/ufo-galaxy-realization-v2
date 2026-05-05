@@ -35,6 +35,7 @@ Functions::
     get_device_state_snapshot(device_id) -> Optional[DeviceStateSnapshot]
     list_device_state_snapshots() -> List[DeviceStateSnapshot]
     get_device_ecosystem_summary() -> Dict[str, Any]
+    list_recent_execution_events(flow_id, device_id, limit) -> List[DeviceExecutionEvent]
 
 Dataclasses::
 
@@ -214,6 +215,7 @@ class DeviceStateSnapshot:
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-safe dict representation."""
         return {
+            "_source": "android_device_state_store",
             "device_id": self.device_id,
             "absorbed_at": self.absorbed_at,
             "snapshot_ts": self.snapshot_ts,
@@ -469,6 +471,9 @@ class _AndroidDeviceStateStore:
                     "compatibility_ok": snap.compatibility_ok,
                     "quantization": snap.quantization,
                     "model_version": snap.model_version,
+                    "mobilevlm_present": snap.mobilevlm_present,
+                    "mobilevlm_checksum_ok": snap.mobilevlm_checksum_ok,
+                    "seeclick_present": snap.seeclick_present,
                 },
                 "active_runtime_type": snap.active_runtime_type,
                 "offline_queue_depth": snap.offline_queue_depth,
@@ -476,6 +481,7 @@ class _AndroidDeviceStateStore:
                 "planner_fallback_tier": snap.planner_fallback_tier,
                 "grounding_fallback_tier": snap.grounding_fallback_tier,
                 "warmup_result": snap.warmup_result,
+                "runtime_health_snapshot": snap.runtime_health_snapshot,
             })
 
         return {
@@ -559,7 +565,11 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
     return DeviceStateSnapshot(
         device_id=device_id,
         absorbed_at=time.time(),
-        snapshot_ts=payload.get("snapshot_ts") or payload.get("timestamp"),
+        snapshot_ts=(
+            payload.get("snapshot_ts")
+            or payload.get("snapshotTs")
+            or payload.get("timestamp")
+        ),
         # Native runtime
         llama_cpp_available=_first_bool("llama_cpp_available", "llamaCppAvailable"),
         ncnn_available=_first_bool("ncnn_available", "ncnnAvailable"),
@@ -763,3 +773,21 @@ def list_device_state_snapshots() -> List[DeviceStateSnapshot]:
 def get_device_ecosystem_summary() -> Dict[str, Any]:
     """Return multi-device ecosystem summary.  Convenience wrapper."""
     return get_android_device_state_store().get_ecosystem_summary()
+
+
+def list_recent_execution_events(
+    flow_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    limit: int = 50,
+) -> List["DeviceExecutionEvent"]:
+    """Return recent execution events, optionally filtered by flow_id / device_id.
+
+    Convenience wrapper over the store singleton's
+    :meth:`~_AndroidDeviceStateStore.list_recent_execution_events`.  Allows
+    callers to read events without first obtaining the store instance directly.
+    """
+    return get_android_device_state_store().list_recent_execution_events(
+        flow_id=flow_id,
+        device_id=device_id,
+        limit=limit,
+    )
