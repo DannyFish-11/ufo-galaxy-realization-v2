@@ -31,6 +31,20 @@ for each candidate before any exec_mode or capability filtering.  Devices
 whose readiness check can be consulted and fail are excluded; the filter
 degrades gracefully when the readiness module is unavailable so that legacy
 environments continue to operate.  Resolves SCHED-002.
+
+PR-7 addition
+-------------
+Step 0b is a **runtime-state pre-filter** that consults
+:mod:`core.android_device_state_store` for each candidate to exclude
+devices that are truly unfit based on real Android runtime-state truth.
+Specifically, a device is excluded when *both* conditions hold:
+  - ``pending_first_download`` is True (device has not completed initial
+    model download — no local AI available), AND
+  - ``current_fallback_tier`` is None/empty (no center-delegated fallback
+    path is configured).
+This combination means the device cannot execute tasks by any path.  All
+other devices — including those with no snapshot yet — are admitted (the
+filter degrades gracefully).
 """
 
 from __future__ import annotations
@@ -73,6 +87,16 @@ ADMISSIBILITY_PREFILTER_IN_SELECTION: str = (
     "exec_mode or capability filtering.  Devices that fail the readiness check "
     "are excluded.  Gracefully degrades when the readiness module is unavailable. "
     "Resolves SCHED-002."
+)
+
+# PR-7: sentinel affirming runtime-state pre-filter.
+RUNTIME_STATE_PREFILTER_IN_SELECTION: str = (
+    "RUNTIME_STATE_PREFILTER_IN_SELECTION_V1: "
+    "select_devices() applies a runtime-state pre-filter (step 0b) using "
+    "core.android_device_state_store.get_device_state_snapshot() to exclude "
+    "devices that are provably unfit: pending_first_download=True AND no "
+    "current_fallback_tier.  Gracefully degrades when the store is unavailable "
+    "or has no snapshot for a device.  Resolves PR-7 requirement §2."
 )
 
 
@@ -190,6 +214,64 @@ def select_devices(
         logger.debug(
             "select_devices: admissibility pre-filter unavailable " "(graceful degradation): %s",
             _adm_err,
+        )
+
+    # ── 0b. Runtime-state pre-filter (PR-7) ──────────────────────────────────
+    # Exclude devices that are provably unfit based on real Android runtime-state
+    # truth from android_device_state_store.  A device is excluded when BOTH:
+    #   - pending_first_download is True (no local AI available), AND
+    #   - current_fallback_tier is None/empty (no center-delegated fallback).
+    # Devices with no snapshot are admitted (fail-open / graceful degradation).
+    # The filter preserves the original list when all candidates would be excluded.
+    try:
+        from core.android_device_state_store import get_device_state_snapshot as _get_snap
+
+        _rt_admitted: List[Any] = []
+        for _dev in devices:
+            _did = getattr(_dev, "device_id", None) or ""
+            if not _did:
+                _rt_admitted.append(_dev)
+                continue
+            _snap = _get_snap(_did)
+            if _snap is None:
+                # No snapshot — no runtime truth to exclude on; admit.
+                _rt_admitted.append(_dev)
+                continue
+            _truly_unfit = (
+                _snap.pending_first_download is True
+                and not (_snap.current_fallback_tier or "")
+            )
+            if _truly_unfit:
+                logger.debug(
+                    "select_devices [PR-7/runtime-state]: device %r excluded — "
+                    "pending_first_download=True and no fallback_tier",
+                    _did,
+                )
+            else:
+                _rt_admitted.append(_dev)
+
+        if _rt_admitted:
+            if len(_rt_admitted) < len(devices):
+                logger.debug(
+                    "select_devices [PR-7/runtime-state]: pre-filter reduced "
+                    "candidates %d → %d",
+                    len(devices),
+                    len(_rt_admitted),
+                )
+            devices = _rt_admitted
+        else:
+            # All candidates excluded by runtime-state — fall back to pre-filter
+            # list so downstream steps can provide a better error message.
+            logger.warning(
+                "select_devices [PR-7/runtime-state]: pre-filter excluded all "
+                "%d candidate(s); falling back to original list",
+                len(devices),
+            )
+    except Exception as _rt_err:
+        logger.debug(
+            "select_devices: runtime-state pre-filter unavailable "
+            "(graceful degradation): %s",
+            _rt_err,
         )
 
     # ── 1. exec_mode-aware filtering via canonical gateway capability view ──

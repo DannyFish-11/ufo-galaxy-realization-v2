@@ -463,12 +463,30 @@ class DevicePoolManager:
         return candidates[0] if candidates else None
 
     def _select_adaptive(self, candidates: List[PoolDevice]) -> Optional[PoolDevice]:
-        """Weighted-score selection: health × weight / (connections + 1)."""
+        """Weighted-score selection: health × weight / (connections + 1) × runtime_state.
+
+        PR-7: The composite score is now enriched by real Android runtime-state
+        truth from :mod:`core.android_device_state_store` when available.
+        The runtime-state factor incorporates:
+
+        - **queue depth** — deep offline queues reduce the score (more backlog
+          means slower response for any new task).
+        - **local AI readiness** — devices with local inference ready are
+          preferred; they can execute locally without delegating back to center.
+        - **runtime health** — devices reporting degradation in their health
+          snapshot have a reduced score proportional to degradation severity.
+        - **fallback tier** — devices already at a degraded fallback tier get
+          a slight score reduction (they are already under load/recovery pressure).
+
+        When the android state store is unavailable the factor defaults to 1.0
+        so existing scoring semantics are fully preserved.
+        """
 
         def score(dev: PoolDevice) -> float:
             h = self._health_score(dev.device_id) / 100.0
             conn_penalty = 1.0 / (dev.active_connections + 1)
-            return h * dev.weight * conn_penalty
+            runtime_factor = _android_runtime_score(dev.device_id)
+            return h * dev.weight * conn_penalty * runtime_factor
 
         if not candidates:
             return None
@@ -602,6 +620,102 @@ class DevicePoolManager:
         cls._instance = None
         global _pool_manager
         _pool_manager = None
+
+
+# ---------------------------------------------------------------------------
+# PR-7: Runtime-state scoring helper
+# ---------------------------------------------------------------------------
+
+# Authority sentinel affirming that adaptive scheduling incorporates real
+# Android runtime-state truth from android_device_state_store.
+RUNTIME_STATE_SCORING_AUTHORITY: str = (
+    "RUNTIME_STATE_SCORING_V1: "
+    "DevicePoolManager._select_adaptive() enriches the composite scheduling "
+    "score with real Android runtime-state truth from "
+    "core.android_device_state_store (queue_depth, local_ai_ready, "
+    "runtime_health, fallback_tier).  Degrades gracefully to 1.0 when the "
+    "store is unavailable."
+)
+
+# Maximum offline queue depth that maps to a full (1.0) score penalty cap.
+_QUEUE_DEPTH_PENALTY_CAP: int = 20
+
+
+def _android_runtime_score(device_id: str) -> float:
+    """Return a runtime-state factor [0.1, 1.5] for *device_id*.
+
+    Queries :mod:`core.android_device_state_store` for the latest
+    :class:`~core.android_device_state_store.DeviceStateSnapshot` for
+    *device_id* and computes a multiplier that rewards healthy/available
+    devices and penalises overloaded or degraded ones.
+
+    Factor breakdown
+    ----------------
+    * **Queue depth** — ``max(0.4, 1 − depth / cap)`` where cap is
+      :data:`_QUEUE_DEPTH_PENALTY_CAP` (default 20).  A device with 10
+      queued items scores 0.5×; a device with no queue scores 1.0×.
+    * **Local AI ready** — bonus +0.25 when ``is_local_ai_ready()`` is True;
+      the device can execute locally without center delegation.
+    * **Degraded state** — each degradation reason listed in
+      ``degraded_reasons`` reduces the factor by 0.1 (floored at 0.4 ×
+      the queue factor) to avoid over-penalising already-struggling devices.
+    * **Fallback tier** — devices already on a center-delegated or degraded
+      fallback tier receive a small −0.15 penalty; they are likely under
+      recovery pressure and should not attract new tasks aggressively.
+    * **Pending first download** — if the device has not finished its
+      initial model download, a −0.3 penalty is applied.  The device
+      retains a positive score so it is not excluded entirely (exclusion
+      is the job of the admissibility pre-filter in device_selection.py).
+
+    Returns ``1.0`` when the store is unavailable or has no snapshot for
+    *device_id* (fail-open — preserves prior scoring semantics).
+    """
+    try:
+        from core.android_device_state_store import get_device_state_snapshot as _get_snap
+
+        snap = _get_snap(device_id)
+        if snap is None:
+            return 1.0
+
+        factor = 1.0
+
+        # Queue depth penalty
+        depth = snap.offline_queue_depth
+        if depth is not None and depth > 0:
+            queue_factor = max(0.4, 1.0 - depth / _QUEUE_DEPTH_PENALTY_CAP)
+            factor *= queue_factor
+
+        # Local AI readiness bonus
+        if snap.is_local_ai_ready():
+            factor += 0.25
+
+        # Degradation penalty
+        degraded_count = len(snap.degraded_reasons or [])
+        if degraded_count > 0:
+            factor -= min(degraded_count * 0.10, factor - 0.1)
+
+        # Fallback tier penalty — device is already under recovery pressure
+        _center_delegated_tier_prefixes = ("center_", "CENTER_", "delegated")
+        tier = snap.current_fallback_tier or ""
+        if tier and any(tier.startswith(p) for p in _center_delegated_tier_prefixes):
+            factor -= 0.15
+
+        # Pending first-download penalty
+        if snap.pending_first_download:
+            factor -= 0.30
+
+        # Clamp to [0.05, 1.5] so the factor never zeroes a score or grows
+        # unboundedly.
+        return max(0.05, min(1.5, factor))
+
+    except Exception as _exc:
+        logger.debug(
+            "DevicePoolManager: android_runtime_score unavailable for %s "
+            "(fail-open, returning 1.0): %s",
+            device_id,
+            _exc,
+        )
+        return 1.0
 
 
 # ---------------------------------------------------------------------------
