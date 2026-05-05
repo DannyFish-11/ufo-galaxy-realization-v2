@@ -169,6 +169,29 @@ def _extract_runtime_attachment_session_id(message: Dict[str, Any]) -> str:
     return str(uuid.uuid4())
 
 
+def _extract_durable_continuity_fields(message: Dict[str, Any]) -> tuple:
+    """Extract Android durable continuity identity fields from a message.
+
+    PR-C: Android clients supply ``durable_session_id`` and
+    ``session_continuity_epoch`` in registration and reconnect messages.
+    These fields provide a cross-restart stable identity that survives cold
+    Android process recreation and complements ``runtime_attachment_session_id``
+    (which is stable only across transport reconnects within the same process
+    epoch).
+
+    Returns ``(durable_session_id, continuity_epoch)`` where
+    ``durable_session_id`` is a string (empty if absent) and
+    ``continuity_epoch`` is an int (0 if absent).
+    """
+    durable_session_id: str = message.get("durable_session_id") or ""
+    raw_epoch = message.get("session_continuity_epoch")
+    try:
+        continuity_epoch: int = int(raw_epoch) if raw_epoch is not None else 0
+    except (ValueError, TypeError):
+        continuity_epoch = 0
+    return durable_session_id, continuity_epoch
+
+
 def _normalize_assimilation_capabilities(raw_capabilities: Any) -> List[str]:
     """Normalize Android capability payloads into canonical capability names."""
     if raw_capabilities is None:
@@ -278,6 +301,16 @@ async def handle_device_register(
                 device_id, inbound_attachment_id,
             )
 
+        # PR-C: extract Android durable continuity identity fields so reconnect
+        # and session-resume decisions can validate cross-restart stable identity.
+        inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(message)
+        if inbound_durable_session_id:
+            logger.debug(
+                "handle_device_register: durable continuity fields present: "
+                "device_id=%s durable_session_id=%s continuity_epoch=%s",
+                device_id, inbound_durable_session_id, inbound_continuity_epoch,
+            )
+
         # PR-G: emit device lifecycle (attach) so the observability sink records
         # the registration event in the production path.
         try:
@@ -376,21 +409,28 @@ async def handle_device_register(
             # Capture classification result before attempting the session operation
             # so that _reconnect_outcome always reflects the classify decision even
             # if the subsequent reconnect_session / register_session call raises.
+            # PR-C: pass durable_session_id to additionally validate cross-restart
+            # session era continuity.
             _reconnect_outcome, _existing_entry = classify_reconnect_outcome(
                 device_id,
                 runtime_attachment_session_id=inbound_attachment_id,
+                durable_session_id=inbound_durable_session_id,
             )
             if _reconnect_outcome == "continuity_resume" and _existing_entry is not None:
                 _reg_entry = reconnect_session(
                     _existing_entry,
                     runtime_attachment_session_id=inbound_attachment_id,
                     metadata={"reconnect_trigger": "device_register_continuity"},
+                    durable_session_id=inbound_durable_session_id,
+                    continuity_epoch=inbound_continuity_epoch,
                 )
                 logger.info(
                     "attached_runtime_session_registry: continuity_resume via device_register: "
-                    "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s",
+                    "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s "
+                    "durable_session_id=%s continuity_epoch=%s",
                     device_id, _reg_entry.runtime_session_id,
                     _reg_entry.runtime_attachment_session_id,
+                    _reg_entry.durable_session_id, _reg_entry.continuity_epoch,
                 )
             else:
                 _reg_entry = register_session(
@@ -398,12 +438,16 @@ async def handle_device_register(
                     posture="join_runtime",
                     runtime_attachment_session_id=inbound_attachment_id,
                     metadata={"registration_trigger": "android_device_register"},
+                    durable_session_id=inbound_durable_session_id,
+                    continuity_epoch=inbound_continuity_epoch,
                 )
                 logger.info(
                     "attached_runtime_session_registry: new_attachment via device_register: "
-                    "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s",
+                    "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s "
+                    "durable_session_id=%s continuity_epoch=%s",
                     device_id, _reg_entry.runtime_session_id,
                     _reg_entry.runtime_attachment_session_id,
+                    _reg_entry.durable_session_id, _reg_entry.continuity_epoch,
                 )
         except Exception as _reg_exc:
             logger.debug(
