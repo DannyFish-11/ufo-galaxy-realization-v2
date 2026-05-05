@@ -207,6 +207,8 @@ ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
 })
 """Whitelist of count-level keys retained in OperatorSnapshot.android_ecosystem.
 
+These keys correspond to the aggregate count fields returned by
+:func:`~core.android_device_state_store.get_device_ecosystem_summary`.
 The per-device ``devices`` list is intentionally excluded — full per-device
 detail is the responsibility of GET /api/v1/operator/devices/ecosystem.
 """
@@ -1525,6 +1527,13 @@ class OperatorSurface:
             snap.android_ecosystem = {
                 k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
             }
+            filtered = set(eco.keys()) - ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
+            if filtered:
+                logger.debug(
+                    "operator_snapshot: ecosystem summary filtered %d key(s) not in whitelist: %s",
+                    len(filtered),
+                    sorted(filtered),
+                )
         except Exception as exc:
             logger.debug("operator_snapshot: android ecosystem unavailable: %s", exc)
 
