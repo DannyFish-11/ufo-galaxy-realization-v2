@@ -3,7 +3,7 @@ tests/test_pr5_v2_operator_observability.py
 ============================================
 PR-5 V2: Operator-facing observability / diagnosability improvements.
 
-Validates the new fields and behaviours added to improve Android→V2
+Validates the new fields and behaviors added to improve Android→V2
 control-plane diagnosis without introducing a parallel observability system.
 
 Sections

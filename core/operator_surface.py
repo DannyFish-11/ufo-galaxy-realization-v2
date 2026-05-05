@@ -204,7 +204,11 @@ ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
     "overlay_ready_count",
     "local_loop_ready_count",
     "pending_first_download_count",
-    # Freshness summary fields (PR-5)
+    # Freshness summary fields (PR-5): propagated from get_device_ecosystem_summary()
+    # so the global operator snapshot can report Android snapshot recency.
+    # ``snapshot_truth_received`` is True when at least one DEVICE_STATE_SNAPSHOT
+    # has been absorbed.  ``last_snapshot_absorbed_at`` is the V2-side ingestion
+    # timestamp of the most recent snapshot across all devices.
     "snapshot_truth_received",
     "last_snapshot_absorbed_at",
 })
@@ -793,7 +797,7 @@ class OperatorSnapshot:
     # Keys present: total_devices_with_snapshot, local_ai_ready_count,
     # model_ready_count, accessibility_ready_count, overlay_ready_count,
     # local_loop_ready_count, pending_first_download_count,
-    # snapshot_truth_received, last_snapshot_absorbed_at.
+    # snapshot_truth_received (bool), last_snapshot_absorbed_at (float|None).
     android_ecosystem: Dict[str, Any] = field(default_factory=dict)
 
     # Convenience boolean: True when at least one DEVICE_STATE_SNAPSHOT has
