@@ -75,7 +75,7 @@ from core.flow_level_operator_surface import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_REALISTIC_SNAKE_PAYLOAD: Dict[str, Any] = {
+_REALISTIC_SNAKE_CASE_PAYLOAD: Dict[str, Any] = {
     "flow_id": "flow_e2e_snake_001",
     "task_id": "task_e2e_snake_001",
     "phase": "grounding",
@@ -87,7 +87,7 @@ _REALISTIC_SNAKE_PAYLOAD: Dict[str, Any] = {
     "event_ts": 1_700_000_100.5,
 }
 
-_REALISTIC_CAMEL_PAYLOAD: Dict[str, Any] = {
+_REALISTIC_CAMEL_CASE_PAYLOAD: Dict[str, Any] = {
     "flowId": "flow_e2e_camel_001",
     "taskId": "task_e2e_camel_001",
     "phase": "stagnation",
@@ -132,7 +132,7 @@ def _reset():
 
 class TestRealisticPayloadParsing:
     def test_A01_snake_case_all_fields_stored(self):
-        evt = absorb_device_execution_event("dev_a01", _REALISTIC_SNAKE_PAYLOAD)
+        evt = absorb_device_execution_event("dev_a01", _REALISTIC_SNAKE_CASE_PAYLOAD)
         assert evt.device_id == "dev_a01"
         assert evt.flow_id == "flow_e2e_snake_001"
         assert evt.task_id == "task_e2e_snake_001"
@@ -145,7 +145,7 @@ class TestRealisticPayloadParsing:
         assert evt.event_ts == pytest.approx(1_700_000_100.5)
 
     def test_A02_camel_case_all_fields_stored(self):
-        evt = absorb_device_execution_event("dev_a02", _REALISTIC_CAMEL_PAYLOAD)
+        evt = absorb_device_execution_event("dev_a02", _REALISTIC_CAMEL_CASE_PAYLOAD)
         assert evt.flow_id == "flow_e2e_camel_001"
         assert evt.task_id == "task_e2e_camel_001"
         assert evt.phase == "stagnation"
@@ -166,7 +166,7 @@ class TestRealisticPayloadParsing:
         assert evt.event_ts is None
 
     def test_A04_event_stored_in_ring_buffer(self):
-        absorb_device_execution_event("dev_a04", _REALISTIC_SNAKE_PAYLOAD)
+        absorb_device_execution_event("dev_a04", _REALISTIC_SNAKE_CASE_PAYLOAD)
         store = get_android_device_state_store()
         events = store.list_recent_execution_events(flow_id="flow_e2e_snake_001")
         assert len(events) >= 1
@@ -258,7 +258,7 @@ class TestEventTsInToDict:
         assert d["event_ts"] is None
 
     def test_D03_to_dict_required_fields_present(self):
-        evt = absorb_device_execution_event("dev_d03", _REALISTIC_CAMEL_PAYLOAD)
+        evt = absorb_device_execution_event("dev_d03", _REALISTIC_CAMEL_CASE_PAYLOAD)
         d = evt.to_dict()
         for key in (
             "device_id", "absorbed_at", "flow_id", "task_id", "phase",

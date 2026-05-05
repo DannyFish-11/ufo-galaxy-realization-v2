@@ -328,7 +328,6 @@ class DeviceExecutionEvent:
     stagnation_detected: bool = False
     fallback_tier: Optional[str] = None
     event_ts: Optional[float] = None
-    """Android-side event timestamp (seconds since epoch), if provided by the device."""
     raw_payload: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
