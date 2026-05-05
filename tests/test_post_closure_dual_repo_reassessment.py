@@ -501,18 +501,16 @@ class TestNextPRRoadmap:
             assert isinstance(item, NextPRItem)
 
     def test_exactly_1_p0_item(self, report: PostClosureReport) -> None:
-        p0 = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
-        assert len(p0) >= 1, (
-            f"Expected at least 1 P0 next-PR item; got {len(p0)}"
+        p0_items = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
+        assert len(p0_items) >= 1, (
+            f"Expected at least 1 P0 next-PR item; got {len(p0_items)}"
         )
 
     def test_p0_item_targets_orchestration_decision_path(
         self, report: PostClosureReport
     ) -> None:
-        p0 = next(
-            n for n in report.next_pr_items
-            if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE
-        )
+        p0_items = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
+        p0 = p0_items[0]
         # The P0 item must clearly reference orchestration/routing/dispatch
         combined = (p0.title + " " + p0.rationale).lower()
         assert any(
@@ -524,10 +522,8 @@ class TestNextPRRoadmap:
         )
 
     def test_p0_item_references_v2_repo(self, report: PostClosureReport) -> None:
-        p0 = next(
-            n for n in report.next_pr_items
-            if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE
-        )
+        p0_items = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
+        p0 = p0_items[0]
         assert any("ufo-galaxy-realization-v2" in r for r in p0.target_repos), (
             f"P0 item must target V2 repo; got {p0.target_repos}"
         )
@@ -761,12 +757,12 @@ class TestSingletonCaching:
         results = []
         lock = threading.Lock()
 
-        def _get():
+        def _fetch_report():
             r = get_post_closure_reassessment()
             with lock:
                 results.append(r)
 
-        threads = [threading.Thread(target=_get) for _ in range(10)]
+        threads = [threading.Thread(target=_fetch_report) for _ in range(10)]
         for t in threads:
             t.start()
         for t in threads:

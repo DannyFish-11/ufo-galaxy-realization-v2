@@ -137,6 +137,8 @@ Functions::
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import inspect
 import json
 import logging
 import os
@@ -1238,7 +1240,6 @@ def _build_task_dispatch_result_path() -> PostClosurePathStatus:
     # Also check for runtime_closure_established attribute in decision history
     try:
         from core.delegated_flow_decision_history import DelegatedFlowDecisionHistory
-        import inspect
         src = inspect.getsource(DelegatedFlowDecisionHistory)
         if "runtime_closure_established" in src:
             mods.append(
@@ -1317,7 +1318,6 @@ def _build_continuity_reconnect_path() -> PostClosurePathStatus:
     # Check ContinuityDecisionArtifact has durable fields
     try:
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
-        import inspect
         src = inspect.getsource(ContinuityDecisionArtifact)
         if "durable_session_id" in src:
             mods.append(
