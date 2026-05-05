@@ -989,6 +989,56 @@ ANDROID_POSTURE_GATING_INTEGRATED_SENTINEL: str = (
     "package=android-posture-gating::posture-aware-readiness-dispatch"
 )
 
+# ---------------------------------------------------------------------------
+# ORCHESTRATION_CONSUMES_ANDROID_TRUTH — P0 gap closure sentinels
+# ---------------------------------------------------------------------------
+
+ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL: str = (
+    "ORCHESTRATION_CONSUMES_ANDROID_TRUTH::"
+    "source-dispatch-orchestrator::"
+    "android-runtime-truth-drives-dispatch-scoring-and-selection::"
+    "_score_candidate-uses-android-snapshot-for-scoring::"
+    "_select_target_from_candidates-fetches-android-device-state-snapshot::"
+    "package=android-truth-consumption::truth-visible-to-truth-decision-consumed"
+)
+
+ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY: str = (
+    "POLICY::ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES: "
+    "_score_candidate() now accepts an optional android_snapshot from "
+    "core.android_device_state_store.get_device_state_snapshot(). "
+    "When present, the snapshot drives score adjustments: "
+    "+10 for model_ready=True (local AI inference is ready), "
+    "+5 for accessibility_ready=True (UI automation layer active), "
+    "+5 for local_loop_ready=True (full local loop ready — broadest signal), "
+    "-10 for warmup_result=failed (runtime warm-up failed), "
+    "-20 for model_ready=False with no current_fallback_tier (cannot execute by "
+    "any path — strong preference to route elsewhere). "
+    "The snapshot is fetched per-candidate in _select_target_from_candidates() "
+    "via get_device_state_snapshot(). "
+    "All adjustments degrade gracefully: if no snapshot is present or a field "
+    "is None the corresponding adjustment is skipped. "
+    "The hard required gates (readiness, participation, posture) are unaffected. "
+    "This closes the ORCHESTRATION_CONSUMES_ANDROID_TRUTH P0 gap: Android "
+    "runtime truth is now a material input to canonical dispatch scoring, "
+    "not merely an observable surface."
+)
+
+ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY: str = (
+    "POLICY::ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION: "
+    "_select_target_from_candidates() checks the most recent execution event "
+    "for each candidate device via "
+    "core.android_device_state_store.list_recent_execution_events(). "
+    "If the most recent event has a non-terminal phase (planning/grounding/"
+    "execution/replan) absorbed within the last 60 seconds, the candidate "
+    "receives a -15 score adjustment reflecting that the device is likely "
+    "currently busy executing a delegated task. "
+    "Terminal phases (completed/failed/error/timeout/cancelled) and absent "
+    "snapshots do not trigger the penalty. "
+    "The adjustment is advisory: it lowers the priority of a busy device "
+    "without hard-gating it so the system degrades gracefully if all "
+    "candidates are busy."
+)
+
 ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET_POLICY: str = (
     "POLICY::ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET: "
     "A registry entry whose posture field is 'control_only' MUST NOT be selected "
@@ -1563,11 +1613,32 @@ def _score_candidate(
     participation: Any,
     reuse_eligible: bool,
     posture: str = "",
+    android_snapshot: Any = None,
+    execution_busy: bool = False,
 ) -> Tuple[int, str]:
     """Score a single dispatch candidate using consolidated truth inputs.
 
     Scoring (higher is better, baseline 100):
       +20  reuse_eligible == True  (established reuse surface)
+
+    Android runtime truth scoring (ORCHESTRATION_CONSUMES_ANDROID_TRUTH)
+    ----------------------------------------------------------------------
+    When *android_snapshot* is supplied (a
+    :class:`~core.android_device_state_store.DeviceStateSnapshot`), the
+    following score adjustments are applied after the posture gate:
+
+      +10  model_ready == True   (local AI inference layer is ready)
+      +5   accessibility_ready == True (UI automation layer active)
+      +5   local_loop_ready == True    (broadest readiness signal)
+      -10  warmup_result == "failed"   (runtime warm-up failed)
+      -20  model_ready == False AND current_fallback_tier is absent
+                                       (device cannot execute by any path)
+      -15  execution_busy == True      (device is currently executing a task)
+
+    Each adjustment is applied independently and only when the corresponding
+    field is not None.  Missing snapshot or None fields degrade gracefully
+    (no adjustment applied).  Per
+    :data:`ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY`.
 
     Gate failures (readiness / participation / posture) immediately return
     score=0 and a stable rejection reason string; they are not treated as
@@ -1629,6 +1700,38 @@ def _score_candidate(
     if reuse_eligible:
         score += 20
 
+    # --- Android runtime truth scoring (ORCHESTRATION_CONSUMES_ANDROID_TRUTH) ---
+    # Consumes DeviceStateSnapshot fields as routing weight inputs.
+    # All adjustments are advisory — gracefully degrade when snapshot or
+    # field is absent.  Per ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY.
+    if android_snapshot is not None:
+        _model_ready = getattr(android_snapshot, "model_ready", None)
+        _accessibility_ready = getattr(android_snapshot, "accessibility_ready", None)
+        _local_loop_ready = getattr(android_snapshot, "local_loop_ready", None)
+        _warmup_result = getattr(android_snapshot, "warmup_result", None)
+        _fallback_tier = getattr(android_snapshot, "current_fallback_tier", None) or ""
+
+        if _model_ready is True:
+            # Local AI inference is ready — prefer this device.
+            score += 10
+        if _accessibility_ready is True:
+            # UI automation layer active — prefer this device.
+            score += 5
+        if _local_loop_ready is True:
+            # Full local-loop ready — broadest positive readiness signal.
+            score += 5
+        if _warmup_result == "failed":
+            # Runtime warm-up failed — slight penalty.
+            score -= 10
+        if _model_ready is False and not _fallback_tier:
+            # Model not ready AND no fallback tier configured: device cannot
+            # execute tasks by any path — strong preference to route elsewhere.
+            score -= 20
+
+    # --- Execution busy penalty (ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION) ---
+    if execution_busy:
+        score -= 15
+
     return score, rejection
 
 
@@ -1638,6 +1741,7 @@ def _select_target_from_candidates(
     readiness_inputs: Optional[Dict[str, Any]] = None,
     participation_inputs: Optional[Dict[str, Any]] = None,
     reuse_inputs: Optional[Dict[str, Any]] = None,
+    android_snapshot_inputs: Optional[Dict[str, Any]] = None,
     mesh_session_id: Optional[str] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
     """Select the best dispatch target from consolidated truth inputs.
@@ -1658,6 +1762,11 @@ def _select_target_from_candidates(
     Per :data:`SELECTION_REUSE_CONTRIBUTES_PREFERENCE_PR24_POLICY` reuse
     eligibility only contributes to scoring; it does not gate selection.
 
+    Per :data:`ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL` and
+    :data:`ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY`, Android
+    runtime truth from :mod:`core.android_device_state_store` is fetched
+    per-candidate and passed to :func:`_score_candidate` for scoring.
+
     Parameters
     ----------
     registry:
@@ -1676,6 +1785,12 @@ def _select_target_from_candidates(
         eligibility flag for test isolation.  When ``None`` or a device is
         absent, :func:`~core.attached_runtime_reuse_dispatch.resolve_reuse_dispatch_surface`
         is called.
+    android_snapshot_inputs:
+        Optional ``{device_id: DeviceStateSnapshot}`` dict for test isolation.
+        When ``None`` or a device is absent, the live
+        :func:`~core.android_device_state_store.get_device_state_snapshot` is
+        called.  Pass an explicit ``{device_id: None}`` entry to simulate a
+        device with no snapshot.
     mesh_session_id:
         Mesh session ID to propagate onto the returned target, if available.
 
@@ -1771,8 +1886,67 @@ def _select_target_from_candidates(
                     exc,
                 )
 
+        # Android runtime truth — fetch snapshot for scoring.
+        # Per ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL and
+        # ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY:
+        # The snapshot drives score adjustments for model readiness,
+        # accessibility readiness, local-loop readiness, warmup failures,
+        # and the model_not_ready+no_fallback penalty.
+        # Gracefully degrades when the store is unavailable or no snapshot
+        # exists for the device.
+        android_snapshot: Any = None
+        if android_snapshot_inputs is not None and device_id in android_snapshot_inputs:
+            android_snapshot = android_snapshot_inputs[device_id]
+        else:
+            try:
+                from core.android_device_state_store import (
+                    get_device_state_snapshot as _get_android_snap,
+                )
+
+                android_snapshot = _get_android_snap(device_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "_select_target_from_candidates: android snapshot unavailable for %s: %s",
+                    device_id,
+                    exc,
+                )
+
+        # Android execution busy check — deprioritise devices that are
+        # currently executing a delegated task (non-terminal phase within
+        # the last 60 seconds).
+        # Per ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY.
+        _execution_busy: bool = False
+        try:
+            from core.android_device_state_store import (
+                list_recent_execution_events as _list_events,
+            )
+            import time as _time
+
+            _recent = _list_events(flow_id=None, device_id=device_id, limit=1)
+            if _recent:
+                _ev = _recent[0]
+                _phase = str(getattr(_ev, "phase", "") or "").lower()
+                _absorbed = float(getattr(_ev, "absorbed_at", 0) or 0)
+                _NON_TERMINAL_PHASES = {"planning", "grounding", "execution", "replan"}
+                if _phase in _NON_TERMINAL_PHASES and (_time.time() - _absorbed) < 60.0:
+                    _execution_busy = True
+                    logger.debug(
+                        "_select_target_from_candidates: device %r appears busy "
+                        "(phase=%s absorbed=%.1f s ago) — applying busy penalty",
+                        device_id,
+                        _phase,
+                        _time.time() - _absorbed,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "_select_target_from_candidates: execution event check unavailable for %s: %s",
+                device_id,
+                exc,
+            )
+
         # Score the candidate — pass registry entry posture so the posture gate
-        # can reject 'control_only' devices (Android posture gating).
+        # can reject 'control_only' devices (Android posture gating); pass
+        # android_snapshot and execution_busy for Android truth scoring.
         _entry_posture: str = str(getattr(entry, "posture", "") or "")
         score, rejection_reason = _score_candidate(
             session_id,
@@ -1781,6 +1955,8 @@ def _select_target_from_candidates(
             participation=participation,
             reuse_eligible=reuse_eligible,
             posture=_entry_posture,
+            android_snapshot=android_snapshot,
+            execution_busy=_execution_busy,
         )
 
         if rejection_reason:
@@ -1794,18 +1970,21 @@ def _select_target_from_candidates(
         if score > best_score:
             best_score = score
             reuse_tag = ":reuse_eligible" if reuse_eligible else ""
+            android_tag = ":android_truth" if android_snapshot is not None else ""
             best_target = SourceDispatchTarget(
                 target_device_id=device_id,
                 target_runtime_id=str(runtime_id) if runtime_id else None,
                 target_session_id=session_id or None,
                 mesh_session_id=mesh_session_id,
                 selection_reason=(
-                    f"registry:readiness:participation{reuse_tag}:score={score}"
+                    f"registry:readiness:participation{reuse_tag}{android_tag}:score={score}"
                 ),
                 metadata={
                     "pr24_selection": True,
                     "score": score,
                     "reuse_eligible": reuse_eligible,
+                    "android_truth_consumed": android_snapshot is not None,
+                    "execution_busy": _execution_busy,
                 },
             )
 

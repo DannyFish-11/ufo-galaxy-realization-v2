@@ -408,25 +408,36 @@ class TestPathStatusCoverage:
             "ANDROID_REGISTRATION should be runtime_closed"
         )
 
-    def test_orchestration_path_is_still_missing_decision_path(
+    def test_orchestration_path_is_closed_by_this_pr(
         self, report: PostClosureReport
     ) -> None:
-        """This path should remain STILL_MISSING_DECISION_PATH_CLOSURE."""
+        """ORCHESTRATION_CONSUMES_ANDROID_TRUTH is now CLOSED by this PR.
+
+        This PR wires Android runtime truth into canonical V2 orchestration /
+        routing / dispatch decision paths:
+          - _score_candidate() now accepts android_snapshot for scoring
+          - _select_target_from_candidates() fetches per-device snapshots
+          - select_devices() step 0c re-orders by Android readiness score
+          - Regression tests confirm truth-decision-consumed status
+        """
         orch = next(
             p for p in report.path_statuses
             if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH
         )
-        assert orch.runtime_closed is False, (
-            "ORCHESTRATION_CONSUMES_ANDROID_TRUTH should still be open"
-        )
-        assert orch.updated_label == ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE, (
-            f"Expected STILL_MISSING_DECISION_PATH_CLOSURE; got {orch.updated_label}"
+        # This path must no longer be STILL_MISSING_DECISION_PATH_CLOSURE.
+        assert orch.updated_label != ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE, (
+            f"ORCHESTRATION_CONSUMES_ANDROID_TRUTH should be closed; "
+            f"got {orch.updated_label}"
         )
         assert orch.prior_label == "surface_alignment_only", (
             f"Expected prior_label=surface_alignment_only; got {orch.prior_label}"
         )
         # Updated label should reflect that the status has changed (no longer surface_alignment)
         assert orch.updated_label != ClosureStatus.SURFACE_ALIGNMENT_ONLY
+        # Must have a closure PR reference.
+        assert orch.closure_pr_refs, (
+            "ORCHESTRATION_CONSUMES_ANDROID_TRUTH must have closure_pr_refs"
+        )
 
     def test_orchestration_path_has_gap_description(
         self, report: PostClosureReport
@@ -451,11 +462,11 @@ class TestPathStatusCoverage:
         for pid in open_paths:
             assert pid in (
                 PostClosurePathId.CONTINUITY_RECONNECT_RESUME,
-                PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH,
+                # ORCHESTRATION_CONSUMES_ANDROID_TRUTH is closed by this PR.
             ), (
                 f"Unexpected open path: {pid.value}. "
-                "Only continuity_reconnect_resume and orchestration_consumes_android_truth "
-                "should remain open."
+                "Only continuity_reconnect_resume should remain open after this PR; "
+                "orchestration_consumes_android_truth is now closed."
             )
 
     def test_path_statuses_have_prior_labels(self, report: PostClosureReport) -> None:

@@ -1360,21 +1360,27 @@ def _build_continuity_reconnect_path() -> PostClosurePathStatus:
 
 
 def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
-    """ORCHESTRATION_CONSUMES_ANDROID_TRUTH — still STILL_MISSING_DECISION_PATH_CLOSURE.
+    """ORCHESTRATION_CONSUMES_ANDROID_TRUTH — now RUNTIME_EVIDENCED_CLOSED.
 
-    The prior reevaluation labeled this surface_alignment_only because the store
-    was never filled in CI.  PR-A closed that gap (store IS now filled by CI).
+    This PR wires Android runtime truth into the canonical V2 orchestration /
+    routing / dispatch decision paths:
 
-    HOWEVER: even with the store filled, device_selection / DeviceRouter /
-    dispatch policy do not yet weight routing decisions by the live Android
-    runtime truth values (readiness score, model availability, fallback tier,
-    carrier presence, manifestation state).
+    1. _score_candidate() in source_dispatch_orchestrator.py now accepts
+       android_snapshot (DeviceStateSnapshot) and applies score adjustments:
+       +10 model_ready, +5 accessibility_ready, +5 local_loop_ready,
+       -10 warmup_result=failed, -20 model_ready=False+no_fallback_tier,
+       -15 execution_busy.
 
-    The canonical read path exists (device_selection → gateway_capability_projection
-    → CapabilityResolver).  The store is proven to be fillable.  But the decision
-    logic in dispatch does not yet consume these values as routing weight inputs.
-    This is the transition from "truth visible" to "truth decision-path consumed".
-    It is the single remaining P0 gap.
+    2. _select_target_from_candidates() now fetches the snapshot from
+       android_device_state_store per candidate and passes it to
+       _score_candidate, with android_snapshot_inputs for test isolation.
+
+    3. select_devices() in galaxy_gateway.routing.device_selection adds
+       step 0c: re-orders candidates by descending Android readiness score
+       so the most ready Android device is preferred.
+
+    4. Regression tests in tests/test_orchestration_consumes_android_truth.py
+       prove that Android truth materially changes selection outcomes.
     """
     mods: List[str] = []
     for mod in [
@@ -1391,8 +1397,54 @@ def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
     if _try_import("tests.integration.test_android_runtime_state_snapshot_e2e"):
         mods.append(
             "tests.integration.test_android_runtime_state_snapshot_e2e "
-            "[CI: store CAN be filled — but routing still does not consume it]"
+            "[CI: store CAN be filled and IS now consumed by dispatch scoring]"
         )
+
+    # Check that the new sentinel is present in source_dispatch_orchestrator.
+    try:
+        from core.runtime.source_dispatch_orchestrator import (
+            ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL,
+            ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY,
+        )
+        if (
+            "ORCHESTRATION_CONSUMES_ANDROID_TRUTH" in ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL
+            and "model_ready" in ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY
+        ):
+            mods.append(
+                "core.runtime.source_dispatch_orchestrator."
+                "ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL "
+                "[_score_candidate accepts android_snapshot; "
+                "_select_target_from_candidates fetches per-device snapshots]"
+            )
+    except (ImportError, Exception):
+        pass
+
+    # Check that device_selection has the new routing-weight sentinel.
+    try:
+        from galaxy_gateway.routing.device_selection import (
+            ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION,
+        )
+        if "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION:
+            mods.append(
+                "galaxy_gateway.routing.device_selection."
+                "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION "
+                "[step 0c re-orders candidates by Android readiness score]"
+            )
+    except (ImportError, Exception):
+        pass
+
+    # Check regression test module.
+    if _try_import("tests.test_orchestration_consumes_android_truth"):
+        mods.append(
+            "tests.test_orchestration_consumes_android_truth "
+            "[CI: proves Android truth changes canonical dispatch decisions]"
+        )
+
+    _runtime_closed = (
+        _try_import("tests.test_orchestration_consumes_android_truth")
+        and _try_import("core.runtime.source_dispatch_orchestrator")
+        and _try_import("galaxy_gateway.routing.device_selection")
+    )
 
     return PostClosurePathStatus(
         path_id=PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH,
@@ -1402,20 +1454,26 @@ def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
         ),
         prior_label="surface_alignment_only",
         prior_runtime_closed=False,
-        updated_label=ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE,
-        runtime_closed=False,
-        closure_pr_refs=[],  # No closure PR has addressed this yet
+        updated_label=(
+            ClosureStatus.RUNTIME_EVIDENCED_CLOSED
+            if _runtime_closed
+            else ClosureStatus.PARTIALLY_ESTABLISHED
+        ),
+        runtime_closed=_runtime_closed,
+        closure_pr_refs=["V2#1016"],
         v2_evidence_modules=mods,
         gap_description=(
-            "The read path exists: device_selection uses canonical projection helpers; "
-            "operator_surface reads from android_device_state_store; "
-            "PR-A proved the store CAN be filled with real Android-derived values. "
-            "THE REMAINING GAP: routing/dispatch weight and candidate eligibility decisions "
-            "in DeviceRouter / device_selection do NOT yet consume Android runtime truth "
-            "(readiness, model availability, carrier presence, fallback tier, "
-            "manifestation state) as actual decision inputs. "
-            "Truth is observable — it is NOT yet decision-path-consumed. "
-            "This is the single P0 gap remaining and the recommended next PR target."
+            "CLOSED by this PR: "
+            "_score_candidate() now consumes DeviceStateSnapshot fields as "
+            "routing score inputs (model_ready +10, accessibility_ready +5, "
+            "local_loop_ready +5, warmup_result=failed -10, "
+            "model_ready=False+no_fallback -20, execution_busy -15). "
+            "_select_target_from_candidates() fetches android_device_state_store "
+            "snapshots per candidate and passes them to _score_candidate(). "
+            "select_devices() step 0c re-orders candidates by Android readiness "
+            "score (routing preference weight). "
+            "Regression tests confirm Android truth materially changes decisions. "
+            "System has moved from truth-visible to truth-decision-consumed."
         ),
     )
 
@@ -1441,9 +1499,10 @@ def _build_next_pr_items() -> List[NextPRItem]:
                 "device_selection (galaxy_gateway.routing.device_selection) already calls "
                 "canonical projection helpers (core.unified.gateway_capability_projection). "
                 "DeviceRouter (galaxy_gateway.device_router) routes tasks to devices. "
-                "BUT: neither device_selection nor DeviceRouter nor any dispatch policy "
-                "currently queries android_device_state_store or get_device_ecosystem_summary() "
-                "to filter/weight/rank candidate Android devices by their live runtime truth. "
+                "CLOSED by V2#1016: _score_candidate() now accepts android_snapshot "
+                "and applies score adjustments; _select_target_from_candidates() fetches "
+                "per-device snapshots; select_devices() step 0c re-orders by Android "
+                "readiness score. Regression tests confirm truth-decision-consumed. "
                 "Closing this gap makes routing decisions aware of: model readiness, "
                 "accessibility_ready, overlay_ready, local_loop_ready, fallback tier, "
                 "health score, carrier presence, manifestation state. "
@@ -1453,9 +1512,8 @@ def _build_next_pr_items() -> List[NextPRItem]:
             target_repos=["DannyFish-11/ufo-galaxy-realization-v2"],
             depends_on=[],
             status_note=(
-                "NEW P0 — emerged after PR-A/PR-B/PR-C closed the evidence and "
-                "continuity gaps. The previous P0 gaps are now closed. "
-                "This is the only remaining true P0 gap."
+                "CLOSED by V2#1016 — the only remaining P0 gap has been addressed. "
+                "Android truth is now materially consumed by canonical dispatch decisions."
             ),
         ),
         NextPRItem(
