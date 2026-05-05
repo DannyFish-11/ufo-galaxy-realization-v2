@@ -198,6 +198,9 @@ TOPOLOGY_VIEWER_ROLE: str = "TOPOLOGY_VIEWER"
 
 ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
     "total_devices_with_snapshot",
+    "snapshot_truth_received",
+    "last_snapshot_absorbed_at",
+    "snapshot_freshness_seconds",
     "local_ai_ready_count",
     "model_ready_count",
     "accessibility_ready_count",
@@ -205,12 +208,17 @@ ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
     "local_loop_ready_count",
     "pending_first_download_count",
 })
-"""Whitelist of count-level keys retained in OperatorSnapshot.android_ecosystem.
+"""Whitelist of count-level and freshness keys retained in OperatorSnapshot.android_ecosystem.
 
-These keys correspond to the aggregate count fields returned by
+These keys correspond to the aggregate count and freshness fields returned by
 :func:`~core.android_device_state_store.get_device_ecosystem_summary`.
 The per-device ``devices`` list is intentionally excluded — full per-device
 detail is the responsibility of GET /api/v1/operator/devices/ecosystem.
+
+Freshness keys (PR-5 V2):
+  snapshot_truth_received — True when at least one device snapshot has been absorbed.
+  last_snapshot_absorbed_at — Unix timestamp of the most recently absorbed snapshot.
+  snapshot_freshness_seconds — Seconds since the most recent snapshot was absorbed.
 """
 
 
@@ -782,14 +790,15 @@ class OperatorSnapshot:
     source_runtime_posture_counts: Dict[str, int] = field(default_factory=dict)
     recent_source_runtime_postures: List[Dict[str, Any]] = field(default_factory=list)
 
-    # Android ecosystem summary (PR-RT, PR-4)
-    # Compact count-level summary from core.android_device_state_store.
+    # Android ecosystem summary (PR-RT, PR-4, PR-5)
+    # Compact count-level and freshness summary from core.android_device_state_store.
     # Only the keys in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS are included — the
     # ``devices`` per-item list is intentionally excluded; it is owned by
     # GET /api/v1/operator/devices/ecosystem.
-    # Keys present: total_devices_with_snapshot, local_ai_ready_count,
-    # model_ready_count, accessibility_ready_count, overlay_ready_count,
-    # local_loop_ready_count, pending_first_download_count.
+    # Keys present: total_devices_with_snapshot, snapshot_truth_received,
+    # last_snapshot_absorbed_at, snapshot_freshness_seconds,
+    # local_ai_ready_count, model_ready_count, accessibility_ready_count,
+    # overlay_ready_count, local_loop_ready_count, pending_first_download_count.
     android_ecosystem: Dict[str, Any] = field(default_factory=dict)
 
     # Authority declaration

@@ -395,6 +395,13 @@ class FlowOperatorProjection:
     current_execution_phase: str = AndroidExecutionPhase.unknown.value
     last_android_execution_event: Optional[AndroidCanonicalExecutionEvent] = None
 
+    # V2-side absorption timestamp of the most recent Android execution event
+    # absorbed for this flow.  None when no execution events have been absorbed.
+    # Distinct from last_updated_at (which reflects the entity update time) —
+    # this specifically tracks when the last Android-side event reached V2,
+    # allowing operators to detect event ingestion staleness.
+    last_event_absorbed_at: Optional[float] = None
+
     # Current blocking / gate / stagnation / waiting reason
     blocking_reason: str = ""
 
@@ -434,6 +441,7 @@ class FlowOperatorProjection:
                 if self.last_android_execution_event is not None
                 else None
             ),
+            "last_event_absorbed_at": self.last_event_absorbed_at,
             "blocking_reason": self.blocking_reason,
             "recovery_status": self.recovery_status,
             "truth_alignment_status": self.truth_alignment_status,
@@ -525,6 +533,15 @@ class FlowLevelOperatorSurface:
                 f"Blocked at phase={last_event.phase.value}"
             )
 
+        # ── last_event_absorbed_at — V2 ingestion timestamp of most recent event ──
+        try:
+            meta = getattr(entity, "metadata", None) or {}
+            _ts = meta.get("_last_android_event_absorbed_at")
+            if isinstance(_ts, (int, float)):
+                proj.last_event_absorbed_at = float(_ts)
+        except Exception:
+            pass
+
         # ── Recovery status ───────────────────────────────────────────────
         proj.recovery_status = self._derive_recovery_status(
             entity.object_mapping.canonical_task_id
@@ -602,7 +619,7 @@ class FlowLevelOperatorSurface:
         try:
             from core.delegated_flow_entity import get_delegated_flow_entity_runtime
             runtime = get_delegated_flow_entity_runtime()
-            entity = runtime.get(flow_id)
+            entity = runtime.get_by_flow_id(flow_id)
             if entity is not None:
                 meta = getattr(entity, "metadata", None) or {}
                 ace_dict = meta.get("_last_android_execution_event")

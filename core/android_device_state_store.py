@@ -218,6 +218,7 @@ class DeviceStateSnapshot:
             "_source": "android_device_state_store",
             "device_id": self.device_id,
             "absorbed_at": self.absorbed_at,
+            "snapshot_age_seconds": round(time.time() - self.absorbed_at, 2),
             "snapshot_ts": self.snapshot_ts,
             "llama_cpp_available": self.llama_cpp_available,
             "ncnn_available": self.ncnn_available,
@@ -484,8 +485,21 @@ class _AndroidDeviceStateStore:
                 "runtime_health_snapshot": snap.runtime_health_snapshot,
             })
 
+        now = time.time()
+        last_snapshot_absorbed_at: Optional[float] = (
+            max(s.absorbed_at for s in snapshots) if snapshots else None
+        )
+        snapshot_freshness_seconds: Optional[float] = (
+            round(now - last_snapshot_absorbed_at, 2)
+            if last_snapshot_absorbed_at is not None
+            else None
+        )
+
         return {
             "total_devices_with_snapshot": total,
+            "snapshot_truth_received": total > 0,
+            "last_snapshot_absorbed_at": last_snapshot_absorbed_at,
+            "snapshot_freshness_seconds": snapshot_freshness_seconds,
             "local_ai_ready_count": local_ai_ready,
             "model_ready_count": model_ready,
             "accessibility_ready_count": accessibility_ready,
@@ -684,7 +698,7 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
         from core.delegated_flow_entity import get_delegated_flow_entity_runtime
 
         runtime = get_delegated_flow_entity_runtime()
-        entity = runtime.get(evt.flow_id)
+        entity = runtime.get_by_flow_id(evt.flow_id)
         if entity is None:
             return  # Flow not known to V2 — nothing to update
 
