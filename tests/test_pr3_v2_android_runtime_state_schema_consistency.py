@@ -201,15 +201,30 @@ class TestEcosystemModelSubdictPresenceFields:
                 "quantization": "q4_k_m",
                 "model_version": "v2.0",
                 "mobilevlm_present": True,
+                "mobilevlm_checksum_ok": False,
+                "seeclick_present": True,
             },
         )
         summary = get_device_ecosystem_summary()
         dev = next(d for d in summary["devices"] if d["device_id"] == "mp_dev_05")
         m = dev["model"]
-        for key in ("model_id", "runtime_type", "checksum_ok", "compatibility_ok",
-                    "quantization", "model_version", "mobilevlm_present",
-                    "mobilevlm_checksum_ok", "seeclick_present"):
+        expected = {
+            "model_id": "mbvlm_7b",
+            "runtime_type": "LLAMA_CPP",
+            "checksum_ok": True,
+            "compatibility_ok": True,
+            "quantization": "q4_k_m",
+            "model_version": "v2.0",
+            "mobilevlm_present": True,
+            "mobilevlm_checksum_ok": False,
+            "seeclick_present": True,
+        }
+        for key, expected_value in expected.items():
             assert key in m, f"Missing key in model sub-dict: {key}"
+            assert m[key] == expected_value, (
+                f"Value mismatch for model sub-dict key {key!r}: "
+                f"expected {expected_value!r}, got {m[key]!r}"
+            )
 
     def test_C06_none_values_for_unset_presence_fields(self):
         """Unset presence fields appear as None (not absent) in model sub-dict."""
@@ -299,6 +314,16 @@ class TestCrossPathSchemaConsistency:
         "snapshotTs": 1_700_500_000.0,
     }
 
+    # Fields that must appear identically in both to_dict() and readiness_summary()
+    _READINESS_FIELDS = (
+        "model_ready",
+        "accessibility_ready",
+        "overlay_ready",
+        "local_loop_ready",
+        "llama_cpp_available",
+        "pending_first_download",
+    )
+
     def test_E01_all_high_value_fields_in_to_dict(self):
         snap = absorb_device_state_snapshot("cp_dev_01", self._FULL_PAYLOAD)
         d = snap.to_dict()
@@ -321,8 +346,7 @@ class TestCrossPathSchemaConsistency:
         snap = absorb_device_state_snapshot("cp_dev_02", self._FULL_PAYLOAD)
         d = snap.to_dict()
         rs = snap.readiness_summary()
-        for key in ("model_ready", "accessibility_ready", "overlay_ready",
-                    "local_loop_ready", "llama_cpp_available", "pending_first_download"):
+        for key in self._READINESS_FIELDS:
             assert d[key] == rs[key], f"Mismatch for {key}: to_dict={d[key]} readiness_summary={rs[key]}"
 
     def test_E03_model_fields_consistent_to_dict_vs_ecosystem_model_subdict(self):
