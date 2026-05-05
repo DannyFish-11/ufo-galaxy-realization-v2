@@ -260,7 +260,7 @@ class TestDesktopPresenceRuntimeCarrierStamp:
             "'DesktopPresenceRuntime.handle_request'."
         )
 
-    def test_14b_authority_chain_value(self):
+    def test_14b_authority_chain_string_is_handle_request(self):
         """authority_chain value must name DesktopPresenceRuntime.handle_request."""
         assert "DesktopPresenceRuntime.handle_request" in self._SRC, (
             "ingress_carrier_context.authority_chain must be set to the string "
