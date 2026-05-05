@@ -500,7 +500,7 @@ class TestNextPRRoadmap:
         for item in report.next_pr_items:
             assert isinstance(item, NextPRItem)
 
-    def test_exactly_1_p0_item(self, report: PostClosureReport) -> None:
+    def test_at_least_1_p0_item(self, report: PostClosureReport) -> None:
         p0_items = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
         assert len(p0_items) >= 1, (
             f"Expected at least 1 P0 next-PR item; got {len(p0_items)}"
