@@ -215,11 +215,20 @@ def adopt_handoff_session(
         _task_id: Optional[str] = None
         _session_id: Optional[str] = None
         _mesh_session_id: Optional[str] = None
+        _delegation_transfer_session_id: Optional[str] = None
 
         if envelope is not None:
             _trace_id = getattr(envelope, "trace_id", None) or None
             _task_id = getattr(envelope, "task_id", None) or None
             _session_id = getattr(envelope, "session_id", None) or None
+            # delegation_transfer_session_id: explicit field on envelope takes
+            # priority; falls back to session_id since DelegatedHandoffContractIdentity
+            # maps delegation_transfer_session_id → session_id.
+            _delegation_transfer_session_id = (
+                getattr(envelope, "delegation_transfer_session_id", None)
+                or _session_id
+                or None
+            )
 
         # Attempt to attach a mesh session ID from PR-33 context
         try:
@@ -235,6 +244,10 @@ def adopt_handoff_session(
         _runtime_session_id = existing_runtime_session_id or str(uuid.uuid4())
         if not _session_id:
             _session_id = str(uuid.uuid4())
+            # Keep delegation_transfer_session_id in sync when session_id was
+            # newly generated so the two stay coherent.
+            if not _delegation_transfer_session_id:
+                _delegation_transfer_session_id = _session_id
 
         return LocalTakeoverSessionContext(
             session_id=_session_id,
@@ -243,6 +256,7 @@ def adopt_handoff_session(
             trace_id=_trace_id,
             adopted=_adopted,
             mesh_session_id=_mesh_session_id,
+            delegation_transfer_session_id=_delegation_transfer_session_id,
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("adopt_handoff_session: failed: %s", exc)
@@ -362,9 +376,13 @@ def build_local_takeover_context(
         # Merge session context from adoption
         _sc_id: Optional[str] = None
         _rt_sess_id: Optional[str] = None
+        _delegation_transfer_session_id: Optional[str] = None
         if session_context is not None:
             _sc_id = getattr(session_context, "session_id", None)
             _rt_sess_id = getattr(session_context, "runtime_session_id", None)
+            _delegation_transfer_session_id = getattr(
+                session_context, "delegation_transfer_session_id", None
+            )
             if _sc_id:
                 _session_dict["session_id"] = _sc_id
 
@@ -373,6 +391,7 @@ def build_local_takeover_context(
             "trace_id": _trace_id,
             "task_id": _task_id,
             "runtime_session_id": _rt_sess_id,
+            "delegation_transfer_session_id": _delegation_transfer_session_id,
             "force_local_execution": True,
         }
         if extra_metadata:
@@ -631,12 +650,16 @@ class TargetTakeoverHandler:
             )
             _session_id = getattr(session_ctx, "session_id", None) if session_ctx else None
             _rt_session_id = getattr(session_ctx, "runtime_session_id", None) if session_ctx else None
+            _delegation_transfer_session_id = (
+                getattr(session_ctx, "delegation_transfer_session_id", None) if session_ctx else None
+            )
 
             logger.debug(
                 "TargetTakeoverHandler.handle: session adopted | "
-                "trace_id=%s session_id=%s adopted=%s",
+                "trace_id=%s session_id=%s delegation_transfer_session_id=%s adopted=%s",
                 _trace_id,
                 _session_id,
+                _delegation_transfer_session_id,
                 getattr(session_ctx, "adopted", False) if session_ctx else False,
             )
 
@@ -676,6 +699,7 @@ class TargetTakeoverHandler:
                     "source_device_id": getattr(envelope, "source_device_id", None) if envelope else None,
                     "target_device_id": getattr(envelope, "target_device_id", None) if envelope else None,
                     "entry_mode": entry_mode,
+                    "delegation_transfer_session_id": _delegation_transfer_session_id,
                 },
             )
 

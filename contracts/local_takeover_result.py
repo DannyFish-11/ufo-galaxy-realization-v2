@@ -139,6 +139,11 @@ class LocalTakeoverSessionContext(BaseModel):
     mesh_session_id
         The mesh-level session identifier, if one was available from
         PR-33 context.  ``None`` when mesh sessions are not active.
+    delegation_transfer_session_id
+        The delegation/transfer lifecycle session identifier.  Propagated from
+        the handoff envelope's ``session_id`` (which IS the delegation-transfer
+        session per ``DelegatedHandoffContractIdentity.delegation_transfer_session_id``).
+        ``None`` when the takeover did not originate from a delegation contract.
     metadata
         Arbitrary extension metadata.
     """
@@ -166,6 +171,14 @@ class LocalTakeoverSessionContext(BaseModel):
     mesh_session_id: Optional[str] = Field(
         default=None,
         description="Mesh-level session ID from PR-33 context, if available.",
+    )
+    delegation_transfer_session_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Delegation/transfer lifecycle session identifier propagated from the "
+            "handoff envelope (alias: envelope.session_id).  Enables takeover receivers "
+            "to trace this execution back to the originating delegation contract."
+        ),
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
