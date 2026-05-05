@@ -53,6 +53,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
+from core.android_device_state_store import get_device_state_snapshot  # noqa: E402
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
 from core.unified.gateway_capability_projection import (  # noqa: E402
     get_gateway_capabilities_for_device,
@@ -97,6 +98,22 @@ RUNTIME_STATE_PREFILTER_IN_SELECTION: str = (
     "devices that are provably unfit: pending_first_download=True AND no "
     "current_fallback_tier.  Gracefully degrades when the store is unavailable "
     "or has no snapshot for a device.  Resolves PR-7 requirement §2."
+)
+
+# ORCHESTRATION_CONSUMES_ANDROID_TRUTH closure sentinel.
+ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION: str = (
+    "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1: "
+    "select_devices() applies Android runtime truth as routing preference weight "
+    "(step 0c) after the hard unfit-device pre-filter (step 0b). "
+    "Each candidate is scored by DeviceStateSnapshot fields: "
+    "+10 model_ready=True, +5 accessibility_ready=True, +5 local_loop_ready=True, "
+    "-10 warmup_result=failed, -20 model_ready=False and no current_fallback_tier. "
+    "Candidates are re-ordered by descending score so the most Android-ready "
+    "device is preferred.  Devices with no snapshot retain their original order "
+    "(no penalty for absent truth — fail-open). "
+    "This step closes the ORCHESTRATION_CONSUMES_ANDROID_TRUTH P0 gap in the "
+    "galaxy_gateway.routing.device_selection selection path: Android truth now "
+    "materially influences candidate ordering, not just hard exclusion."
 )
 
 
@@ -224,15 +241,13 @@ def select_devices(
     # Devices with no snapshot are admitted (fail-open / graceful degradation).
     # The filter preserves the original list when all candidates would be excluded.
     try:
-        from core.android_device_state_store import get_device_state_snapshot as _get_snap
-
         _rt_admitted: List[Any] = []
         for _dev in devices:
             _did = getattr(_dev, "device_id", None) or ""
             if not _did:
                 _rt_admitted.append(_dev)
                 continue
-            _snap = _get_snap(_did)
+            _snap = get_device_state_snapshot(_did)
             if _snap is None:
                 # No snapshot — no runtime truth to exclude on; admit.
                 _rt_admitted.append(_dev)
@@ -272,6 +287,58 @@ def select_devices(
             "select_devices: runtime-state pre-filter unavailable "
             "(graceful degradation): %s",
             _rt_err,
+        )
+
+    # ── 0c. Android runtime truth routing weight (ORCHESTRATION_CONSUMES_ANDROID_TRUTH) ─
+    # Re-order candidates by descending Android readiness score so that the
+    # most ready Android device is preferred.  This is a soft preference step:
+    # it does not exclude candidates — it only affects ordering.  Devices with
+    # no snapshot retain a neutral score (0) and are not penalised.
+    # Per ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION.
+    try:
+        def _android_readiness_score(dev: Any) -> int:
+            _did = getattr(dev, "device_id", None) or ""
+            if not _did:
+                return 0
+            _snap = get_device_state_snapshot(_did)
+            if _snap is None:
+                return 0
+            _score = 0
+            if getattr(_snap, "model_ready", None) is True:
+                _score += 10
+            if getattr(_snap, "accessibility_ready", None) is True:
+                _score += 5
+            if getattr(_snap, "local_loop_ready", None) is True:
+                _score += 5
+            if getattr(_snap, "warmup_result", None) == "failed":
+                _score -= 10
+            if getattr(_snap, "model_ready", None) is False and not (
+                getattr(_snap, "current_fallback_tier", None) or ""
+            ):
+                _score -= 20
+            return _score
+
+        _scores = [_android_readiness_score(d) for d in devices]
+        if any(s != 0 for s in _scores):
+            # At least one device has a non-neutral Android score — re-order.
+            _indexed = sorted(
+                enumerate(devices),
+                key=lambda idx_dev: _scores[idx_dev[0]],
+                reverse=True,
+            )
+            _reordered = [d for _, d in _indexed]
+            if _reordered != devices:
+                logger.debug(
+                    "select_devices [ORCHESTRATION_CONSUMES_ANDROID_TRUTH]: "
+                    "re-ordered %d candidate(s) by Android readiness score",
+                    len(devices),
+                )
+            devices = _reordered
+    except Exception as _wt_err:
+        logger.debug(
+            "select_devices: Android runtime truth routing weight unavailable "
+            "(graceful degradation): %s",
+            _wt_err,
         )
 
     # ── 1. exec_mode-aware filtering via canonical gateway capability view ──
