@@ -532,6 +532,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 "active": sum(
                     1 for e in all_entities if e.phase.is_active()
                 ),
+                "authority": "OPERATOR_ROUTES_V1",
             })
         except Exception as exc:
             logger.error("list_flows endpoint error: %s", exc)

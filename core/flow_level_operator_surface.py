@@ -415,6 +415,7 @@ class FlowOperatorProjection:
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-safe dict representation."""
         return {
+            "_authority": FLOW_LEVEL_OPERATOR_SURFACE_AUTHORITY,
             "flow_id": self.flow_id,
             "flow_lineage_id": self.flow_lineage_id,
             "flow_segment_id": self.flow_segment_id,
