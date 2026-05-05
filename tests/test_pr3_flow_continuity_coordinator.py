@@ -629,7 +629,7 @@ class TestDecideReconnect:
         class _MockRegistry:
             pass
 
-        def _mock_classify(device_id, *, runtime_attachment_session_id="", registry=None):
+        def _mock_classify(device_id, *, runtime_attachment_session_id="", registry=None, **kwargs):
             return classify_return
 
         c = FlowContinuityCoordinator()

@@ -607,6 +607,10 @@ class AttachedSessionRegistryEntry:
     entry_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     reconnect_count: int = 0
     last_reconnect_at: Optional[float] = None
+    # PR-C: Android durable continuity identity — carried across reconnects so
+    # that the registry can validate durable continuity on re-registration.
+    durable_session_id: str = ""
+    continuity_epoch: int = 0
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -649,6 +653,8 @@ class AttachedSessionRegistryEntry:
             "metadata": self.metadata,
             "reconnect_count": self.reconnect_count,
             "last_reconnect_at": self.last_reconnect_at,
+            "durable_session_id": self.durable_session_id,
+            "continuity_epoch": self.continuity_epoch,
         }
 
     def to_json(self) -> str:
@@ -694,6 +700,8 @@ class AttachedSessionRegistryEntry:
             metadata=data.get("metadata", {}),
             reconnect_count=int(data.get("reconnect_count", 0)),
             last_reconnect_at=float(data["last_reconnect_at"]) if data.get("last_reconnect_at") is not None else None,
+            durable_session_id=data.get("durable_session_id", "") or "",
+            continuity_epoch=int(data.get("continuity_epoch", 0) or 0),
         )
 
 
@@ -860,6 +868,8 @@ class AttachedSessionRegistry:
         coordination_role: str = "",
         capability_tier: str = "",
         metadata: Optional[Dict[str, Any]] = None,
+        durable_session_id: str = "",
+        continuity_epoch: int = -1,
     ) -> AttachedSessionRegistryEntry:
         """Apply *transition* to *entry*, returning the updated entry.
 
@@ -901,6 +911,13 @@ class AttachedSessionRegistry:
             or entry.runtime_attachment_session_id
         )
 
+        # PR-C: preserve durable continuity fields through transitions;
+        # allow callers to supply updated values (e.g. on reconnect with new epoch).
+        resolved_durable_session_id = durable_session_id or entry.durable_session_id
+        resolved_continuity_epoch = (
+            continuity_epoch if continuity_epoch >= 0 else entry.continuity_epoch
+        )
+
         updated = AttachedSessionRegistryEntry(
             entry_id=entry.entry_id,
             session_id=session_id if session_id else entry.session_id,
@@ -928,6 +945,8 @@ class AttachedSessionRegistry:
                 if transition == RegistryTransition.reconnect
                 else entry.last_reconnect_at
             ),
+            durable_session_id=resolved_durable_session_id,
+            continuity_epoch=resolved_continuity_epoch,
         )
 
         replaced = self._replace_in_buffer(updated)
@@ -1119,6 +1138,8 @@ def register_session(
     capability_tier: str = "",
     metadata: Optional[Dict[str, Any]] = None,
     registry: Optional[AttachedSessionRegistry] = None,
+    durable_session_id: str = "",
+    continuity_epoch: int = 0,
 ) -> AttachedSessionRegistryEntry:
     """Register a new session for *device_id* in the registry.
 
@@ -1183,6 +1204,8 @@ def register_session(
         registered_at=now,
         last_transition_at=now,
         metadata=metadata or {},
+        durable_session_id=durable_session_id or "",
+        continuity_epoch=int(continuity_epoch or 0),
     )
     registry.push_new(entry)
     return entry
@@ -1200,6 +1223,8 @@ def reconnect_session(
     runtime_attachment_session_id: str = "",
     metadata: Optional[Dict[str, Any]] = None,
     registry: Optional[AttachedSessionRegistry] = None,
+    durable_session_id: str = "",
+    continuity_epoch: int = -1,
 ) -> AttachedSessionRegistryEntry:
     """Reconnect a previously detached/disconnected session.
 
@@ -1240,6 +1265,8 @@ def reconnect_session(
         session_id=session_id,
         runtime_attachment_session_id=runtime_attachment_session_id,
         metadata=metadata,
+        durable_session_id=durable_session_id,
+        continuity_epoch=continuity_epoch,
     )
 
 
@@ -1548,11 +1575,12 @@ def classify_reconnect_outcome(
     device_id: str,
     *,
     runtime_attachment_session_id: str = "",
+    durable_session_id: str = "",
     registry: Optional[AttachedSessionRegistry] = None,
 ) -> tuple:
     """Classify a reconnect event as *continuity_resume* or *new_attachment*.
 
-    This is the canonical PR-G server-side decision function for the
+    This is the canonical PR-G / PR-C server-side decision function for the
     registration/reconnect path.  It consults the registry to determine
     whether the inbound reconnect should restore an existing runtime
     attachment continuity or start a new attachment session.
@@ -1563,8 +1591,14 @@ def classify_reconnect_outcome(
     2. If no entry exists → ``new_attachment``.
     3. If the entry is in a terminal state (replaced/invalidated) → ``new_attachment``.
     4. If *runtime_attachment_session_id* is supplied:
-       - If it matches the stored value → ``continuity_resume``.
+       - If it matches the stored value → proceed to durable check (step 4b).
        - If it does **not** match → ``new_attachment`` (prevents identity spoofing).
+    4b. If *durable_session_id* is also supplied (PR-C):
+       - If it matches the stored durable_session_id → ``continuity_resume``.
+       - If it does **not** match the stored value (and the entry has a stored value)
+         → ``new_attachment`` (durable identity mismatch indicates a different session era).
+       - If the stored entry has no durable_session_id → ``continuity_resume``
+         (backward compatible with sessions registered before durable fields were tracked).
     5. If *runtime_attachment_session_id* is absent (older clients):
        - If an active/detached entry exists → ``continuity_resume`` (backward
          compatible: treat existing session as resumable without explicit id).
@@ -1577,6 +1611,12 @@ def classify_reconnect_outcome(
     runtime_attachment_session_id
         The canonical attachment identity supplied by the client (PR-G).
         May be empty for older clients; see fallback logic above.
+    durable_session_id
+        The Android durable session identifier (PR-C).  When supplied, the
+        classifier additionally validates that the presented durable identity
+        matches the stored entry's durable_session_id before granting
+        ``continuity_resume``.  May be empty when the client does not supply
+        it; absence is non-constraining.
     registry
         Optional :class:`AttachedSessionRegistry` to use; defaults to the
         module singleton.
@@ -1608,12 +1648,17 @@ def classify_reconnect_outcome(
         return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
 
     if runtime_attachment_session_id:
-        # Explicit id supplied: must match stored value for continuity resume
-        if existing.runtime_attachment_session_id == runtime_attachment_session_id:
-            return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
-        return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+        # Explicit attachment id supplied: must match stored value
+        if existing.runtime_attachment_session_id != runtime_attachment_session_id:
+            return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+        # PR-C: if the client also supplies a durable_session_id, validate it.
+        if durable_session_id and existing.durable_session_id:
+            if existing.durable_session_id != durable_session_id:
+                # Durable identity mismatch — different session era → new attachment
+                return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+        return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
 
-    # Fallback: no explicit id; treat existing session as continuity resume
+    # Fallback: no explicit attachment id; treat existing session as continuity resume
     # (backward compatible with older Android clients)
     return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
 
@@ -1702,6 +1747,8 @@ def update_session_posture(
         metadata={**entry.metadata, **(metadata or {})},
         reconnect_count=entry.reconnect_count,
         last_reconnect_at=entry.last_reconnect_at,
+        durable_session_id=entry.durable_session_id,
+        continuity_epoch=entry.continuity_epoch,
     )
 
     replaced = registry._replace_in_buffer(updated)

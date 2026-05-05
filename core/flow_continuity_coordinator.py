@@ -549,6 +549,9 @@ class ContinuityEventContext:
     device_id: str = ""
     session_id: str = ""
     runtime_attachment_session_id: str = ""
+    # PR-C: Android durable continuity identity fields
+    durable_session_id: str = ""
+    continuity_epoch: int = 0
     contract_id: str = ""
     tracker_id: str = ""
     flow_id: str = ""
@@ -566,6 +569,8 @@ class ContinuityEventContext:
             "device_id": self.device_id,
             "session_id": self.session_id,
             "runtime_attachment_session_id": self.runtime_attachment_session_id,
+            "durable_session_id": self.durable_session_id,
+            "continuity_epoch": self.continuity_epoch,
             "contract_id": self.contract_id,
             "tracker_id": self.tracker_id,
             "flow_id": self.flow_id,
@@ -647,6 +652,9 @@ class ContinuityDecisionArtifact:
     device_id: str = ""
     session_id: str = ""
     runtime_attachment_session_id: str = ""
+    # PR-C: Android durable continuity identity fields preserved in artifact
+    durable_session_id: str = ""
+    continuity_epoch: int = 0
     contract_id: str = ""
     flow_id: str = ""
     flow_lineage_id: str = ""
@@ -668,6 +676,8 @@ class ContinuityDecisionArtifact:
             "device_id": self.device_id,
             "session_id": self.session_id,
             "runtime_attachment_session_id": self.runtime_attachment_session_id,
+            "durable_session_id": self.durable_session_id,
+            "continuity_epoch": self.continuity_epoch,
             "contract_id": self.contract_id,
             "flow_id": self.flow_id,
             "flow_lineage_id": self.flow_lineage_id,
@@ -701,6 +711,8 @@ class ContinuityDecisionArtifact:
             runtime_attachment_session_id=data.get(
                 "runtime_attachment_session_id", ""
             ),
+            durable_session_id=data.get("durable_session_id", "") or "",
+            continuity_epoch=int(data.get("continuity_epoch", 0) or 0),
             contract_id=data.get("contract_id", ""),
             flow_id=data.get("flow_id", ""),
             flow_lineage_id=data.get("flow_lineage_id", ""),
@@ -930,6 +942,8 @@ class FlowContinuityCoordinator:
             device_id=ctx.device_id,
             session_id=ctx.session_id,
             runtime_attachment_session_id=ctx.runtime_attachment_session_id,
+            durable_session_id=ctx.durable_session_id,
+            continuity_epoch=ctx.continuity_epoch,
             contract_id=ctx.contract_id,
             flow_id=ctx.flow_id,
             flow_lineage_id=ctx.flow_lineage_id,
@@ -1147,6 +1161,7 @@ class FlowContinuityCoordinator:
             registry_outcome: str = classify_fn(
                 ctx.device_id,
                 runtime_attachment_session_id=ctx.runtime_attachment_session_id,
+                durable_session_id=ctx.durable_session_id,
                 registry=registry,
             )
         except Exception as exc:
