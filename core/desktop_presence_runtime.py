@@ -608,6 +608,9 @@ class DesktopPresenceRuntime:
         # Provides a single normalized carrier descriptor so all operator
         # surfaces and tests can identify which carrier path originated the
         # invocation without inspecting raw ``entrypoint_source`` strings.
+        # PR-6: add invocation_id (= runtime_session_id) so the ingress stamp
+        # ties each invocation back to its unique correlation ID, enabling
+        # stable continuity tracing across presence→task→delegation chains.
         result.setdefault(
             "ingress_carrier_context",
             {
@@ -615,6 +618,8 @@ class DesktopPresenceRuntime:
                 "authority_chain": "DesktopPresenceRuntime.handle_request",
                 "session_id": conversation_session_id,
                 "user_id": user_id or "default",
+                "invocation_id": rsession.runtime_session_id,
+                "control_session_id": control_session_id,
             },
         )
         return result
@@ -680,6 +685,8 @@ class DesktopPresenceRuntime:
                 user_id=user_id,
                 context=context,
                 use_constellation=use_constellation,
+                control_session_id=kwargs.get("control_session_id", ""),
+                runtime_attachment_session_id=kwargs.get("runtime_attachment_session_id", ""),
             )
 
         # Unknown source — log a warning and fall back to OpenClawd so requests
@@ -762,6 +769,8 @@ class DesktopPresenceRuntime:
         user_id: str,
         context: Optional[List[Dict]],
         use_constellation: bool,
+        control_session_id: str = "",
+        runtime_attachment_session_id: str = "",
     ) -> Dict[str, Any]:
         """Delegate to the E2E pipeline with runtime_session_id propagation."""
         # Inject runtime_session_id into the context so downstream modules can
@@ -771,6 +780,8 @@ class DesktopPresenceRuntime:
             {
                 "runtime_session_id": rsession.runtime_session_id,
                 "trace_id": rsession.runtime_session_id,
+                "control_session_id": control_session_id,
+                "runtime_attachment_session_id": runtime_attachment_session_id,
             }
         )
 
@@ -784,6 +795,8 @@ class DesktopPresenceRuntime:
                     "user_id": user_id,
                     "runtime_session_id": rsession.runtime_session_id,
                     "trace_id": rsession.runtime_session_id,
+                    "control_session_id": control_session_id,
+                    "runtime_attachment_session_id": runtime_attachment_session_id,
                 }
                 result = await constellation.run(
                     task_description=message,
