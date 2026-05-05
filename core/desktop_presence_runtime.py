@@ -604,6 +604,19 @@ class DesktopPresenceRuntime:
         )
         if _dsp is not None:
             result["desktop_status_projection"] = _dsp
+        # PR-5-V2: stamp ingress carrier context (additive, non-breaking).
+        # Provides a single normalized carrier descriptor so all operator
+        # surfaces and tests can identify which carrier path originated the
+        # invocation without inspecting raw ``entrypoint_source`` strings.
+        result.setdefault(
+            "ingress_carrier_context",
+            {
+                "carrier": source,
+                "authority_chain": "DesktopPresenceRuntime.handle_request",
+                "session_id": conversation_session_id,
+                "user_id": user_id or "default",
+            },
+        )
         return result
 
     # ------------------------------------------------------------------
