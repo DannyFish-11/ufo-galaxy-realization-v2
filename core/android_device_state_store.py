@@ -276,16 +276,17 @@ class DeviceStateSnapshot:
 class DeviceExecutionEvent:
     """A single structured execution event emitted by Android during a delegated flow.
 
-    Populated from DEVICE_EXECUTION_EVENT messages.  These events are
-    absorbed into :class:`~core.flow_level_operator_surface.FlowLevelOperatorSurface`
-    so the V2 operator plane can observe live cross-device execution state.
+    Populated from DEVICE_EXECUTION_EVENT messages.  Events are stored in the
+    in-process ring buffer and forwarded to the delegated flow entity's metadata
+    so that :class:`~core.flow_level_operator_surface.FlowLevelOperatorSurface`
+    can project the current Android execution phase to operator surfaces.
 
     Attributes
     ----------
     device_id
         The Android device that emitted this event.
     absorbed_at
-        Unix timestamp when V2 absorbed this event.
+        Unix timestamp when V2 absorbed this event (V2-side clock).
     flow_id
         Delegated flow id this event belongs to.
     task_id
@@ -295,6 +296,8 @@ class DeviceExecutionEvent:
         stagnation / gate_decision / completed / failed / …).
     step_index
         Zero-based step index within the current loop, or -1 if unknown.
+        The parser coerces a missing or ``None`` value to ``-1`` rather
+        than raising.
     is_blocking
         Whether this event represents a blocking condition.
     blocking_reason
@@ -303,6 +306,13 @@ class DeviceExecutionEvent:
         Whether stagnation was detected at this step.
     fallback_tier
         Fallback tier active at time of this event, if any.
+    event_ts
+        Android-device-side event timestamp (seconds since epoch), if the
+        device included ``event_ts`` / ``eventTs`` / ``timestamp`` in the
+        payload.  This is distinct from ``absorbed_at`` (the V2 ingestion
+        time) and allows operator surfaces to observe clock skew and true
+        device-side event ordering.  ``None`` when the Android side did not
+        include a timestamp.
     raw_payload
         Original payload dict for audit / forward-compat.
     """
@@ -317,6 +327,7 @@ class DeviceExecutionEvent:
     blocking_reason: str = ""
     stagnation_detected: bool = False
     fallback_tier: Optional[str] = None
+    event_ts: Optional[float] = None
     raw_payload: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -332,6 +343,7 @@ class DeviceExecutionEvent:
             "blocking_reason": self.blocking_reason,
             "stagnation_detected": self.stagnation_detected,
             "fallback_tier": self.fallback_tier,
+            "event_ts": self.event_ts,
         }
 
 
@@ -590,20 +602,51 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
 
 
 def _parse_execution_event(device_id: str, payload: Dict[str, Any]) -> DeviceExecutionEvent:
-    """Build a DeviceExecutionEvent from a raw DEVICE_EXECUTION_EVENT payload dict."""
+    """Build a DeviceExecutionEvent from a raw DEVICE_EXECUTION_EVENT payload dict.
+
+    Accepts both snake_case (``step_index``, ``is_blocking``, …) and
+    camelCase (``stepIndex``, ``isBlocking``, …) keys so the parser is
+    tolerant of the current Android JSON serialisation conventions.
+
+    ``step_index`` / ``stepIndex`` may be ``None`` in the payload (e.g. when
+    the Android side has not yet assigned a step counter); the parser coerces
+    ``None`` to ``-1`` rather than raising a ``TypeError``.
+
+    ``event_ts`` / ``eventTs`` / ``timestamp`` carries the Android-side event
+    timestamp; it is captured separately from ``absorbed_at`` (which is the
+    V2 ingestion time) so the operator surface can detect clock skew and
+    preserve ordering from the device perspective.
+    """
+    # Safely resolve step_index — guard against the key being present but None.
+    _raw_step = payload.get("step_index")
+    if _raw_step is None:
+        _raw_step = payload.get("stepIndex")
+    try:
+        _step_index = int(_raw_step) if _raw_step is not None else -1
+    except (TypeError, ValueError):
+        _step_index = -1
+
+    # Android-side event timestamp (optional).
+    _raw_ts = payload.get("event_ts") or payload.get("eventTs") or payload.get("timestamp")
+    try:
+        _event_ts: Optional[float] = float(_raw_ts) if _raw_ts is not None else None
+    except (TypeError, ValueError):
+        _event_ts = None
+
     return DeviceExecutionEvent(
         device_id=device_id,
         absorbed_at=time.time(),
         flow_id=payload.get("flow_id") or payload.get("flowId") or "",
         task_id=payload.get("task_id") or payload.get("taskId") or "",
         phase=payload.get("phase") or "unknown",
-        step_index=int(payload.get("step_index", payload.get("stepIndex", -1))),
+        step_index=_step_index,
         is_blocking=bool(payload.get("is_blocking") or payload.get("isBlocking")),
         blocking_reason=payload.get("blocking_reason") or payload.get("blockingReason") or "",
         stagnation_detected=bool(
             payload.get("stagnation_detected") or payload.get("stagnationDetected")
         ),
         fallback_tier=payload.get("fallback_tier") or payload.get("fallbackTier"),
+        event_ts=_event_ts,
         raw_payload=dict(payload),
     )
 
@@ -611,15 +654,22 @@ def _parse_execution_event(device_id: str, payload: Dict[str, Any]) -> DeviceExe
 def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
     """Attempt to forward execution event to FlowLevelOperatorSurface.
 
-    Absorbs the event as an AndroidCanonicalExecutionEvent so that
-    FlowLevelOperatorSurface can reflect live Android execution state.
+    Builds an :class:`~core.flow_level_operator_surface.AndroidCanonicalExecutionEvent`
+    from the raw :class:`DeviceExecutionEvent` and writes it to the flow
+    entity's metadata so that
+    :meth:`~core.flow_level_operator_surface.FlowLevelOperatorSurface.inspect_flow`
+    can project the current Android execution phase for operator views.
+
+    Uses the Android-side ``event_ts`` as ``android_ts`` when available so
+    the operator surface can observe the true device-side event time rather
+    than the V2 ingestion time.
+
     Failures are logged and swallowed — this is a best-effort path.
     """
     try:
         from core.flow_level_operator_surface import (
             AndroidCanonicalExecutionEvent,
             AndroidExecutionPhase,
-            get_flow_level_operator_surface,
         )
         from core.delegated_flow_entity import get_delegated_flow_entity_runtime
 
@@ -628,7 +678,6 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
         if entity is None:
             return  # Flow not known to V2 — nothing to update
 
-        surface = get_flow_level_operator_surface()
         ace = AndroidCanonicalExecutionEvent(
             flow_id=evt.flow_id,
             phase=AndroidExecutionPhase.from_string(evt.phase),
@@ -636,7 +685,7 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
             detail=evt.blocking_reason or f"phase={evt.phase}",
             is_blocking=evt.is_blocking,
             blocking_reason=evt.blocking_reason,
-            android_ts=evt.absorbed_at,
+            android_ts=evt.event_ts,
             evidence={
                 "device_id": evt.device_id,
                 "task_id": evt.task_id,
@@ -646,8 +695,10 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
             },
         )
 
-        # Store on the flow entity's metadata for operator surface projection
-        # by setting last_android_execution_event via entity metadata update.
+        # Store on the flow entity's metadata for operator surface projection.
+        # FlowLevelOperatorSurface._derive_android_execution_phase reads these
+        # keys to construct the canonical execution phase projection returned
+        # by inspect_flow().
         try:
             entity.metadata["_last_android_execution_event"] = ace.to_dict()
             entity.metadata["_last_android_phase"] = evt.phase

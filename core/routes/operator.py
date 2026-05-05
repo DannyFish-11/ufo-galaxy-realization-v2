@@ -121,8 +121,9 @@ Design constraints
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.Routes.Operator")
@@ -827,13 +828,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # ------------------------------------------------------------------
 
     @router.get("/api/v1/operator/devices/execution-events")
-    async def devices_execution_events() -> JSONResponse:
+    async def devices_execution_events(
+        flow_id: Optional[str] = Query(None, description="Filter by delegated flow id"),
+        device_id: Optional[str] = Query(None, description="Filter by Android device id"),
+        limit: int = Query(100, ge=1, le=500, description="Maximum number of events to return"),
+    ) -> JSONResponse:
         """Return recent Android execution phase events.
 
         Sources ``DEVICE_EXECUTION_EVENT`` records absorbed by
         :mod:`core.android_device_state_store`.  Returns the most recent
         events across all connected Android devices, making delegated-execution
         phase progression visible to the V2 operator surface.
+
+        Optional query parameters:
+
+        * ``flow_id`` — filter to events belonging to a specific delegated flow.
+        * ``device_id`` — filter to events emitted by a specific Android device.
+        * ``limit`` — cap the number of returned events (default 100, max 500).
 
         Returns::
 
@@ -849,6 +860,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                   "step_index": int,
                   "is_blocking": bool,
                   "blocking_reason": str | null,
+                  "stagnation_detected": bool,
+                  "fallback_tier": str | null,
                   "event_ts": float | null
                 },
                 ...
@@ -859,7 +872,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.android_device_state_store import get_android_device_state_store
             store = get_android_device_state_store()
-            events = store.list_recent_execution_events(limit=100)
+            events = store.list_recent_execution_events(
+                flow_id=flow_id or None,
+                device_id=device_id or None,
+                limit=limit,
+            )
             return JSONResponse(content={
                 "total_events": len(events),
                 "events": [e.to_dict() for e in events],
