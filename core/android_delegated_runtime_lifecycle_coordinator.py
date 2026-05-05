@@ -763,11 +763,17 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     record_participant_session(result.record)
 
             # Step 3: PR-5A — forward result-kind signals to the stable consumer.
+            # ``signal_kind`` here is the AndroidSignalKind value extracted from the
+            # reconciler's AndroidExecutionSignalEnvelope.  DelegatedSignalKind.result
+            # maps to AndroidSignalKind.final_result (success) or AndroidSignalKind.error
+            # (failure) — NOT the string "result" — so we compare against those two
+            # canonical terminal result values.
+            _RESULT_SIGNAL_KINDS: frozenset = frozenset({"final_result", "error"})
             if (
                 _RESULT_CONSUMER_AVAILABLE
                 and _android_result_consumer is not None
                 and was_updated
-                and signal_kind == "result"
+                and signal_kind in _RESULT_SIGNAL_KINDS
                 and _raw_ingress_outcome is not None
             ):
                 try:

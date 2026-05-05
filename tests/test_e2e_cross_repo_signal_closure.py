@@ -927,7 +927,13 @@ class TestDelegatedExecutionFullLoop:
     @_skip_coordinator
     @_skip_delegated_ingress
     def test_P01_result_consumer_called_on_result_signal(self):
-        """PR-5A: result consumer must be called when signal_kind==result and was_updated."""
+        """PR-5A: result consumer must be called when signal_kind is a terminal result kind.
+
+        The coordinator receives AndroidSignalKind values from the reconciler envelope.
+        DelegatedSignalKind.result maps to AndroidSignalKind.final_result (success) or
+        AndroidSignalKind.error (failure) — so the mock uses "final_result" to match
+        what the real ingress path produces.
+        """
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
@@ -937,7 +943,7 @@ class TestDelegatedExecutionFullLoop:
 
         mock_raw_outcome = MagicMock()
         mock_env = MagicMock()
-        mock_env.signal_kind = MagicMock(value="result")
+        mock_env.signal_kind = MagicMock(value="final_result")
         mock_env.session_id = ""
         mock_raw_outcome.was_updated = True
         mock_raw_outcome.reject_reason = ""

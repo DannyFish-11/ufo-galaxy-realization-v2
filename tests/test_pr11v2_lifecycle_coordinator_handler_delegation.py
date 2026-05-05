@@ -435,7 +435,13 @@ class TestCoordinatorExecutionSignalDeviceId:
 class TestCoordinatorPR5AResultConsumer:
 
     def test_E01_result_consumer_called_when_result_kind_updated(self):
-        """on_execution_signal calls result consumer for result-kind updated signals."""
+        """on_execution_signal calls result consumer for terminal result-kind signals.
+
+        The coordinator receives AndroidSignalKind values from the reconciler envelope.
+        DelegatedSignalKind.result maps to AndroidSignalKind.final_result (success) or
+        AndroidSignalKind.error (failure).  The mock uses "final_result" to match
+        what the real ingress path produces for a successful execution result.
+        """
         reset_lifecycle_coordinator()
         lc = get_lifecycle_coordinator()
         message = {"type": "delegated_execution_signal", "session_id": "sess-E01"}
@@ -445,7 +451,7 @@ class TestCoordinatorPR5AResultConsumer:
         mock_ingress_outcome.reject_reason = ""
         mock_ingress_env = MagicMock()
         mock_ingress_env.signal_kind = MagicMock()
-        mock_ingress_env.signal_kind.value = "result"
+        mock_ingress_env.signal_kind.value = "final_result"
         mock_ingress_env.session_id = "sess-E01"
         mock_ingress_outcome.envelope = mock_ingress_env
 
