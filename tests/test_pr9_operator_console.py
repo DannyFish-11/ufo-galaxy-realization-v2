@@ -74,7 +74,7 @@ class TestStaticFilePresence:
 
     def test_console_html_is_valid_html(self):
         html = _console_html()
-        assert "<!doctype html>" in html.lower() or "<!DOCTYPE html>" in html
+        assert "<!doctype html>" in html.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +130,8 @@ class TestNoParallelTruthModel:
 
     def test_console_has_no_hardcoded_mock_devices(self):
         html = _console_html()
-        # Should not have hardcoded mock device arrays like [{device_id: "mock_...
-        assert '"mock_device' not in html
-        assert "'mock_device" not in html
+        # Should not have hardcoded mock device arrays
+        assert "mock_device" not in html.lower()
 
 
 # ---------------------------------------------------------------------------

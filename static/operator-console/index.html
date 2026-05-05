@@ -438,7 +438,10 @@ function esc(v) {
 function fmtTs(ts) {
   if (!ts) return '—';
   try {
-    return new Date(ts * 1000).toISOString().replace('T', ' ').slice(0, 19);
+    // OPERATOR_ROUTES_V1 returns Unix timestamps in seconds (float).
+    // Guard against millisecond timestamps (> 1e12) to avoid year-52000 output.
+    const ms = ts > 1e12 ? ts : ts * 1000;
+    return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
   } catch (_) { return String(ts); }
 }
 
@@ -703,6 +706,12 @@ async function refreshAll() {
   await Promise.all(SECTIONS.map(([path, id, fn]) => fetchAndRender(path, id, fn)));
   document.getElementById('last-refresh').textContent =
     new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  // Reflect backend authority into the header badge (sourced from flows endpoint)
+  try {
+    const d = await apiFetch('/api/v1/operator/flows');
+    const auth = d.authority || d.flows?.[0]?._authority || '';
+    if (auth) document.getElementById('auth-badge').textContent = auth;
+  } catch (_) { /* badge retains its default value */ }
 }
 
 /* -- auto-refresh -------------------------------------------- */

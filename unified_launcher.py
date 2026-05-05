@@ -347,7 +347,7 @@ class UnifiedWebUI:
             operator_console_dir = PROJECT_ROOT / "static" / "operator-console"
             operator_console_index = operator_console_dir / "index.html"
             if operator_console_index.exists():
-                @self.app.get("/operator-console", response_class=HTMLResponse)
+                @self.app.get("/operator-console")
                 async def operator_console_index_route():
                     return FileResponse(str(operator_console_index))
 
