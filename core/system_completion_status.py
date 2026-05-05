@@ -124,6 +124,10 @@ class SystemCompletionStatus:
     status_alignment: Dict[str, Any] = field(default_factory=dict)
     remaining_to_100: List[RemainingClosureItem] = field(default_factory=list)
     accepted_limitations: List[str] = field(default_factory=list)
+    # PR-10 V2 final consolidation evidence: tracks whether the five canonical
+    # V2 consolidation paths (ingress, continuity, orchestration, manifestation,
+    # operator truth) are structurally coherent in the current code.
+    v2_consolidation_evidence: Dict[str, Any] = field(default_factory=dict)
     summary: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -147,6 +151,7 @@ class SystemCompletionStatus:
             "status_alignment": self.status_alignment,
             "remaining_to_100": [item.to_dict() for item in self.remaining_to_100],
             "accepted_limitations": self.accepted_limitations,
+            "v2_consolidation_evidence": self.v2_consolidation_evidence,
             "summary": self.summary,
         }
 
@@ -249,6 +254,98 @@ def _build_remaining_to_100(
     return items
 
 
+def _build_v2_consolidation_evidence() -> Dict[str, Any]:
+    """Build the PR-10 V2 final consolidation evidence dict.
+
+    Probes the five canonical V2 consolidation paths introduced by the
+    prior PR work (ingress, continuity, orchestration, manifestation,
+    operator truth) and returns a coherence summary.  All probes are
+    read-only import/file checks — no runtime state is mutated.
+    """
+    import importlib
+    import os
+
+    def _can_import(mod: str) -> bool:
+        try:
+            importlib.import_module(mod)
+            return True
+        except Exception:
+            return False
+
+    def _file_present(rel: str) -> bool:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.isfile(os.path.join(root, rel))
+
+    # 1. Ingress truth — unified_runtime_truth_ingress (PR-2)
+    ingress_available = _can_import("core.unified_runtime_truth_ingress")
+
+    # 2. Continuity — flow_continuity_coordinator (PR-3V2)
+    continuity_available = _can_import("core.flow_continuity_coordinator")
+
+    # 3. Orchestration — orchestration_review_surface (PR-10 observability)
+    orchestration_review_available = _can_import("core.orchestration_review_surface")
+
+    # 4. Manifestation / shell / presence — desktop_presence_runtime (PR-8V2)
+    manifestation_available = _can_import("core.desktop_presence_runtime")
+
+    # 5. Operator truth — flow_level_operator_surface + operator_surface
+    operator_surface_available = _can_import("core.operator_surface")
+    flow_operator_available = _can_import("core.flow_level_operator_surface")
+
+    # Orchestration review surface — check if it can produce a snapshot
+    orchestration_snapshot_ok = False
+    orchestration_partial = None
+    if orchestration_review_available:
+        try:
+            from core.orchestration_review_surface import (  # type: ignore[import]
+                build_orchestration_review_snapshot,
+            )
+            snap = build_orchestration_review_snapshot()
+            orchestration_snapshot_ok = True
+            orchestration_partial = snap._partial
+        except Exception:
+            pass
+
+    # Continuity coordinator — can it be constructed?
+    continuity_coordinator_ok = False
+    if continuity_available:
+        try:
+            from core.flow_continuity_coordinator import (  # type: ignore[import]
+                get_flow_continuity_coordinator,
+            )
+            coord = get_flow_continuity_coordinator()
+            continuity_coordinator_ok = coord is not None
+        except Exception:
+            pass
+
+    chain_paths = {
+        "ingress": ingress_available,
+        "continuity": continuity_available,
+        "orchestration_review": orchestration_review_available,
+        "manifestation": manifestation_available,
+        "operator_surface": operator_surface_available,
+        "flow_operator_surface": flow_operator_available,
+    }
+    chain_coherent = all(chain_paths.values())
+    available_count = sum(1 for v in chain_paths.values() if v)
+    total_count = len(chain_paths)
+
+    return {
+        "chain_paths_available": chain_paths,
+        "chain_coherent": chain_coherent,
+        "available_count": available_count,
+        "total_count": total_count,
+        "orchestration_snapshot_ok": orchestration_snapshot_ok,
+        "orchestration_review_partial": orchestration_partial,
+        "continuity_coordinator_ok": continuity_coordinator_ok,
+        "consolidation_verdict": (
+            "coherent"
+            if chain_coherent
+            else f"partial ({available_count}/{total_count} paths available)"
+        ),
+    }
+
+
 def _build_summary(
     *,
     architecture_pct: float,
@@ -257,6 +354,7 @@ def _build_summary(
     completeness_review: CompletenessReviewReport,
     acceptance_report: SystemAcceptanceReport,
     remaining_items: List[RemainingClosureItem],
+    consolidation_evidence: Optional[Dict[str, Any]] = None,
 ) -> str:
     lines = [
         "系统统一收口状态",
@@ -268,6 +366,10 @@ def _build_summary(
         f"- 阻塞项数量: {len(completeness_review.blocking_gaps)}",
         f"- 延期项数量: {len(completeness_review.deferred_acknowledged)}",
     ]
+
+    if consolidation_evidence:
+        verdict = consolidation_evidence.get("consolidation_verdict", "unknown")
+        lines.append(f"- V2 统一体验收口链路状态: {verdict}")
 
     if (
         architecture_pct >= 100.0
@@ -291,12 +393,14 @@ def build_system_completion_status() -> SystemCompletionStatus:
     review = build_completeness_review()
     acceptance = evaluate_system_acceptance()
     system_map = build_system_map_snapshot()
+    consolidation_evidence = _build_v2_consolidation_evidence()
 
     architecture_pct = round(float(scorecard.overall_completion_pct), 2)
     closure_pct = _compute_system_closure_pct(review)
     remaining_pct = round(max(0.0, 100.0 - closure_pct), 2)
     remaining_items = _build_remaining_to_100(review, acceptance, system_map)
 
+    consolidation_coherent = consolidation_evidence.get("chain_coherent", False)
     status_alignment = {
         "architecture_complete_but_system_not_closed": (
             architecture_pct >= 100.0 and review.verdict != CompletenessVerdict.fully_closed
@@ -307,6 +411,8 @@ def build_system_completion_status() -> SystemCompletionStatus:
         "runtime_ready_but_completeness_not_full": (
             live_status.runtime_readiness == "ready" and review.verdict != CompletenessVerdict.fully_closed
         ),
+        # PR-10 V2 final consolidation: are all five canonical paths coherent?
+        "v2_consolidation_chain_coherent": consolidation_coherent,
     }
 
     summary = _build_summary(
@@ -316,6 +422,7 @@ def build_system_completion_status() -> SystemCompletionStatus:
         completeness_review=review,
         acceptance_report=acceptance,
         remaining_items=remaining_items,
+        consolidation_evidence=consolidation_evidence,
     )
 
     return SystemCompletionStatus(
@@ -344,6 +451,7 @@ def build_system_completion_status() -> SystemCompletionStatus:
         status_alignment=status_alignment,
         remaining_to_100=remaining_items,
         accepted_limitations=list(review.deferred_acknowledged),
+        v2_consolidation_evidence=consolidation_evidence,
         summary=summary,
     )
 

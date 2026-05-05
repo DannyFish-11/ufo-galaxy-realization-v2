@@ -727,21 +727,38 @@ class DualRepoSystemCompletenessReviewer:
             else:
                 missing.append(f"{mod_path} ({label})")
 
-        # Gateway layer
+        # Gateway layer — use file-existence as the structural check so that
+        # modules that require optional runtime deps (fastapi, pydantic) are
+        # not classified as structurally absent when their source files exist.
         gateway_modules = [
             "galaxy_gateway.device_router",
             "galaxy_gateway.websocket_handler",
         ]
-        gateway_available = sum(1 for m in gateway_modules if _try_import(m))
+        gateway_available = sum(
+            1 for m in gateway_modules
+            if _try_import(m) or _module_file_exists(m)
+        )
+        gateway_env_constrained = [
+            m for m in gateway_modules
+            if not _try_import(m) and _module_file_exists(m)
+        ]
 
-        # Dispatch chain
+        # Dispatch chain — same file-existence fallback for modules that depend
+        # on optional runtime deps (pydantic, fastapi) but are structurally present.
         dispatch_modules = [
             "core.command_router",
             "core.capability_routing_gate",
             "core.delegated_flow_acceptance_gate",
             "core.delegated_flow_readiness_gate",
         ]
-        dispatch_available = sum(1 for m in dispatch_modules if _try_import(m))
+        dispatch_available = sum(
+            1 for m in dispatch_modules
+            if _try_import(m) or _module_file_exists(m)
+        )
+        dispatch_env_constrained = [
+            m for m in dispatch_modules
+            if not _try_import(m) and _module_file_exists(m)
+        ]
 
         # Check documentation anchors
         doc_files = [
@@ -755,6 +772,7 @@ class DualRepoSystemCompletenessReviewer:
 
         completed: List[str] = []
         gaps: List[str] = []
+        deferred: List[str] = []
 
         if available:
             completed.append(
@@ -765,23 +783,47 @@ class DualRepoSystemCompletenessReviewer:
         if gateway_available > 0:
             completed.append(
                 f"Gateway transport modules: {gateway_available}/{len(gateway_modules)} available"
+                + (
+                    f" (file-confirmed, runtime import requires optional deps: "
+                    f"{', '.join(gateway_env_constrained)})"
+                    if gateway_env_constrained else ""
+                )
             )
         if dispatch_available > 0:
             completed.append(
                 f"Dispatch chain modules: {dispatch_available}/{len(dispatch_modules)} available"
+                + (
+                    f" (file-confirmed, runtime import requires optional deps: "
+                    f"{', '.join(dispatch_env_constrained)})"
+                    if dispatch_env_constrained else ""
+                )
             )
         if docs_present > 0:
             completed.append(
                 f"Joint system review docs: {docs_present}/{len(doc_files)} present"
+            )
+        if gateway_env_constrained or dispatch_env_constrained:
+            all_env_constrained = gateway_env_constrained + dispatch_env_constrained
+            deferred.append(
+                "Runtime import of the following modules requires optional deps "
+                "(fastapi, pydantic) not present in this environment; source files "
+                f"are confirmed present: {', '.join(all_env_constrained)}"
             )
 
         if missing:
             gaps.append(
                 f"Missing structural modules: {', '.join(m.split()[0] for m in missing)}"
             )
-        if gateway_available < len(gateway_modules):
+        # A gateway module is only a structural gap when the source file itself
+        # is absent — not when it merely fails to import due to missing optional
+        # runtime dependencies (fastapi, pydantic, etc.).
+        truly_missing_gateway = [
+            m for m in gateway_modules
+            if not _try_import(m) and not _module_file_exists(m)
+        ]
+        if truly_missing_gateway:
             gaps.append(
-                f"Gateway modules incomplete: {gateway_available}/{len(gateway_modules)}"
+                f"Gateway modules truly absent: {', '.join(truly_missing_gateway)}"
             )
 
         # Label assignment
@@ -815,7 +857,7 @@ class DualRepoSystemCompletenessReviewer:
             ),
             completed_items=completed,
             gap_items=gaps,
-            deferred_items=[],
+            deferred_items=deferred,
             code_references=[m.split()[0] for m in available],
             test_references=[
                 "tests/test_pr17_v2_system_final_acceptance_verdict.py",
@@ -828,7 +870,9 @@ class DualRepoSystemCompletenessReviewer:
         """Assess runtime closure maturity."""
         dim = CompletenessDimension.runtime_closure
 
-        # Core runtime modules
+        # Core runtime modules — use file-existence as the structural check so
+        # that modules which require optional runtime deps (pydantic, fastapi)
+        # are not classified as missing when their source files are present.
         runtime_modules = [
             "core.command_router",
             "core.canonical_execution_chain",
@@ -837,7 +881,14 @@ class DualRepoSystemCompletenessReviewer:
             "core.recovery_durability_closure_validator",
             "core.attached_runtime_recovery_readiness",
         ]
-        runtime_available = [m for m in runtime_modules if _try_import(m)]
+        runtime_available = [
+            m for m in runtime_modules
+            if _try_import(m) or _module_file_exists(m)
+        ]
+        runtime_env_constrained = [
+            m for m in runtime_modules
+            if not _try_import(m) and _module_file_exists(m)
+        ]
 
         # Decision history: was the delegated path actually exercised?
         decision_history_available = _try_import("core.delegated_flow_decision_history")
@@ -887,9 +938,14 @@ class DualRepoSystemCompletenessReviewer:
 
         if runtime_available:
             completed.append(
-                f"Runtime modules importable: {len(runtime_available)}/{len(runtime_modules)}: "
+                f"Runtime modules present: {len(runtime_available)}/{len(runtime_modules)}: "
                 + ", ".join(runtime_available[:4])
                 + ("..." if len(runtime_available) > 4 else "")
+                + (
+                    f" (file-confirmed but runtime import requires optional deps: "
+                    f"{', '.join(runtime_env_constrained)})"
+                    if runtime_env_constrained else ""
+                )
             )
         if decision_history_available:
             completed.append(
@@ -911,6 +967,12 @@ class DualRepoSystemCompletenessReviewer:
                 "core.system_final_acceptance_verdict.evaluate_system_acceptance() "
                 "callable and returns a report"
             )
+        if runtime_env_constrained:
+            deferred.append(
+                "Runtime import of the following modules requires optional deps "
+                "(fastapi, pydantic) not present in this environment; source files "
+                f"are confirmed present: {', '.join(runtime_env_constrained)}"
+            )
 
         if not decision_history_has_runtime_events:
             gaps.append(
@@ -919,10 +981,14 @@ class DualRepoSystemCompletenessReviewer:
                 "no completed run history proves runtime closure"
             )
 
-        missing_runtime = [m for m in runtime_modules if m not in runtime_available]
-        if missing_runtime:
+        # Only report modules as truly missing when the source file is also absent.
+        truly_missing_runtime = [
+            m for m in runtime_modules
+            if not _try_import(m) and not _module_file_exists(m)
+        ]
+        if truly_missing_runtime:
             gaps.append(
-                f"Missing runtime modules: {', '.join(missing_runtime)}"
+                f"Missing runtime modules (file absent): {', '.join(truly_missing_runtime)}"
             )
 
         deferred.append(
@@ -940,8 +1006,11 @@ class DualRepoSystemCompletenessReviewer:
 
         # Label: runtime closure is not yet end-to-end proven
         # (decision history has no runtime events in a fresh environment,
-        # and some deferred items exist)
-        if decision_history_has_runtime_events and not missing_runtime:
+        # and some deferred items exist).
+        # Use truly_missing_runtime (file absent) for the complete gate rather
+        # than runtime_available, so that env-constrained modules (file present
+        # but import requires pydantic/fastapi) don't block a 'complete' label.
+        if decision_history_has_runtime_events and not truly_missing_runtime:
             label = CompletenessLabel.complete
         elif len(runtime_available) >= len(runtime_modules) * 0.7:
             label = CompletenessLabel.evidence_gap
@@ -1093,6 +1162,23 @@ class DualRepoSystemCompletenessReviewer:
             bridge_handlers_source_present,
         )
 
+        # Runtime activation check: verify that cross-repo evidence has actually
+        # flowed at runtime (not just that the structural wire path exists).
+        # The dimension name explicitly asks for "real cross-repo evidence flow"
+        # — structural completeness alone is insufficient.
+        runtime_cross_repo_activated = False
+        runtime_activation_check_available = False
+        try:
+            from core.android_device_state_store import (  # type: ignore[import]
+                get_device_ecosystem_summary as _get_eco_summary,
+            )
+            runtime_activation_check_available = True
+            eco = _get_eco_summary()
+            devices_with_snapshot = eco.get("total_devices_with_snapshot", 0)
+            runtime_cross_repo_activated = devices_with_snapshot > 0
+        except Exception:
+            pass
+
         completed: List[str] = []
         gaps: List[str] = []
         deferred: List[str] = []
@@ -1127,6 +1213,11 @@ class DualRepoSystemCompletenessReviewer:
                 "response gateway handlers; handoff responses call "
                 "core.android_handoff_v2_response_ingress"
             )
+        if runtime_cross_repo_activated:
+            completed.append(
+                "Runtime cross-repo evidence activated: at least one Android device "
+                "has provided a live state snapshot via the cross-repo wire path"
+            )
 
         if ingress_missing:
             gaps.append(
@@ -1148,6 +1239,14 @@ class DualRepoSystemCompletenessReviewer:
                 "HandoffEnvelopeV2 response wire regression: "
                 "handoff message types or AndroidBridge handlers are not registered"
             )
+        if runtime_activation_check_available and not runtime_cross_repo_activated:
+            gaps.append(
+                "No real cross-repo signal has been activated at runtime: "
+                "no Android device state snapshot observed in this environment. "
+                "The wire path is code-complete but the evidence flow is not yet real. "
+                "This is an EVIDENCE GAP — resolved only when an Android participant "
+                "connects and transmits a live state snapshot."
+            )
 
         deferred.append(
             "Cross-repo signal flow still requires runtime activation: "
@@ -1155,6 +1254,11 @@ class DualRepoSystemCompletenessReviewer:
             "and an active WebSocket session"
         )
 
+        # Label: 'complete' only when both the wire path AND runtime activation
+        # are verified.  In a fresh environment with no Android device connected,
+        # the dimension is 'evidence_gap' — the code is present but the flow has
+        # not been observed.  This aligns with the final audit surface which
+        # reports MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW as MISSING/evidence_gap.
         label = (
             CompletenessLabel.complete
             if not gaps
@@ -1165,14 +1269,14 @@ class DualRepoSystemCompletenessReviewer:
             dimension=dim,
             label=label,
             summary=(
-                "Cross-repo evidence wire path is now code-complete on the V2 side: "
+                "Cross-repo evidence wire path is code-complete on the V2 side: "
                 "AIP v3 MessageType contains reconciliation_signal and handoff "
                 "response types, AndroidBridge imports/registers the reconciliation "
                 "and handoff_v2_result handlers, and V2 ingress modules are present. "
-                "Older review documents that described these two paths as absent are "
-                "stale relative to current code. Remaining limits are runtime "
-                "activation and real-device evidence, which are assessed in the "
-                "runtime_closure and real_device_multi_device dimensions."
+                "HOWEVER: in a fresh environment with no Android device connected, "
+                "no real cross-repo evidence flow has been activated at runtime. "
+                "The dimension is 'evidence_gap' until a live Android participant "
+                "transmits state via the wire path."
             ),
             completed_items=completed,
             gap_items=gaps,
