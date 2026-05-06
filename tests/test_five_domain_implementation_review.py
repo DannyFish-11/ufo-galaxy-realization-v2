@@ -93,7 +93,13 @@ MIN_DESCRIPTION_LENGTH: int = 20  # cut-point and modification-zone descriptions
 
 @pytest.fixture(scope="module")
 def report() -> Generator[FiveDomainReviewReport, None, None]:
-    """Build report once per module; reset cache before and after."""
+    """Build report once per module; reset cache before and after.
+
+    Uses ``build_five_domain_review()`` directly (not ``get_five_domain_review()``)
+    so the module fixture gets a stable object independent of the singleton
+    cache.  TestSingletonCaching tests explicitly manage the cache via
+    ``reset_five_domain_review()`` and ``get_five_domain_review()``.
+    """
     reset_five_domain_review()
     yield build_five_domain_review()
     reset_five_domain_review()
@@ -790,10 +796,9 @@ class TestDomainByName:
     def test_domain_by_name_raises_key_error_for_unknown(
         self, report: FiveDomainReviewReport
     ) -> None:
-        # Create a minimal stand-in that has a .value attribute not matching any domain
-        import unittest.mock as mock
-        fake_domain = mock.Mock()
-        fake_domain.value = "NONEXISTENT_DOMAIN"
+        # Use a simple namespace object with a .value attribute that matches no domain
+        import types
+        fake_domain = types.SimpleNamespace(value="NONEXISTENT_DOMAIN")
         with pytest.raises(KeyError):
             report.domain_by_name(fake_domain)  # type: ignore[arg-type]
 

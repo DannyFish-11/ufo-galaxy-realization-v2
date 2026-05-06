@@ -441,19 +441,19 @@ def _module_file_exists(module_path: str) -> bool:
     """Return True iff the module file exists on disk (without importing).
 
     Uses find_spec() which is lighter than a full import, but still executes
-    ``__init__.py`` files in parent packages.  We catch all exceptions here
-    because those __init__.py files may fail (e.g., missing optional
-    dependencies like pydantic, numpy, or httpx) — those failures do not mean
-    the target module is absent, only that its package cannot be fully
+    ``__init__.py`` files in parent packages.  We catch known import-related
+    exceptions here because those ``__init__.py`` files may fail (e.g., missing
+    optional dependencies like pydantic, numpy, or httpx) — those failures do
+    not mean the target module is absent, only that its package cannot be fully
     initialised in the current environment.
     """
     try:
         spec = importlib.util.find_spec(module_path)
         return spec is not None
-    except Exception:
-        # find_spec may execute parent __init__.py side effects that raise
-        # (e.g. missing pydantic/numpy causes ModuleNotFoundError).
-        # Fall back to False — caller can try a direct file-path check.
+    except (ImportError, ModuleNotFoundError, AttributeError, ValueError):
+        # find_spec executes parent __init__.py which may fail due to missing
+        # optional deps (pydantic, numpy, httpx).  These are known-benign
+        # failures in a CI environment without the full optional stack.
         return False
 
 
@@ -463,20 +463,27 @@ def _try_import_or_exists(module_path: str) -> bool:
 
 
 def _source_contains(module_path: str, pattern: str) -> bool:
-    """Return True iff the module source contains the given pattern string."""
+    """Return True iff the module source contains the given pattern string.
+
+    Tries import + inspect first, then falls back to a direct file read so
+    the probe still works even when optional runtime dependencies are missing.
+    Known import failures (missing optional deps) are silently swallowed; all
+    other unexpected errors allow propagation through the caller's exception
+    handler.
+    """
     try:
         m = importlib.import_module(module_path)
         src = inspect.getsource(m)
         return pattern in src
-    except Exception:
+    except (ImportError, ModuleNotFoundError, OSError):
         pass
-    # Fall back to file-level grep
+    # Fall back to file-level grep via find_spec
     try:
         spec = importlib.util.find_spec(module_path)
         if spec and spec.origin:
             with open(spec.origin, encoding="utf-8", errors="replace") as fh:
                 return pattern in fh.read()
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError, ValueError, OSError):
         pass
     return False
 
@@ -535,9 +542,10 @@ def _review_unified_panel_aggregation() -> DomainReviewEntry:
     has_flow_projection = _source_contains(
         "core.flow_level_operator_surface", "FlowOperatorProjection"
     )
-    all_routes_are_get = (
-        not _file_contains("core/routes/operator.py", "@router.post")
-        and _file_contains("core/routes/operator.py", "@router.get")
+    # True iff the operator file has at least one GET route AND zero POST routes
+    has_get_routes_only = (
+        _file_contains("core/routes/operator.py", "@router.get")
+        and not _file_contains("core/routes/operator.py", "@router.post")
     )
 
     # Tests confirming panel surfaces
@@ -583,7 +591,7 @@ def _review_unified_panel_aggregation() -> DomainReviewEntry:
     if test_flow:
         established.append("tests.test_flow_level_operator_surface present")
 
-    if all_routes_are_get:
+    if has_get_routes_only:
         partial.append(
             "All /api/v1/operator/* routes confirmed as GET-only (grep: no @router.post "
             "in core/routes/operator.py) — panel surface is read-only projection"
