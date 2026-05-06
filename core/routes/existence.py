@@ -97,7 +97,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             surface = build_desktop_existence_surface()
             return JSONResponse(content=surface.to_dict())
         except Exception as exc:
-            logger.exception("existence surface build failed: %s", exc)
+            logger.exception("existence surface build failed")
             return JSONResponse(
                 content={"error": "existence surface unavailable", "detail": str(exc)},
                 status_code=503,

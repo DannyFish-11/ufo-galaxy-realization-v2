@@ -675,11 +675,14 @@ class DesktopExistenceSurfaceBuilder:
         )
 
         # active: cognition/execution in progress or shell expanded
+        is_active_continuum_phase = bool(
+            fam3.tri_state_phase and fam3.tri_state_phase not in ("", "passive")
+        )
         is_active = (
             fam1.dominant_tristate == "liminal"
             or fam2.shell_state == "sidesheet"
             or fam4.manifest_pressure > 0.4
-            or bool(fam3.tri_state_phase and fam3.tri_state_phase not in ("", "passive"))
+            or is_active_continuum_phase
         )
 
         # background: sustained background presence without active request
