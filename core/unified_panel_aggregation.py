@@ -80,6 +80,7 @@ Helpers::
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -387,13 +388,15 @@ class UnifiedPanelAggregationService:
             digest: List[Dict[str, Any]] = []
             for snap in snapshots:
                 try:
-                    readiness = snap.readiness_summary() if hasattr(snap, "readiness_summary") else {}
+                    readiness_fn = getattr(snap, "readiness_summary", None)
+                    readiness = readiness_fn() if callable(readiness_fn) else {}
+                    local_ai_fn = getattr(snap, "is_local_ai_ready", None)
                     digest.append({
                         "device_id": snap.device_id,
                         "absorbed_at": snap.absorbed_at,
                         "model_ready": snap.model_ready,
                         "accessibility_ready": snap.accessibility_ready,
-                        "local_ai_ready": snap.is_local_ai_ready() if hasattr(snap, "is_local_ai_ready") else False,
+                        "local_ai_ready": local_ai_fn() if callable(local_ai_fn) else False,
                         "mobilevlm_present": getattr(snap, "mobilevlm_present", False),
                         "seeclick_present": getattr(snap, "seeclick_present", False),
                         "readiness": readiness,
@@ -445,8 +448,8 @@ class UnifiedPanelAggregationService:
             rd = getattr(projection, "runtime_domain", None)
             if rd is not None:
                 payload.runtime_domain = rd.value if hasattr(rd, "value") else str(rd)
-            payload.presence_intensity = float(getattr(projection, "presence_intensity", 0.0) or 0.0)
-            payload.coherence = float(getattr(projection, "coherence", 0.0) or 0.0)
+            payload.presence_intensity = float(getattr(projection, "presence_intensity", 0.0) or 0)
+            payload.coherence = float(getattr(projection, "coherence", 0.0) or 0)
         except Exception as exc:
             logger.debug("build_payload: runtime projection unavailable: %s", exc)
 
@@ -534,7 +537,7 @@ def build_unified_panel_payload(*, mode: str = "chat") -> UnifiedPanelPayload:
 # ---------------------------------------------------------------------------
 
 _service_instance: Optional[UnifiedPanelAggregationService] = None
-_service_lock = __import__("threading").Lock()
+_service_lock = threading.Lock()
 
 
 def get_unified_panel_aggregation_service() -> UnifiedPanelAggregationService:

@@ -68,8 +68,12 @@ PANEL_ROUTES_AUTHORITY: str = (
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the unified panel router.
 
-    The ``service_manager`` and ``config`` parameters follow the same
-    convention used by all ``core/routes/`` modules.
+    The ``service_manager`` and ``config`` parameters are accepted for
+    signature compatibility with all other ``core/routes/`` module factories
+    (see ``core/api_routes.py``).  They are intentionally unused here because
+    this router's only handler delegates entirely to
+    :func:`~core.unified_panel_aggregation.build_unified_panel_payload`, which
+    reads from singleton sources directly.
     """
     router = APIRouter()
 

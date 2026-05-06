@@ -34,11 +34,14 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
         return UnifiedPanelPayload
 
     def test_A01_import_succeeds(self):
-        from core.unified_panel_aggregation import (  # noqa: F401
+        from core.unified_panel_aggregation import (
             UnifiedPanelPayload,
             UNIFIED_PANEL_AGGREGATION_AUTHORITY,
             PANEL_STATE_SCHEMA_VERSION,
         )
+        self.assertIsInstance(UNIFIED_PANEL_AGGREGATION_AUTHORITY, str)
+        self.assertIn("UNIFIED_PANEL_AGGREGATION_V1", UNIFIED_PANEL_AGGREGATION_AUTHORITY)
+        self.assertEqual(PANEL_STATE_SCHEMA_VERSION, "1.0")
 
     def test_A02_default_construction(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
@@ -161,14 +164,6 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
 
 class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
     """UnifiedPanelAggregationService must read from canonical source singletons."""
-
-    def _build(self, **patches):
-        """Build a payload with selective source mocks."""
-        from core.unified_panel_aggregation import UnifiedPanelAggregationService
-        svc = UnifiedPanelAggregationService()
-        with unittest.mock.patch.multiple("builtins", **{}):
-            pass
-        return svc.build_payload()
 
     def test_B01_service_import_succeeds(self):
         from core.unified_panel_aggregation import UnifiedPanelAggregationService  # noqa: F401
@@ -561,6 +556,20 @@ class TestRegressionSafety(unittest.TestCase):
         from core.unified_panel_aggregation import build_unified_panel_payload
         payload = build_unified_panel_payload()
         self.assertEqual(payload.schema_version, "1.0")
+
+    def test_E11_readiness_verdict_normalised_to_uppercase(self):
+        """Regression: _fill_from_readiness_matrix must normalise verdict to UPPER case."""
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService, UnifiedPanelPayload
+
+        mock_matrix = MagicMock()
+        mock_matrix.to_dict.return_value = {"verdict": "blocked", "blocked": ["transport_layer"]}
+
+        svc = UnifiedPanelAggregationService()
+        payload = UnifiedPanelPayload()
+        with patch("core.runtime_readiness_matrix.get_readiness_matrix", return_value=mock_matrix):
+            svc._fill_from_readiness_matrix(payload)
+
+        self.assertEqual(payload.readiness_verdict, "BLOCKED")
 
 
 # ---------------------------------------------------------------------------
