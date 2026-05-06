@@ -535,14 +535,32 @@ class TestAntiOverclaimingGuards:
             f"got {entry.evidence_strength}"
         )
 
-    def test_natural_language_path_not_overclaimed(
+    def test_natural_language_path_evidence_strength_reflects_ci_proof(
         self, domain_map: dict
     ) -> None:
+        """When the NL e2e CI test file exists the domain must be upgraded to
+        RUNTIME_EVIDENCED_CLOSED.  When it does not exist it must remain at
+        PARTIALLY_ESTABLISHED (not overclaimed).
+
+        PR-5 adds tests/integration/test_nl_e2e_canonical_path.py which is the
+        gate that unlocks the upgrade.  This test asserts the correct strength for
+        whichever state the file is in right now.
+        """
+        from core.five_domain_implementation_review import _test_file_exists
         entry = domain_map[ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH]
-        assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
-            f"NATURAL_LANGUAGE_CANONICAL_PATH must not be overclaimed; "
-            f"got {entry.evidence_strength}"
-        )
+        nl_e2e_file = "tests.integration.test_nl_e2e_canonical_path"
+        if _test_file_exists(nl_e2e_file):
+            # CI proof exists — expect RUNTIME_EVIDENCED_CLOSED
+            assert entry.evidence_strength == EvidenceStrength.RUNTIME_EVIDENCED_CLOSED, (
+                f"NATURAL_LANGUAGE_CANONICAL_PATH should be RUNTIME_EVIDENCED_CLOSED "
+                f"when the NL e2e test file exists; got {entry.evidence_strength}"
+            )
+        else:
+            # CI proof missing — must not be overclaimed
+            assert entry.evidence_strength not in self._OVERCLAIM_LABELS, (
+                f"NATURAL_LANGUAGE_CANONICAL_PATH must not be overclaimed when "
+                f"the CI test is absent; got {entry.evidence_strength}"
+            )
 
     def test_multimodal_path_is_infrastructure_present_or_lower(
         self, domain_map: dict
@@ -592,14 +610,23 @@ class TestAntiOverclaimingGuards:
             "OPERATOR_ACTIONABILITY must document the read-only / no-action-endpoint gap"
         )
 
-    def test_nl_path_documents_no_ci_test_gap(
+    def test_nl_path_documents_ci_state(
         self, domain_map: dict
     ) -> None:
+        """The NL domain must document the CI test state.
+
+        - Before PR-5: gap_items must contain a reference to the missing CI test.
+        - After PR-5: partial_or_fragmented_items must contain a reference to the
+          LLM stub (documenting that the CI proof uses a contract stub, not a real
+          production LLM).
+        """
+        from core.five_domain_implementation_review import _test_file_exists
         entry = domain_map[ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH]
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
-        assert "CI" in text or "LLM" in text or "TEST" in text, (
-            "NATURAL_LANGUAGE_CANONICAL_PATH must document the CI test gap"
+        assert "CI" in text or "LLM" in text or "TEST" in text or "STUB" in text, (
+            "NATURAL_LANGUAGE_CANONICAL_PATH must document CI/LLM test status "
+            "(either a missing CI test gap or a stub-only limitation note)"
         )
 
     def test_multimodal_documents_safe_default_disabled_gap(
