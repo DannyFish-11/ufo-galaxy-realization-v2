@@ -442,7 +442,7 @@ class TestCanonicalPerceptionStateWithMultimodal:
             )
 
         cps = result.get("metadata", {}).get("canonical_perception_state", {})
-        assert not cps.get("has_request_multimodal", True), (
+        assert not cps.get("has_request_multimodal", False), (
             "has_request_multimodal must be False for a text-only request"
         )
 
@@ -514,11 +514,17 @@ class TestMultimodalRouteDecisionInResult:
         mrd_modalities = md.get("multimodal_route_decision", {}).get("active_modalities", [])
         cps_modalities = md.get("canonical_perception_state", {}).get("active_modalities", [])
 
-        # Both should include "image"
-        assert "image" in mrd_modalities or "image" in cps_modalities, (
-            "At least one of route_decision or canonical_perception_state must "
-            "record 'image' modality for an image multimodal_context — "
-            "proves modality signal propagates through the routing chain"
+        # Both the routing decision and the canonical perception state must include "image",
+        # proving the modality signal propagates coherently through the full routing chain.
+        assert "image" in cps_modalities, (
+            f"canonical_perception_state.active_modalities must include 'image' "
+            f"for an image multimodal_context, got: {cps_modalities!r}"
+        )
+        assert "image" in mrd_modalities, (
+            f"multimodal_route_decision.active_modalities must include 'image' "
+            f"for an image multimodal_context, got: {mrd_modalities!r} — "
+            f"proves modality signal propagates from perception state into the "
+            f"routing decision"
         )
 
 
@@ -705,7 +711,7 @@ class TestMultimodalVsTextOnlyRegression:
         text_cps = text_result.get("metadata", {}).get("canonical_perception_state", {})
         mm_cps = mm_result.get("metadata", {}).get("canonical_perception_state", {})
 
-        assert not text_cps.get("has_request_multimodal", True), (
+        assert not text_cps.get("has_request_multimodal", False), (
             "text-only request must have has_request_multimodal=False"
         )
         assert mm_cps.get("has_request_multimodal") is True, (
