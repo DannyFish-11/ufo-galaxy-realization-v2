@@ -145,9 +145,10 @@ class TestModuleImport:
         assert "FIVE_DOMAIN_IMPLEMENTATION_REVIEW_AUTHORITY" in FIVE_DOMAIN_REVIEW_AUTHORITY
 
     def test_authority_excludes_readme_and_pr_prose(self) -> None:
-        assert "no-readme" in FIVE_DOMAIN_REVIEW_AUTHORITY.lower() or \
-               "no-pr-prose" in FIVE_DOMAIN_REVIEW_AUTHORITY.lower() or \
-               "no-readme-no-pr-prose" in FIVE_DOMAIN_REVIEW_AUTHORITY
+        authority_lower = FIVE_DOMAIN_REVIEW_AUTHORITY.lower()
+        assert "no-readme" in authority_lower or \
+               "no-pr-prose" in authority_lower or \
+               "no-readme-no-pr-prose" in authority_lower
 
     def test_methodology_is_non_empty_string(self) -> None:
         assert isinstance(FIVE_DOMAIN_REVIEW_METHODOLOGY, str)
@@ -587,7 +588,7 @@ class TestAntiOverclaimingGuards:
         all_issues = entry.gap_items + entry.partial_or_fragmented_items
         text = " ".join(all_issues).upper()
         assert "READ-ONLY" in text or "READ_ONLY" in text or "OBSERVATION" in text or \
-               "NO POST" in text or "ACTION" in text, (
+               "NO POST" in text or "NO ACTION" in text or "OBSERVATION-ONLY" in text, (
             "OPERATOR_ACTIONABILITY must document the read-only / no-action-endpoint gap"
         )
 

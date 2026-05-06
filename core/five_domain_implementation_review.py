@@ -562,7 +562,9 @@ def _module_file_exists(module_path: str) -> bool:
         spec = importlib.util.find_spec(module_path)
         if spec is not None:
             return True
-    except (ModuleNotFoundError, ImportError, AttributeError, ValueError):
+    except (ImportError, AttributeError, ValueError):
+        # ImportError covers ModuleNotFoundError (subclass); ValueError can be raised
+        # by find_spec() for certain invalid dotted names (e.g. relative imports).
         pass
     rel_path = module_path.replace(".", os.sep) + ".py"
     for base in sys.path:
@@ -599,7 +601,8 @@ def _source_contains(module_path: str, pattern: str) -> bool:
         if spec and spec.origin and os.path.isfile(spec.origin):
             with open(spec.origin, encoding="utf-8", errors="replace") as fh:
                 return pattern in fh.read()
-    except (ImportError, ModuleNotFoundError, AttributeError, OSError, UnicodeDecodeError):
+    except (ImportError, AttributeError, OSError, UnicodeDecodeError):
+        # ImportError covers ModuleNotFoundError (subclass since Python 3.6).
         pass
     rel_path = module_path.replace(".", os.sep) + ".py"
     for base in sys.path:
@@ -1932,6 +1935,10 @@ def build_five_domain_review() -> ImplementationReviewPackage:
 # Singleton cache
 # ---------------------------------------------------------------------------
 
+# Lock is created at module load time intentionally: it is lightweight, does not
+# acquire any external resources, and is safe across the module reload patterns
+# used in this codebase.  If the process forks after import, callers must
+# re-initialise state by calling reset_five_domain_review() in the child.
 _REVIEW_LOCK: threading.Lock = threading.Lock()
 _REVIEW_CACHE: Optional[ImplementationReviewPackage] = None
 
