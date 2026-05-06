@@ -1803,7 +1803,11 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
 
     return DomainImplementationEntry(
         domain=ReviewDomain.MULTIMODAL_CANONICAL_PATH,
-        evidence_strength=EvidenceStrength.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN,
+        evidence_strength=(
+            EvidenceStrength.PARTIALLY_ESTABLISHED
+            if mm_e2e_found
+            else EvidenceStrength.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN
+        ),
         canonical_path_summary=(
             "Two multimodal paths in real code: "
             "(1) Continuous ambient path: MultimodalIngressBus → PerceptionSourceRegistry "
@@ -1815,7 +1819,12 @@ def _review_multimodal_canonical_path() -> DomainImplementationEntry:
             "Android side: vision uplink handler present (galaxy_gateway/android/handlers/"
             "vision.py); mobilevlm_present / seeclick_present tracked in "
             "DeviceStateSnapshot. "
-            "Neither path is CI-proven end-to-end."
+            + (
+                "Request-bound path is CI-proven end-to-end via "
+                "tests/integration/test_multimodal_canonical_path.py."
+                if mm_e2e_found
+                else "Neither path is CI-proven end-to-end."
+            )
         ),
         established_items=established,
         partial_or_fragmented_items=partial,
