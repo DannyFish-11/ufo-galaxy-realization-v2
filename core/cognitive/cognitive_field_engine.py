@@ -226,6 +226,11 @@ class CognitiveFieldEngine:
         """Total number of ticks executed since the engine was started."""
         return self._tick_count
 
+    @property
+    def is_running(self) -> bool:
+        """Return ``True`` if the background tick loop is currently active."""
+        return self._running
+
     # ------------------------------------------------------------------
     # Internal tick logic
     # ------------------------------------------------------------------

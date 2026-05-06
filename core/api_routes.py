@@ -348,6 +348,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     except Exception as _e:
         logger.warning("统一面板路由加载失败（可选）: %s", _e)
 
+    # PR-2: Desktop Existence Surface — unified assistant-like existence endpoint.
+    #        GET /api/v1/existence/surface
+    try:
+        from core.routes import existence as existence_routes
+        router.include_router(existence_routes.create_router())
+    except Exception as _e:
+        logger.warning("存在面路由加载失败（可选）: %s", _e)
+
     # Android center-side VLM HTTP surface (plan / ground / status / checksums).
     # Module lives under galaxy_gateway but must register on the canonical API app.
     try:
