@@ -1,24 +1,25 @@
 """
 core/routes/operator.py
 ========================
-PR-510: Operator API — first-class read endpoints for OperatorSurface.
+PR-510 / PR-3: Operator API — read endpoints + canonical action endpoints.
 
-**Architecture role: READ-ONLY OPERATOR INSPECTION SURFACE**
--------------------------------------------------------------
+**Architecture role: CANONICAL OPERATOR CONTROL PLANE**
+--------------------------------------------------------
 This module exposes the :class:`~core.operator_surface.OperatorSurface`
-as a supported, first-class HTTP API.  All responses are derived
+as a supported, first-class HTTP API.  All read responses are derived
 exclusively from ``OperatorSurface`` projections — handlers MUST NOT
 reconstruct truth from raw subsystem internals.
+
+PR-3 (Operator Control-Plane Activation) upgrades this surface from
+observation-only to action-capable by adding POST endpoints that route
+operator-originated actions into the canonical runtime/orchestration path
+via :meth:`~core.operator_surface.OperatorSurface.execute_operator_action`.
 
 Canonical route ownership is declared in ``core/api_routes.py`` via the
 ``CANONICAL_API_ROUTES_AUTHORITY`` sentinel.
 
 Routes
 ------
-  GET /api/v1/readiness
-      Runtime readiness matrix verdict and per-dimension status.  Backed by
-      :func:`~core.runtime_readiness_matrix.get_readiness_matrix`.
-
   GET /api/v1/operator/snapshot
       Compact runtime overview — task counts, device presence, topology,
       capability totals.  Corresponds to
@@ -106,11 +107,36 @@ Routes
       Android execution phase, blocking reason, recovery/truth/result status.
       Returns 404 when the flow is unknown.
 
+  --- PR-3: Operator Control-Plane Action Endpoints ---
+
+  POST /api/v1/operator/action
+      General operator action endpoint.  Accepts an
+      :class:`~core.operator_action_contract.OperatorActionRequest` body and
+      routes the action into the canonical runtime via
+      :meth:`~core.operator_surface.OperatorSurface.execute_operator_action`.
+      Supported action_kind values: ``dispatch``, ``device_dispatch``,
+      ``flow_cancel``.
+
+  POST /api/v1/operator/dispatch
+      Convenience endpoint for task-dispatch actions.  Equivalent to
+      POST /api/v1/operator/action with action_kind=dispatch.  Accepts
+      ``message``, ``device_id``, ``session_id``, ``user_id``,
+      ``required_capabilities``, and ``context`` fields.
+
+  POST /api/v1/operator/flows/{flow_id}/cancel
+      Request cancellation of a specific in-flight delegated flow.  Routes
+      through :meth:`~core.operator_surface.OperatorSurface.execute_operator_action`
+      with action_kind=flow_cancel.  Safe semantics: terminal flows are not
+      affected.
+
 Design constraints
 ------------------
-- **Read-only** — no writes, no side-effects.
-- **Projection-only** — all responses come from ``OperatorSurface``; handlers
-  never reach into raw subsystem internals.
+- **Read endpoints: Read-only** — no writes, no side-effects.
+- **Action endpoints: Canonical path only** — all actions enter the runtime
+  via OperatorSurface.execute_operator_action() → DesktopPresenceRuntime.
+  No parallel execution engine is introduced.
+- **Projection-only reads** — all read responses come from ``OperatorSurface``;
+  handlers never reach into raw subsystem internals.
 - **Graceful degradation** — errors in the underlying runtime layers are
   caught and surfaced as HTTP 500 with an ``"error"`` key rather than
   crashing the server.
@@ -121,7 +147,7 @@ Design constraints
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -134,8 +160,12 @@ logger = logging.getLogger("Galaxy.Routes.Operator")
 
 OPERATOR_ROUTES_AUTHORITY: str = (
     "OPERATOR_ROUTES_V1: core/routes/operator.py is the canonical owner "
-    "of the /api/v1/operator/* route surface.  All handlers consume "
-    "OperatorSurface projections — no raw subsystem internals."
+    "of the /api/v1/operator/* route surface.  Read handlers consume "
+    "OperatorSurface projections — no raw subsystem internals.  "
+    "Action handlers (POST /api/v1/operator/action, POST /api/v1/operator/dispatch, "
+    "POST /api/v1/operator/flows/{flow_id}/cancel) route into the canonical "
+    "runtime via OperatorSurface.execute_operator_action() — no parallel "
+    "execution engine."
 )
 
 
@@ -884,6 +914,248 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             })
         except Exception as exc:
             logger.error("devices_execution_events endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ==================================================================
+    # PR-3: Operator Control-Plane Action Endpoints
+    # ==================================================================
+    #
+    # These endpoints upgrade the operator surface from observation-only
+    # to action-capable.  Every action is routed through
+    # OperatorSurface.execute_operator_action() → DesktopPresenceRuntime
+    # so that:
+    #   - the canonical tri-state lifecycle is respected
+    #   - no parallel execution engine is introduced
+    #   - all operator actions are traceable via ingress_carrier_context
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/operator/action
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/operator/action")
+    async def operator_action(body: Dict[str, Any]) -> JSONResponse:
+        """Execute an operator-panel action via the canonical runtime path.
+
+        Accepts an :class:`~core.operator_action_contract.OperatorActionRequest`
+        payload and routes the action through
+        :meth:`~core.operator_surface.OperatorSurface.execute_operator_action`,
+        which delegates to the canonical
+        :meth:`~core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request`.
+
+        No parallel execution engine is introduced — all action kinds
+        enter the same canonical tri-state lifecycle that chat and e2e
+        requests use.
+
+        Request body fields
+        -------------------
+        ``action_kind`` (required)
+            One of ``"dispatch"``, ``"device_dispatch"``, ``"flow_cancel"``.
+        ``message``
+            Natural-language task message (for dispatch/device_dispatch).
+        ``device_id``
+            Target Android device (for device_dispatch; optional for dispatch).
+        ``flow_id``
+            Target flow ID (required for flow_cancel).
+        ``session_id``
+            Operator session ID for continuity tracing.
+        ``user_id``
+            Operator user ID (default: ``"operator"``).
+        ``required_capabilities``
+            Optional capability filter list.
+        ``context``
+            Optional conversation context list.
+
+        Returns::
+
+            {
+              "action_id": str,
+              "action_kind": str,
+              "accepted": bool,
+              "runtime_session_id": str,
+              "trace_id": str,
+              "operator_entry_mode": "operator_action",
+              "runtime_result": { ... },
+              "error": str,
+              "generated_at": float,
+              "authority": str
+            }
+        """
+        try:
+            from core.operator_action_contract import OperatorActionRequest
+            from core.operator_surface import get_operator_surface
+            from core.unified_panel_aggregation import record_last_operator_action_result
+            request = OperatorActionRequest.from_dict(body)
+            surface = get_operator_surface()
+            result = await surface.execute_operator_action(request)
+            record_last_operator_action_result(result)
+            status = 200 if result.accepted else 422
+            return JSONResponse(
+                content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=status,
+            )
+        except Exception as exc:
+            logger.error("operator_action endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/operator/dispatch
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/operator/dispatch")
+    async def operator_dispatch(body: Dict[str, Any]) -> JSONResponse:
+        """Convenience operator dispatch endpoint.
+
+        Equivalent to POST /api/v1/operator/action with
+        ``action_kind`` set to ``"dispatch"`` (or ``"device_dispatch"`` when
+        ``device_id`` is provided).  Routes via the canonical
+        :meth:`~core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request`
+        path.
+
+        Request body fields
+        -------------------
+        ``message`` (required)
+            Natural-language task message.
+        ``device_id``
+            Optional target device ID (switches to ``device_dispatch`` kind).
+        ``session_id``
+            Optional operator session ID.
+        ``user_id``
+            Operator user ID (default: ``"operator"``).
+        ``required_capabilities``
+            Optional capability filter list.
+        ``context``
+            Optional conversation context list.
+
+        Returns::
+
+            {
+              "action_id": str,
+              "action_kind": "dispatch" | "device_dispatch",
+              "accepted": bool,
+              "runtime_session_id": str,
+              "trace_id": str,
+              "operator_entry_mode": "operator_action",
+              "runtime_result": { ... },
+              "error": str,
+              "generated_at": float,
+              "authority": str
+            }
+        """
+        try:
+            from core.operator_action_contract import (
+                OperatorActionRequest,
+                OperatorActionKind,
+            )
+            from core.operator_surface import get_operator_surface
+            from core.unified_panel_aggregation import record_last_operator_action_result
+            # Determine kind: device_dispatch when device_id is present
+            device_id = body.get("device_id") or None
+            kind = (
+                OperatorActionKind.device_dispatch.value
+                if device_id
+                else OperatorActionKind.dispatch.value
+            )
+            request = OperatorActionRequest(
+                action_kind=kind,
+                message=body.get("message", ""),
+                device_id=device_id,
+                session_id=body.get("session_id", ""),
+                user_id=body.get("user_id", "operator"),
+                required_capabilities=list(body.get("required_capabilities") or []),
+                context=list(body.get("context") or []),
+            )
+            surface = get_operator_surface()
+            result = await surface.execute_operator_action(request)
+            record_last_operator_action_result(result)
+            status = 200 if result.accepted else 422
+            return JSONResponse(
+                content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=status,
+            )
+        except Exception as exc:
+            logger.error("operator_dispatch endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/operator/flows/{flow_id}/cancel
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/operator/flows/{flow_id}/cancel")
+    async def operator_flow_cancel(flow_id: str) -> JSONResponse:
+        """Request cancellation of a specific in-flight delegated flow.
+
+        Routes through
+        :meth:`~core.operator_surface.OperatorSurface.execute_operator_action`
+        with ``action_kind=flow_cancel``.  Safe semantics: a flow that is
+        already in a terminal phase (cancelled, completed, failed) is not
+        affected — no error is raised.
+
+        Path parameters
+        ---------------
+        ``flow_id``
+            The delegated flow ID to cancel.
+
+        Returns::
+
+            {
+              "action_id": str,
+              "action_kind": "flow_cancel",
+              "accepted": bool,
+              "runtime_session_id": "",
+              "trace_id": "",
+              "operator_entry_mode": "operator_action",
+              "runtime_result": {
+                "flow_id": str,
+                "phase_after_cancel": str,
+                "_source": "delegated_flow_entity_runtime"
+              },
+              "error": str,
+              "generated_at": float,
+              "authority": str
+            }
+
+        Returns HTTP 404 when the flow is not found.
+        Returns HTTP 422 when the cancellation was not accepted (e.g. invalid
+        flow_id format).
+        """
+        try:
+            from core.operator_action_contract import (
+                OperatorActionRequest,
+                OperatorActionKind,
+            )
+            from core.operator_surface import get_operator_surface
+            from core.unified_panel_aggregation import record_last_operator_action_result
+            request = OperatorActionRequest(
+                action_kind=OperatorActionKind.flow_cancel.value,
+                flow_id=flow_id,
+            )
+            surface = get_operator_surface()
+            result = await surface.execute_operator_action(request)
+            record_last_operator_action_result(result)
+            if not result.accepted and "not found" in result.error:
+                return JSONResponse(
+                    content={
+                        "detail": f"flow '{flow_id}' not found",
+                        "authority": "OPERATOR_ROUTES_V1",
+                    },
+                    status_code=404,
+                )
+            status = 200 if result.accepted else 422
+            return JSONResponse(
+                content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=status,
+            )
+        except Exception as exc:
+            logger.error("operator_flow_cancel(%s) endpoint error: %s", flow_id, exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,

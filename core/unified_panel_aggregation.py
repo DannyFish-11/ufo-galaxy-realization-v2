@@ -193,6 +193,16 @@ class UnifiedPanelPayload:
         ``existence_projection`` verdict.  Empty dict when the existence
         surface module is unavailable.
 
+    Last operator action section (PR-3)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    last_operator_action
+        Compact summary of the most recent
+        :class:`~core.operator_action_contract.OperatorActionResult` executed
+        in this process lifetime.  Keys: ``action_id``, ``action_kind``,
+        ``accepted``, ``runtime_session_id``, ``operator_entry_mode``,
+        ``generated_at``.  Empty dict when no operator action has been
+        executed or the operator action module is unavailable.
+
     Provenance
     ~~~~~~~~~~
     _source
@@ -237,6 +247,14 @@ class UnifiedPanelPayload:
     # ── Existence surface (PR-2) ──────────────────────────────────────────
     existence_surface: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Last operator action outcome (PR-3) ───────────────────────────────
+    # When an operator-panel action has been executed, this field carries a
+    # compact summary of the most recent OperatorActionResult so that the
+    # unified panel surface stays coherent with control-plane activity.
+    # Empty dict when no operator action has been executed in this process
+    # lifetime or the operator action module is unavailable.
+    last_operator_action: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -273,6 +291,8 @@ class UnifiedPanelPayload:
             "active_surface_spec": dict(self.active_surface_spec),
             # existence surface (PR-2)
             "existence_surface": dict(self.existence_surface),
+            # last operator action (PR-3)
+            "last_operator_action": dict(self.last_operator_action),
             # provenance
             "_source": self._source,
         }
@@ -360,6 +380,12 @@ class UnifiedPanelAggregationService:
             self._fill_from_existence_surface(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: existence surface fill failed: %s", exc)
+
+        # 7. Last operator action outcome (PR-3) — control-plane result integration
+        try:
+            self._fill_from_last_operator_action(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: last operator action fill failed: %s", exc)
 
         return payload
 
@@ -514,6 +540,73 @@ class UnifiedPanelAggregationService:
             payload.existence_surface = surface.to_dict()
         except Exception as exc:
             logger.debug("build_payload: existence surface unavailable: %s", exc)
+
+    def _fill_from_last_operator_action(self, payload: UnifiedPanelPayload) -> None:
+        """Fill last_operator_action from the operator action result store (PR-3).
+
+        Reads the most recent :class:`~core.operator_action_contract.OperatorActionResult`
+        persisted in the process-level ``_LAST_OPERATOR_ACTION_RESULT`` store
+        (maintained by the operator route handlers).  This ensures that the
+        unified panel payload reflects the most recent operator control-plane
+        activity without requiring a separate request.
+        """
+        try:
+            result = get_last_operator_action_result()
+            if result is not None:
+                payload.last_operator_action = {
+                    "action_id": result.action_id,
+                    "action_kind": result.action_kind,
+                    "accepted": result.accepted,
+                    "runtime_session_id": result.runtime_session_id,
+                    "operator_entry_mode": result.operator_entry_mode,
+                    "generated_at": result.generated_at,
+                    "_source": "operator_action_contract",
+                }
+        except Exception as exc:
+            logger.debug("build_payload: last operator action unavailable: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Process-level operator action result store (PR-3)
+# ---------------------------------------------------------------------------
+# A lightweight in-process store so the unified panel payload can reflect
+# the most recent operator control-plane action without requiring the routes
+# module to publish results to a separate service.
+#
+# This store is written by record_last_operator_action_result() (called by
+# the operator route handlers) and read by _fill_from_last_operator_action().
+# It is intentionally NOT a full persistence layer — a process restart clears
+# it.  For durable audit evidence, see the audit_store chain.
+
+_LAST_OPERATOR_ACTION_RESULT: Optional[Any] = None
+_OPERATOR_ACTION_RESULT_LOCK = threading.Lock()
+
+
+def record_last_operator_action_result(result: Any) -> None:
+    """Store the most recent :class:`~core.operator_action_contract.OperatorActionResult`.
+
+    Called by operator route handlers after each action execution so the
+    unified panel payload can surface the last operator activity.
+
+    Args:
+        result: An :class:`~core.operator_action_contract.OperatorActionResult`
+                instance.
+    """
+    global _LAST_OPERATOR_ACTION_RESULT
+    with _OPERATOR_ACTION_RESULT_LOCK:
+        _LAST_OPERATOR_ACTION_RESULT = result
+
+
+def get_last_operator_action_result() -> Optional[Any]:
+    """Return the most recent operator action result, or None."""
+    return _LAST_OPERATOR_ACTION_RESULT
+
+
+def reset_last_operator_action_result() -> None:
+    """Reset the stored result — for testing only."""
+    global _LAST_OPERATOR_ACTION_RESULT
+    with _OPERATOR_ACTION_RESULT_LOCK:
+        _LAST_OPERATOR_ACTION_RESULT = None
 
 
 # ---------------------------------------------------------------------------
