@@ -183,6 +183,16 @@ class UnifiedPanelPayload:
         SurfaceSpec dict for the current interaction mode.  Contains
         surface_type, title, layout_hints, fallback_surface.
 
+    Existence surface section (PR-2)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    existence_surface
+        Dict representation of the :class:`~core.desktop_existence_surface.DesktopExistenceSurface`
+        built by :mod:`~core.desktop_existence_surface`.  Contains all five
+        real state-family snapshots (subject_lifecycle, shell_clothing,
+        continuum_posture, cognitive_field, android_signals) plus the derived
+        ``existence_projection`` verdict.  Empty dict when the existence
+        surface module is unavailable.
+
     Provenance
     ~~~~~~~~~~
     _source
@@ -224,6 +234,9 @@ class UnifiedPanelPayload:
     # ── Active surface spec ───────────────────────────────────────────────
     active_surface_spec: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Existence surface (PR-2) ──────────────────────────────────────────
+    existence_surface: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -258,6 +271,8 @@ class UnifiedPanelPayload:
             "blocked_dimensions": list(self.blocked_dimensions),
             # surface spec
             "active_surface_spec": dict(self.active_surface_spec),
+            # existence surface (PR-2)
+            "existence_surface": dict(self.existence_surface),
             # provenance
             "_source": self._source,
         }
@@ -339,6 +354,12 @@ class UnifiedPanelAggregationService:
             self._fill_active_surface_spec(payload, mode=mode)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: surface spec fill failed: %s", exc)
+
+        # 6. Existence surface (PR-2) — unified assistant-like existence projection
+        try:
+            self._fill_from_existence_surface(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: existence surface fill failed: %s", exc)
 
         return payload
 
@@ -478,6 +499,21 @@ class UnifiedPanelAggregationService:
             payload.active_surface_spec = spec.to_dict()
         except Exception as exc:
             logger.debug("build_payload: surface selector unavailable: %s", exc)
+
+    def _fill_from_existence_surface(self, payload: UnifiedPanelPayload) -> None:
+        """Fill existence_surface from DesktopExistenceSurfaceBuilder (PR-2).
+
+        Adds the unified assistant-like existence surface to the panel payload
+        so that consumers of GET /api/v1/panel/unified also receive the
+        coherent existence projection without a second request.
+        """
+        try:
+            from core.desktop_existence_surface import build_desktop_existence_surface
+
+            surface = build_desktop_existence_surface()
+            payload.existence_surface = surface.to_dict()
+        except Exception as exc:
+            logger.debug("build_payload: existence surface unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------
