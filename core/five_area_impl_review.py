@@ -814,8 +814,10 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
             "STATE SYSTEM 1 (SUBJECT LIFECYCLE): DesktopPresenceRuntime importable; "
             "tri-state lifecycle SILENT→LIMINAL→MANIFEST confirmed in source"
         )
-        if _source_contains("core.desktop_presence_runtime", "SILENT") and \
-           _source_contains("core.desktop_presence_runtime", "LIMINAL"):
+        if (
+            _source_contains("core.desktop_presence_runtime", "SILENT")
+            and _source_contains("core.desktop_presence_runtime", "LIMINAL")
+        ):
             established.append(
                 "DesktopPresenceRuntime: SILENT (subject at rest, background sensing), "
                 "LIMINAL (request received, cognition in progress), "
@@ -863,8 +865,10 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
             break
     if not ui_clothing_confirmed:
         # Try to find in desktop presence runtime docstring
-        if _source_contains("core.desktop_presence_runtime", "DORMANT") and \
-           _source_contains("core.desktop_presence_runtime", "FULLAGENT"):
+        if (
+            _source_contains("core.desktop_presence_runtime", "DORMANT")
+            and _source_contains("core.desktop_presence_runtime", "FULLAGENT")
+        ):
             partial.append(
                 "UI clothing states (DORMANT/ISLAND/SIDESHEET/FULLAGENT) referenced "
                 "in core.desktop_presence_runtime docstring but primary definition "
@@ -926,8 +930,10 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
         )
 
     # Operator snapshot partial integration
-    if _source_contains("core.operator_surface", "desktop_shell_state") and \
-       _source_contains("core.operator_surface", "presence_tristate"):
+    if (
+        _source_contains("core.operator_surface", "desktop_shell_state")
+        and _source_contains("core.operator_surface", "presence_tristate")
+    ):
         partial.append(
             "OperatorSnapshot includes desktop_shell_state and presence_tristate fields "
             "but does NOT include UI clothing states or continuum posture — partial "
@@ -1101,8 +1107,10 @@ def _review_operator_actionability() -> AreaReviewEntry:
         )
 
     # Confirmed read-only policy in source
-    if _source_contains("core.operator_surface", "read-only") or \
-       _source_contains("core.operator_surface", "read_only"):
+    if (
+        _source_contains("core.operator_surface", "read-only")
+        or _source_contains("core.operator_surface", "read_only")
+    ):
         established.append(
             "OperatorSurface PROJECTION_POLICY explicitly documented as read-only "
             "in source — confirmed NOT action-capable by design"
@@ -1170,8 +1178,10 @@ def _review_operator_actionability() -> AreaReviewEntry:
         )
 
     # No operator dispatch test
-    if _test_file_exists("tests.test_operator_action_dispatch") or \
-       _test_file_exists("tests.test_operator_actionability"):
+    if (
+        _test_file_exists("tests.test_operator_action_dispatch")
+        or _test_file_exists("tests.test_operator_actionability")
+    ):
         partial.append(
             "Operator action dispatch test found (unexpected — review)"
         )
@@ -1345,8 +1355,10 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
             "LIFECYCLE SHELL: DesktopPresenceRuntime.handle_request() — sole canonical "
             "NL entry point; drives SILENT→LIMINAL→MANIFEST→SILENT lifecycle"
         )
-        if _source_contains("core.desktop_presence_runtime", "handle_via_e2e") or \
-           _source_contains("core.desktop_presence_runtime", "_handle_via_e2e"):
+        if (
+            _source_contains("core.desktop_presence_runtime", "handle_via_e2e")
+            or _source_contains("core.desktop_presence_runtime", "_handle_via_e2e")
+        ):
             established.append(
                 "_handle_via_e2e() — e2e path present inside DPR for full "
                 "orchestration chain execution"
@@ -1365,8 +1377,10 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
             "INTERPRETATION/PLANNING: OpenClawd.process() importable — NL interpretation, "
             "intent resolution, and execution-path branching authority"
         )
-        if _source_contains("core.openclawd", "function_calling") or \
-           _source_contains("core.openclawd", "tool_call"):
+        if (
+            _source_contains("core.openclawd", "function_calling")
+            or _source_contains("core.openclawd", "tool_call")
+        ):
             established.append(
                 "OpenClawd: LLM function calling/tool_call dispatch confirmed — "
                 "NL → structured tool dispatch path present in source"
@@ -1613,8 +1627,10 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
                 "FUSION POINT: OpenClawd accepts multimodal_context kwarg — "
                 "request-bound multimodal payload fusion path present in source"
             )
-        if _source_contains("core.openclawd", "_select_multimodal_route") or \
-           _source_contains("core.openclawd", "route_multimodal_first"):
+        if (
+            _source_contains("core.openclawd", "_select_multimodal_route")
+            or _source_contains("core.openclawd", "route_multimodal_first")
+        ):
             established.append(
                 "OpenClawd._select_multimodal_route() — native multimodal routing "
                 "decision present: routes to native-MM-capable provider when available"
@@ -1676,12 +1692,16 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
     # Disabled by default (the gap)
     disabled_by_default = False
     for mm_mod in ["core.multimodal", "core.multimodal.multimodal_ingest_bus"]:
-        if _source_contains(mm_mod, "enable_multimodal_ingest") or \
-           _source_contains(mm_mod, "SAFE_DEFAULT"):
+        if (
+            _source_contains(mm_mod, "enable_multimodal_ingest")
+            or _source_contains(mm_mod, "SAFE_DEFAULT")
+        ):
             disabled_by_default = True
             break
-    if _source_contains("core.openclawd", "enable_multimodal_ingest") or \
-       _source_contains("core.openclawd", "SAFE_DEFAULT"):
+    if (
+        _source_contains("core.openclawd", "enable_multimodal_ingest")
+        or _source_contains("core.openclawd", "SAFE_DEFAULT")
+    ):
         disabled_by_default = True
 
     if disabled_by_default:
