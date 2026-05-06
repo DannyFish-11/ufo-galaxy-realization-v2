@@ -513,3 +513,111 @@ class TestNatsHealthEndpoint:
             "GALAXY_SYSTEM_MODE": "desktop-local",
         })
         assert result["system_mode"] == "desktop-local"
+
+
+# ===========================================================================
+# 26. GET /api/v1/system/mode-status endpoint (Axis-6)
+# ===========================================================================
+
+class TestModeStatusEndpoint:
+    """Verify GET /api/v1/system/mode-status exposes the canonical mode state.
+
+    Axis-6: Full-end system runtime/surface/capability/protocol closure —
+    operators must be able to query the current system mode, cross-device
+    capability availability, and takeover readiness via a single endpoint.
+    """
+
+    def _call_mode_status_with_env(self, env_overrides: dict) -> dict:
+        import os
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from core.routes.system import create_router
+
+        original_env = os.environ.copy()
+        try:
+            os.environ.clear()
+            os.environ.update(env_overrides)
+
+            app = FastAPI()
+            router = create_router()
+            app.include_router(router)
+            client = TestClient(app, raise_server_exceptions=True)
+            resp = client.get("/api/v1/system/mode-status")
+            assert resp.status_code == 200
+            return resp.json()
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
+
+    def test_26_01_endpoint_returns_200(self):
+        """GET /api/v1/system/mode-status returns HTTP 200."""
+        result = self._call_mode_status_with_env({})
+        assert isinstance(result, dict)
+
+    def test_26_02_mode_field_present(self):
+        """Response includes 'mode' field."""
+        result = self._call_mode_status_with_env({})
+        assert "mode" in result
+
+    def test_26_03_cross_device_enabled_field_present(self):
+        """Response includes 'cross_device_enabled' field."""
+        result = self._call_mode_status_with_env({})
+        assert "cross_device_enabled" in result
+
+    def test_26_04_takeover_available_field_present(self):
+        """Response includes 'takeover_available' field."""
+        result = self._call_mode_status_with_env({})
+        assert "takeover_available" in result
+
+    def test_26_05_schema_version_present(self):
+        """Response includes 'schema_version' field."""
+        result = self._call_mode_status_with_env({})
+        assert "schema_version" in result
+        assert result["schema_version"] == "1.0"
+
+    def test_26_06_desktop_local_mode(self):
+        """desktop-local mode is reflected in mode field."""
+        result = self._call_mode_status_with_env({"GALAXY_SYSTEM_MODE": "desktop-local"})
+        assert result["mode"] == "desktop-local"
+
+    def test_26_07_cross_device_disabled_in_local_mode(self):
+        """cross_device_enabled=False in desktop-local mode."""
+        result = self._call_mode_status_with_env({
+            "GALAXY_SYSTEM_MODE": "desktop-local",
+            "GALAXY_CROSS_DEVICE_ENABLED": "0",
+        })
+        assert result["cross_device_enabled"] is False
+
+    def test_26_08_takeover_not_available_when_cross_device_off(self):
+        """takeover_available=False when cross-device is disabled."""
+        result = self._call_mode_status_with_env({
+            "GALAXY_SYSTEM_MODE": "desktop-local",
+            "GALAXY_CROSS_DEVICE_ENABLED": "0",
+        })
+        assert result["takeover_available"] is False
+
+    def test_26_09_cross_device_mode_reflected(self):
+        """desktop-cross-device mode is reflected in mode and cross_device_enabled."""
+        result = self._call_mode_status_with_env({
+            "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+        })
+        assert result["mode"] == "desktop-cross-device"
+        assert result["cross_device_enabled"] is True
+
+    def test_26_10_takeover_available_in_cross_device_mode(self):
+        """takeover_available=True when system is in cross-device mode."""
+        result = self._call_mode_status_with_env({
+            "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+        })
+        assert result["takeover_available"] is True
+
+    def test_26_11_android_devices_online_field_present(self):
+        """Response includes 'android_devices_online' count field."""
+        result = self._call_mode_status_with_env({})
+        assert "android_devices_online" in result
+        assert isinstance(result["android_devices_online"], int)
+
+    def test_26_12_nats_enabled_field_present(self):
+        """Response includes 'nats_enabled' field."""
+        result = self._call_mode_status_with_env({})
+        assert "nats_enabled" in result

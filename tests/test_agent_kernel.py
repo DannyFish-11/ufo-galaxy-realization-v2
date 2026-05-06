@@ -475,7 +475,7 @@ class TestSoulInjectionConstraint:
              patch("core.agent.kernel.get_user", return_value="user"), \
              patch.object(kernel._intent_router, "route",
                           new_callable=AsyncMock, return_value=chat_intent):
-            await kernel._process("你好", "s1", "", [])
+            await kernel._process("你好", "s1", "", "", "", [])
 
         assert len(soul_loaded) == 0, "chat_only 路径中 get_soul 不应被调用"
 
@@ -508,7 +508,7 @@ class TestSoulInjectionConstraint:
              patch("core.agent.kernel.get_soul", return_value="SOUL_CONTENT"), \
              patch("core.agent.kernel.get_agents", return_value="agents"), \
              patch("core.agent.kernel.get_user", return_value="user"):
-            await kernel._process("帮我截图", "s1", "", [])
+            await kernel._process("帮我截图", "s1", "", "", "", [])
 
         assert len(received_plans) == 1
         assert received_plans[0].soul_policy == "SOUL_CONTENT", \
