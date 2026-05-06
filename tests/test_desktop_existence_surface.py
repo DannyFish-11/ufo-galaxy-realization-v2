@@ -646,7 +646,7 @@ class TestRegressionSafety(unittest.TestCase):
 
     def test_E09_existence_route_module_is_importable(self):
         try:
-            from core.routes.existence import create_router, EXISTENCE_ROUTES_AUTHORITY  # noqa: F401
+            from core.routes.existence import create_router, EXISTENCE_ROUTES_AUTHORITY
             self.assertIsInstance(EXISTENCE_ROUTES_AUTHORITY, str)
             self.assertIn("EXISTENCE_ROUTES_V1", EXISTENCE_ROUTES_AUTHORITY)
         except ModuleNotFoundError as exc:

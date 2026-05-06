@@ -566,7 +566,7 @@ class DesktopExistenceSurfaceBuilder:
                 intent_strength=float(snap.get("intent_strength", 0.0)),
                 manifest_pressure=float(snap.get("manifest_pressure", 0.0)),
                 stability=float(snap.get("stability", 0.0)),
-                is_running=bool(engine._running),
+                is_running=engine.is_running,
                 tick_count=int(engine.tick_count),
             )
         except Exception as exc:
