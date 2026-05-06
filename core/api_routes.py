@@ -36,6 +36,7 @@ Domain → 子模块映射：
   /api/v1/federation    → core/routes/federation.py   （多实例联邦）
   /api/v1/projection    → core/routes/projection.py   （运行时状态投影）
   /api/v1/operator      → core/routes/operator.py     （算子检查面 ★ PR-510）
+  /api/v1/panel         → core/routes/panel.py         （统一面板聚合 ★ PR-1）
   /api/v1/stream        → (inline SSE endpoint below)  （服务端推送流）
   /ws/device            → (create_websocket_routes)    （设备 WebSocket — 兼容路径，非规范主入口，见下文）
   /ws/status            → (create_websocket_routes)    （状态推送 WebSocket）
@@ -338,6 +339,14 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(operator_routes.create_router())
     except Exception as _e:
         logger.warning("算子路由加载失败（可选）: %s", _e)
+
+    # PR-1: Unified Panel Aggregation — single canonical panel/runtime endpoint.
+    #        GET /api/v1/panel/unified
+    try:
+        from core.routes import panel as panel_routes
+        router.include_router(panel_routes.create_router())
+    except Exception as _e:
+        logger.warning("统一面板路由加载失败（可选）: %s", _e)
 
     # Android center-side VLM HTTP surface (plan / ground / status / checksums).
     # Module lives under galaxy_gateway but must register on the canonical API app.
