@@ -154,7 +154,9 @@ try:
         is_cross_device_enabled as _is_cross_device_enabled,
     )
 except ImportError:  # pragma: no cover
-    _is_cross_device_enabled = lambda: True  # type: ignore[assignment]
+    # Fail-safe default: if the switch module is unavailable, disable cross-device
+    # mode to prevent unintended takeover operations in degraded environments.
+    _is_cross_device_enabled = lambda: False  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

@@ -533,10 +533,24 @@ class TestModeStatusEndpoint:
         from fastapi.testclient import TestClient
         from core.routes.system import create_router
 
-        original_env = os.environ.copy()
+        # Only temporarily modify the Galaxy-specific mode variables; leave
+        # system-level env vars (PATH, PYTHONPATH, etc.) untouched.
+        _GALAXY_MODE_KEYS = {
+            "GALAXY_SYSTEM_MODE",
+            "GALAXY_CROSS_DEVICE_ENABLED",
+            "GALAXY_NATS_ENABLED",
+            "GALAXY_NATS_URL",
+            "GALAXY_FABRIC_STRICT",
+            "GALAXY_NETWORK_MODE",
+            "GALAXY_TAILSCALE_ENABLED",
+            "GALAXY_TAILSCALE_HOST",
+            "GALAXY_TRANSPORT_PRIORITY",
+        }
+        # Save current values of all mode-related keys, then clear them
+        saved = {k: os.environ.pop(k, None) for k in _GALAXY_MODE_KEYS}
         try:
-            os.environ.clear()
-            os.environ.update(env_overrides)
+            for k, v in env_overrides.items():
+                os.environ[k] = v
 
             app = FastAPI()
             router = create_router()
@@ -546,8 +560,13 @@ class TestModeStatusEndpoint:
             assert resp.status_code == 200
             return resp.json()
         finally:
-            os.environ.clear()
-            os.environ.update(original_env)
+            # Remove any overrides applied for this test
+            for k in env_overrides:
+                os.environ.pop(k, None)
+            # Restore original values
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
 
     def test_26_01_endpoint_returns_200(self):
         """GET /api/v1/system/mode-status returns HTTP 200."""

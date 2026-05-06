@@ -536,11 +536,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # Count connected Android devices from the active connection manager
         android_online = 0
         try:
-            android_online = len([
-                did for did in connection_manager.active_devices
+            android_online = sum(
+                1 for did in connection_manager.active_devices
                 if did in registered_devices
                 and registered_devices[did].get("device_type", "").startswith("android")
-            ])
+            )
         except Exception:  # pragma: no cover
             pass
 
