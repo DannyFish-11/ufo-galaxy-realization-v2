@@ -68,6 +68,14 @@ ANDROID_DEVICE_STATE_STORE_AUTHORITY: str = (
 DEVICE_STATE_SNAPSHOT_MSG_TYPE: str = "device_state_snapshot"
 DEVICE_EXECUTION_EVENT_MSG_TYPE: str = "device_execution_event"
 
+# PR-4: Terminal Android execution phases that trigger roundtrip notification.
+# When an absorbed DeviceExecutionEvent carries one of these phases, the
+# canonical_roundtrip store is notified so the unified panel surface reflects
+# the Android-side execution outcome.
+_ANDROID_TERMINAL_PHASES: frozenset = frozenset(
+    {"completed", "failed", "stagnation", "gate_decision"}
+)
+
 
 # ---------------------------------------------------------------------------
 # DeviceStateSnapshot
@@ -394,7 +402,10 @@ class _AndroidDeviceStateStore:
         """Parse and store a DEVICE_EXECUTION_EVENT payload.
 
         Also attempts to forward the event to FlowLevelOperatorSurface for
-        live cross-device flow visibility.  Returns the parsed event.
+        live cross-device flow visibility.  For terminal execution phases,
+        also notifies the canonical roundtrip store (PR-4) so the unified
+        panel surface reflects real Android execution outcomes.  Returns the
+        parsed event.
         """
         evt = _parse_execution_event(device_id, payload)
         with self._lock:
@@ -405,6 +416,30 @@ class _AndroidDeviceStateStore:
         # Forward to FlowLevelOperatorSurface
         if evt.flow_id:
             _forward_execution_event_to_flow_surface(evt)
+
+        # PR-4: For terminal Android execution phases, notify the canonical
+        # roundtrip store directly — independent of whether a flow entity
+        # exists in the delegated flow entity runtime.  This ensures that
+        # Android terminal truth re-enters the unified panel surface even
+        # for delegated flows that are no longer tracked by V2 in-process state.
+        if evt.phase in _ANDROID_TERMINAL_PHASES:
+            try:
+                from core.canonical_roundtrip import notify_android_execution_terminal
+                notify_android_execution_terminal(
+                    flow_id=evt.flow_id,
+                    device_id=evt.device_id,
+                    phase=evt.phase,
+                    step_index=evt.step_index,
+                    detail=evt.blocking_reason or f"phase={evt.phase}",
+                    task_id=evt.task_id,
+                    evidence={
+                        "stagnation_detected": evt.stagnation_detected,
+                        "fallback_tier": evt.fallback_tier,
+                        "source": "DEVICE_EXECUTION_EVENT",
+                    },
+                )
+            except Exception:
+                pass
 
         logger.debug(
             "Absorbed DEVICE_EXECUTION_EVENT from %s (flow=%s, phase=%s, step=%d)",

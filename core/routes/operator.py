@@ -991,6 +991,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             surface = get_operator_surface()
             result = await surface.execute_operator_action(request)
             record_last_operator_action_result(result)
+            # PR-4: Record execution roundtrip so the unified panel surface
+            # reflects the actual execution outcome (not just "accepted").
+            try:
+                from core.canonical_roundtrip import record_execution_roundtrip
+                record_execution_roundtrip(
+                    action_id=result.action_id,
+                    action_kind=result.action_kind,
+                    trace_id=result.trace_id,
+                    session_id=result.runtime_session_id,
+                    runtime_result=dict(result.runtime_result),
+                )
+            except Exception:
+                pass
             status = 200 if result.accepted else 422
             return JSONResponse(
                 content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
@@ -1073,6 +1086,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             surface = get_operator_surface()
             result = await surface.execute_operator_action(request)
             record_last_operator_action_result(result)
+            # PR-4: Record execution roundtrip so the unified panel surface
+            # reflects the actual execution outcome (not just "accepted").
+            try:
+                from core.canonical_roundtrip import record_execution_roundtrip
+                record_execution_roundtrip(
+                    action_id=result.action_id,
+                    action_kind=result.action_kind,
+                    trace_id=result.trace_id,
+                    session_id=result.runtime_session_id,
+                    runtime_result=dict(result.runtime_result),
+                )
+            except Exception:
+                pass
             status = 200 if result.accepted else 422
             return JSONResponse(
                 content={**result.to_dict(), "authority": "OPERATOR_ROUTES_V1"},
@@ -1141,6 +1167,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             surface = get_operator_surface()
             result = await surface.execute_operator_action(request)
             record_last_operator_action_result(result)
+            # PR-4: Record execution roundtrip for flow_cancel so panel reflects
+            # the cancellation outcome.
+            try:
+                from core.canonical_roundtrip import record_execution_roundtrip
+                record_execution_roundtrip(
+                    action_id=result.action_id,
+                    action_kind=result.action_kind,
+                    trace_id=result.trace_id,
+                    session_id=result.runtime_session_id,
+                    runtime_result=dict(result.runtime_result),
+                )
+            except Exception:
+                pass
             if not result.accepted and "not found" in result.error:
                 return JSONResponse(
                     content={
