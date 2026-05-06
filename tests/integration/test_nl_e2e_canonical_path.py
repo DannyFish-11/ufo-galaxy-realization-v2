@@ -96,6 +96,13 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+#: Fields that must be present in every DPR result dict.
+CANONICAL_DPR_FIELDS = ("success", "response", "runtime_session_id", "tristate", "entrypoint_source")
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -224,7 +231,7 @@ class TestNLIngressEntersCanonicalPath:
             )
 
         assert isinstance(result, dict), "handle_request must return a dict"
-        for field in ("success", "response", "runtime_session_id", "tristate", "entrypoint_source"):
+        for field in CANONICAL_DPR_FIELDS:
             assert field in result, f"Canonical field '{field}' missing from DPR result"
 
     def test_entrypoint_source_is_chat(self):
@@ -993,7 +1000,10 @@ class TestLLMContractStubContract:
             "the NL chain must be processed by AgentKernel"
         )
 
-        # Proof 2: stub is the kernel's LLM router → stub is actually wired in
+        # Proof 2: stub is the kernel's LLM router → stub is actually wired in.
+        # call_count is NOT checked here because the canonical rule-based path
+        # classifies short messages with high confidence (≥0.6) and skips the
+        # LLM classification call.  Structural identity (is stub) is the reliable proof.
         import core.openclawd as _oc_mod
         clawd = _oc_mod._openclawd_instance
         assert clawd is not None, "OpenClawd singleton must exist after request"

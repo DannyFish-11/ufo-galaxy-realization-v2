@@ -37,6 +37,7 @@ intent classification prompt.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Dict, List, Optional
 
@@ -75,8 +76,8 @@ STUB_MODEL: str = "contract-stub-v1"
 
 # Valid intent-classification JSON so IntentRouter's LLM-enhancement path
 # can parse the result and route the conversation correctly.
-_STUB_INTENT_JSON: str = (
-    '{"mode": "chat_only", "confidence": 0.92, "intent": "chat", "task_hint": ""}'
+_STUB_INTENT_JSON: str = json.dumps(
+    {"mode": "chat_only", "confidence": 0.92, "intent": "chat", "task_hint": ""}
 )
 
 

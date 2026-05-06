@@ -1513,6 +1513,36 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
         ),
     )
 
+    _ci_suffix = (
+        "CI-proven end-to-end via tests/integration/test_nl_e2e_canonical_path.py "
+        "— LLMContractStub injected into AgentKernel; ingress_carrier_context, "
+        "tristate, runtime_session_id, and panel-aggregation integration all "
+        "machine-verified."
+        if nl_e2e_found
+        else "Gap: no CI test exercises a real or contract-verified LLM backend "
+             "end-to-end roundtrip."
+    )
+    _overclaiming_guard = (
+        "NL canonical path is CI-proven end-to-end via "
+        "tests/integration/test_nl_e2e_canonical_path.py (PR-5). "
+        "LLMContractStub is injected into AgentKernel to provide a "
+        "contract-verified LLM backend without a real API key. "
+        "The 'truly NL-driven' claim is now machine-verifiable. "
+        "NOT a claim of production-LLM proof: the CI stub is a structural "
+        "contract verifier, not a real-provider benchmark. "
+        "Overclaiming production-grade LLM reasoning from these tests is "
+        "not supported."
+        if nl_e2e_found
+        else (
+            "OVERCLAIMING GUARD: The NL canonical path CANNOT be claimed as "
+            "'CI-proven end-to-end' because no CI test exercises the full roundtrip "
+            "with real or contract-verified LLM processing. The structural chain "
+            "is correct, but 'truly NL-driven' as a CI-provable claim requires "
+            "a test that exercises LLM function calling and verifies action dispatch "
+            "without mocking the entire LLM response chain. "
+            "Claiming CI-proven NL e2e without such a test is overclaiming."
+        )
+    )
     return DomainImplementationEntry(
         domain=ReviewDomain.NATURAL_LANGUAGE_CANONICAL_PATH,
         evidence_strength=(
@@ -1531,15 +1561,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
             "All carrier paths (android_vision, vision_sampler, compat_ws_chat) "
             "converge at DesktopPresenceRuntime.handle_request(). "
             "Session identity (ingress_carrier_context, control_session_id) present. "
-            + (
-                "CI-proven end-to-end via tests/integration/test_nl_e2e_canonical_path.py "
-                "— LLMContractStub injected into AgentKernel; ingress_carrier_context, "
-                "tristate, runtime_session_id, and panel-aggregation integration all "
-                "machine-verified."
-                if nl_e2e_found
-                else "Gap: no CI test exercises a real or contract-verified LLM backend "
-                     "end-to-end roundtrip."
-            )
+            + _ci_suffix
         ),
         established_items=established,
         partial_or_fragmented_items=partial,
@@ -1554,27 +1576,7 @@ def _review_natural_language_canonical_path() -> DomainImplementationEntry:
                 confirmed_via_v2=_try_import("galaxy_gateway.android.handlers.vision"),
             ),
         ],
-        overclaiming_guard=(
-            "NL canonical path is CI-proven end-to-end via "
-            "tests/integration/test_nl_e2e_canonical_path.py (PR-5). "
-            "LLMContractStub is injected into AgentKernel to provide a "
-            "contract-verified LLM backend without a real API key. "
-            "The 'truly NL-driven' claim is now machine-verifiable. "
-            "NOT a claim of production-LLM proof: the CI stub is a structural "
-            "contract verifier, not a real-provider benchmark. "
-            "Overclaiming production-grade LLM reasoning from these tests is "
-            "not supported."
-            if nl_e2e_found
-            else (
-                "OVERCLAIMING GUARD: The NL canonical path CANNOT be claimed as "
-                "'CI-proven end-to-end' because no CI test exercises the full roundtrip "
-                "with real or contract-verified LLM processing. The structural chain "
-                "is correct, but 'truly NL-driven' as a CI-provable claim requires "
-                "a test that exercises LLM function calling and verifies action dispatch "
-                "without mocking the entire LLM response chain. "
-                "Claiming CI-proven NL e2e without such a test is overclaiming."
-            )
-        ),
+        overclaiming_guard=_overclaiming_guard,
         follow_up_pr_spec=follow_up,
     )
 
