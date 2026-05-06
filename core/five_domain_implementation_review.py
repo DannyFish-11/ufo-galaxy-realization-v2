@@ -438,12 +438,22 @@ def _try_import(module_path: str) -> bool:
 
 
 def _module_file_exists(module_path: str) -> bool:
-    """Return True iff the module file exists on disk (without importing)."""
+    """Return True iff the module file exists on disk (without importing).
+
+    Uses find_spec() which is lighter than a full import, but still executes
+    ``__init__.py`` files in parent packages.  We catch all exceptions here
+    because those __init__.py files may fail (e.g., missing optional
+    dependencies like pydantic, numpy, or httpx) — those failures do not mean
+    the target module is absent, only that its package cannot be fully
+    initialised in the current environment.
+    """
     try:
         spec = importlib.util.find_spec(module_path)
         return spec is not None
     except Exception:
-        # find_spec may execute __init__.py side effects that raise (e.g. pydantic)
+        # find_spec may execute parent __init__.py side effects that raise
+        # (e.g. missing pydantic/numpy causes ModuleNotFoundError).
+        # Fall back to False — caller can try a direct file-path check.
         return False
 
 
@@ -904,7 +914,7 @@ def _review_desktop_three_state_presence() -> DomainReviewEntry:
             repo="v2",
             path="core.openclawd",
             available=openclawd_ok,
-            note="OpenClawd; continuum posture; lifecycle lifecycle transitions",
+            note="OpenClawd; continuum posture; lifecycle transitions",
         ),
     ]
     android_anchors = [
@@ -1857,7 +1867,16 @@ _CACHED_REPORT: Optional[FiveDomainReviewReport] = None
 
 
 def get_five_domain_review() -> FiveDomainReviewReport:
-    """Return the cached FiveDomainReviewReport (builds on first call)."""
+    """Return the cached FiveDomainReviewReport (builds on first call).
+
+    Thread safety
+    -------------
+    The lock protects the cache initialisation.  The returned report object
+    is shared across threads and **must be treated as read-only**.  No field
+    on any returned object should be mutated after retrieval.  All dataclasses
+    in this module use ``field(default_factory=list)`` for mutable defaults,
+    but callers must not modify those lists in place.
+    """
     global _CACHED_REPORT
     with _CACHE_LOCK:
         if _CACHED_REPORT is None:

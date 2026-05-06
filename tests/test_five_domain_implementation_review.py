@@ -55,6 +55,7 @@ Methodology
 from __future__ import annotations
 
 import json
+from typing import Generator
 
 import pytest
 
@@ -77,6 +78,13 @@ from core.five_domain_implementation_review import (
     reset_five_domain_review,
 )
 
+# ---------------------------------------------------------------------------
+# Minimum length thresholds (kept as module constants for maintainability)
+# ---------------------------------------------------------------------------
+MIN_AUTHORITY_LENGTH: int = 40   # authority sentinel must be sufficiently long
+MIN_SUMMARY_LENGTH: int = 50     # canonical_path_summary / incompleteness must be prose
+MIN_DESCRIPTION_LENGTH: int = 20  # cut-point and modification-zone descriptions
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -84,10 +92,11 @@ from core.five_domain_implementation_review import (
 
 
 @pytest.fixture(scope="module")
-def report() -> FiveDomainReviewReport:
-    """Build report once per module; reset cache after module finishes."""
+def report() -> Generator[FiveDomainReviewReport, None, None]:
+    """Build report once per module; reset cache before and after."""
     reset_five_domain_review()
-    return build_five_domain_review()
+    yield build_five_domain_review()
+    reset_five_domain_review()
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +108,7 @@ class TestModuleSymbols:
     """Module-level public symbols must all be importable."""
 
     def test_authority_sentinel_non_empty(self) -> None:
-        assert len(FIVE_DOMAIN_REVIEW_AUTHORITY) > 40
+        assert len(FIVE_DOMAIN_REVIEW_AUTHORITY) > MIN_AUTHORITY_LENGTH
 
     def test_authority_sentinel_contains_module_name(self) -> None:
         assert "five_domain_implementation_review" in FIVE_DOMAIN_REVIEW_AUTHORITY
@@ -163,7 +172,7 @@ class TestReportStructure:
     def test_report_global_invariant_summary_non_empty(
         self, report: FiveDomainReviewReport
     ) -> None:
-        assert len(report.global_invariant_summary) > 50
+        assert len(report.global_invariant_summary) > MIN_SUMMARY_LENGTH
 
     def test_all_five_domains_present(self, report: FiveDomainReviewReport) -> None:
         actual = {d.domain for d in report.domains}
@@ -184,7 +193,7 @@ class TestDomainStructuralCompleteness:
         self, report: FiveDomainReviewReport, domain: ReviewDomain
     ) -> None:
         entry = report.domain_by_name(domain)
-        assert len(entry.canonical_path_summary) > 50, (
+        assert len(entry.canonical_path_summary) > MIN_SUMMARY_LENGTH, (
             f"{domain.value}: canonical_path_summary too short"
         )
 
@@ -211,7 +220,7 @@ class TestDomainStructuralCompleteness:
         self, report: FiveDomainReviewReport, domain: ReviewDomain
     ) -> None:
         entry = report.domain_by_name(domain)
-        assert len(entry.incompleteness_rationale) > 50, (
+        assert len(entry.incompleteness_rationale) > MIN_SUMMARY_LENGTH, (
             f"{domain.value}: incompleteness_rationale too short"
         )
 
@@ -238,7 +247,7 @@ class TestDomainStructuralCompleteness:
         self, report: FiveDomainReviewReport, domain: ReviewDomain
     ) -> None:
         entry = report.domain_by_name(domain)
-        assert len(entry.maturity_unlock_description) > 50, (
+        assert len(entry.maturity_unlock_description) > MIN_SUMMARY_LENGTH, (
             f"{domain.value}: maturity_unlock_description too short"
         )
 
@@ -328,7 +337,7 @@ class TestImplementationCutPoints:
     ) -> None:
         entry = report.domain_by_name(domain)
         for cp in entry.implementation_cut_points:
-            assert len(cp.description) > 20, (
+            assert len(cp.description) > MIN_DESCRIPTION_LENGTH, (
                 f"{domain.value}: cut point description too short"
             )
 
@@ -396,7 +405,7 @@ class TestModificationZones:
     ) -> None:
         entry = report.domain_by_name(domain)
         for zone in entry.modification_zones:
-            assert len(zone.change_description) > 20, (
+            assert len(zone.change_description) > MIN_DESCRIPTION_LENGTH, (
                 f"{domain.value}: modification zone change_description too short"
             )
 
@@ -781,11 +790,12 @@ class TestDomainByName:
     def test_domain_by_name_raises_key_error_for_unknown(
         self, report: FiveDomainReviewReport
     ) -> None:
+        # Create a minimal stand-in that has a .value attribute not matching any domain
+        import unittest.mock as mock
+        fake_domain = mock.Mock()
+        fake_domain.value = "NONEXISTENT_DOMAIN"
         with pytest.raises(KeyError):
-            # Use a fake ReviewDomain-like object
-            class _Fake:
-                value = "NONEXISTENT_DOMAIN"
-            report.domain_by_name(_Fake())  # type: ignore[arg-type]
+            report.domain_by_name(fake_domain)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
