@@ -433,3 +433,107 @@ class TestSendTakeoverRequest:
         # No device registered → send_to_device returns None
         result = _run(bridge.send_takeover_request("nonexistent-device", "tkv-001"))
         assert result is None
+
+
+# ============================================================================
+# M.  Mode gate — Axis-1 + Axis-7: takeover is mode-gated
+# ============================================================================
+
+class TestTakeoverModeGate:
+    """Verify that send_takeover_request is strictly gated by system mode.
+
+    Takeover must only be dispatched when the system is running in
+    cross-device mode (GALAXY_CROSS_DEVICE_ENABLED=1 / GALAXY_SYSTEM_MODE=
+    desktop-cross-device).  In local mode the method must return a structured
+    error dict without ever calling send_to_device.
+    """
+
+    def _make_bridge(self) -> Any:
+        from galaxy_gateway.android_bridge import AndroidBridge
+        return AndroidBridge()
+
+    def test_M01_blocked_when_cross_device_disabled(self):
+        """send_takeover_request returns a blocked dict when cross-device is OFF."""
+        bridge = self._make_bridge()
+        call_count = {"n": 0}
+
+        async def _fake_send(device_id, message, **kwargs):
+            call_count["n"] += 1
+            return {"success": True}
+
+        bridge.send_to_device = _fake_send
+
+        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False):
+            result = _run(bridge.send_takeover_request("dev-1", "tkv-blocked"))
+
+        assert result is not None, "blocked result must be a dict, not None"
+        assert result.get("success") is False
+        assert result.get("blocked") is True
+        assert result.get("reason") == "cross_device_mode_disabled"
+        assert call_count["n"] == 0, "send_to_device must NOT be called in local mode"
+
+    def test_M02_blocked_result_includes_takeover_and_device_id(self):
+        """Blocked result must include takeover_id and device_id for traceability."""
+        bridge = self._make_bridge()
+        bridge.send_to_device = AsyncMock()
+
+        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False):
+            result = _run(bridge.send_takeover_request(
+                "my-android",
+                "tkv-xyz",
+                trace_id="trace-999",
+            ))
+
+        assert result["takeover_id"] == "tkv-xyz"
+        assert result["device_id"] == "my-android"
+        assert result["trace_id"] == "trace-999"
+
+    def test_M03_blocked_result_generates_trace_id_when_absent(self):
+        """When trace_id is not provided the blocked dict still carries one."""
+        bridge = self._make_bridge()
+        bridge.send_to_device = AsyncMock()
+
+        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False):
+            result = _run(bridge.send_takeover_request("dev-1", "tkv-001"))
+
+        assert "trace_id" in result
+        assert result["trace_id"], "trace_id must be non-empty"
+
+    def test_M04_allowed_when_cross_device_enabled(self):
+        """send_takeover_request proceeds normally when cross-device is ON."""
+        bridge = self._make_bridge()
+        sent = []
+
+        async def _fake_send(device_id, message, **kwargs):
+            sent.append(message)
+            return {"success": True}
+
+        bridge.send_to_device = _fake_send
+
+        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=True):
+            result = _run(bridge.send_takeover_request("dev-1", "tkv-go"))
+
+        assert len(sent) == 1, "send_to_device must be called when mode allows"
+        assert sent[0]["type"] == "takeover_request"
+        assert result == {"success": True}
+
+    def test_M05_blocked_does_not_notify_lifecycle_coordinator(self):
+        """Lifecycle coordinator must NOT be notified when the request is blocked."""
+        bridge = self._make_bridge()
+        bridge.send_to_device = AsyncMock()
+        coordinator_calls = []
+
+        def _fake_coordinator():
+            coord = MagicMock()
+            coord.on_takeover_requested = MagicMock(
+                side_effect=lambda **kw: coordinator_calls.append(kw)
+            )
+            return coord
+
+        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False), \
+             patch("galaxy_gateway.android_bridge._get_lifecycle_coordinator", _fake_coordinator):
+            _run(bridge.send_takeover_request("dev-1", "tkv-blocked"))
+
+        assert len(coordinator_calls) == 0, (
+            "Lifecycle coordinator must not record a blocked takeover request"
+        )

@@ -143,6 +143,19 @@ except ImportError:  # pragma: no cover
 # reconnect after a brief disconnect (fixes INFLIGHT_TASK_LOSS_ON_DISCONNECT).
 from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer as _pending_delivery_buffer
 
+# =============================================================================
+# Axis-1 + Axis-7: Cross-device mode gate — takeover is only permitted when
+# the system is running in ``desktop-cross-device`` mode.  The switch helper
+# is imported at module level so tests can patch it without reloading the
+# entire bridge.
+# =============================================================================
+try:
+    from galaxy_gateway.cross_device_switch import (
+        is_cross_device_enabled as _is_cross_device_enabled,
+    )
+except ImportError:  # pragma: no cover
+    _is_cross_device_enabled = lambda: True  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -1175,9 +1188,33 @@ class AndroidBridge:
         Returns
         -------
         dict or None
-            ``{"success": True}`` on successful send, or ``None`` when the
-            device is not connected / send fails.
+            ``{"success": True}`` on successful send, or a structured error
+            dict when the system mode prevents takeover (e.g. not in
+            ``desktop-cross-device`` mode), or ``None`` when the device is not
+            connected / send fails.
         """
+        # Axis-1 + Axis-7: Takeover is mode-gated.  It must not be initiated
+        # unless the system is running in cross-device mode.  In local mode,
+        # Android acts as a standalone device and takeover semantics are not
+        # applicable.  Return a structured error so callers can surface the
+        # refusal without raising.
+        if not _is_cross_device_enabled():
+            _tid = trace_id or str(uuid.uuid4())
+            logger.warning(
+                "send_takeover_request blocked: cross-device mode is disabled "
+                "takeover_id=%s device_id=%s trace_id=%s",
+                takeover_id,
+                device_id,
+                _tid,
+            )
+            return {
+                "success": False,
+                "blocked": True,
+                "reason": "cross_device_mode_disabled",
+                "takeover_id": takeover_id,
+                "device_id": device_id,
+                "trace_id": _tid,
+            }
         msg = MessageBuilder.takeover_request(
             device_id=device_id,
             takeover_id=takeover_id,

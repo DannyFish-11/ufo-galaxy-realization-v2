@@ -24,6 +24,7 @@ Routes in this module:
   GET  /api/v1/system/status       - 服务运行状态（管理用途）
   GET  /api/v1/system/health       - 健康检查
   GET  /api/v1/system/config       - 系统配置(脱敏)
+  GET  /api/v1/system/mode-status  - 系统模式状态（本地 vs 跨设备，接管能力可用性）
   GET  /api/v1/agents/status       - 所有活跃 Agent 状态
   GET  /api/v1/nodes/status        - 所有节点注册状态
   GET  /api/config                 - 前端配置
@@ -482,5 +483,75 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return {"status": "success", "message": "Configuration updated", "updated": updated_keys}
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+    @router.get("/api/v1/system/mode-status")
+    async def system_mode_status():
+        """Axis-6: 全端系统模式状态快照。
+
+        暴露当前系统运行模式（desktop-local vs desktop-cross-device）、跨设备能力
+        可用性、接管能力状态以及已连接 Android 设备数量，供 operator 面和客户端判断
+        当前系统所处的运行态。
+
+        Returns
+        -------
+        JSON 对象，包含以下字段：
+
+        mode
+            当前系统模式字符串（``"desktop-local"`` 或 ``"desktop-cross-device"``）。
+        cross_device_enabled
+            跨设备路由是否启用（由 ``GALAXY_CROSS_DEVICE_ENABLED`` 或
+            ``GALAXY_SYSTEM_MODE`` 派生）。
+        takeover_available
+            接管（takeover）能力是否可用（仅在 cross_device_enabled=true 时为 true）。
+        android_devices_online
+            当前在线 Android 设备数量。
+        nats_enabled
+            NATS 总线是否启用。
+        fabric_strict
+            是否处于严格启动模式（缺少 fabric 依赖时是否硬失败）。
+        schema_version
+            响应 schema 版本，便于客户端进行版本适配。
+        """
+        try:
+            from core.system_mode import resolve_fabric_config
+            fabric = resolve_fabric_config()
+            cross_device_on = fabric.cross_device_enabled
+            current_mode = fabric.mode.value
+            nats_enabled = fabric.nats_enabled
+            fabric_strict = fabric.fabric_strict
+        except Exception as _e:
+            logger.warning("system_mode_status: resolve_fabric_config failed: %s", _e)
+            cross_device_on = False
+            current_mode = "desktop-local"
+            nats_enabled = False
+            fabric_strict = False
+
+        # Cross-device switch may override the fabric config at runtime
+        try:
+            from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+            cross_device_on = is_cross_device_enabled()
+        except Exception:  # pragma: no cover
+            pass
+
+        # Count connected Android devices from the active connection manager
+        android_online = 0
+        try:
+            android_online = len([
+                did for did in connection_manager.active_devices
+                if did in registered_devices
+                and registered_devices[did].get("device_type", "").startswith("android")
+            ])
+        except Exception:  # pragma: no cover
+            pass
+
+        return JSONResponse({
+            "mode": current_mode,
+            "cross_device_enabled": cross_device_on,
+            "takeover_available": cross_device_on,
+            "android_devices_online": android_online,
+            "nats_enabled": nats_enabled,
+            "fabric_strict": fabric_strict,
+            "schema_version": "1.0",
+        })
 
     return router
