@@ -255,6 +255,20 @@ class UnifiedPanelPayload:
     # lifetime or the operator action module is unavailable.
     last_operator_action: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Execution result feedback (PR-4) ──────────────────────────────────
+    # Carries the compact projection of the most recent
+    # ExecutionRoundtripRecord from core.canonical_roundtrip.  This closes
+    # the action→execution→result→state-feedback loop so that the unified
+    # panel surface reflects real execution outcomes rather than only
+    # indicating that an action was "accepted".
+    #
+    # Keys: roundtrip_id, action_id, action_kind, trace_id, execution_phase,
+    #       execution_success, android_terminal_phase, android_device_id,
+    #       android_flow_id, feedback_projected_at, _source.
+    # Empty dict when no execution roundtrip has completed in this process
+    # lifetime or the canonical_roundtrip module is unavailable.
+    last_execution_result: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -293,6 +307,8 @@ class UnifiedPanelPayload:
             "existence_surface": dict(self.existence_surface),
             # last operator action (PR-3)
             "last_operator_action": dict(self.last_operator_action),
+            # execution result feedback (PR-4)
+            "last_execution_result": dict(self.last_execution_result),
             # provenance
             "_source": self._source,
         }
@@ -386,6 +402,12 @@ class UnifiedPanelAggregationService:
             self._fill_from_last_operator_action(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: last operator action fill failed: %s", exc)
+
+        # 8. Execution result feedback (PR-4) — closed-loop roundtrip projection
+        try:
+            self._fill_from_execution_roundtrip(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: execution roundtrip fill failed: %s", exc)
 
         return payload
 
@@ -564,6 +586,28 @@ class UnifiedPanelAggregationService:
                 }
         except Exception as exc:
             logger.debug("build_payload: last operator action unavailable: %s", exc)
+
+    def _fill_from_execution_roundtrip(self, payload: UnifiedPanelPayload) -> None:
+        """Fill last_execution_result from the canonical roundtrip store (PR-4).
+
+        Reads the most recent :class:`~core.canonical_roundtrip.ExecutionRoundtripRecord`
+        from the process-level roundtrip store and projects a compact summary
+        into the panel payload.  This closes the action→execution→result→state-
+        feedback roundtrip so that operator/panel/existence consumers observe
+        real outcome-driven state changes rather than only "action accepted".
+
+        Both V2-local execution results (from DesktopPresenceRuntime) and
+        Android terminal execution events (from android_device_state_store) are
+        eligible to populate this field.
+        """
+        try:
+            from core.canonical_roundtrip import get_last_execution_roundtrip
+
+            record = get_last_execution_roundtrip()
+            if record is not None:
+                payload.last_execution_result = record.compact_dict()
+        except Exception as exc:
+            logger.debug("build_payload: execution roundtrip unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------
