@@ -663,7 +663,7 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "openclawd", "android_vision", "vision_sampler"):
+        if source in ("chat", "openclawd", "android_vision", "vision_sampler", "operator"):
             return await self._handle_via_openclawd(
                 rsession=rsession,
                 message=message,

@@ -121,6 +121,21 @@ try:
 except Exception:  # pragma: no cover
     pass  # graceful degradation if module is unavailable
 
+# PR-3: Operator action contract re-exports — lazy so callers that only need
+# the read surface do not transitively import the async action path.
+try:
+    from core.operator_action_contract import (  # noqa: F401
+        OperatorActionKind,
+        OperatorActionRequest,
+        OperatorActionResult,
+        OPERATOR_ACTION_CONTRACT_AUTHORITY,
+        OPERATOR_CONTROL_PLANE_IS_CANONICAL_AUTHORITY,
+        OPERATOR_ACTION_ENTRY_MODE,
+        build_operator_action_result_from_runtime_result,
+    )
+except Exception:  # pragma: no cover
+    pass  # graceful degradation if module is unavailable
+
 __all__ = [
     # Authority sentinels
     "OPERATOR_SURFACE_AUTHORITY",
@@ -154,6 +169,13 @@ __all__ = [
     # Helpers
     "get_operator_surface",
     "reset_operator_surface",
+    # Action contract (PR-3) — re-exported for convenience
+    "OperatorActionRequest",
+    "OperatorActionResult",
+    "OperatorActionKind",
+    "OPERATOR_ACTION_CONTRACT_AUTHORITY",
+    "OPERATOR_CONTROL_PLANE_IS_CANONICAL_AUTHORITY",
+    "OPERATOR_ACTION_ENTRY_MODE",
 ]
 
 # ---------------------------------------------------------------------------
@@ -1604,6 +1626,145 @@ class OperatorSurface:
             }
 
         return snap
+
+    # ── Operator Action (PR-3: Control-Plane Activation) ─────────────────
+
+    async def execute_operator_action(
+        self,
+        request: "OperatorActionRequest",
+    ) -> "OperatorActionResult":
+        """Execute an operator-originated action via the canonical runtime path.
+
+        This is the **sole** entry point for operator-panel-originated actions.
+        All action kinds are routed through the canonical execution path —
+        no parallel dispatch engine is introduced.
+
+        Action routing
+        --------------
+        ``dispatch`` / ``device_dispatch``
+            Delegates to :meth:`~core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request`
+            with ``source="operator"`` and ``entry_mode="operator_action"``.
+            This enters the tri-state lifecycle → OpenClawd → canonical dispatch
+            chain identically to a chat-originated request, but is stamped with
+            the ``"operator"`` carrier tag so it can be identified in traces.
+
+        ``flow_cancel``
+            Retrieves the target :class:`~core.delegated_flow_entity.DelegatedFlowEntity`
+            by ``request.flow_id`` and applies the ``cancel`` signal via
+            :func:`~core.delegated_flow_entity.advance_flow_phase`.
+            Terminal flows are not affected (safe semantics).
+
+        Args:
+            request: The :class:`~core.operator_action_contract.OperatorActionRequest`
+                     describing the action to execute.
+
+        Returns:
+            An :class:`~core.operator_action_contract.OperatorActionResult` with
+            ``accepted=True`` on success, or ``accepted=False`` with a non-empty
+            ``error`` field on failure.
+        """
+        from core.operator_action_contract import (
+            OperatorActionKind,
+            OperatorActionRequest,
+            OperatorActionResult,
+            OPERATOR_ACTION_ENTRY_MODE,
+            build_operator_action_result_from_runtime_result,
+        )
+
+        action_kind = request.action_kind
+
+        # ── dispatch / device_dispatch ────────────────────────────────────
+        if action_kind in (
+            OperatorActionKind.dispatch.value,
+            OperatorActionKind.device_dispatch.value,
+        ):
+            try:
+                from core.desktop_presence_runtime import get_desktop_presence_runtime
+                runtime = get_desktop_presence_runtime()
+                result = await runtime.handle_request(
+                    message=request.message,
+                    source="operator",
+                    device_id=request.device_id,
+                    session_id=request.session_id or None,
+                    user_id=request.user_id or "operator",
+                    context=list(request.context) if request.context else None,
+                    required_capabilities=(
+                        list(request.required_capabilities)
+                        if request.required_capabilities
+                        else None
+                    ),
+                    entry_mode=OPERATOR_ACTION_ENTRY_MODE,
+                )
+                return build_operator_action_result_from_runtime_result(
+                    action_kind=action_kind,
+                    runtime_result=result if isinstance(result, dict) else {},
+                )
+            except Exception as exc:
+                logger.error(
+                    "execute_operator_action(%s) runtime delegation failed: %s",
+                    action_kind,
+                    exc,
+                )
+                return OperatorActionResult(
+                    action_kind=action_kind,
+                    accepted=False,
+                    error=str(exc),
+                )
+
+        # ── flow_cancel ───────────────────────────────────────────────────
+        if action_kind == OperatorActionKind.flow_cancel.value:
+            flow_id = request.flow_id or ""
+            if not flow_id:
+                return OperatorActionResult(
+                    action_kind=action_kind,
+                    accepted=False,
+                    error="flow_id is required for flow_cancel action",
+                )
+            try:
+                from core.delegated_flow_entity import (
+                    get_delegated_flow_entity_runtime,
+                    get_delegated_flow,
+                    advance_flow_phase,
+                    DelegatedFlowSignal,
+                )
+                entity = get_delegated_flow(flow_id)
+                if entity is None:
+                    return OperatorActionResult(
+                        action_kind=action_kind,
+                        accepted=False,
+                        error=f"flow '{flow_id}' not found",
+                    )
+                # advance_flow_phase is safe for terminal flows — it is a no-op
+                # when the transition is not valid for the current phase.
+                updated = advance_flow_phase(entity, DelegatedFlowSignal.cancel)
+                cancelled = getattr(updated.phase, "value", str(updated.phase))
+                return OperatorActionResult(
+                    action_kind=action_kind,
+                    accepted=True,
+                    runtime_result={
+                        "flow_id": flow_id,
+                        "phase_after_cancel": cancelled,
+                        "_source": "delegated_flow_entity_runtime",
+                    },
+                )
+            except Exception as exc:
+                logger.error(
+                    "execute_operator_action(flow_cancel, flow_id=%s) failed: %s",
+                    flow_id,
+                    exc,
+                )
+                return OperatorActionResult(
+                    action_kind=action_kind,
+                    accepted=False,
+                    error=str(exc),
+                )
+
+        # ── unknown action kind ───────────────────────────────────────────
+        return OperatorActionResult(
+            action_kind=action_kind,
+            accepted=False,
+            error=f"unsupported action_kind: {action_kind!r}",
+        )
 
 
 # ---------------------------------------------------------------------------
