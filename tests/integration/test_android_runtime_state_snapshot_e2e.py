@@ -59,11 +59,10 @@ No external services, live devices, or network connections are required.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
 from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -282,6 +281,50 @@ def operator_client():
 
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture()
+def operator_panel_client():
+    """FastAPI TestClient with operator + unified panel routes mounted."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from core.routes.operator import create_router as create_operator_router
+    from core.routes.panel import create_router as create_panel_router
+
+    app = FastAPI()
+    app.include_router(create_operator_router())
+    app.include_router(create_panel_router())
+
+    with TestClient(app) as c:
+        yield c
+
+
+def _make_full_flow_entity(
+    flow_id: str,
+    *,
+    trace_id: str,
+    task_id: str,
+    device_id: str,
+) -> MagicMock:
+    """Return a minimal DelegatedFlowEntity-like object for flow projection."""
+    entity = MagicMock()
+    entity.identity.delegated_flow_id = flow_id
+    entity.identity.flow_lineage_id = f"lin_{flow_id}"
+    entity.identity.flow_segment_id = ""
+    entity.identity.trace_id = trace_id
+    entity.identity.flow_kind.value = "goal_execution"
+    entity.phase.value = "active"
+    entity.phase.is_active.return_value = True
+    entity.object_mapping.canonical_task_id = task_id
+    entity.object_mapping.dispatch_record_id = f"dr_{task_id}"
+    entity.object_mapping.contract_id = ""
+    entity.object_mapping.binding_id = ""
+    entity.object_mapping.device_id = device_id
+    entity.object_mapping.android_flow_id = flow_id
+    entity.created_at = time.time()
+    entity.last_updated_at = time.time()
+    entity.metadata = {}
+    return entity
 
 
 # ===========================================================================
@@ -841,7 +884,222 @@ class TestCanonicalPathBypassRegression:
 
 
 # ===========================================================================
-# 6. Message type handler registration guard
+# 6. Cross-device runtime roundtrip closure (machine-verifiable)
+# ===========================================================================
+
+
+class TestCrossDeviceRuntimeRoundtripClosure:
+    """Canonical happy path proof: V2 dispatch → Android execution → V2 feedback."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_roundtrip_singletons(self):
+        from core.attached_runtime_session_registry import reset_session_registry
+        from core.canonical_roundtrip import reset_execution_roundtrip
+        from core.flow_level_operator_surface import reset_flow_level_operator_surface
+        from core.unified_panel_aggregation import reset_unified_panel_aggregation_service
+
+        reset_session_registry()
+        reset_flow_level_operator_surface()
+        reset_execution_roundtrip()
+        reset_unified_panel_aggregation_service()
+        yield
+        reset_session_registry()
+        reset_flow_level_operator_surface()
+        reset_execution_roundtrip()
+        reset_unified_panel_aggregation_service()
+
+    @pytest.mark.asyncio
+    async def test_v2_android_roundtrip_updates_state_flow_operator_and_panel(
+        self,
+        bridge: Any,
+        operator_panel_client: Any,
+    ) -> None:
+        from core.android_device_state_store import (
+            get_device_state_snapshot,
+            list_recent_execution_events,
+        )
+        from core.attached_runtime_session_registry import lookup_session_by_device
+        from core.flow_level_operator_surface import (
+            AndroidExecutionPhase,
+            get_flow_level_operator_surface,
+        )
+        from core.unified_panel_aggregation import build_unified_panel_payload
+        from galaxy_gateway.android_bridge import get_android_bridge_trace_id
+
+        device_id = f"rt-closure-{uuid.uuid4().hex[:8]}"
+        flow_id = f"flow-{uuid.uuid4().hex[:8]}"
+        task_id = f"task-{uuid.uuid4().hex[:8]}"
+        trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+        stub = AndroidRuntimeStub(device_id)
+
+        # Android startup path: register + capability + runtime-state snapshot.
+        reg_ack = await stub.register(bridge)
+        runtime_attachment_session_id = reg_ack.get("runtime_attachment_session_id", "")
+        assert runtime_attachment_session_id, (
+            "device_register_ack must include runtime_attachment_session_id for "
+            "session continuity proof."
+        )
+        session_entry = lookup_session_by_device(device_id)
+        assert session_entry is not None
+        runtime_session_id = session_entry.runtime_session_id
+        durable_session_id = session_entry.durable_session_id
+        control_session_id = session_entry.session_id
+        cap_ack = await stub.report_capabilities(bridge)
+        assert cap_ack.get("accepted") is True
+        snap_ack = await stub.send_state_snapshot(bridge)
+        assert snap_ack.get("status") == "absorbed"
+
+        # V2 dispatch path: send_to_device emits task_assign with trace_id.
+        task_assign_message = {
+            "version": "3.0",
+            "type": "task_assign",
+            "message_id": task_id,
+            "task_id": task_id,
+            "device_id": device_id,
+            "timestamp": int(time.time() * 1000),
+            "trace_id": trace_id,
+            "payload": {
+                "command": "tap",
+                "flow_id": flow_id,
+                "trace_id": trace_id,
+                "orchestrator_dispatch": True,
+            },
+        }
+        dispatched_task = asyncio.create_task(
+            bridge.send_to_device(
+                device_id,
+                task_assign_message,
+                wait_response=True,
+                timeout=5.0,
+            )
+        )
+        await asyncio.sleep(0.05)
+
+        outbound_messages = [
+            c.args[0] for c in stub.ws.send_json.call_args_list if c.args and isinstance(c.args[0], dict)
+        ]
+        assert any(m.get("type") == "task_assign" for m in outbound_messages), (
+            "V2 dispatch did not emit task_assign to Android transport."
+        )
+        task_assign = next(m for m in outbound_messages if m.get("type") == "task_assign")
+        assert get_android_bridge_trace_id(task_assign) == trace_id, (
+            "trace_id must be preserved on V2→Android dispatch payload."
+        )
+
+        fake_entity = _make_full_flow_entity(
+            flow_id,
+            trace_id=trace_id,
+            task_id=task_id,
+            device_id=device_id,
+        )
+        fake_runtime = MagicMock()
+        fake_runtime.get.side_effect = lambda fid: fake_entity if fid == flow_id else None
+        fake_runtime.list_entities.return_value = [fake_entity]
+
+        with patch("core.delegated_flow_entity.get_delegated_flow", return_value=fake_entity), patch(
+            "core.delegated_flow_entity.get_delegated_flow_entity_runtime",
+            return_value=fake_runtime,
+        ):
+            delegated_ack = await bridge.handle_message(
+                stub.ws,
+                _v3(
+                    "delegated_execution_signal",
+                    device_id,
+                    trace_id=trace_id,
+                    payload={
+                        "kind": "result",
+                        "session_id": runtime_attachment_session_id,
+                        "flow_id": flow_id,
+                    },
+                ),
+            )
+            assert delegated_ack is not None
+            assert delegated_ack.get("type") == "delegated_execution_signal_ack"
+
+            event_ack = await bridge.handle_message(
+                stub.ws,
+                _v3(
+                    "device_execution_event",
+                    device_id,
+                    payload={
+                        "flow_id": flow_id,
+                        "task_id": task_id,
+                        "phase": "completed",
+                        "step_index": 3,
+                        "is_blocking": False,
+                        "event_ts": int(time.time() * 1000),
+                    },
+                ),
+            )
+            assert event_ack is not None
+            assert event_ack.get("type") == "device_execution_event_ack"
+            assert event_ack.get("status") == "absorbed"
+
+            await bridge.handle_message(
+                stub.ws,
+                _v3(
+                    "task_result",
+                    device_id,
+                    task_id=task_id,
+                    status="completed",
+                    route_mode="cross_device",
+                    trace_id=trace_id,
+                    session_id=control_session_id,
+                    runtime_session_id=runtime_session_id,
+                    runtime_attachment_session_id=runtime_attachment_session_id,
+                    durable_session_id=durable_session_id,
+                    payload={
+                        "result": {"ok": True},
+                        "session_id": control_session_id,
+                        "runtime_session_id": runtime_session_id,
+                        "runtime_attachment_session_id": runtime_attachment_session_id,
+                        "durable_session_id": durable_session_id,
+                    },
+                ),
+            )
+
+            dispatch_result = await asyncio.wait_for(dispatched_task, timeout=5.0)
+            assert dispatch_result is not None, "Dispatch waiter must resolve after task_result."
+            assert dispatch_result.get("runtime_attachment_session_id") == runtime_attachment_session_id
+
+            stored_snapshot = get_device_state_snapshot(device_id)
+            assert stored_snapshot is not None
+            events = list_recent_execution_events(flow_id=flow_id, device_id=device_id, limit=10)
+            assert events, "android_device_state_store must contain execution event."
+            assert events[0].phase == "completed"
+
+            surface = get_flow_level_operator_surface()
+            flow_proj = surface.inspect_flow(flow_id)
+            assert flow_proj is not None
+            assert flow_proj.trace_id == trace_id
+            assert flow_proj.current_execution_phase == AndroidExecutionPhase.completed.value
+
+            flow_resp = operator_panel_client.get(f"/api/v1/operator/flows/{flow_id}")
+            assert flow_resp.status_code == 200, flow_resp.text
+            flow_body = flow_resp.json()
+            assert flow_body.get("trace_id") == trace_id
+            assert flow_body.get("current_execution_phase") == "completed"
+
+            panel = build_unified_panel_payload().to_dict()
+            assert any(
+                d.get("device_id") == device_id
+                for d in panel.get("android_device_execution_digest", [])
+            ), "Unified panel digest must expose the Android device in roundtrip."
+            last_exec = panel.get("last_execution_result", {})
+            assert last_exec.get("action_kind") == "android_terminal"
+            assert last_exec.get("android_flow_id") == flow_id
+
+            panel_resp = operator_panel_client.get("/api/v1/panel/unified")
+            assert panel_resp.status_code == 200
+            assert panel_resp.json().get("last_execution_result", {}).get("android_flow_id") == flow_id
+
+        session_entry_after = lookup_session_by_device(device_id)
+        assert session_entry_after is not None
+        assert session_entry_after.runtime_attachment_session_id == runtime_attachment_session_id
+
+
+# ===========================================================================
+# 7. Message type handler registration guard
 # ===========================================================================
 
 
@@ -855,7 +1113,6 @@ class TestSnapshotHandlerRegistrationGuard:
     def test_device_state_snapshot_handler_is_registered(self) -> None:
         """DEVICE_STATE_SNAPSHOT must have a handler registered in AndroidBridge."""
         from galaxy_gateway.android_bridge import AndroidBridge
-        from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
