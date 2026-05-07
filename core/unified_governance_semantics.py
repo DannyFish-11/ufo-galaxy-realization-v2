@@ -14,7 +14,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import importlib
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
     "UNIFIED_GOVERNANCE_SEMANTICS_V1: "
@@ -29,6 +33,9 @@ MESH_RUNTIME_STATUS_POLICY: str = (
     "multi-device mesh runtime status must be surfaced as explicit "
     "partial/runtime/deferred facts instead of implicit structural claims."
 )
+MESH_RUNTIME_STATUS_PARTIAL: str = "partial"
+MESH_RUNTIME_STATUS_CONTRACT_ONLY: str = "contract_only"
+MESH_RUNTIME_STATUS_UNAVAILABLE: str = "unavailable"
 
 
 class GovernancePath(str, Enum):
@@ -82,6 +89,16 @@ def _rank_for_path(path: GovernancePath) -> int:
     return rank_map[path]
 
 
+def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
+    """Return True when a sentinel constant can be imported and is truthy."""
+    try:
+        module = importlib.import_module(module_path)
+        return bool(getattr(module, sentinel_name, None))
+    except (ImportError, AttributeError) as exc:
+        logger.debug("_has_sentinel: unavailable %s.%s: %s", module_path, sentinel_name, exc)
+        return False
+
+
 def build_mesh_runtime_state() -> Dict[str, Any]:
     """Build a compact operator/panel-safe mesh runtime status snapshot.
 
@@ -89,49 +106,40 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
     V2 codebase from what still depends on Android-side authority/runtime
     closure.
     """
-    has_staged_mesh_dispatch = False
-    has_live_mesh_engine = False
-    has_live_mesh_coordinator = False
+    has_staged_mesh_dispatch = _has_sentinel(
+        "core.runtime.source_dispatch_orchestrator",
+        "LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL",
+    )
+    has_live_mesh_engine = _has_sentinel(
+        "core.mesh.live_mesh_runtime_engine",
+        "LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL",
+    )
+    has_live_mesh_coordinator = _has_sentinel(
+        "core.mesh.live_mesh_session_coordinator",
+        "LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL",
+    )
     recoverable_mesh_sessions = 0
-
-    try:
-        from core.runtime.source_dispatch_orchestrator import (
-            LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL,
-        )
-
-        has_staged_mesh_dispatch = bool(LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL)
-    except Exception:
-        has_staged_mesh_dispatch = False
-
-    try:
-        from core.mesh.live_mesh_runtime_engine import LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL
-
-        has_live_mesh_engine = bool(LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL)
-    except Exception:
-        has_live_mesh_engine = False
-
-    try:
-        from core.mesh.live_mesh_session_coordinator import LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL
-
-        has_live_mesh_coordinator = bool(LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL)
-    except Exception:
-        has_live_mesh_coordinator = False
 
     try:
         from core.mesh.mesh_session_persistence import recover_mesh_sessions
 
         recoverable_mesh_sessions = len(recover_mesh_sessions())
-    except Exception:
+    except Exception as exc:
+        logger.debug("build_mesh_runtime_state: recoverable mesh sessions unavailable: %s", exc)
         recoverable_mesh_sessions = 0
 
     runtime_proof_count = sum(
         (
-            1 if has_staged_mesh_dispatch else 0,
-            1 if has_live_mesh_engine else 0,
-            1 if has_live_mesh_coordinator else 0,
+            int(has_staged_mesh_dispatch),
+            int(has_live_mesh_engine),
+            int(has_live_mesh_coordinator),
         )
     )
-    status = "partial" if runtime_proof_count > 0 else "contract_only"
+    status = (
+        MESH_RUNTIME_STATUS_PARTIAL
+        if runtime_proof_count > 0
+        else MESH_RUNTIME_STATUS_CONTRACT_ONLY
+    )
 
     return {
         "status": status,
@@ -165,7 +173,7 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
             },
         ],
         "deferred_or_constrained": [
-            "cross-repo authority contract closure (V2↔Android) remains required",
+            "cross-repo authority contract closure (V2<->Android) remains required",
             "multi-Android-device live mesh closure remains constrained without Android-side runtime proof",
         ],
         "_policy": MESH_RUNTIME_STATUS_POLICY,
@@ -287,7 +295,7 @@ def build_unified_governance_state(
             "cross_device_mode_count": 0,
             "takeover_active_count": 0,
             "mesh_runtime_state": {
-                "status": "unavailable",
+                "status": MESH_RUNTIME_STATUS_UNAVAILABLE,
                 "runtime_proof_count": 0,
                 "runtime_relationships": [],
                 "deferred_or_constrained": ["governance dependencies unavailable"],
@@ -368,6 +376,9 @@ __all__ = [
     "GovernancePath",
     "GovernancePathDecision",
     "MESH_RUNTIME_STATUS_POLICY",
+    "MESH_RUNTIME_STATUS_PARTIAL",
+    "MESH_RUNTIME_STATUS_CONTRACT_ONLY",
+    "MESH_RUNTIME_STATUS_UNAVAILABLE",
     "build_mesh_runtime_state",
     "resolve_governance_path_decision",
     "build_unified_governance_state",
