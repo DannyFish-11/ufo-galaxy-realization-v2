@@ -55,13 +55,13 @@ Design principles
 - **Governance/policy-aware** — consumes PR-27 and PR-28 context when
   available, degrades gracefully when unavailable.
 - **Mesh-aware** — integrates PR-32/33 mesh membership/session context for
-  staged mesh dispatch planning (full Mesh Session Coordinator deferred to a
-  future PR).
+  staged mesh dispatch orchestration and PR-J live runtime integration.
 - **Target takeover integration** — can invoke PR-34's
   :func:`~core.runtime.target_takeover.execute_local_takeover` when a
   remote target is selected.
 - **No persistence / streaming** — in-scope for future PRs only.
-- **No full Mesh Session Coordinator** — deferred to PR-37.
+- **Cross-repo mesh authority closure remains partial** — Android-side
+  LocalCollaborationAgent runtime authority is external to this repository.
 
 Usage::
 

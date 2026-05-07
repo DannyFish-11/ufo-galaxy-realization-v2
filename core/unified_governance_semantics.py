@@ -24,6 +24,11 @@ UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
 )
 
 UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION: str = "1.0.0"
+MESH_RUNTIME_STATUS_POLICY: str = (
+    "MESH_RUNTIME_STATUS_POLICY_V1: "
+    "multi-device mesh runtime status must be surfaced as explicit "
+    "partial/runtime/deferred facts instead of implicit structural claims."
+)
 
 
 class GovernancePath(str, Enum):
@@ -75,6 +80,97 @@ def _rank_for_path(path: GovernancePath) -> int:
         GovernancePath.multimodal_participation: 6,
     }
     return rank_map[path]
+
+
+def build_mesh_runtime_state() -> Dict[str, Any]:
+    """Build a compact operator/panel-safe mesh runtime status snapshot.
+
+    This snapshot intentionally distinguishes what is runtime-proven in the
+    V2 codebase from what still depends on Android-side authority/runtime
+    closure.
+    """
+    has_staged_mesh_dispatch = False
+    has_live_mesh_engine = False
+    has_live_mesh_coordinator = False
+    recoverable_mesh_sessions = 0
+
+    try:
+        from core.runtime.source_dispatch_orchestrator import (
+            LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL,
+        )
+
+        has_staged_mesh_dispatch = bool(LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL)
+    except Exception:
+        has_staged_mesh_dispatch = False
+
+    try:
+        from core.mesh.live_mesh_runtime_engine import LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL
+
+        has_live_mesh_engine = bool(LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL)
+    except Exception:
+        has_live_mesh_engine = False
+
+    try:
+        from core.mesh.live_mesh_session_coordinator import LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL
+
+        has_live_mesh_coordinator = bool(LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL)
+    except Exception:
+        has_live_mesh_coordinator = False
+
+    try:
+        from core.mesh.mesh_session_persistence import recover_mesh_sessions
+
+        recoverable_mesh_sessions = len(recover_mesh_sessions())
+    except Exception:
+        recoverable_mesh_sessions = 0
+
+    runtime_proof_count = sum(
+        (
+            1 if has_staged_mesh_dispatch else 0,
+            1 if has_live_mesh_engine else 0,
+            1 if has_live_mesh_coordinator else 0,
+        )
+    )
+    status = "partial" if runtime_proof_count > 0 else "contract_only"
+
+    return {
+        "status": status,
+        "runtime_proof_count": runtime_proof_count,
+        "runtime_proofs": {
+            "staged_mesh_dispatch_orchestration": has_staged_mesh_dispatch,
+            "live_mesh_runtime_engine": has_live_mesh_engine,
+            "live_mesh_session_coordinator": has_live_mesh_coordinator,
+        },
+        "runtime_observability": {
+            "recoverable_mesh_session_count": recoverable_mesh_sessions,
+        },
+        "runtime_relationships": [
+            {
+                "link": "dispatch_to_delegation",
+                "source": "SourceDispatchOrchestrator(staged_mesh)",
+                "target": "Android delegated execution(goal_execution/parallel_subtask)",
+                "status": "v2_dispatch_proven_android_execution_external",
+            },
+            {
+                "link": "delegation_to_parallel_subtask",
+                "source": "delegated execution envelope",
+                "target": "parallel_subtask handling path",
+                "status": "message_path_proven",
+            },
+            {
+                "link": "parallel_subtask_to_local_collaboration_agent",
+                "source": "parallel_subtask",
+                "target": "Android LocalCollaborationAgent",
+                "status": "android_repo_authority_external_to_v2_runtime",
+            },
+        ],
+        "deferred_or_constrained": [
+            "cross-repo authority contract closure (V2↔Android) remains required",
+            "multi-Android-device live mesh closure remains constrained without Android-side runtime proof",
+        ],
+        "_policy": MESH_RUNTIME_STATUS_POLICY,
+        "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
+    }
 
 
 def resolve_governance_path_decision(
@@ -190,6 +286,14 @@ def build_unified_governance_state(
             "local_mode_count": 0,
             "cross_device_mode_count": 0,
             "takeover_active_count": 0,
+            "mesh_runtime_state": {
+                "status": "unavailable",
+                "runtime_proof_count": 0,
+                "runtime_relationships": [],
+                "deferred_or_constrained": ["governance dependencies unavailable"],
+                "_policy": MESH_RUNTIME_STATUS_POLICY,
+                "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
+            },
             "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             "_contract_version": UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
         }
@@ -251,6 +355,7 @@ def build_unified_governance_state(
         "local_mode_count": local_mode_count,
         "cross_device_mode_count": cross_device_mode_count,
         "takeover_active_count": takeover_active_count,
+        "mesh_runtime_state": build_mesh_runtime_state(),
         "authority": "v2_semantic_orchestration_authority",
         "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
         "_contract_version": UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
@@ -262,6 +367,8 @@ __all__ = [
     "UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION",
     "GovernancePath",
     "GovernancePathDecision",
+    "MESH_RUNTIME_STATUS_POLICY",
+    "build_mesh_runtime_state",
     "resolve_governance_path_decision",
     "build_unified_governance_state",
 ]

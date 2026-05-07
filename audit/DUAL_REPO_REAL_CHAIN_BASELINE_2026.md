@@ -583,13 +583,23 @@ Android 本地链路（crossDeviceEnabled = false 时，默认情况）：
 已存在的结构：
     - AIP v3 支持 MeshTopologyPayload, PeerExchangePayload, PeerAnnouncePayload
     - Android 侧有 LocalCollaborationAgent（协调 parallel_subtask 执行）
-    - V2 侧有 SourceDispatchOrchestrator（"mesh-aware staged dispatch"计划支持）
-    - V2 侧有 core/mesh/ 目录（mesh_coordinator.py 等）
+    - V2 侧有 SourceDispatchOrchestrator（staged_mesh + PR-J live runtime 路径）
+    - V2 侧有 core/mesh/ 目录（live_mesh_runtime_engine / live_mesh_session_coordinator / persistence）
 
 尚未完全闭合：
-    - Mesh Session Coordinator 已明确声明推迟到 PR-37（source_dispatch_orchestrator.py 注释）
-    - 多设备 mesh 的运行时闭环尚缺更强的测试/运行时证据
-    - parallel_subtask 跨两个以上设备同时执行的完整运行级证明尚缺
+    - 双仓 authority contract 仍是关键约束：Android LocalCollaborationAgent 运行权威在 Android 仓，不在 V2 仓内闭合
+    - panel/operator/surface 必须明确暴露 mesh_runtime_state（partial/constrained/deferred）而非只依赖结构性代码叙事
+    - parallel_subtask 跨两个以上 Android 设备的端到端运行级闭环仍需 Android 侧实机证据
+
+当前收敛结论（基于真实代码）：
+    - V2 内：已具备 staged_mesh 调度 + live mesh runtime engine + coordinator 的运行级证据（partial runtime proof）
+    - 双仓整体：仍为 partial/constrained；需 Android 侧 authority/runtime 配套证明才能宣称 fully closed
+
+运行关系（runtime relationship）：
+    SourceDispatchOrchestrator(staged_mesh)
+        -> delegated execution envelope(goal_execution/parallel_subtask)
+        -> Android LocalCollaborationAgent（Android 仓 authority）
+        -> result 回流 V2 operator/panel/state store
 ```
 
 ---

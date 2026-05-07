@@ -128,6 +128,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
             "active_surface_spec",
             # governance
             "governance_state",
+            "mesh_runtime_state",
             # provenance
             "_source",
         }
@@ -285,6 +286,12 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("governance_state", d)
+
+    def test_C02c_mesh_runtime_state_is_present(self):
+        from core.unified_panel_aggregation import UnifiedPanelPayload
+        p = UnifiedPanelPayload()
+        d = p.to_dict()
+        self.assertIn("mesh_runtime_state", d)
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""

@@ -293,6 +293,7 @@ def test_operator_snapshot_still_works(client):
     resp = client.get("/api/v1/operator/snapshot")
     assert resp.status_code == 200
     assert "governance_state" in resp.json()
+    assert "mesh_runtime_state" in resp.json()
 
 
 # ---------------------------------------------------------------------------
