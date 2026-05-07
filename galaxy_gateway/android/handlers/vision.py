@@ -15,6 +15,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from core.android_perception_ingress_contract import ANDROID_PERCEPTION_ONE_SHOT
 from galaxy_gateway.android.message_builder import MessageBuilder
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ async def handle_vision_request(
     image_base64 = message.get("image_base64", "")
     mode = message.get("mode", "full")
     task_context = message.get("task_context", "")
-    participation = message.get("participation", "one_shot_request_bound")
+    participation = message.get("participation", ANDROID_PERCEPTION_ONE_SHOT)
 
     logger.info("Vision request from %s: task_id=%s, mode=%s", device_id, task_id, mode)
 
@@ -95,7 +96,7 @@ async def _process_via_runtime_shell(
     mode: str,
     device_id: str,
     task_id: str = "",
-    participation: str = "one_shot_request_bound",
+    participation: str = ANDROID_PERCEPTION_ONE_SHOT,
 ) -> Dict[str, Any]:
     """Route the vision request through the runtime shell multimodal path."""
     from core.android_perception_ingress_contract import (

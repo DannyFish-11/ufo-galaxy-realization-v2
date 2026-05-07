@@ -86,7 +86,10 @@ def build_android_perception_ingress_context(
         return {}
 
     metadata = _extract_mm_metadata(multimodal_context)
-    participation = metadata.get(ANDROID_PERCEPTION_PARTICIPATION_KEY, "")
+    participation = metadata.get(
+        ANDROID_PERCEPTION_PARTICIPATION_KEY,
+        ANDROID_PERCEPTION_ONE_SHOT,
+    )
     canonical_requested = (
         participation == ANDROID_PERCEPTION_CANONICAL
         or metadata.get(ANDROID_CANONICAL_OPT_IN_KEY) is True
