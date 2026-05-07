@@ -831,6 +831,95 @@ class TestAndroidVisionIngress:
             "for Android vision requests"
         )
 
+    def test_android_vision_default_participation_is_request_bound(self):
+        """Default Android vision participation must be one-shot request-bound."""
+        from tests.integration.stubs.multimodal_perception_stub import (
+            make_android_vision_context,
+        )
+        from core.android_perception_ingress_contract import (
+            ANDROID_PERCEPTION_ONE_SHOT,
+            ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND,
+            V2_MULTIMODAL_AUTHORITY,
+        )
+
+        stub = _make_stub()
+        _reset_openclawd_singleton()
+        ctx = make_android_vision_context(device_id="android-contract-default")
+
+        with _patch_llm_router(stub):
+            result = asyncio.run(
+                _run_handle_request(
+                    "Android default participation contract",
+                    source="android_vision",
+                    multimodal_context=ctx,
+                )
+            )
+
+        icc = result.get("ingress_carrier_context", {})
+        assert icc.get("multimodal_authority") == V2_MULTIMODAL_AUTHORITY
+        assert icc.get("android_perception_participation") == ANDROID_PERCEPTION_ONE_SHOT
+        assert (
+            icc.get("android_perception_ingress_route")
+            == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
+        )
+        assert icc.get("android_perception_can_enter_ingress_bus") is False
+
+    def test_android_vision_canonical_requires_ingest_gate(self):
+        """Canonical Android participation enters ingress bus only when gate is enabled."""
+        from tests.integration.stubs.multimodal_perception_stub import (
+            make_android_vision_context,
+        )
+        from core.android_perception_ingress_contract import (
+            ANDROID_PERCEPTION_CANONICAL,
+            ANDROID_PERCEPTION_ROUTE_INGRESS_BUS,
+            ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND,
+        )
+
+        stub = _make_stub()
+        _reset_openclawd_singleton()
+        ctx = make_android_vision_context(device_id="android-contract-canonical")
+        ctx.metadata["android_perception_participation"] = ANDROID_PERCEPTION_CANONICAL
+
+        with patch(
+            "core.android_perception_ingress_contract._is_multimodal_ingest_enabled",
+            return_value=False,
+        ):
+            with _patch_llm_router(stub):
+                disabled_result = asyncio.run(
+                    _run_handle_request(
+                        "Android canonical participation while ingest disabled",
+                        source="android_vision",
+                        multimodal_context=ctx,
+                    )
+                )
+
+        disabled_icc = disabled_result.get("ingress_carrier_context", {})
+        assert (
+            disabled_icc.get("android_perception_ingress_route")
+            == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
+        )
+        assert disabled_icc.get("android_perception_can_enter_ingress_bus") is False
+
+        with patch(
+            "core.android_perception_ingress_contract._is_multimodal_ingest_enabled",
+            return_value=True,
+        ):
+            with _patch_llm_router(stub):
+                enabled_result = asyncio.run(
+                    _run_handle_request(
+                        "Android canonical participation while ingest enabled",
+                        source="android_vision",
+                        multimodal_context=ctx,
+                    )
+                )
+
+        enabled_icc = enabled_result.get("ingress_carrier_context", {})
+        assert (
+            enabled_icc.get("android_perception_ingress_route")
+            == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
+        )
+        assert enabled_icc.get("android_perception_can_enter_ingress_bus") is True
+
 
 # ---------------------------------------------------------------------------
 # 8. Android-Side Multimodal Presence
@@ -898,6 +987,20 @@ class TestAndroidSideMultimodalPresence:
         assert "multimodal_route" in handler_src, (
             "Android vision handler result must include 'multimodal_route' key — "
             "proves Android side propagates the multimodal routing decision"
+        )
+
+    def test_android_vision_handler_stamps_perception_contract_metadata(self):
+        """Android vision handler must stamp payload-level perception contract metadata."""
+        handler_src = (
+            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py"
+        ).read_text(encoding="utf-8")
+        assert "build_android_perception_payload_contract" in handler_src, (
+            "vision.py must build Android perception payload contract metadata "
+            "to standardize one-shot vs canonical participation semantics."
+        )
+        assert "android_perception_contract" in handler_src, (
+            "vision.py must include android_perception_contract in MultiModalContext.metadata "
+            "so ingress contract is machine-verifiable at request payload boundary."
         )
 
     def test_device_state_store_module_level_functions_present(self):

@@ -621,26 +621,41 @@ class DesktopPresenceRuntime:
             else "android_vision_nl" if source == "android_vision"
             else "desktop_direct_nl"
         )
-        result.setdefault(
-            "ingress_carrier_context",
-            {
-                "carrier": source,
-                "authority_chain": "DesktopPresenceRuntime.handle_request",
-                "session_id": conversation_session_id,
-                "user_id": user_id or "default",
-                "invocation_id": rsession.runtime_session_id,
-                "control_session_id": control_session_id,
-                # semantic_authority is always V2 — the LLM semantic reasoning chain
-                # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
-                # which device or adapter surface originated the NL request.
-                # Android-side GoalNormalizer = structural normalization only (not LLM).
-                # Android-side LocalPlannerService = local task decomposition only (not LLM).
-                "semantic_authority": "v2_openclawd",
-                # nl_path_type distinguishes Android carriers from desktop-direct paths.
-                "nl_path_type": _nl_path_type,
-                "is_android_carrier": source in _android_carriers,
-            },
-        )
+        _ingress_carrier_context: Dict[str, Any] = {
+            "carrier": source,
+            "authority_chain": "DesktopPresenceRuntime.handle_request",
+            "session_id": conversation_session_id,
+            "user_id": user_id or "default",
+            "invocation_id": rsession.runtime_session_id,
+            "control_session_id": control_session_id,
+            # semantic_authority is always V2 — the LLM semantic reasoning chain
+            # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
+            # which device or adapter surface originated the NL request.
+            # Android-side GoalNormalizer = structural normalization only (not LLM).
+            # Android-side LocalPlannerService = local task decomposition only (not LLM).
+            "semantic_authority": "v2_openclawd",
+            # nl_path_type distinguishes Android carriers from desktop-direct paths.
+            "nl_path_type": _nl_path_type,
+            "is_android_carrier": source in _android_carriers,
+        }
+        if source == "android_vision":
+            try:
+                from core.android_perception_ingress_contract import (
+                    build_android_perception_ingress_context,
+                )
+
+                _ingress_carrier_context.update(
+                    build_android_perception_ingress_context(
+                        source=source,
+                        multimodal_context=multimodal_context,
+                    )
+                )
+            except Exception as _apc_err:
+                logger.debug(
+                    "android perception ingress context build failed (non-fatal): %s",
+                    _apc_err,
+                )
+        result.setdefault("ingress_carrier_context", _ingress_carrier_context)
         return result
 
     # ------------------------------------------------------------------
