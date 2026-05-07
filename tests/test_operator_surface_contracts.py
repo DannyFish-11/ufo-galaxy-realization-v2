@@ -239,6 +239,7 @@ class TestDataclassStructure:
         d = snap.to_dict()
         assert d["authority"] == OPERATOR_SURFACE_AUTHORITY
         assert "governance_state" in d
+        assert "mesh_runtime_state" in d
 
 
 # ===========================================================================

@@ -838,6 +838,7 @@ class OperatorSnapshot:
     presence_tristate: str = ""
     manifestation_summary: Dict[str, Any] = field(default_factory=dict)
     governance_state: Dict[str, Any] = field(default_factory=dict)
+    mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -863,6 +864,7 @@ class OperatorSnapshot:
             "presence_tristate": self.presence_tristate,
             "manifestation_summary": dict(self.manifestation_summary),
             "governance_state": dict(self.governance_state),
+            "mesh_runtime_state": dict(self.mesh_runtime_state),
         }
 
 
@@ -1632,6 +1634,7 @@ class OperatorSurface:
             from core.unified_governance_semantics import build_unified_governance_state
 
             snap.governance_state = build_unified_governance_state()
+            snap.mesh_runtime_state = dict(snap.governance_state.get("mesh_runtime_state", {}))
         except Exception as exc:
             logger.debug("operator_snapshot: governance semantics unavailable: %s", exc)
 

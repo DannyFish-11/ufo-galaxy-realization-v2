@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from core.unified_governance_semantics import (
     GovernancePath,
+    MESH_RUNTIME_STATUS_PARTIAL,
     build_unified_governance_state,
     resolve_governance_path_decision,
 )
@@ -100,3 +101,9 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     cross = next(d for d in state["devices"] if d["device_id"] == "dev_cross")
     assert cross["android_autonomy_scope"] == "subordinate_participation"
     assert cross["governance_precedence"]["takeover"]["eligible"] is True
+    assert "mesh_runtime_state" in state
+    assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL
+    relationship_links = {
+        link["link"] for link in state["mesh_runtime_state"]["runtime_relationships"]
+    }
+    assert "parallel_subtask_to_local_collaboration_agent" in relationship_links

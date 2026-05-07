@@ -282,6 +282,7 @@ class UnifiedPanelPayload:
     #       takeover_eligible_count, total_devices, _source.
     android_mode_gate_state: Dict[str, Any] = field(default_factory=dict)
     governance_state: Dict[str, Any] = field(default_factory=dict)
+    mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -327,6 +328,7 @@ class UnifiedPanelPayload:
             "android_mode_gate_state": dict(self.android_mode_gate_state),
             # unified governance semantics
             "governance_state": dict(self.governance_state),
+            "mesh_runtime_state": dict(self.mesh_runtime_state),
             # provenance
             "_source": self._source,
         }
@@ -461,6 +463,7 @@ class UnifiedPanelAggregationService:
             payload.desktop_shell_state = snap.desktop_shell_state
             payload.presence_tristate = snap.presence_tristate
             payload.manifestation_summary = dict(snap.manifestation_summary)
+            payload.mesh_runtime_state = dict(getattr(snap, "mesh_runtime_state", {}))
         except Exception as exc:
             logger.debug("build_payload: operator snapshot unavailable: %s", exc)
 
@@ -683,6 +686,11 @@ class UnifiedPanelAggregationService:
             from core.unified_governance_semantics import build_unified_governance_state
 
             payload.governance_state = build_unified_governance_state()
+            # mesh_runtime_state is a first-class payload field for panel consumers.
+            # During fallback/degrade paths we can still project it from the
+            # governance snapshot contract when operator_snapshot did not fill it.
+            if not payload.mesh_runtime_state:
+                payload.mesh_runtime_state = dict(payload.governance_state.get("mesh_runtime_state", {}))
         except Exception as exc:
             logger.debug("build_payload: unified governance semantics unavailable: %s", exc)
 
