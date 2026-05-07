@@ -142,11 +142,24 @@ NL_PATH_TYPES: frozenset = frozenset(
 
 
 def is_android_nl_carrier(source: str) -> bool:
-    """Return True when *source* identifies an Android device as the NL carrier.
+    """Return True when *source* is one of the recognized Android NL transport sources.
 
-    This does NOT mean Android is the semantic authority — it only means the NL
-    request was physically originated on an Android device.  The semantic authority
-    is always V2 (``V2_SEMANTIC_AUTHORITY``) once the request enters DPR.
+    The term "carrier" here refers to the **source/transport tag** used by
+    ``DesktopPresenceRuntime.handle_request(source=...)`` — it identifies the
+    adapter surface or gateway path that delivered the NL request.  Being an
+    Android carrier does NOT mean Android is the semantic authority — the semantic
+    authority is always V2 (``V2_SEMANTIC_AUTHORITY``) once the request enters DPR.
+
+    Parameters
+    ----------
+    source:
+        The ``source`` tag passed to ``DesktopPresenceRuntime.handle_request()``.
+
+    Returns
+    -------
+    bool
+        ``True`` for ``"android_goal_execution"`` and ``"android_vision"``.
+        ``False`` for ``"chat"``, ``"openclawd"``, etc.
     """
     return source in ANDROID_CARRIER_SOURCES
 

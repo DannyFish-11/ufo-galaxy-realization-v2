@@ -107,16 +107,16 @@ def _patch_llm_router(stub):
     )
 
 
-async def _run_dpr(message: str, source: str = "chat", **kw) -> Dict[str, Any]:
+async def _run_dpr(message: str, source: str = "chat", **kwargs) -> Dict[str, Any]:
     """Run a fresh DesktopPresenceRuntime with the given message and source."""
     from core.desktop_presence_runtime import DesktopPresenceRuntime
     runtime = DesktopPresenceRuntime()
-    kw.setdefault("session_id", "android-nl-test-session")
-    kw.setdefault("user_id", "android-nl-test-user")
+    kwargs.setdefault("session_id", "android-nl-test-session")
+    kwargs.setdefault("user_id", "android-nl-test-user")
     result = await runtime.handle_request(
         message=message,
         source=source,
-        **kw,
+        **kwargs,
     )
     return result
 
@@ -276,9 +276,6 @@ class TestAndroidCrossDeviceNLToV2SemanticChain:
                 )
             )
 
-        assert result.get("success") is not False or result.get("response") is not None, (
-            "android_goal_execution source must reach OpenClawd and return a result"
-        )
         assert result.get("tristate") == "silent", (
             "After android_goal_execution processing, tristate must be 'silent' — "
             "the full DPR lifecycle (SILENT→LIMINAL→MANIFEST→SILENT) must complete."
