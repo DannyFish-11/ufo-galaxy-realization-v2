@@ -114,16 +114,19 @@ TAKEOVER_BLOCKS_LOWER_PRIORITY: str = (
     "POLICY::TAKEOVER_MUTUAL_EXCLUSION: "
     "An active takeover_request MUST block any incoming goal_execution or "
     "parallel_subtask on the same device. Takeover has the highest execution "
-    "priority (PRIORITY_1). goal_execution and parallel_subtask (PRIORITY_2) "
-    "MUST be rejected with rejection_reason='active_takeover_in_progress' "
+    "priority (PRIORITY_1) AND sets blocks_lower_priority=True. "
+    "goal_execution and parallel_subtask (PRIORITY_2, equal priority to each "
+    "other) MUST be rejected with rejection_reason='active_takeover_in_progress' "
     "until the takeover completes, times out, or is explicitly cancelled."
 )
 
 PRIORITY_ORDER_POLICY: str = (
     "POLICY::EXECUTION_PRIORITY_ORDER: "
-    "takeover_request (PRIORITY_1) > parallel_subtask (PRIORITY_2) = "
-    "goal_execution (PRIORITY_2). Priority is used to resolve which "
-    "execution type wins a conflict. Lower numeric value = higher priority."
+    "takeover_request (PRIORITY_1) > goal_execution (PRIORITY_2) = "
+    "parallel_subtask (PRIORITY_2). goal_execution and parallel_subtask have "
+    "equal numeric priority; when both are active simultaneously on the same "
+    "device, the first-arrived execution wins (FIFO). Blocking of lower-priority "
+    "types is governed by blocks_lower_priority=True on the takeover policy."
 )
 
 CANCELLATION_PROPAGATION_POLICY: str = (
