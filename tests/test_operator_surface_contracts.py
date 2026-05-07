@@ -238,6 +238,7 @@ class TestDataclassStructure:
         snap = OperatorSnapshot()
         d = snap.to_dict()
         assert d["authority"] == OPERATOR_SURFACE_AUTHORITY
+        assert "governance_state" in d
 
 
 # ===========================================================================

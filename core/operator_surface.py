@@ -837,6 +837,7 @@ class OperatorSnapshot:
     desktop_shell_state: str = ""
     presence_tristate: str = ""
     manifestation_summary: Dict[str, Any] = field(default_factory=dict)
+    governance_state: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -861,6 +862,7 @@ class OperatorSnapshot:
             "desktop_shell_state": self.desktop_shell_state,
             "presence_tristate": self.presence_tristate,
             "manifestation_summary": dict(self.manifestation_summary),
+            "governance_state": dict(self.governance_state),
         }
 
 
@@ -1624,6 +1626,14 @@ class OperatorSurface:
                 "presence_tristate": snap.presence_tristate,
                 "_source": "operator_surface.operator_snapshot",
             }
+
+        # Unified governance semantics (V2 authority vs Android autonomy)
+        try:
+            from core.unified_governance_semantics import build_unified_governance_state
+
+            snap.governance_state = build_unified_governance_state()
+        except Exception as exc:
+            logger.debug("operator_snapshot: governance semantics unavailable: %s", exc)
 
         return snap
 
