@@ -40,6 +40,7 @@ async def handle_vision_request(
     image_base64 = message.get("image_base64", "")
     mode = message.get("mode", "full")
     task_context = message.get("task_context", "")
+    participation = message.get("participation", "one_shot_request_bound")
 
     logger.info("Vision request from %s: task_id=%s, mode=%s", device_id, task_id, mode)
 
@@ -59,6 +60,7 @@ async def handle_vision_request(
             mode=mode,
             device_id=device_id or "",
             task_id=task_id,
+            participation=participation,
         )
     except Exception as exc:
         logger.warning(
@@ -93,8 +95,12 @@ async def _process_via_runtime_shell(
     mode: str,
     device_id: str,
     task_id: str = "",
+    participation: str = "one_shot_request_bound",
 ) -> Dict[str, Any]:
     """Route the vision request through the runtime shell multimodal path."""
+    from core.android_perception_ingress_contract import (
+        build_android_perception_payload_contract,
+    )
     from core.desktop_presence_runtime import get_desktop_presence_runtime
     from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
@@ -110,7 +116,17 @@ async def _process_via_runtime_shell(
             )
         ],
         screen={"mode": mode, "source": "android"},
-        metadata={"device_id": device_id, "mode": mode},
+        metadata={
+            "device_id": device_id,
+            "mode": mode,
+            "android_perception_contract": build_android_perception_payload_contract(
+                device_id=device_id,
+                mode=mode,
+                task_id=task_id,
+                participation=participation,
+            ),
+            "android_perception_participation": participation,
+        },
     )
 
     # Derive a stable session_id for this vision request so the carrier can
