@@ -57,6 +57,22 @@ try:
 except ImportError:
     _run_task_result_truth_chain = None  # type: ignore[assignment]
 
+# PR-EG: Unified execution governance — top-level import so tests can patch() it.
+# Provides the unified gate evaluation for goal_execution / parallel_subtask /
+# takeover_request via a single authority policy model.
+try:
+    from core.unified_execution_governance import (
+        ExecutionType as _ExecutionType,
+        evaluate_execution_governance as _evaluate_execution_governance,
+        notify_execution_completed as _notify_execution_completed,
+    )
+    _GOVERNANCE_AVAILABLE = True
+except ImportError:
+    _ExecutionType = None  # type: ignore[assignment]
+    _evaluate_execution_governance = None  # type: ignore[assignment]
+    _notify_execution_completed = None  # type: ignore[assignment]
+    _GOVERNANCE_AVAILABLE = False
+
 
 def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
     """Build a minimal duck-typed envelope for CanonicalCompletionIngress.notify().
@@ -142,6 +158,31 @@ async def handle_goal_execution(
             "goal_execution missing or empty 'goal' field",
             correlation_id=task_id,
         )
+
+    # ── Unified Execution Governance check ───────────────────────────────
+    # Consult the unified governance layer before proceeding.  This enforces
+    # acceptance conditions, conflict detection (e.g., active takeover blocks
+    # this goal_execution), and concurrency limits across all execution types.
+    if _GOVERNANCE_AVAILABLE and _evaluate_execution_governance is not None:
+        _gov_verdict = _evaluate_execution_governance(
+            _ExecutionType.goal_execution,
+            device_id,
+            execution_id=task_id,
+        )
+        if not _gov_verdict.accepted:
+            logger.warning(
+                "GOAL_EXECUTION blocked by unified governance: task_id=%s device_id=%s "
+                "reason=%r conflict=%s active_type=%s",
+                task_id, device_id, _gov_verdict.rejection_reason,
+                _gov_verdict.conflict,
+                _gov_verdict.active_conflicting_type.value if _gov_verdict.active_conflicting_type else None,
+            )
+            return MessageBuilder.error(
+                device_id,
+                "GOVERNANCE_REJECTED",
+                _gov_verdict.rejection_reason,
+                correlation_id=task_id,
+            )
 
     logger.info(
         "GOAL_EXECUTION received: task_id=%s device_id=%s group_id=%s goal=%r",
@@ -237,6 +278,31 @@ async def handle_parallel_subtask(
             "parallel_subtask missing or empty 'goal' field",
             correlation_id=task_id,
         )
+
+    # ── Unified Execution Governance check ───────────────────────────────
+    # Consult the unified governance layer before proceeding.  This enforces
+    # acceptance conditions, conflict detection (e.g., active takeover blocks
+    # this parallel_subtask), and concurrency limits across all execution types.
+    if _GOVERNANCE_AVAILABLE and _evaluate_execution_governance is not None:
+        _gov_verdict = _evaluate_execution_governance(
+            _ExecutionType.parallel_subtask,
+            device_id,
+            execution_id=task_id,
+        )
+        if not _gov_verdict.accepted:
+            logger.warning(
+                "PARALLEL_SUBTASK blocked by unified governance: task_id=%s device_id=%s "
+                "reason=%r conflict=%s active_type=%s",
+                task_id, device_id, _gov_verdict.rejection_reason,
+                _gov_verdict.conflict,
+                _gov_verdict.active_conflicting_type.value if _gov_verdict.active_conflicting_type else None,
+            )
+            return MessageBuilder.error(
+                device_id,
+                "GOVERNANCE_REJECTED",
+                _gov_verdict.rejection_reason,
+                correlation_id=task_id,
+            )
 
     logger.info(
         "PARALLEL_SUBTASK received: task_id=%s device_id=%s group_id=%s goal=%r",
