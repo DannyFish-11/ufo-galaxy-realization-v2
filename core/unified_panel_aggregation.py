@@ -489,6 +489,24 @@ class UnifiedPanelAggregationService:
                         "local_ai_ready": local_ai_fn() if callable(local_ai_fn) else False,
                         "mobilevlm_present": getattr(snap, "mobilevlm_present", False),
                         "seeclick_present": getattr(snap, "seeclick_present", False),
+                        "dispatch_capability_status": {
+                            "authoritative_scoring_fields": {
+                                "model_ready": getattr(snap, "model_ready", None),
+                                "accessibility_ready": getattr(snap, "accessibility_ready", None),
+                                "local_loop_ready": getattr(snap, "local_loop_ready", None),
+                                "warmup_result": getattr(snap, "warmup_result", None),
+                                "current_fallback_tier": getattr(snap, "current_fallback_tier", None),
+                            },
+                            "capability_presence_only_fields": {
+                                "mobilevlm_present": getattr(snap, "mobilevlm_present", None),
+                                "mobilevlm_checksum_ok": getattr(snap, "mobilevlm_checksum_ok", None),
+                                "seeclick_present": getattr(snap, "seeclick_present", None),
+                            },
+                            "authority_note": (
+                                "runtime-truth fields above drive dispatch scoring; "
+                                "capability_presence_only_fields are observability-only"
+                            ),
+                        },
                         "readiness": readiness,
                         "_source": "android_device_state_store",
                     })

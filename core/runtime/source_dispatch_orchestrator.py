@@ -1023,6 +1023,31 @@ ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY: str = (
     "not merely an observable surface."
 )
 
+ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY: str = (
+    "POLICY::ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS: "
+    "In _score_candidate(), only the runtime-truth fields "
+    "model_ready/accessibility_ready/local_loop_ready/warmup_result/"
+    "current_fallback_tier are authoritative dispatch scoring inputs. "
+    "Capability-presence fields such as mobilevlm_present, "
+    "mobilevlm_checksum_ok, and seeclick_present are currently "
+    "capability-only observability signals and MUST NOT change dispatch "
+    "score unless explicitly promoted by a future policy change."
+)
+
+ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS: Tuple[str, ...] = (
+    "model_ready",
+    "accessibility_ready",
+    "local_loop_ready",
+    "warmup_result",
+    "current_fallback_tier",
+)
+
+ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS: Tuple[str, ...] = (
+    "mobilevlm_present",
+    "mobilevlm_checksum_ok",
+    "seeclick_present",
+)
+
 ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY: str = (
     "POLICY::ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION: "
     "_select_target_from_candidates() checks the most recent execution event "
@@ -1704,6 +1729,9 @@ def _score_candidate(
     # Consumes DeviceStateSnapshot fields as routing weight inputs.
     # All adjustments are advisory — gracefully degrade when snapshot or
     # field is absent.  Per ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY.
+    # Capability-presence-only fields (e.g. mobilevlm_present / seeclick_present)
+    # are intentionally NOT consumed here.  Per
+    # ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY.
     if android_snapshot is not None:
         _model_ready = getattr(android_snapshot, "model_ready", None)
         _accessibility_ready = getattr(android_snapshot, "accessibility_ready", None)
@@ -1984,6 +2012,14 @@ def _select_target_from_candidates(
                     "score": score,
                     "reuse_eligible": reuse_eligible,
                     "android_truth_consumed": android_snapshot is not None,
+                    "android_dispatch_field_status": {
+                        "authoritative_scoring_fields": list(
+                            ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
+                        ),
+                        "capability_presence_only_fields": list(
+                            ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS
+                        ),
+                    },
                     "execution_busy": _execution_busy,
                 },
             )

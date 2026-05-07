@@ -53,6 +53,23 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.AndroidDeviceStateStore")
 
+# Dispatch-authority classification for Android snapshot fields.
+# These sets are intentionally explicit so operator/panel surfaces can
+# distinguish fields that currently drive dispatch from fields that are
+# capability-presence-only observability.
+ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS: tuple[str, ...] = (
+    "model_ready",
+    "accessibility_ready",
+    "local_loop_ready",
+    "warmup_result",
+    "current_fallback_tier",
+)
+ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS: tuple[str, ...] = (
+    "mobilevlm_present",
+    "mobilevlm_checksum_ok",
+    "seeclick_present",
+)
+
 # ---------------------------------------------------------------------------
 # Authority sentinel
 # ---------------------------------------------------------------------------
@@ -517,6 +534,26 @@ class _AndroidDeviceStateStore:
                 "grounding_fallback_tier": snap.grounding_fallback_tier,
                 "warmup_result": snap.warmup_result,
                 "runtime_health_snapshot": snap.runtime_health_snapshot,
+                "dispatch_capability_status": {
+                    "authoritative_scoring_fields": {
+                        "model_ready": snap.model_ready,
+                        "accessibility_ready": snap.accessibility_ready,
+                        "local_loop_ready": snap.local_loop_ready,
+                        "warmup_result": snap.warmup_result,
+                        "current_fallback_tier": snap.current_fallback_tier,
+                    },
+                    "capability_presence_only_fields": {
+                        "mobilevlm_present": snap.mobilevlm_present,
+                        "mobilevlm_checksum_ok": snap.mobilevlm_checksum_ok,
+                        "seeclick_present": snap.seeclick_present,
+                    },
+                    "authoritative_scoring_field_names": list(
+                        ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
+                    ),
+                    "capability_presence_only_field_names": list(
+                        ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS
+                    ),
+                },
             })
 
         return {

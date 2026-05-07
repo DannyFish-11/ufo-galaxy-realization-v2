@@ -64,6 +64,9 @@ def _make_snapshot(
     local_loop_ready: Optional[bool] = None,
     warmup_result: Optional[str] = None,
     current_fallback_tier: Optional[str] = None,
+    mobilevlm_present: Optional[bool] = None,
+    mobilevlm_checksum_ok: Optional[bool] = None,
+    seeclick_present: Optional[bool] = None,
 ) -> Any:
     snap = MagicMock()
     snap.model_ready = model_ready
@@ -71,6 +74,9 @@ def _make_snapshot(
     snap.local_loop_ready = local_loop_ready
     snap.warmup_result = warmup_result
     snap.current_fallback_tier = current_fallback_tier
+    snap.mobilevlm_present = mobilevlm_present
+    snap.mobilevlm_checksum_ok = mobilevlm_checksum_ok
+    snap.seeclick_present = seeclick_present
     return snap
 
 
@@ -111,6 +117,14 @@ class TestSentinelsExported:
         )
 
         assert "execution_busy" in ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY.lower()
+
+    def test_dispatch_field_authoritative_status_policy(self):
+        from core.runtime.source_dispatch_orchestrator import (
+            ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY,
+        )
+
+        assert "capability-only" in ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY
+        assert "mobilevlm_present" in ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY
 
     def test_device_selection_routing_weight_sentinel(self):
         from galaxy_gateway.routing.device_selection import (
@@ -236,6 +250,16 @@ class TestScoreCandidateAndroidTruth:
         )
         score, _ = self._score(android_snapshot=snap)
         assert score == 100  # no adjustments
+
+    def test_capability_presence_fields_do_not_change_score(self):
+        """Presence-only capability fields must not affect dispatch score."""
+        snap = _make_snapshot(
+            mobilevlm_present=True,
+            mobilevlm_checksum_ok=True,
+            seeclick_present=True,
+        )
+        score, _ = self._score(android_snapshot=snap)
+        assert score == 100
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +430,33 @@ class TestSelectTargetAndroidTruth:
         assert result is not None
         # Metadata must record that the busy check ran.
         assert "execution_busy" in result.metadata
+
+    def test_metadata_exposes_authoritative_vs_capability_only_fields(self, monkeypatch):
+        """Selection metadata must expose dispatch field-status split."""
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        device_id = "dev_field_status"
+        entry = _make_registry_entry(device_id)
+        snap = _make_snapshot(model_ready=True, mobilevlm_present=True)
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry],
+        )
+
+        result = _select_target_from_candidates(
+            readiness_inputs={device_id: _make_readiness()},
+            participation_inputs={device_id: _make_participation()},
+            reuse_inputs={device_id: False},
+            android_snapshot_inputs={device_id: snap},
+        )
+
+        assert result is not None
+        status = result.metadata.get("android_dispatch_field_status") or {}
+        assert "model_ready" in status.get("authoritative_scoring_fields", [])
+        assert "mobilevlm_present" in status.get("capability_presence_only_fields", [])
 
 
 # ---------------------------------------------------------------------------
