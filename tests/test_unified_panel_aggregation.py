@@ -340,6 +340,12 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         entry = result.android_device_execution_digest[0]
         self.assertEqual(entry["device_id"], "dev_001")
         self.assertTrue(entry["model_ready"])
+        self.assertIn("dispatch_capability_status", entry)
+        status = entry["dispatch_capability_status"]
+        self.assertIn("authoritative_scoring_fields", status)
+        self.assertIn("capability_presence_only_fields", status)
+        self.assertIn("model_ready", status["authoritative_scoring_fields"])
+        self.assertIn("mobilevlm_present", status["capability_presence_only_fields"])
         self.assertEqual(entry.get("_source"), "android_device_state_store")
 
     def test_C05_android_store_authority_sentinel_present(self):

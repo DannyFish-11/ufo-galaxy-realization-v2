@@ -430,6 +430,24 @@ def test_ecosystem_summary_device_shape():
     assert device["offline_queue_depth"] == 2
 
 
+def test_ecosystem_summary_exposes_dispatch_capability_status_split():
+    absorb_device_state_snapshot("status_dev", {
+        "model_ready": True,
+        "local_loop_ready": False,
+        "mobilevlm_present": True,
+        "mobilevlm_checksum_ok": True,
+        "seeclick_present": False,
+    })
+    summary = get_device_ecosystem_summary()
+    device = next(d for d in summary["devices"] if d["device_id"] == "status_dev")
+    status = device["dispatch_capability_status"]
+    assert "authoritative_scoring_fields" in status
+    assert "capability_presence_only_fields" in status
+    assert status["authoritative_scoring_fields"]["model_ready"] is True
+    assert status["capability_presence_only_fields"]["mobilevlm_present"] is True
+    assert "mobilevlm_present" in status["capability_presence_only_field_names"]
+
+
 def test_ecosystem_pending_first_download_count():
     absorb_device_state_snapshot("pfd_1", {"pending_first_download": True})
     absorb_device_state_snapshot("pfd_2", {"pending_first_download": False})
