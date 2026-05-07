@@ -611,6 +611,16 @@ class DesktopPresenceRuntime:
         # PR-6: add invocation_id (= runtime_session_id) so the ingress stamp
         # ties each invocation back to its unique correlation ID, enabling
         # stable continuity tracing across presence→task→delegation chains.
+        # Android NL chain: carrier identifies the source/carrier device; semantic_authority
+        # always names V2 as the LLM semantic authority regardless of which carrier sent the
+        # NL request (resolves DUAL_REPO_REAL_CHAIN_BASELINE_2026 P2 — source/carrier vs
+        # semantic-authority split must be machine-verifiable).
+        _android_carriers = {"android_vision", "android_goal_execution"}
+        _nl_path_type = (
+            "android_cross_device_nl" if source == "android_goal_execution"
+            else "android_vision_nl" if source == "android_vision"
+            else "desktop_direct_nl"
+        )
         result.setdefault(
             "ingress_carrier_context",
             {
@@ -620,6 +630,15 @@ class DesktopPresenceRuntime:
                 "user_id": user_id or "default",
                 "invocation_id": rsession.runtime_session_id,
                 "control_session_id": control_session_id,
+                # semantic_authority is always V2 — the LLM semantic reasoning chain
+                # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
+                # which device or adapter surface originated the NL request.
+                # Android-side GoalNormalizer = structural normalization only (not LLM).
+                # Android-side LocalPlannerService = local task decomposition only (not LLM).
+                "semantic_authority": "v2_openclawd",
+                # nl_path_type distinguishes Android carriers from desktop-direct paths.
+                "nl_path_type": _nl_path_type,
+                "is_android_carrier": source in _android_carriers,
             },
         )
         return result
@@ -663,7 +682,8 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "openclawd", "android_vision", "vision_sampler", "operator"):
+        if source in ("chat", "openclawd", "android_vision", "vision_sampler", "operator",
+                      "android_goal_execution"):
             return await self._handle_via_openclawd(
                 rsession=rsession,
                 message=message,

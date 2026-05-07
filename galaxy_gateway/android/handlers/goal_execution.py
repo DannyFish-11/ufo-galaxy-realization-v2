@@ -152,13 +152,17 @@ async def handle_goal_execution(
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
         runtime = get_desktop_presence_runtime()
+        # source="android_goal_execution" correctly identifies the carrier as Android.
+        # V2's OpenClawd + AgentKernel + MultiLLMRouter remains the semantic authority;
+        # Android is the NL source/carrier only (GoalNormalizer = structural normalization,
+        # not LLM semantic reasoning).
         result = await runtime.handle_request(
             message=goal,
-            source="chat",
+            source="android_goal_execution",
             device_id=device_id,
             session_id=session_id,
             runtime_session_id=trace_id,
-            entry_mode="local",
+            entry_mode="cross_device",
         )
     except Exception as runtime_err:
         logger.error(
@@ -240,17 +244,19 @@ async def handle_parallel_subtask(
     )
 
     # ── Step 1: 通过 DesktopPresenceRuntime 规范化 goal ──────────────
+    # source="android_goal_execution" correctly identifies the carrier as Android.
+    # V2's OpenClawd + AgentKernel + MultiLLMRouter is the semantic authority.
     result: Dict[str, Any] = {"success": False, "response": ""}
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
         runtime = get_desktop_presence_runtime()
         result = await runtime.handle_request(
             message=goal,
-            source="chat",
+            source="android_goal_execution",
             device_id=device_id,
             session_id=session_id,
             runtime_session_id=trace_id,
-            entry_mode="local",
+            entry_mode="cross_device",
         )
     except Exception as runtime_err:
         logger.error(
