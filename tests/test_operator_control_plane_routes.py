@@ -292,6 +292,7 @@ def test_device_ecosystem_single_has_snapshot_fields(client):
 def test_operator_snapshot_still_works(client):
     resp = client.get("/api/v1/operator/snapshot")
     assert resp.status_code == 200
+    assert "governance_state" in resp.json()
 
 
 # ---------------------------------------------------------------------------

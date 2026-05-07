@@ -281,6 +281,7 @@ class UnifiedPanelPayload:
     #       cross_device_ready_count, dispatch_eligible_count,
     #       takeover_eligible_count, total_devices, _source.
     android_mode_gate_state: Dict[str, Any] = field(default_factory=dict)
+    governance_state: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -324,6 +325,8 @@ class UnifiedPanelPayload:
             "last_execution_result": dict(self.last_execution_result),
             # android mode gate state (PR-mode-gate)
             "android_mode_gate_state": dict(self.android_mode_gate_state),
+            # unified governance semantics
+            "governance_state": dict(self.governance_state),
             # provenance
             "_source": self._source,
         }
@@ -429,6 +432,12 @@ class UnifiedPanelAggregationService:
             self._fill_from_android_mode_gate_policy(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: android mode gate state fill failed: %s", exc)
+
+        # 10. Unified governance semantics (V2 authority vs Android autonomy)
+        try:
+            self._fill_from_unified_governance_semantics(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: governance semantics fill failed: %s", exc)
 
         return payload
 
@@ -667,6 +676,15 @@ class UnifiedPanelAggregationService:
             payload.android_mode_gate_state = build_cross_device_readiness_panel_dict()
         except Exception as exc:
             logger.debug("build_payload: android mode gate policy unavailable: %s", exc)
+
+    def _fill_from_unified_governance_semantics(self, payload: UnifiedPanelPayload) -> None:
+        """Fill governance_state from unified governance semantics contract."""
+        try:
+            from core.unified_governance_semantics import build_unified_governance_state
+
+            payload.governance_state = build_unified_governance_state()
+        except Exception as exc:
+            logger.debug("build_payload: unified governance semantics unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------
