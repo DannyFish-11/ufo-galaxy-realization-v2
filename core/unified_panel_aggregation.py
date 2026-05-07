@@ -269,6 +269,19 @@ class UnifiedPanelPayload:
     # lifetime or the canonical_roundtrip module is unavailable.
     last_execution_result: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Android mode gate state (PR-mode-gate) ───────────────────────────
+    # Authoritative per-device mode / readiness summary from
+    # core.android_mode_gate_policy.  Carries the unified verdict for the
+    # three Android gates (crossDeviceEnabled, goalExecutionEnabled,
+    # parallelExecutionEnabled) and the current device mode
+    # (local / cross_device / unknown) for every device with an active
+    # session.  Empty dict when the mode gate policy module is unavailable.
+    #
+    # Keys: devices (list of AndroidModeReadinessVerdict dicts),
+    #       cross_device_ready_count, dispatch_eligible_count,
+    #       takeover_eligible_count, total_devices, _source.
+    android_mode_gate_state: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -309,6 +322,8 @@ class UnifiedPanelPayload:
             "last_operator_action": dict(self.last_operator_action),
             # execution result feedback (PR-4)
             "last_execution_result": dict(self.last_execution_result),
+            # android mode gate state (PR-mode-gate)
+            "android_mode_gate_state": dict(self.android_mode_gate_state),
             # provenance
             "_source": self._source,
         }
@@ -408,6 +423,12 @@ class UnifiedPanelAggregationService:
             self._fill_from_execution_roundtrip(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: execution roundtrip fill failed: %s", exc)
+
+        # 9. Android mode gate state — unified cross-device gate readiness
+        try:
+            self._fill_from_android_mode_gate_policy(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: android mode gate state fill failed: %s", exc)
 
         return payload
 
@@ -608,6 +629,26 @@ class UnifiedPanelAggregationService:
                 payload.last_execution_result = record.compact_dict()
         except Exception as exc:
             logger.debug("build_payload: execution roundtrip unavailable: %s", exc)
+
+    def _fill_from_android_mode_gate_policy(self, payload: UnifiedPanelPayload) -> None:
+        """Fill android_mode_gate_state from the unified mode gate policy (PR-mode-gate).
+
+        Aggregates per-device cross-device readiness into the panel payload so
+        that operator surfaces can observe whether each connected Android device
+        is in local or cross_device mode, and whether it passes the unified gate
+        policy for dispatch / takeover eligibility.
+
+        All devices with an active session in AttachedRuntimeSessionRegistry are
+        evaluated.  Evaluation is lightweight (no I/O, reads from in-process
+        singletons) so the per-device cost is acceptable for the typical small
+        count of connected devices.  If the device count grows large, consider
+        applying a sampling or caching layer upstream.
+        """
+        try:
+            from core.android_mode_gate_policy import build_cross_device_readiness_panel_dict
+            payload.android_mode_gate_state = build_cross_device_readiness_panel_dict()
+        except Exception as exc:
+            logger.debug("build_payload: android mode gate policy unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------
