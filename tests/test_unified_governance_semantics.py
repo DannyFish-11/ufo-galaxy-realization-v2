@@ -97,7 +97,6 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     local = next(d for d in state["devices"] if d["device_id"] == "dev_local")
     assert local["android_autonomy_scope"] == "local_autonomy"
     assert local["governance_precedence"]["delegated_execution"]["eligible"] is False
-
     cross = next(d for d in state["devices"] if d["device_id"] == "dev_cross")
     assert cross["android_autonomy_scope"] == "subordinate_participation"
     assert cross["governance_precedence"]["takeover"]["eligible"] is True
