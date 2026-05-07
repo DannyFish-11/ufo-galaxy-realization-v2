@@ -1758,3 +1758,129 @@ def update_session_posture(
         registry._update_indices(updated)
 
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Core API — record_mode_switch_in_session  (Android mode gate policy)
+# ---------------------------------------------------------------------------
+
+REGISTRY_MODE_SWITCH_METADATA_POLICY: str = (
+    "POLICY::REGISTRY_MODE_SWITCH_METADATA_POLICY: "
+    "Mode transitions (local↔cross_device) for an Android device MUST be "
+    "recorded in the device's active session entry via "
+    "record_mode_switch_in_session().  The 'current_mode' and "
+    "'mode_switch_history' metadata keys are the authoritative in-session "
+    "record of mode transitions.  Do not mutate these keys directly; use "
+    "this function to ensure history tracking and posture alignment."
+)
+
+
+def record_mode_switch_in_session(
+    device_id: str,
+    from_mode: str,
+    to_mode: str,
+    *,
+    new_posture: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    registry: Optional[AttachedSessionRegistry] = None,
+) -> Optional[AttachedSessionRegistryEntry]:
+    """Record a mode transition in the active session entry for *device_id*.
+
+    Updates the session entry's metadata to include the mode transition and,
+    when *new_posture* is supplied, also updates the posture field via the
+    same in-place update mechanism as :func:`update_session_posture`.
+
+    This is a lower-level primitive — callers that need full mode switch
+    semantics (posture derivation, readiness gate evaluation) should use
+    :func:`~core.android_mode_gate_policy.apply_mode_switch_to_registry`
+    instead.
+
+    Parameters
+    ----------
+    device_id
+        Android device identifier.
+    from_mode
+        Previous mode string (e.g. ``"local"`` or ``"cross_device"``).
+    to_mode
+        New mode string (e.g. ``"local"`` or ``"cross_device"``).
+    new_posture
+        Optional new posture value.  When provided, it is normalised to
+        ``"join_runtime"`` or ``"control_only"`` (unknown → ``"control_only"``).
+        When omitted, the existing posture is preserved.
+    metadata
+        Additional metadata to merge into the entry.
+    registry
+        Optional :class:`AttachedSessionRegistry` to use; defaults to the
+        module singleton.
+
+    Returns
+    -------
+    AttachedSessionRegistryEntry | None
+        The updated entry, or ``None`` when no active session exists.
+    """
+    if registry is None:
+        registry = get_session_registry()
+
+    entry = registry.get_active_for_device(device_id)
+    if entry is None:
+        return None
+
+    now = time.time()
+    switch_record = {
+        "from_mode": str(from_mode),
+        "to_mode": str(to_mode),
+        "switched_at": now,
+    }
+    existing_meta = dict(entry.metadata)
+    history: list = list(existing_meta.get("mode_switch_history", []))
+    history.append(switch_record)
+    # Keep last _MODE_SWITCH_HISTORY_MAX_LEN entries (same limit as android_mode_gate_policy).
+    _max_history = 10
+    if len(history) > _max_history:
+        history = history[-_max_history:]
+
+    merged_meta: Dict[str, Any] = {
+        **existing_meta,
+        "current_mode": str(to_mode),
+        "mode_switch_history": history,
+        **(metadata or {}),
+    }
+
+    # Resolve posture: normalise if provided, preserve existing otherwise.
+    if new_posture is not None:
+        _np = (new_posture or "").strip().lower()
+        if _np not in (_POSTURE_JOIN_RUNTIME, _POSTURE_CONTROL_ONLY):
+            _np = _POSTURE_CONTROL_ONLY
+    else:
+        _np = entry.posture
+
+    updated = AttachedSessionRegistryEntry(
+        entry_id=entry.entry_id,
+        session_id=entry.session_id,
+        device_id=entry.device_id,
+        runtime_session_id=entry.runtime_session_id,
+        runtime_attachment_session_id=entry.runtime_attachment_session_id,
+        attachment_state=entry.attachment_state,
+        invalidation_reason=entry.invalidation_reason,
+        posture=_np,
+        host_role=entry.host_role,
+        coordination_role=entry.coordination_role,
+        capability_tier=entry.capability_tier,
+        last_transition=entry.last_transition,
+        previous_state=entry.previous_state,
+        registered_at=entry.registered_at,
+        last_transition_at=now,
+        metadata=merged_meta,
+        reconnect_count=entry.reconnect_count,
+        last_reconnect_at=entry.last_reconnect_at,
+        durable_session_id=entry.durable_session_id,
+        continuity_epoch=entry.continuity_epoch,
+    )
+
+    replaced = registry._replace_in_buffer(updated)
+    if not replaced:
+        registry._push(updated)
+    else:
+        registry._update_indices(updated)
+
+    return updated
