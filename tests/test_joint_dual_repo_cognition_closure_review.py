@@ -2,8 +2,11 @@ from core.joint_dual_repo_cognition_closure_review import (
     JOINT_COGNITION_CLOSURE_AUTHORITY,
     JOINT_COGNITION_CLOSURE_METHODOLOGY,
     ClosureBoundary,
+    GapType,
     JointCognitionClosureReport,
     PropositionVerdict,
+    SystemStage,
+    WorkPriority,
     build_joint_dual_repo_cognition_closure_review,
 )
 
@@ -73,3 +76,36 @@ def test_to_dict_is_json_ready() -> None:
     payload = report.to_dict()
     assert payload["authority"] == JOINT_COGNITION_CLOSURE_AUTHORITY
     assert len(payload["propositions"]) == 8
+    assert payload["overall_completion_pct"] > 0.0
+    assert payload["current_stage"] in {stage.value for stage in SystemStage}
+
+
+def test_domain_scorecard_integrity() -> None:
+    report = build_joint_dual_repo_cognition_closure_review()
+    assert len(report.domain_scores) == 8
+    assert sum(item.weight_pct for item in report.domain_scores) == 100.0
+    for item in report.domain_scores:
+        assert 0.0 <= item.completion_pct <= 100.0
+
+
+def test_overall_completion_is_weighted_average() -> None:
+    report = build_joint_dual_repo_cognition_closure_review()
+    weighted = round(
+        sum(item.weight_pct * item.completion_pct for item in report.domain_scores) / 100.0,
+        1,
+    )
+    assert report.overall_completion_pct == weighted
+    assert report.current_stage == SystemStage.MID_STAGE_CONSOLIDATION
+
+
+def test_remaining_work_is_classified_and_prioritized() -> None:
+    report = build_joint_dual_repo_cognition_closure_review()
+    assert len(report.remaining_work) >= 5
+    priorities = {item.priority for item in report.remaining_work}
+    assert WorkPriority.MUST_DO in priorities
+    assert WorkPriority.IMPORTANT_SECONDARY in priorities
+    assert WorkPriority.ENHANCEMENT in priorities
+    for item in report.remaining_work:
+        assert item.gap_type in set(GapType)
+        assert item.blocking_propositions
+        assert item.evidence_anchors
