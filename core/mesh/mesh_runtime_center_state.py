@@ -151,6 +151,23 @@ DEGRADED_CONSTRAINED_CENTER_PR03_POLICY: str = (
     "cannot complete even partially."
 )
 
+_COORDINATION_ACTIVATED_COORDINATOR_STATUSES = (
+    "active",
+    "awaiting_barrier",
+    "merging",
+    "completed",
+    "partial",
+    "failed",
+)
+_COMPLETION_OBSERVED_COORDINATOR_STATUSES = (
+    "completed",
+    "partial",
+    "failed",
+)
+_LIFECYCLE_CLOSURE_RUNTIME_CLOSED = "runtime_closed"
+_LIFECYCLE_CLOSURE_PARTICIPATION_READY_NOT_CLOSED = "participation_ready_not_closed"
+_LIFECYCLE_CLOSURE_NOT_PARTICIPATION_READY = "not_participation_ready"
+
 
 # ---------------------------------------------------------------------------
 # State machine enum
@@ -516,6 +533,69 @@ class MeshRuntimeCenterState:
     evaluated_at: float = field(default_factory=time.time)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    def build_lifecycle_proof(self) -> Dict[str, Any]:
+        """Build an explicit proof surface for mesh runtime lifecycle closure."""
+        has_active_or_terminal_center_status = (
+            self.status in MESH_RUNTIME_CENTER_ACTIVE_STATUSES
+            or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
+        )
+        coordination_activated = (
+            self.coordinator_status in _COORDINATION_ACTIVATED_COORDINATOR_STATUSES
+            or has_active_or_terminal_center_status
+        )
+        barrier_wait_observed = (
+            self.barrier_status == "waiting"
+            or self.coordinator_status == "awaiting_barrier"
+            or self.status == MeshRuntimeCenterStatus.barrier_active
+        )
+        barrier_release_observed = (
+            self.barrier_status == "released"
+            or self.status in (
+                MeshRuntimeCenterStatus.barrier_released,
+                MeshRuntimeCenterStatus.runtime_closed,
+            )
+        )
+        completion_observed = (
+            self.coordinator_status in _COMPLETION_OBSERVED_COORDINATOR_STATUSES
+            or self.runtime_closed_count > 0
+            or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
+        )
+        partial_or_degraded_path = (
+            self.status in (
+                MeshRuntimeCenterStatus.degraded,
+                MeshRuntimeCenterStatus.constrained,
+                MeshRuntimeCenterStatus.failed,
+            )
+            or self.degraded_count > 0
+            or self.constrained_count > 0
+            or self.ineligible_count > 0
+            or (
+                # Some participants have closed while others have not: partial completion.
+                self.total_participant_count > 0
+                and self.runtime_closed_count < self.total_participant_count
+                and completion_observed
+            )
+        )
+
+        if self.is_runtime_closed:
+            closure_classification = _LIFECYCLE_CLOSURE_RUNTIME_CLOSED
+        elif self.is_participation_ready:
+            closure_classification = _LIFECYCLE_CLOSURE_PARTICIPATION_READY_NOT_CLOSED
+        else:
+            closure_classification = _LIFECYCLE_CLOSURE_NOT_PARTICIPATION_READY
+
+        return {
+            "participation_registered": self.total_participant_count > 0,
+            "participation_ready": self.is_participation_ready,
+            "coordination_activated": coordination_activated,
+            "barrier_wait_observed": barrier_wait_observed,
+            "barrier_release_observed": barrier_release_observed,
+            "completion_observed": completion_observed,
+            "runtime_closed": self.is_runtime_closed,
+            "closure_classification": closure_classification,
+            "partial_or_degraded_path": partial_or_degraded_path,
+        }
+
     def to_dict(self) -> Dict[str, Any]:
         """Return a stable, JSON-safe dictionary representation."""
         return {
@@ -537,6 +617,7 @@ class MeshRuntimeCenterState:
             "errors": self.errors,
             "evaluated_at": self.evaluated_at,
             "metadata": self.metadata,
+            "lifecycle_proof": self.build_lifecycle_proof(),
             "_policy_participation_ready_vs_closed": PARTICIPATION_READY_VS_RUNTIME_CLOSED_PR03_POLICY,
             "_sentinel": MESH_RUNTIME_CENTER_STATE_PR03_SENTINEL,
         }
