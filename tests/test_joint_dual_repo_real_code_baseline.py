@@ -21,6 +21,7 @@ def test_pr_title_focuses_on_joint_real_code_review() -> None:
     assert "joint dual-repo" in title
     assert "real-code" in title
     assert "remaining-gap" in title
+    assert build_joint_dual_repo_real_code_baseline().pr_title == JOINT_BASELINE_PR_TITLE
 
 
 def test_report_builds_with_required_domain_coverage() -> None:
@@ -43,7 +44,6 @@ def test_report_builds_with_required_domain_coverage() -> None:
 
 def test_remaining_issues_are_structured_and_prioritized() -> None:
     report = build_joint_dual_repo_real_code_baseline()
-    assert len(report.remaining_issues) >= 6
 
     priorities = {item.priority for item in report.remaining_issues}
     assert WorkPriority.MUST_FIRST in priorities

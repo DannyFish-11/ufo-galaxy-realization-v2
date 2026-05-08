@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import importlib.util
+import logging
 import os
 import sys
 import time
@@ -20,33 +21,43 @@ JOINT_BASELINE_PR_TITLE = (
     "Joint dual-repo real-code baseline audit: full integrated status and remaining-gap closure review"
 )
 JOINT_BASELINE_AUTHORITY = (
-    "JOINT_DUAL_REPO_REAL_CODE_BASELINE::core.joint_dual_repo_real_code_baseline::" "real-code-only-v2-plus-android"
+    "JOINT_DUAL_REPO_REAL_CODE_BASELINE::"
+    "core.joint_dual_repo_real_code_baseline::real-code-only-v2-plus-android"
 )
 JOINT_BASELINE_METHOD = (
-    "Only current real code is used as evidence. " "No historical PR narrative/audit markdown is used as factual proof."
+    "Only current real code is used as evidence. "
+    "No historical PR narrative/audit markdown is used as factual proof."
 )
 
 # Android repository ref audited when compiling this baseline.
 ANDROID_AUDITED_REF = "478e3f8f3cd3cb85b5a20999c9fca22a0f44ef8d"
 ANDROID_ANCHOR_MESH_CONTRACT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/" "AndroidMeshParticipationContract.kt"
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt"
 )
 ANDROID_ANCHOR_AUTONOMOUS_PIPELINE = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/" "AutonomousExecutionPipeline.kt"
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/AutonomousExecutionPipeline.kt"
 )
 ANDROID_ANCHOR_WS_CLIENT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
 ANDROID_ANCHOR_MESH_TEST = (
-    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/" "Pr8AndroidMeshParticipationContractTest.kt"
+    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/Pr8AndroidMeshParticipationContractTest.kt"
 )
+
+MID_STAGE_OVERALL_THRESHOLD = 70.0
+
+logger = logging.getLogger(__name__)
 
 
 class EvidenceState(str, Enum):
+    """Evidence quality for each conclusion."""
+
     HARD_ESTABLISHED = "hard_established"
     PARTIAL = "partial"
     RUNTIME_PROOF_THIN = "runtime_proof_thin"
 
 
 class GapClass(str, Enum):
+    """Gap taxonomy (Chinese labels intentionally match governance language)."""
+
     CORE_ARCH = "核心架构缺口"
     GOVERNANCE = "治理缺口"
     RUNTIME = "运行级缺口"
@@ -57,6 +68,8 @@ class GapClass(str, Enum):
 
 
 class WorkPriority(str, Enum):
+    """Prioritization levels (Chinese labels intentionally match review policy)."""
+
     MUST_FIRST = "必须先做"
     IMPORTANT_SECONDARY = "重要但次级"
     ENHANCEMENT = "后续增强"
@@ -150,10 +163,15 @@ def _module_exists(module_path: str) -> bool:
     try:
         if importlib.util.find_spec(module_path) is not None:
             return True
-    except (ImportError, ModuleNotFoundError, ValueError, AttributeError):
-        pass
+    except (ImportError, ModuleNotFoundError, ValueError, AttributeError) as exc:
+        logger.debug("_module_exists fallback for %s due to %s", module_path, exc)
     rel = module_path.replace(".", os.sep) + ".py"
-    return any(os.path.isfile(os.path.join(base, rel)) for base in sys.path)
+    rel_pkg = module_path.replace(".", os.sep) + os.sep + "__init__.py"
+    return any(
+        os.path.isfile(os.path.join(base, rel))
+        or os.path.isfile(os.path.join(base, rel_pkg))
+        for base in sys.path
+    )
 
 
 def _source_contains(module_path: str, token: str) -> bool:
@@ -163,7 +181,7 @@ def _source_contains(module_path: str, token: str) -> bool:
         return False
     if not spec or not spec.origin or not os.path.isfile(spec.origin):
         return False
-    with open(spec.origin, encoding="utf-8", errors="ignore") as fh:
+    with open(spec.origin, encoding="utf-8", errors="replace") as fh:
         return token in fh.read()
 
 
@@ -174,6 +192,14 @@ def build_joint_dual_repo_real_code_baseline() -> JointRealCodeBaselineReport:
     runtime_truth &= _source_contains("core.unified_governance_semantics", "decision_causality")
     operator_surface = _module_exists("core.routes.operator") and _module_exists("core.routes.panel")
     ingress_unified = _source_contains("core.routes.panel", "/api/v1/panel/unified")
+    logger.debug(
+        "joint-baseline checks: governance=%s routing_truth=%s runtime_truth=%s operator_surface=%s ingress_unified=%s",
+        governance,
+        routing_truth,
+        runtime_truth,
+        operator_surface,
+        ingress_unified,
+    )
 
     domains = [
         DomainStatus(
@@ -369,11 +395,16 @@ def build_joint_dual_repo_real_code_baseline() -> JointRealCodeBaselineReport:
     ]
 
     overall = round(sum(item.completion_pct for item in domains) / len(domains), 1)
-    stage = (
-        StageVerdict.LATE_INTEGRATION
-        if any(item.priority == WorkPriority.MUST_FIRST for item in remaining)
-        else StageVerdict.NEAR_CLOSURE
+    has_must = any(item.priority == WorkPriority.MUST_FIRST for item in remaining)
+    has_important = any(
+        item.priority == WorkPriority.IMPORTANT_SECONDARY for item in remaining
     )
+    if has_must:
+        stage = StageVerdict.MID_STAGE_CONSOLIDATION
+    elif has_important:
+        stage = StageVerdict.LATE_INTEGRATION
+    else:
+        stage = StageVerdict.NEAR_CLOSURE
 
     return JointRealCodeBaselineReport(
         system_identity_zh="当前系统本体是以 V2 为中心治理核、Android/桌面/其它设备为执行与显化载体的中心控制型分布式智能系统。",
