@@ -817,7 +817,12 @@ def evaluate_center_runtime_status(
             deferred.append(
                 "runtime not yet closed — full coordination cycle has not completed"
             )
-        if is_participation_ready and not is_runtime_closed:
+        # Add the participation_ready vs runtime_closed distinction note only when
+        # the state is explicitly participation_ready (i.e. participants registered and
+        # eligible but coordinator has not yet started active execution).  In
+        # runtime_active / barrier_active / barrier_released states the runtime is
+        # already progressing, so the note would be redundant noise.
+        if center_status == MeshRuntimeCenterStatus.participation_ready:
             deferred.append(
                 "participation_ready but not runtime_closed: "
                 "participants eligible but no full coordination cycle completed yet"
