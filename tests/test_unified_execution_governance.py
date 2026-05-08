@@ -75,6 +75,7 @@ from core.unified_execution_governance import (
     resolve_execution_conflict,
     is_takeover_active,
     get_active_execution_type,
+    get_execution_runtime_snapshot,
     notify_execution_completed,
     _clear_all_active_executions,
     _clear_active_executions_for_device,
@@ -992,3 +993,38 @@ class TestClearActiveExecutions:
         _clear_active_executions_for_device(device_a)
         assert get_active_execution_type(device_a) is None
         assert get_active_execution_type(device_b) == ExecutionType.goal_execution
+
+
+class TestExecutionRuntimeSnapshot:
+    def test_snapshot_reports_active_execution_lifecycle_truth(self):
+        device_id = "device-runtime-snapshot-1"
+        with _patch_mode_gate_pass():
+            evaluate_execution_governance(
+                ExecutionType.goal_execution,
+                device_id,
+                execution_id="goal-snapshot-001",
+                register_if_accepted=True,
+            )
+            evaluate_execution_governance(
+                ExecutionType.takeover_request,
+                device_id,
+                execution_id="takeover-snapshot-001",
+                register_if_accepted=True,
+                skip_conflict_check=True,
+            )
+
+        snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+        assert snapshot["active_execution_total_count"] == 2
+        device_state = snapshot["devices"][0]
+        assert device_state["device_id"] == device_id
+        assert device_state["active_execution_count"] == 2
+        assert device_state["highest_priority_execution_type"] == "takeover_request"
+        assert device_state["takeover_active"] is True
+        assert device_state["blocked_execution_types"] == ["goal_execution", "parallel_subtask"]
+
+    def test_snapshot_includes_requested_devices_without_active_executions(self):
+        snapshot = get_execution_runtime_snapshot(device_ids=["idle-device"])
+        assert snapshot["active_execution_total_count"] == 0
+        assert snapshot["active_device_count"] == 0
+        assert snapshot["devices"][0]["device_id"] == "idle-device"
+        assert snapshot["devices"][0]["active_execution_count"] == 0

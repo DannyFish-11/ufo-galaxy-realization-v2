@@ -78,6 +78,25 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
         "dev_cross": SimpleNamespace(is_dispatch_eligible=True, is_takeover_eligible=True),
     }
 
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_local",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+            },
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 1,
+                "highest_priority_execution_type": "takeover_request",
+                "blocked_execution_types": ["goal_execution", "parallel_subtask"],
+            },
+        ],
+        "active_device_count": 1,
+        "active_execution_total_count": 1,
+    }
+
     with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
         "core.android_mode_gate_policy.build_mode_state_for_device",
         side_effect=lambda device_id: mode_map[device_id],
@@ -87,6 +106,9 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     ), patch(
         "core.unified_execution_governance.is_takeover_active",
         side_effect=lambda device_id: device_id == "dev_cross",
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
     ):
         state = build_unified_governance_state()
 
@@ -101,6 +123,12 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     cross = next(d for d in state["devices"] if d["device_id"] == "dev_cross")
     assert cross["android_autonomy_scope"] == "subordinate_participation"
     assert cross["governance_precedence"]["takeover"]["eligible"] is True
+    assert cross["runtime_execution_state"]["highest_priority_execution_type"] == "takeover_request"
+    assert (
+        cross["governance_precedence"]["delegated_execution"]["decision_causality"]["active_execution_count"]
+        == 1
+    )
+    assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL
     relationship_links = {

@@ -287,13 +287,22 @@ def build_unified_governance_state(
             build_mode_state_for_device,
             evaluate_android_mode_readiness,
         )
-        from core.unified_execution_governance import is_takeover_active
+        from core.unified_execution_governance import (
+            get_execution_runtime_snapshot,
+            is_takeover_active,
+        )
     except Exception:
         return {
             "devices": [],
             "local_mode_count": 0,
             "cross_device_mode_count": 0,
             "takeover_active_count": 0,
+            "execution_runtime_state": {
+                "devices": [],
+                "active_device_count": 0,
+                "active_execution_total_count": 0,
+                "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
+            },
             "mesh_runtime_state": {
                 "status": MESH_RUNTIME_STATUS_UNAVAILABLE,
                 "runtime_proof_count": 0,
@@ -311,6 +320,13 @@ def build_unified_governance_state(
             device_ids = [e.device_id for e in list_active_sessions()]
         except Exception:
             device_ids = []
+    device_ids = list(dict.fromkeys(device_ids or []))
+    execution_runtime_state = get_execution_runtime_snapshot(device_ids=device_ids)
+    runtime_by_device = {
+        str(entry.get("device_id", "")): entry
+        for entry in execution_runtime_state.get("devices", [])
+        if entry.get("device_id")
+    }
 
     devices: List[Dict[str, Any]] = []
     local_mode_count = 0
@@ -326,6 +342,9 @@ def build_unified_governance_state(
             continue
 
         mode = getattr(mode_state.mode, "value", str(mode_state.mode))
+        dispatch_eligible = bool(getattr(readiness, "is_dispatch_eligible", False))
+        takeover_eligible = bool(getattr(readiness, "is_takeover_eligible", False))
+        runtime_state_for_device = dict(runtime_by_device.get(device_id, {}))
         if mode == "local":
             local_mode_count += 1
         elif mode == "cross_device":
@@ -339,20 +358,37 @@ def build_unified_governance_state(
             decision = resolve_governance_path_decision(
                 mode=mode,
                 path=path,
-                dispatch_eligible=bool(getattr(readiness, "is_dispatch_eligible", False)),
-                takeover_eligible=bool(getattr(readiness, "is_takeover_eligible", False)),
+                dispatch_eligible=dispatch_eligible,
+                takeover_eligible=takeover_eligible,
                 takeover_active=takeover_active,
             )
-            paths[path.value] = decision.to_dict()
+            decision_dict = decision.to_dict()
+            decision_dict["decision_causality"] = {
+                "mode": mode,
+                "dispatch_eligible": dispatch_eligible,
+                "takeover_eligible": takeover_eligible,
+                "takeover_active": takeover_active,
+                "active_execution_count": int(
+                    runtime_state_for_device.get("active_execution_count", 0)
+                ),
+                "highest_priority_execution_type": runtime_state_for_device.get(
+                    "highest_priority_execution_type"
+                ),
+                "blocked_execution_types": list(
+                    runtime_state_for_device.get("blocked_execution_types", [])
+                ),
+            }
+            paths[path.value] = decision_dict
 
         devices.append(
             {
                 "device_id": device_id,
                 "mode": mode,
                 "android_autonomy_scope": _autonomy_scope_for_mode(mode),
-                "dispatch_eligible": bool(getattr(readiness, "is_dispatch_eligible", False)),
-                "takeover_eligible": bool(getattr(readiness, "is_takeover_eligible", False)),
+                "dispatch_eligible": dispatch_eligible,
+                "takeover_eligible": takeover_eligible,
                 "takeover_active": takeover_active,
+                "runtime_execution_state": runtime_state_for_device,
                 "governance_precedence": paths,
                 "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             }
@@ -363,6 +399,7 @@ def build_unified_governance_state(
         "local_mode_count": local_mode_count,
         "cross_device_mode_count": cross_device_mode_count,
         "takeover_active_count": takeover_active_count,
+        "execution_runtime_state": execution_runtime_state,
         "mesh_runtime_state": build_mesh_runtime_state(),
         "authority": "v2_semantic_orchestration_authority",
         "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
