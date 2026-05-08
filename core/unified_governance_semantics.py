@@ -99,12 +99,25 @@ def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
         return False
 
 
-def build_mesh_runtime_state() -> Dict[str, Any]:
+def build_mesh_runtime_state(
+    coordinator_state: Any = None,
+) -> Dict[str, Any]:
     """Build a compact operator/panel-safe mesh runtime status snapshot.
 
-    This snapshot intentionally distinguishes what is runtime-proven in the
-    V2 codebase from what still depends on Android-side authority/runtime
-    closure.
+    This snapshot distinguishes what is runtime-proven in the V2 codebase from
+    what still depends on Android-side authority/runtime closure.
+
+    As of PR-03, this function also integrates the center-side mesh runtime
+    state machine (via :mod:`core.mesh.mesh_runtime_center_state`) so that the
+    snapshot expresses a real center-side runtime contract rather than only a
+    sentinel-presence projection.
+
+    Parameters
+    ----------
+    coordinator_state:
+        Optional coordinator state to pass to the center state machine for
+        real state derivation.  If ``None``, falls back to sentinel-based
+        presence checks.
     """
     has_staged_mesh_dispatch = _has_sentinel(
         "core.runtime.source_dispatch_orchestrator",
@@ -117,6 +130,10 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
     has_live_mesh_coordinator = _has_sentinel(
         "core.mesh.live_mesh_session_coordinator",
         "LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL",
+    )
+    has_center_state_machine = _has_sentinel(
+        "core.mesh.mesh_runtime_center_state",
+        "MESH_RUNTIME_CENTER_STATE_PR03_SENTINEL",
     )
     recoverable_mesh_sessions = 0
 
@@ -133,6 +150,7 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
             int(has_staged_mesh_dispatch),
             int(has_live_mesh_engine),
             int(has_live_mesh_coordinator),
+            int(has_center_state_machine),
         )
     )
     status = (
@@ -141,6 +159,19 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
         else MESH_RUNTIME_STATUS_CONTRACT_ONLY
     )
 
+    # Build center-side state machine snapshot (PR-03)
+    center_state_snapshot: Dict[str, Any] = {}
+    try:
+        from core.mesh.mesh_runtime_center_state import build_mesh_runtime_center_state
+
+        center_state_snapshot = build_mesh_runtime_center_state(coordinator_state)
+    except Exception as exc:
+        logger.debug("build_mesh_runtime_state: center state machine unavailable: %s", exc)
+        center_state_snapshot = {
+            "status": MESH_RUNTIME_STATUS_UNAVAILABLE,
+            "errors": [f"center_state_machine_unavailable:{exc}"],
+        }
+
     return {
         "status": status,
         "runtime_proof_count": runtime_proof_count,
@@ -148,10 +179,12 @@ def build_mesh_runtime_state() -> Dict[str, Any]:
             "staged_mesh_dispatch_orchestration": has_staged_mesh_dispatch,
             "live_mesh_runtime_engine": has_live_mesh_engine,
             "live_mesh_session_coordinator": has_live_mesh_coordinator,
+            "mesh_runtime_center_state_machine": has_center_state_machine,
         },
         "runtime_observability": {
             "recoverable_mesh_session_count": recoverable_mesh_sessions,
         },
+        "center_runtime_state": center_state_snapshot,
         "runtime_relationships": [
             {
                 "link": "dispatch_to_delegation",
