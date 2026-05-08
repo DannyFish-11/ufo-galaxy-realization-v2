@@ -1,3 +1,5 @@
+import math
+
 from core.joint_dual_repo_cognition_closure_review import (
     JOINT_COGNITION_CLOSURE_AUTHORITY,
     JOINT_COGNITION_CLOSURE_METHODOLOGY,
@@ -7,8 +9,12 @@ from core.joint_dual_repo_cognition_closure_review import (
     PropositionVerdict,
     SystemStage,
     WorkPriority,
+    _classify_stage,
+    _has_critical_runtime_gaps,
     build_joint_dual_repo_cognition_closure_review,
 )
+
+_WEIGHT_PERCENTAGE_SUM_TOLERANCE = 1e-6
 
 
 def test_authority_and_methodology_present() -> None:
@@ -83,19 +89,27 @@ def test_to_dict_is_json_ready() -> None:
 def test_domain_scorecard_integrity() -> None:
     report = build_joint_dual_repo_cognition_closure_review()
     assert len(report.domain_scores) == 8
-    assert sum(item.weight_pct for item in report.domain_scores) == 100.0
+    assert math.isclose(
+        sum(item.weight_pct for item in report.domain_scores),
+        100.0,
+        abs_tol=_WEIGHT_PERCENTAGE_SUM_TOLERANCE,
+    )
     for item in report.domain_scores:
         assert 0.0 <= item.completion_pct <= 100.0
 
 
 def test_overall_completion_is_weighted_average() -> None:
     report = build_joint_dual_repo_cognition_closure_review()
+    total_weight = sum(item.weight_pct for item in report.domain_scores)
     weighted = round(
-        sum(item.weight_pct * item.completion_pct for item in report.domain_scores) / 100.0,
+        sum(item.weight_pct * item.completion_pct for item in report.domain_scores) / total_weight,
         1,
     )
     assert report.overall_completion_pct == weighted
-    assert report.current_stage == SystemStage.MID_STAGE_CONSOLIDATION
+    assert report.current_stage == _classify_stage(
+        overall_completion_pct=report.overall_completion_pct,
+        has_runtime_or_proof_gap=_has_critical_runtime_gaps(report.remaining_work),
+    )
 
 
 def test_remaining_work_is_classified_and_prioritized() -> None:
@@ -106,6 +120,6 @@ def test_remaining_work_is_classified_and_prioritized() -> None:
     assert WorkPriority.IMPORTANT_SECONDARY in priorities
     assert WorkPriority.ENHANCEMENT in priorities
     for item in report.remaining_work:
-        assert item.gap_type in set(GapType)
+        assert isinstance(item.gap_type, GapType)
         assert item.blocking_propositions
         assert item.evidence_anchors

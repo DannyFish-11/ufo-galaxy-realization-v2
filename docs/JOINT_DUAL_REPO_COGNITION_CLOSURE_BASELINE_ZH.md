@@ -46,6 +46,7 @@
 - **总完成度（加权）**：**77.3%**
 - **当前阶段判定**：**mid-stage consolidation（中期收敛阶段）**
 - **阶段理由**：中心治理与执行/透明面已成形，但 mesh full runtime、跨仓运行态一致性、多模态运行级证据仍是关键未闭合项。
+- 注：完成度数值来自可机读 scorecard 计算，后续应以 `build_joint_dual_repo_cognition_closure_review()` 的实时输出为准。
 
 ## 4) 双仓关键代码锚点（抽样）
 

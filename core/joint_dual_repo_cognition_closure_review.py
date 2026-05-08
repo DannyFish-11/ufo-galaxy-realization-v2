@@ -41,6 +41,17 @@ _V2_ALLOWED_MODULE_PREFIXES = ("core.", "galaxy_gateway.")
 _ROUTE_OPERATOR_ACTION = "/api/v1/operator/action"
 _ROUTE_PANEL_UNIFIED = "/api/v1/panel/unified"
 _MESH_RUNTIME_STATE_KEY = "mesh_runtime_state"
+# 阶段阈值语义：按升序作为阶段“上界”分界点，超过后进入下一阶段。
+_POC_STAGE_THRESHOLD_PCT = 35.0
+_EARLY_RUNTIME_STAGE_THRESHOLD_PCT = 55.0
+_MID_STAGE_CONSOLIDATION_THRESHOLD_PCT = 78.0
+# 分项评分语义：base 表示结构与基础路径存在时的起点分；increment 表示关键信号命中后的加权增量。
+_GOVERNANCE_BASE_SCORE = 62.0
+_GOVERNANCE_SIGNAL_INCREMENT = 11.0
+_EXECUTION_CHAIN_BASE_SCORE = 52.0
+_EXECUTION_CHAIN_SIGNAL_INCREMENT = 12.0
+_OBSERVABILITY_BASE_SCORE = 56.0
+_OBSERVABILITY_SIGNAL_INCREMENT = 13.0
 _ANDROID_MESH_CONTRACT = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
     "AndroidMeshParticipationContract.kt"
@@ -235,7 +246,8 @@ def _source_contains(module_path: str, token: str) -> bool:
     return False
 
 
-def _round_pct(value: float) -> float:
+def _clamp_and_round_percentage(value: float) -> float:
+    """将百分比约束到 [0, 100] 并统一保留 1 位小数。"""
     return round(max(0.0, min(100.0, value)), 1)
 
 
@@ -243,15 +255,31 @@ def _classify_stage(
     overall_completion_pct: float,
     has_runtime_or_proof_gap: bool,
 ) -> SystemStage:
-    if overall_completion_pct < 35.0:
+    if not (
+        _POC_STAGE_THRESHOLD_PCT
+        < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT
+        < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT
+    ):
+        raise ValueError("Stage thresholds must be strictly ascending.")
+    # 说明：低分段（PoC/Early/Mid）由整体完成度主导；高分段（Late/Near）再由关键运行/证明缺口区分。
+    if overall_completion_pct < _POC_STAGE_THRESHOLD_PCT:
         return SystemStage.POC
-    if overall_completion_pct < 55.0:
+    if overall_completion_pct < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT:
         return SystemStage.EARLY_RUNTIME
-    if overall_completion_pct < 78.0:
+    if overall_completion_pct < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT:
         return SystemStage.MID_STAGE_CONSOLIDATION
     if has_runtime_or_proof_gap:
         return SystemStage.LATE_INTEGRATION
     return SystemStage.NEAR_CLOSURE
+
+
+def _has_critical_runtime_gaps(remaining_work: List[RemainingWorkItem]) -> bool:
+    """关键阶段判定只考虑非增强类且会阻塞运行/证明闭环的缺口。"""
+    critical_gap_types = {GapType.RUNTIME_GAP, GapType.PROOF_GAP, GapType.CORE_GAP}
+    return any(
+        item.gap_type in critical_gap_types and item.priority != WorkPriority.ENHANCEMENT
+        for item in remaining_work
+    )
 
 
 def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureReport:
@@ -448,8 +476,10 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
             domain_id="D1_center_governance",
             topic="authority / governance（中心治理）",
             weight_pct=16.0,
-            completion_pct=_round_pct(
-                62.0 + 11.0 * sum([execution_governance, governance_semantics, mode_gate_policy])
+            completion_pct=_clamp_and_round_percentage(
+                _GOVERNANCE_BASE_SCORE
+                + _GOVERNANCE_SIGNAL_INCREMENT
+                * sum([execution_governance, governance_semantics, mode_gate_policy])
             ),
             evidence_status="runtime_governance_structure_verified",
             rationale_zh=(
@@ -460,9 +490,9 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
             domain_id="D2_execution_runtime_chain",
             topic="execution runtime（执行链）",
             weight_pct=14.0,
-            completion_pct=_round_pct(
-                52.0
-                + 12.0
+            completion_pct=_clamp_and_round_percentage(
+                _EXECUTION_CHAIN_BASE_SCORE
+                + _EXECUTION_CHAIN_SIGNAL_INCREMENT
                 * sum(
                     [
                         execution_governance,
@@ -510,8 +540,10 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
             domain_id="D7_observability_operator_state",
             topic="observability/operator surface/state transparency",
             weight_pct=12.0,
-            completion_pct=_round_pct(
-                56.0 + 13.0 * sum([operator_action_surface, panel_unified, mesh_state_surface])
+            completion_pct=_clamp_and_round_percentage(
+                _OBSERVABILITY_BASE_SCORE
+                + _OBSERVABILITY_SIGNAL_INCREMENT
+                * sum([operator_action_surface, panel_unified, mesh_state_surface])
             ),
             evidence_status="operator_and_panel_surface_verified",
             rationale_zh="operator action 与 unified panel 及 mesh_runtime_state 透明面均可由真实代码定位。",
@@ -526,8 +558,11 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
         ),
     ]
 
-    overall_completion_pct = _round_pct(
-        sum(item.weight_pct * item.completion_pct for item in domain_scores) / 100.0
+    total_weight = sum(item.weight_pct for item in domain_scores)
+    if total_weight <= 0.0:
+        raise ValueError("Domain score total weight must be > 0.")
+    overall_completion_pct = _clamp_and_round_percentage(
+        sum(item.weight_pct * item.completion_pct for item in domain_scores) / total_weight
     )
 
     remaining_work = [
@@ -601,11 +636,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
         ),
     ]
 
-    has_runtime_or_proof_gap = any(
-        item.gap_type in {GapType.RUNTIME_GAP, GapType.PROOF_GAP, GapType.CORE_GAP}
-        for item in remaining_work
-        if item.priority != WorkPriority.ENHANCEMENT
-    )
+    has_runtime_or_proof_gap = _has_critical_runtime_gaps(remaining_work)
     current_stage = _classify_stage(overall_completion_pct, has_runtime_or_proof_gap)
     stage_reason_zh = (
         "中心治理、执行链与状态透明面已稳定成形；"
