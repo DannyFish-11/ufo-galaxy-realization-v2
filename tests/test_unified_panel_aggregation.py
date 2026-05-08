@@ -293,6 +293,37 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         d = p.to_dict()
         self.assertIn("mesh_runtime_state", d)
 
+    def test_C02d_mesh_runtime_state_always_mirrors_governance_state(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
+        mock_snap = MagicMock()
+        mock_snap.active_task_count = 0
+        mock_snap.active_flow_count = 0
+        mock_snap.online_device_count = 0
+        mock_snap.capability_provider_count = 0
+        mock_snap.online_provider_count = 0
+        mock_snap.topology_node_count = 0
+        mock_snap.topology_edge_count = 0
+        mock_snap.desktop_shell_state = "unknown"
+        mock_snap.presence_tristate = "unknown"
+        mock_snap.manifestation_summary = {}
+        mock_snap.mesh_runtime_state = {"status": "stale_operator_snapshot"}
+
+        mock_surface = MagicMock()
+        mock_surface.operator_snapshot.return_value = mock_snap
+        canonical_governance = {
+            "mesh_runtime_state": {"status": "canonical_governance_runtime"},
+        }
+
+        svc = UnifiedPanelAggregationService()
+        with patch("core.operator_surface.get_operator_surface", return_value=mock_surface), patch(
+            "core.unified_governance_semantics.build_unified_governance_state",
+            return_value=canonical_governance,
+        ):
+            payload = svc.build_payload()
+
+        self.assertEqual(payload.mesh_runtime_state, canonical_governance["mesh_runtime_state"])
+
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
         from core.unified_panel_aggregation import UnifiedPanelAggregationService

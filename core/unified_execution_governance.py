@@ -820,6 +820,91 @@ def notify_execution_completed(
     return removed
 
 
+def get_execution_runtime_snapshot(
+    *,
+    device_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Return a canonical runtime snapshot of active execution lifecycle state.
+
+    The snapshot is read-only and derived from the unified active-execution
+    registry used by :func:`evaluate_execution_governance`.
+    """
+    requested_device_ids = set(device_ids or [])
+    with _active_executions_lock:
+        registry_device_ids = set(_active_executions.keys())
+    tracked_device_ids = requested_device_ids | registry_device_ids
+
+    devices: List[Dict[str, Any]] = []
+    active_device_count = 0
+    active_execution_total_count = 0
+
+    for device_id in sorted(tracked_device_ids):
+        active_entries = sorted(
+            _get_active_executions(device_id),
+            key=lambda t: t[1],
+        )
+        active_items: List[Dict[str, Any]] = []
+        for execution_type, started_at, execution_id in active_entries:
+            policy = get_execution_type_policy(execution_type)
+            active_items.append(
+                {
+                    "execution_type": execution_type.value,
+                    "started_at": float(started_at),
+                    "execution_id": execution_id,
+                    "priority": int(_EXECUTION_TYPE_PRIORITY.get(execution_type, 99)),
+                    "blocks_lower_priority": bool(
+                        policy.blocks_lower_priority if policy else False
+                    ),
+                }
+            )
+
+        highest_priority = get_active_execution_type(device_id)
+        takeover_active = any(
+            item["execution_type"] == ExecutionType.takeover_request.value
+            for item in active_items
+        )
+        active_execution_types = {
+            ExecutionType.from_string(item["execution_type"])
+            for item in active_items
+        }
+        blocked_execution_type_values: set[str] = set()
+        for active_execution_type in active_execution_types:
+            active_policy = get_execution_type_policy(active_execution_type)
+            if not active_policy or not active_policy.blocks_lower_priority:
+                continue
+            active_priority = int(_EXECUTION_TYPE_PRIORITY.get(active_execution_type, 99))
+            for candidate_type, candidate_policy in _EXECUTION_TYPE_POLICIES.items():
+                if int(candidate_policy.priority) > active_priority:
+                    blocked_execution_type_values.add(candidate_type.value)
+        blocked_execution_types = sorted(blocked_execution_type_values)
+
+        active_count = len(active_items)
+        if active_count > 0:
+            active_device_count += 1
+        active_execution_total_count += active_count
+        devices.append(
+            {
+                "device_id": device_id,
+                "active_execution_count": active_count,
+                "active_executions": active_items,
+                "takeover_active": takeover_active,
+                "highest_priority_execution_type": (
+                    highest_priority.value if highest_priority else None
+                ),
+                "blocked_execution_types": blocked_execution_types,
+                "_source": "unified_execution_governance.active_registry",
+            }
+        )
+
+    return {
+        "devices": devices,
+        "active_device_count": active_device_count,
+        "active_execution_total_count": active_execution_total_count,
+        "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
+    }
+
+
 # ---------------------------------------------------------------------------
 # _check_mode_readiness_gate
 # ---------------------------------------------------------------------------
