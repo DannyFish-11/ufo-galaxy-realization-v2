@@ -60,7 +60,11 @@ def _make_coordinator_state(
         )
         for spec in participant_specs
     ]
-    waiting_device_ids = [spec["device_id"] for spec in participant_specs if spec["status"] == "waiting"]
+    waiting_device_ids = [
+        spec["device_id"]
+        for spec in participant_specs
+        if spec["status"] == MeshParticipantStatus.waiting.value
+    ]
     barrier = MeshBarrierState(
         status=MeshBarrierStatus(barrier_status),
         released=barrier_status == "released",
@@ -195,5 +199,11 @@ class TestPR05MeshE2ERuntimeProofV2:
             participant_specs=[{"device_id": "d1", "status": "pending"}],
         )
         payload = build_mesh_runtime_center_state(coord)
-        assert "lifecycle_proof" in payload
-        assert payload["lifecycle_proof"]["participation_registered"] is True
+        proof = payload.get("lifecycle_proof", {})
+        assert proof["participation_registered"] is True
+        assert proof["participation_ready"] is True
+        assert proof["coordination_activated"] is False
+        assert proof["barrier_wait_observed"] is False
+        assert proof["barrier_release_observed"] is False
+        assert proof["runtime_closed"] is False
+        assert proof["closure_classification"] == "participation_ready_not_closed"

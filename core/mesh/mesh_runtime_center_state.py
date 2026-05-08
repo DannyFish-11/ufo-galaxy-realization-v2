@@ -151,6 +151,23 @@ DEGRADED_CONSTRAINED_CENTER_PR03_POLICY: str = (
     "cannot complete even partially."
 )
 
+_COORDINATION_ACTIVATED_COORDINATOR_STATUSES = (
+    "active",
+    "awaiting_barrier",
+    "merging",
+    "completed",
+    "partial",
+    "failed",
+)
+_COMPLETION_OBSERVED_COORDINATOR_STATUSES = (
+    "completed",
+    "partial",
+    "failed",
+)
+_LIFECYCLE_CLOSURE_RUNTIME_CLOSED = "runtime_closed"
+_LIFECYCLE_CLOSURE_PARTICIPATION_READY_NOT_CLOSED = "participation_ready_not_closed"
+_LIFECYCLE_CLOSURE_NOT_PARTICIPATION_READY = "not_participation_ready"
+
 
 # ---------------------------------------------------------------------------
 # State machine enum
@@ -518,10 +535,13 @@ class MeshRuntimeCenterState:
 
     def build_lifecycle_proof(self) -> Dict[str, Any]:
         """Build an explicit proof surface for mesh runtime lifecycle closure."""
-        coordination_activated = (
-            self.coordinator_status in ("active", "awaiting_barrier", "merging", "completed", "partial", "failed")
-            or self.status in MESH_RUNTIME_CENTER_ACTIVE_STATUSES
+        has_active_or_terminal_center_status = (
+            self.status in MESH_RUNTIME_CENTER_ACTIVE_STATUSES
             or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
+        )
+        coordination_activated = (
+            self.coordinator_status in _COORDINATION_ACTIVATED_COORDINATOR_STATUSES
+            or has_active_or_terminal_center_status
         )
         barrier_wait_observed = (
             self.barrier_status == "waiting"
@@ -536,7 +556,7 @@ class MeshRuntimeCenterState:
             )
         )
         completion_observed = (
-            self.coordinator_status in ("completed", "partial", "failed")
+            self.coordinator_status in _COMPLETION_OBSERVED_COORDINATOR_STATUSES
             or self.runtime_closed_count > 0
             or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
         )
@@ -550,6 +570,7 @@ class MeshRuntimeCenterState:
             or self.constrained_count > 0
             or self.ineligible_count > 0
             or (
+                # Some participants have closed while others have not: partial completion.
                 self.total_participant_count > 0
                 and self.runtime_closed_count < self.total_participant_count
                 and completion_observed
@@ -557,11 +578,11 @@ class MeshRuntimeCenterState:
         )
 
         if self.is_runtime_closed:
-            closure_classification = "runtime_closed"
+            closure_classification = _LIFECYCLE_CLOSURE_RUNTIME_CLOSED
         elif self.is_participation_ready:
-            closure_classification = "participation_ready_not_closed"
+            closure_classification = _LIFECYCLE_CLOSURE_PARTICIPATION_READY_NOT_CLOSED
         else:
-            closure_classification = "not_participation_ready"
+            closure_classification = _LIFECYCLE_CLOSURE_NOT_PARTICIPATION_READY
 
         return {
             "participation_registered": self.total_participant_count > 0,
