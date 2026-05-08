@@ -41,6 +41,17 @@ _V2_ALLOWED_MODULE_PREFIXES = ("core.", "galaxy_gateway.")
 _ROUTE_OPERATOR_ACTION = "/api/v1/operator/action"
 _ROUTE_PANEL_UNIFIED = "/api/v1/panel/unified"
 _MESH_RUNTIME_STATE_KEY = "mesh_runtime_state"
+# 阶段阈值语义：按升序作为阶段“上界”分界点，超过后进入下一阶段。
+_POC_STAGE_THRESHOLD_PCT = 35.0
+_EARLY_RUNTIME_STAGE_THRESHOLD_PCT = 55.0
+_MID_STAGE_CONSOLIDATION_THRESHOLD_PCT = 78.0
+# 分项评分语义：base 表示结构与基础路径存在时的起点分；increment 表示关键信号命中后的加权增量。
+_GOVERNANCE_BASE_SCORE = 62.0
+_GOVERNANCE_SIGNAL_INCREMENT = 11.0
+_EXECUTION_CHAIN_BASE_SCORE = 52.0
+_EXECUTION_CHAIN_SIGNAL_INCREMENT = 12.0
+_OBSERVABILITY_BASE_SCORE = 56.0
+_OBSERVABILITY_SIGNAL_INCREMENT = 13.0
 _ANDROID_MESH_CONTRACT = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
     "AndroidMeshParticipationContract.kt"
@@ -81,6 +92,34 @@ class ClosureBoundary(str, Enum):
     DEFERRED = "deferred"
 
 
+class SystemStage(str, Enum):
+    """系统阶段判定。"""
+
+    POC = "poc"
+    EARLY_RUNTIME = "early_runtime"
+    MID_STAGE_CONSOLIDATION = "mid_stage_consolidation"
+    LATE_INTEGRATION = "late_integration"
+    NEAR_CLOSURE = "near_closure"
+
+
+class GapType(str, Enum):
+    """剩余缺口分类。"""
+
+    CORE_GAP = "核心缺口"
+    CLOSURE_GAP = "收口缺口"
+    GOVERNANCE_GAP = "治理缺口"
+    RUNTIME_GAP = "运行级缺口"
+    PROOF_GAP = "证明缺口"
+
+
+class WorkPriority(str, Enum):
+    """剩余工作优先级。"""
+
+    MUST_DO = "必须做"
+    IMPORTANT_SECONDARY = "重要但次级"
+    ENHANCEMENT = "后续增强项"
+
+
 @dataclass
 class SystemPropositionReview:
     proposition_id: str
@@ -106,11 +145,60 @@ class SystemPropositionReview:
 
 
 @dataclass
+class DomainCompletionScore:
+    domain_id: str
+    topic: str
+    weight_pct: float
+    completion_pct: float
+    evidence_status: str
+    rationale_zh: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "domain_id": self.domain_id,
+            "topic": self.topic,
+            "weight_pct": self.weight_pct,
+            "completion_pct": self.completion_pct,
+            "evidence_status": self.evidence_status,
+            "rationale_zh": self.rationale_zh,
+        }
+
+
+@dataclass
+class RemainingWorkItem:
+    work_id: str
+    title: str
+    priority: WorkPriority
+    gap_type: GapType
+    evidence_status: str
+    why_not_complete_zh: str
+    blocking_propositions: List[str] = field(default_factory=list)
+    evidence_anchors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "work_id": self.work_id,
+            "title": self.title,
+            "priority": self.priority.value,
+            "gap_type": self.gap_type.value,
+            "evidence_status": self.evidence_status,
+            "why_not_complete_zh": self.why_not_complete_zh,
+            "blocking_propositions": list(self.blocking_propositions),
+            "evidence_anchors": list(self.evidence_anchors),
+        }
+
+
+@dataclass
 class JointCognitionClosureReport:
     authority: str = JOINT_COGNITION_CLOSURE_AUTHORITY
     methodology: str = JOINT_COGNITION_CLOSURE_METHODOLOGY
     generated_at: float = field(default_factory=time.time)
     propositions: List[SystemPropositionReview] = field(default_factory=list)
+    domain_scores: List[DomainCompletionScore] = field(default_factory=list)
+    overall_completion_pct: float = 0.0
+    current_stage: SystemStage = SystemStage.EARLY_RUNTIME
+    stage_reason_zh: str = ""
+    remaining_work: List[RemainingWorkItem] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -118,6 +206,11 @@ class JointCognitionClosureReport:
             "methodology": self.methodology,
             "generated_at": self.generated_at,
             "propositions": [p.to_dict() for p in self.propositions],
+            "domain_scores": [score.to_dict() for score in self.domain_scores],
+            "overall_completion_pct": self.overall_completion_pct,
+            "current_stage": self.current_stage.value,
+            "stage_reason_zh": self.stage_reason_zh,
+            "remaining_work": [item.to_dict() for item in self.remaining_work],
         }
 
 
@@ -151,6 +244,42 @@ def _source_contains(module_path: str, token: str) -> bool:
     except (UnicodeDecodeError, OSError, ValueError, ImportError, AttributeError) as exc:
         logger.debug("_source_contains read failed for %s: %s", module_path, exc)
     return False
+
+
+def _clamp_and_round_percentage(value: float) -> float:
+    """将百分比约束到 [0, 100] 并统一保留 1 位小数。"""
+    return round(max(0.0, min(100.0, value)), 1)
+
+
+def _classify_stage(
+    overall_completion_pct: float,
+    has_runtime_or_proof_gap: bool,
+) -> SystemStage:
+    if not (
+        _POC_STAGE_THRESHOLD_PCT
+        < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT
+        < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT
+    ):
+        raise ValueError("Stage thresholds must be strictly ascending.")
+    # 说明：低分段（PoC/Early/Mid）由整体完成度主导；高分段（Late/Near）再由关键运行/证明缺口区分。
+    if overall_completion_pct < _POC_STAGE_THRESHOLD_PCT:
+        return SystemStage.POC
+    if overall_completion_pct < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT:
+        return SystemStage.EARLY_RUNTIME
+    if overall_completion_pct < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT:
+        return SystemStage.MID_STAGE_CONSOLIDATION
+    if has_runtime_or_proof_gap:
+        return SystemStage.LATE_INTEGRATION
+    return SystemStage.NEAR_CLOSURE
+
+
+def _has_critical_runtime_gaps(remaining_work: List[RemainingWorkItem]) -> bool:
+    """关键阶段判定只考虑非增强类且会阻塞运行/证明闭环的缺口。"""
+    critical_gap_types = {GapType.RUNTIME_GAP, GapType.PROOF_GAP, GapType.CORE_GAP}
+    return any(
+        item.gap_type in critical_gap_types and item.priority != WorkPriority.ENHANCEMENT
+        for item in remaining_work
+    )
 
 
 def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureReport:
@@ -342,7 +471,189 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
         ),
     ]
 
-    return JointCognitionClosureReport(propositions=propositions)
+    domain_scores = [
+        DomainCompletionScore(
+            domain_id="D1_center_governance",
+            topic="authority / governance（中心治理）",
+            weight_pct=16.0,
+            completion_pct=_clamp_and_round_percentage(
+                _GOVERNANCE_BASE_SCORE
+                + _GOVERNANCE_SIGNAL_INCREMENT
+                * sum([execution_governance, governance_semantics, mode_gate_policy])
+            ),
+            evidence_status="runtime_governance_structure_verified",
+            rationale_zh=(
+                "统一执行治理、统一治理语义、Android 模式门均可在 V2 真实代码中定位。"
+            ),
+        ),
+        DomainCompletionScore(
+            domain_id="D2_execution_runtime_chain",
+            topic="execution runtime（执行链）",
+            weight_pct=14.0,
+            completion_pct=_clamp_and_round_percentage(
+                _EXECUTION_CHAIN_BASE_SCORE
+                + _EXECUTION_CHAIN_SIGNAL_INCREMENT
+                * sum(
+                    [
+                        execution_governance,
+                        _module_exists("core.desktop_presence_runtime"),
+                        _module_exists("galaxy_gateway.android.handlers.goal_execution"),
+                    ]
+                )
+            ),
+            evidence_status="runtime_path_exists_cross_repo_live_proof_limited",
+            rationale_zh="执行治理、Android goal ingress、运行时承载链路已存在，但跨仓活体闭环仍受证据约束。",
+        ),
+        DomainCompletionScore(
+            domain_id="D3_android_runtime_node",
+            topic="Android runtime node 能力",
+            weight_pct=12.0,
+            completion_pct=68.0,
+            evidence_status="android_local_runtime_and_contract_present",
+            rationale_zh="Android 本地执行与并行子任务协作能力明确，但不拥有全局 mesh 协调 authority。",
+        ),
+        DomainCompletionScore(
+            domain_id="D4_mesh_hybrid_orchestration",
+            topic="mesh / hybrid / orchestration",
+            weight_pct=14.0,
+            completion_pct=62.0 if mesh_state_surface else 48.0,
+            evidence_status="participation_ready_full_mesh_deferred",
+            rationale_zh="mesh 参与契约与 mesh_runtime_state 已存在，full mesh runtime 与 barrier 协调仍 deferred。",
+        ),
+        DomainCompletionScore(
+            domain_id="D5_multimodal_chain",
+            topic="multimodal 主链",
+            weight_pct=11.0,
+            completion_pct=64.0 if nl_chain_contract else 46.0,
+            evidence_status="semantic_chain_present_e2e_runtime_needs_more_proof",
+            rationale_zh="carrier / semantic authority 语义链可定位，端到端运行级证据仍不足以判定 fully closed。",
+        ),
+        DomainCompletionScore(
+            domain_id="D6_capability_readiness_policy",
+            topic="capability/readiness/policy",
+            weight_pct=11.0,
+            completion_pct=66.0 if mode_gate_policy else 42.0,
+            evidence_status="governance_exists_cross_repo_truth_drift_risk",
+            rationale_zh="中心 capability/readiness/policy 治理面成立，但 Android 本地能力状态与 V2 truth 对齐仍需持续验证。",
+        ),
+        DomainCompletionScore(
+            domain_id="D7_observability_operator_state",
+            topic="observability/operator surface/state transparency",
+            weight_pct=12.0,
+            completion_pct=_clamp_and_round_percentage(
+                _OBSERVABILITY_BASE_SCORE
+                + _OBSERVABILITY_SIGNAL_INCREMENT
+                * sum([operator_action_surface, panel_unified, mesh_state_surface])
+            ),
+            evidence_status="operator_and_panel_surface_verified",
+            rationale_zh="operator action 与 unified panel 及 mesh_runtime_state 透明面均可由真实代码定位。",
+        ),
+        DomainCompletionScore(
+            domain_id="D8_manifestation_carrier_semantics",
+            topic="manifestation / carrier semantics",
+            weight_pct=10.0,
+            completion_pct=72.0 if _module_exists("core.desktop_presence_runtime") else 45.0,
+            evidence_status="semantic_surface_present_runtime_validation_pending",
+            rationale_zh="manifestation 与 carrier 语义面已存在，仍需更多跨仓运行证据支撑最终闭环结论。",
+        ),
+    ]
+
+    total_weight = sum(item.weight_pct for item in domain_scores)
+    if total_weight <= 0.0:
+        raise ValueError("Domain score total weight must be > 0.")
+    overall_completion_pct = _clamp_and_round_percentage(
+        sum(item.weight_pct * item.completion_pct for item in domain_scores) / total_weight
+    )
+
+    remaining_work = [
+        RemainingWorkItem(
+            work_id="RW1_mesh_full_runtime_contract_closure",
+            title="闭合 full mesh runtime 与 barrier coordination 跨仓运行契约",
+            priority=WorkPriority.MUST_DO,
+            gap_type=GapType.CORE_GAP,
+            evidence_status="contract_signals_present_but_runtime_deferred",
+            why_not_complete_zh="Android mesh participation contract 明确 full mesh 与 barrier 仍 deferred，当前无法判定运行级闭合。",
+            blocking_propositions=["P6_mesh_collaboration_multi_device_runtime"],
+            evidence_anchors=[_ANDROID_MESH_CONTRACT, _ANDROID_MESH_TEST, "core/unified_governance_semantics.py"],
+        ),
+        RemainingWorkItem(
+            work_id="RW2_cross_repo_execution_runtime_proof",
+            title="补足跨仓 execution governance 运行态一致性证明（真实 Android 端到端证据）",
+            priority=WorkPriority.MUST_DO,
+            gap_type=GapType.PROOF_GAP,
+            evidence_status="semantic_contract_present_live_runtime_evidence_insufficient",
+            why_not_complete_zh="当前更多是结构/契约级证据，缺少稳定可回归的跨仓活体运行证据链。",
+            blocking_propositions=[
+                "P3_execution_governance_unified_semantics",
+                "P4_multimodal_main_chain_closure",
+            ],
+            evidence_anchors=[
+                "core/unified_execution_governance.py",
+                "galaxy_gateway/android/handlers/goal_execution.py",
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+            ],
+        ),
+        RemainingWorkItem(
+            work_id="RW3_capability_truth_alignment",
+            title="收敛 Android 本地能力状态与 V2 capability truth 漂移",
+            priority=WorkPriority.IMPORTANT_SECONDARY,
+            gap_type=GapType.GOVERNANCE_GAP,
+            evidence_status="central_policy_present_cross_repo_alignment_not_closed",
+            why_not_complete_zh="V2 capability/readiness/policy 治理已成立，但 Android 本地状态与中心 truth 仍需持续校准机制。",
+            blocking_propositions=["P5_capability_authority_readiness_policy"],
+            evidence_anchors=[
+                "core/android_mode_gate_policy.py",
+                "core/unified/capability_resolver.py",
+                _ANDROID_AUTONOMOUS_PIPELINE,
+            ],
+        ),
+        RemainingWorkItem(
+            work_id="RW4_multimodal_runtime_evidence_hardening",
+            title="强化 multimodal 主链全链路运行级验证",
+            priority=WorkPriority.IMPORTANT_SECONDARY,
+            gap_type=GapType.RUNTIME_GAP,
+            evidence_status="semantic_chain_exists_runtime_closure_not_fully_proven",
+            why_not_complete_zh="多模态主链语义已建立，但缺少稳定的跨仓端到端运行验证闭环。",
+            blocking_propositions=["P4_multimodal_main_chain_closure"],
+            evidence_anchors=[
+                "core/desktop_presence_runtime.py",
+                "core/android_nl_semantic_chain_contract.py",
+                _ANDROID_WS_CLIENT,
+            ],
+        ),
+        RemainingWorkItem(
+            work_id="RW5_operator_scorecard_regression_gate",
+            title="将完成度 scorecard 与剩余缺口清单纳入回归门禁",
+            priority=WorkPriority.ENHANCEMENT,
+            gap_type=GapType.CLOSURE_GAP,
+            evidence_status="review_contract_available_operator_gate_not_yet_enforced",
+            why_not_complete_zh="已有可机读审查结构，但尚未形成统一的自动化收口门禁与趋势比较机制。",
+            blocking_propositions=["P8_remaining_primary_axes"],
+            evidence_anchors=[
+                "core/joint_dual_repo_cognition_closure_review.py",
+                "tests/test_joint_dual_repo_cognition_closure_review.py",
+            ],
+        ),
+    ]
+
+    has_runtime_or_proof_gap = _has_critical_runtime_gaps(remaining_work)
+    current_stage = _classify_stage(overall_completion_pct, has_runtime_or_proof_gap)
+    stage_reason_zh = (
+        "中心治理、执行链与状态透明面已稳定成形；"
+        "但 mesh full runtime、跨仓运行态一致性与多模态运行级证据仍存在核心缺口，"
+        "整体处于 mid-stage consolidation。"
+        if current_stage == SystemStage.MID_STAGE_CONSOLIDATION
+        else "阶段由综合完成度与关键运行级缺口自动判定。"
+    )
+
+    return JointCognitionClosureReport(
+        propositions=propositions,
+        domain_scores=domain_scores,
+        overall_completion_pct=overall_completion_pct,
+        current_stage=current_stage,
+        stage_reason_zh=stage_reason_zh,
+        remaining_work=remaining_work,
+    )
 
 
 __all__ = [
@@ -350,7 +661,12 @@ __all__ = [
     "JOINT_COGNITION_CLOSURE_METHODOLOGY",
     "PropositionVerdict",
     "ClosureBoundary",
+    "SystemStage",
+    "GapType",
+    "WorkPriority",
     "SystemPropositionReview",
+    "DomainCompletionScore",
+    "RemainingWorkItem",
     "JointCognitionClosureReport",
     "build_joint_dual_repo_cognition_closure_review",
 ]
