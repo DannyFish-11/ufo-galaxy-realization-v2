@@ -124,10 +124,8 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert cross["android_autonomy_scope"] == "subordinate_participation"
     assert cross["governance_precedence"]["takeover"]["eligible"] is True
     assert cross["runtime_execution_state"]["highest_priority_execution_type"] == "takeover_request"
-    assert (
-        cross["governance_precedence"]["delegated_execution"]["decision_causality"]["active_execution_count"]
-        == 1
-    )
+    causality = cross["governance_precedence"]["delegated_execution"]["decision_causality"]
+    assert causality["active_execution_count"] == 1
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL

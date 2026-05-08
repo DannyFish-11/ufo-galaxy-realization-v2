@@ -320,12 +320,13 @@ def build_unified_governance_state(
             device_ids = [e.device_id for e in list_active_sessions()]
         except Exception:
             device_ids = []
+    # Deduplicate while preserving the previously collected session order.
     device_ids = list(dict.fromkeys(device_ids or []))
     execution_runtime_state = get_execution_runtime_snapshot(device_ids=device_ids)
     runtime_by_device = {
-        str(entry.get("device_id", "")): entry
+        entry["device_id"]: entry
         for entry in execution_runtime_state.get("devices", [])
-        if entry.get("device_id")
+        if isinstance(entry.get("device_id"), str) and entry.get("device_id")
     }
 
     devices: List[Dict[str, Any]] = []

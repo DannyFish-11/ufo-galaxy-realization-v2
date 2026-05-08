@@ -829,9 +829,10 @@ def get_execution_runtime_snapshot(
     The snapshot is read-only and derived from the unified active-execution
     registry used by :func:`evaluate_execution_governance`.
     """
-    tracked_device_ids = set(device_ids or [])
+    requested_device_ids = set(device_ids or [])
     with _active_executions_lock:
-        tracked_device_ids.update(_active_executions.keys())
+        registry_device_ids = set(_active_executions.keys())
+    tracked_device_ids = requested_device_ids | registry_device_ids
 
     devices: List[Dict[str, Any]] = []
     active_device_count = 0
@@ -862,12 +863,20 @@ def get_execution_runtime_snapshot(
             item["execution_type"] == ExecutionType.takeover_request.value
             for item in active_items
         )
-        blocked_execution_types: List[str] = []
-        if takeover_active:
-            blocked_execution_types = [
-                ExecutionType.goal_execution.value,
-                ExecutionType.parallel_subtask.value,
-            ]
+        active_execution_types = {
+            ExecutionType.from_string(item["execution_type"])
+            for item in active_items
+        }
+        blocked_execution_type_values: set[str] = set()
+        for active_execution_type in active_execution_types:
+            active_policy = get_execution_type_policy(active_execution_type)
+            if not active_policy or not active_policy.blocks_lower_priority:
+                continue
+            active_priority = int(_EXECUTION_TYPE_PRIORITY.get(active_execution_type, 99))
+            for candidate_type, candidate_policy in _EXECUTION_TYPE_POLICIES.items():
+                if int(candidate_policy.priority) > active_priority:
+                    blocked_execution_type_values.add(candidate_type.value)
+        blocked_execution_types = sorted(blocked_execution_type_values)
 
         active_count = len(active_items)
         if active_count > 0:
