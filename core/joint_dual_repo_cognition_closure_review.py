@@ -17,10 +17,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 import importlib
 import importlib.util
+import logging
 import os
 import sys
 import time
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 JOINT_COGNITION_CLOSURE_AUTHORITY: str = (
     "JOINT_DUAL_REPO_COGNITION_CLOSURE_REVIEW_V1::"
@@ -32,6 +35,31 @@ JOINT_COGNITION_CLOSURE_METHODOLOGY: str = (
     "METHOD::仅使用当前真实代码锚点。"
     "V2 侧通过 import/source 检查；Android 侧通过明确文件锚点引用。"
     "PR #993/历史文档/路线叙事不作为事实证据。"
+)
+
+_V2_ALLOWED_MODULE_PREFIXES = ("core.", "galaxy_gateway.")
+_ROUTE_OPERATOR_ACTION = "/api/v1/operator/action"
+_ROUTE_PANEL_UNIFIED = "/api/v1/panel/unified"
+_MESH_RUNTIME_STATE_KEY = "mesh_runtime_state"
+_ANDROID_MESH_CONTRACT = (
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
+    "AndroidMeshParticipationContract.kt"
+)
+_ANDROID_LOCAL_COLLAB = (
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
+    "LocalCollaborationAgent.kt"
+)
+_ANDROID_MESH_TEST = (
+    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/"
+    "Pr8AndroidMeshParticipationContractTest.kt"
+)
+_ANDROID_AUTONOMOUS_PIPELINE = (
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
+    "AutonomousExecutionPipeline.kt"
+)
+_ANDROID_WS_CLIENT = (
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/"
+    "GalaxyWebSocketClient.kt"
 )
 
 
@@ -98,59 +126,43 @@ def _module_exists(module_path: str) -> bool:
         spec = importlib.util.find_spec(module_path)
         if spec is not None:
             return True
-    except (ModuleNotFoundError, ImportError, AttributeError, ValueError):
-        pass
+    except (ModuleNotFoundError, ImportError, AttributeError, ValueError) as exc:
+        logger.debug("_module_exists find_spec failed for %s: %s", module_path, exc)
 
     rel_path = module_path.replace(".", os.sep) + ".py"
     for base in sys.path:
         if os.path.isfile(os.path.join(base, rel_path)):
             return True
+    rel_pkg = module_path.replace(".", os.sep) + os.sep + "__init__.py"
+    for base in sys.path:
+        if os.path.isfile(os.path.join(base, rel_pkg)):
+            return True
     return False
 
 
 def _source_contains(module_path: str, token: str) -> bool:
+    if not module_path.startswith(_V2_ALLOWED_MODULE_PREFIXES):
+        return False
     try:
         spec = importlib.util.find_spec(module_path)
         if spec and spec.origin and os.path.isfile(spec.origin):
-            with open(spec.origin, encoding="utf-8", errors="replace") as fh:
+            with open(spec.origin, encoding="utf-8", errors="strict") as fh:
                 return token in fh.read()
-    except Exception:
-        pass
+    except (UnicodeDecodeError, OSError, ValueError, ImportError, AttributeError) as exc:
+        logger.debug("_source_contains read failed for %s: %s", module_path, exc)
     return False
 
 
 def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureReport:
     """构建 8 项系统级命题的正式审查收口报告。"""
 
-    operator_action_surface = _source_contains("core.routes.operator", '/api/v1/operator/action')
-    panel_unified = _source_contains("core.routes.panel", '/api/v1/panel/unified')
+    operator_action_surface = _source_contains("core.routes.operator", _ROUTE_OPERATOR_ACTION)
+    panel_unified = _source_contains("core.routes.panel", _ROUTE_PANEL_UNIFIED)
     governance_semantics = _module_exists("core.unified_governance_semantics")
     execution_governance = _module_exists("core.unified_execution_governance")
     mode_gate_policy = _module_exists("core.android_mode_gate_policy")
     nl_chain_contract = _module_exists("core.android_nl_semantic_chain_contract")
-    mesh_state_surface = _source_contains("core.unified_governance_semantics", "mesh_runtime_state")
-
-    # Android 外仓锚点（引用，不在本仓 runtime import）
-    android_mesh_contract = (
-        "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
-        "AndroidMeshParticipationContract.kt"
-    )
-    android_local_collab = (
-        "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
-        "LocalCollaborationAgent.kt"
-    )
-    android_mesh_test = (
-        "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/"
-        "Pr8AndroidMeshParticipationContractTest.kt"
-    )
-    android_autonomous_pipeline = (
-        "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
-        "AutonomousExecutionPipeline.kt"
-    )
-    android_ws_client = (
-        "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/"
-        "GalaxyWebSocketClient.kt"
-    )
+    mesh_state_surface = _source_contains("core.unified_governance_semantics", _MESH_RUNTIME_STATE_KEY)
 
     propositions = [
         SystemPropositionReview(
@@ -175,7 +187,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/unified_governance_semantics.py",
                 "core/android_mode_gate_policy.py",
             ],
-            android_code_anchors=[android_autonomous_pipeline],
+            android_code_anchors=[_ANDROID_AUTONOMOUS_PIPELINE],
         ),
         SystemPropositionReview(
             proposition_id="P2_android_strong_runtime_node",
@@ -191,9 +203,9 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/android_nl_semantic_chain_contract.py",
             ],
             android_code_anchors=[
-                android_local_collab,
-                android_autonomous_pipeline,
-                android_ws_client,
+                _ANDROID_LOCAL_COLLAB,
+                _ANDROID_AUTONOMOUS_PIPELINE,
+                _ANDROID_WS_CLIENT,
             ],
             constrained_or_deferred=[
                 "Android 作为执行参与方已成立，但 mesh 全局协调 authority 不在 Android 本地闭合。",
@@ -213,9 +225,9 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "galaxy_gateway/android/handlers/goal_execution.py",
             ],
             android_code_anchors=[
-                android_mesh_contract,
-                android_mesh_test,
-                android_autonomous_pipeline,
+                _ANDROID_MESH_CONTRACT,
+                _ANDROID_MESH_TEST,
+                _ANDROID_AUTONOMOUS_PIPELINE,
             ],
             constrained_or_deferred=[
                 "跨仓一致性目前以 contract+测试锚点成立，非单仓内可完全运行时证明。",
@@ -235,7 +247,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/android_nl_semantic_chain_contract.py",
                 "galaxy_gateway/android/handlers/goal_execution.py",
             ],
-            android_code_anchors=[android_ws_client],
+            android_code_anchors=[_ANDROID_WS_CLIENT],
             constrained_or_deferred=[
                 "多模态主链语义完整，但全链路运行级证明仍需额外 E2E 证据。",
             ],
@@ -254,7 +266,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/unified/capability_resolver.py",
                 "core/android_mode_gate_policy.py",
             ],
-            android_code_anchors=[android_ws_client, android_autonomous_pipeline],
+            android_code_anchors=[_ANDROID_WS_CLIENT, _ANDROID_AUTONOMOUS_PIPELINE],
             constrained_or_deferred=[
                 "Android 本地能力状态与 V2 truth 仍需持续 cross-repo 对齐验证。",
             ],
@@ -273,7 +285,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/operator_surface.py",
                 "core/unified_panel_aggregation.py",
             ],
-            android_code_anchors=[android_mesh_contract, android_mesh_test, android_local_collab],
+            android_code_anchors=[_ANDROID_MESH_CONTRACT, _ANDROID_MESH_TEST, _ANDROID_LOCAL_COLLAB],
             constrained_or_deferred=[
                 "full_mesh_runtime_execution_deferred_until_hybrid_execute_full_is_available",
                 "barrier_coordination_deferred_until_cross_repo_runtime_contract_is_closed",
@@ -301,7 +313,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/android_mode_gate_policy.py",
                 "core/android_nl_semantic_chain_contract.py",
             ],
-            android_code_anchors=[android_autonomous_pipeline, android_local_collab],
+            android_code_anchors=[_ANDROID_AUTONOMOUS_PIPELINE, _ANDROID_LOCAL_COLLAB],
         ),
         SystemPropositionReview(
             proposition_id="P8_remaining_primary_axes",
@@ -326,7 +338,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
                 "core/routes/operator.py",
                 "core/unified_governance_semantics.py",
             ],
-            android_code_anchors=[android_mesh_contract],
+            android_code_anchors=[_ANDROID_MESH_CONTRACT],
         ),
     ]
 

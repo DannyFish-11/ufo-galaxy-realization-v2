@@ -71,4 +71,4 @@
 
 ---
 
-本文件与 `core/joint_dual_repo_cognition_closure_review.py` / 对应测试共同构成当前阶段默认认知与治理收口基线。
+本文件与 `core/joint_dual_repo_cognition_closure_review.py`、`tests/test_joint_dual_repo_cognition_closure_review.py` 共同构成当前阶段默认认知与治理收口基线。

@@ -51,10 +51,21 @@ def test_non_closed_propositions_must_expose_constraints() -> None:
 
 def test_mesh_proposition_explicitly_constrained() -> None:
     report = build_joint_dual_repo_cognition_closure_review()
-    mesh = next(p for p in report.propositions if p.proposition_id == "P6_mesh_collaboration_multi_device_runtime")
+    mesh = next(
+        (p for p in report.propositions if p.proposition_id == "P6_mesh_collaboration_multi_device_runtime"),
+        None,
+    )
+    assert mesh is not None
     assert mesh.boundary == ClosureBoundary.CONSTRAINED
     assert mesh.verdict == PropositionVerdict.PARTIAL
-    assert any("deferred" in s for s in mesh.constrained_or_deferred)
+    assert (
+        "full_mesh_runtime_execution_deferred_until_hybrid_execute_full_is_available"
+        in mesh.constrained_or_deferred
+    )
+    assert (
+        "barrier_coordination_deferred_until_cross_repo_runtime_contract_is_closed"
+        in mesh.constrained_or_deferred
+    )
 
 
 def test_to_dict_is_json_ready() -> None:
