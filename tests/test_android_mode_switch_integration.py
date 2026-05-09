@@ -586,6 +586,20 @@ class TestEvaluateReadinessAndroidGateOff:
         # parallel is not required, so its gate should not be blocking
         assert "android_parallel_execution_enabled" not in verdict.blocking_gates
 
+    def test_J4_explicit_android_mode_state_local_only_normalizes_to_local(self):
+        register_session("dev_reported_local", posture="join_runtime")
+        snap = _make_snapshot(cross_device_enabled=True)
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=snap,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={"canonical_mode": "local"},
+        ):
+            state = build_mode_state_for_device("dev_reported_local")
+
+        assert state.mode == AndroidDeviceMode.local
+
 
 # ---------------------------------------------------------------------------
 # K. evaluate_android_mode_readiness — local_loop_ready=False → not takeover eligible

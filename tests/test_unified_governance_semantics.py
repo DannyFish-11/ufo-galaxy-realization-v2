@@ -148,6 +148,18 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
                 "offline_queue_depth": 3,
                 "execution_busy": True,
                 "local_inference_available": True,
+                "android_reported_mode": "local",
+                "android_reported_mode_state": "local_only",
+                "android_reported_mode_readiness_state": "degraded",
+                "android_reported_cross_device_eligibility": False,
+                "android_reported_goal_execution_eligibility": False,
+                "android_reported_parallel_execution_eligibility": False,
+                "android_reported_local_intelligence_status": "disabled",
+                "android_reported_local_inference_ready": False,
+                "android_reported_local_inference_available": True,
+                "android_semantics_absorbed_at": 451.0,
+                "android_semantics_reported_at": 449.0,
+                "android_semantics_age_s": 2.0,
                 "runtime_health_status": "degraded",
                 "current_fallback_tier": "center_delegated",
                 "snapshot_reconciliation_status": "conflict_center_truth_retained",
@@ -198,6 +210,14 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert causality["execution_busy"] is True
     assert causality["offline_queue_depth"] == 3
     assert causality["local_inference_available"] is True
+    assert causality["android_reported_mode"] == "local"
+    assert causality["android_reported_mode_state"] == "local_only"
+    assert causality["android_reported_mode_readiness_state"] == "degraded"
+    assert causality["android_reported_cross_device_eligibility"] is False
+    assert causality["android_reported_local_inference_available"] is True
+    assert causality["android_semantics_absorbed_at"] == 451.0
+    assert causality["android_semantics_reported_at"] == 449.0
+    assert causality["android_semantics_age_s"] == 2.0
     assert causality["runtime_health_status"] == "degraded"
     assert causality["current_fallback_tier"] == "center_delegated"
     assert causality["snapshot_reconciliation_status"] == "conflict_center_truth_retained"

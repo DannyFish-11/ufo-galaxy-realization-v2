@@ -821,12 +821,48 @@ def notify_execution_completed(
     return removed
 
 
+def _resolve_local_inference_availability(
+    *,
+    report_semantics: Optional[Dict[str, Any]],
+    device_snapshot: Any,
+) -> bool:
+    """Return canonical local-inference availability with Android-report precedence."""
+    if isinstance(report_semantics, dict):
+        reported_value = report_semantics.get("local_inference_available")
+        if reported_value is not None:
+            return bool(reported_value)
+
+    inferred_value = getattr(device_snapshot, "is_local_ai_ready", None)
+    if callable(inferred_value):
+        try:
+            return bool(inferred_value())
+        except Exception as exc:
+            logger.debug(
+                "_resolve_local_inference_availability: snapshot local-ai probe failed: %s",
+                exc,
+            )
+            return False
+    return False
+
+
 def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     """Return Android runtime pressure truth for *device_id* (best effort)."""
     snapshot: Dict[str, Any] = {
         "offline_queue_depth": 0,
         "current_fallback_tier": None,
         "local_inference_available": False,
+        "android_reported_mode": None,
+        "android_reported_mode_state": None,
+        "android_reported_mode_readiness_state": None,
+        "android_reported_cross_device_eligibility": None,
+        "android_reported_goal_execution_eligibility": None,
+        "android_reported_parallel_execution_eligibility": None,
+        "android_reported_local_intelligence_status": None,
+        "android_reported_local_inference_ready": None,
+        "android_reported_local_inference_available": None,
+        "android_semantics_absorbed_at": 0.0,
+        "android_semantics_reported_at": None,
+        "android_semantics_age_s": None,
         "runtime_health_status": "unknown",
         "execution_busy": False,
         "snapshot_reconciliation_status": "unavailable",
@@ -842,11 +878,58 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     }
     try:
         from core.android_device_state_store import (
+            get_device_capability_report_semantics,
             get_device_state_snapshot,
             get_device_snapshot_reconciliation,
             list_recent_execution_events,
         )
 
+        report_semantics = get_device_capability_report_semantics(device_id)
+        if isinstance(report_semantics, dict) and report_semantics:
+            snapshot["android_reported_mode"] = report_semantics.get("canonical_mode")
+            snapshot["android_reported_mode_state"] = report_semantics.get("reported_mode_state")
+            snapshot["android_reported_mode_readiness_state"] = report_semantics.get(
+                "mode_readiness_state"
+            )
+            snapshot["android_reported_cross_device_eligibility"] = report_semantics.get(
+                "cross_device_eligibility"
+            )
+            snapshot["android_reported_goal_execution_eligibility"] = report_semantics.get(
+                "goal_execution_eligibility"
+            )
+            snapshot["android_reported_parallel_execution_eligibility"] = report_semantics.get(
+                "parallel_execution_eligibility"
+            )
+            snapshot["android_reported_local_intelligence_status"] = report_semantics.get(
+                "local_intelligence_status"
+            )
+            snapshot["android_reported_local_inference_ready"] = report_semantics.get(
+                "local_inference_ready"
+            )
+            snapshot["android_reported_local_inference_available"] = report_semantics.get(
+                "local_inference_available"
+            )
+            _semantics_absorbed_at = report_semantics.get("absorbed_at")
+            try:
+                snapshot["android_semantics_absorbed_at"] = float(_semantics_absorbed_at or 0.0)
+            except (TypeError, ValueError):
+                snapshot["android_semantics_absorbed_at"] = 0.0
+            _semantics_reported_at = report_semantics.get("reported_at")
+            try:
+                snapshot["android_semantics_reported_at"] = (
+                    float(_semantics_reported_at)
+                    if _semantics_reported_at is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                snapshot["android_semantics_reported_at"] = None
+            _semantics_age_s = report_semantics.get("semantics_age_s")
+            try:
+                snapshot["android_semantics_age_s"] = (
+                    float(_semantics_age_s) if _semantics_age_s is not None else None
+                )
+            except (TypeError, ValueError):
+                snapshot["android_semantics_age_s"] = None
         device_snapshot = get_device_state_snapshot(device_id)
         if device_snapshot is not None:
             _queue_depth = getattr(device_snapshot, "offline_queue_depth", None)
@@ -855,12 +938,10 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             snapshot["current_fallback_tier"] = getattr(
                 device_snapshot, "current_fallback_tier", None
             )
-            _is_local_ai_ready = getattr(device_snapshot, "is_local_ai_ready", None)
-            if callable(_is_local_ai_ready):
-                try:
-                    snapshot["local_inference_available"] = bool(_is_local_ai_ready())
-                except Exception:
-                    snapshot["local_inference_available"] = False
+            snapshot["local_inference_available"] = _resolve_local_inference_availability(
+                report_semantics=report_semantics,
+                device_snapshot=device_snapshot,
+            )
             _health = getattr(device_snapshot, "runtime_health_snapshot", None)
             if isinstance(_health, dict):
                 snapshot["runtime_health_status"] = str(
@@ -991,6 +1072,42 @@ def get_execution_runtime_snapshot(
                 "offline_queue_depth": int(runtime_pressure.get("offline_queue_depth", 0) or 0),
                 "current_fallback_tier": runtime_pressure.get("current_fallback_tier"),
                 "local_inference_available": bool(runtime_pressure.get("local_inference_available", False)),
+                "android_reported_mode": runtime_pressure.get("android_reported_mode"),
+                "android_reported_mode_state": runtime_pressure.get("android_reported_mode_state"),
+                "android_reported_mode_readiness_state": runtime_pressure.get(
+                    "android_reported_mode_readiness_state"
+                ),
+                "android_reported_cross_device_eligibility": runtime_pressure.get(
+                    "android_reported_cross_device_eligibility"
+                ),
+                "android_reported_goal_execution_eligibility": runtime_pressure.get(
+                    "android_reported_goal_execution_eligibility"
+                ),
+                "android_reported_parallel_execution_eligibility": runtime_pressure.get(
+                    "android_reported_parallel_execution_eligibility"
+                ),
+                "android_reported_local_intelligence_status": runtime_pressure.get(
+                    "android_reported_local_intelligence_status"
+                ),
+                "android_reported_local_inference_ready": runtime_pressure.get(
+                    "android_reported_local_inference_ready"
+                ),
+                "android_reported_local_inference_available": runtime_pressure.get(
+                    "android_reported_local_inference_available"
+                ),
+                "android_semantics_absorbed_at": float(
+                    runtime_pressure.get("android_semantics_absorbed_at", 0.0) or 0.0
+                ),
+                "android_semantics_reported_at": (
+                    float(runtime_pressure.get("android_semantics_reported_at"))
+                    if runtime_pressure.get("android_semantics_reported_at") is not None
+                    else None
+                ),
+                "android_semantics_age_s": (
+                    float(runtime_pressure.get("android_semantics_age_s"))
+                    if runtime_pressure.get("android_semantics_age_s") is not None
+                    else None
+                ),
                 "runtime_health_status": str(runtime_pressure.get("runtime_health_status", "unknown") or "unknown"),
                 "execution_busy": bool(runtime_pressure.get("execution_busy", False)),
                 "snapshot_reconciliation_status": str(

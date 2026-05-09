@@ -647,9 +647,18 @@ def build_mode_state_for_device(
         logger.debug("build_mode_state_for_device: session lookup failed: %s", exc)
 
     # ── Snapshot gates ─────────────────────────────────────────────────────
+    reported_mode: Optional[str] = None
     try:
-        from core.android_device_state_store import get_device_state_snapshot
+        from core.android_device_state_store import (
+            get_device_capability_report_semantics,
+            get_device_state_snapshot,
+        )
         snap = get_device_state_snapshot(device_id)
+        semantics = get_device_capability_report_semantics(device_id)
+        if isinstance(semantics, dict):
+            _reported_mode = semantics.get("canonical_mode")
+            if isinstance(_reported_mode, str) and _reported_mode:
+                reported_mode = _reported_mode
         if snap is not None:
             cfg = snap.local_loop_config or {}
             state.cross_device_enabled = bool(
@@ -669,7 +678,9 @@ def build_mode_state_for_device(
         logger.debug("build_mode_state_for_device: snapshot read failed: %s", exc)
 
     # ── Infer mode ────────────────────────────────────────────────────────
-    if state.cross_device_enabled and state.session_active:
+    if reported_mode and (state.session_active or state.snapshot_age_s is not None):
+        state.mode = AndroidDeviceMode.from_string(reported_mode)
+    elif state.cross_device_enabled and state.session_active:
         state.mode = AndroidDeviceMode.cross_device
     elif state.session_active:
         state.mode = AndroidDeviceMode.local

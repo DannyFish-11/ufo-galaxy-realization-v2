@@ -83,6 +83,12 @@ ANDROID_DEVICE_STATE_STORE_AUTHORITY: str = (
     "DEVICE_EXECUTION_EVENT messages.  All operator/control-plane surfaces "
     "that expose Android device state MUST read from this store."
 )
+ANDROID_CAPABILITY_REPORT_SEMANTICS_AUTHORITY: str = (
+    "ANDROID_CAPABILITY_REPORT_SEMANTICS_V1: "
+    "core.android_device_state_store canonically normalizes Android "
+    "capability_report metadata semantics (mode/readiness/eligibility/"
+    "local-inference/continuity hints) for downstream V2 consumers."
+)
 
 DEVICE_STATE_SNAPSHOT_MSG_TYPE: str = "device_state_snapshot"
 DEVICE_EXECUTION_EVENT_MSG_TYPE: str = "device_execution_event"
@@ -99,6 +105,12 @@ SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
 # the Android-side execution outcome.
 _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
     {"completed", "failed", "stagnation", "gate_decision"}
+)
+_EPOCH_MILLISECOND_CONVERSION_THRESHOLD: float = 1_000_000_000_000.0
+_ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
+_ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {"local_only": "local"}
+_ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset(
+    {"local", "cross_device", "transitioning", "unknown"}
 )
 
 
@@ -400,6 +412,7 @@ class _AndroidDeviceStateStore:
         self._lock = threading.Lock()
         # Latest snapshot per device_id
         self._snapshots: Dict[str, DeviceStateSnapshot] = {}
+        self._capability_report_semantics: Dict[str, Dict[str, Any]] = {}
         # Latest convergence decision per device_id.
         self._snapshot_reconciliation: Dict[str, Dict[str, Any]] = {}
         # Recent execution events (capped at _MAX_EVENTS)
@@ -449,6 +462,17 @@ class _AndroidDeviceStateStore:
             reconciliation.get("applied"),
         )
         return canonical
+
+    def absorb_capability_report_semantics(
+        self,
+        device_id: str,
+        message: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Normalize and store Android capability_report semantic hints."""
+        semantics = _normalize_capability_report_semantics(device_id, message)
+        with self._lock:
+            self._capability_report_semantics[device_id] = dict(semantics)
+        return dict(semantics)
 
     # ------------------------------------------------------------------
     # Ingress: absorb DEVICE_EXECUTION_EVENT payloads
@@ -515,6 +539,12 @@ class _AndroidDeviceStateStore:
         with self._lock:
             return self._snapshots.get(device_id)
 
+    def get_capability_report_semantics(self, device_id: str) -> Dict[str, Any]:
+        """Return the latest normalized capability_report semantics for *device_id*."""
+        with self._lock:
+            semantics = self._capability_report_semantics.get(device_id)
+            return dict(semantics or {})
+
     def list_snapshots(self) -> List[DeviceStateSnapshot]:
         """Return all current device snapshots (one per device_id)."""
         with self._lock:
@@ -550,6 +580,7 @@ class _AndroidDeviceStateStore:
 
         devices: List[Dict[str, Any]] = []
         for snap in snapshots:
+            capability_report_semantics = self.get_capability_report_semantics(snap.device_id)
             devices.append({
                 "device_id": snap.device_id,
                 "absorbed_at": snap.absorbed_at,
@@ -604,6 +635,7 @@ class _AndroidDeviceStateStore:
                         ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS
                     ),
                 },
+                "android_capability_report_semantics": capability_report_semantics,
             })
 
         return {
@@ -762,6 +794,114 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
         grounding_fallback_tier=_first_str("grounding_fallback_tier", "groundingFallbackTier"),
         raw_payload=dict(payload),
     )
+
+
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value in (0, 0.0):
+            return False
+        if value in (1, 1.0):
+            return True
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+    return None
+
+
+def _coerce_optional_str(value: Any, *, lowercase: bool = False) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    return normalized.lower() if lowercase else normalized
+
+
+def _normalize_optional_timestamp(raw_value: Any) -> Optional[float]:
+    if raw_value is None:
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if value > _EPOCH_MILLISECOND_CONVERSION_THRESHOLD:
+        value /= _ANDROID_MILLISECONDS_TO_SECONDS
+    return value
+
+
+def _normalize_capability_report_semantics(
+    device_id: str,
+    message: Dict[str, Any],
+) -> Dict[str, Any]:
+    metadata = message.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    absorbed_at = time.time()
+    normalized_mode_state = _coerce_optional_str(metadata.get("mode_state"), lowercase=True)
+    raw_mode_state = normalized_mode_state or ""
+    canonical_mode = _ANDROID_REPORTED_MODE_ALIASES.get(raw_mode_state, raw_mode_state or None)
+    if canonical_mode not in _ANDROID_CANONICAL_MODE_VALUES:
+        canonical_mode = None
+    if normalized_mode_state and canonical_mode is None:
+        logger.debug(
+            "_normalize_capability_report_semantics: unmapped mode_state=%r for device_id=%r",
+            normalized_mode_state,
+            device_id,
+        )
+    mode_readiness_state = _coerce_optional_str(
+        metadata.get("mode_readiness_state"),
+        lowercase=True,
+    )
+    reported_at = _normalize_optional_timestamp(message.get("timestamp"))
+    semantics_age_s = None
+    if reported_at is not None:
+        semantics_age_s = max(0.0, absorbed_at - reported_at)
+    return {
+        "device_id": device_id,
+        "canonical_mode": canonical_mode,
+        "reported_mode_state": raw_mode_state or None,
+        "mode_readiness_state": mode_readiness_state,
+        "cross_device_eligibility": _coerce_optional_bool(
+            metadata.get("cross_device_eligibility")
+        ),
+        "goal_execution_eligibility": _coerce_optional_bool(
+            metadata.get("goal_execution_eligibility")
+        ),
+        "parallel_execution_eligibility": _coerce_optional_bool(
+            metadata.get("parallel_execution_eligibility")
+        ),
+        "degraded_mode": _coerce_optional_bool(metadata.get("degraded_mode")),
+        "local_intelligence_status": _coerce_optional_str(
+            metadata.get("local_intelligence_status"),
+            lowercase=True,
+        ),
+        "local_inference_ready": _coerce_optional_bool(
+            metadata.get("local_inference_ready")
+        ),
+        "local_inference_available": _coerce_optional_bool(
+            metadata.get("local_inference_available")
+        ),
+        "runtime_attachment_session_id": _coerce_optional_str(
+            message.get("runtime_attachment_session_id")
+        ),
+        "durable_session_id": _coerce_optional_str(
+            message.get("durable_session_id")
+        ),
+        "continuity_epoch": message.get("continuity_epoch"),
+        "route_mode": _coerce_optional_str(message.get("route_mode"), lowercase=True),
+        "reported_at": reported_at,
+        "absorbed_at": absorbed_at,
+        "semantics_age_s": semantics_age_s,
+        "_source": ANDROID_CAPABILITY_REPORT_SEMANTICS_AUTHORITY,
+    }
 
 
 def _parse_ordering_timestamp(snapshot: Optional[DeviceStateSnapshot]) -> Optional[float]:
@@ -1111,6 +1251,16 @@ def list_device_state_snapshots() -> List[DeviceStateSnapshot]:
 def get_device_ecosystem_summary() -> Dict[str, Any]:
     """Return multi-device ecosystem summary.  Convenience wrapper."""
     return get_android_device_state_store().get_ecosystem_summary()
+
+
+def absorb_capability_report_semantics(device_id: str, message: Dict[str, Any]) -> Dict[str, Any]:
+    """Absorb Android capability_report semantic metadata for *device_id*."""
+    return get_android_device_state_store().absorb_capability_report_semantics(device_id, message)
+
+
+def get_device_capability_report_semantics(device_id: str) -> Dict[str, Any]:
+    """Return normalized Android capability_report semantics for *device_id*."""
+    return get_android_device_state_store().get_capability_report_semantics(device_id)
 
 
 def list_recent_execution_events(
