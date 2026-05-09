@@ -459,6 +459,21 @@ def build_unified_governance_state(
                 "current_fallback_tier": runtime_state_for_device.get(
                     "current_fallback_tier"
                 ),
+                "snapshot_reconciliation_status": runtime_state_for_device.get(
+                    "snapshot_reconciliation_status"
+                ),
+                "snapshot_reconciliation_reason": runtime_state_for_device.get(
+                    "snapshot_reconciliation_reason"
+                ),
+                "snapshot_conflict": bool(
+                    runtime_state_for_device.get("snapshot_conflict", False)
+                ),
+                "snapshot_ordering_basis": runtime_state_for_device.get(
+                    "snapshot_ordering_basis"
+                ),
+                "snapshot_last_updated_at": float(
+                    runtime_state_for_device.get("snapshot_last_updated_at", 0.0) or 0.0
+                ),
             }
             paths[path.value] = decision_dict
 

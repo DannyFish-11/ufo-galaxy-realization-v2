@@ -884,7 +884,156 @@ class TestCanonicalPathBypassRegression:
 
 
 # ===========================================================================
-# 6. Cross-device runtime roundtrip closure (machine-verifiable)
+# 6. Canonical convergence / reconciliation determinism
+# ===========================================================================
+
+
+class TestAndroidSnapshotConvergenceDeterminism:
+    """Deterministic convergence for stale/out-of-order/reconnect/conflict races."""
+
+    def test_stale_and_out_of_order_snapshot_is_rejected(self) -> None:
+        from core.android_device_state_store import (
+            absorb_device_state_snapshot,
+            get_device_snapshot_reconciliation,
+            get_device_state_snapshot,
+            reset_android_device_state_store,
+        )
+
+        reset_android_device_state_store()
+        device_id = f"snap-stale-{uuid.uuid4().hex[:8]}"
+
+        absorb_device_state_snapshot(
+            device_id,
+            {
+                "snapshot_ts": 2000,
+                "snapshot_seq": 10,
+                "model_ready": True,
+                "current_fallback_tier": "planner_local",
+            },
+        )
+        absorb_device_state_snapshot(
+            device_id,
+            {
+                "snapshot_ts": 1000,
+                "snapshot_seq": 9,
+                "model_ready": False,
+                "current_fallback_tier": "center_delegated",
+            },
+        )
+
+        stored = get_device_state_snapshot(device_id)
+        assert stored is not None
+        assert stored.model_ready is True
+        assert stored.current_fallback_tier == "planner_local"
+
+        reconciliation = get_device_snapshot_reconciliation(device_id)
+        assert reconciliation.get("status") == "out_of_order_rejected"
+        assert reconciliation.get("applied") is False
+        assert reconciliation.get("ordering_basis") == "snapshot_seq"
+
+    def test_same_timestamp_conflict_keeps_center_truth_stable(self) -> None:
+        from core.android_device_state_store import (
+            absorb_device_state_snapshot,
+            get_device_snapshot_reconciliation,
+            get_device_state_snapshot,
+            reset_android_device_state_store,
+        )
+
+        reset_android_device_state_store()
+        device_id = f"snap-conflict-{uuid.uuid4().hex[:8]}"
+
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_ts": 3000, "snapshot_seq": 4, "model_ready": True, "runtime_type": "LLAMA_CPP"},
+        )
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_ts": 3000, "snapshot_seq": 4, "model_ready": False, "runtime_type": "CENTER"},
+        )
+
+        stored = get_device_state_snapshot(device_id)
+        assert stored is not None
+        assert stored.model_ready is True
+        assert stored.runtime_type == "LLAMA_CPP"
+
+        reconciliation = get_device_snapshot_reconciliation(device_id)
+        assert reconciliation.get("status") == "conflict_center_truth_retained"
+        assert reconciliation.get("conflict") is True
+        assert reconciliation.get("applied") is False
+
+    def test_reconnect_delayed_snapshot_missing_ordering_is_rejected(self) -> None:
+        from core.android_device_state_store import (
+            absorb_device_state_snapshot,
+            get_device_snapshot_reconciliation,
+            get_device_state_snapshot,
+            reset_android_device_state_store,
+        )
+
+        reset_android_device_state_store()
+        device_id = f"snap-reconnect-{uuid.uuid4().hex[:8]}"
+
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_seq": 5, "snapshot_ts": 5000, "model_ready": True},
+        )
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_ts": 6000, "model_ready": False},
+        )
+
+        stored = get_device_state_snapshot(device_id)
+        assert stored is not None
+        assert stored.model_ready is True
+        assert stored.snapshot_seq == 5
+
+        reconciliation = get_device_snapshot_reconciliation(device_id)
+        assert reconciliation.get("status") == "reconnect_delayed_rejected"
+        assert reconciliation.get("applied") is False
+
+    def test_governance_truth_path_projects_reconciliation_causality(self) -> None:
+        from types import SimpleNamespace
+
+        from core.android_device_state_store import (
+            absorb_device_state_snapshot,
+            reset_android_device_state_store,
+        )
+        from core.unified_governance_semantics import build_unified_governance_state
+
+        reset_android_device_state_store()
+        device_id = f"snap-gov-{uuid.uuid4().hex[:8]}"
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_ts": 8000, "snapshot_seq": 2, "model_ready": True},
+        )
+        absorb_device_state_snapshot(
+            device_id,
+            {"snapshot_ts": 7000, "snapshot_seq": 1, "model_ready": False},
+        )
+
+        with patch(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            return_value=[SimpleNamespace(device_id=device_id)],
+        ), patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            return_value=SimpleNamespace(mode=SimpleNamespace(value="cross_device")),
+        ), patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            return_value=SimpleNamespace(is_dispatch_eligible=True, is_takeover_eligible=True),
+        ), patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ):
+            state = build_unified_governance_state()
+
+        device_state = next(d for d in state["devices"] if d["device_id"] == device_id)
+        causality = device_state["governance_precedence"]["delegated_execution"]["decision_causality"]
+        assert causality["snapshot_reconciliation_status"] == "out_of_order_rejected"
+        assert causality["snapshot_conflict"] is False
+        assert causality["snapshot_ordering_basis"] == "snapshot_seq"
+
+
+# ===========================================================================
+# 7. Cross-device runtime roundtrip closure (machine-verifiable)
 # ===========================================================================
 
 
@@ -1099,7 +1248,7 @@ class TestCrossDeviceRuntimeRoundtripClosure:
 
 
 # ===========================================================================
-# 7. Message type handler registration guard
+# 8. Message type handler registration guard
 # ===========================================================================
 
 

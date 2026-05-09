@@ -845,6 +845,18 @@ class TestReduceReconciliationSignal:
         assert not result.was_transitioned
         assert result.record is rec
 
+    def test_AD02_not_reconciled_uses_explicit_reject_category(self):
+        rec = self._execution_record()
+        result = reduce_reconciliation_signal(
+            rec,
+            truth_kind="runtime_state",
+            was_reconciled=False,
+            reject_reason="snapshot stale_rejected by canonical truth",
+        )
+        assert not result.was_transitioned
+        assert result.record is rec
+        assert result.transition_description.endswith("stale_rejected")
+
 
 @pytest.mark.skipif(not _TR_AVAILABLE or not _SS_AVAILABLE, reason="reducer or session state unavailable")
 class TestReduceExecutionSignal:
@@ -880,6 +892,18 @@ class TestReduceParticipantTruth:
         result = reduce_participant_truth(rec, truth_kind="result", was_reconciled=True)
         assert result.was_transitioned
         assert result.record.phase == AndroidParticipantSessionPhase.terminal_success
+
+    def test_AG02_not_reconciled_uses_explicit_reject_category(self):
+        rec = self._execution_record()
+        result = reduce_participant_truth(
+            rec,
+            truth_kind="runtime_state",
+            was_reconciled=False,
+            reject_reason="delayed reconnect_delayed_rejected by center",
+        )
+        assert not result.was_transitioned
+        assert result.record is rec
+        assert result.transition_description.endswith("reconnect_delayed_rejected")
 
 
 @pytest.mark.skipif(not _TR_AVAILABLE or not _SS_AVAILABLE, reason="reducer or session state unavailable")

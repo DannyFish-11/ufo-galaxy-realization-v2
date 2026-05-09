@@ -77,16 +77,28 @@ async def handle_device_state_snapshot(
     payload = message.get("payload") or {}
 
     status = "absorbed"
+    reconciliation_status = "unknown"
+    applied_to_canonical_truth = False
+    canonical_conflict = False
     try:
-        from core.android_device_state_store import absorb_device_state_snapshot
+        from core.android_device_state_store import (
+            absorb_device_state_snapshot,
+            get_device_snapshot_reconciliation,
+        )
         snap = absorb_device_state_snapshot(device_id, payload)
+        reconciliation = get_device_snapshot_reconciliation(device_id)
+        reconciliation_status = str(reconciliation.get("status", "unknown"))
+        applied_to_canonical_truth = bool(reconciliation.get("applied", False))
+        canonical_conflict = bool(reconciliation.get("conflict", False))
         logger.debug(
             "device_state_snapshot absorbed: device_id=%s model_ready=%s "
-            "active_runtime=%s fallback_tier=%s",
+            "active_runtime=%s fallback_tier=%s reconciliation_status=%s applied=%s",
             device_id,
             snap.model_ready,
             snap.active_runtime_type,
             snap.current_fallback_tier,
+            reconciliation_status,
+            applied_to_canonical_truth,
         )
     except ImportError:
         logger.error(
@@ -107,6 +119,9 @@ async def handle_device_state_snapshot(
         "device_id": device_id,
         "status": status,
         "correlation_id": message_id,
+        "reconciliation_status": reconciliation_status,
+        "applied_to_canonical_truth": applied_to_canonical_truth,
+        "canonical_conflict": canonical_conflict,
     }
 
 

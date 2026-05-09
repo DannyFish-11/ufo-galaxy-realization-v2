@@ -240,6 +240,13 @@ class AndroidRuntimeTransitionResult:
 _HANDOFF_TYPE_TO_SIGNAL: Dict[str, Any] = {}  # populated after import guard below
 _EXECUTION_KIND_TO_SIGNAL: Dict[str, Any] = {}
 _TRUTH_KIND_TO_SIGNAL: Dict[str, Any] = {}
+_EXPLICIT_RECONCILIATION_REJECT_REASONS = {
+    "stale_rejected",
+    "out_of_order_rejected",
+    "reconnect_delayed_rejected",
+    "conflict_center_truth_retained",
+    "duplicate_ignored",
+}
 
 if _SESSION_STATE_AVAILABLE:
     _HANDOFF_TYPE_TO_SIGNAL = {
@@ -291,6 +298,16 @@ def _apply(
         next_signal=signal if transitioned else None,
         transition_description=description if transitioned else f"noop:{description}",
     )
+
+
+def _normalize_reconciliation_reject_reason(reject_reason: str) -> str:
+    reason = str(reject_reason or "").strip().lower()
+    if not reason:
+        return "unknown_reject_reason"
+    for known in _EXPLICIT_RECONCILIATION_REJECT_REASONS:
+        if known in reason:
+            return known
+    return reason
 
 
 # ---------------------------------------------------------------------------
@@ -415,9 +432,10 @@ def reduce_reconciliation_signal(
                 transition_description="session_state_unavailable",
             )
         if not was_reconciled:
+            normalized_reject = _normalize_reconciliation_reject_reason(reject_reason)
             return AndroidRuntimeTransitionResult(
                 record=record, was_transitioned=False,
-                transition_description=f"reconciliation_signal_not_reconciled:{reject_reason}",
+                transition_description=f"reconciliation_signal_not_reconciled:{normalized_reject}",
             )
         sig = _TRUTH_KIND_TO_SIGNAL.get(truth_kind.lower() if truth_kind else "")
         if sig is None:
@@ -510,9 +528,10 @@ def reduce_participant_truth(
                 transition_description="session_state_unavailable",
             )
         if not was_reconciled:
+            normalized_reject = _normalize_reconciliation_reject_reason(reject_reason)
             return AndroidRuntimeTransitionResult(
                 record=record, was_transitioned=False,
-                transition_description=f"participant_truth_not_reconciled:{reject_reason}",
+                transition_description=f"participant_truth_not_reconciled:{normalized_reject}",
             )
         sig = _TRUTH_KIND_TO_SIGNAL.get(truth_kind.lower() if truth_kind else "")
         if sig is None:

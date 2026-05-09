@@ -829,10 +829,16 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         "local_inference_available": False,
         "runtime_health_status": "unknown",
         "execution_busy": False,
+        "snapshot_reconciliation_status": "unavailable",
+        "snapshot_reconciliation_reason": "no_snapshot_reconciliation_data",
+        "snapshot_conflict": False,
+        "snapshot_ordering_basis": "none",
+        "snapshot_last_updated_at": 0.0,
     }
     try:
         from core.android_device_state_store import (
             get_device_state_snapshot,
+            get_device_snapshot_reconciliation,
             list_recent_execution_events,
         )
 
@@ -855,6 +861,23 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 snapshot["runtime_health_status"] = str(
                     _health.get("status") or _health.get("state") or _health.get("health") or "unknown"
                 ).strip().lower() or "unknown"
+            reconciliation = get_device_snapshot_reconciliation(device_id)
+            if isinstance(reconciliation, dict):
+                snapshot["snapshot_reconciliation_status"] = str(
+                    reconciliation.get("status", "unavailable")
+                )
+                snapshot["snapshot_reconciliation_reason"] = str(
+                    reconciliation.get("reason", "unknown")
+                )
+                snapshot["snapshot_conflict"] = bool(reconciliation.get("conflict", False))
+                snapshot["snapshot_ordering_basis"] = str(
+                    reconciliation.get("ordering_basis", "none")
+                )
+                _updated_at = reconciliation.get("updated_at", 0.0)
+                try:
+                    snapshot["snapshot_last_updated_at"] = float(_updated_at or 0.0)
+                except (TypeError, ValueError):
+                    snapshot["snapshot_last_updated_at"] = 0.0
 
         recent_events = list_recent_execution_events(flow_id=None, device_id=device_id, limit=1)
         if recent_events:
@@ -952,6 +975,19 @@ def get_execution_runtime_snapshot(
                 "local_inference_available": bool(runtime_pressure.get("local_inference_available", False)),
                 "runtime_health_status": str(runtime_pressure.get("runtime_health_status", "unknown") or "unknown"),
                 "execution_busy": bool(runtime_pressure.get("execution_busy", False)),
+                "snapshot_reconciliation_status": str(
+                    runtime_pressure.get("snapshot_reconciliation_status", "unavailable")
+                ),
+                "snapshot_reconciliation_reason": str(
+                    runtime_pressure.get("snapshot_reconciliation_reason", "unknown")
+                ),
+                "snapshot_conflict": bool(runtime_pressure.get("snapshot_conflict", False)),
+                "snapshot_ordering_basis": str(
+                    runtime_pressure.get("snapshot_ordering_basis", "none")
+                ),
+                "snapshot_last_updated_at": float(
+                    runtime_pressure.get("snapshot_last_updated_at", 0.0) or 0.0
+                ),
                 "_source": "unified_execution_governance.active_registry",
             }
         )

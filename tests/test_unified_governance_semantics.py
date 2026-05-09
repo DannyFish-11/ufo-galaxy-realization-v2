@@ -103,6 +103,11 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
                 "local_inference_available": False,
                 "runtime_health_status": "healthy",
                 "current_fallback_tier": "planner_local",
+                "snapshot_reconciliation_status": "accepted",
+                "snapshot_reconciliation_reason": "newer_snapshot_timestamp",
+                "snapshot_conflict": False,
+                "snapshot_ordering_basis": "snapshot_ts",
+                "snapshot_last_updated_at": 123.0,
             },
             {
                 "device_id": "dev_cross",
@@ -114,6 +119,11 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
                 "local_inference_available": True,
                 "runtime_health_status": "degraded",
                 "current_fallback_tier": "center_delegated",
+                "snapshot_reconciliation_status": "conflict_center_truth_retained",
+                "snapshot_reconciliation_reason": "same_timestamp_conflicting_payload",
+                "snapshot_conflict": True,
+                "snapshot_ordering_basis": "snapshot_ts+payload_hash",
+                "snapshot_last_updated_at": 456.0,
             },
         ],
         "active_device_count": 1,
@@ -154,6 +164,11 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert causality["local_inference_available"] is True
     assert causality["runtime_health_status"] == "degraded"
     assert causality["current_fallback_tier"] == "center_delegated"
+    assert causality["snapshot_reconciliation_status"] == "conflict_center_truth_retained"
+    assert causality["snapshot_reconciliation_reason"] == "same_timestamp_conflicting_payload"
+    assert causality["snapshot_conflict"] is True
+    assert causality["snapshot_ordering_basis"] == "snapshot_ts+payload_hash"
+    assert causality["snapshot_last_updated_at"] == 456.0
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL
