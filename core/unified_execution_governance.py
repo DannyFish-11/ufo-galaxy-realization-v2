@@ -926,6 +926,16 @@ def _apply_android_runtime_truth_freshness_governance(
     if not has_android_truth:
         return
 
+    if not bool(snapshot.get("android_semantics_contract_complete", False)):
+        _clear_android_reported_runtime_truth(snapshot)
+        snapshot["local_inference_available"] = _resolve_local_inference_availability(
+            report_semantics=None,
+            device_snapshot=device_snapshot,
+        )
+        snapshot["android_semantics_freshness_reason"] = "android_semantics_contract_incomplete"
+        snapshot["android_runtime_truth_authority"] = "downgraded_to_unknown"
+        return
+
     if normalized_age_s is None:
         _clear_android_reported_runtime_truth(snapshot)
         snapshot["local_inference_available"] = _resolve_local_inference_availability(

@@ -1099,6 +1099,10 @@ class TestExecutionRuntimeSnapshot:
                 "local_intelligence_status": "disabled",
                 "local_inference_ready": False,
                 "local_inference_available": True,
+                "canonical_gate_metadata_state": "complete",
+                "canonical_gate_metadata_complete": True,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
                 "absorbed_at": 123.0,
                 "reported_at": 120.0,
                 "semantics_age_s": 3.0,
@@ -1136,6 +1140,10 @@ class TestExecutionRuntimeSnapshot:
                 "canonical_mode": "cross_device",
                 "reported_mode_state": "delegated",
                 "local_inference_available": True,
+                "canonical_gate_metadata_state": "complete",
+                "canonical_gate_metadata_complete": True,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
                 "absorbed_at": 123.0,
                 "reported_at": 120.0,
                 "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
@@ -1179,6 +1187,10 @@ class TestExecutionRuntimeSnapshot:
                 "reported_mode_state": "delegated",
                 "local_inference_available": True,
                 "local_inference_ready": True,
+                "canonical_gate_metadata_state": "complete",
+                "canonical_gate_metadata_complete": True,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
                 "absorbed_at": 123.0,
                 "reported_at": 120.0,
                 "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS + 0.1,
@@ -1221,6 +1233,10 @@ class TestExecutionRuntimeSnapshot:
                 "canonical_mode": "cross_device",
                 "reported_mode_state": "delegated",
                 "local_inference_available": True,
+                "canonical_gate_metadata_state": "complete",
+                "canonical_gate_metadata_complete": True,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
                 "absorbed_at": None,
                 "reported_at": 120.0,
                 "semantics_age_s": None,
@@ -1281,3 +1297,84 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["android_semantics_contract_complete"] is False
         assert device_state["android_semantics_missing_keys"] == ["goal_execution_eligibility"]
         assert device_state["android_semantics_malformed_keys"] == ["mode_state"]
+
+    @pytest.mark.parametrize(
+        ("semantics_patch", "expected_contract_state"),
+        [
+            (
+                {
+                    "canonical_gate_metadata_state": "partial",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
+                    "malformed_canonical_gate_metadata_keys": [],
+                },
+                "partial",
+            ),
+            (
+                {
+                    "canonical_gate_metadata_state": "malformed",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": [],
+                    "malformed_canonical_gate_metadata_keys": ["mode_state"],
+                },
+                "malformed",
+            ),
+            ({}, "missing"),
+        ],
+    )
+    def test_snapshot_downgrades_incomplete_android_semantics_contract(
+        self,
+        semantics_patch,
+        expected_contract_state,
+    ):
+        device_id = "device-runtime-semantics-contract-drift"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        semantics = {
+            "canonical_mode": "cross_device",
+            "reported_mode_state": "cross_device_active",
+            "mode_readiness_state": "ready",
+            "cross_device_eligibility": True,
+            "goal_execution_eligibility": True,
+            "parallel_execution_eligibility": True,
+            "local_intelligence_status": "ready",
+            "local_inference_ready": True,
+            "local_inference_available": True,
+            "absorbed_at": 123.0,
+            "reported_at": 120.0,
+            "semantics_age_s": 3.0,
+        }
+        semantics.update(semantics_patch)
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value=semantics,
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["android_semantics_contract_state"] == expected_contract_state
+        assert device_state["android_semantics_contract_complete"] is False
+        assert device_state["android_reported_mode"] is None
+        assert device_state["android_reported_local_inference_available"] is None
+        assert device_state["local_inference_available"] is False
+        assert device_state["android_semantics_freshness_state"] == "unknown"
+        assert (
+            device_state["android_semantics_freshness_reason"]
+            == "android_semantics_contract_incomplete"
+        )
+        assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
+        assert device_state["android_runtime_truth_usable"] is False
