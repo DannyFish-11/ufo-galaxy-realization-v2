@@ -264,8 +264,8 @@ def test_governance_runtime_authority_is_stable_across_execution_modes(execution
 
 
 def test_canonical_truth_prefers_authoritative_terminal_lifecycle_over_conflicting_result():
-    execution_id = "exec-pr08-authority-selection"
-    device_id = "device-pr08-authority-selection"
+    execution_id = "exec-pr06-authority-selection"
+    device_id = "device-pr06-authority-selection"
     record_execution_lifecycle_event(
         execution_id=execution_id,
         device_id=device_id,
@@ -301,8 +301,8 @@ def test_canonical_truth_prefers_authoritative_terminal_lifecycle_over_conflicti
 
 
 def test_reconciliation_marks_delayed_conflict_when_conflicting_report_arrives_after_terminal_phase():
-    execution_id = "exec-pr08-delayed-conflict"
-    device_id = "device-pr08-delayed-conflict"
+    execution_id = "exec-pr06-delayed-conflict"
+    device_id = "device-pr06-delayed-conflict"
     with patch(
         "core.unified_execution_governance.time.time",
         side_effect=[100.0, 101.0, 105.0],
@@ -335,8 +335,8 @@ def test_reconciliation_marks_delayed_conflict_when_conflicting_report_arrives_a
 
 
 def test_reported_vs_canonical_truth_distinction_for_uplink_only_state_observation():
-    execution_id = "exec-pr08-uplink-only-partial"
-    device_id = "device-pr08-uplink-only-partial"
+    execution_id = "exec-pr06-uplink-only-partial"
+    device_id = "device-pr06-uplink-only-partial"
     record_state_uplink(
         execution_id=execution_id,
         device_id=device_id,
@@ -354,8 +354,8 @@ def test_reported_vs_canonical_truth_distinction_for_uplink_only_state_observati
 
 
 def test_partial_authoritative_observation_is_explicitly_marked():
-    execution_id = "exec-pr08-partial-authoritative"
-    device_id = "device-pr08-partial-authoritative"
+    execution_id = "exec-pr06-partial-authoritative"
+    device_id = "device-pr06-partial-authoritative"
     record_execution_lifecycle_event(
         execution_id=execution_id,
         device_id=device_id,
@@ -383,8 +383,8 @@ def test_partial_authoritative_observation_is_explicitly_marked():
 
 
 def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():
-    execution_id = "exec-pr08-degraded-recovered"
-    device_id = "device-pr08-degraded-recovered"
+    execution_id = "exec-pr06-degraded-recovered"
+    device_id = "device-pr06-degraded-recovered"
     record_execution_lifecycle_event(
         execution_id=execution_id,
         device_id=device_id,
