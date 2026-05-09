@@ -495,6 +495,9 @@ def _collect_probes() -> Dict[str, bool]:
     ) or _source_contains("core.desktop_presence_runtime", "carrier")
     p["desktop_consumption_adapter"] = _module_exists("core.desktop_consumption_adapter")
     p["canonical_layer_model"] = _module_exists("core.canonical_layer_model")
+    p["existence_surface_has_unified_carrier"] = _source_contains(
+        "core.desktop_existence_surface", "UnifiedCarrierSurface"
+    )
 
     # --- Session continuity / durable identity ---
     p["attached_session_registry"] = _module_exists("core.attached_runtime_session_registry")
@@ -706,15 +709,26 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
         PropositionEntry(
             "P10",
             "Desktop / tablet / other devices are unified as carrier surfaces of the same AI body.",
-            PropositionVerdict.PARTIALLY_ESTABLISHED,
-            EvidenceState.PARTIAL,
+            PropositionVerdict.HARD_ESTABLISHED
+            if p.get("existence_surface_has_unified_carrier")
+            else PropositionVerdict.PARTIALLY_ESTABLISHED,
+            EvidenceState.HARD_ESTABLISHED
+            if p.get("existence_surface_has_unified_carrier")
+            else EvidenceState.PARTIAL,
             "DesktopExistenceSurface / ExistenceProjection / desktop_presence_runtime 存在，"
+            "desktop_consumption_adapter 存在。"
+            "PR-8 V2：UnifiedCarrierSurface / CarrierSurfaceEntry 已加入 "
+            "core.desktop_existence_surface (schema 1.1)，"
+            "桌面 carrier 与 Android carrier 现在通过 CarrierSurfaceEntry 投影在同一语义层，"
+            "R8 在 V2 侧已收口。"
+            if p.get("existence_surface_has_unified_carrier")
+            else "DesktopExistenceSurface / ExistenceProjection / desktop_presence_runtime 存在，"
             "desktop_consumption_adapter 存在，但[桌面 carrier 与 Android carrier 统一显化框架]"
             "尚未形成单一代码层面的完全统一。",
             ["core/desktop_existence_surface.py", "core/desktop_presence_runtime.py",
              "core/desktop_consumption_adapter.py"],
             [],
-            ["R8"],
+            [] if p.get("existence_surface_has_unified_carrier") else ["R8"],
         ),
         PropositionEntry(
             "P11",
@@ -1066,8 +1080,15 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             GapClass.MANIFESTATION_CONTROL,
             WorkPriority.IMPORTANT_SECONDARY,
             StageGate.P1_BEFORE_NEAR_CLOSURE,
-            EvidenceState.PARTIAL,
-            "DesktopExistenceSurface 统一了桌面侧 5 个状态族，"
+            EvidenceState.HARD_ESTABLISHED
+            if p.get("existence_surface_has_unified_carrier")
+            else EvidenceState.PARTIAL,
+            "PR-8 V2：UnifiedCarrierSurface / CarrierSurfaceEntry 已加入 "
+            "core.desktop_existence_surface (schema 1.1)，"
+            "桌面 carrier 与 Android carrier 通过 CarrierSurfaceEntry 统一投影在同一语义层，"
+            "R8 V2 侧收口。"
+            if p.get("existence_surface_has_unified_carrier")
+            else "DesktopExistenceSurface 统一了桌面侧 5 个状态族，"
             "但与 Android carrier 的统一显化框架（carrier 语义统一、execution surface 同层次投影）"
             "尚未在单一代码层面完全实现。",
             ["多设备统一显化面命题", "P10 命题 HARD_ESTABLISHED"],

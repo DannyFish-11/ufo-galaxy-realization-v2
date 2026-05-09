@@ -41,7 +41,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
         )
         self.assertIsInstance(DESKTOP_EXISTENCE_SURFACE_AUTHORITY, str)
         self.assertIn("DESKTOP_EXISTENCE_SURFACE_V1", DESKTOP_EXISTENCE_SURFACE_AUTHORITY)
-        self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.0")
+        self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.1")
 
     def test_A02_default_construction(self):
         from core.desktop_existence_surface import DesktopExistenceSurface
@@ -50,7 +50,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
         self.assertTrue(s.surface_id.startswith("exist_"))
         self.assertIsInstance(s.generated_at, float)
         self.assertGreater(s.generated_at, 0)
-        self.assertEqual(s.schema_version, "1.0")
+        self.assertEqual(s.schema_version, "1.1")
 
     def test_A03_subject_lifecycle_snapshot_fields(self):
         from core.desktop_existence_surface import SubjectLifecycleSnapshot
@@ -640,9 +640,9 @@ class TestRegressionSafety(unittest.TestCase):
         for fam in families:
             self.assertIn("_source", d[fam], f"Family {fam!r} missing '_source' in to_dict()")
 
-    def test_E08_schema_version_is_1_0(self):
+    def test_E08_schema_version_is_1_1(self):
         from core.desktop_existence_surface import EXISTENCE_SURFACE_SCHEMA_VERSION
-        self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.0")
+        self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.1")
 
     def test_E09_existence_route_module_is_importable(self):
         try:
@@ -699,7 +699,7 @@ class TestPR1Integration(unittest.TestCase):
         payload.existence_surface = surface.to_dict()
         d = payload.to_dict()
         self.assertIn("schema_version", d["existence_surface"])
-        self.assertEqual(d["existence_surface"]["schema_version"], "1.0")
+        self.assertEqual(d["existence_surface"]["schema_version"], "1.1")
 
     def test_F05_unified_panel_payload_to_dict_is_json_serialisable_with_existence_surface(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
