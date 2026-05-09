@@ -1630,6 +1630,17 @@ def resolve_execution_conflict(
 
 # Local intelligence statuses that are semantically incompatible with
 # local_inference_available=True.
+#
+# These token values are canonical Android-side report values that explicitly
+# indicate the local AI/inference runtime is off or not functional.  Any device
+# that simultaneously reports local_inference_available=True and one of these
+# status values is producing contradictory metadata — one field claims inference
+# is available while the other claims it is not operational.
+#
+# This set is intentionally conservative.  Add only status tokens that have
+# established, cross-repo meaning (i.e., defined in the Android capability
+# report contract).  Do not add ambiguous or transitional states (e.g.,
+# "initializing") that may temporarily precede availability.
 _LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset = frozenset({
     "disabled",
     "unavailable",
@@ -1678,7 +1689,7 @@ def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
     """
     conflicts: List[str] = []
 
-    reported_mode = str(snapshot.get("android_reported_mode") or "").strip().lower()
+    reported_mode = (snapshot.get("android_reported_mode") or "").strip().lower()
     cross_device_eligibility = snapshot.get("android_reported_cross_device_eligibility")
     goal_execution_eligibility = snapshot.get("android_reported_goal_execution_eligibility")
     local_inference_available = snapshot.get("android_reported_local_inference_available")
@@ -1771,6 +1782,12 @@ def classify_canonical_proof_input_diagnosis(
             Reference to :data:`CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY`.
     """
     degradation_causes: List[str] = []
+    # Degradation-cause format convention:
+    #   "<cause_type>:<cause_value>"
+    # cause_type is a stable, lowercase token identifying the kind of issue.
+    # cause_value is a detail string (key list, reason token, etc.).
+    # This format is stable across versions; consumers may split on the first
+    # ":" to extract cause_type for programmatic checks.
 
     contract_state = str(
         snapshot.get("android_semantics_contract_state") or "missing"
