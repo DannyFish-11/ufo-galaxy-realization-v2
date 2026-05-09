@@ -109,14 +109,10 @@ _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
 _EPOCH_MILLISECOND_CONVERSION_THRESHOLD: float = 1_000_000_000_000.0
 _ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
 _ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {
-    "local": "local",
     "local_only": "local",
-    "cross_device": "cross_device",
     "cross_device_active": "cross_device",
     "cross_device_degraded": "cross_device",
     "delegated": "cross_device",
-    "transitioning": "transitioning",
-    "unknown": "unknown",
     "inactive": "unknown",
 }
 _ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset(

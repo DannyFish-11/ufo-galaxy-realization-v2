@@ -810,7 +810,7 @@ def build_mode_state_for_device(
         logger.debug("build_mode_state_for_device: snapshot read failed: %s", exc)
 
     # ── Infer mode ────────────────────────────────────────────────────────
-    if reported_mode:
+    if reported_mode and (state.session_active or state.snapshot_age_s is not None):
         state.mode = AndroidDeviceMode.from_string(reported_mode)
     elif state.cross_device_enabled and state.session_active:
         state.mode = AndroidDeviceMode.cross_device
