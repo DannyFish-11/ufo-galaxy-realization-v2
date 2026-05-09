@@ -1798,6 +1798,13 @@ def _score_candidate(
         )
         _canonical_gate_decision = _canonical_gate.decision
     except Exception:
+        logger.debug(
+            "_score_candidate: canonical gate decision fallback to allow "
+            "(execution_busy=%s model_ready=%s fallback_tier=%s)",
+            execution_busy,
+            _model_ready,
+            _fallback_tier,
+        )
         _canonical_gate_decision = "allow"
 
     if _canonical_gate_decision == "deny" and _model_ready is False and not _fallback_tier:

@@ -79,7 +79,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.AndroidModeGatePolicy")
 
@@ -367,7 +367,7 @@ class AndroidCanonicalExecutionGateDecision:
     local_inference_available: bool = False
     fallback_tier: Optional[str] = None
     model_ready: Optional[bool] = None
-    reasons: tuple[str, ...] = field(default_factory=tuple)
+    reasons: Tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

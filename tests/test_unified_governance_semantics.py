@@ -204,7 +204,7 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert "parallel_subtask_to_local_collaboration_agent" in relationship_links
 
 
-def test_build_unified_governance_state_local_inference_changes_canonical_gate_decision() -> None:
+def test_local_inference_affects_canonical_gate_decision() -> None:
     active_sessions = [SimpleNamespace(device_id="dev_cross")]
     mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
     readiness_map = {
