@@ -50,10 +50,14 @@ filter degrades gracefully).
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
-from core.android_device_state_store import get_device_state_snapshot  # noqa: E402
+from core.android_device_state_store import (  # noqa: E402
+    get_device_state_snapshot,
+    list_recent_execution_events,
+)
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
 from core.unified.gateway_capability_projection import (  # noqa: E402
     get_gateway_capabilities_for_device,
@@ -105,9 +109,12 @@ ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION: str = (
     "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1: "
     "select_devices() applies Android runtime truth as routing preference weight "
     "(step 0c) after the hard unfit-device pre-filter (step 0b). "
-    "Each candidate is scored by DeviceStateSnapshot fields: "
+    "Each candidate is scored by DeviceStateSnapshot / execution-event truth: "
     "+10 model_ready=True, +5 accessibility_ready=True, +5 local_loop_ready=True, "
-    "-10 warmup_result=failed, -20 model_ready=False and no current_fallback_tier. "
+    "+8 local_ai_ready=True, -10 warmup_result=failed, "
+    "-20 model_ready=False and no current_fallback_tier, "
+    "-min(offline_queue_depth,20), -12 recent_non_terminal_execution_busy, "
+    "-10 runtime_health degraded/unhealthy. "
     "Candidates are re-ordered by descending score so the most Android-ready "
     "device is preferred.  Devices with no snapshot retain their original order "
     "(no penalty for absent truth — fail-open). "
@@ -316,6 +323,36 @@ def select_devices(
                 getattr(_snap, "current_fallback_tier", None) or ""
             ):
                 _score -= 20
+            _is_local_ai_ready = getattr(_snap, "is_local_ai_ready", None)
+            if callable(_is_local_ai_ready):
+                try:
+                    if bool(_is_local_ai_ready()):
+                        _score += 8
+                except Exception:
+                    pass
+            _queue_depth = getattr(_snap, "offline_queue_depth", None)
+            if isinstance(_queue_depth, int) and _queue_depth > 0:
+                _score -= min(_queue_depth, 20)
+            _health = getattr(_snap, "runtime_health_snapshot", None)
+            if isinstance(_health, dict):
+                _health_status = str(
+                    _health.get("status") or _health.get("state") or _health.get("health") or ""
+                ).strip().lower()
+                _is_degraded = bool(_health.get("is_degraded", False))
+                if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
+                    _score -= 10
+            try:
+                _recent = list_recent_execution_events(flow_id=None, device_id=_did, limit=1)
+                if _recent:
+                    _ev = _recent[0]
+                    _phase = str(getattr(_ev, "phase", "") or "").strip().lower()
+                    _absorbed = float(getattr(_ev, "absorbed_at", 0) or 0)
+                    if _phase in {"planning", "grounding", "execution", "replan"} and (
+                        time.time() - _absorbed
+                    ) < 60.0:
+                        _score -= 12
+            except Exception:
+                pass
             return _score
 
         _scores = [_android_readiness_score(d) for d in devices]
