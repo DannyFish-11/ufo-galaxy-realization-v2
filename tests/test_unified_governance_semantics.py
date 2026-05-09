@@ -6,6 +6,8 @@ from unittest.mock import patch
 from core.unified_governance_semantics import (
     GovernancePath,
     MESH_RUNTIME_STATUS_PARTIAL,
+    MESH_RUNTIME_STATUS_RUNTIME_PROVEN,
+    build_mesh_runtime_state,
     build_unified_governance_state,
     resolve_governance_path_decision,
 )
@@ -385,3 +387,54 @@ def test_build_unified_governance_state_stale_android_truth_downgrades_canonical
     assert causality["android_runtime_truth_authority"] == "downgraded_to_unknown"
     assert causality["android_runtime_truth_usable"] is False
     assert causality["android_reported_mode"] is None
+
+
+def test_build_mesh_runtime_state_stays_partial_without_live_runtime_execution_proof() -> None:
+    from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
+
+    reset_live_mesh_runtime_proof_snapshot()
+
+    state = build_mesh_runtime_state()
+
+    assert state["status"] == MESH_RUNTIME_STATUS_PARTIAL
+    assert state["runtime_proofs"]["live_mesh_runtime_path_execution"] is False
+    assert state["runtime_observability"]["live_mesh_runtime_proof"]["live_mesh_run_count"] == 0
+
+
+def test_build_mesh_runtime_state_is_runtime_proven_after_staged_mesh_live_run() -> None:
+    from contracts.source_dispatch import SourceDispatchMode
+    from core.runtime.source_dispatch_orchestrator import (
+        orchestrate_source_runtime_dispatch,
+        reset_live_mesh_runtime_proof_snapshot,
+    )
+
+    reset_live_mesh_runtime_proof_snapshot()
+    mesh_session = {
+        "session_id": "mesh_runtime_proof_session",
+        "mesh_id": "mesh_runtime_proof",
+        "source_device_id": "source_runtime_proof",
+        "primary_device_id": "primary_runtime_proof",
+        "participants": [
+            {"device_id": "source_runtime_proof", "roles": ["source"], "status": "active"},
+            {"device_id": "primary_runtime_proof", "roles": ["primary"], "status": "active"},
+        ],
+        "multi_device_required": True,
+        "barrier_posture": "soft_barrier",
+        "merge_owner_device_id": "primary_runtime_proof",
+    }
+    result = orchestrate_source_runtime_dispatch(
+        trace_id="trace_mesh_runtime_proven",
+        mesh_session=mesh_session,
+        policy_alignment=None,
+        governance_snapshot=None,
+        mesh_memberships=None,
+    )
+    assert result.mode == SourceDispatchMode.staged_mesh
+
+    state = build_mesh_runtime_state()
+    assert state["status"] == MESH_RUNTIME_STATUS_RUNTIME_PROVEN
+    assert state["runtime_proofs"]["live_mesh_runtime_path_execution"] is True
+    live_proof = state["runtime_observability"]["live_mesh_runtime_proof"]
+    assert live_proof["staged_mesh_dispatch_count"] >= 1
+    assert live_proof["live_mesh_run_count"] >= 1
+    assert live_proof["last_mesh_session_id"] == "mesh_runtime_proof_session"

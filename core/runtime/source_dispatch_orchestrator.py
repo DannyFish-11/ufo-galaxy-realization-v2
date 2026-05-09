@@ -93,7 +93,9 @@ specification.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
+import threading
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -688,6 +690,81 @@ LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY: str = (
     "propagate live_outcome and live_merged_result into the SourceDispatchResult "
     "without introducing new result-surfacing authority."
 )
+
+# Runtime-proof evidence snapshot for PR-7 foundational closure.
+# This captures whether the canonical staged_mesh path has actually invoked
+# the live mesh runtime engine in-process (not just sentinel presence).
+_LIVE_MESH_RUNTIME_PROOF_LOCK = threading.Lock()
+_LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
+    "staged_mesh_dispatch_count": 0,
+    "live_mesh_run_count": 0,
+    "live_mesh_completed_count": 0,
+    "live_mesh_partial_count": 0,
+    "live_mesh_failed_count": 0,
+    "last_live_outcome": None,
+    "last_mesh_session_id": None,
+}
+
+
+def reset_live_mesh_runtime_proof_snapshot() -> None:
+    """Reset in-memory live mesh runtime proof counters.
+
+    Intended for focused tests that need deterministic assertions.
+    """
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        _LIVE_MESH_RUNTIME_PROOF_STATE.update(
+            {
+                "staged_mesh_dispatch_count": 0,
+                "live_mesh_run_count": 0,
+                "live_mesh_completed_count": 0,
+                "live_mesh_partial_count": 0,
+                "live_mesh_failed_count": 0,
+                "last_live_outcome": None,
+                "last_mesh_session_id": None,
+            }
+        )
+
+
+def get_live_mesh_runtime_proof_snapshot() -> Dict[str, Any]:
+    """Return a copy of canonical staged-mesh live runtime proof counters."""
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        return copy.deepcopy(_LIVE_MESH_RUNTIME_PROOF_STATE)
+
+
+def _record_live_mesh_runtime_proof(
+    *,
+    mesh_session: Optional[Dict[str, Any]],
+    live_run_result: Any,
+) -> None:
+    """Record staged-mesh runtime-proof evidence from orchestrator execution."""
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        _LIVE_MESH_RUNTIME_PROOF_STATE["staged_mesh_dispatch_count"] = int(
+            _LIVE_MESH_RUNTIME_PROOF_STATE.get("staged_mesh_dispatch_count", 0) or 0
+        ) + 1
+        if isinstance(mesh_session, dict):
+            _LIVE_MESH_RUNTIME_PROOF_STATE["last_mesh_session_id"] = mesh_session.get("session_id")
+
+        if live_run_result is None:
+            return
+
+        _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_run_count"] = int(
+            _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_run_count", 0) or 0
+        ) + 1
+        outcome = str(getattr(live_run_result, "outcome", "") or "").strip().lower()
+        _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_outcome"] = outcome or None
+
+        if outcome == "completed":
+            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_completed_count"] = int(
+                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_completed_count", 0) or 0
+            ) + 1
+        elif outcome == "partial":
+            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_partial_count"] = int(
+                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_partial_count", 0) or 0
+            ) + 1
+        elif outcome == "failed":
+            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_failed_count"] = int(
+                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_failed_count", 0) or 0
+            ) + 1
 
 
 # ---------------------------------------------------------------------------
@@ -2996,6 +3073,10 @@ def orchestrate_source_runtime_dispatch(
                     "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
                     exc,
                 )
+            _record_live_mesh_runtime_proof(
+                mesh_session=plan.mesh_session if isinstance(plan.mesh_session, dict) else None,
+                live_run_result=live_run_result,
+            )
 
             # Determine success and extract coordinator status for the result
             success = coordinator_state is not None
