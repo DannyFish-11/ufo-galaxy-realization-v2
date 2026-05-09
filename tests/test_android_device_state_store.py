@@ -29,9 +29,11 @@ from core.android_device_state_store import (
     DEVICE_STATE_SNAPSHOT_MSG_TYPE,
     DeviceExecutionEvent,
     DeviceStateSnapshot,
+    absorb_capability_report_semantics,
     absorb_device_execution_event,
     absorb_device_state_snapshot,
     get_android_device_state_store,
+    get_device_capability_report_semantics,
     get_device_ecosystem_summary,
     get_device_state_snapshot,
     list_device_state_snapshots,
@@ -167,6 +169,53 @@ def test_parse_state_snapshot_missing_keys():
     assert snap.llama_cpp_available is None
     assert snap.model_ready is None
     assert snap.degraded_reasons == []
+
+
+def test_capability_report_semantics_normalize_android_mode_gate_states():
+    semantics = absorb_capability_report_semantics(
+        "gate-dev-1",
+        {
+            "metadata": {
+                "degraded_mode": True,
+                "mode_state": "cross_device_degraded",
+                "mode_readiness_state": "degraded",
+                "cross_device_eligibility": True,
+                "goal_execution_eligibility": True,
+                "parallel_execution_eligibility": False,
+                "local_intelligence_status": "degraded",
+                "local_inference_ready": False,
+                "local_inference_available": False,
+            }
+        },
+    )
+    stored = get_device_capability_report_semantics("gate-dev-1")
+
+    assert semantics["canonical_mode"] == "cross_device"
+    assert stored["canonical_mode"] == "cross_device"
+    assert semantics["canonical_gate_metadata_state"] == "complete"
+    assert semantics["canonical_gate_metadata_complete"] is True
+    assert semantics["missing_canonical_gate_metadata_keys"] == []
+    assert semantics["malformed_canonical_gate_metadata_keys"] == []
+
+
+def test_capability_report_semantics_surface_partial_and_malformed_contract_metadata():
+    semantics = absorb_capability_report_semantics(
+        "gate-dev-2",
+        {
+            "metadata": {
+                "mode_state": "not_a_real_mode",
+                "mode_readiness_state": "degraded",
+                "cross_device_eligibility": "maybe",
+            }
+        },
+    )
+
+    assert semantics["canonical_mode"] is None
+    assert semantics["canonical_gate_metadata_state"] == "malformed"
+    assert "mode_state" in semantics["malformed_canonical_gate_metadata_keys"]
+    assert "cross_device_eligibility" in semantics["malformed_canonical_gate_metadata_keys"]
+    assert "goal_execution_eligibility" in semantics["missing_canonical_gate_metadata_keys"]
+    assert "local_inference_available" in semantics["missing_canonical_gate_metadata_keys"]
 
 
 # ---------------------------------------------------------------------------

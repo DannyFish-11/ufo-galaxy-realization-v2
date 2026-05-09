@@ -532,6 +532,18 @@ def build_unified_governance_state(
                 "android_reported_local_inference_available": runtime_state_for_device.get(
                     "android_reported_local_inference_available"
                 ),
+                "android_semantics_contract_state": runtime_state_for_device.get(
+                    "android_semantics_contract_state"
+                ),
+                "android_semantics_contract_complete": bool(
+                    runtime_state_for_device.get("android_semantics_contract_complete", False)
+                ),
+                "android_semantics_missing_keys": list(
+                    runtime_state_for_device.get("android_semantics_missing_keys", [])
+                ),
+                "android_semantics_malformed_keys": list(
+                    runtime_state_for_device.get("android_semantics_malformed_keys", [])
+                ),
                 "android_semantics_absorbed_at": float(
                     runtime_state_for_device.get("android_semantics_absorbed_at", 0.0)
                 ),

@@ -108,9 +108,38 @@ _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
 )
 _EPOCH_MILLISECOND_CONVERSION_THRESHOLD: float = 1_000_000_000_000.0
 _ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
-_ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {"local_only": "local"}
+_ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {
+    "local": "local",
+    "local_only": "local",
+    "cross_device": "cross_device",
+    "cross_device_active": "cross_device",
+    "cross_device_degraded": "cross_device",
+    "delegated": "cross_device",
+    "transitioning": "transitioning",
+    "unknown": "unknown",
+    "inactive": "unknown",
+}
 _ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset(
     {"local", "cross_device", "transitioning", "unknown"}
+)
+_ANDROID_CANONICAL_GATE_METADATA_KEYS: tuple[str, ...] = (
+    "degraded_mode",
+    "mode_state",
+    "mode_readiness_state",
+    "cross_device_eligibility",
+    "goal_execution_eligibility",
+    "parallel_execution_eligibility",
+    "local_intelligence_status",
+    "local_inference_ready",
+    "local_inference_available",
+)
+_ANDROID_CANONICAL_GATE_BOOLEAN_FIELDS: tuple[str, ...] = (
+    "degraded_mode",
+    "cross_device_eligibility",
+    "goal_execution_eligibility",
+    "parallel_execution_eligibility",
+    "local_inference_ready",
+    "local_inference_available",
 )
 
 
@@ -860,6 +889,60 @@ def _normalize_capability_report_semantics(
         metadata.get("mode_readiness_state"),
         lowercase=True,
     )
+    local_intelligence_status = _coerce_optional_str(
+        metadata.get("local_intelligence_status"),
+        lowercase=True,
+    )
+    degraded_mode = _coerce_optional_bool(metadata.get("degraded_mode"))
+    cross_device_eligibility = _coerce_optional_bool(
+        metadata.get("cross_device_eligibility")
+    )
+    goal_execution_eligibility = _coerce_optional_bool(
+        metadata.get("goal_execution_eligibility")
+    )
+    parallel_execution_eligibility = _coerce_optional_bool(
+        metadata.get("parallel_execution_eligibility")
+    )
+    local_inference_ready = _coerce_optional_bool(
+        metadata.get("local_inference_ready")
+    )
+    local_inference_available = _coerce_optional_bool(
+        metadata.get("local_inference_available")
+    )
+    missing_canonical_gate_metadata_keys = sorted(
+        key
+        for key in _ANDROID_CANONICAL_GATE_METADATA_KEYS
+        if key not in metadata
+    )
+    malformed_canonical_gate_metadata_keys: List[str] = []
+    if "mode_state" in metadata and canonical_mode is None:
+        malformed_canonical_gate_metadata_keys.append("mode_state")
+    if "mode_readiness_state" in metadata and mode_readiness_state is None:
+        malformed_canonical_gate_metadata_keys.append("mode_readiness_state")
+    if "local_intelligence_status" in metadata and local_intelligence_status is None:
+        malformed_canonical_gate_metadata_keys.append("local_intelligence_status")
+    _bool_values = {
+        "degraded_mode": degraded_mode,
+        "cross_device_eligibility": cross_device_eligibility,
+        "goal_execution_eligibility": goal_execution_eligibility,
+        "parallel_execution_eligibility": parallel_execution_eligibility,
+        "local_inference_ready": local_inference_ready,
+        "local_inference_available": local_inference_available,
+    }
+    for key in _ANDROID_CANONICAL_GATE_BOOLEAN_FIELDS:
+        if key in metadata and _bool_values[key] is None:
+            malformed_canonical_gate_metadata_keys.append(key)
+    malformed_canonical_gate_metadata_keys = sorted(
+        set(malformed_canonical_gate_metadata_keys)
+    )
+    if not metadata:
+        canonical_gate_metadata_state = "missing"
+    elif malformed_canonical_gate_metadata_keys:
+        canonical_gate_metadata_state = "malformed"
+    elif missing_canonical_gate_metadata_keys:
+        canonical_gate_metadata_state = "partial"
+    else:
+        canonical_gate_metadata_state = "complete"
     reported_at = _normalize_optional_timestamp(message.get("timestamp"))
     semantics_age_s = None
     if reported_at is not None:
@@ -869,26 +952,17 @@ def _normalize_capability_report_semantics(
         "canonical_mode": canonical_mode,
         "reported_mode_state": raw_mode_state or None,
         "mode_readiness_state": mode_readiness_state,
-        "cross_device_eligibility": _coerce_optional_bool(
-            metadata.get("cross_device_eligibility")
-        ),
-        "goal_execution_eligibility": _coerce_optional_bool(
-            metadata.get("goal_execution_eligibility")
-        ),
-        "parallel_execution_eligibility": _coerce_optional_bool(
-            metadata.get("parallel_execution_eligibility")
-        ),
-        "degraded_mode": _coerce_optional_bool(metadata.get("degraded_mode")),
-        "local_intelligence_status": _coerce_optional_str(
-            metadata.get("local_intelligence_status"),
-            lowercase=True,
-        ),
-        "local_inference_ready": _coerce_optional_bool(
-            metadata.get("local_inference_ready")
-        ),
-        "local_inference_available": _coerce_optional_bool(
-            metadata.get("local_inference_available")
-        ),
+        "cross_device_eligibility": cross_device_eligibility,
+        "goal_execution_eligibility": goal_execution_eligibility,
+        "parallel_execution_eligibility": parallel_execution_eligibility,
+        "degraded_mode": degraded_mode,
+        "local_intelligence_status": local_intelligence_status,
+        "local_inference_ready": local_inference_ready,
+        "local_inference_available": local_inference_available,
+        "canonical_gate_metadata_state": canonical_gate_metadata_state,
+        "canonical_gate_metadata_complete": canonical_gate_metadata_state == "complete",
+        "missing_canonical_gate_metadata_keys": missing_canonical_gate_metadata_keys,
+        "malformed_canonical_gate_metadata_keys": malformed_canonical_gate_metadata_keys,
         "runtime_attachment_session_id": _coerce_optional_str(
             message.get("runtime_attachment_session_id")
         ),

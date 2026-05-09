@@ -453,6 +453,33 @@ _POSTURE_CONTROL_ONLY = "control_only"
 _MODE_SWITCH_HISTORY_MAX_LEN = 10
 
 
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value in (0, 0.0):
+            return False
+        if value in (1, 1.0):
+            return True
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+    return None
+
+
+def _read_explicit_gate_bool(config: Dict[str, Any], *keys: str) -> Optional[bool]:
+    for key in keys:
+        if key in config:
+            return _coerce_optional_bool(config.get(key))
+    return None
+
+
 def _check_v2_cross_device_switch() -> GateEvalResult:
     """Check whether the V2-side cross-device switch is ON."""
     try:
@@ -534,18 +561,107 @@ def _check_session_gate(device_id: str) -> tuple:
 def _check_snapshot_gates(device_id: str) -> tuple:
     """Return (cross_device_gate, goal_exec_gate, parallel_gate, local_loop_gate, snapshot_age_s).
 
-    Reads from DeviceStateSnapshot.local_loop_config for Android gate booleans.
-    Falls back to DeviceStateSnapshot.local_loop_ready for the readiness gate.
+    Prefers normalized Android capability-report semantics when available.
+    Falls back to explicit DeviceStateSnapshot.local_loop_config booleans when
+    no capability-report semantics have been absorbed yet.
     """
     snapshot_age_s: Optional[float] = None
     now = time.time()
+    semantics: Dict[str, Any] = {}
 
     try:
-        from core.android_device_state_store import get_device_state_snapshot
+        from core.android_device_state_store import (
+            get_device_capability_report_semantics,
+            get_device_state_snapshot,
+        )
         snap = get_device_state_snapshot(device_id)
+        semantics = get_device_capability_report_semantics(device_id) or {}
     except Exception as exc:
         logger.debug("_check_snapshot_gates: store unavailable for %r: %s", device_id, exc)
         snap = None
+        semantics = {}
+
+    if isinstance(semantics, dict) and semantics:
+        semantics_state = str(
+            semantics.get("canonical_gate_metadata_state") or "missing"
+        ).strip().lower()
+        if semantics_state != "complete":
+            reason = (
+                "Android capability_report canonical gate metadata is "
+                f"{semantics_state}; missing={semantics.get('missing_canonical_gate_metadata_keys', [])}; "
+                f"malformed={semantics.get('malformed_canonical_gate_metadata_keys', [])}"
+            )
+            local_loop_reason = reason
+            if snap is None:
+                local_loop_reason += "; local_loop_ready unavailable without DeviceStateSnapshot"
+            return (
+                GateEvalResult(_ANDROID_CROSS_DEVICE_GATE, False, reason, "android_capability_report_semantics"),
+                GateEvalResult(_ANDROID_GOAL_EXEC_GATE, False, reason, "android_capability_report_semantics"),
+                GateEvalResult(_ANDROID_PARALLEL_GATE, False, reason, "android_capability_report_semantics"),
+                GateEvalResult(_DEVICE_LOCAL_LOOP_GATE, False, local_loop_reason, "android_capability_report_semantics"),
+                snapshot_age_s,
+            )
+
+        reported_mode = str(semantics.get("canonical_mode") or "").strip().lower() or "unknown"
+        reported_mode_state = semantics.get("reported_mode_state")
+        if reported_mode == AndroidDeviceMode.cross_device.value:
+            cross_device_ok = bool(semantics.get("cross_device_eligibility") is True)
+            goal_exec_ok = bool(semantics.get("goal_execution_eligibility") is True)
+            parallel_ok = bool(semantics.get("parallel_execution_eligibility") is True)
+            cross_reason_prefix = (
+                f"Android capability_report mode_state={reported_mode_state!r} "
+                f"canonical_mode={reported_mode!r}"
+            )
+        else:
+            cross_device_ok = False
+            goal_exec_ok = False
+            parallel_ok = False
+            cross_reason_prefix = (
+                f"Android capability_report canonical_mode={reported_mode!r} "
+                "does not permit cross-device dispatch"
+            )
+
+        local_loop_ok = bool(getattr(snap, "local_loop_ready", None))
+        if snap is not None:
+            snapshot_age_s = now - (snap.absorbed_at or now)
+            local_loop_reason = (
+                "DeviceStateSnapshot.local_loop_ready="
+                + str(local_loop_ok)
+            )
+        else:
+            local_loop_ok = False
+            local_loop_reason = (
+                "DeviceStateSnapshot.local_loop_ready unavailable while consuming "
+                "Android capability_report semantics"
+            )
+
+        return (
+            GateEvalResult(
+                _ANDROID_CROSS_DEVICE_GATE,
+                cross_device_ok,
+                f"{cross_reason_prefix}; cross_device_eligibility={semantics.get('cross_device_eligibility')!r}",
+                "android_capability_report_semantics",
+            ),
+            GateEvalResult(
+                _ANDROID_GOAL_EXEC_GATE,
+                goal_exec_ok,
+                f"{cross_reason_prefix}; goal_execution_eligibility={semantics.get('goal_execution_eligibility')!r}",
+                "android_capability_report_semantics",
+            ),
+            GateEvalResult(
+                _ANDROID_PARALLEL_GATE,
+                parallel_ok,
+                f"{cross_reason_prefix}; parallel_execution_eligibility={semantics.get('parallel_execution_eligibility')!r}",
+                "android_capability_report_semantics",
+            ),
+            GateEvalResult(
+                _DEVICE_LOCAL_LOOP_GATE,
+                local_loop_ok,
+                local_loop_reason,
+                "DeviceStateSnapshot",
+            ),
+            snapshot_age_s,
+        )
 
     if snap is None:
         # No snapshot — cannot confirm Android-side gates.
@@ -561,37 +677,53 @@ def _check_snapshot_gates(device_id: str) -> tuple:
 
     snapshot_age_s = now - (snap.absorbed_at or now)
     cfg: Dict[str, Any] = snap.local_loop_config or {}
-
-    # Android-side AppSettings gate booleans may be carried in local_loop_config
-    # under keys "crossDeviceEnabled", "goalExecutionEnabled", "parallelExecutionEnabled".
-    #
-    # Optimistic default: when a key is absent (older snapshot format), we assume
-    # the Android gate is ON.  This is intentional: the V2-side cross-device switch
-    # (which defaults to OFF in local mode) is the primary gating authority.  The
-    # Android-side keys are supplementary — their absence means the snapshot predates
-    # the key being added, not that the feature is disabled.  Callers that need strict
-    # three-state semantics (enabled/disabled/unknown) should read
-    # DeviceStateSnapshot.local_loop_config directly.
-    cross_device_ok = bool(cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", True)))
-    goal_exec_ok = bool(cfg.get("goalExecutionEnabled", cfg.get("goal_execution_enabled", True)))
-    parallel_ok = bool(cfg.get("parallelExecutionEnabled", cfg.get("parallel_execution_enabled", True)))
+    cross_device_ok = _read_explicit_gate_bool(
+        cfg,
+        "crossDeviceEnabled",
+        "cross_device_enabled",
+    )
+    goal_exec_ok = _read_explicit_gate_bool(
+        cfg,
+        "goalExecutionEnabled",
+        "goal_execution_enabled",
+    )
+    parallel_ok = _read_explicit_gate_bool(
+        cfg,
+        "parallelExecutionEnabled",
+        "parallel_execution_enabled",
+    )
 
     local_loop_ok = bool(snap.local_loop_ready)
 
     return (
         GateEvalResult(
-            _ANDROID_CROSS_DEVICE_GATE, cross_device_ok,
-            "Android crossDeviceEnabled=" + str(cross_device_ok),
+            _ANDROID_CROSS_DEVICE_GATE,
+            cross_device_ok is True,
+            (
+                "Android crossDeviceEnabled=" + str(cross_device_ok)
+                if cross_device_ok is not None
+                else "Android crossDeviceEnabled missing from DeviceStateSnapshot.local_loop_config"
+            ),
             "DeviceStateSnapshot.local_loop_config",
         ),
         GateEvalResult(
-            _ANDROID_GOAL_EXEC_GATE, goal_exec_ok,
-            "Android goalExecutionEnabled=" + str(goal_exec_ok),
+            _ANDROID_GOAL_EXEC_GATE,
+            goal_exec_ok is True,
+            (
+                "Android goalExecutionEnabled=" + str(goal_exec_ok)
+                if goal_exec_ok is not None
+                else "Android goalExecutionEnabled missing from DeviceStateSnapshot.local_loop_config"
+            ),
             "DeviceStateSnapshot.local_loop_config",
         ),
         GateEvalResult(
-            _ANDROID_PARALLEL_GATE, parallel_ok,
-            "Android parallelExecutionEnabled=" + str(parallel_ok),
+            _ANDROID_PARALLEL_GATE,
+            parallel_ok is True,
+            (
+                "Android parallelExecutionEnabled=" + str(parallel_ok)
+                if parallel_ok is not None
+                else "Android parallelExecutionEnabled missing from DeviceStateSnapshot.local_loop_config"
+            ),
             "DeviceStateSnapshot.local_loop_config",
         ),
         GateEvalResult(
@@ -678,7 +810,7 @@ def build_mode_state_for_device(
         logger.debug("build_mode_state_for_device: snapshot read failed: %s", exc)
 
     # ── Infer mode ────────────────────────────────────────────────────────
-    if reported_mode and (state.session_active or state.snapshot_age_s is not None):
+    if reported_mode:
         state.mode = AndroidDeviceMode.from_string(reported_mode)
     elif state.cross_device_enabled and state.session_active:
         state.mode = AndroidDeviceMode.cross_device
