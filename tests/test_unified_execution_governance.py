@@ -1021,7 +1021,11 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["active_execution_count"] == 2
         assert device_state["highest_priority_execution_type"] == "takeover_request"
         assert device_state["takeover_active"] is True
-        assert device_state["blocked_execution_types"] == ["goal_execution", "parallel_subtask"]
+        assert device_state["blocked_execution_types"] == [
+            "delegated_execution",
+            "goal_execution",
+            "parallel_subtask",
+        ]
 
     def test_snapshot_includes_requested_devices_without_active_executions(self):
         snapshot = get_execution_runtime_snapshot(device_ids=["idle-device"])
