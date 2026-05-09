@@ -126,6 +126,14 @@ CROSS_DEVICE_READINESS_GATE_POLICY: str = (
     "(4) that session's posture is join_runtime."
 )
 
+CANONICAL_ANDROID_EXECUTION_GATE_POLICY: str = (
+    "POLICY::CANONICAL_ANDROID_EXECUTION_GATE: "
+    "resolve_android_execution_gate_decision() is the canonical gate contract "
+    "for allow/deny/defer outcomes from unified Android policy eligibility, "
+    "readiness, capability availability, busy state, fallback tier, and "
+    "local inference availability."
+)
+
 ANDROID_MODE_GATE_POLICY_PR_SENTINEL: str = (
     "ANDROID_MODE_GATE_POLICY_PR_SENTINEL::v1 present"
 )
@@ -345,6 +353,84 @@ class AndroidModeReadinessVerdict:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), separators=(",", ":"))
+
+
+@dataclass(frozen=True)
+class AndroidCanonicalExecutionGateDecision:
+    """Canonical execution gate decision for cross-repo allow/deny/defer semantics."""
+
+    decision: str = "deny"
+    policy_eligible: bool = False
+    readiness_ready: bool = False
+    capability_ready: bool = False
+    execution_busy: bool = False
+    local_inference_available: bool = False
+    fallback_tier: Optional[str] = None
+    model_ready: Optional[bool] = None
+    reasons: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "decision": self.decision,
+            "policy_eligible": self.policy_eligible,
+            "readiness_ready": self.readiness_ready,
+            "capability_ready": self.capability_ready,
+            "execution_busy": self.execution_busy,
+            "local_inference_available": self.local_inference_available,
+            "fallback_tier": self.fallback_tier,
+            "model_ready": self.model_ready,
+            "reasons": list(self.reasons),
+            "_policy": CANONICAL_ANDROID_EXECUTION_GATE_POLICY,
+        }
+
+
+def resolve_android_execution_gate_decision(
+    *,
+    policy_eligible: bool,
+    readiness_ready: bool,
+    execution_busy: bool,
+    local_inference_available: bool,
+    fallback_tier: Optional[str],
+    model_ready: Optional[bool] = None,
+) -> AndroidCanonicalExecutionGateDecision:
+    """Resolve canonical allow/deny/defer decision from unified Android gate inputs."""
+    normalized_fallback_tier = str(fallback_tier or "").strip() or None
+    has_fallback = bool(normalized_fallback_tier)
+    capability_ready = bool(local_inference_available or has_fallback or model_ready is True)
+    reasons: List[str] = []
+    decision = "allow"
+
+    if not policy_eligible:
+        decision = "deny"
+        reasons.append("policy_ineligible")
+    elif not readiness_ready:
+        decision = "deny"
+        reasons.append("readiness_not_ready")
+    elif not capability_ready:
+        decision = "deny"
+        reasons.append("capability_unavailable")
+    elif execution_busy:
+        decision = "defer"
+        reasons.append("execution_busy")
+    else:
+        reasons.append("all_gate_conditions_satisfied")
+
+    if local_inference_available:
+        reasons.append("local_inference_available")
+    if has_fallback:
+        reasons.append(f"fallback_tier:{normalized_fallback_tier}")
+
+    return AndroidCanonicalExecutionGateDecision(
+        decision=decision,
+        policy_eligible=bool(policy_eligible),
+        readiness_ready=bool(readiness_ready),
+        capability_ready=capability_ready,
+        execution_busy=bool(execution_busy),
+        local_inference_available=bool(local_inference_available),
+        fallback_tier=normalized_fallback_tier,
+        model_ready=model_ready,
+        reasons=tuple(reasons),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1072,7 @@ __all__ = [
     "UNIFIED_GATE_POLICY_SENTINELS",
     "MODE_SWITCH_SESSION_CONSISTENCY_POLICY",
     "CROSS_DEVICE_READINESS_GATE_POLICY",
+    "CANONICAL_ANDROID_EXECUTION_GATE_POLICY",
     "ANDROID_MODE_GATE_POLICY_PR_SENTINEL",
     # Enums
     "AndroidDeviceMode",
@@ -993,8 +1080,10 @@ __all__ = [
     "GateEvalResult",
     "AndroidModeState",
     "AndroidModeReadinessVerdict",
+    "AndroidCanonicalExecutionGateDecision",
     # Functions
     "evaluate_android_mode_readiness",
+    "resolve_android_execution_gate_decision",
     "apply_mode_switch_to_registry",
     "build_mode_state_for_device",
     "build_cross_device_readiness_panel_dict",

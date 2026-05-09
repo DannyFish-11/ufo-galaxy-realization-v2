@@ -334,6 +334,38 @@ class TestSelectTargetAndroidTruth:
         assert result is not None
         assert result.target_device_id == device_id
         assert result.metadata.get("android_truth_consumed") is True
+        assert result.metadata.get("canonical_execution_gate_decision") == "allow"
+        assert result.metadata.get("canonical_execution_gate_reasons")
+
+    def test_canonical_gate_decision_surfaces_deny_without_local_inference_or_fallback(
+        self, monkeypatch
+    ):
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        device_id = "dev_gate_deny"
+        entry = _make_registry_entry(device_id)
+        snap = _make_snapshot(
+            model_ready=False,
+            current_fallback_tier=None,
+            local_ai_ready=False,
+        )
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry],
+        )
+
+        result = _select_target_from_candidates(
+            readiness_inputs={device_id: _make_readiness()},
+            participation_inputs={device_id: _make_participation()},
+            reuse_inputs={device_id: False},
+            android_snapshot_inputs={device_id: snap},
+        )
+
+        assert result is not None
+        assert result.metadata.get("canonical_execution_gate_decision") == "deny"
 
     def test_two_candidates_android_truth_picks_more_ready_one(self, monkeypatch):
         """Given two candidates, Android truth scoring picks the more ready one."""

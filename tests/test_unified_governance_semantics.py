@@ -68,6 +68,32 @@ def test_cross_device_mode_delegated_blocked_by_execution_runtime_conflict() -> 
     assert delegated.blocked_by == "execution_runtime_blocked:goal_execution"
 
 
+def test_cross_device_mode_delegated_deferred_by_canonical_gate() -> None:
+    delegated = resolve_governance_path_decision(
+        mode="cross_device",
+        path=GovernancePath.delegated_execution,
+        dispatch_eligible=True,
+        takeover_eligible=True,
+        takeover_active=False,
+        canonical_execution_gate_decision="defer",
+    )
+    assert delegated.eligible is False
+    assert delegated.blocked_by == "canonical_execution_gate:defer"
+
+
+def test_cross_device_mode_delegated_denied_by_canonical_gate() -> None:
+    delegated = resolve_governance_path_decision(
+        mode="cross_device",
+        path=GovernancePath.delegated_execution,
+        dispatch_eligible=True,
+        takeover_eligible=True,
+        takeover_active=False,
+        canonical_execution_gate_decision="deny",
+    )
+    assert delegated.eligible is False
+    assert delegated.blocked_by == "canonical_execution_gate:deny"
+
+
 def test_takeover_active_blocks_lower_precedence_paths() -> None:
     decision = resolve_governance_path_decision(
         mode="cross_device",
@@ -176,3 +202,76 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
         link["link"] for link in state["mesh_runtime_state"]["runtime_relationships"]
     }
     assert "parallel_subtask_to_local_collaboration_agent" in relationship_links
+
+
+def test_build_unified_governance_state_local_inference_changes_canonical_gate_decision() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_cross")]
+    mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_cross": SimpleNamespace(is_dispatch_eligible=True, is_takeover_eligible=True, is_cross_device_ready=True)
+    }
+
+    runtime_snapshot_base = {
+        "devices": [
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+                "offline_queue_depth": 0,
+                "execution_busy": False,
+                "local_inference_available": False,
+                "runtime_health_status": "healthy",
+                "current_fallback_tier": None,
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot_base,
+    ):
+        denied_state = build_unified_governance_state()
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value={
+            **runtime_snapshot_base,
+            "devices": [{**runtime_snapshot_base["devices"][0], "local_inference_available": True}],
+        },
+    ):
+        allowed_state = build_unified_governance_state()
+
+    denied_device = denied_state["devices"][0]
+    denied_decision = denied_device["governance_precedence"]["delegated_execution"]
+    assert denied_decision["eligible"] is False
+    assert denied_decision["blocked_by"] == "canonical_execution_gate:deny"
+    denied_causality = denied_decision["decision_causality"]
+    assert denied_causality["canonical_execution_gate_decision"] == "deny"
+
+    allowed_device = allowed_state["devices"][0]
+    allowed_decision = allowed_device["governance_precedence"]["delegated_execution"]
+    assert allowed_decision["eligible"] is True
+    assert allowed_decision["blocked_by"] is None
+    allowed_causality = allowed_decision["decision_causality"]
+    assert allowed_causality["canonical_execution_gate_decision"] == "allow"

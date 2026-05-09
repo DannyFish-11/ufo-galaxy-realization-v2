@@ -69,9 +69,11 @@ from core.attached_runtime_session_registry import (
 from core.android_mode_gate_policy import (
     ANDROID_MODE_GATE_POLICY_AUTHORITY,
     ANDROID_MODE_GATE_POLICY_PR_SENTINEL,
+    CANONICAL_ANDROID_EXECUTION_GATE_POLICY,
     CROSS_DEVICE_READINESS_GATE_POLICY,
     MODE_SWITCH_SESSION_CONSISTENCY_POLICY,
     UNIFIED_GATE_POLICY_SENTINELS,
+    AndroidCanonicalExecutionGateDecision,
     AndroidDeviceMode,
     AndroidModeReadinessVerdict,
     AndroidModeState,
@@ -80,6 +82,7 @@ from core.android_mode_gate_policy import (
     build_cross_device_readiness_panel_dict,
     build_mode_state_for_device,
     evaluate_android_mode_readiness,
+    resolve_android_execution_gate_decision,
 )
 
 
@@ -143,6 +146,10 @@ class TestModuleImports:
     def test_A6_registry_mode_switch_sentinel(self):
         assert REGISTRY_MODE_SWITCH_METADATA_POLICY
         assert "record_mode_switch_in_session" in REGISTRY_MODE_SWITCH_METADATA_POLICY
+
+    def test_A6b_canonical_execution_gate_policy(self):
+        assert "allow/deny/defer" in CANONICAL_ANDROID_EXECUTION_GATE_POLICY
+        assert "resolve_android_execution_gate_decision" in CANONICAL_ANDROID_EXECUTION_GATE_POLICY
 
     def test_A7_evaluate_android_mode_readiness_callable(self):
         assert callable(evaluate_android_mode_readiness)
@@ -279,6 +286,57 @@ class TestAndroidModeReadinessVerdict:
         j = v.to_json()
         parsed = json.loads(j)
         assert parsed["device_id"] == "dev_c"
+
+
+# ---------------------------------------------------------------------------
+# E2. Canonical execution gate decision
+# ---------------------------------------------------------------------------
+
+
+class TestAndroidCanonicalExecutionGateDecision:
+
+    def test_E2_1_dataclass_to_dict(self):
+        d = AndroidCanonicalExecutionGateDecision(decision="allow", reasons=("ok",)).to_dict()
+        assert d["decision"] == "allow"
+        assert d["reasons"] == ["ok"]
+        assert d["_policy"] == CANONICAL_ANDROID_EXECUTION_GATE_POLICY
+
+    def test_E2_2_policy_not_eligible_denies(self):
+        decision = resolve_android_execution_gate_decision(
+            policy_eligible=False,
+            readiness_ready=True,
+            execution_busy=False,
+            local_inference_available=True,
+            fallback_tier="center_delegated",
+            model_ready=True,
+        )
+        assert decision.decision == "deny"
+        assert "policy_ineligible" in decision.reasons
+
+    def test_E2_3_busy_state_defers_when_other_signals_ready(self):
+        decision = resolve_android_execution_gate_decision(
+            policy_eligible=True,
+            readiness_ready=True,
+            execution_busy=True,
+            local_inference_available=True,
+            fallback_tier=None,
+            model_ready=True,
+        )
+        assert decision.decision == "defer"
+        assert "execution_busy" in decision.reasons
+
+    def test_E2_4_fallback_restores_capability_and_allows(self):
+        decision = resolve_android_execution_gate_decision(
+            policy_eligible=True,
+            readiness_ready=True,
+            execution_busy=False,
+            local_inference_available=False,
+            fallback_tier="center_delegated",
+            model_ready=False,
+        )
+        assert decision.decision == "allow"
+        assert decision.capability_ready is True
+        assert any(r.startswith("fallback_tier:") for r in decision.reasons)
 
 
 # ---------------------------------------------------------------------------
