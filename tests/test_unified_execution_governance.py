@@ -1037,6 +1037,7 @@ class TestExecutionRuntimeSnapshot:
 
         recent_event = MagicMock()
         recent_event.phase = "execution"
+        # With patched time.time()=200.0 this yields a deterministic age of 5.0 seconds.
         recent_event.absorbed_at = 195.0
 
         with patch(

@@ -94,6 +94,7 @@ def _snapshot_continuity_state(
     status: Optional[str],
     conflict: bool,
 ) -> str:
+    """Classify reconciliation facts into a stable continuity state bucket."""
     normalized_status = str(status or "").strip().lower()
     if conflict or normalized_status == "conflict_center_truth_retained":
         return "conflict_retained"

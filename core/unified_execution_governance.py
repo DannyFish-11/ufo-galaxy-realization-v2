@@ -892,7 +892,15 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             recent_event = recent_events[0]
             _phase = str(getattr(recent_event, "phase", "") or "").strip().lower()
             _absorbed = float(getattr(recent_event, "absorbed_at", 0) or 0)
-            _age_s = max(0.0, float(time.time() - _absorbed))
+            _raw_age_s = float(time.time() - _absorbed)
+            if _raw_age_s < 0:
+                logger.warning(
+                    "_get_android_runtime_pressure_snapshot: negative event age for %r (phase=%s, age=%s)",
+                    device_id,
+                    _phase,
+                    _raw_age_s,
+                )
+            _age_s = max(0.0, _raw_age_s)
             snapshot["latest_execution_event_phase"] = _phase or None
             snapshot["latest_execution_event_absorbed_at"] = _absorbed
             snapshot["latest_execution_event_age_s"] = _age_s
