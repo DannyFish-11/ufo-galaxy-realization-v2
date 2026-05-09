@@ -601,6 +601,20 @@ _TYPE_STATUS_MAP: Dict[Tuple[str, str], AndroidSignalKind] = {
     ("parallel_result", "failed"):    AndroidSignalKind.error,
     ("parallel_result", ""):          AndroidSignalKind.final_result,
 
+    # command_result — v3 AIP native result type; also the target of v1/v2
+    # compat normalisation ("response" → command_result).  A bare
+    # command_result without a terminal status is treated as an ACK (the
+    # remote surface acknowledged receipt of the command); terminal statuses
+    # map to the matching phase-advancing signals.
+    ("command_result", ""):           AndroidSignalKind.ack,
+    ("command_result", "completed"):  AndroidSignalKind.final_result,
+    ("command_result", "success"):    AndroidSignalKind.final_result,
+    ("command_result", "failed"):     AndroidSignalKind.error,
+    ("command_result", "failure"):    AndroidSignalKind.error,
+    ("command_result", "running"):    AndroidSignalKind.progress,
+    ("command_result", "cancelled"):  AndroidSignalKind.cancelled,
+    ("command_result", "timeout"):    AndroidSignalKind.timeout,
+
     # delegated_execution_signal (PR-16 canonical ingress message type)
     # signal_kind is read directly from the payload field in this case;
     # these fallbacks handle the compat path via normalize_android_message_to_signal_kind.
@@ -629,6 +643,7 @@ _TYPE_ONLY_MAP: Dict[str, AndroidSignalKind] = {
     "agent_status":                 AndroidSignalKind.progress,
     "parallel_result":              AndroidSignalKind.final_result,
     "task_assign":                  AndroidSignalKind.ack,
+    "command_result":               AndroidSignalKind.ack,
     "device_register_ack":          AndroidSignalKind.ack,
     "heartbeat_ack":                AndroidSignalKind.ack,
     # PR-16 canonical ingress: bare delegated_execution_signal → progress (keep alive)

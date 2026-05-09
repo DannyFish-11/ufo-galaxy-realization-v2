@@ -792,6 +792,15 @@ async def handle_command_result(
         if not future.done():
             future.set_result(message)
 
+    # PR-13: reconcile inbound command_result signal against the host-side
+    # execution tracker.  command_result is an ACK/result-style Android
+    # execution signal; messages that carry contract_id or session_id identity
+    # fields must advance the canonical tracking record.  _try_reconcile's
+    # internal has_key guard is a no-op for messages without those fields, so
+    # this call is safe for all command_result messages regardless of whether
+    # they relate to a tracked delegated execution.
+    _try_reconcile(message)
+
 
 async def handle_error(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
