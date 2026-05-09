@@ -180,10 +180,11 @@ def test_failure_timeout_retry_replay_and_interruption_are_recorded():
         "running",
         "interrupted",
     ]
-    assert [history[i]["attempt"] for i in [0, 1, 2, 3]] == [1, 1, 1, 1]
-    assert history[4]["attempt"] == 2
-    assert [history[i]["attempt"] for i in [5, 6]] == [2, 2]
-    assert history[7]["attempt"] == 3
+    assert history[phases.index("created")]["attempt"] == 1
+    assert history[phases.index("failed")]["attempt"] == 1
+    assert history[phases.index("retrying")]["attempt"] == 2
+    assert history[phases.index("timed_out")]["attempt"] == 2
+    assert history[phases.index("replayed")]["attempt"] == 3
 
 
 def test_result_and_state_uplink_are_mapped_into_canonical_truth():
