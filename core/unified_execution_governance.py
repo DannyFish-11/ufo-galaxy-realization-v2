@@ -1193,11 +1193,16 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
     reported_outcome = reported_result_outcome or reported_state_outcome
-    has_partial_uplink_observation = bool(
+    has_incomplete_uplink_pair = bool(
         latest_result_payload is None or latest_state_payload is None
     )
     has_partial_authoritative_observation = bool(
-        latest_phase and has_partial_uplink_observation
+        latest_phase and has_incomplete_uplink_pair
+    )
+    reported_outcome_recorded_at = (
+        latest_result_recorded_at
+        if reported_result_outcome is not None
+        else latest_state_recorded_at
     )
     outcome_conflict = bool(
         is_terminal
@@ -1207,7 +1212,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     delayed_observation = bool(
         outcome_conflict
         and latest_lifecycle_event_at > 0.0
-        and max(latest_result_recorded_at or 0.0, latest_state_recorded_at or 0.0)
+        and float(reported_outcome_recorded_at or 0.0)
         > latest_lifecycle_event_at
     )
     if outcome_conflict:
@@ -1236,7 +1241,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     else:
         reconciliation_status = "missing"
         reconciliation_reason = "no_lifecycle_or_uplink_observation"
-    authoritative_runtime_health = (
+    canonical_runtime_health = (
         reported_runtime_health
         if reported_runtime_health in {"degraded", "recovered"}
         else "stable"
@@ -1264,7 +1269,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
             else ("reported_uplink" if reported_outcome else "none")
         ),
         "reported_runtime_health": reported_runtime_health,
-        "canonical_runtime_health": authoritative_runtime_health,
+        "canonical_runtime_health": canonical_runtime_health,
         "reconciliation_status": reconciliation_status,
         "reconciliation_reason": reconciliation_reason,
         "reconciliation_conflict": outcome_conflict,

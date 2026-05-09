@@ -353,6 +353,35 @@ def test_reported_vs_canonical_truth_distinction_for_uplink_only_partial_state()
     assert truth_state["reconciliation_partial_observation"] is False
 
 
+def test_partial_authoritative_observation_is_explicitly_marked():
+    execution_id = "exec-pr08-partial-authoritative"
+    device_id = "device-pr08-partial-authoritative"
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.created,
+    )
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.succeeded,
+        enforce_transition=False,
+    )
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        payload={"status": "ok"},
+    )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["canonical_outcome"] == "succeeded"
+    assert truth_state["reconciliation_status"] == "accepted_partial_observation"
+    assert truth_state["reconciliation_partial_observation"] is True
+
+
 def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():
     execution_id = "exec-pr08-degraded-recovered"
     device_id = "device-pr08-degraded-recovered"
