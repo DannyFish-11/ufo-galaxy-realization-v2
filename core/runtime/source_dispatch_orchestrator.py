@@ -93,7 +93,9 @@ specification.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
+import threading
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -688,6 +690,91 @@ LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY: str = (
     "propagate live_outcome and live_merged_result into the SourceDispatchResult "
     "without introducing new result-surfacing authority."
 )
+
+# Runtime-proof evidence snapshot for PR-7 foundational closure.
+# This captures whether the canonical staged_mesh path has actually invoked
+# the live mesh runtime engine in process (not just sentinel presence).
+_LIVE_MESH_RUNTIME_PROOF_LOCK = threading.Lock()
+_LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
+    "staged_mesh_dispatch_count": 0,
+    "live_mesh_run_count": 0,
+    "live_mesh_completed_count": 0,
+    "live_mesh_partial_count": 0,
+    "live_mesh_failed_count": 0,
+    "last_live_outcome": None,
+    "last_mesh_session_id": None,
+}
+
+
+def _coerce_proof_counter_value(value: Any) -> int:
+    """Coerce stored proof counter values to int (legacy None-safe)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _increment_proof_counter_unlocked(counter_key: str) -> None:
+    """Increment a proof counter. Caller must hold _LIVE_MESH_RUNTIME_PROOF_LOCK."""
+    _LIVE_MESH_RUNTIME_PROOF_STATE[counter_key] = (
+        _coerce_proof_counter_value(_LIVE_MESH_RUNTIME_PROOF_STATE.get(counter_key, 0)) + 1
+    )
+
+
+def _normalize_live_outcome(result: Any) -> str:
+    """Normalize runtime outcome to a stable lowercase token."""
+    return str(getattr(result, "outcome", "") or "").strip().lower()
+
+
+def reset_live_mesh_runtime_proof_snapshot() -> None:
+    """Reset in-memory live mesh runtime proof counters.
+
+    Intended for focused tests that need deterministic assertions.
+    """
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        _LIVE_MESH_RUNTIME_PROOF_STATE.update(
+            {
+                "staged_mesh_dispatch_count": 0,
+                "live_mesh_run_count": 0,
+                "live_mesh_completed_count": 0,
+                "live_mesh_partial_count": 0,
+                "live_mesh_failed_count": 0,
+                "last_live_outcome": None,
+                "last_mesh_session_id": None,
+            }
+        )
+
+
+def get_live_mesh_runtime_proof_snapshot() -> Dict[str, Any]:
+    """Return a copy of canonical staged-mesh live runtime proof counters."""
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        return copy.deepcopy(_LIVE_MESH_RUNTIME_PROOF_STATE)
+
+
+def _record_live_mesh_runtime_proof(
+    *,
+    mesh_session: Optional[Dict[str, Any]],
+    live_run_result: Any,
+) -> None:
+    """Record staged-mesh runtime-proof evidence from orchestrator execution."""
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        _increment_proof_counter_unlocked("staged_mesh_dispatch_count")
+        if isinstance(mesh_session, dict):
+            _LIVE_MESH_RUNTIME_PROOF_STATE["last_mesh_session_id"] = mesh_session.get("session_id")
+
+        if live_run_result is None:
+            return
+
+        _increment_proof_counter_unlocked("live_mesh_run_count")
+        outcome = _normalize_live_outcome(live_run_result)
+        _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_outcome"] = outcome or None
+
+        if outcome == "completed":
+            _increment_proof_counter_unlocked("live_mesh_completed_count")
+        elif outcome == "partial":
+            _increment_proof_counter_unlocked("live_mesh_partial_count")
+        elif outcome == "failed":
+            _increment_proof_counter_unlocked("live_mesh_failed_count")
 
 
 # ---------------------------------------------------------------------------
@@ -2996,6 +3083,12 @@ def orchestrate_source_runtime_dispatch(
                     "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
                     exc,
                 )
+            # Record both successful and failed staged_mesh attempts so the
+            # proof surface reflects real canonical-path execution attempts.
+            _record_live_mesh_runtime_proof(
+                mesh_session=plan.mesh_session if isinstance(plan.mesh_session, dict) else None,
+                live_run_result=live_run_result,
+            )
 
             # Determine success and extract coordinator status for the result
             success = coordinator_state is not None

@@ -33,6 +33,7 @@ MESH_RUNTIME_STATUS_POLICY: str = (
     "multi-device mesh runtime status must be surfaced as explicit "
     "partial/runtime/deferred facts instead of implicit structural claims."
 )
+MESH_RUNTIME_STATUS_RUNTIME_PROVEN: str = "runtime_proven"
 MESH_RUNTIME_STATUS_PARTIAL: str = "partial"
 MESH_RUNTIME_STATUS_CONTRACT_ONLY: str = "contract_only"
 MESH_RUNTIME_STATUS_UNAVAILABLE: str = "unavailable"
@@ -156,7 +157,17 @@ def build_mesh_runtime_state(
         "core.mesh.mesh_runtime_center_state",
         "MESH_RUNTIME_CENTER_STATE_PR03_SENTINEL",
     )
+
+    def _safe_counter_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     recoverable_mesh_sessions = 0
+    live_runtime_proof_snapshot: Dict[str, Any] = {}
+    live_runtime_dispatch_count = 0
+    live_runtime_run_count = 0
 
     try:
         from core.mesh.mesh_session_persistence import recover_mesh_sessions
@@ -166,19 +177,40 @@ def build_mesh_runtime_state(
         logger.debug("build_mesh_runtime_state: recoverable mesh sessions unavailable: %s", exc)
         recoverable_mesh_sessions = 0
 
+    try:
+        from core.runtime.source_dispatch_orchestrator import (
+            get_live_mesh_runtime_proof_snapshot,
+        )
+
+        live_runtime_proof_snapshot = get_live_mesh_runtime_proof_snapshot()
+    except Exception as exc:
+        logger.debug("build_mesh_runtime_state: live runtime proof snapshot unavailable: %s", exc)
+        live_runtime_proof_snapshot = {}
+
+    # None-safe coercion protects against unexpected/legacy snapshot values.
+    live_runtime_dispatch_count = _safe_counter_int(
+        live_runtime_proof_snapshot.get("staged_mesh_dispatch_count", 0)
+    )
+    live_runtime_run_count = _safe_counter_int(
+        live_runtime_proof_snapshot.get("live_mesh_run_count", 0)
+    )
+    has_live_runtime_path_execution = live_runtime_run_count > 0
+
     runtime_proof_count = sum(
         (
             int(has_staged_mesh_dispatch),
             int(has_live_mesh_engine),
             int(has_live_mesh_coordinator),
             int(has_center_state_machine),
+            int(has_live_runtime_path_execution),
         )
     )
-    status = (
-        MESH_RUNTIME_STATUS_PARTIAL
-        if runtime_proof_count > 0
-        else MESH_RUNTIME_STATUS_CONTRACT_ONLY
-    )
+    if has_live_runtime_path_execution:
+        status = MESH_RUNTIME_STATUS_RUNTIME_PROVEN
+    elif runtime_proof_count > 0:
+        status = MESH_RUNTIME_STATUS_PARTIAL
+    else:
+        status = MESH_RUNTIME_STATUS_CONTRACT_ONLY
 
     # Build center-side state machine snapshot (PR-03)
     center_state_snapshot: Dict[str, Any] = {}
@@ -201,9 +233,25 @@ def build_mesh_runtime_state(
             "live_mesh_runtime_engine": has_live_mesh_engine,
             "live_mesh_session_coordinator": has_live_mesh_coordinator,
             "mesh_runtime_center_state_machine": has_center_state_machine,
+            "live_mesh_runtime_path_execution": has_live_runtime_path_execution,
         },
         "runtime_observability": {
             "recoverable_mesh_session_count": recoverable_mesh_sessions,
+            "live_mesh_runtime_proof": {
+                "staged_mesh_dispatch_count": live_runtime_dispatch_count,
+                "live_mesh_run_count": live_runtime_run_count,
+                "live_mesh_completed_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_completed_count", 0)
+                ),
+                "live_mesh_partial_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_partial_count", 0)
+                ),
+                "live_mesh_failed_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_failed_count", 0)
+                ),
+                "last_live_outcome": live_runtime_proof_snapshot.get("last_live_outcome"),
+                "last_mesh_session_id": live_runtime_proof_snapshot.get("last_mesh_session_id"),
+            },
         },
         "center_runtime_state": center_state_snapshot,
         "runtime_relationships": [
@@ -656,6 +704,7 @@ __all__ = [
     "GovernancePath",
     "GovernancePathDecision",
     "MESH_RUNTIME_STATUS_POLICY",
+    "MESH_RUNTIME_STATUS_RUNTIME_PROVEN",
     "MESH_RUNTIME_STATUS_PARTIAL",
     "MESH_RUNTIME_STATUS_CONTRACT_ONLY",
     "MESH_RUNTIME_STATUS_UNAVAILABLE",
