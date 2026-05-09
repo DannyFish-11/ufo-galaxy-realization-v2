@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -50,6 +50,13 @@ try:
 except ImportError:  # pragma: no cover
     _record_takeover_response = None  # type: ignore[assignment]
 
+try:
+    from core.attached_runtime_session_registry import (
+        lookup_session_by_device as _lookup_session_by_device,
+    )
+except ImportError:  # pragma: no cover
+    _lookup_session_by_device = None  # type: ignore[assignment]
+
 # PR-11-V2: lifecycle coordinator — session state reduction and audit are
 # performed by the coordinator.  Tracking is called directly above so that
 # it remains patchable in unit tests.
@@ -59,6 +66,30 @@ try:
     )
 except ImportError:  # pragma: no cover
     _get_lifecycle_coordinator = None  # type: ignore[assignment]
+
+
+def _resolve_session_id_for_takeover_response(
+    *,
+    device_id: str,
+    session_id: str,
+) -> str:
+    """Resolve canonical runtime session id for takeover responses."""
+    if session_id:
+        return session_id
+    if not device_id or _lookup_session_by_device is None:
+        return ""
+    try:
+        entry = _lookup_session_by_device(device_id)
+        if entry is not None and getattr(entry, "runtime_session_id", ""):
+            return str(entry.runtime_session_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "takeover_response: unable to resolve session_id from registry "
+            "(non-fatal) device_id=%s exc_type=%s",
+            device_id,
+            type(exc).__name__,
+        )
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +133,10 @@ async def handle_takeover_response(
     takeover_id = message.get("takeover_id", "")
     accepted: bool = bool(message.get("accepted", False))
     reason: str = message.get("reason") or ""
-    session_id: str = message.get("session_id") or ""
+    session_id: str = _resolve_session_id_for_takeover_response(
+        device_id=device_id,
+        session_id=message.get("session_id") or "",
+    )
     task_id: str = message.get("task_id") or message.get("payload", {}).get("task_id") or ""
     trace_id: str = message.get("trace_id") or ""
 
