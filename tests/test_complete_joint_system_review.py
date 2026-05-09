@@ -74,8 +74,8 @@ def test_methodology_prohibits_non_code_evidence() -> None:
     lower = REVIEW_METHODOLOGY.lower()
     assert "real" in lower
     assert "code" in lower
-    # Must explicitly say PR narratives are excluded
-    assert "narrative" in lower or "no historical pr" in lower or "not" in lower
+    # Must explicitly say PR narratives or historical prose are excluded
+    assert "narrative" in lower or "no historical pr" in lower or "pr narrative" in lower
 
 
 def test_pr_title_signals_joint_system_review() -> None:

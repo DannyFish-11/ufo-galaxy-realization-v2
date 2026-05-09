@@ -545,9 +545,9 @@ def _build_system_identity(p: Dict[str, bool]) -> SystemIdentityVerdict:
         p.get("android_delegated_runtime"),
         p.get("mesh_runtime_center"),
     ])
-    evidence = EvidenceState.PARTIAL if not (
+    evidence = EvidenceState.HARD_ESTABLISHED if (
         p.get("mesh_runtime_center_has_lifecycle_proof") and p.get("dispatch_consumes_android_snapshot")
-    ) else EvidenceState.HARD_ESTABLISHED
+    ) else EvidenceState.PARTIAL
 
     integration_degree = (
         "网络化程度：V2 + Android 已形成真实双节点协作网络（语义成立、局部运行成立），"
@@ -993,8 +993,7 @@ def _build_remaining_issues(p: Dict[str, bool]) -> List[RemainingIssue]:
             "跨仓漂移检测与治理仍非 fully closed。",
             ["统一治理核完备性命题", "P6 命题 fully closed"],
             ["P6"],
-            ["core/android_mode_gate_policy.py", "core/unified/capability_resolver.py",
-             "core/android_mode_gate_policy.py"],
+            ["core/android_mode_gate_policy.py", "core/unified/capability_resolver.py"],
             [ANDROID_ANCHOR_CAPABILITY_REPORT, ANDROID_ANCHOR_MODE_GATE],
         ),
         RemainingIssue(
