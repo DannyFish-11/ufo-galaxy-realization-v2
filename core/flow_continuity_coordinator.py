@@ -1158,12 +1158,21 @@ class FlowContinuityCoordinator:
             return artifact
 
         try:
-            registry_outcome: str = classify_fn(
+            classify_result = classify_fn(
                 ctx.device_id,
                 runtime_attachment_session_id=ctx.runtime_attachment_session_id,
                 durable_session_id=ctx.durable_session_id,
+                continuity_epoch=ctx.continuity_epoch,
                 registry=registry,
             )
+            existing_entry = None
+            if isinstance(classify_result, tuple):
+                registry_outcome = str(classify_result[0]) if len(classify_result) > 0 else ""
+                if len(classify_result) > 1:
+                    existing_entry = classify_result[1]
+            else:
+                # Backward-compatible support for legacy classify stubs/tests.
+                registry_outcome = str(classify_result)
         except Exception as exc:
             logger.warning("classify_reconnect_outcome raised: %s", exc)
             artifact = self._base_artifact(
@@ -1208,6 +1217,18 @@ class FlowContinuityCoordinator:
             policy_ref = "FAIL_CLOSED_IS_SAFE_DEFAULT_POLICY"
             detail = f"unrecognised registry outcome: {registry_outcome!r}"
 
+        effective_durable_session_id = ctx.durable_session_id
+        effective_continuity_epoch = ctx.continuity_epoch
+        if existing_entry is not None:
+            if not effective_durable_session_id:
+                effective_durable_session_id = str(
+                    getattr(existing_entry, "durable_session_id", "") or ""
+                )
+            if effective_continuity_epoch <= 0:
+                effective_continuity_epoch = int(
+                    getattr(existing_entry, "continuity_epoch", 0) or 0
+                )
+
         artifact = self._base_artifact(
             ctx,
             decision,
@@ -1218,6 +1239,8 @@ class FlowContinuityCoordinator:
             flow_entity_phase=self._lookup_flow_phase(ctx),
             contract_verified=contract_verified_str,
         )
+        artifact.durable_session_id = effective_durable_session_id
+        artifact.continuity_epoch = effective_continuity_epoch
         self._record(artifact)
         return artifact
 
@@ -1833,6 +1856,8 @@ def coordinate_reconnect(
     runtime_attachment_session_id: str = "",
     *,
     session_id: str = "",
+    durable_session_id: str = "",
+    continuity_epoch: int = 0,
     reconnect_count_incremented: bool = True,
     metadata: Optional[Dict[str, Any]] = None,
     coordinator: Optional[FlowContinuityCoordinator] = None,
@@ -1847,6 +1872,10 @@ def coordinate_reconnect(
         Attachment identity presented by the reconnecting client.
     session_id
         External session identifier.
+    durable_session_id
+        Cross-restart durable identity supplied by Android runtime.
+    continuity_epoch
+        Monotonic continuity era counter supplied by Android runtime.
     reconnect_count_incremented
         Whether the registry incremented reconnect_count on this reconnect.
     metadata
@@ -1860,6 +1889,8 @@ def coordinate_reconnect(
         device_id=device_id,
         session_id=session_id,
         runtime_attachment_session_id=runtime_attachment_session_id,
+        durable_session_id=durable_session_id,
+        continuity_epoch=continuity_epoch,
         metadata={
             "reconnect_count_incremented": reconnect_count_incremented,
             **(metadata or {}),

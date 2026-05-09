@@ -840,3 +840,22 @@ class TestRecoverHybridExecutionsConvenience:
         assert created.is_terminal is True
         assert created.execution_id not in recovered_ids
         assert running.execution_id in recovered_ids
+
+    def test_recover_hybrid_executions_persists_restart_normalisation(self, tmp_path):
+        from core.hybrid_orchestration_continuity import (
+            recover_hybrid_executions,
+            load_hybrid_execution,
+        )
+
+        store = _make_store(str(tmp_path))
+        running = _make_record()
+        running.transition(_state("dispatched"))
+        running.transition(_state("running"))
+        assert store.save(running) is True
+
+        recovered = recover_hybrid_executions(store=store)
+        assert len(recovered) == 1
+
+        reloaded = load_hybrid_execution(running.execution_id, store=store)
+        assert reloaded is not None
+        assert reloaded.lifecycle_state.value == "interrupted"

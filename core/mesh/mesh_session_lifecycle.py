@@ -666,10 +666,27 @@ class MeshSessionLifecycleCoordinator:
                 return None
 
             # Record the association in session metadata
+            normalized_context: Dict[str, Any]
+            if isinstance(continuity_context, dict):
+                normalized_context = dict(continuity_context)
+            else:
+                # Non-dict values are tolerated for backward compatibility with
+                # loosely-typed callers; we normalize to an empty dict and keep
+                # the original type in association metadata for diagnostics.
+                normalized_context = {}
+            if not normalized_context.get("prior_session_id"):
+                normalized_context["prior_session_id"] = session_id
+            if not normalized_context.get("prior_mesh_session_id"):
+                normalized_context["prior_mesh_session_id"] = session_id
+
             association: Dict[str, Any] = {
-                "continuity_context": continuity_context or {},
+                "continuity_context": normalized_context,
                 "associated_at": time.time(),
             }
+            if continuity_context is None:
+                association["continuity_context_type"] = "none"
+            elif not isinstance(continuity_context, dict):
+                association["continuity_context_type"] = type(continuity_context).__name__
             if resumed_dispatch_id is not None:
                 association["resumed_dispatch_id"] = resumed_dispatch_id
             if resumed_trace_id is not None:
@@ -684,7 +701,7 @@ class MeshSessionLifecycleCoordinator:
             "execution (prior_dispatch_id=%s, resumed_dispatch_id=%s)",
             session_id,
             record.status,
-            (continuity_context or {}).get("prior_dispatch_id"),
+            normalized_context.get("prior_dispatch_id"),
             resumed_dispatch_id,
         )
         return record
