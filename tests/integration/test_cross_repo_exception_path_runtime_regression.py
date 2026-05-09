@@ -493,7 +493,6 @@ class TestDegradationFallbackChain:
         """
         from core.android_device_state_store import get_device_state_snapshot
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock
 
         dev_a = f"r13-deg-a-{uuid.uuid4().hex[:8]}"
         dev_b = f"r13-deg-b-{uuid.uuid4().hex[:8]}"
@@ -553,7 +552,6 @@ class TestDegradationFallbackChain:
         """
         from core.android_device_state_store import absorb_device_state_snapshot
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock
 
         dev_a = f"r13-nofb-a-{uuid.uuid4().hex[:8]}"
         dev_b = f"r13-fb-b-{uuid.uuid4().hex[:8]}"
@@ -1150,7 +1148,6 @@ class TestMeshParticipationRecoveryAfterDegradation:
         """
         from core.android_device_state_store import get_device_state_snapshot
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock
 
         device_id = f"r13-mesh-{uuid.uuid4().hex[:8]}"
 

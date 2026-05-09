@@ -917,7 +917,6 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         """Healthy snapshot must score materially higher than degraded snapshot."""
         from core.android_device_state_store import absorb_device_state_snapshot, get_device_state_snapshot
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock as MM
 
         dev_healthy = f"pr8-score-h-{uuid.uuid4().hex[:8]}"
         dev_degraded = f"pr8-score-d-{uuid.uuid4().hex[:8]}"
@@ -936,10 +935,10 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         snap_h = get_device_state_snapshot(dev_healthy)
         snap_d = get_device_state_snapshot(dev_degraded)
 
-        readiness = MM()
+        readiness = MagicMock()
         readiness.registered = True
         readiness.routable = True
-        participation = MM()
+        participation = MagicMock()
         participation.orchestration_eligible = True
         participation.participant_tier = "joined_runtime"
 
