@@ -74,12 +74,14 @@ try:
 except ImportError:
     _CORE_AVAILABLE = False
 
-try:
-    import galaxy_gateway.android.handlers.goal_execution as _ge
+_GE_AVAILABLE: bool = False
+if _CORE_AVAILABLE:
+    try:
+        import galaxy_gateway.android.handlers.goal_execution as _ge
 
-    _GE_AVAILABLE = _CORE_AVAILABLE
-except ImportError:
-    _GE_AVAILABLE = False
+        _GE_AVAILABLE = True
+    except ImportError:
+        pass
 
 _SKIP_CORE = pytest.mark.skipif(not _CORE_AVAILABLE, reason="core modules unavailable")
 _SKIP_GE = pytest.mark.skipif(not _GE_AVAILABLE, reason="goal_execution handler unavailable")
@@ -134,6 +136,15 @@ def _make_reconcile_with_runtime(
     def _reconcile(message: Dict[str, Any]) -> Any:
         return reconcile_inbound_message(message, runtime=rt)
     return _reconcile
+
+
+def _find_record(
+    rt: "DelegatedExecutionTrackingRuntime",
+    contract_id: str,
+    session_id: str,
+) -> Any:
+    """Look up the most recent tracking record by contract_id then session_id."""
+    return rt.get_latest_for_contract(contract_id) or rt.get_latest_for_session(session_id)
 
 
 # ===========================================================================
@@ -295,7 +306,7 @@ class TestGroupB_HandleCommandResultReconcileWiring:
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
             _run(_tl.handle_command_result(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-b04") or rt.get_latest_for_session("ses-b04")
+        rec = _find_record(rt, "ctr-b04", "ses-b04")
         assert rec is not None, "tracking record must be findable in the runtime"
         assert rec.phase in (
             DelegatedExecutionPhase.acknowledged,
@@ -337,7 +348,7 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
             with patch.object(_tl, "_ingest_participant_truth", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-c01") or rt.get_latest_for_session("ses-c01")
+        rec = _find_record(rt, "ctr-c01", "ses-c01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.in_progress, (
             f"progress signal must advance phase to in_progress; got {rec.phase}"
@@ -366,7 +377,7 @@ class TestGroupC_HandleTaskProgressAdvancesPhase:
             with patch.object(_tl, "_ingest_participant_truth", None):
                 _run(_tl.handle_task_progress(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-c02") or rt.get_latest_for_session("ses-c02")
+        rec = _find_record(rt, "ctr-c02", "ses-c02")
         assert rec is not None
         assert rec.phase in (
             DelegatedExecutionPhase.acknowledged,
@@ -437,7 +448,7 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
                         ):
                             _run(_tl.handle_task_result(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-d01") or rt.get_latest_for_session("ses-d01")
+        rec = _find_record(rt, "ctr-d01", "ses-d01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.completed, (
             f"RESULT signal must advance phase to completed; got {rec.phase}"
@@ -474,7 +485,7 @@ class TestGroupD_HandleTaskResultAdvancesPhase:
                         ):
                             _run(_tl.handle_task_result(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-d02") or rt.get_latest_for_session("ses-d02")
+        rec = _find_record(rt, "ctr-d02", "ses-d02")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.failed, (
             f"failed RESULT signal must advance phase to failed; got {rec.phase}"
@@ -523,7 +534,7 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
                         ):
                             _run(_ge.handle_goal_execution_result(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-e01") or rt.get_latest_for_session("ses-e01")
+        rec = _find_record(rt, "ctr-e01", "ses-e01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.completed, (
             f"goal_execution_result success must advance phase to completed; got {rec.phase}"
@@ -560,7 +571,7 @@ class TestGroupE_HandleGoalExecutionResultAdvancesPhase:
                         ):
                             _run(_ge.handle_goal_execution_result(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-e02") or rt.get_latest_for_session("ses-e02")
+        rec = _find_record(rt, "ctr-e02", "ses-e02")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.failed, (
             f"failed goal_execution_result must advance phase to failed; got {rec.phase}"
@@ -599,7 +610,7 @@ class TestGroupF_HandleErrorAdvancesPhase:
             with patch.object(_tl, "_ingest_participant_truth", None):
                 _run(_tl.handle_error(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-f01") or rt.get_latest_for_session("ses-f01")
+        rec = _find_record(rt, "ctr-f01", "ses-f01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.failed, (
             f"error signal must advance phase to failed; got {rec.phase}"
@@ -661,7 +672,7 @@ class TestGroupG_HandleTaskEndAdvancesPhase:
             with patch.object(_tl, "_ingest_participant_truth", None):
                 _run(_tl.handle_task_end(bridge, None, msg))
 
-        rec = rt.get_latest_for_contract("ctr-g01") or rt.get_latest_for_session("ses-g01")
+        rec = _find_record(rt, "ctr-g01", "ses-g01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.completed, (
             f"task_end 'completed' must advance phase to completed; got {rec.phase}"
@@ -771,7 +782,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
             _run(_tl.handle_command_result(bridge, None, ack_msg))
 
-        rec = rt.get_latest_for_contract("ctr-i01") or rt.get_latest_for_session("ses-i01")
+        rec = _find_record(rt, "ctr-i01", "ses-i01")
         assert rec is not None
         assert rec.phase in (
             DelegatedExecutionPhase.acknowledged,
@@ -795,7 +806,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
             with patch.object(_tl, "_ingest_participant_truth", None):
                 _run(_tl.handle_task_progress(bridge, None, progress_msg))
 
-        rec = rt.get_latest_for_contract("ctr-i01") or rt.get_latest_for_session("ses-i01")
+        rec = _find_record(rt, "ctr-i01", "ses-i01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.in_progress, (
             f"after PROGRESS, phase must be in_progress; got {rec.phase}"
@@ -824,7 +835,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
                         ):
                             _run(_tl.handle_task_result(bridge, None, result_msg))
 
-        rec = rt.get_latest_for_contract("ctr-i01") or rt.get_latest_for_session("ses-i01")
+        rec = _find_record(rt, "ctr-i01", "ses-i01")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.completed, (
             f"after RESULT, phase must be completed; got {rec.phase}"
@@ -861,7 +872,7 @@ class TestGroupI_FullLifecycleThroughInboundPath:
         with patch.object(_tl, "_reconcile_inbound_message", reconcile_with_rt):
             _run(_tl.handle_command_result(bridge, None, result_msg))
 
-        rec = rt.get_latest_for_contract("ctr-i02") or rt.get_latest_for_session("ses-i02")
+        rec = _find_record(rt, "ctr-i02", "ses-i02")
         assert rec is not None
         assert rec.phase == DelegatedExecutionPhase.completed, (
             f"command_result 'completed' must close tracking to completed; got {rec.phase}"
