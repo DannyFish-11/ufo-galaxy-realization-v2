@@ -89,7 +89,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.UnifiedExecutionGovernance")
 
@@ -1149,13 +1150,15 @@ _TERMINAL_OUTCOME_VALUES: frozenset[str] = frozenset(
         _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
     }
 )
-_LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME: Dict[str, str] = {
-    ExecutionLifecyclePhase.succeeded.value: _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-    ExecutionLifecyclePhase.failed.value: _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-    ExecutionLifecyclePhase.timed_out.value: _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
-    ExecutionLifecyclePhase.cancelled.value: _CANONICAL_TERMINAL_OUTCOME_ABORTED,
-    ExecutionLifecyclePhase.interrupted.value: _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
-}
+_LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME: Mapping[str, str] = MappingProxyType(
+    {
+        ExecutionLifecyclePhase.succeeded.value: _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        ExecutionLifecyclePhase.failed.value: _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        ExecutionLifecyclePhase.timed_out.value: _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
+        ExecutionLifecyclePhase.cancelled.value: _CANONICAL_TERMINAL_OUTCOME_ABORTED,
+        ExecutionLifecyclePhase.interrupted.value: _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
+    }
+)
 
 
 def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -1219,6 +1222,10 @@ def _merge_reported_terminal_outcomes(
     if result_terminal and state_terminal:
         if result_terminal == state_terminal:
             return result_terminal
+        # partial_success is reserved for explicit mixed success/failure evidence.
+        # Other terminal mismatches (e.g. timeout vs failure) are treated as
+        # conflicts and keep deterministic precedence rather than collapsing to
+        # partial_success.
         if {result_terminal, state_terminal} == {
             _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
             _CANONICAL_TERMINAL_OUTCOME_FAILURE,
