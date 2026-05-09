@@ -89,6 +89,27 @@ def _rank_for_path(path: GovernancePath) -> int:
     return rank_map[path]
 
 
+def _snapshot_continuity_state(
+    *,
+    status: Optional[str],
+    conflict: bool,
+) -> str:
+    """Classify reconciliation facts into a stable continuity state bucket."""
+    normalized_status = str(status or "").strip().lower()
+    if conflict or normalized_status == "conflict_center_truth_retained":
+        return "conflict_retained"
+    if normalized_status in {
+        "stale_rejected",
+        "out_of_order_rejected",
+        "reconnect_delayed_rejected",
+        "duplicate_ignored",
+    }:
+        return "rejected"
+    if normalized_status == "accepted":
+        return "accepted"
+    return "unavailable"
+
+
 def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
     """Return True when a sentinel constant can be imported and is truthy."""
     try:
@@ -507,6 +528,29 @@ def build_unified_governance_state(
                 ),
                 "snapshot_last_updated_at": float(
                     runtime_state_for_device.get("snapshot_last_updated_at", 0.0) or 0.0
+                ),
+                "snapshot_reconciliation_applied": bool(
+                    runtime_state_for_device.get("snapshot_reconciliation_applied", False)
+                ),
+                "snapshot_continuity_state": _snapshot_continuity_state(
+                    status=runtime_state_for_device.get("snapshot_reconciliation_status"),
+                    conflict=bool(runtime_state_for_device.get("snapshot_conflict", False)),
+                ),
+                "latest_execution_event_phase": runtime_state_for_device.get(
+                    "latest_execution_event_phase"
+                ),
+                "latest_execution_event_absorbed_at": float(
+                    runtime_state_for_device.get("latest_execution_event_absorbed_at", 0.0)
+                    or 0.0
+                ),
+                "latest_execution_event_age_s": (
+                    float(runtime_state_for_device.get("latest_execution_event_age_s"))
+                    if runtime_state_for_device.get("latest_execution_event_age_s") is not None
+                    else None
+                ),
+                "execution_busy_window_seconds": float(
+                    runtime_state_for_device.get("execution_busy_window_seconds", 60.0)
+                    or 60.0
                 ),
             }
             paths[path.value] = decision_dict

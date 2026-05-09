@@ -43,7 +43,6 @@ AH. ``_clear_all_active_executions()`` resets tracking for test isolation.
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -65,7 +64,6 @@ from core.unified_execution_governance import (
     FailureSemantic,
     ConflictResolution,
     # Dataclasses
-    ExecutionTypePolicy,
     ExecutionGovernanceVerdict,
     ExecutionConflict,
     ConflictResolutionResult,
@@ -1028,3 +1026,49 @@ class TestExecutionRuntimeSnapshot:
         assert snapshot["active_device_count"] == 0
         assert snapshot["devices"][0]["device_id"] == "idle-device"
         assert snapshot["devices"][0]["active_execution_count"] == 0
+
+    def test_snapshot_surfaces_busy_event_and_reconciliation_evidence(self):
+        device_id = "device-runtime-evidence-1"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 4
+        state_snapshot.current_fallback_tier = "center_delegated"
+        state_snapshot.runtime_health_snapshot = {"status": "degraded"}
+        state_snapshot.is_local_ai_ready = lambda: True
+
+        recent_event = MagicMock()
+        recent_event.phase = "execution"
+        # With patched time.time()=200.0 this yields a deterministic age of 5.0 seconds.
+        recent_event.absorbed_at = 195.0
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={
+                "status": "out_of_order_rejected",
+                "reason": "snapshot_seq_regression",
+                "conflict": False,
+                "ordering_basis": "snapshot_seq",
+                "updated_at": 196.0,
+                "applied": False,
+            },
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[recent_event],
+        ), patch(
+            "core.unified_execution_governance.time.time",
+            return_value=200.0,
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["execution_busy"] is True
+        assert device_state["latest_execution_event_phase"] == "execution"
+        assert device_state["latest_execution_event_absorbed_at"] == 195.0
+        assert device_state["latest_execution_event_age_s"] == 5.0
+        assert device_state["execution_busy_window_seconds"] == 60.0
+        assert device_state["snapshot_reconciliation_status"] == "out_of_order_rejected"
+        assert device_state["snapshot_reconciliation_applied"] is False
+        assert device_state["snapshot_ordering_basis"] == "snapshot_seq"
+        assert device_state["offline_queue_depth"] == 4

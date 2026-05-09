@@ -994,6 +994,7 @@ class TestAndroidSnapshotConvergenceDeterminism:
         from types import SimpleNamespace
 
         from core.android_device_state_store import (
+            absorb_device_execution_event,
             absorb_device_state_snapshot,
             reset_android_device_state_store,
         )
@@ -1009,6 +1010,15 @@ class TestAndroidSnapshotConvergenceDeterminism:
             device_id,
             {"snapshot_ts": 7000, "snapshot_seq": 1, "model_ready": False},
         )
+        absorb_device_execution_event(
+            device_id,
+            {
+                "flow_id": f"flow-{device_id}",
+                "task_id": f"task-{device_id}",
+                "phase": "execution",
+                "event_ts": time.time(),
+            },
+        )
 
         with patch(
             "core.attached_runtime_session_registry.list_active_sessions",
@@ -1018,7 +1028,11 @@ class TestAndroidSnapshotConvergenceDeterminism:
             return_value=SimpleNamespace(mode=SimpleNamespace(value="cross_device")),
         ), patch(
             "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            return_value=SimpleNamespace(is_dispatch_eligible=True, is_takeover_eligible=True),
+            return_value=SimpleNamespace(
+                is_dispatch_eligible=True,
+                is_takeover_eligible=True,
+                is_cross_device_ready=True,
+            ),
         ), patch(
             "core.unified_execution_governance.is_takeover_active",
             return_value=False,
@@ -1035,6 +1049,12 @@ class TestAndroidSnapshotConvergenceDeterminism:
         assert causality["snapshot_reconciliation_status"] == "out_of_order_rejected"
         assert causality["snapshot_conflict"] is False
         assert causality["snapshot_ordering_basis"] == "snapshot_seq"
+        assert causality["snapshot_reconciliation_applied"] is False
+        assert causality["snapshot_continuity_state"] == "rejected"
+        assert causality["execution_busy"] is True
+        assert causality["canonical_execution_gate_decision"] == "deny"
+        assert causality["latest_execution_event_phase"] == "execution"
+        assert isinstance(causality["latest_execution_event_age_s"], float)
 
 
 # ===========================================================================

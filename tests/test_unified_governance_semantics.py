@@ -134,6 +134,11 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
                 "snapshot_conflict": False,
                 "snapshot_ordering_basis": "snapshot_ts",
                 "snapshot_last_updated_at": 123.0,
+                "snapshot_reconciliation_applied": True,
+                "latest_execution_event_phase": "completed",
+                "latest_execution_event_absorbed_at": 100.0,
+                "latest_execution_event_age_s": 2.0,
+                "execution_busy_window_seconds": 60.0,
             },
             {
                 "device_id": "dev_cross",
@@ -150,6 +155,11 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
                 "snapshot_conflict": True,
                 "snapshot_ordering_basis": "snapshot_ts+payload_hash",
                 "snapshot_last_updated_at": 456.0,
+                "snapshot_reconciliation_applied": False,
+                "latest_execution_event_phase": "execution",
+                "latest_execution_event_absorbed_at": 450.0,
+                "latest_execution_event_age_s": 6.0,
+                "execution_busy_window_seconds": 60.0,
             },
         ],
         "active_device_count": 1,
@@ -195,6 +205,12 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert causality["snapshot_conflict"] is True
     assert causality["snapshot_ordering_basis"] == "snapshot_ts+payload_hash"
     assert causality["snapshot_last_updated_at"] == 456.0
+    assert causality["snapshot_reconciliation_applied"] is False
+    assert causality["snapshot_continuity_state"] == "conflict_retained"
+    assert causality["latest_execution_event_phase"] == "execution"
+    assert causality["latest_execution_event_absorbed_at"] == 450.0
+    assert causality["latest_execution_event_age_s"] == 6.0
+    assert causality["execution_busy_window_seconds"] == 60.0
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL
@@ -275,3 +291,4 @@ def test_build_unified_governance_state_local_inference_changes_canonical_gate_d
     assert allowed_decision["blocked_by"] is None
     allowed_causality = allowed_decision["decision_causality"]
     assert allowed_causality["canonical_execution_gate_decision"] == "allow"
+    assert allowed_causality["snapshot_continuity_state"] == "unavailable"

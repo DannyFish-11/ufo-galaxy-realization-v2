@@ -834,6 +834,11 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         "snapshot_conflict": False,
         "snapshot_ordering_basis": "none",
         "snapshot_last_updated_at": 0.0,
+        "snapshot_reconciliation_applied": False,
+        "latest_execution_event_phase": None,
+        "latest_execution_event_absorbed_at": 0.0,
+        "latest_execution_event_age_s": None,
+        "execution_busy_window_seconds": EXECUTION_BUSY_THRESHOLD_SECONDS,
     }
     try:
         from core.android_device_state_store import (
@@ -873,6 +878,9 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 snapshot["snapshot_ordering_basis"] = str(
                     reconciliation.get("ordering_basis", "none")
                 )
+                snapshot["snapshot_reconciliation_applied"] = bool(
+                    reconciliation.get("applied", False)
+                )
                 _updated_at = reconciliation.get("updated_at", 0.0)
                 try:
                     snapshot["snapshot_last_updated_at"] = float(_updated_at or 0.0)
@@ -884,9 +892,19 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             recent_event = recent_events[0]
             _phase = str(getattr(recent_event, "phase", "") or "").strip().lower()
             _absorbed = float(getattr(recent_event, "absorbed_at", 0) or 0)
-            if _phase in {"planning", "grounding", "execution", "replan"} and (
-                time.time() - _absorbed
-            ) < EXECUTION_BUSY_THRESHOLD_SECONDS:
+            _raw_age_s = float(time.time() - _absorbed)
+            if _raw_age_s < 0:
+                logger.warning(
+                    "_get_android_runtime_pressure_snapshot: negative event age for %r (phase=%s, age=%s)",
+                    device_id,
+                    _phase,
+                    _raw_age_s,
+                )
+            _age_s = max(0.0, _raw_age_s)
+            snapshot["latest_execution_event_phase"] = _phase or None
+            snapshot["latest_execution_event_absorbed_at"] = _absorbed
+            snapshot["latest_execution_event_age_s"] = _age_s
+            if _phase in {"planning", "grounding", "execution", "replan"} and _age_s < EXECUTION_BUSY_THRESHOLD_SECONDS:
                 snapshot["execution_busy"] = True
     except Exception as exc:
         logger.debug(
@@ -987,6 +1005,24 @@ def get_execution_runtime_snapshot(
                 ),
                 "snapshot_last_updated_at": float(
                     runtime_pressure.get("snapshot_last_updated_at", 0.0) or 0.0
+                ),
+                "snapshot_reconciliation_applied": bool(
+                    runtime_pressure.get("snapshot_reconciliation_applied", False)
+                ),
+                "latest_execution_event_phase": runtime_pressure.get("latest_execution_event_phase"),
+                "latest_execution_event_absorbed_at": float(
+                    runtime_pressure.get("latest_execution_event_absorbed_at", 0.0) or 0.0
+                ),
+                "latest_execution_event_age_s": (
+                    float(runtime_pressure.get("latest_execution_event_age_s"))
+                    if runtime_pressure.get("latest_execution_event_age_s") is not None
+                    else None
+                ),
+                "execution_busy_window_seconds": float(
+                    runtime_pressure.get(
+                        "execution_busy_window_seconds", EXECUTION_BUSY_THRESHOLD_SECONDS
+                    )
+                    or EXECUTION_BUSY_THRESHOLD_SECONDS
                 ),
                 "_source": "unified_execution_governance.active_registry",
             }
