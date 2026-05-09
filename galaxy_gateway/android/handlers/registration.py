@@ -6,6 +6,7 @@ Handles device registration messages and unregistered message types.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections import OrderedDict
@@ -91,6 +92,64 @@ def clear_registration_gaps(device_id: Optional[str] = None) -> None:
         _device_registration_gaps.clear()
     else:
         _device_registration_gaps.pop(device_id, None)
+
+
+def _schedule_pending_delivery_replay_on_canonical_reconnect(
+    *,
+    device_id: str,
+    websocket: Any,
+) -> int:
+    """Replay buffered messages after canonical ``device_register`` continuity resume.
+
+    ``AndroidBridge.reconnect_device()`` already flushes the pending-delivery
+    buffer, but the production reconnect path is a new websocket followed by
+    ``device_register``.  When that registration is classified as
+    ``continuity_resume``, V2 must replay buffered task messages on the new
+    websocket so the resumed execution path remains stable on the canonical flow.
+
+    The replay is scheduled asynchronously so the registration ack can be sent
+    first by the websocket route before buffered task messages are re-delivered.
+    """
+    try:
+        from galaxy_gateway.pending_delivery_buffer import (
+            pending_delivery_buffer as _pending_delivery_buffer,
+        )
+    except Exception as exc:  # pragma: no cover - non-fatal integration absence
+        logger.debug(
+            "handle_device_register: canonical reconnect replay unavailable "
+            "device_id=%s error=%s",
+            device_id,
+            exc,
+        )
+        return 0
+
+    buffered_count = _pending_delivery_buffer.queue_size(device_id)
+    if buffered_count <= 0:
+        return 0
+
+    async def _flush() -> None:
+        try:
+            delivered, skipped = await _pending_delivery_buffer.flush(
+                device_id,
+                websocket.send_json,
+            )
+            logger.info(
+                "handle_device_register: canonical reconnect replay complete "
+                "device_id=%s delivered=%d skipped=%d",
+                device_id,
+                delivered,
+                skipped,
+            )
+        except Exception as exc:  # pragma: no cover - best-effort replay path
+            logger.warning(
+                "handle_device_register: canonical reconnect replay failed "
+                "device_id=%s error=%s",
+                device_id,
+                exc,
+            )
+
+    asyncio.create_task(_flush())
+    return buffered_count
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +459,7 @@ async def handle_device_register(
         #
         # See DEVICE_REGISTER_IS_CANONICAL_RECONNECT_PATH for the full policy statement.
         _reconnect_outcome = "new_attachment"  # safe default if classify call throws
+        _reg_entry = None
         try:
             from core.attached_runtime_session_registry import (
                 classify_reconnect_outcome,
@@ -546,6 +606,17 @@ async def handle_device_register(
                 device_id, _gaps,
             )
 
+        _recovery_replay_buffered_count = 0
+        _recovery_replay_scheduled = False
+        if _reconnect_outcome == "continuity_resume":
+            _recovery_replay_buffered_count = (
+                _schedule_pending_delivery_replay_on_canonical_reconnect(
+                    device_id=device_id,
+                    websocket=websocket,
+                )
+            )
+            _recovery_replay_scheduled = _recovery_replay_buffered_count > 0
+
         ack = MessageBuilder.device_register_ack(
             device_id=device_id,
             success=True,
@@ -560,6 +631,13 @@ async def handle_device_register(
         # new attachment ("new_attachment").  This is the server-side canonical
         # answer to "is this a reconnect or a brand-new connection?".
         ack["continuity_outcome"] = _reconnect_outcome
+        # ``_reg_entry`` is produced by guarded registry calls above; keep this
+        # defensive lookup so ack construction still degrades safely if a
+        # partial/mock entry without runtime_session_id reaches this path.
+        if _reg_entry is not None and getattr(_reg_entry, "runtime_session_id", None) is not None:
+            ack["runtime_session_id"] = _reg_entry.runtime_session_id
+        ack["recovery_replay_buffered_count"] = _recovery_replay_buffered_count
+        ack["recovery_replay_scheduled"] = _recovery_replay_scheduled
         # Surface registration completeness so callers can assert the state.
         ack["registration_fully_attached"] = len(_gaps) == 0
         if _gaps:
