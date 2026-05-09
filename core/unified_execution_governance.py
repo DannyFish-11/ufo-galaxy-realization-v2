@@ -85,6 +85,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -203,6 +204,7 @@ class ExecutionType(str, Enum):
     goal_execution = "goal_execution"
     parallel_subtask = "parallel_subtask"
     takeover_request = "takeover_request"
+    delegated_execution = "delegated_execution"
     unknown = "unknown"
 
     @classmethod
@@ -240,6 +242,7 @@ class ExecutionPriority(int, Enum):
     PRIORITY_1_TAKEOVER = 1
     PRIORITY_2_PARALLEL = 2
     PRIORITY_2_GOAL = 2
+    PRIORITY_2_DELEGATED = 2
     PRIORITY_UNKNOWN = 99
 
 
@@ -248,6 +251,7 @@ _EXECUTION_TYPE_PRIORITY: Dict[ExecutionType, int] = {
     ExecutionType.takeover_request: ExecutionPriority.PRIORITY_1_TAKEOVER,
     ExecutionType.parallel_subtask: ExecutionPriority.PRIORITY_2_PARALLEL,
     ExecutionType.goal_execution: ExecutionPriority.PRIORITY_2_GOAL,
+    ExecutionType.delegated_execution: ExecutionPriority.PRIORITY_2_DELEGATED,
     ExecutionType.unknown: ExecutionPriority.PRIORITY_UNKNOWN,
 }
 
@@ -392,6 +396,45 @@ class ConflictResolution(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Execution lifecycle / replay / interruption / uplink enums
+# ---------------------------------------------------------------------------
+
+
+class ExecutionLifecyclePhase(str, Enum):
+    created = "created"
+    admitted = "admitted"
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
+    timed_out = "timed_out"
+    interrupted = "interrupted"
+    retrying = "retrying"
+    replayed = "replayed"
+    cancelled = "cancelled"
+
+
+class InterruptionReason(str, Enum):
+    operator_interrupt = "operator_interrupt"
+    takeover_preempted = "takeover_preempted"
+    device_disconnect = "device_disconnect"
+    policy_interrupt = "policy_interrupt"
+    unknown = "unknown"
+
+
+class ReplayReason(str, Enum):
+    timeout_replay = "timeout_replay"
+    failure_replay = "failure_replay"
+    operator_replay = "operator_replay"
+    recovery_replay = "recovery_replay"
+    unknown = "unknown"
+
+
+class UplinkKind(str, Enum):
+    result_uplink = "result_uplink"
+    state_uplink = "state_uplink"
+
+
+# ---------------------------------------------------------------------------
 # ExecutionTypePolicy
 # ---------------------------------------------------------------------------
 
@@ -524,10 +567,31 @@ _TAKEOVER_REQUEST_POLICY = ExecutionTypePolicy(
     max_concurrent_per_device=1,
 )
 
+_DELEGATED_EXECUTION_POLICY = ExecutionTypePolicy(
+    execution_type=ExecutionType.delegated_execution,
+    priority=ExecutionPriority.PRIORITY_2_DELEGATED,
+    required_gates=[
+        "v2_cross_device_switch",
+        "session_active",
+        "session_posture_join_runtime",
+        "android_cross_device_enabled",
+        "android_parallel_execution_enabled",
+    ],
+    cancellable=True,
+    rollback_on_cancel=RollbackPolicy.notify_only,
+    rollback_on_failure=RollbackPolicy.best_effort_undo,
+    timeout_policy=TimeoutPolicy.hard,
+    default_timeout_s=240.0,
+    failure_semantic=FailureSemantic.fallback_local,
+    blocks_lower_priority=False,
+    max_concurrent_per_device=2,
+)
+
 _EXECUTION_TYPE_POLICIES: Dict[ExecutionType, ExecutionTypePolicy] = {
     ExecutionType.goal_execution: _GOAL_EXECUTION_POLICY,
     ExecutionType.parallel_subtask: _PARALLEL_SUBTASK_POLICY,
     ExecutionType.takeover_request: _TAKEOVER_REQUEST_POLICY,
+    ExecutionType.delegated_execution: _DELEGATED_EXECUTION_POLICY,
 }
 
 
@@ -696,14 +760,145 @@ class ConflictResolutionResult:
 
 
 # ---------------------------------------------------------------------------
-# Active execution tracking (in-process, non-durable)
+# Lifecycle / uplink event models
 # ---------------------------------------------------------------------------
 
-import threading
+
+@dataclass
+class ExecutionLifecycleEvent:
+    execution_id: str
+    device_id: str
+    execution_type: ExecutionType
+    phase: ExecutionLifecyclePhase
+    attempt: int = 1
+    failure_semantic: Optional[FailureSemantic] = None
+    interruption_reason: Optional[InterruptionReason] = None
+    replay_reason: Optional[ReplayReason] = None
+    detail: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    event_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "device_id": self.device_id,
+            "execution_type": self.execution_type.value,
+            "phase": self.phase.value,
+            "attempt": int(self.attempt),
+            "failure_semantic": self.failure_semantic.value if self.failure_semantic else None,
+            "interruption_reason": self.interruption_reason.value if self.interruption_reason else None,
+            "replay_reason": self.replay_reason.value if self.replay_reason else None,
+            "detail": self.detail,
+            "metadata": dict(self.metadata),
+            "event_at": float(self.event_at),
+        }
+
+
+@dataclass
+class ExecutionUplinkRecord:
+    execution_id: str
+    device_id: str
+    execution_type: ExecutionType
+    kind: UplinkKind
+    payload: Dict[str, Any]
+    sequence: int
+    recorded_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "device_id": self.device_id,
+            "execution_type": self.execution_type.value,
+            "kind": self.kind.value,
+            "payload": dict(self.payload),
+            "sequence": int(self.sequence),
+            "recorded_at": float(self.recorded_at),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Active execution tracking (in-process, non-durable)
+# ---------------------------------------------------------------------------
 
 _active_executions_lock = threading.Lock()
 # device_id → list of (ExecutionType, started_at, execution_id)
 _active_executions: Dict[str, List[Tuple[ExecutionType, float, str]]] = {}
+_execution_lifecycle_lock = threading.Lock()
+_execution_uplink_lock = threading.Lock()
+_execution_lifecycle_history: Dict[str, List[ExecutionLifecycleEvent]] = {}
+_execution_uplink_records: Dict[str, List[ExecutionUplinkRecord]] = {}
+_uplink_sequence: int = 0
+
+_EXECUTION_LIFECYCLE_TRANSITIONS: Dict[
+    ExecutionLifecyclePhase,
+    frozenset[ExecutionLifecyclePhase],
+] = {
+    ExecutionLifecyclePhase.created: frozenset(
+        {
+            ExecutionLifecyclePhase.admitted,
+            ExecutionLifecyclePhase.cancelled,
+            ExecutionLifecyclePhase.interrupted,
+        }
+    ),
+    ExecutionLifecyclePhase.admitted: frozenset(
+        {
+            ExecutionLifecyclePhase.running,
+            ExecutionLifecyclePhase.succeeded,
+            ExecutionLifecyclePhase.failed,
+            ExecutionLifecyclePhase.timed_out,
+            ExecutionLifecyclePhase.interrupted,
+            ExecutionLifecyclePhase.cancelled,
+        }
+    ),
+    ExecutionLifecyclePhase.running: frozenset(
+        {
+            ExecutionLifecyclePhase.succeeded,
+            ExecutionLifecyclePhase.failed,
+            ExecutionLifecyclePhase.timed_out,
+            ExecutionLifecyclePhase.interrupted,
+            ExecutionLifecyclePhase.cancelled,
+        }
+    ),
+    ExecutionLifecyclePhase.failed: frozenset(
+        {
+            ExecutionLifecyclePhase.retrying,
+            ExecutionLifecyclePhase.replayed,
+            ExecutionLifecyclePhase.cancelled,
+        }
+    ),
+    ExecutionLifecyclePhase.timed_out: frozenset(
+        {
+            ExecutionLifecyclePhase.retrying,
+            ExecutionLifecyclePhase.replayed,
+            ExecutionLifecyclePhase.cancelled,
+        }
+    ),
+    ExecutionLifecyclePhase.interrupted: frozenset(
+        {
+            ExecutionLifecyclePhase.retrying,
+            ExecutionLifecyclePhase.replayed,
+            ExecutionLifecyclePhase.cancelled,
+        }
+    ),
+    ExecutionLifecyclePhase.retrying: frozenset(
+        {
+            ExecutionLifecyclePhase.running,
+            ExecutionLifecyclePhase.failed,
+            ExecutionLifecyclePhase.timed_out,
+            ExecutionLifecyclePhase.interrupted,
+        }
+    ),
+    ExecutionLifecyclePhase.replayed: frozenset(
+        {
+            ExecutionLifecyclePhase.running,
+            ExecutionLifecyclePhase.failed,
+            ExecutionLifecyclePhase.timed_out,
+            ExecutionLifecyclePhase.interrupted,
+        }
+    ),
+    ExecutionLifecyclePhase.succeeded: frozenset(),
+    ExecutionLifecyclePhase.cancelled: frozenset(),
+}
 
 
 def _register_active_execution(
@@ -762,6 +957,196 @@ def _clear_all_active_executions() -> None:
         _active_executions.clear()
 
 
+def _clear_execution_governance_runtime_state() -> None:
+    """Clear active, lifecycle, and uplink runtime state (test isolation)."""
+    global _uplink_sequence
+    _clear_all_active_executions()
+    with _execution_lifecycle_lock:
+        _execution_lifecycle_history.clear()
+    with _execution_uplink_lock:
+        _execution_uplink_records.clear()
+        _uplink_sequence = 0
+
+
+def get_execution_lifecycle_matrix() -> Dict[str, Any]:
+    """Return canonical lifecycle matrix for all governed execution modes."""
+    return {
+        "execution_types": {
+            execution_type.value: {
+                "priority": int(policy.priority),
+                "timeout_policy": policy.timeout_policy.value,
+                "default_timeout_s": policy.default_timeout_s,
+                "failure_semantic": policy.failure_semantic.value,
+                "max_concurrent_per_device": policy.max_concurrent_per_device,
+            }
+            for execution_type, policy in _EXECUTION_TYPE_POLICIES.items()
+        },
+        "transitions": {
+            phase.value: sorted(next_phase.value for next_phase in next_phases)
+            for phase, next_phases in _EXECUTION_LIFECYCLE_TRANSITIONS.items()
+        },
+        "governance_semantics": {
+            "failure": ExecutionLifecyclePhase.failed.value,
+            "timeout": ExecutionLifecyclePhase.timed_out.value,
+            "retry": ExecutionLifecyclePhase.retrying.value,
+            "replay": ExecutionLifecyclePhase.replayed.value,
+            "interruption": ExecutionLifecyclePhase.interrupted.value,
+        },
+        "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
+    }
+
+
+def _is_transition_allowed(
+    previous_phase: Optional[ExecutionLifecyclePhase],
+    next_phase: ExecutionLifecyclePhase,
+) -> bool:
+    if previous_phase is None:
+        return next_phase in {
+            ExecutionLifecyclePhase.created,
+            ExecutionLifecyclePhase.admitted,
+        }
+    if previous_phase == next_phase:
+        return True
+    return next_phase in _EXECUTION_LIFECYCLE_TRANSITIONS.get(previous_phase, frozenset())
+
+
+def record_execution_lifecycle_event(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    phase: ExecutionLifecyclePhase,
+    *,
+    failure_semantic: Optional[FailureSemantic] = None,
+    interruption_reason: Optional[InterruptionReason] = None,
+    replay_reason: Optional[ReplayReason] = None,
+    detail: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    enforce_transition: bool = True,
+) -> bool:
+    """Record lifecycle event if transition is valid under the canonical matrix."""
+    with _execution_lifecycle_lock:
+        history = _execution_lifecycle_history.setdefault(execution_id, [])
+        previous_phase = history[-1].phase if history else None
+        if enforce_transition and not _is_transition_allowed(previous_phase, phase):
+            return False
+        attempt = history[-1].attempt if history else 1
+        if phase in {ExecutionLifecyclePhase.retrying, ExecutionLifecyclePhase.replayed}:
+            attempt += 1
+        history.append(
+            ExecutionLifecycleEvent(
+                execution_id=execution_id,
+                device_id=device_id,
+                execution_type=execution_type,
+                phase=phase,
+                attempt=attempt,
+                failure_semantic=failure_semantic,
+                interruption_reason=interruption_reason,
+                replay_reason=replay_reason,
+                detail=detail,
+                metadata=dict(metadata or {}),
+            )
+        )
+        return True
+
+
+def get_execution_lifecycle_history(execution_id: str) -> List[Dict[str, Any]]:
+    with _execution_lifecycle_lock:
+        return [event.to_dict() for event in _execution_lifecycle_history.get(execution_id, [])]
+
+
+def _record_execution_uplink(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    kind: UplinkKind,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    global _uplink_sequence
+    with _execution_uplink_lock:
+        _uplink_sequence += 1
+        record = ExecutionUplinkRecord(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=execution_type,
+            kind=kind,
+            payload=dict(payload),
+            sequence=_uplink_sequence,
+        )
+        _execution_uplink_records.setdefault(execution_id, []).append(record)
+        return record.to_dict()
+
+
+def record_result_uplink(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    return _record_execution_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=execution_type,
+        kind=UplinkKind.result_uplink,
+        payload=payload,
+    )
+
+
+def record_state_uplink(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    return _record_execution_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=execution_type,
+        kind=UplinkKind.state_uplink,
+        payload=payload,
+    )
+
+
+def get_all_uplink_records(execution_id: str) -> List[Dict[str, Any]]:
+    with _execution_uplink_lock:
+        return [record.to_dict() for record in _execution_uplink_records.get(execution_id, [])]
+
+
+def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
+    lifecycle_history = get_execution_lifecycle_history(execution_id)
+    uplink_records = get_all_uplink_records(execution_id)
+    latest_phase = lifecycle_history[-1]["phase"] if lifecycle_history else None
+    latest_result_payload = None
+    latest_state_payload = None
+    for record in uplink_records:
+        if record["kind"] == UplinkKind.result_uplink.value:
+            latest_result_payload = record["payload"]
+        elif record["kind"] == UplinkKind.state_uplink.value:
+            latest_state_payload = record["payload"]
+    return {
+        "execution_id": execution_id,
+        "lifecycle_phase": latest_phase,
+        "is_terminal": latest_phase
+        in {
+            ExecutionLifecyclePhase.succeeded.value,
+            ExecutionLifecyclePhase.failed.value,
+            ExecutionLifecyclePhase.timed_out.value,
+            ExecutionLifecyclePhase.cancelled.value,
+        },
+        "result_uplink": latest_result_payload,
+        "state_uplink": latest_state_payload,
+        "result_uplink_count": sum(
+            1 for record in uplink_records if record["kind"] == UplinkKind.result_uplink.value
+        ),
+        "state_uplink_count": sum(
+            1 for record in uplink_records if record["kind"] == UplinkKind.state_uplink.value
+        ),
+        "lifecycle_event_count": len(lifecycle_history),
+        "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
+    }
+
+
 # ---------------------------------------------------------------------------
 # is_takeover_active / get_active_execution_type
 # ---------------------------------------------------------------------------
@@ -818,6 +1203,12 @@ def notify_execution_completed(
     device_id: str,
     execution_type: ExecutionType,
     execution_id: str = "",
+    *,
+    completion_phase: ExecutionLifecyclePhase = ExecutionLifecyclePhase.succeeded,
+    failure_semantic: Optional[FailureSemantic] = None,
+    interruption_reason: Optional[InterruptionReason] = None,
+    replay_reason: Optional[ReplayReason] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Notify the governance layer that an execution has completed or been cancelled.
 
@@ -841,6 +1232,29 @@ def notify_execution_completed(
     """
     removed = _unregister_active_execution(device_id, execution_type, execution_id)
     if removed:
+        if execution_id:
+            record_execution_lifecycle_event(
+                execution_id=execution_id,
+                device_id=device_id,
+                execution_type=execution_type,
+                phase=completion_phase,
+                failure_semantic=failure_semantic,
+                interruption_reason=interruption_reason,
+                replay_reason=replay_reason,
+                detail="execution_terminalized",
+                metadata=metadata,
+            )
+            record_result_uplink(
+                execution_id=execution_id,
+                device_id=device_id,
+                execution_type=execution_type,
+                payload={
+                    "terminal_phase": completion_phase.value,
+                    "failure_semantic": failure_semantic.value if failure_semantic else None,
+                    "interruption_reason": interruption_reason.value if interruption_reason else None,
+                    "replay_reason": replay_reason.value if replay_reason else None,
+                },
+            )
         logger.debug(
             "notify_execution_completed: device_id=%r type=%s id=%r removed from registry",
             device_id, execution_type.value, execution_id,
@@ -1358,7 +1772,9 @@ def _check_mode_readiness_gate(
         verdict = evaluate_android_mode_readiness(
             device_id=device_id,
             require_goal_execution=(execution_type == ExecutionType.goal_execution),
-            require_parallel_execution=(execution_type == ExecutionType.parallel_subtask),
+            require_parallel_execution=(
+                execution_type in {ExecutionType.parallel_subtask, ExecutionType.delegated_execution}
+            ),
             require_local_loop_ready=(execution_type == ExecutionType.takeover_request),
         )
         if execution_type == ExecutionType.takeover_request:
@@ -1444,6 +1860,16 @@ def evaluate_execution_governance(
             failure_semantic=FailureSemantic.reject_with_reason,
         )
 
+    if register_if_accepted:
+        record_execution_lifecycle_event(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=execution_type,
+            phase=ExecutionLifecyclePhase.created,
+            detail="execution_request_received",
+            enforce_transition=False,
+        )
+
     # Step 1: Conflict check
     if not skip_conflict_check:
         conflict_verdict = _check_execution_conflict(
@@ -1492,6 +1918,22 @@ def evaluate_execution_governance(
     # All checks passed — accept
     if register_if_accepted:
         _register_active_execution(device_id, execution_type, execution_id)
+        record_execution_lifecycle_event(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=execution_type,
+            phase=ExecutionLifecyclePhase.admitted,
+            detail="execution_admitted_by_governance",
+        )
+        record_state_uplink(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=execution_type,
+            payload={
+                "governance_state": "admitted",
+                "accepted": True,
+            },
+        )
         logger.debug(
             "evaluate_execution_governance: ACCEPTED device_id=%r type=%s id=%r",
             device_id, execution_type.value, execution_id,
