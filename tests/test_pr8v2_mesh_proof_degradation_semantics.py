@@ -86,23 +86,10 @@ class TestGroupA_MeshRuntimeStateProofQuality:
             "core.unified_governance_semantics._has_sentinel",
             return_value=False,
         ), patch(
-            "core.unified_governance_semantics.build_mesh_runtime_state.__wrapped__"
-            if hasattr(build_mesh_runtime_state, "__wrapped__")
-            else "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
             return_value=_EMPTY_PROOF_SNAPSHOT,
         ):
-            # Direct snapshot injection via the orchestrator mock
-            with patch(
-                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-                return_value=_EMPTY_PROOF_SNAPSHOT,
-            ):
-                from core.runtime.source_dispatch_orchestrator import (
-                    reset_live_mesh_runtime_proof_snapshot,
-                )
-                reset_live_mesh_runtime_proof_snapshot()
-                # Disable all sentinels
-                with patch("core.unified_governance_semantics._has_sentinel", return_value=False):
-                    state = build_mesh_runtime_state()
+            state = build_mesh_runtime_state()
 
         assert state["proof_quality"] == MESH_RUNTIME_PROOF_QUALITY_MISSING
         assert state["governance_readiness_impact"] == "blocked_no_proof"
@@ -113,15 +100,20 @@ class TestGroupA_MeshRuntimeStateProofQuality:
         from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
         reset_live_mesh_runtime_proof_snapshot()
 
-        # At least one sentinel is present (default state has orchestrator sentinel)
-        state = build_mesh_runtime_state()
-        # Without a live run, proof quality must NOT claim live
-        assert state["proof_quality"] != MESH_RUNTIME_PROOF_QUALITY_LIVE
-        assert state["proof_quality"] in {
-            MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED,
-            MESH_RUNTIME_PROOF_QUALITY_MISSING,
-        }
-        assert state["governance_readiness_impact"] != "none"
+        # Explicitly provide empty proof snapshot and at least one sentinel so that
+        # runtime_proof_count > 0 and has_live_runtime_path_execution == False.
+        with patch(
+            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+            return_value=_EMPTY_PROOF_SNAPSHOT,
+        ), patch(
+            "core.unified_governance_semantics._has_sentinel",
+            return_value=True,  # all sentinels present → runtime_proof_count > 0
+        ):
+            state = build_mesh_runtime_state()
+
+        assert state["proof_quality"] == MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED
+        assert state["governance_readiness_impact"] == "degraded_structurally_inferred"
+        assert state["status"] == MESH_RUNTIME_STATUS_PARTIAL
 
     def test_a3_live_run_fresh_proof_quality_is_live(self) -> None:
         """A recent live run yields proof_quality=live and impact=none."""
@@ -469,10 +461,7 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
                 is_cross_device_ready=True,
             )
         }
-        # No live runs, at least one sentinel → structurally_inferred or missing
-        from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
-        reset_live_mesh_runtime_proof_snapshot()
-
+        # No live runs but all sentinels present → structurally_inferred (explicit mocks)
         with patch(
             "core.attached_runtime_session_registry.list_active_sessions",
             return_value=active_sessions,
@@ -488,19 +477,25 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
         ), patch(
             "core.unified_execution_governance.get_execution_runtime_snapshot",
             return_value=self._base_runtime_snapshot(),
+        ), patch(
+            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+            return_value=_EMPTY_PROOF_SNAPSHOT,
+        ), patch(
+            "core.unified_governance_semantics._has_sentinel",
+            return_value=True,  # all sentinels present → structurally_inferred
         ):
             state = build_unified_governance_state()
 
         device = state["devices"][0]
         multimodal = device["governance_precedence"]["multimodal_participation"]
         proof_quality = state["mesh_runtime_state"]["proof_quality"]
-        # Must not be live
-        assert proof_quality != MESH_RUNTIME_PROOF_QUALITY_LIVE
-        # multimodal must be blocked
+        assert proof_quality == MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED
+        # multimodal must be blocked with the exact quality reason
         assert multimodal["eligible"] is False
+        assert "structurally_inferred" in (multimodal.get("blocked_by") or "")
         causality = multimodal["decision_causality"]
-        assert causality["mesh_proof_quality"] == proof_quality
-        assert causality["mesh_governance_readiness_impact"] != "none"
+        assert causality["mesh_proof_quality"] == MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED
+        assert causality["mesh_governance_readiness_impact"] == "degraded_structurally_inferred"
 
     def test_c5_mesh_runtime_state_in_governance_output_has_proof_quality(self) -> None:
         """mesh_runtime_state in build_unified_governance_state output includes proof_quality."""

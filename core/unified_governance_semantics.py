@@ -313,6 +313,10 @@ def build_mesh_runtime_state(
     try:
         last_live_run_at = float(_raw_last_live_run_at) if _raw_last_live_run_at is not None else None
     except (TypeError, ValueError):
+        logger.debug(
+            "build_mesh_runtime_state: malformed last_live_run_at value=%r — treating as None",
+            _raw_last_live_run_at,
+        )
         last_live_run_at = None
 
     runtime_proof_count = sum(
@@ -551,15 +555,15 @@ def resolve_governance_path_decision(
             # Multimodal participation requires live mesh runtime proof.
             # Partial, stale, structurally-inferred, or missing proof must
             # degrade this decision so governance does not overstate readiness.
-            _mesh_proof = str(mesh_proof_quality or "").strip().lower()
-            if _mesh_proof and _mesh_proof != MESH_RUNTIME_PROOF_QUALITY_LIVE:
+            _mesh_proof_quality_normalized = str(mesh_proof_quality or "").strip().lower()
+            if _mesh_proof_quality_normalized and _mesh_proof_quality_normalized != MESH_RUNTIME_PROOF_QUALITY_LIVE:
                 return GovernancePathDecision(
                     path=path,
                     precedence_rank=_rank_for_path(path),
                     authority_owner="v2_authority",
                     android_scope="mesh_proof_degraded",
                     eligible=False,
-                    blocked_by=f"mesh_proof_quality:{_mesh_proof}",
+                    blocked_by=f"mesh_proof_quality:{_mesh_proof_quality_normalized}",
                 )
         return GovernancePathDecision(
             path=path,
