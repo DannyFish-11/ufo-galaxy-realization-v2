@@ -3083,6 +3083,8 @@ def orchestrate_source_runtime_dispatch(
                     "orchestrate_source_runtime_dispatch: staged_mesh coordinator error: %s",
                     exc,
                 )
+            # Record both successful and failed staged_mesh attempts so the
+            # proof surface reflects real canonical-path execution attempts.
             _record_live_mesh_runtime_proof(
                 mesh_session=plan.mesh_session if isinstance(plan.mesh_session, dict) else None,
                 live_run_result=live_run_result,
