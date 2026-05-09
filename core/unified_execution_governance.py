@@ -1231,6 +1231,8 @@ def _merge_reported_terminal_outcomes(
             _CANONICAL_TERMINAL_OUTCOME_FAILURE,
         }:
             return _CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS
+        # For non success/failure terminal mismatches, keep deterministic
+        # precedence to the latest state uplink terminal observation.
         return state_terminal
     return result_terminal or state_terminal
 
@@ -1286,6 +1288,9 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     )
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
     reported_runtime_health_reason = _extract_reported_runtime_health_reason(latest_state_payload)
+    # reported_outcome keeps backward-compatible phase-level projection
+    # (legacy callers may rely on running/admitted/etc). Terminal callers
+    # should use *_terminal_outcome fields for canonical completion closure.
     reported_outcome = reported_result_outcome or reported_state_outcome
     has_incomplete_uplink_data = bool(
         latest_result_payload is None or latest_state_payload is None
