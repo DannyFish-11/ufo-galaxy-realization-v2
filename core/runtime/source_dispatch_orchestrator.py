@@ -706,6 +706,26 @@ _LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
 }
 
 
+def _coerce_proof_counter_value(value: Any) -> int:
+    """Coerce stored proof counter values to int (legacy None-safe)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _increment_proof_counter_unlocked(counter_key: str) -> None:
+    """Increment a proof counter. Caller must hold _LIVE_MESH_RUNTIME_PROOF_LOCK."""
+    _LIVE_MESH_RUNTIME_PROOF_STATE[counter_key] = (
+        _coerce_proof_counter_value(_LIVE_MESH_RUNTIME_PROOF_STATE.get(counter_key, 0)) + 1
+    )
+
+
+def _normalize_live_outcome(result: Any) -> str:
+    """Normalize runtime outcome to a stable lowercase token."""
+    return str(getattr(result, "outcome", "") or "").strip().lower()
+
+
 def reset_live_mesh_runtime_proof_snapshot() -> None:
     """Reset in-memory live mesh runtime proof counters.
 
@@ -737,33 +757,24 @@ def _record_live_mesh_runtime_proof(
     live_run_result: Any,
 ) -> None:
     """Record staged-mesh runtime-proof evidence from orchestrator execution."""
-    def _increment_proof_counter(counter_key: str) -> None:
-        _LIVE_MESH_RUNTIME_PROOF_STATE[counter_key] = int(
-            _LIVE_MESH_RUNTIME_PROOF_STATE.get(counter_key, 0) or 0
-        ) + 1
-
-    def _normalize_live_outcome(result: Any) -> str:
-        """Normalize runtime outcome to a stable lowercase token."""
-        return str(getattr(result, "outcome", "") or "").strip().lower()
-
     with _LIVE_MESH_RUNTIME_PROOF_LOCK:
-        _increment_proof_counter("staged_mesh_dispatch_count")
+        _increment_proof_counter_unlocked("staged_mesh_dispatch_count")
         if isinstance(mesh_session, dict):
             _LIVE_MESH_RUNTIME_PROOF_STATE["last_mesh_session_id"] = mesh_session.get("session_id")
 
         if live_run_result is None:
             return
 
-        _increment_proof_counter("live_mesh_run_count")
+        _increment_proof_counter_unlocked("live_mesh_run_count")
         outcome = _normalize_live_outcome(live_run_result)
         _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_outcome"] = outcome or None
 
         if outcome == "completed":
-            _increment_proof_counter("live_mesh_completed_count")
+            _increment_proof_counter_unlocked("live_mesh_completed_count")
         elif outcome == "partial":
-            _increment_proof_counter("live_mesh_partial_count")
+            _increment_proof_counter_unlocked("live_mesh_partial_count")
         elif outcome == "failed":
-            _increment_proof_counter("live_mesh_failed_count")
+            _increment_proof_counter_unlocked("live_mesh_failed_count")
 
 
 # ---------------------------------------------------------------------------

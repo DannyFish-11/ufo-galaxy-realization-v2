@@ -157,6 +157,13 @@ def build_mesh_runtime_state(
         "core.mesh.mesh_runtime_center_state",
         "MESH_RUNTIME_CENTER_STATE_PR03_SENTINEL",
     )
+
+    def _safe_counter_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     recoverable_mesh_sessions = 0
     live_runtime_proof_snapshot: Dict[str, Any] = {}
     live_runtime_dispatch_count = 0
@@ -180,11 +187,12 @@ def build_mesh_runtime_state(
         logger.debug("build_mesh_runtime_state: live runtime proof snapshot unavailable: %s", exc)
         live_runtime_proof_snapshot = {}
 
-    live_runtime_dispatch_count = int(
-        live_runtime_proof_snapshot.get("staged_mesh_dispatch_count", 0) or 0
+    # None-safe coercion protects against unexpected/legacy snapshot values.
+    live_runtime_dispatch_count = _safe_counter_int(
+        live_runtime_proof_snapshot.get("staged_mesh_dispatch_count", 0)
     )
-    live_runtime_run_count = int(
-        live_runtime_proof_snapshot.get("live_mesh_run_count", 0) or 0
+    live_runtime_run_count = _safe_counter_int(
+        live_runtime_proof_snapshot.get("live_mesh_run_count", 0)
     )
     has_live_runtime_path_execution = live_runtime_run_count > 0
 
@@ -232,14 +240,14 @@ def build_mesh_runtime_state(
             "live_mesh_runtime_proof": {
                 "staged_mesh_dispatch_count": live_runtime_dispatch_count,
                 "live_mesh_run_count": live_runtime_run_count,
-                "live_mesh_completed_count": int(
-                    live_runtime_proof_snapshot.get("live_mesh_completed_count", 0) or 0
+                "live_mesh_completed_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_completed_count", 0)
                 ),
-                "live_mesh_partial_count": int(
-                    live_runtime_proof_snapshot.get("live_mesh_partial_count", 0) or 0
+                "live_mesh_partial_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_partial_count", 0)
                 ),
-                "live_mesh_failed_count": int(
-                    live_runtime_proof_snapshot.get("live_mesh_failed_count", 0) or 0
+                "live_mesh_failed_count": _safe_counter_int(
+                    live_runtime_proof_snapshot.get("live_mesh_failed_count", 0)
                 ),
                 "last_live_outcome": live_runtime_proof_snapshot.get("last_live_outcome"),
                 "last_mesh_session_id": live_runtime_proof_snapshot.get("last_mesh_session_id"),
