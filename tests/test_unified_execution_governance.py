@@ -55,6 +55,8 @@ from core.unified_execution_governance import (
     TAKEOVER_BLOCKS_LOWER_PRIORITY,
     PRIORITY_ORDER_POLICY,
     CANCELLATION_PROPAGATION_POLICY,
+    ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+    STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY,
     # Enums
     ExecutionType,
     ExecutionPriority,
@@ -127,6 +129,7 @@ class TestModuleImports:
         assert TAKEOVER_BLOCKS_LOWER_PRIORITY
         assert PRIORITY_ORDER_POLICY
         assert CANCELLATION_PROPAGATION_POLICY
+        assert STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY
 
 
 # ---------------------------------------------------------------------------
@@ -1115,3 +1118,127 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["android_reported_mode_state"] == "local_only"
         assert device_state["android_reported_local_inference_available"] is True
         assert device_state["android_semantics_age_s"] == 3.0
+
+    def test_snapshot_keeps_android_truth_authoritative_at_staleness_boundary(self):
+        device_id = "device-runtime-semantics-boundary"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "cross_device",
+                "reported_mode_state": "delegated",
+                "local_inference_available": True,
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["local_inference_available"] is True
+        assert device_state["android_reported_mode"] == "cross_device"
+        assert (
+            device_state["android_semantics_freshness_threshold_s"]
+            == ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
+        )
+        assert device_state["android_semantics_freshness_state"] == "fresh"
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_age_within_threshold"
+        assert device_state["android_runtime_truth_authority"] == "authoritative"
+        assert device_state["android_runtime_truth_usable"] is True
+
+    def test_snapshot_downgrades_stale_android_truth_to_unknown(self):
+        device_id = "device-runtime-semantics-stale"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "cross_device",
+                "reported_mode_state": "delegated",
+                "local_inference_available": True,
+                "local_inference_ready": True,
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS + 0.1,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["local_inference_available"] is False
+        assert device_state["android_reported_mode"] is None
+        assert device_state["android_reported_local_inference_available"] is None
+        assert device_state["android_semantics_age_s"] == pytest.approx(
+            ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS + 0.1
+        )
+        assert device_state["android_semantics_freshness_state"] == "stale"
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_age_exceeds_threshold"
+        assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
+        assert device_state["android_runtime_truth_usable"] is False
+
+    def test_snapshot_downgrades_android_truth_when_freshness_is_unknown(self):
+        device_id = "device-runtime-semantics-unknown"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "cross_device",
+                "reported_mode_state": "delegated",
+                "local_inference_available": True,
+                "absorbed_at": None,
+                "reported_at": 120.0,
+                "semantics_age_s": None,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["local_inference_available"] is False
+        assert device_state["android_reported_mode"] is None
+        assert device_state["android_semantics_age_s"] is None
+        assert device_state["android_semantics_freshness_state"] == "unknown"
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_age_unavailable"
+        assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
+        assert device_state["android_runtime_truth_usable"] is False

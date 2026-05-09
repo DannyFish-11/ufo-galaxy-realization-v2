@@ -141,6 +141,27 @@ UNIFIED_EXECUTION_GOVERNANCE_SENTINEL: str = (
     "UNIFIED_EXECUTION_GOVERNANCE_SENTINEL::v1 present"
 )
 EXECUTION_BUSY_THRESHOLD_SECONDS: float = 60.0
+ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS: float = 120.0
+STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY: str = (
+    "POLICY::STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_V1: "
+    "Android-reported runtime truth on the canonical V2 execution-governance "
+    "path MUST be freshness-gated. When android_semantics_age_s is unavailable "
+    "or exceeds ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS, Android-reported "
+    "semantics MUST be downgraded to unknown/non-authoritative input rather than "
+    "silently driving canonical governance decisions as fresh runtime truth."
+)
+
+_ANDROID_REPORTED_RUNTIME_TRUTH_FIELDS: Tuple[str, ...] = (
+    "android_reported_mode",
+    "android_reported_mode_state",
+    "android_reported_mode_readiness_state",
+    "android_reported_cross_device_eligibility",
+    "android_reported_goal_execution_eligibility",
+    "android_reported_parallel_execution_eligibility",
+    "android_reported_local_intelligence_status",
+    "android_reported_local_inference_ready",
+    "android_reported_local_inference_available",
+)
 
 # ---------------------------------------------------------------------------
 # ExecutionType
@@ -845,6 +866,93 @@ def _resolve_local_inference_availability(
     return False
 
 
+def _clear_android_reported_runtime_truth(snapshot: Dict[str, Any]) -> None:
+    """Downgrade Android-reported runtime truth to unknown/non-authoritative."""
+    for field_name in _ANDROID_REPORTED_RUNTIME_TRUTH_FIELDS:
+        snapshot[field_name] = None
+
+
+def _has_android_reported_runtime_truth(snapshot: Dict[str, Any]) -> bool:
+    """Return True when the snapshot currently carries Android-reported truth."""
+    return any(snapshot.get(field_name) is not None for field_name in _ANDROID_REPORTED_RUNTIME_TRUTH_FIELDS)
+
+
+def _normalize_android_semantics_age_s(snapshot: Dict[str, Any]) -> Optional[float]:
+    """Return normalized Android semantics age, deriving from absorbed_at when needed."""
+    raw_age_s = snapshot.get("android_semantics_age_s")
+    age_s: Optional[float]
+    try:
+        age_s = float(raw_age_s) if raw_age_s is not None else None
+    except (TypeError, ValueError):
+        age_s = None
+
+    if age_s is None:
+        try:
+            absorbed_at = float(snapshot.get("android_semantics_absorbed_at", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            absorbed_at = 0.0
+        if absorbed_at > 0.0:
+            age_s = float(time.time() - absorbed_at)
+
+    if age_s is None:
+        return None
+
+    if age_s < 0:
+        logger.warning(
+            "_normalize_android_semantics_age_s: negative semantics age=%s",
+            age_s,
+        )
+    return max(0.0, age_s)
+
+
+def _apply_android_runtime_truth_freshness_governance(
+    snapshot: Dict[str, Any],
+    *,
+    device_snapshot: Any,
+) -> None:
+    """Freshness-gate Android-reported runtime truth before governance consumes it."""
+    snapshot["android_semantics_freshness_threshold_s"] = (
+        ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
+    )
+    snapshot["android_semantics_freshness_state"] = "unknown"
+    snapshot["android_semantics_freshness_reason"] = "no_android_runtime_truth"
+    snapshot["android_runtime_truth_authority"] = "unknown"
+    snapshot["android_runtime_truth_usable"] = False
+
+    has_android_truth = _has_android_reported_runtime_truth(snapshot)
+    normalized_age_s = _normalize_android_semantics_age_s(snapshot)
+    snapshot["android_semantics_age_s"] = normalized_age_s
+
+    if not has_android_truth:
+        return
+
+    if normalized_age_s is None:
+        _clear_android_reported_runtime_truth(snapshot)
+        snapshot["local_inference_available"] = _resolve_local_inference_availability(
+            report_semantics=None,
+            device_snapshot=device_snapshot,
+        )
+        snapshot["android_semantics_freshness_reason"] = "android_semantics_age_unavailable"
+        snapshot["android_runtime_truth_authority"] = "downgraded_to_unknown"
+        return
+
+    if normalized_age_s > ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS:
+        _clear_android_reported_runtime_truth(snapshot)
+        snapshot["local_inference_available"] = _resolve_local_inference_availability(
+            report_semantics=None,
+            device_snapshot=device_snapshot,
+        )
+        snapshot["android_semantics_freshness_state"] = "stale"
+        snapshot["android_semantics_freshness_reason"] = "android_semantics_age_exceeds_threshold"
+        snapshot["android_runtime_truth_authority"] = "downgraded_to_unknown"
+        return
+
+    snapshot["android_semantics_freshness_state"] = "fresh"
+    snapshot["android_semantics_freshness_reason"] = "android_semantics_age_within_threshold"
+    snapshot["android_runtime_truth_authority"] = "authoritative"
+    snapshot["android_runtime_truth_usable"] = True
+
+
 def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     """Return Android runtime pressure truth for *device_id* (best effort)."""
     snapshot: Dict[str, Any] = {
@@ -863,6 +971,11 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         "android_semantics_absorbed_at": 0.0,
         "android_semantics_reported_at": None,
         "android_semantics_age_s": None,
+        "android_semantics_freshness_threshold_s": ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+        "android_semantics_freshness_state": "unknown",
+        "android_semantics_freshness_reason": "no_android_runtime_truth",
+        "android_runtime_truth_authority": "unknown",
+        "android_runtime_truth_usable": False,
         "runtime_health_status": "unknown",
         "execution_busy": False,
         "snapshot_reconciliation_status": "unavailable",
@@ -967,6 +1080,11 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                     snapshot["snapshot_last_updated_at"] = float(_updated_at or 0.0)
                 except (TypeError, ValueError):
                     snapshot["snapshot_last_updated_at"] = 0.0
+
+        _apply_android_runtime_truth_freshness_governance(
+            snapshot,
+            device_snapshot=device_snapshot,
+        )
 
         recent_events = list_recent_execution_events(flow_id=None, device_id=device_id, limit=1)
         if recent_events:
@@ -1107,6 +1225,25 @@ def get_execution_runtime_snapshot(
                     float(runtime_pressure.get("android_semantics_age_s"))
                     if runtime_pressure.get("android_semantics_age_s") is not None
                     else None
+                ),
+                "android_semantics_freshness_threshold_s": float(
+                    runtime_pressure.get(
+                        "android_semantics_freshness_threshold_s",
+                        ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS,
+                    )
+                    or ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
+                ),
+                "android_semantics_freshness_state": runtime_pressure.get(
+                    "android_semantics_freshness_state"
+                ),
+                "android_semantics_freshness_reason": runtime_pressure.get(
+                    "android_semantics_freshness_reason"
+                ),
+                "android_runtime_truth_authority": runtime_pressure.get(
+                    "android_runtime_truth_authority"
+                ),
+                "android_runtime_truth_usable": bool(
+                    runtime_pressure.get("android_runtime_truth_usable", False)
                 ),
                 "runtime_health_status": str(runtime_pressure.get("runtime_health_status", "unknown") or "unknown"),
                 "execution_busy": bool(runtime_pressure.get("execution_busy", False)),

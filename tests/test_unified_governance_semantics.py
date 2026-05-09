@@ -312,3 +312,76 @@ def test_build_unified_governance_state_local_inference_changes_canonical_gate_d
     allowed_causality = allowed_decision["decision_causality"]
     assert allowed_causality["canonical_execution_gate_decision"] == "allow"
     assert allowed_causality["snapshot_continuity_state"] == "unavailable"
+
+
+def test_build_unified_governance_state_stale_android_truth_downgrades_canonical_gate() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_cross")]
+    mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_cross": SimpleNamespace(is_dispatch_eligible=True, is_takeover_eligible=True, is_cross_device_ready=True)
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+                "offline_queue_depth": 0,
+                "execution_busy": False,
+                "local_inference_available": False,
+                "android_reported_mode": None,
+                "android_reported_mode_state": None,
+                "android_reported_local_inference_available": None,
+                "android_semantics_age_s": 121.0,
+                "android_semantics_freshness_threshold_s": 120.0,
+                "android_semantics_freshness_state": "stale",
+                "android_semantics_freshness_reason": "android_semantics_age_exceeds_threshold",
+                "android_runtime_truth_authority": "downgraded_to_unknown",
+                "android_runtime_truth_usable": False,
+                "runtime_health_status": "healthy",
+                "current_fallback_tier": None,
+                "snapshot_reconciliation_status": "accepted",
+                "snapshot_reconciliation_reason": "newer_snapshot_timestamp",
+                "snapshot_conflict": False,
+                "snapshot_ordering_basis": "snapshot_ts",
+                "snapshot_last_updated_at": 123.0,
+                "snapshot_reconciliation_applied": True,
+                "latest_execution_event_phase": None,
+                "latest_execution_event_absorbed_at": 0.0,
+                "latest_execution_event_age_s": None,
+                "execution_busy_window_seconds": 60.0,
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ):
+        state = build_unified_governance_state()
+
+    delegated = state["devices"][0]["governance_precedence"]["delegated_execution"]
+    assert delegated["eligible"] is False
+    assert delegated["blocked_by"] == "canonical_execution_gate:deny"
+    causality = delegated["decision_causality"]
+    assert causality["canonical_execution_gate_decision"] == "deny"
+    assert "capability_unavailable" in causality["canonical_execution_gate_reasons"]
+    assert causality["android_semantics_age_s"] == 121.0
+    assert causality["android_semantics_freshness_threshold_s"] == 120.0
+    assert causality["android_semantics_freshness_state"] == "stale"
+    assert causality["android_semantics_freshness_reason"] == "android_semantics_age_exceeds_threshold"
+    assert causality["android_runtime_truth_authority"] == "downgraded_to_unknown"
+    assert causality["android_runtime_truth_usable"] is False
+    assert causality["android_reported_mode"] is None
