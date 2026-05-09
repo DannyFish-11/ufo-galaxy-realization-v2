@@ -535,6 +535,24 @@ class TestSelectTargetAndroidTruth:
         assert result is not None
         assert result.target_device_id == dev_open
 
+    def test_blocked_execution_type_returns_stable_rejection_reason(self):
+        from core.runtime.source_dispatch_orchestrator import _score_candidate
+
+        score, rejection = _score_candidate(
+            "sess_runtime_block",
+            "dev_runtime_block",
+            readiness=_make_readiness(),
+            participation=_make_participation(),
+            reuse_eligible=False,
+            android_snapshot=_make_snapshot(model_ready=True),
+            execution_runtime_state={
+                "blocked_execution_types": ["goal_execution"],
+                "incoming_execution_type": "goal_execution",
+            },
+        )
+        assert score == 0
+        assert rejection == "execution_runtime:blocked_execution_type:goal_execution"
+
     def test_selection_stability_under_equivalent_truth(self, monkeypatch):
         from core.runtime.source_dispatch_orchestrator import (
             _select_target_from_candidates,
@@ -550,31 +568,32 @@ class TestSelectTargetAndroidTruth:
             lambda registry=None: [entry_a, entry_b],
         )
 
-        result = _select_target_from_candidates(
-            readiness_inputs={dev_a: _make_readiness(), dev_b: _make_readiness()},
-            participation_inputs={dev_a: _make_participation(), dev_b: _make_participation()},
-            reuse_inputs={dev_a: False, dev_b: False},
-            android_snapshot_inputs={
-                dev_a: _make_snapshot(model_ready=True, local_ai_ready=True),
-                dev_b: _make_snapshot(model_ready=True, local_ai_ready=True),
-            },
-            execution_runtime_inputs={
-                dev_a: {
-                    "device_id": dev_a,
-                    "active_execution_count": 0,
-                    "highest_priority_execution_type": None,
-                    "blocked_execution_types": [],
+        for _ in range(5):
+            result = _select_target_from_candidates(
+                readiness_inputs={dev_a: _make_readiness(), dev_b: _make_readiness()},
+                participation_inputs={dev_a: _make_participation(), dev_b: _make_participation()},
+                reuse_inputs={dev_a: False, dev_b: False},
+                android_snapshot_inputs={
+                    dev_a: _make_snapshot(model_ready=True, local_ai_ready=True),
+                    dev_b: _make_snapshot(model_ready=True, local_ai_ready=True),
                 },
-                dev_b: {
-                    "device_id": dev_b,
-                    "active_execution_count": 0,
-                    "highest_priority_execution_type": None,
-                    "blocked_execution_types": [],
+                execution_runtime_inputs={
+                    dev_a: {
+                        "device_id": dev_a,
+                        "active_execution_count": 0,
+                        "highest_priority_execution_type": None,
+                        "blocked_execution_types": [],
+                    },
+                    dev_b: {
+                        "device_id": dev_b,
+                        "active_execution_count": 0,
+                        "highest_priority_execution_type": None,
+                        "blocked_execution_types": [],
+                    },
                 },
-            },
-        )
-        assert result is not None
-        assert result.target_device_id == dev_a
+            )
+            assert result is not None
+            assert result.target_device_id == dev_a
 
 
 # ---------------------------------------------------------------------------

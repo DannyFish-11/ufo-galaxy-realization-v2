@@ -1063,6 +1063,7 @@ ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY: str = (
     "without hard-gating it so the system degrades gracefully if all "
     "candidates are busy."
 )
+MAX_QUEUE_DEPTH_PENALTY: int = 20
 
 ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET_POLICY: str = (
     "POLICY::ANDROID_CONTROL_ONLY_POSTURE_IS_NOT_DISPATCH_TARGET: "
@@ -1773,7 +1774,7 @@ def _score_candidate(
         if _local_ai_ready:
             score += 8
         if isinstance(_offline_queue_depth, int) and _offline_queue_depth > 0:
-            score -= min(_offline_queue_depth, 20)
+            score -= min(_offline_queue_depth, MAX_QUEUE_DEPTH_PENALTY)
         if isinstance(_runtime_health_snapshot, dict):
             _health_status = str(
                 _runtime_health_snapshot.get("status")

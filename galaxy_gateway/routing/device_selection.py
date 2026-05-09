@@ -50,6 +50,7 @@ filter degrades gracefully).
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
@@ -343,13 +344,11 @@ def select_devices(
             try:
                 _recent = list_recent_execution_events(flow_id=None, device_id=_did, limit=1)
                 if _recent:
-                    import time as _time
-
                     _ev = _recent[0]
                     _phase = str(getattr(_ev, "phase", "") or "").strip().lower()
                     _absorbed = float(getattr(_ev, "absorbed_at", 0) or 0)
                     if _phase in {"planning", "grounding", "execution", "replan"} and (
-                        _time.time() - _absorbed
+                        time.time() - _absorbed
                     ) < 60.0:
                         _score -= 12
             except Exception:

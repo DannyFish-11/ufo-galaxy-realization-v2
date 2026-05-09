@@ -224,7 +224,12 @@ def resolve_governance_path_decision(
     highest_priority_execution_type: Optional[str] = None,
     blocked_execution_types: Optional[List[str]] = None,
 ) -> GovernancePathDecision:
-    blocked_execution_types = [str(v).strip() for v in (blocked_execution_types or []) if str(v).strip()]
+    _blocked_execution_types: List[str] = []
+    for value in blocked_execution_types or []:
+        normalized_value = str(value).strip()
+        if normalized_value:
+            _blocked_execution_types.append(normalized_value)
+    blocked_execution_types = _blocked_execution_types
     highest_priority_execution_type = str(highest_priority_execution_type or "").strip()
     if takeover_active and path != GovernancePath.takeover:
         return GovernancePathDecision(

@@ -140,6 +140,7 @@ CANCELLATION_PROPAGATION_POLICY: str = (
 UNIFIED_EXECUTION_GOVERNANCE_SENTINEL: str = (
     "UNIFIED_EXECUTION_GOVERNANCE_SENTINEL::v1 present"
 )
+EXECUTION_BUSY_THRESHOLD_SECONDS: float = 60.0
 
 # ---------------------------------------------------------------------------
 # ExecutionType
@@ -860,7 +861,9 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             recent_event = recent_events[0]
             _phase = str(getattr(recent_event, "phase", "") or "").strip().lower()
             _absorbed = float(getattr(recent_event, "absorbed_at", 0) or 0)
-            if _phase in {"planning", "grounding", "execution", "replan"} and (time.time() - _absorbed) < 60.0:
+            if _phase in {"planning", "grounding", "execution", "replan"} and (
+                time.time() - _absorbed
+            ) < EXECUTION_BUSY_THRESHOLD_SECONDS:
                 snapshot["execution_busy"] = True
     except Exception as exc:
         logger.debug(
