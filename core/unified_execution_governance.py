@@ -968,6 +968,10 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         "android_reported_local_intelligence_status": None,
         "android_reported_local_inference_ready": None,
         "android_reported_local_inference_available": None,
+        "android_semantics_contract_state": "missing",
+        "android_semantics_contract_complete": False,
+        "android_semantics_missing_keys": [],
+        "android_semantics_malformed_keys": [],
         "android_semantics_absorbed_at": 0.0,
         "android_semantics_reported_at": None,
         "android_semantics_age_s": None,
@@ -1021,6 +1025,18 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             )
             snapshot["android_reported_local_inference_available"] = report_semantics.get(
                 "local_inference_available"
+            )
+            snapshot["android_semantics_contract_state"] = (
+                report_semantics.get("canonical_gate_metadata_state") or "missing"
+            )
+            snapshot["android_semantics_contract_complete"] = bool(
+                report_semantics.get("canonical_gate_metadata_complete", False)
+            )
+            snapshot["android_semantics_missing_keys"] = list(
+                report_semantics.get("missing_canonical_gate_metadata_keys") or []
+            )
+            snapshot["android_semantics_malformed_keys"] = list(
+                report_semantics.get("malformed_canonical_gate_metadata_keys") or []
             )
             _semantics_absorbed_at = report_semantics.get("absorbed_at")
             try:
@@ -1212,6 +1228,18 @@ def get_execution_runtime_snapshot(
                 ),
                 "android_reported_local_inference_available": runtime_pressure.get(
                     "android_reported_local_inference_available"
+                ),
+                "android_semantics_contract_state": runtime_pressure.get(
+                    "android_semantics_contract_state"
+                ),
+                "android_semantics_contract_complete": bool(
+                    runtime_pressure.get("android_semantics_contract_complete", False)
+                ),
+                "android_semantics_missing_keys": list(
+                    runtime_pressure.get("android_semantics_missing_keys", [])
+                ),
+                "android_semantics_malformed_keys": list(
+                    runtime_pressure.get("android_semantics_malformed_keys", [])
                 ),
                 "android_semantics_absorbed_at": float(
                     runtime_pressure.get("android_semantics_absorbed_at", 0.0) or 0.0

@@ -600,6 +600,69 @@ class TestEvaluateReadinessAndroidGateOff:
 
         assert state.mode == AndroidDeviceMode.local
 
+    def test_J5_capability_report_semantics_take_precedence_over_snapshot_gates(self):
+        register_session("dev_reported_local_gate", posture="join_runtime")
+        snap = _make_snapshot(
+            cross_device_enabled=True,
+            goal_execution_enabled=True,
+            parallel_execution_enabled=True,
+        )
+        semantics = {
+            "canonical_mode": "local",
+            "reported_mode_state": "local_only",
+            "mode_readiness_state": "degraded",
+            "cross_device_eligibility": False,
+            "goal_execution_eligibility": False,
+            "parallel_execution_eligibility": False,
+            "canonical_gate_metadata_state": "complete",
+            "canonical_gate_metadata_complete": True,
+            "missing_canonical_gate_metadata_keys": [],
+            "malformed_canonical_gate_metadata_keys": [],
+        }
+        with patch(
+            "galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True
+        ), patch(
+            "core.android_device_state_store.get_device_state_snapshot", return_value=snap
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value=semantics,
+        ):
+            verdict = evaluate_android_mode_readiness("dev_reported_local_gate")
+
+        assert verdict.mode == AndroidDeviceMode.local
+        assert verdict.is_dispatch_eligible is False
+        assert "android_cross_device_enabled" in verdict.blocking_gates
+
+    def test_J6_partial_capability_report_metadata_blocks_explicitly(self):
+        register_session("dev_partial_semantics", posture="join_runtime")
+        snap = _make_snapshot(
+            cross_device_enabled=True,
+            goal_execution_enabled=True,
+            parallel_execution_enabled=True,
+        )
+        semantics = {
+            "canonical_mode": "cross_device",
+            "reported_mode_state": "cross_device_active",
+            "canonical_gate_metadata_state": "partial",
+            "canonical_gate_metadata_complete": False,
+            "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
+            "malformed_canonical_gate_metadata_keys": [],
+        }
+        with patch(
+            "galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True
+        ), patch(
+            "core.android_device_state_store.get_device_state_snapshot", return_value=snap
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value=semantics,
+        ):
+            verdict = evaluate_android_mode_readiness("dev_partial_semantics")
+
+        assert verdict.is_dispatch_eligible is False
+        assert "android_cross_device_enabled" in verdict.blocking_gates
+        reasons = {gate.gate_name: gate.reason for gate in verdict.gate_results}
+        assert "canonical gate metadata is partial" in reasons["android_cross_device_enabled"]
+
 
 # ---------------------------------------------------------------------------
 # K. evaluate_android_mode_readiness — local_loop_ready=False → not takeover eligible

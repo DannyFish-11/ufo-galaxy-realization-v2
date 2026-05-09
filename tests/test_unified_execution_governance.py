@@ -1242,3 +1242,42 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["android_semantics_freshness_reason"] == "android_semantics_age_unavailable"
         assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
         assert device_state["android_runtime_truth_usable"] is False
+
+    def test_snapshot_surfaces_android_semantics_contract_state(self):
+        device_id = "device-runtime-semantics-contract"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": None,
+                "reported_mode_state": "not_a_real_mode",
+                "canonical_gate_metadata_state": "malformed",
+                "canonical_gate_metadata_complete": False,
+                "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
+                "malformed_canonical_gate_metadata_keys": ["mode_state"],
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": 3.0,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["android_semantics_contract_state"] == "malformed"
+        assert device_state["android_semantics_contract_complete"] is False
+        assert device_state["android_semantics_missing_keys"] == ["goal_execution_eligibility"]
+        assert device_state["android_semantics_malformed_keys"] == ["mode_state"]
