@@ -1737,6 +1737,9 @@ def _score_candidate(
     # Capability-presence-only fields (e.g. mobilevlm_present / seeclick_present)
     # are intentionally NOT consumed here.  Per
     # ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY.
+    _model_ready = None
+    _fallback_tier = ""
+    _local_ai_ready = False
     if android_snapshot is not None:
         _model_ready = getattr(android_snapshot, "model_ready", None)
         _accessibility_ready = getattr(android_snapshot, "accessibility_ready", None)
@@ -1745,7 +1748,6 @@ def _score_candidate(
         _fallback_tier = getattr(android_snapshot, "current_fallback_tier", None) or ""
         _offline_queue_depth = getattr(android_snapshot, "offline_queue_depth", None)
         _runtime_health_snapshot = getattr(android_snapshot, "runtime_health_snapshot", None)
-        _local_ai_ready = False
         _is_local_ai_ready = getattr(android_snapshot, "is_local_ai_ready", None)
         if callable(_is_local_ai_ready):
             try:
@@ -1767,10 +1769,6 @@ def _score_candidate(
         if _warmup_result == "failed":
             # Runtime warm-up failed — slight penalty.
             score -= 10
-        if _model_ready is False and not _fallback_tier:
-            # Model not ready AND no fallback tier configured: device cannot
-            # execute tasks by any path — strong preference to route elsewhere.
-            score -= 20
         if _local_ai_ready:
             score += 8
         if isinstance(_offline_queue_depth, int) and _offline_queue_depth > 0:
@@ -1785,6 +1783,27 @@ def _score_candidate(
             _is_degraded = bool(_runtime_health_snapshot.get("is_degraded", False))
             if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                 score -= 10
+
+    _canonical_gate_decision = "allow"
+    try:
+        from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
+        _canonical_gate = resolve_android_execution_gate_decision(
+            policy_eligible=True,
+            readiness_ready=True,
+            execution_busy=execution_busy,
+            local_inference_available=_local_ai_ready,
+            fallback_tier=_fallback_tier,
+            model_ready=_model_ready,
+        )
+        _canonical_gate_decision = _canonical_gate.decision
+    except Exception:
+        _canonical_gate_decision = "allow"
+
+    if _canonical_gate_decision == "deny" and _model_ready is False and not _fallback_tier:
+        # Model not ready AND no fallback tier configured: device cannot
+        # execute tasks by any path — strong preference to route elsewhere.
+        score -= 20
 
     # --- Execution busy penalty (ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION) ---
     if execution_busy:
@@ -2045,6 +2064,49 @@ def _select_target_from_candidates(
                 exc,
             )
 
+        _canonical_gate_decision = "allow"
+        _canonical_gate_reasons: List[str] = []
+        try:
+            from core.android_mode_gate_policy import resolve_android_execution_gate_decision
+
+            _model_ready_for_gate = (
+                getattr(android_snapshot, "model_ready", None)
+                if android_snapshot is not None
+                else None
+            )
+            _fallback_tier_for_gate = (
+                getattr(android_snapshot, "current_fallback_tier", None)
+                if android_snapshot is not None
+                else None
+            )
+            _local_inference_available_for_gate = False
+            if android_snapshot is not None:
+                _is_local_ai_ready = getattr(android_snapshot, "is_local_ai_ready", None)
+                if callable(_is_local_ai_ready):
+                    try:
+                        _local_inference_available_for_gate = bool(_is_local_ai_ready())
+                    except Exception:
+                        _local_inference_available_for_gate = False
+                elif _is_local_ai_ready is not None:
+                    _local_inference_available_for_gate = bool(_is_local_ai_ready)
+
+            _canonical_gate = resolve_android_execution_gate_decision(
+                policy_eligible=True,
+                readiness_ready=True,
+                execution_busy=_execution_busy,
+                local_inference_available=_local_inference_available_for_gate,
+                fallback_tier=_fallback_tier_for_gate,
+                model_ready=_model_ready_for_gate,
+            )
+            _canonical_gate_decision = _canonical_gate.decision
+            _canonical_gate_reasons = list(_canonical_gate.reasons)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "_select_target_from_candidates: canonical gate decision unavailable for %s: %s",
+                device_id,
+                exc,
+            )
+
         # Score the candidate — pass registry entry posture so the posture gate
         # can reject 'control_only' devices (Android posture gating); pass
         # android_snapshot and execution_busy for Android truth scoring.
@@ -2095,6 +2157,8 @@ def _select_target_from_candidates(
                         ),
                     },
                     "execution_busy": _execution_busy,
+                    "canonical_execution_gate_decision": _canonical_gate_decision,
+                    "canonical_execution_gate_reasons": list(_canonical_gate_reasons),
                     "execution_runtime_state": execution_runtime_by_device.get(device_id),
                 },
             )

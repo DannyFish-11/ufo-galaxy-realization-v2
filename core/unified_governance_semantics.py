@@ -223,6 +223,7 @@ def resolve_governance_path_decision(
     takeover_active: bool,
     highest_priority_execution_type: Optional[str] = None,
     blocked_execution_types: Optional[List[str]] = None,
+    canonical_execution_gate_decision: str = "allow",
 ) -> GovernancePathDecision:
     _blocked_execution_types: List[str] = []
     for value in blocked_execution_types or []:
@@ -231,6 +232,7 @@ def resolve_governance_path_decision(
             _blocked_execution_types.append(normalized_value)
     blocked_execution_types = _blocked_execution_types
     highest_priority_execution_type = str(highest_priority_execution_type or "").strip()
+    canonical_execution_gate_decision = str(canonical_execution_gate_decision or "allow").strip().lower()
     if takeover_active and path != GovernancePath.takeover:
         return GovernancePathDecision(
             path=path,
@@ -291,6 +293,24 @@ def resolve_governance_path_decision(
                     eligible=False,
                     blocked_by="execution_runtime_blocked:goal_execution",
                 )
+            if canonical_execution_gate_decision == "defer":
+                return GovernancePathDecision(
+                    path=path,
+                    precedence_rank=_rank_for_path(path),
+                    authority_owner="v2_authority",
+                    android_scope="deferred_by_canonical_execution_gate",
+                    eligible=False,
+                    blocked_by="canonical_execution_gate:defer",
+                )
+            if canonical_execution_gate_decision == "deny":
+                return GovernancePathDecision(
+                    path=path,
+                    precedence_rank=_rank_for_path(path),
+                    authority_owner="v2_authority",
+                    android_scope="blocked_by_canonical_execution_gate",
+                    eligible=False,
+                    blocked_by="canonical_execution_gate:deny",
+                )
             return GovernancePathDecision(
                 path=path,
                 precedence_rank=_rank_for_path(path),
@@ -346,6 +366,7 @@ def build_unified_governance_state(
         from core.android_mode_gate_policy import (
             build_mode_state_for_device,
             evaluate_android_mode_readiness,
+            resolve_android_execution_gate_decision,
         )
         from core.unified_execution_governance import (
             get_execution_runtime_snapshot,
@@ -406,6 +427,15 @@ def build_unified_governance_state(
         dispatch_eligible = bool(getattr(readiness, "is_dispatch_eligible", False))
         takeover_eligible = bool(getattr(readiness, "is_takeover_eligible", False))
         runtime_state_for_device = dict(runtime_by_device.get(device_id, {}))
+        canonical_gate = resolve_android_execution_gate_decision(
+            policy_eligible=dispatch_eligible,
+            readiness_ready=bool(getattr(readiness, "is_cross_device_ready", False)),
+            execution_busy=bool(runtime_state_for_device.get("execution_busy", False)),
+            local_inference_available=bool(
+                runtime_state_for_device.get("local_inference_available", False)
+            ),
+            fallback_tier=runtime_state_for_device.get("current_fallback_tier"),
+        )
         if mode == "local":
             local_mode_count += 1
         elif mode == "cross_device":
@@ -428,6 +458,7 @@ def build_unified_governance_state(
                 blocked_execution_types=list(
                     runtime_state_for_device.get("blocked_execution_types", [])
                 ),
+                canonical_execution_gate_decision=canonical_gate.decision,
             )
             decision_dict = decision.to_dict()
             decision_dict["decision_causality"] = {
@@ -459,6 +490,9 @@ def build_unified_governance_state(
                 "current_fallback_tier": runtime_state_for_device.get(
                     "current_fallback_tier"
                 ),
+                "canonical_execution_gate_decision": canonical_gate.decision,
+                "canonical_execution_gate_reasons": list(canonical_gate.reasons),
+                "capability_ready": canonical_gate.capability_ready,
                 "snapshot_reconciliation_status": runtime_state_for_device.get(
                     "snapshot_reconciliation_status"
                 ),
