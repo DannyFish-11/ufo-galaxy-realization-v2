@@ -1352,7 +1352,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         reconciliation_reason = "authoritative_terminal_phase_aligned_with_observation"
     elif in_progress_terminal_observation:
         reconciliation_status = "terminal_observation_held_for_lifecycle_authority"
-        reconciliation_reason = "reported_terminal_outcome_arrived_before_authoritative_lifecycle_terminalization"
+        reconciliation_reason = "reported_terminal_outcome_arrived_before_authoritative_lifecycle_termination"
     elif latest_phase:
         reconciliation_status = "in_progress"
         reconciliation_reason = "authoritative_lifecycle_not_terminal"
