@@ -45,6 +45,8 @@ Dataclasses::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 import time
@@ -84,6 +86,12 @@ ANDROID_DEVICE_STATE_STORE_AUTHORITY: str = (
 
 DEVICE_STATE_SNAPSHOT_MSG_TYPE: str = "device_state_snapshot"
 DEVICE_EXECUTION_EVENT_MSG_TYPE: str = "device_execution_event"
+SNAPSHOT_RECONCILIATION_ACCEPTED: str = "accepted"
+SNAPSHOT_RECONCILIATION_STALE_REJECTED: str = "stale_rejected"
+SNAPSHOT_RECONCILIATION_OUT_OF_ORDER_REJECTED: str = "out_of_order_rejected"
+SNAPSHOT_RECONCILIATION_RECONNECT_DELAYED_REJECTED: str = "reconnect_delayed_rejected"
+SNAPSHOT_RECONCILIATION_CONFLICT_CENTER_TRUTH_RETAINED: str = "conflict_center_truth_retained"
+SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
 
 # PR-4: Terminal Android execution phases that trigger roundtrip notification.
 # When an absorbed DeviceExecutionEvent carries one of these phases, the
@@ -196,6 +204,7 @@ class DeviceStateSnapshot:
     device_id: str = ""
     absorbed_at: float = field(default_factory=time.time)
     snapshot_ts: Optional[float] = None
+    snapshot_seq: Optional[int] = None
 
     # Native runtime availability
     llama_cpp_available: Optional[bool] = None
@@ -236,6 +245,8 @@ class DeviceStateSnapshot:
 
     # Raw payload
     raw_payload: Dict[str, Any] = field(default_factory=dict)
+    canonical_reconciliation_status: str = SNAPSHOT_RECONCILIATION_ACCEPTED
+    canonical_reconciliation_reason: str = "initial_absorb"
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-safe dict representation."""
@@ -244,6 +255,7 @@ class DeviceStateSnapshot:
             "device_id": self.device_id,
             "absorbed_at": self.absorbed_at,
             "snapshot_ts": self.snapshot_ts,
+            "snapshot_seq": self.snapshot_seq,
             "llama_cpp_available": self.llama_cpp_available,
             "ncnn_available": self.ncnn_available,
             "active_runtime_type": self.active_runtime_type,
@@ -269,6 +281,8 @@ class DeviceStateSnapshot:
             "current_fallback_tier": self.current_fallback_tier,
             "planner_fallback_tier": self.planner_fallback_tier,
             "grounding_fallback_tier": self.grounding_fallback_tier,
+            "canonical_reconciliation_status": self.canonical_reconciliation_status,
+            "canonical_reconciliation_reason": self.canonical_reconciliation_reason,
         }
 
     def is_local_ai_ready(self) -> bool:
@@ -386,6 +400,8 @@ class _AndroidDeviceStateStore:
         self._lock = threading.Lock()
         # Latest snapshot per device_id
         self._snapshots: Dict[str, DeviceStateSnapshot] = {}
+        # Latest convergence decision per device_id.
+        self._snapshot_reconciliation: Dict[str, Dict[str, Any]] = {}
         # Recent execution events (capped at _MAX_EVENTS)
         self._execution_events: List[DeviceExecutionEvent] = []
         self._MAX_EVENTS = 500
@@ -402,14 +418,37 @@ class _AndroidDeviceStateStore:
         """
         snap = _parse_state_snapshot(device_id, payload)
         with self._lock:
-            self._snapshots[device_id] = snap
+            existing = self._snapshots.get(device_id)
+            reconciliation = _reconcile_snapshot_update(existing=existing, incoming=snap)
+            reconciliation["updated_at"] = time.time()
+            self._snapshot_reconciliation[device_id] = dict(reconciliation)
+            if bool(reconciliation.get("applied", True)):
+                snap.canonical_reconciliation_status = str(
+                    reconciliation.get("status", SNAPSHOT_RECONCILIATION_ACCEPTED)
+                )
+                snap.canonical_reconciliation_reason = str(
+                    reconciliation.get("reason", "applied_to_canonical_truth")
+                )
+                self._snapshots[device_id] = snap
+                canonical = snap
+            else:
+                canonical = existing or snap
+                canonical.canonical_reconciliation_status = str(
+                    reconciliation.get("status", SNAPSHOT_RECONCILIATION_STALE_REJECTED)
+                )
+                canonical.canonical_reconciliation_reason = str(
+                    reconciliation.get("reason", "rejected_by_canonical_reconciliation")
+                )
         logger.debug(
-            "Absorbed DEVICE_STATE_SNAPSHOT from %s (local_loop_ready=%s, model_ready=%s)",
+            "Absorbed DEVICE_STATE_SNAPSHOT from %s (local_loop_ready=%s, model_ready=%s, "
+            "reconciliation_status=%s, applied=%s)",
             device_id,
-            snap.local_loop_ready,
-            snap.model_ready,
+            canonical.local_loop_ready,
+            canonical.model_ready,
+            reconciliation.get("status"),
+            reconciliation.get("applied"),
         )
-        return snap
+        return canonical
 
     # ------------------------------------------------------------------
     # Ingress: absorb DEVICE_EXECUTION_EVENT payloads
@@ -532,6 +571,17 @@ class _AndroidDeviceStateStore:
                 "current_fallback_tier": snap.current_fallback_tier,
                 "planner_fallback_tier": snap.planner_fallback_tier,
                 "grounding_fallback_tier": snap.grounding_fallback_tier,
+                "canonical_reconciliation": dict(
+                    self._snapshot_reconciliation.get(
+                        snap.device_id,
+                        {
+                            "status": snap.canonical_reconciliation_status,
+                            "reason": snap.canonical_reconciliation_reason,
+                            "applied": True,
+                            "conflict": False,
+                        },
+                    )
+                ),
                 "warmup_result": snap.warmup_result,
                 "runtime_health_snapshot": snap.runtime_health_snapshot,
                 "dispatch_capability_status": {
@@ -565,6 +615,29 @@ class _AndroidDeviceStateStore:
             "local_loop_ready_count": local_loop_ready,
             "pending_first_download_count": pending_download,
             "devices": devices,
+        }
+
+    def get_snapshot_reconciliation(self, device_id: str) -> Dict[str, Any]:
+        """Return latest snapshot reconciliation decision for *device_id*."""
+        with self._lock:
+            decision = self._snapshot_reconciliation.get(device_id)
+            if decision is not None:
+                return dict(decision)
+            snap = self._snapshots.get(device_id)
+        if snap is None:
+            return {
+                "status": "unavailable",
+                "reason": "device_has_no_snapshot",
+                "applied": False,
+                "conflict": False,
+                "ordering_basis": "none",
+            }
+        return {
+            "status": snap.canonical_reconciliation_status,
+            "reason": snap.canonical_reconciliation_reason,
+            "applied": True,
+            "conflict": False,
+            "ordering_basis": "none",
         }
 
 
@@ -642,6 +715,14 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
             or payload.get("snapshotTs")
             or payload.get("timestamp")
         ),
+        snapshot_seq=_first_int(
+            "snapshot_seq",
+            "snapshotSeq",
+            "state_seq",
+            "stateSeq",
+            "state_version",
+            "stateVersion",
+        ),
         # Native runtime
         llama_cpp_available=_first_bool("llama_cpp_available", "llamaCppAvailable"),
         ncnn_available=_first_bool("ncnn_available", "ncnnAvailable"),
@@ -681,6 +762,191 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
         grounding_fallback_tier=_first_str("grounding_fallback_tier", "groundingFallbackTier"),
         raw_payload=dict(payload),
     )
+
+
+def _parse_ordering_timestamp(snapshot: Optional[DeviceStateSnapshot]) -> Optional[float]:
+    if snapshot is None:
+        return None
+    raw_value = getattr(snapshot, "snapshot_ts", None)
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _snapshot_fingerprint(snapshot: Optional[DeviceStateSnapshot]) -> str:
+    if snapshot is None:
+        return ""
+    payload = getattr(snapshot, "raw_payload", {}) or {}
+    try:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    except Exception as exc:
+        logger.debug("snapshot fingerprint fallback to repr due to payload encoding error: %s", exc)
+        encoded = repr(payload)
+    digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return digest
+
+
+def _reconcile_snapshot_update(
+    *,
+    existing: Optional[DeviceStateSnapshot],
+    incoming: DeviceStateSnapshot,
+) -> Dict[str, Any]:
+    """Return deterministic reconciliation decision for incoming snapshot."""
+    if existing is None:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+            "reason": "initial_snapshot",
+            "applied": True,
+            "conflict": False,
+            "ordering_basis": "bootstrap",
+        }
+
+    existing_seq = existing.snapshot_seq
+    incoming_seq = incoming.snapshot_seq
+    existing_ts = _parse_ordering_timestamp(existing)
+    incoming_ts = _parse_ordering_timestamp(incoming)
+    existing_fp = _snapshot_fingerprint(existing)
+    incoming_fp = _snapshot_fingerprint(incoming)
+
+    if existing_seq is not None and incoming_seq is not None:
+        if incoming_seq > existing_seq:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+                "reason": "newer_snapshot_sequence",
+                "applied": True,
+                "conflict": False,
+                "ordering_basis": "snapshot_seq",
+            }
+        if incoming_seq < existing_seq:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_OUT_OF_ORDER_REJECTED,
+                "reason": "snapshot_sequence_regressed",
+                "applied": False,
+                "conflict": False,
+                "ordering_basis": "snapshot_seq",
+            }
+        if incoming_ts is not None and existing_ts is not None:
+            if incoming_ts > existing_ts:
+                return {
+                    "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+                    "reason": "same_sequence_newer_timestamp",
+                    "applied": True,
+                    "conflict": False,
+                    "ordering_basis": "snapshot_seq+snapshot_ts",
+                }
+            if incoming_ts < existing_ts:
+                return {
+                    "status": SNAPSHOT_RECONCILIATION_STALE_REJECTED,
+                    "reason": "same_sequence_older_timestamp",
+                    "applied": False,
+                    "conflict": False,
+                    "ordering_basis": "snapshot_seq+snapshot_ts",
+                }
+        if incoming_fp == existing_fp:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED,
+                "reason": "same_sequence_duplicate_payload",
+                "applied": False,
+                "conflict": False,
+                "ordering_basis": "snapshot_seq+payload_hash",
+            }
+        return {
+            "status": SNAPSHOT_RECONCILIATION_CONFLICT_CENTER_TRUTH_RETAINED,
+            "reason": "same_sequence_conflicting_payload",
+            "applied": False,
+            "conflict": True,
+            "ordering_basis": "snapshot_seq+payload_hash",
+        }
+
+    if existing_seq is not None and incoming_seq is None:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_RECONNECT_DELAYED_REJECTED,
+            "reason": "ordered_stream_missing_sequence",
+            "applied": False,
+            "conflict": False,
+            "ordering_basis": "snapshot_seq",
+        }
+    if existing_seq is None and incoming_seq is not None:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+            "reason": "sequence_introduced",
+            "applied": True,
+            "conflict": False,
+            "ordering_basis": "snapshot_seq",
+        }
+
+    if existing_ts is not None and incoming_ts is not None:
+        if incoming_ts > existing_ts:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+                "reason": "newer_snapshot_timestamp",
+                "applied": True,
+                "conflict": False,
+                "ordering_basis": "snapshot_ts",
+            }
+        if incoming_ts < existing_ts:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_STALE_REJECTED,
+                "reason": "snapshot_timestamp_regressed",
+                "applied": False,
+                "conflict": False,
+                "ordering_basis": "snapshot_ts",
+            }
+        if incoming_fp == existing_fp:
+            return {
+                "status": SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED,
+                "reason": "same_timestamp_duplicate_payload",
+                "applied": False,
+                "conflict": False,
+                "ordering_basis": "snapshot_ts+payload_hash",
+            }
+        # Roundtrip (R2) closure tradeoff: when both snapshots lack sequence and share the
+        # same timestamp, apply latest arrival to preserve update liveness.
+        # Safety-sensitive fields should include sequence to avoid this fallback.
+        return {
+            "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+            "reason": "same_timestamp_last_write_wins",
+            "applied": True,
+            "conflict": True,
+            "ordering_basis": "snapshot_ts+payload_hash",
+        }
+
+    if existing_ts is not None and incoming_ts is None:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_RECONNECT_DELAYED_REJECTED,
+            "reason": "ordered_stream_missing_timestamp",
+            "applied": False,
+            "conflict": False,
+            "ordering_basis": "snapshot_ts",
+        }
+    if existing_ts is None and incoming_ts is not None:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+            "reason": "timestamp_introduced",
+            "applied": True,
+            "conflict": False,
+            "ordering_basis": "snapshot_ts",
+        }
+
+    if incoming_fp == existing_fp:
+        return {
+            "status": SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED,
+            "reason": "unordered_duplicate_payload",
+            "applied": False,
+            "conflict": False,
+            "ordering_basis": "payload_hash",
+        }
+
+    return {
+        "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
+        "reason": "unordered_last_write_wins",
+        "applied": True,
+        "conflict": False,
+        "ordering_basis": "fallback",
+    }
 
 
 def _parse_execution_event(device_id: str, payload: Dict[str, Any]) -> DeviceExecutionEvent:
@@ -863,3 +1129,8 @@ def list_recent_execution_events(
         device_id=device_id,
         limit=limit,
     )
+
+
+def get_device_snapshot_reconciliation(device_id: str) -> Dict[str, Any]:
+    """Return latest canonical reconciliation decision for a device snapshot stream."""
+    return get_android_device_state_store().get_snapshot_reconciliation(device_id)
