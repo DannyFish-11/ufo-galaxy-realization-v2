@@ -154,15 +154,19 @@ def _ensure_all_issues_are_planned(
 
 
 def _collect_issue_anchors(issue_index: Dict[str, RemainingIssue], issue_ids: List[str]) -> Dict[str, List[str]]:
+    v2_seen = set()
+    android_seen = set()
     v2: List[str] = []
     android: List[str] = []
     for issue_id in issue_ids:
         issue = issue_index[issue_id]
         for anchor in issue.v2_anchors:
-            if anchor not in v2:
+            if anchor not in v2_seen:
+                v2_seen.add(anchor)
                 v2.append(anchor)
         for anchor in issue.android_anchors:
-            if anchor not in android:
+            if anchor not in android_seen:
+                android_seen.add(anchor)
                 android.append(anchor)
     return {"v2": v2, "android": android}
 

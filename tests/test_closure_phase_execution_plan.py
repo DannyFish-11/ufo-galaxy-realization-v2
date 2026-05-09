@@ -48,6 +48,8 @@ def test_pr_ownership_has_explicit_repositories() -> None:
 def test_stage_gate_block_grouping_exists_for_p0_p1_p2() -> None:
     plan = build_closure_phase_execution_plan()
     blocks = {block.block_id: block for block in plan.closure_blocks}
+    assert "B-P0-RUNTIME-CLOSURE" in blocks
+    assert "B-P2-ENHANCEMENT" in blocks
     assert blocks["B-P0-RUNTIME-CLOSURE"].stage_gate == StageGate.P0_BEFORE_RUNTIME_CLOSURE
     assert set(blocks["B-P0-RUNTIME-CLOSURE"].issue_ids) == {"R1", "R2", "R3"}
     assert blocks["B-P2-ENHANCEMENT"].stage_gate == StageGate.P2_ENHANCEMENT
