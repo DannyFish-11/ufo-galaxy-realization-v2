@@ -82,7 +82,7 @@ def test_uplink_only_partial_success_is_canonically_classified():
     assert truth_state["reconciliation_status"] == "uplink_only_terminal_observation"
 
 
-def test_terminal_report_is_held_while_authoritative_lifecycle_is_non_terminal():
+def test_holds_terminal_report_during_non_terminal_lifecycle():
     execution_id = "exec-pr09-terminal-held"
     device_id = "device-pr09-terminal-held"
     record_execution_lifecycle_event(

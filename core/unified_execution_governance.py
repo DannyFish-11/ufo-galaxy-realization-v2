@@ -1149,6 +1149,13 @@ _TERMINAL_OUTCOME_VALUES: frozenset[str] = frozenset(
         _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
     }
 )
+_LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME: Dict[str, str] = {
+    ExecutionLifecyclePhase.succeeded.value: _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+    ExecutionLifecyclePhase.failed.value: _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+    ExecutionLifecyclePhase.timed_out.value: _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
+    ExecutionLifecyclePhase.cancelled.value: _CANONICAL_TERMINAL_OUTCOME_ABORTED,
+    ExecutionLifecyclePhase.interrupted.value: _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
+}
 
 
 def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -1196,15 +1203,8 @@ def _normalize_terminal_outcome(outcome: Optional[str]) -> Optional[str]:
     normalized = str(outcome or "").strip().lower()
     if not normalized:
         return None
-    lifecycle_phase_to_terminal = {
-        ExecutionLifecyclePhase.succeeded.value: _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-        ExecutionLifecyclePhase.failed.value: _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-        ExecutionLifecyclePhase.timed_out.value: _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
-        ExecutionLifecyclePhase.cancelled.value: _CANONICAL_TERMINAL_OUTCOME_ABORTED,
-        ExecutionLifecyclePhase.interrupted.value: _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
-    }
-    if normalized in lifecycle_phase_to_terminal:
-        return lifecycle_phase_to_terminal[normalized]
+    if normalized in _LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME:
+        return _LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME[normalized]
     if normalized in _TERMINAL_OUTCOME_VALUES:
         return normalized
     return None
