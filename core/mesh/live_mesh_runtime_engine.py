@@ -415,12 +415,24 @@ def _evaluate_barrier(
         b_status_val = b_status.value if hasattr(b_status, "value") else str(b_status)
 
         if b_status_val == "not_required":
+            status_event = mod.MeshCoordinationEvent(
+                kind=mod.MeshCoordinationEventKind.coordinator_status_changed,
+                message="Barrier not required: coordinator advanced to merging",
+                metadata={"to_status": "merging", "trigger": "barrier_not_required"},
+            )
+            updated = coordinator_state.model_copy(
+                update={
+                    "status": mod.MeshCoordinatorStatus.merging,
+                    "coordination_events": list(coordinator_state.coordination_events) + [status_event],
+                    "updated_at": time.time(),
+                }
+            )
             _log_event(
                 "barrier_released",
                 getattr(coordinator_state, "session_id", None),
                 message="Barrier not required — skipping barrier evaluation",
             )
-            return coordinator_state, True
+            return updated, True
 
         participants = getattr(coordinator_state, "participants", []) or []
         device_ids = [getattr(p, "device_id", "") for p in participants if getattr(p, "device_id", "")]
@@ -522,10 +534,16 @@ def _evaluate_barrier(
                 kind=mod.MeshCoordinationEventKind.barrier_released,
                 message="Barrier released: all participants arrived",
             )
+            status_event = mod.MeshCoordinationEvent(
+                kind=mod.MeshCoordinationEventKind.coordinator_status_changed,
+                message="Barrier released: coordinator advanced to merging",
+                metadata={"to_status": "merging", "trigger": "barrier_released"},
+            )
             updated = coordinator_state.model_copy(
                 update={
                     "barrier_state": new_barrier,
-                    "coordination_events": list(coordinator_state.coordination_events) + [barrier_event],
+                    "status": mod.MeshCoordinatorStatus.merging,
+                    "coordination_events": list(coordinator_state.coordination_events) + [barrier_event, status_event],
                     "updated_at": time.time(),
                 }
             )

@@ -1258,7 +1258,7 @@ def recover_hybrid_executions(
     *,
     store: Optional[HybridContinuityPersistenceStore] = None,
 ) -> List[HybridOrchestrationRecord]:
-    """Return all non-terminal records from the durable store.
+    """Return restart-normalised, non-terminal records from the durable store.
 
     Convenience entry-point for startup recovery::
 
@@ -1267,10 +1267,37 @@ def recover_hybrid_executions(
         for r in records:
             registry.register(r)
 
+    Recovery normalization
+    ----------------------
+    Restored records are normalized to restart-consistent lifecycle states:
+
+    - ``dispatched``/``running``/``resuming`` -> ``interrupted``
+    - ``created`` -> ``cancelled`` (never dispatched; not recoverable in-flight work)
+
+    The returned records are the same objects loaded from the store and are
+    mutated in-place during normalization.
+
     Returns
     -------
     list of :class:`HybridOrchestrationRecord`
-        Records in non-terminal states that are eligible for restoration.
+        Records in non-terminal states that are eligible for restoration after
+        restart normalization.
     """
     effective_store = store if store is not None else get_hybrid_persistence_store()
-    return effective_store.list_recoverable()
+    recovered = effective_store.list_recoverable()
+    for record in recovered:
+        if record.lifecycle_state in (
+            HybridOrchestrationLifecycleState.dispatched,
+            HybridOrchestrationLifecycleState.running,
+            HybridOrchestrationLifecycleState.resuming,
+        ):
+            record.transition(
+                HybridOrchestrationLifecycleState.interrupted,
+                reason="recover_hybrid_executions_restart_normalisation",
+            )
+        elif record.lifecycle_state == HybridOrchestrationLifecycleState.created:
+            record.transition(
+                HybridOrchestrationLifecycleState.cancelled,
+                reason="recover_hybrid_executions_created_cancelled",
+            )
+    return [record for record in recovered if not record.is_terminal]

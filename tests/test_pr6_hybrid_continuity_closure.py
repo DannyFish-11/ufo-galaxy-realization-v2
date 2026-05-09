@@ -788,3 +788,55 @@ class TestFullContinuityScenario:
         count = reg.restore_from_persistence(store)
         assert count == 0
         assert reg.get(r.execution_id) is None
+
+
+class TestRecoverHybridExecutionsConvenience:
+    def test_recover_hybrid_executions_normalizes_running_to_interrupted(self, tmp_path):
+        from core.hybrid_orchestration_continuity import recover_hybrid_executions
+
+        store = _make_store(str(tmp_path))
+        running = _make_record()
+        running.transition(_state("dispatched"))
+        running.transition(_state("running"))
+        assert store.save(running) is True
+
+        recovered = recover_hybrid_executions(store=store)
+        assert len(recovered) == 1
+        assert recovered[0].execution_id == running.execution_id
+        assert recovered[0].lifecycle_state.value == "interrupted"
+
+    def test_recover_hybrid_executions_cancels_created_records(self, tmp_path):
+        from core.hybrid_orchestration_continuity import recover_hybrid_executions
+
+        store = _make_store(str(tmp_path))
+        created = _make_record()
+        running = _make_record()
+        running.transition(_state("dispatched"))
+        running.transition(_state("running"))
+        assert store.save(created) is True
+        assert store.save(running) is True
+
+        recovered = recover_hybrid_executions(store=store)
+        recovered_ids = {record.execution_id for record in recovered}
+        assert running.execution_id in recovered_ids
+        assert created.execution_id not in recovered_ids
+
+    def test_recover_hybrid_executions_excludes_terminal_records(self):
+        from core.hybrid_orchestration_continuity import recover_hybrid_executions
+
+        created = _make_record()
+        running = _make_record()
+        running.transition(_state("dispatched"))
+        running.transition(_state("running"))
+
+        class _MemoryStore:
+            def list_recoverable(self):
+                return [created, running]
+
+        recovered = recover_hybrid_executions(store=_MemoryStore())
+        recovered_ids = {record.execution_id for record in recovered}
+
+        assert created.lifecycle_state.value == "cancelled"
+        assert created.is_terminal is True
+        assert created.execution_id not in recovered_ids
+        assert running.execution_id in recovered_ids
