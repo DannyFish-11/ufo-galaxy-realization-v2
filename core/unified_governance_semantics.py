@@ -545,6 +545,22 @@ def build_unified_governance_state(
                     if runtime_state_for_device.get("android_semantics_age_s") is not None
                     else None
                 ),
+                "android_semantics_freshness_threshold_s": float(
+                    runtime_state_for_device.get("android_semantics_freshness_threshold_s", 0.0)
+                    or 0.0
+                ),
+                "android_semantics_freshness_state": runtime_state_for_device.get(
+                    "android_semantics_freshness_state"
+                ),
+                "android_semantics_freshness_reason": runtime_state_for_device.get(
+                    "android_semantics_freshness_reason"
+                ),
+                "android_runtime_truth_authority": runtime_state_for_device.get(
+                    "android_runtime_truth_authority"
+                ),
+                "android_runtime_truth_usable": bool(
+                    runtime_state_for_device.get("android_runtime_truth_usable", False)
+                ),
                 "runtime_health_status": runtime_state_for_device.get(
                     "runtime_health_status"
                 ),
