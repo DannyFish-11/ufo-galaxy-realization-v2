@@ -99,15 +99,43 @@ logger = logging.getLogger("Galaxy.UnifiedExecutionGovernance")
 UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY: str = (
     "UNIFIED_EXECUTION_GOVERNANCE_V1: "
     "core.unified_execution_governance is the single, authoritative unified "
-    "governance layer for all three execution types (goal_execution, "
-    "parallel_subtask, takeover_request). It evaluates acceptance conditions, "
-    "priority, concurrency, cancellation, rollback, timeout, and failure "
-    "semantics for each type in a unified policy model. All code that needs to "
-    "determine whether an execution type is accepted, or to resolve conflicts "
-    "between concurrent execution types, MUST consult this module."
+    "governance layer for all four execution types (goal_execution, "
+    "parallel_subtask, takeover_request, delegated_execution). It evaluates "
+    "acceptance conditions, priority, concurrency, cancellation, rollback, "
+    "timeout, and failure semantics for each type in a unified policy model. "
+    "All code that needs to determine whether an execution type is accepted, "
+    "or to resolve conflicts between concurrent execution types, MUST consult "
+    "this module."
 )
 
-UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION: str = "1.0.0"
+UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION: str = "1.1.0"
+
+# PR-06 hardening sentinel — import to assert lifecycle governance is hardened.
+EXECUTION_GOVERNANCE_HARDENING_SENTINEL: str = (
+    "EXECUTION_GOVERNANCE_HARDENING_V1::PR-06 present: "
+    "center-side lifecycle governance is hardened across goal/parallel/"
+    "takeover/delegated execution modes with canonical interruption, timeout, "
+    "retry, replay, and uplink semantics."
+)
+
+LIFECYCLE_GOVERNANCE_HARDENING_POLICY: str = (
+    "POLICY::LIFECYCLE_GOVERNANCE_HARDENING_V1: "
+    "All execution lifecycle transitions — including failure, timeout, retry, "
+    "replay, and interruption — MUST be recorded via record_execution_lifecycle_event(). "
+    "Result uplinks MUST be recorded via record_result_uplink(). "
+    "The center-side execution registry is the canonical runtime authority; "
+    "uplink records are the canonical source of result truth for each execution."
+)
+
+DELEGATED_EXECUTION_GOVERNANCE_POLICY: str = (
+    "POLICY::DELEGATED_EXECUTION_GOVERNANCE_V1: "
+    "delegated_execution is the center-side canonical type for executions where "
+    "V2 delegates goal-level authority to the Android runtime while retaining "
+    "supervision rights. It has the same priority tier as goal_execution but "
+    "a distinct gate surface (delegated_execution_gate). "
+    "An active takeover_request MUST block delegated_execution (same as goal). "
+    "delegated_execution failures default to fallback_local before escalation."
+)
 
 # Policy constants referenced in governance decisions
 TAKEOVER_BLOCKS_LOWER_PRIORITY: str = (
@@ -184,7 +212,12 @@ class ExecutionType(str, Enum):
     takeover_request
         V2 actively takes over an Android device for direct UI control.
         Requires mode gate + session gate + readiness gate to pass (the most
-        stringent acceptance conditions of the three types).
+        stringent acceptance conditions of the four types).
+    delegated_execution
+        V2 delegates goal-level authority to the Android runtime while
+        retaining supervision rights.  The Android device executes autonomously
+        within the delegated scope; V2 monitors lifecycle and receives result
+        uplinks.  Blocked by active takeover_request (same as goal_execution).
     unknown
         Execution type could not be determined.  Used as a safe default.
     """
@@ -192,6 +225,7 @@ class ExecutionType(str, Enum):
     goal_execution = "goal_execution"
     parallel_subtask = "parallel_subtask"
     takeover_request = "takeover_request"
+    delegated_execution = "delegated_execution"
     unknown = "unknown"
 
     @classmethod
@@ -222,6 +256,9 @@ class ExecutionPriority(int, Enum):
     PRIORITY_2_GOAL = 2
         goal_execution — same priority as parallel_subtask.  When both are
         present simultaneously, the first one to arrive wins (FIFO).
+    PRIORITY_2_DELEGATED = 2
+        delegated_execution — same priority tier as goal_execution.  Blocked
+        by active takeover_request; otherwise first-arrived wins (FIFO).
     PRIORITY_UNKNOWN = 99
         Unknown execution type — treated as lowest priority.
     """
@@ -229,6 +266,7 @@ class ExecutionPriority(int, Enum):
     PRIORITY_1_TAKEOVER = 1
     PRIORITY_2_PARALLEL = 2
     PRIORITY_2_GOAL = 2
+    PRIORITY_2_DELEGATED = 2
     PRIORITY_UNKNOWN = 99
 
 
@@ -237,6 +275,7 @@ _EXECUTION_TYPE_PRIORITY: Dict[ExecutionType, int] = {
     ExecutionType.takeover_request: ExecutionPriority.PRIORITY_1_TAKEOVER,
     ExecutionType.parallel_subtask: ExecutionPriority.PRIORITY_2_PARALLEL,
     ExecutionType.goal_execution: ExecutionPriority.PRIORITY_2_GOAL,
+    ExecutionType.delegated_execution: ExecutionPriority.PRIORITY_2_DELEGATED,
     ExecutionType.unknown: ExecutionPriority.PRIORITY_UNKNOWN,
 }
 
@@ -381,6 +420,113 @@ class ConflictResolution(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# InterruptionReason — PR-06 lifecycle hardening
+# ---------------------------------------------------------------------------
+
+
+class InterruptionReason(str, Enum):
+    """Canonical reason for execution lifecycle interruption.
+
+    An interruption is a non-terminal lifecycle event that suspends progress;
+    the execution may be retried, replayed, or escalated depending on policy.
+
+    Values
+    ------
+    timeout_hard
+        Hard timeout deadline exceeded; governance cancels the execution.
+    timeout_soft
+        Soft advisory timeout elapsed; execution is warned but may continue.
+    device_disconnected
+        The target Android device connection was lost mid-execution.
+    mode_boundary_violated
+        Execution continued past a governance mode-boundary (e.g., device
+        switched to local while cross-device execution was running).
+    operator_interrupt
+        Operator explicitly interrupted the execution.
+    higher_priority_preempted
+        A higher-priority execution (e.g., takeover) preempted this one.
+    resource_exhaustion
+        Runtime resource limit (memory, CPU, queue depth) forced suspension.
+    dependency_failure
+        A dependency required for execution (session, transport, device
+        capability) became unavailable mid-flight.
+    unknown
+        Interruption reason could not be determined.
+    """
+
+    timeout_hard = "timeout_hard"
+    timeout_soft = "timeout_soft"
+    device_disconnected = "device_disconnected"
+    mode_boundary_violated = "mode_boundary_violated"
+    operator_interrupt = "operator_interrupt"
+    higher_priority_preempted = "higher_priority_preempted"
+    resource_exhaustion = "resource_exhaustion"
+    dependency_failure = "dependency_failure"
+    unknown = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# ReplayReason — PR-06 lifecycle hardening
+# ---------------------------------------------------------------------------
+
+
+class ReplayReason(str, Enum):
+    """Canonical reason a completed or failed execution is replayed.
+
+    Values
+    ------
+    transient_failure_retry
+        Execution failed transiently and is being retried under the same
+        policy (same target, same mode).
+    fallback_mode_retry
+        Execution failed and is being retried in a downgraded mode (e.g.,
+        cross-device → local).
+    operator_requested_replay
+        Operator explicitly requested replay of a completed/failed execution.
+    timeout_retry
+        Execution timed out and is being retried (respecting retry policy).
+    interruption_recovery
+        Execution was interrupted (device disconnect, preemption) and is
+        being recovered by the governance layer.
+    unknown
+        Replay reason could not be determined.
+    """
+
+    transient_failure_retry = "transient_failure_retry"
+    fallback_mode_retry = "fallback_mode_retry"
+    operator_requested_replay = "operator_requested_replay"
+    timeout_retry = "timeout_retry"
+    interruption_recovery = "interruption_recovery"
+    unknown = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# UplinkKind — PR-06 result / state uplink canonical mapping
+# ---------------------------------------------------------------------------
+
+
+class UplinkKind(str, Enum):
+    """Kind of uplink record produced by an execution.
+
+    Values
+    ------
+    result_uplink
+        Final execution result (success or failure) uplinked to center.
+    state_uplink
+        Intermediate lifecycle state uplinked to center (progress signal).
+    interruption_uplink
+        Interruption event (timeout, disconnect, preemption) uplinked.
+    replay_uplink
+        Replay/retry initiation record uplinked to center.
+    """
+
+    result_uplink = "result_uplink"
+    state_uplink = "state_uplink"
+    interruption_uplink = "interruption_uplink"
+    replay_uplink = "replay_uplink"
+
+
+# ---------------------------------------------------------------------------
 # ExecutionTypePolicy
 # ---------------------------------------------------------------------------
 
@@ -513,10 +659,31 @@ _TAKEOVER_REQUEST_POLICY = ExecutionTypePolicy(
     max_concurrent_per_device=1,
 )
 
+_DELEGATED_EXECUTION_POLICY = ExecutionTypePolicy(
+    execution_type=ExecutionType.delegated_execution,
+    priority=ExecutionPriority.PRIORITY_2_DELEGATED,
+    required_gates=[
+        "v2_cross_device_switch",
+        "session_active",
+        "session_posture_join_runtime",
+        "android_cross_device_enabled",
+        "android_delegated_execution_gate",
+    ],
+    cancellable=True,
+    rollback_on_cancel=RollbackPolicy.notify_only,
+    rollback_on_failure=RollbackPolicy.best_effort_undo,
+    timeout_policy=TimeoutPolicy.hard,
+    default_timeout_s=240.0,
+    failure_semantic=FailureSemantic.fallback_local,
+    blocks_lower_priority=False,
+    max_concurrent_per_device=2,
+)
+
 _EXECUTION_TYPE_POLICIES: Dict[ExecutionType, ExecutionTypePolicy] = {
     ExecutionType.goal_execution: _GOAL_EXECUTION_POLICY,
     ExecutionType.parallel_subtask: _PARALLEL_SUBTASK_POLICY,
     ExecutionType.takeover_request: _TAKEOVER_REQUEST_POLICY,
+    ExecutionType.delegated_execution: _DELEGATED_EXECUTION_POLICY,
 }
 
 
@@ -685,6 +852,137 @@ class ConflictResolutionResult:
 
 
 # ---------------------------------------------------------------------------
+# ExecutionLifecycleEvent — PR-06 lifecycle governance hardening
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ExecutionLifecycleEvent:
+    """A single lifecycle governance event for a tracked execution.
+
+    Records one of: failure, timeout, retry, replay, interruption, or
+    result-uplink.  These events populate the per-execution lifecycle history
+    used by :func:`get_execution_lifecycle_history` and
+    :func:`get_execution_lifecycle_matrix`.
+
+    Attributes
+    ----------
+    execution_id
+        Correlation identifier for the execution instance.
+    device_id
+        Target Android device identifier.
+    execution_type
+        The :class:`ExecutionType` involved.
+    event_kind
+        One of ``"failure"``, ``"timeout"``, ``"retry"``, ``"replay"``,
+        ``"interruption"``, ``"result_uplink"``, ``"state_uplink"``.
+    interruption_reason
+        :class:`InterruptionReason` when ``event_kind`` is ``"interruption"``
+        or ``"timeout"``; ``None`` otherwise.
+    replay_reason
+        :class:`ReplayReason` when ``event_kind`` is ``"retry"`` or
+        ``"replay"``; ``None`` otherwise.
+    detail
+        Human-readable detail string.
+    occurred_at
+        Unix epoch seconds when the event was recorded.
+    """
+
+    execution_id: str
+    device_id: str
+    execution_type: ExecutionType
+    event_kind: str
+    interruption_reason: Optional[InterruptionReason] = None
+    replay_reason: Optional[ReplayReason] = None
+    detail: str = ""
+    occurred_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "device_id": self.device_id,
+            "execution_type": self.execution_type.value,
+            "event_kind": self.event_kind,
+            "interruption_reason": (
+                self.interruption_reason.value if self.interruption_reason else None
+            ),
+            "replay_reason": (
+                self.replay_reason.value if self.replay_reason else None
+            ),
+            "detail": self.detail,
+            "occurred_at": self.occurred_at,
+            "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        }
+
+
+# ---------------------------------------------------------------------------
+# ExecutionUplinkRecord — PR-06 result / state uplink canonical mapping
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ExecutionUplinkRecord:
+    """Center-side canonical record of a result or state uplink.
+
+    Produced by :func:`record_result_uplink`.  These records are the
+    authoritative source of execution result truth for the center-side
+    governance layer.
+
+    Attributes
+    ----------
+    execution_id
+        Correlation identifier for the execution instance.
+    device_id
+        Source Android device identifier.
+    execution_type
+        The :class:`ExecutionType` that produced the uplink.
+    uplink_kind
+        :class:`UplinkKind` of this record.
+    result_status
+        Canonical terminal status string: ``"succeeded"``, ``"failed"``,
+        ``"cancelled"``, ``"timed_out"``, ``"degraded"`` — or an intermediate
+        status string for state uplinks.
+    success
+        ``True`` for successful terminal results; ``False`` for failures;
+        ``None`` for non-terminal state uplinks.
+    error_code
+        Optional error code for failed results.
+    failure_domain
+        Optional failure domain (transport, device, execution, etc.).
+    uplinked_at
+        Unix epoch seconds when the uplink was received at center.
+    payload
+        Optional key/value map of additional result data.
+    """
+
+    execution_id: str
+    device_id: str
+    execution_type: ExecutionType
+    uplink_kind: UplinkKind
+    result_status: str
+    success: Optional[bool] = None
+    error_code: Optional[str] = None
+    failure_domain: Optional[str] = None
+    uplinked_at: float = field(default_factory=time.time)
+    payload: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "device_id": self.device_id,
+            "execution_type": self.execution_type.value,
+            "uplink_kind": self.uplink_kind.value,
+            "result_status": self.result_status,
+            "success": self.success,
+            "error_code": self.error_code,
+            "failure_domain": self.failure_domain,
+            "uplinked_at": self.uplinked_at,
+            "payload": self.payload,
+            "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        }
+
+
+# ---------------------------------------------------------------------------
 # Active execution tracking (in-process, non-durable)
 # ---------------------------------------------------------------------------
 
@@ -693,6 +991,20 @@ import threading
 _active_executions_lock = threading.Lock()
 # device_id → list of (ExecutionType, started_at, execution_id)
 _active_executions: Dict[str, List[Tuple[ExecutionType, float, str]]] = {}
+
+# ---------------------------------------------------------------------------
+# Lifecycle event store (in-process, non-durable) — PR-06
+# ---------------------------------------------------------------------------
+_lifecycle_events_lock = threading.Lock()
+# execution_id → list of ExecutionLifecycleEvent (append-only)
+_lifecycle_events: Dict[str, List[ExecutionLifecycleEvent]] = {}
+
+# ---------------------------------------------------------------------------
+# Uplink record store (in-process, non-durable) — PR-06
+# ---------------------------------------------------------------------------
+_uplink_records_lock = threading.Lock()
+# execution_id → list of ExecutionUplinkRecord (append-only; last record wins for terminal truth)
+_uplink_records: Dict[str, List[ExecutionUplinkRecord]] = {}
 
 
 def _register_active_execution(
@@ -746,9 +1058,13 @@ def _clear_active_executions_for_device(device_id: str) -> None:
 
 
 def _clear_all_active_executions() -> None:
-    """Clear all tracked active executions (test isolation)."""
+    """Clear all tracked active executions and lifecycle/uplink stores (test isolation)."""
     with _active_executions_lock:
         _active_executions.clear()
+    with _lifecycle_events_lock:
+        _lifecycle_events.clear()
+    with _uplink_records_lock:
+        _uplink_records.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -1346,7 +1662,9 @@ def _check_mode_readiness_gate(
         from core.android_mode_gate_policy import evaluate_android_mode_readiness
         verdict = evaluate_android_mode_readiness(
             device_id=device_id,
-            require_goal_execution=(execution_type == ExecutionType.goal_execution),
+            require_goal_execution=(
+                execution_type in (ExecutionType.goal_execution, ExecutionType.delegated_execution)
+            ),
             require_parallel_execution=(execution_type == ExecutionType.parallel_subtask),
             require_local_loop_ready=(execution_type == ExecutionType.takeover_request),
         )
@@ -1611,3 +1929,288 @@ def resolve_execution_conflict(
             ),
             recommended_failure_semantic=FailureSemantic.wait_and_requeue,
         )
+
+
+# ---------------------------------------------------------------------------
+# record_execution_lifecycle_event — PR-06 lifecycle hardening
+# ---------------------------------------------------------------------------
+
+
+def record_execution_lifecycle_event(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    event_kind: str,
+    *,
+    interruption_reason: Optional[InterruptionReason] = None,
+    replay_reason: Optional[ReplayReason] = None,
+    detail: str = "",
+) -> ExecutionLifecycleEvent:
+    """Record a canonical lifecycle event for a tracked execution.
+
+    This is the **authoritative API** for recording failure, timeout, retry,
+    replay, and interruption events.  All execution paths MUST call this
+    function to ensure the center-side lifecycle history is complete.
+
+    Parameters
+    ----------
+    execution_id
+        Correlation identifier for the execution instance.
+    device_id
+        Target Android device identifier.
+    execution_type
+        The :class:`ExecutionType` producing the event.
+    event_kind
+        One of: ``"failure"``, ``"timeout"``, ``"retry"``, ``"replay"``,
+        ``"interruption"``, ``"result_uplink"``, ``"state_uplink"``.
+    interruption_reason
+        :class:`InterruptionReason` for interruption/timeout events.
+    replay_reason
+        :class:`ReplayReason` for retry/replay events.
+    detail
+        Human-readable detail.
+
+    Returns
+    -------
+    ExecutionLifecycleEvent
+        The recorded event.
+    """
+    event = ExecutionLifecycleEvent(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=execution_type,
+        event_kind=event_kind,
+        interruption_reason=interruption_reason,
+        replay_reason=replay_reason,
+        detail=detail,
+    )
+    with _lifecycle_events_lock:
+        if execution_id not in _lifecycle_events:
+            _lifecycle_events[execution_id] = []
+        _lifecycle_events[execution_id].append(event)
+    logger.debug(
+        "record_execution_lifecycle_event: id=%r type=%s kind=%s",
+        execution_id, execution_type.value, event_kind,
+    )
+    return event
+
+
+def get_execution_lifecycle_history(
+    execution_id: str,
+) -> List[ExecutionLifecycleEvent]:
+    """Return all recorded lifecycle events for *execution_id*.
+
+    Returns an empty list when no events have been recorded.
+    """
+    with _lifecycle_events_lock:
+        return list(_lifecycle_events.get(execution_id, []))
+
+
+# ---------------------------------------------------------------------------
+# record_result_uplink — PR-06 result / state uplink canonical mapping
+# ---------------------------------------------------------------------------
+
+
+def record_result_uplink(
+    execution_id: str,
+    device_id: str,
+    execution_type: ExecutionType,
+    result_status: str,
+    *,
+    uplink_kind: UplinkKind = UplinkKind.result_uplink,
+    success: Optional[bool] = None,
+    error_code: Optional[str] = None,
+    failure_domain: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> ExecutionUplinkRecord:
+    """Record a center-side canonical result or state uplink.
+
+    This is the **authoritative API** for mapping execution results and
+    intermediate state signals into center-side canonical truth.  All
+    result-returning paths MUST call this function so the governance layer
+    has a complete and ordered record of uplinks per execution.
+
+    Parameters
+    ----------
+    execution_id
+        Correlation identifier for the execution instance.
+    device_id
+        Source Android device identifier.
+    execution_type
+        The :class:`ExecutionType` producing the uplink.
+    result_status
+        Canonical status string (e.g. ``"succeeded"``, ``"failed"``,
+        ``"timed_out"``, ``"cancelled"``, ``"degraded"``, or an
+        intermediate phase string for state uplinks).
+    uplink_kind
+        :class:`UplinkKind` of this uplink record (default: result_uplink).
+    success
+        ``True`` for success, ``False`` for failure, ``None`` for
+        non-terminal state uplinks.
+    error_code
+        Optional error code for failed results.
+    failure_domain
+        Optional failure domain string.
+    payload
+        Optional additional result key/value data.
+
+    Returns
+    -------
+    ExecutionUplinkRecord
+        The recorded uplink.
+    """
+    record = ExecutionUplinkRecord(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=execution_type,
+        uplink_kind=uplink_kind,
+        result_status=result_status,
+        success=success,
+        error_code=error_code,
+        failure_domain=failure_domain,
+        payload=payload,
+    )
+    with _uplink_records_lock:
+        if execution_id not in _uplink_records:
+            _uplink_records[execution_id] = []
+        _uplink_records[execution_id].append(record)
+    logger.debug(
+        "record_result_uplink: id=%r type=%s kind=%s status=%r success=%s",
+        execution_id, execution_type.value, uplink_kind.value, result_status, success,
+    )
+    return record
+
+
+def get_uplink_truth_state(
+    execution_id: str,
+) -> Optional[ExecutionUplinkRecord]:
+    """Return the most recent uplink record for *execution_id*.
+
+    This is the center-side canonical execution truth for the given execution.
+    The last uplink record is authoritative (replaces earlier intermediate
+    state uplinks when a terminal result arrives).
+
+    Returns ``None`` when no uplinks have been recorded.
+    """
+    with _uplink_records_lock:
+        records = _uplink_records.get(execution_id)
+    if not records:
+        return None
+    return records[-1]
+
+
+def get_all_uplink_records(
+    execution_id: str,
+) -> List[ExecutionUplinkRecord]:
+    """Return all uplink records for *execution_id* in chronological order."""
+    with _uplink_records_lock:
+        return list(_uplink_records.get(execution_id, []))
+
+
+# ---------------------------------------------------------------------------
+# get_execution_lifecycle_matrix — PR-06 full lifecycle matrix
+# ---------------------------------------------------------------------------
+
+
+def get_execution_lifecycle_matrix() -> Dict[str, Any]:
+    """Return the canonical execution lifecycle matrix across all four modes.
+
+    The matrix describes the governance policy and lifecycle semantics for
+    each :class:`ExecutionType` in one structured, JSON-serialisable dict.
+
+    This is the center-side canonical authority reference for:
+    - Priority and conflict rules across all four execution modes
+    - Timeout, failure, rollback, and interruption governance
+    - Result uplink and state uplink canonical semantics
+
+    Returns
+    -------
+    dict
+        ``{
+          "execution_types": { type_name: policy_dict + lifecycle_semantics },
+          "priority_order": [...],
+          "blocking_rules": [...],
+          "_authority": ...,
+          "_contract_version": ...,
+        }``
+    """
+    execution_types: Dict[str, Any] = {}
+    for et, policy in _EXECUTION_TYPE_POLICIES.items():
+        priority = _EXECUTION_TYPE_PRIORITY.get(et, 99)
+        lifecycle_semantics = {
+            "timeout_governance": {
+                "policy": policy.timeout_policy.value,
+                "default_timeout_s": policy.default_timeout_s,
+                "hard_timeout_interruption_reason": (
+                    InterruptionReason.timeout_hard.value
+                    if policy.timeout_policy == TimeoutPolicy.hard
+                    else InterruptionReason.timeout_soft.value
+                ),
+            },
+            "failure_governance": {
+                "failure_semantic": policy.failure_semantic.value,
+                "rollback_on_failure": policy.rollback_on_failure.value,
+            },
+            "cancellation_governance": {
+                "cancellable": policy.cancellable,
+                "rollback_on_cancel": policy.rollback_on_cancel.value,
+            },
+            "retry_governance": {
+                "default_replay_reason": (
+                    ReplayReason.transient_failure_retry.value
+                    if policy.failure_semantic == FailureSemantic.retry
+                    else (
+                        ReplayReason.fallback_mode_retry.value
+                        if policy.failure_semantic == FailureSemantic.fallback_local
+                        else ReplayReason.interruption_recovery.value
+                    )
+                ),
+            },
+            "uplink_governance": {
+                "result_uplink_kind": UplinkKind.result_uplink.value,
+                "state_uplink_kind": UplinkKind.state_uplink.value,
+            },
+        }
+        execution_types[et.value] = {
+            "policy": policy.to_dict(),
+            "priority": priority,
+            "lifecycle_semantics": lifecycle_semantics,
+        }
+
+    # Priority order: lowest number = highest priority
+    priority_order = sorted(
+        _EXECUTION_TYPE_POLICIES.keys(),
+        key=lambda t: _EXECUTION_TYPE_PRIORITY.get(t, 99),
+    )
+
+    # Blocking rules: which types block which
+    blocking_rules = []
+    for active_type, active_policy in _EXECUTION_TYPE_POLICIES.items():
+        if not active_policy.blocks_lower_priority:
+            continue
+        active_priority = _EXECUTION_TYPE_PRIORITY.get(active_type, 99)
+        blocked = [
+            candidate.value
+            for candidate, candidate_policy in _EXECUTION_TYPE_POLICIES.items()
+            if int(candidate_policy.priority) > active_priority
+        ]
+        if blocked:
+            blocking_rules.append(
+                {
+                    "blocker": active_type.value,
+                    "blocker_priority": active_priority,
+                    "blocks": sorted(blocked),
+                    "cancellation_reason_for_blocked": (
+                        CancellationReason.higher_priority_execution.value
+                    ),
+                }
+            )
+
+    return {
+        "execution_types": execution_types,
+        "priority_order": [et.value for et in priority_order],
+        "blocking_rules": blocking_rules,
+        "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
+        "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
+        "_hardening_sentinel": EXECUTION_GOVERNANCE_HARDENING_SENTINEL,
+    }
