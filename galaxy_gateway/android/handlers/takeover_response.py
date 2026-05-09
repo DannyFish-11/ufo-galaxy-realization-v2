@@ -85,9 +85,9 @@ def _resolve_session_id_for_takeover_response(
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "takeover_response: unable to resolve session_id from registry "
-            "(non-fatal) device_id=%s exc=%s",
+            "(non-fatal) device_id=%s exc_type=%s",
             device_id,
-            exc,
+            type(exc).__name__,
         )
     return ""
 

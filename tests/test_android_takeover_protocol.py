@@ -299,15 +299,38 @@ class TestTakeoverResponseSessionRecovery:
     def test_I01_missing_session_id_uses_active_registry_session(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
-        msg = _make_accept_message(session_id=f"sess_wire_{uuid.uuid4().hex[:6]}")
+        msg = _make_accept_message()
         msg.pop("session_id", None)
-        resolved_session_id = f"sess_{uuid.uuid4().hex[:8]}"
+        expected_session_id = f"sess_{uuid.uuid4().hex[:8]}"
         coordinator = MagicMock()
         coordinator.on_takeover_response = MagicMock()
 
         with patch(
             "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
-            return_value=SimpleNamespace(runtime_session_id=resolved_session_id),
+            return_value=SimpleNamespace(runtime_session_id=expected_session_id),
+        ) as mock_lookup, patch(
+            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
+        ) as mock_record, patch(
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
+            _run(handle_takeover_response(MagicMock(), None, msg))
+
+        mock_lookup.assert_called_once_with(msg["device_id"])
+        assert mock_record.call_args.kwargs["session_id"] == expected_session_id
+        assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == expected_session_id
+
+    def test_I02_missing_session_id_without_registry_entry_degrades_gracefully(self):
+        from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
+        msg = _make_accept_message()
+        msg.pop("session_id", None)
+        coordinator = MagicMock()
+        coordinator.on_takeover_response = MagicMock()
+
+        with patch(
+            "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
+            return_value=None,
         ), patch(
             "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
         ) as mock_record, patch(
@@ -316,8 +339,12 @@ class TestTakeoverResponseSessionRecovery:
         ):
             _run(handle_takeover_response(MagicMock(), None, msg))
 
-        assert mock_record.call_args.kwargs["session_id"] == resolved_session_id
-        assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == resolved_session_id
+        assert mock_record.call_args.kwargs["session_id"] is None, (
+            "Tracking API normalizes missing session_id to None"
+        )
+        assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == "", (
+            "Coordinator API preserves empty-string session_id when lookup cannot recover it"
+        )
 
 
 # ============================================================================

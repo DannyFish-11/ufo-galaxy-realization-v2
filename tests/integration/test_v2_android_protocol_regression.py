@@ -930,6 +930,7 @@ class TestReconnectContinuitySemantics:
             reset_execution_tracking_runtime,
         )
         from core.takeover_tracking import (
+            TakeoverDecision,
             get_takeover_record,
             reset_takeover_tracking_runtime,
         )
@@ -974,6 +975,9 @@ class TestReconnectContinuitySemantics:
             trace_id=trace_id,
             contract_id=contract_id,
         )
+        handoff_dispatched = get_participant_session(runtime_session_id)
+        assert handoff_dispatched is not None
+        assert handoff_dispatched.phase == AndroidParticipantSessionPhase.handoff_dispatched
         coordinator.on_takeover_requested(
             session_id=runtime_session_id,
             takeover_id=takeover_id,
@@ -1024,8 +1028,9 @@ class TestReconnectContinuitySemantics:
         assert resumed_takeover.phase == AndroidParticipantSessionPhase.takeover_accepted
         takeover_record = get_takeover_record(takeover_id)
         assert takeover_record is not None
+        assert takeover_record.takeover_id == takeover_id
         assert takeover_record.session_id == runtime_session_id
-        assert takeover_record.decision.value == "accepted"
+        assert takeover_record.decision == TakeoverDecision.accepted
 
         continuity_payload = {
             "contract_id": contract_id,
