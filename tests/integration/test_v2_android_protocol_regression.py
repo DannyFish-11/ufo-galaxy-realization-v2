@@ -915,6 +915,13 @@ class TestReconnectContinuitySemantics:
     @pytest.mark.asyncio
     async def test_disconnect_reconnect_restores_context_and_converges_result(self) -> None:
         """Reconnect path must preserve context, resume tracking, and converge the final result."""
+        from core.android_participant_session_state import (
+            AndroidParticipantSessionPhase,
+            get_participant_session,
+        )
+        from core.android_delegated_runtime_lifecycle_coordinator import (
+            get_lifecycle_coordinator,
+        )
         from core.delegated_runtime_execution_tracker import (
             DelegatedExecutionPhase,
             create_execution_tracking_record,
@@ -922,9 +929,14 @@ class TestReconnectContinuitySemantics:
             get_execution_tracking_record,
             reset_execution_tracking_runtime,
         )
+        from core.takeover_tracking import (
+            get_takeover_record,
+            reset_takeover_tracking_runtime,
+        )
         from galaxy_gateway.android_bridge import AndroidBridge
 
         reset_execution_tracking_runtime()
+        reset_takeover_tracking_runtime()
 
         bridge = AndroidBridge()
         device_id = f"resume-proof-{uuid.uuid4().hex[:8]}"
@@ -932,6 +944,7 @@ class TestReconnectContinuitySemantics:
         contract_id = f"contract-{uuid.uuid4().hex[:8]}"
         task_id = f"task-{uuid.uuid4().hex[:8]}"
         trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+        takeover_id = f"takeover-{uuid.uuid4().hex[:8]}"
         ws1 = _make_ws()
         ws2 = _make_ws()
 
@@ -953,6 +966,24 @@ class TestReconnectContinuitySemantics:
             trace_id=trace_id,
             source_runtime_posture="join_runtime",
         )
+        coordinator = get_lifecycle_coordinator()
+        coordinator.on_handoff_dispatched(
+            session_id=runtime_session_id,
+            device_id=device_id,
+            task_id=task_id,
+            trace_id=trace_id,
+            contract_id=contract_id,
+        )
+        coordinator.on_takeover_requested(
+            session_id=runtime_session_id,
+            takeover_id=takeover_id,
+            device_id=device_id,
+            task_id=task_id,
+            trace_id=trace_id,
+        )
+        takeover_pending = get_participant_session(runtime_session_id)
+        assert takeover_pending is not None
+        assert takeover_pending.phase == AndroidParticipantSessionPhase.takeover_pending
 
         future = asyncio.get_running_loop().create_future()
         bridge._pending_responses[task_id] = future
@@ -974,6 +1005,27 @@ class TestReconnectContinuitySemantics:
         active = get_active_execution_tracking_for_session(runtime_session_id)
         assert active is not None
         assert active.phase == DelegatedExecutionPhase.pending_ack
+
+        takeover_ack = await bridge.handle_message(
+            ws2,
+            _v3(
+                "takeover_response",
+                device_id,
+                takeover_id=takeover_id,
+                accepted=True,
+                reason="resume_after_reconnect",
+                task_id=task_id,
+                trace_id=trace_id,
+            ),
+        )
+        assert takeover_ack["type"] == "takeover_response_ack"
+        resumed_takeover = get_participant_session(runtime_session_id)
+        assert resumed_takeover is not None
+        assert resumed_takeover.phase == AndroidParticipantSessionPhase.takeover_accepted
+        takeover_record = get_takeover_record(takeover_id)
+        assert takeover_record is not None
+        assert takeover_record.session_id == runtime_session_id
+        assert takeover_record.decision.value == "accepted"
 
         continuity_payload = {
             "contract_id": contract_id,

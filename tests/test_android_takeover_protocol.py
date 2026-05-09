@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from types import SimpleNamespace
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -290,7 +291,37 @@ class TestTrackingOnReject:
 
 
 # ============================================================================
-# I.  Tracking import failure degrades gracefully
+# I.  Session recovery across reconnect takeover responses
+# ============================================================================
+
+class TestTakeoverResponseSessionRecovery:
+
+    def test_I01_missing_session_id_uses_active_registry_session(self):
+        from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
+        msg = _make_accept_message(session_id=f"sess_wire_{uuid.uuid4().hex[:6]}")
+        msg.pop("session_id", None)
+        resolved_session_id = f"sess_{uuid.uuid4().hex[:8]}"
+        coordinator = MagicMock()
+        coordinator.on_takeover_response = MagicMock()
+
+        with patch(
+            "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
+            return_value=SimpleNamespace(runtime_session_id=resolved_session_id),
+        ), patch(
+            "galaxy_gateway.android.handlers.takeover_response._record_takeover_response",
+        ) as mock_record, patch(
+            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+            return_value=coordinator,
+        ):
+            _run(handle_takeover_response(MagicMock(), None, msg))
+
+        assert mock_record.call_args.kwargs["session_id"] == resolved_session_id
+        assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == resolved_session_id
+
+
+# ============================================================================
+# J.  Tracking import failure degrades gracefully
 # ============================================================================
 
 class TestTrackingDegradeGracefully:
@@ -320,7 +351,7 @@ class TestTrackingDegradeGracefully:
 
 
 # ============================================================================
-# J.  ACK response shape
+# K.  ACK response shape
 # ============================================================================
 
 class TestAckResponseShape:
@@ -357,7 +388,7 @@ class TestAckResponseShape:
 
 
 # ============================================================================
-# K.  __init__.py re-exports
+# L.  __init__.py re-exports
 # ============================================================================
 
 class TestInitReExport:
@@ -371,7 +402,7 @@ class TestInitReExport:
 
 
 # ============================================================================
-# L.  AndroidBridge.send_takeover_request()
+# M.  AndroidBridge.send_takeover_request()
 # ============================================================================
 
 class TestSendTakeoverRequest:
@@ -436,7 +467,7 @@ class TestSendTakeoverRequest:
 
 
 # ============================================================================
-# M.  Mode gate — Axis-1 + Axis-7: takeover is mode-gated
+# N.  Mode gate — Axis-1 + Axis-7: takeover is mode-gated
 # ============================================================================
 
 class TestTakeoverModeGate:
