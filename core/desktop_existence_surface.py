@@ -3,6 +3,7 @@ core.desktop_existence_surface — Canonical Assistant-Like Existence Surface
 ============================================================================
 
 PR-2: Desktop Existence Surface / Assistant Presence Unification
+PR-8 (V2): Unified Carrier Execution Surface — R8 closure
 
 **Purpose**
 
@@ -38,6 +39,31 @@ coherent external projection.  This module unifies them into one
    :mod:`~core.android_device_state_store`.
    Read via ``list_device_state_snapshots()`` + ``get_device_ecosystem_summary()``.
 
+**PR-8 V2: Unified Carrier Execution Surface (R8 closure)**
+
+The R8 gap identified in the joint system review was:
+"Desktop/tablet carrier semantics not unified with Android carrier into a
+single manifestation framework at the code layer."
+
+This PR closes that gap by introducing:
+
+- :class:`CarrierSurfaceEntry` — a uniform, per-carrier semantic unit that
+  represents a single execution-surface carrier (desktop *or* Android) at the
+  same projection level.  Both carrier types share the fields
+  ``carrier_type``, ``carrier_id``, ``execution_surface_state``,
+  ``is_execution_ready``, and ``carrier_semantic_role``.
+
+- :class:`UnifiedCarrierSurface` — the aggregate surface that collects all
+  active carriers (one desktop entry + one entry per Android device snapshot)
+  and derives ``dominant_carrier_type``, ``active_carrier_count``, and
+  ``execution_ready_carrier_count`` from them.
+
+This unified carrier surface is added as a new field
+``unified_carrier_surface`` on :class:`DesktopExistenceSurface` (schema
+version "1.1") and is populated by
+:class:`DesktopExistenceSurfaceBuilder` reading from existing canonical
+singletons — no new state authority is introduced.
+
 **What this module is NOT**
 
 - It is NOT a second presence system.  :class:`DesktopExistenceSurfaceBuilder`
@@ -62,6 +88,12 @@ Authority sentinels::
 
     DESKTOP_EXISTENCE_SURFACE_AUTHORITY
     EXISTENCE_SURFACE_SCHEMA_VERSION
+    PR8_UNIFIED_CARRIER_SURFACE_SENTINEL
+
+Carrier type constants::
+
+    CARRIER_TYPE_DESKTOP
+    CARRIER_TYPE_ANDROID
 
 Dataclasses::
 
@@ -70,6 +102,8 @@ Dataclasses::
     ContinuumPostureSnapshot    — state family 3: tri_state_phase / runtime_domain
     CognitiveFieldSnapshot      — state family 4: continuous cognitive field
     AndroidPresenceSignals      — state family 5: Android carrier presence
+    CarrierSurfaceEntry         — PR-8: single carrier at unified semantic level
+    UnifiedCarrierSurface       — PR-8: all carriers at same projection layer
     ExistenceProjection         — derived verdict (read-only, not a new state)
     DesktopExistenceSurface     — unified canonical existence surface
 
@@ -109,11 +143,31 @@ DESKTOP_EXISTENCE_SURFACE_AUTHORITY: str = (
     "(3) continuum posture (ContinuumOrchestrator tri_state_phase/runtime_domain), "
     "(4) continuous cognitive field (CognitiveFieldEngine/CognitiveState), "
     "(5) Android presence signals (android_device_state_store).  "
+    "PR-8 V2 extends this with a UnifiedCarrierSurface (CarrierSurfaceEntry per carrier) "
+    "that projects desktop and Android carriers at the same semantic level, closing R8.  "
     "This module reads from existing canonical singletons and NEVER introduces "
     "a second presence system or writes state."
 )
 
-EXISTENCE_SURFACE_SCHEMA_VERSION: str = "1.0"
+#: PR-8 V2 sentinel — confirms that the UnifiedCarrierSurface (CarrierSurfaceEntry list)
+#: is present in this module, closing the R8 gap of desktop/Android carrier semantic
+#: divergence.  Both carrier types are now projected at the same semantic layer via
+#: CarrierSurfaceEntry / UnifiedCarrierSurface.
+PR8_UNIFIED_CARRIER_SURFACE_SENTINEL: str = (
+    "PR8_V2::UNIFIED_CARRIER_SURFACE_V1: "
+    "core.desktop_existence_surface.UnifiedCarrierSurface projects desktop and Android "
+    "carriers at the same semantic level via CarrierSurfaceEntry.  "
+    "Closes R8: desktop carrier and Android carrier are now unified in a single "
+    "code-layer manifestation framework (schema_version 1.1)."
+)
+
+#: Carrier type constant for the desktop/tablet carrier.
+CARRIER_TYPE_DESKTOP: str = "desktop"
+
+#: Carrier type constant for Android device carriers.
+CARRIER_TYPE_ANDROID: str = "android"
+
+EXISTENCE_SURFACE_SCHEMA_VERSION: str = "1.1"
 
 # ---------------------------------------------------------------------------
 # State-family snapshot dataclasses
@@ -264,8 +318,114 @@ class AndroidPresenceSignals:
 
 
 # ---------------------------------------------------------------------------
-# Derived existence projection
+# PR-8 V2 — Unified Carrier Execution Surface (R8 closure)
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class CarrierSurfaceEntry:
+    """A single carrier execution surface entry at a unified semantic level.
+
+    PR-8 V2 / R8 closure: both desktop and Android carriers are represented
+    as :class:`CarrierSurfaceEntry` instances, eliminating the asymmetry where
+    Android devices were only represented as aggregate counts while the desktop
+    carrier was represented through richer subject-lifecycle and shell-clothing
+    families.  Every carrier now carries the same semantic fields, making
+    desktop and Android carriers structurally equivalent at the projection
+    layer.
+
+    Attributes
+    ----------
+    carrier_type:
+        ``"desktop"`` or ``"android"``.  Use :data:`CARRIER_TYPE_DESKTOP` /
+        :data:`CARRIER_TYPE_ANDROID` constants.
+    carrier_id:
+        Unique identifier for this carrier.  ``"desktop"`` for the local
+        desktop/tablet surface; the ``device_id`` string for Android devices.
+    execution_surface_state:
+        Canonical execution-surface state for this carrier:
+
+        - ``"active"`` — carrier is currently running an execution loop
+          (manifest tri-state or local loop ready + model ready on Android).
+        - ``"ready"`` — carrier can accept execution (liminal tri-state or
+          model ready on Android) but no active loop is running.
+        - ``"idle"`` — carrier is present and reachable but not execution-ready.
+        - ``"unavailable"`` — carrier has no execution surface or is offline.
+
+    is_execution_ready:
+        ``True`` when the carrier can accept an execution request right now.
+    carrier_semantic_role:
+        ``"primary"`` for the desktop carrier (V2-local governance surface);
+        ``"delegated"`` for Android carriers (runtime-node / delegated
+        execution surfaces).
+    _source:
+        Module that produced this entry.
+    """
+
+    carrier_type: str = CARRIER_TYPE_DESKTOP
+    carrier_id: str = "desktop"
+    execution_surface_state: str = "unavailable"
+    is_execution_ready: bool = False
+    carrier_semantic_role: str = "primary"
+    _source: str = "desktop_existence_surface"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "carrier_type": self.carrier_type,
+            "carrier_id": self.carrier_id,
+            "execution_surface_state": self.execution_surface_state,
+            "is_execution_ready": self.is_execution_ready,
+            "carrier_semantic_role": self.carrier_semantic_role,
+            "_source": self._source,
+        }
+
+
+@dataclass
+class UnifiedCarrierSurface:
+    """Unified execution surface across all active carriers.
+
+    PR-8 V2 / R8 closure: collects :class:`CarrierSurfaceEntry` instances for
+    *all* carriers — one desktop entry and one entry per Android device
+    snapshot — so downstream consumers have a single, uniform carrier
+    projection without having to reconstruct it from heterogeneous sources.
+
+    ``dominant_carrier_type`` names the carrier type (``"desktop"`` or
+    ``"android"``) of the first carrier in ``active`` state; if none are
+    active, the first ``ready`` carrier type; ``"none"`` when no carrier is
+    ready.
+
+    This object is read-only and derived; it does not introduce new state
+    authority.
+
+    Attributes
+    ----------
+    carriers:
+        All carrier surface entries (desktop first, Android entries in
+        insertion order).
+    dominant_carrier_type:
+        Carrier type of the currently dominant execution surface.
+    active_carrier_count:
+        Count of carriers whose ``execution_surface_state`` is ``"active"``.
+    execution_ready_carrier_count:
+        Count of carriers where ``is_execution_ready`` is ``True``.
+    _source:
+        Module that produced this surface.
+    """
+
+    carriers: List[CarrierSurfaceEntry] = field(default_factory=list)
+    dominant_carrier_type: str = "none"
+    active_carrier_count: int = 0
+    execution_ready_carrier_count: int = 0
+    _source: str = "desktop_existence_surface"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "carriers": [c.to_dict() for c in self.carriers],
+            "dominant_carrier_type": self.dominant_carrier_type,
+            "active_carrier_count": self.active_carrier_count,
+            "execution_ready_carrier_count": self.execution_ready_carrier_count,
+            "_source": self._source,
+        }
 
 
 @dataclass
@@ -343,7 +503,7 @@ class DesktopExistenceSurface:
     generated_at:
         Unix timestamp when this surface was built.
     schema_version:
-        Schema version string (``"1.0"``).
+        Schema version string (``"1.1"``).
     subject_lifecycle:
         State family 1 — TriState subject lifecycle snapshot.
     shell_clothing:
@@ -354,6 +514,9 @@ class DesktopExistenceSurface:
         State family 4 — CognitiveFieldEngine field snapshot.
     android_signals:
         State family 5 — Android device presence signals.
+    unified_carrier_surface:
+        PR-8 V2 — Unified carrier execution surface projecting desktop and
+        Android carriers at the same semantic level.  Closes R8.
     existence_projection:
         Derived read-only verdict combining all five families.
     _source:
@@ -384,6 +547,9 @@ class DesktopExistenceSurface:
     existence_projection: ExistenceProjection = field(
         default_factory=ExistenceProjection
     )
+    unified_carrier_surface: UnifiedCarrierSurface = field(
+        default_factory=UnifiedCarrierSurface
+    )
     _source: str = DESKTOP_EXISTENCE_SURFACE_AUTHORITY
 
     def to_dict(self) -> Dict[str, Any]:
@@ -397,6 +563,7 @@ class DesktopExistenceSurface:
             "continuum_posture": self.continuum_posture.to_dict(),
             "cognitive_field": self.cognitive_field.to_dict(),
             "android_signals": self.android_signals.to_dict(),
+            "unified_carrier_surface": self.unified_carrier_surface.to_dict(),
             "existence_projection": self.existence_projection.to_dict(),
             "_source": self._source,
         }
@@ -466,7 +633,13 @@ class DesktopExistenceSurfaceBuilder:
                 logger.debug("build: android_signals read failed (non-fatal): %s", exc)
                 fam5 = AndroidPresenceSignals()
 
-            proj = self._derive_existence_projection(fam1, fam2, fam3, fam4, fam5)
+            try:
+                carrier_surface = self._build_unified_carrier_surface(fam1, fam2)
+            except Exception as exc:
+                logger.debug("build: unified_carrier_surface failed (non-fatal): %s", exc)
+                carrier_surface = UnifiedCarrierSurface()
+
+            proj = self._derive_existence_projection(fam1, fam2, fam3, fam4, fam5, carrier_surface)
 
             return DesktopExistenceSurface(
                 subject_lifecycle=fam1,
@@ -474,6 +647,7 @@ class DesktopExistenceSurfaceBuilder:
                 continuum_posture=fam3,
                 cognitive_field=fam4,
                 android_signals=fam5,
+                unified_carrier_surface=carrier_surface,
                 existence_projection=proj,
             )
 
@@ -614,6 +788,120 @@ class DesktopExistenceSurfaceBuilder:
             return AndroidPresenceSignals()
 
     # ------------------------------------------------------------------
+    # PR-8 V2 — Unified carrier surface (R8 closure)
+    # ------------------------------------------------------------------
+
+    def _build_unified_carrier_surface(
+        self,
+        fam1: SubjectLifecycleSnapshot,
+        fam2: ShellClothingSnapshot,
+    ) -> UnifiedCarrierSurface:
+        """Build the unified carrier execution surface.
+
+        Reads per-device Android snapshots from
+        :func:`~core.android_device_state_store.list_device_state_snapshots`
+        and combines them with the desktop carrier context derived from
+        ``fam1`` (subject lifecycle) and ``fam2`` (shell clothing) so that
+        desktop and Android carriers are represented at the same semantic
+        level.
+
+        This method is **read-only** — it never writes state.  Failures in
+        the Android snapshot read produce an Android-less surface (desktop
+        entry only) rather than raising.
+        """
+        carriers: List[CarrierSurfaceEntry] = []
+
+        # ── Desktop carrier entry ──────────────────────────────────────
+        if fam1.dominant_tristate == "manifest" or fam2.shell_state == "fullagent":
+            desktop_exec_state = "active"
+            desktop_ready = True
+        elif fam1.dominant_tristate == "liminal" or fam2.shell_state in (
+            "sidesheet",
+            "island",
+        ):
+            desktop_exec_state = "ready"
+            desktop_ready = True
+        elif fam1.active_session_count > 0 or fam2.shell_state != "dormant":
+            desktop_exec_state = "idle"
+            desktop_ready = False
+        else:
+            desktop_exec_state = "unavailable"
+            desktop_ready = False
+
+        carriers.append(
+            CarrierSurfaceEntry(
+                carrier_type=CARRIER_TYPE_DESKTOP,
+                carrier_id="desktop",
+                execution_surface_state=desktop_exec_state,
+                is_execution_ready=desktop_ready,
+                carrier_semantic_role="primary",
+            )
+        )
+
+        # ── Android carrier entries (one per device snapshot) ──────────
+        try:
+            from core.android_device_state_store import list_device_state_snapshots
+
+            for snap in list_device_state_snapshots():
+                device_id_raw = getattr(snap, "device_id", None)
+                device_id: str = device_id_raw if device_id_raw is not None else "android"
+                local_loop = bool(getattr(snap, "local_loop_ready", False))
+                model_rdy = bool(getattr(snap, "model_ready", False))
+
+                if local_loop and model_rdy:
+                    android_exec_state = "active"
+                    android_ready = True
+                elif model_rdy:
+                    android_exec_state = "ready"
+                    android_ready = True
+                elif local_loop:
+                    android_exec_state = "idle"
+                    android_ready = False
+                else:
+                    android_exec_state = "unavailable"
+                    android_ready = False
+
+                carriers.append(
+                    CarrierSurfaceEntry(
+                        carrier_type=CARRIER_TYPE_ANDROID,
+                        carrier_id=device_id,
+                        execution_surface_state=android_exec_state,
+                        is_execution_ready=android_ready,
+                        carrier_semantic_role="delegated",
+                    )
+                )
+        except Exception as exc:
+            logger.debug(
+                "DesktopExistenceSurfaceBuilder: android carrier read failed "
+                "(non-fatal — desktop carrier still present): %s",
+                exc,
+            )
+
+        # ── Derived summary fields ─────────────────────────────────────
+        active_count = sum(
+            1 for c in carriers if c.execution_surface_state == "active"
+        )
+        ready_count = sum(1 for c in carriers if c.is_execution_ready)
+
+        dominant: str = "none"
+        for c in carriers:
+            if c.execution_surface_state == "active":
+                dominant = c.carrier_type
+                break
+        if dominant == "none":
+            for c in carriers:
+                if c.is_execution_ready:
+                    dominant = c.carrier_type
+                    break
+
+        return UnifiedCarrierSurface(
+            carriers=carriers,
+            dominant_carrier_type=dominant,
+            active_carrier_count=active_count,
+            execution_ready_carrier_count=ready_count,
+        )
+
+    # ------------------------------------------------------------------
     # Projection derivation — read-only, not a new state machine
     # ------------------------------------------------------------------
 
@@ -624,6 +912,7 @@ class DesktopExistenceSurfaceBuilder:
         fam3: ContinuumPostureSnapshot,
         fam4: CognitiveFieldSnapshot,
         fam5: AndroidPresenceSignals,
+        carrier_surface: Optional[UnifiedCarrierSurface] = None,
     ) -> ExistenceProjection:
         """Derive the presence verdict from all five state families.
 
@@ -665,6 +954,12 @@ class DesktopExistenceSurfaceBuilder:
             contributing.append("android_signals")
             evidence["android_total_devices"] = fam5.total_devices_with_snapshot
             evidence["android_local_loop_ready"] = fam5.local_loop_ready_count
+
+        # PR-8 V2 — unified carrier context
+        if carrier_surface is not None and carrier_surface.carriers:
+            evidence["carrier_active_count"] = carrier_surface.active_carrier_count
+            evidence["carrier_ready_count"] = carrier_surface.execution_ready_carrier_count
+            evidence["dominant_carrier_type"] = carrier_surface.dominant_carrier_type
 
         # ── Derive verdict (priority: expressing > active > background > dormant) ─
 
