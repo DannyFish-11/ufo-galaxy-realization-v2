@@ -914,9 +914,12 @@ class AttachedSessionRegistry:
         # PR-C: preserve durable continuity fields through transitions;
         # allow callers to supply updated values (e.g. on reconnect with new epoch).
         resolved_durable_session_id = durable_session_id or entry.durable_session_id
-        resolved_continuity_epoch = (
-            continuity_epoch if continuity_epoch >= 0 else entry.continuity_epoch
-        )
+        if continuity_epoch >= 0:
+            # Preserve monotonic epoch progression across lifecycle transitions.
+            # A reconnect/reattach must not silently regress to an older era.
+            resolved_continuity_epoch = max(entry.continuity_epoch, continuity_epoch)
+        else:
+            resolved_continuity_epoch = entry.continuity_epoch
 
         updated = AttachedSessionRegistryEntry(
             entry_id=entry.entry_id,
@@ -1576,6 +1579,7 @@ def classify_reconnect_outcome(
     *,
     runtime_attachment_session_id: str = "",
     durable_session_id: str = "",
+    continuity_epoch: int = -1,
     registry: Optional[AttachedSessionRegistry] = None,
 ) -> tuple:
     """Classify a reconnect event as *continuity_resume* or *new_attachment*.
@@ -1617,6 +1621,11 @@ def classify_reconnect_outcome(
         matches the stored entry's durable_session_id before granting
         ``continuity_resume``.  May be empty when the client does not supply
         it; absence is non-constraining.
+    continuity_epoch
+        Optional Android session continuity epoch.  When supplied (>=0), the
+        classifier rejects reconnects whose epoch is lower than the stored
+        entry epoch to prevent stale-era resumes from silently inheriting a
+        newer execution context.
     registry
         Optional :class:`AttachedSessionRegistry` to use; defaults to the
         module singleton.
@@ -1655,6 +1664,11 @@ def classify_reconnect_outcome(
         if durable_session_id and existing.durable_session_id:
             if existing.durable_session_id != durable_session_id:
                 # Durable identity mismatch — different session era → new attachment
+                return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+        if continuity_epoch >= 0 and existing.continuity_epoch > 0:
+            if continuity_epoch < existing.continuity_epoch:
+                # Presented era regressed — treat as a new attachment to avoid
+                # cross-era continuity confusion on reconnect/resume.
                 return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
         return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
 

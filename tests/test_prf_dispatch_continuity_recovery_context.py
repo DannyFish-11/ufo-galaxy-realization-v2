@@ -609,7 +609,16 @@ class TestAssociateResumedExecution:
         record = coord.associate_resumed_execution("sess_active", None)
         assert record is not None
         assoc = record.metadata["resumed_execution_association"]
-        assert assoc["continuity_context"] == {}
+        assert assoc["continuity_context"]["prior_session_id"] == "sess_active"
+        assert assoc["continuity_context"]["prior_mesh_session_id"] == "sess_active"
+
+    def test_non_dict_continuity_context_is_normalized(self):
+        coord = self._make_active_coordinator()
+        record = coord.associate_resumed_execution("sess_active", "invalid")
+        assert record is not None
+        assoc = record.metadata["resumed_execution_association"]
+        assert assoc["continuity_context"]["prior_session_id"] == "sess_active"
+        assert assoc["continuity_context_type"] == "str"
 
 
 # ---------------------------------------------------------------------------

@@ -415,6 +415,7 @@ async def handle_device_register(
                 device_id,
                 runtime_attachment_session_id=inbound_attachment_id,
                 durable_session_id=inbound_durable_session_id,
+                continuity_epoch=inbound_continuity_epoch,
             )
             if _reconnect_outcome == "continuity_resume" and _existing_entry is not None:
                 _reg_entry = reconnect_session(
@@ -629,6 +630,9 @@ async def handle_device_reconnect(
     try:
         # PR-G: extract canonical attachment identity from the reconnect message.
         inbound_attachment_id = _extract_runtime_attachment_session_id(message)
+        inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(
+            message
+        )
 
         # Update local transport/session cache so the bridge sees the new socket.
         async with bridge._lock:
@@ -653,6 +657,8 @@ async def handle_device_reconnect(
             outcome, existing_entry = classify_reconnect_outcome(
                 device_id,
                 runtime_attachment_session_id=inbound_attachment_id,
+                durable_session_id=inbound_durable_session_id,
+                continuity_epoch=inbound_continuity_epoch,
             )
         except Exception as _cls_exc:
             logger.debug(
@@ -677,6 +683,8 @@ async def handle_device_reconnect(
                     existing_entry,
                     runtime_attachment_session_id=resolved_attachment_id,
                     metadata={"reconnect_trigger": "android_device_reconnect"},
+                    durable_session_id=inbound_durable_session_id,
+                    continuity_epoch=inbound_continuity_epoch,
                 )
             except Exception as _rec_exc:
                 logger.debug(
@@ -697,6 +705,8 @@ async def handle_device_reconnect(
                     posture="join_runtime",
                     runtime_attachment_session_id=resolved_attachment_id,
                     metadata={"reconnect_trigger": "android_device_reconnect"},
+                    durable_session_id=inbound_durable_session_id,
+                    continuity_epoch=inbound_continuity_epoch,
                 )
             except Exception as _reg_exc:
                 logger.debug(

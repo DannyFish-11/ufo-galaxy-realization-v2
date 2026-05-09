@@ -1339,6 +1339,20 @@ class TestConvenienceWrappers:
         artifact = coordinate_reconnect("dev-1", "att-1", coordinator=c)
         assert isinstance(artifact, ContinuityDecisionArtifact)
 
+    def test_coordinate_reconnect_forwards_durable_identity_fields(self):
+        from core.flow_continuity_coordinator import coordinate_reconnect
+
+        c = _fresh_coordinator()
+        artifact = coordinate_reconnect(
+            "dev-1",
+            "att-1",
+            durable_session_id="dsid-1",
+            continuity_epoch=5,
+            coordinator=c,
+        )
+        assert artifact.durable_session_id == "dsid-1"
+        assert artifact.continuity_epoch == 5
+
     def test_coordinate_reattach_process_recreation(self):
         from core.flow_continuity_coordinator import (
             coordinate_reattach_process_recreation,

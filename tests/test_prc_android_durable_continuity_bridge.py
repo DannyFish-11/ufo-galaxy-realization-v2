@@ -322,6 +322,27 @@ class TestClassifyReconnectOutcomeDurableFields:
         assert outcome == "new_attachment"
         assert entry is None
 
+    def test_lower_continuity_epoch_yields_new_attachment(self):
+        """Older continuity epoch must not resume a newer stored session era."""
+        from core.attached_runtime_session_registry import (
+            register_session,
+            classify_reconnect_outcome,
+        )
+        register_session(
+            "dev-001",
+            runtime_attachment_session_id="att-epoch",
+            durable_session_id="dsid-epoch",
+            continuity_epoch=8,
+        )
+        outcome, entry = classify_reconnect_outcome(
+            "dev-001",
+            runtime_attachment_session_id="att-epoch",
+            durable_session_id="dsid-epoch",
+            continuity_epoch=7,
+        )
+        assert outcome == "new_attachment"
+        assert entry is None
+
 
 # ===========================================================================
 # E — ContinuityEventContext carries durable fields
@@ -507,6 +528,29 @@ class TestFlowContinuityCoordinatorDurableFields:
         )
         c.decide_reconnect(ctx)
         assert captured.get("durable_session_id") == "dsid-captured"
+
+    def test_registry_tuple_outcome_is_supported(self):
+        """Real classify_reconnect_outcome returns (outcome, entry) tuple."""
+        from core.flow_continuity_coordinator import (
+            ContinuityEventContext,
+            ContinuityEventKind,
+            ContinuityDecision,
+        )
+
+        class _Entry:
+            durable_session_id = "dsid-registry"
+            continuity_epoch = 9
+
+        c = self._make_coordinator_with_mock(("continuity_resume", _Entry()))
+        ctx = ContinuityEventContext(
+            event_kind=ContinuityEventKind.transport_reconnect,
+            device_id="dev-005",
+            runtime_attachment_session_id="att-5",
+        )
+        artifact = c.decide_reconnect(ctx)
+        assert artifact.decision == ContinuityDecision.continuity_resume
+        assert artifact.durable_session_id == "dsid-registry"
+        assert artifact.continuity_epoch == 9
 
 
 # ===========================================================================

@@ -1286,6 +1286,7 @@ def recover_hybrid_executions(
     effective_store = store if store is not None else get_hybrid_persistence_store()
     recovered = effective_store.list_recoverable()
     for record in recovered:
+        state_normalized = False
         if record.lifecycle_state in (
             HybridOrchestrationLifecycleState.dispatched,
             HybridOrchestrationLifecycleState.running,
@@ -1295,9 +1296,18 @@ def recover_hybrid_executions(
                 HybridOrchestrationLifecycleState.interrupted,
                 reason="recover_hybrid_executions_restart_normalisation",
             )
+            state_normalized = True
         elif record.lifecycle_state == HybridOrchestrationLifecycleState.created:
             record.transition(
                 HybridOrchestrationLifecycleState.cancelled,
                 reason="recover_hybrid_executions_created_cancelled",
             )
+            state_normalized = True
+        if state_normalized:
+            # Persist restart normalization so subsequent recovery attempts
+            # observe the same durable lifecycle truth.
+            try:
+                effective_store.save(record)
+            except Exception:
+                pass
     return [record for record in recovered if not record.is_terminal]
