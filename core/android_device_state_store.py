@@ -106,6 +106,7 @@ SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
 _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
     {"completed", "failed", "stagnation", "gate_decision"}
 )
+_ANDROID_MILLISECOND_EPOCH_THRESHOLD: float = 1_000_000_000_000.0
 _ANDROID_REPORTED_MODE_MAP: Dict[str, str] = {
     "local": "local",
     "local_only": "local",
@@ -813,6 +814,15 @@ def _coerce_optional_bool(value: Any) -> Optional[bool]:
     return None
 
 
+def _coerce_optional_str(value: Any, *, lowercase: bool = False) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    return normalized.lower() if lowercase else normalized
+
+
 def _normalize_optional_timestamp(raw_value: Any) -> Optional[float]:
     if raw_value is None:
         return None
@@ -820,7 +830,7 @@ def _normalize_optional_timestamp(raw_value: Any) -> Optional[float]:
         value = float(raw_value)
     except (TypeError, ValueError):
         return None
-    if value > 1_000_000_000_000:
+    if value > _ANDROID_MILLISECOND_EPOCH_THRESHOLD:
         value /= 1000.0
     return value
 
@@ -833,15 +843,19 @@ def _normalize_capability_report_semantics(
     if not isinstance(metadata, dict):
         metadata = {}
     absorbed_at = time.time()
-    raw_mode_state = str(metadata.get("mode_state") or "").strip().lower()
+    normalized_mode_state = _coerce_optional_str(metadata.get("mode_state"), lowercase=True)
+    raw_mode_state = normalized_mode_state or ""
     canonical_mode = _ANDROID_REPORTED_MODE_MAP.get(raw_mode_state)
-    if raw_mode_state and canonical_mode is None:
+    if normalized_mode_state and canonical_mode is None:
         logger.debug(
             "_normalize_capability_report_semantics: unmapped mode_state=%r for device_id=%r",
-            raw_mode_state,
+            normalized_mode_state,
             device_id,
         )
-    mode_readiness_state = str(metadata.get("mode_readiness_state") or "").strip().lower() or None
+    mode_readiness_state = _coerce_optional_str(
+        metadata.get("mode_readiness_state"),
+        lowercase=True,
+    )
     reported_at = _normalize_optional_timestamp(message.get("timestamp"))
     semantics_age_s = None
     if reported_at is not None:
@@ -861,10 +875,9 @@ def _normalize_capability_report_semantics(
             metadata.get("parallel_execution_eligibility")
         ),
         "degraded_mode": _coerce_optional_bool(metadata.get("degraded_mode")),
-        "local_intelligence_status": (
-            str(metadata.get("local_intelligence_status")).strip().lower()
-            if metadata.get("local_intelligence_status") is not None
-            else None
+        "local_intelligence_status": _coerce_optional_str(
+            metadata.get("local_intelligence_status"),
+            lowercase=True,
         ),
         "local_inference_ready": _coerce_optional_bool(
             metadata.get("local_inference_ready")
@@ -872,22 +885,14 @@ def _normalize_capability_report_semantics(
         "local_inference_available": _coerce_optional_bool(
             metadata.get("local_inference_available")
         ),
-        "runtime_attachment_session_id": (
-            str(message.get("runtime_attachment_session_id")).strip()
-            if message.get("runtime_attachment_session_id")
-            else None
+        "runtime_attachment_session_id": _coerce_optional_str(
+            message.get("runtime_attachment_session_id")
         ),
-        "durable_session_id": (
-            str(message.get("durable_session_id")).strip()
-            if message.get("durable_session_id")
-            else None
+        "durable_session_id": _coerce_optional_str(
+            message.get("durable_session_id")
         ),
         "continuity_epoch": message.get("continuity_epoch"),
-        "route_mode": (
-            str(message.get("route_mode")).strip().lower()
-            if message.get("route_mode") is not None
-            else None
-        ),
+        "route_mode": _coerce_optional_str(message.get("route_mode"), lowercase=True),
         "reported_at": reported_at,
         "absorbed_at": absorbed_at,
         "semantics_age_s": semantics_age_s,

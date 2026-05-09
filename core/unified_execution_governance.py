@@ -925,6 +925,9 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 device_snapshot, "current_fallback_tier", None
             )
             _is_local_ai_ready = getattr(device_snapshot, "is_local_ai_ready", None)
+            # Only reach this fallback when Android did not publish an explicit
+            # local_inference_available semantic; otherwise the Android-reported
+            # value above remains authoritative.
             if (
                 snapshot.get("android_reported_local_inference_available") is None
                 and callable(_is_local_ai_ready)
