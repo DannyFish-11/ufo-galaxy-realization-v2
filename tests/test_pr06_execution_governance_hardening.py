@@ -180,7 +180,9 @@ def test_failure_timeout_retry_replay_and_interruption_are_recorded():
         "running",
         "interrupted",
     ]
+    assert [history[i]["attempt"] for i in [0, 1, 2, 3]] == [1, 1, 1, 1]
     assert history[4]["attempt"] == 2
+    assert [history[i]["attempt"] for i in [5, 6]] == [2, 2]
     assert history[7]["attempt"] == 3
 
 

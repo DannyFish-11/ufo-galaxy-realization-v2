@@ -1126,12 +1126,16 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     return {
         "execution_id": execution_id,
         "lifecycle_phase": latest_phase,
-        "is_terminal": latest_phase in {
-            ExecutionLifecyclePhase.succeeded.value,
-            ExecutionLifecyclePhase.failed.value,
-            ExecutionLifecyclePhase.timed_out.value,
-            ExecutionLifecyclePhase.cancelled.value,
-        },
+        "is_terminal": bool(
+            latest_phase
+            and latest_phase
+            in {
+                ExecutionLifecyclePhase.succeeded.value,
+                ExecutionLifecyclePhase.failed.value,
+                ExecutionLifecyclePhase.timed_out.value,
+                ExecutionLifecyclePhase.cancelled.value,
+            }
+        ),
         "result_uplink": latest_result_payload,
         "state_uplink": latest_state_payload,
         "result_uplink_count": sum(
