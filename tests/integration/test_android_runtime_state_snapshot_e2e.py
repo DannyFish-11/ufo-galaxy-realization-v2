@@ -891,7 +891,7 @@ class TestCanonicalPathBypassRegression:
 class TestAndroidSnapshotConvergenceDeterminism:
     """Deterministic convergence for stale/out-of-order/reconnect/conflict races."""
 
-    def test_stale_and_out_of_order_snapshot_is_rejected(self) -> None:
+    def test_out_of_order_snapshot_is_rejected_by_sequence(self) -> None:
         from core.android_device_state_store import (
             absorb_device_state_snapshot,
             get_device_snapshot_reconciliation,
@@ -900,7 +900,7 @@ class TestAndroidSnapshotConvergenceDeterminism:
         )
 
         reset_android_device_state_store()
-        device_id = f"snap-stale-{uuid.uuid4().hex[:8]}"
+        device_id = f"snap-out-of-order-{uuid.uuid4().hex[:8]}"
 
         absorb_device_state_snapshot(
             device_id,
@@ -1025,7 +1025,12 @@ class TestAndroidSnapshotConvergenceDeterminism:
         ):
             state = build_unified_governance_state()
 
-        device_state = next(d for d in state["devices"] if d["device_id"] == device_id)
+        device_state = next((d for d in state["devices"] if d["device_id"] == device_id), None)
+        governance_state_device_ids = [d.get("device_id") for d in state["devices"]]
+        assert device_state is not None, (
+            f"Device {device_id!r} not present in governance state devices: "
+            f"{governance_state_device_ids}"
+        )
         causality = device_state["governance_precedence"]["delegated_execution"]["decision_causality"]
         assert causality["snapshot_reconciliation_status"] == "out_of_order_rejected"
         assert causality["snapshot_conflict"] is False

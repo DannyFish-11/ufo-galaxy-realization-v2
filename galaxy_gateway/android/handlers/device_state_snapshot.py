@@ -102,8 +102,7 @@ async def handle_device_state_snapshot(
         )
     except ImportError:
         logger.error(
-            "device_state_snapshot: core.android_device_state_store not available; "
-            "snapshot from %s discarded",
+            "device_state_snapshot: core.android_device_state_store not available; snapshot from %s discarded",
             device_id,
         )
         status = "error"

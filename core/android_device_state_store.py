@@ -45,11 +45,11 @@ Dataclasses::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 import time
-import hashlib
-import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -767,8 +767,11 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
 def _parse_ordering_timestamp(snapshot: Optional[DeviceStateSnapshot]) -> Optional[float]:
     if snapshot is None:
         return None
+    raw_value = getattr(snapshot, "snapshot_ts", None)
+    if raw_value is None:
+        return None
     try:
-        return float(getattr(snapshot, "snapshot_ts", None))
+        return float(raw_value)
     except (TypeError, ValueError):
         return None
 
@@ -779,7 +782,8 @@ def _snapshot_fingerprint(snapshot: Optional[DeviceStateSnapshot]) -> str:
     payload = getattr(snapshot, "raw_payload", {}) or {}
     try:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-    except Exception:
+    except Exception as exc:
+        logger.debug("snapshot fingerprint fallback to repr due to payload encoding error: %s", exc)
         encoded = repr(payload)
     digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
     return digest
@@ -899,6 +903,9 @@ def _reconcile_snapshot_update(
                 "conflict": False,
                 "ordering_basis": "snapshot_ts+payload_hash",
             }
+        # Roundtrip (R2) closure tradeoff: when both snapshots lack sequence and share the
+        # same timestamp, apply latest arrival to preserve update liveness.
+        # Safety-sensitive fields should include sequence to avoid this fallback.
         return {
             "status": SNAPSHOT_RECONCILIATION_ACCEPTED,
             "reason": "same_timestamp_last_write_wins",
