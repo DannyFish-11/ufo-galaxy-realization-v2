@@ -1299,7 +1299,13 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["android_semantics_malformed_keys"] == ["mode_state"]
 
     @pytest.mark.parametrize(
-        ("semantics_patch", "expected_contract_state"),
+        (
+            "semantics_patch",
+            "missing_semantic_fields",
+            "expected_contract_state",
+            "expected_missing_keys",
+            "expected_malformed_keys",
+        ),
         [
             (
                 {
@@ -1308,7 +1314,22 @@ class TestExecutionRuntimeSnapshot:
                     "missing_canonical_gate_metadata_keys": ["goal_execution_eligibility"],
                     "malformed_canonical_gate_metadata_keys": [],
                 },
+                ["goal_execution_eligibility"],
                 "partial",
+                ["goal_execution_eligibility"],
+                [],
+            ),
+            (
+                {
+                    "canonical_gate_metadata_state": "partial",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": ["cross_device_eligibility"],
+                    "malformed_canonical_gate_metadata_keys": [],
+                },
+                ["cross_device_eligibility"],
+                "partial",
+                ["cross_device_eligibility"],
+                [],
             ),
             (
                 {
@@ -1317,15 +1338,50 @@ class TestExecutionRuntimeSnapshot:
                     "missing_canonical_gate_metadata_keys": [],
                     "malformed_canonical_gate_metadata_keys": ["mode_state"],
                 },
+                [],
                 "malformed",
+                [],
+                ["mode_state"],
             ),
-            ({}, "missing"),
+            (
+                {
+                    "canonical_gate_metadata_state": "missing",
+                    "canonical_gate_metadata_complete": False,
+                    "missing_canonical_gate_metadata_keys": [
+                        "mode_state",
+                        "mode_readiness_state",
+                        "cross_device_eligibility",
+                        "goal_execution_eligibility",
+                        "parallel_execution_eligibility",
+                    ],
+                    "malformed_canonical_gate_metadata_keys": [],
+                },
+                [
+                    "mode_state",
+                    "mode_readiness_state",
+                    "cross_device_eligibility",
+                    "goal_execution_eligibility",
+                    "parallel_execution_eligibility",
+                ],
+                "missing",
+                [
+                    "mode_state",
+                    "mode_readiness_state",
+                    "cross_device_eligibility",
+                    "goal_execution_eligibility",
+                    "parallel_execution_eligibility",
+                ],
+                [],
+            ),
         ],
     )
     def test_snapshot_downgrades_incomplete_android_semantics_contract(
         self,
         semantics_patch,
+        missing_semantic_fields,
         expected_contract_state,
+        expected_missing_keys,
+        expected_malformed_keys,
     ):
         device_id = "device-runtime-semantics-contract-drift"
         state_snapshot = MagicMock()
@@ -1349,6 +1405,8 @@ class TestExecutionRuntimeSnapshot:
             "semantics_age_s": 3.0,
         }
         semantics.update(semantics_patch)
+        for field_name in missing_semantic_fields:
+            semantics.pop(field_name, None)
 
         with patch(
             "core.android_device_state_store.get_device_state_snapshot",
@@ -1368,13 +1426,12 @@ class TestExecutionRuntimeSnapshot:
         device_state = snapshot["devices"][0]
         assert device_state["android_semantics_contract_state"] == expected_contract_state
         assert device_state["android_semantics_contract_complete"] is False
+        assert device_state["android_semantics_missing_keys"] == expected_missing_keys
+        assert device_state["android_semantics_malformed_keys"] == expected_malformed_keys
         assert device_state["android_reported_mode"] is None
         assert device_state["android_reported_local_inference_available"] is None
         assert device_state["local_inference_available"] is False
         assert device_state["android_semantics_freshness_state"] == "unknown"
-        assert (
-            device_state["android_semantics_freshness_reason"]
-            == "android_semantics_contract_incomplete"
-        )
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_contract_incomplete"
         assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
         assert device_state["android_runtime_truth_usable"] is False
