@@ -151,6 +151,17 @@ STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY: str = (
     "silently driving canonical governance decisions as fresh runtime truth."
 )
 
+CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY: str = (
+    "POLICY::CANONICAL_PROOF_INPUT_DIAGNOSIS_V1: "
+    "Canonical governance diagnosis MUST classify Android/runtime proof inputs "
+    "as one of: complete, stale, conflicting, malformed, partial, or missing. "
+    "Semantic conflicts between Android-reported fields (e.g., cross_device mode "
+    "with cross_device_eligibility=False, or local_inference_available=True with "
+    "local_intelligence_status=disabled) MUST be surfaced as 'conflicting' rather "
+    "than collapsing into generic denial reasons. Each degraded state MUST carry "
+    "explicit degradation_causes and conflict descriptions for debuggability."
+)
+
 _ANDROID_REPORTED_RUNTIME_TRUTH_FIELDS: Tuple[str, ...] = (
     "android_reported_mode",
     "android_reported_mode_state",
@@ -1611,3 +1622,263 @@ def resolve_execution_conflict(
             ),
             recommended_failure_semantic=FailureSemantic.wait_and_requeue,
         )
+
+
+# ---------------------------------------------------------------------------
+# Android semantics conflict detection
+# ---------------------------------------------------------------------------
+
+# Local intelligence statuses that are semantically incompatible with
+# local_inference_available=True.
+_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset = frozenset({
+    "disabled",
+    "unavailable",
+    "not_available",
+    "none",
+    "off",
+})
+
+
+def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
+    """Detect semantic conflicts in Android-reported capability/gate fields.
+
+    Returns a list of human-readable conflict descriptions.  An empty list
+    means no semantic conflicts were detected.
+
+    Checks the following known conflicting pairs:
+
+    1. ``mode=cross_device`` but ``cross_device_eligibility=False``
+       — the device reports cross-device mode but denies cross-device
+       eligibility simultaneously.
+
+    2. ``goal_execution_eligibility=True`` but ``cross_device_eligibility=False``
+       — goal execution requires cross-device mode; reporting goal eligibility
+       without cross-device eligibility is semantically contradictory.
+
+    3. ``local_inference_available=True`` but ``local_intelligence_status``
+       is one of the known-unavailable tokens — the device simultaneously
+       reports inference as available and its status as disabled/unavailable.
+
+    4. ``local_inference_ready=True`` but ``local_inference_available=False``
+       — inference is flagged ready but also flagged unavailable; a device
+       that is ready MUST be available.
+
+    Parameters
+    ----------
+    snapshot:
+        A runtime pressure snapshot dict as built by
+        :func:`_get_android_runtime_pressure_snapshot` or an equivalent
+        dict carrying ``android_reported_*`` fields.
+
+    Returns
+    -------
+    List[str]
+        Stable, lowercase conflict-description tokens suitable for structured
+        diagnostics output and regression-test assertions.
+    """
+    conflicts: List[str] = []
+
+    reported_mode = str(snapshot.get("android_reported_mode") or "").strip().lower()
+    cross_device_eligibility = snapshot.get("android_reported_cross_device_eligibility")
+    goal_execution_eligibility = snapshot.get("android_reported_goal_execution_eligibility")
+    local_inference_available = snapshot.get("android_reported_local_inference_available")
+    local_inference_ready = snapshot.get("android_reported_local_inference_ready")
+    local_intelligence_status = str(
+        snapshot.get("android_reported_local_intelligence_status") or ""
+    ).strip().lower()
+
+    # Conflict 1: mode=cross_device but cross_device_eligibility=False
+    if reported_mode == "cross_device" and cross_device_eligibility is False:
+        conflicts.append(
+            "mode_cross_device_conflicts_with_cross_device_eligibility_false"
+        )
+
+    # Conflict 2: goal_execution_eligibility=True but cross_device_eligibility=False
+    if goal_execution_eligibility is True and cross_device_eligibility is False:
+        conflicts.append(
+            "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false"
+        )
+
+    # Conflict 3: local_inference_available=True but status is a known-unavailable token
+    if (
+        local_inference_available is True
+        and local_intelligence_status
+        and local_intelligence_status in _LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES
+    ):
+        conflicts.append(
+            f"local_inference_available_true_conflicts_with_local_intelligence_status_{local_intelligence_status}"
+        )
+
+    # Conflict 4: local_inference_ready=True but local_inference_available=False
+    if local_inference_ready is True and local_inference_available is False:
+        conflicts.append(
+            "local_inference_ready_true_conflicts_with_local_inference_available_false"
+        )
+
+    return conflicts
+
+
+# ---------------------------------------------------------------------------
+# Canonical proof input diagnosis
+# ---------------------------------------------------------------------------
+
+
+def classify_canonical_proof_input_diagnosis(
+    snapshot: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify Android/runtime proof inputs and return a structured diagnosis.
+
+    This is the canonical observability helper for understanding *why* a
+    governance decision degraded.  It synthesises all individual proof-input
+    fields from *snapshot* into a single, stable, structured diagnosis so
+    that operators, regression tests, and contract validators can inspect
+    the root cause of any canonical degradation in one place.
+
+    Classification priority (highest → lowest):
+
+    1. ``"conflicting"`` — semantic conflicts detected between related fields
+       (e.g., mode=cross_device + cross_device_eligibility=False).  Indicates
+       a producer disagreement; the inputs cannot all be trusted simultaneously.
+    2. ``"malformed"`` — one or more required canonical gate metadata keys carry
+       invalid / unparseable values.
+    3. ``"stale"`` — semantics are present but older than the freshness threshold.
+    4. ``"partial"`` — some required canonical gate metadata keys are absent.
+    5. ``"missing"`` — no Android capability semantics were reported at all.
+    6. ``"complete"`` — all required keys present, no conflicts, fresh.
+
+    Parameters
+    ----------
+    snapshot:
+        A runtime pressure snapshot dict as produced by
+        :func:`_get_android_runtime_pressure_snapshot` or an equivalent dict
+        carrying the ``android_semantics_*`` and ``android_reported_*`` fields.
+        The function is deliberately lenient — missing keys are treated as
+        their safe defaults.
+
+    Returns
+    -------
+    Dict[str, Any]
+        ``proof_input_class``
+            One of the six classification strings above.
+        ``proof_input_detail``
+            A single human-readable sentence explaining the classification.
+        ``proof_input_conflicts``
+            List of semantic conflict tokens (empty when class ≠ "conflicting").
+        ``proof_input_degradation_causes``
+            List of specific cause tokens explaining why the class is not
+            "complete".  Empty when class is "complete".
+        ``_policy``
+            Reference to :data:`CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY`.
+    """
+    degradation_causes: List[str] = []
+
+    contract_state = str(
+        snapshot.get("android_semantics_contract_state") or "missing"
+    ).strip().lower()
+    missing_keys: List[str] = list(
+        snapshot.get("android_semantics_missing_keys") or []
+    )
+    malformed_keys: List[str] = list(
+        snapshot.get("android_semantics_malformed_keys") or []
+    )
+    freshness_state = str(
+        snapshot.get("android_semantics_freshness_state") or "unknown"
+    ).strip().lower()
+    freshness_reason = str(
+        snapshot.get("android_semantics_freshness_reason") or ""
+    ).strip()
+    runtime_truth_authority = str(
+        snapshot.get("android_runtime_truth_authority") or "unknown"
+    ).strip().lower()
+
+    # --- semantic conflict check (highest priority) ---
+    detected_conflicts = _detect_android_semantics_conflicts(snapshot)
+    if detected_conflicts:
+        for conflict in detected_conflicts:
+            degradation_causes.append(f"semantic_conflict:{conflict}")
+        return {
+            "proof_input_class": "conflicting",
+            "proof_input_detail": (
+                f"Android-reported fields carry {len(detected_conflicts)} semantic "
+                f"conflict(s): {', '.join(detected_conflicts)}"
+            ),
+            "proof_input_conflicts": detected_conflicts,
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- malformed (next priority) ---
+    if malformed_keys or contract_state == "malformed":
+        cause_keys = malformed_keys or []
+        degradation_causes.append(
+            f"malformed_canonical_gate_metadata_keys:{cause_keys}"
+        )
+        return {
+            "proof_input_class": "malformed",
+            "proof_input_detail": (
+                f"Android capability report has malformed canonical gate metadata; "
+                f"malformed_keys={cause_keys}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- stale (next priority) ---
+    if freshness_state == "stale" or runtime_truth_authority == "downgraded_to_unknown":
+        degradation_causes.append(
+            f"android_semantics_stale:{freshness_reason or 'reason_unavailable'}"
+        )
+        return {
+            "proof_input_class": "stale",
+            "proof_input_detail": (
+                f"Android semantics are stale or authority downgraded; "
+                f"freshness_state={freshness_state!r}, "
+                f"reason={freshness_reason!r}, "
+                f"truth_authority={runtime_truth_authority!r}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- partial (missing keys but present) ---
+    if missing_keys or contract_state == "partial":
+        cause_keys = missing_keys or []
+        degradation_causes.append(
+            f"missing_canonical_gate_metadata_keys:{cause_keys}"
+        )
+        return {
+            "proof_input_class": "partial",
+            "proof_input_detail": (
+                f"Android capability report is missing {len(cause_keys)} required "
+                f"canonical gate metadata key(s): {cause_keys}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- missing (no semantics at all) ---
+    if contract_state == "missing":
+        degradation_causes.append("android_semantics_contract_state:missing")
+        return {
+            "proof_input_class": "missing",
+            "proof_input_detail": (
+                "No Android capability semantics have been reported for this device."
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- complete ---
+    return {
+        "proof_input_class": "complete",
+        "proof_input_detail": (
+            "Android capability semantics are complete, fresh, and conflict-free."
+        ),
+        "proof_input_conflicts": [],
+        "proof_input_degradation_causes": [],
+        "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+    }
