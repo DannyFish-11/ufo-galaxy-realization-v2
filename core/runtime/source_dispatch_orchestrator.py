@@ -737,34 +737,33 @@ def _record_live_mesh_runtime_proof(
     live_run_result: Any,
 ) -> None:
     """Record staged-mesh runtime-proof evidence from orchestrator execution."""
-    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
-        _LIVE_MESH_RUNTIME_PROOF_STATE["staged_mesh_dispatch_count"] = int(
-            _LIVE_MESH_RUNTIME_PROOF_STATE.get("staged_mesh_dispatch_count", 0) or 0
+    def _increment_proof_counter(counter_key: str) -> None:
+        _LIVE_MESH_RUNTIME_PROOF_STATE[counter_key] = int(
+            _LIVE_MESH_RUNTIME_PROOF_STATE.get(counter_key, 0) or 0
         ) + 1
+
+    def _normalize_live_outcome(result: Any) -> str:
+        """Normalize runtime outcome to a stable lowercase token."""
+        return str(getattr(result, "outcome", "") or "").strip().lower()
+
+    with _LIVE_MESH_RUNTIME_PROOF_LOCK:
+        _increment_proof_counter("staged_mesh_dispatch_count")
         if isinstance(mesh_session, dict):
             _LIVE_MESH_RUNTIME_PROOF_STATE["last_mesh_session_id"] = mesh_session.get("session_id")
 
         if live_run_result is None:
             return
 
-        _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_run_count"] = int(
-            _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_run_count", 0) or 0
-        ) + 1
-        outcome = str(getattr(live_run_result, "outcome", "") or "").strip().lower()
+        _increment_proof_counter("live_mesh_run_count")
+        outcome = _normalize_live_outcome(live_run_result)
         _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_outcome"] = outcome or None
 
         if outcome == "completed":
-            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_completed_count"] = int(
-                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_completed_count", 0) or 0
-            ) + 1
+            _increment_proof_counter("live_mesh_completed_count")
         elif outcome == "partial":
-            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_partial_count"] = int(
-                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_partial_count", 0) or 0
-            ) + 1
+            _increment_proof_counter("live_mesh_partial_count")
         elif outcome == "failed":
-            _LIVE_MESH_RUNTIME_PROOF_STATE["live_mesh_failed_count"] = int(
-                _LIVE_MESH_RUNTIME_PROOF_STATE.get("live_mesh_failed_count", 0) or 0
-            ) + 1
+            _increment_proof_counter("live_mesh_failed_count")
 
 
 # ---------------------------------------------------------------------------
