@@ -1126,6 +1126,7 @@ _SUCCESSFUL_REPORTED_STATUSES: frozenset[str] = frozenset(
 _FAILED_REPORTED_STATUSES: frozenset[str] = frozenset({"failed", "failure", "error"})
 _CANCELLED_REPORTED_STATUSES: frozenset[str] = frozenset({"cancelled", "canceled"})
 _TIMED_OUT_REPORTED_STATUSES: frozenset[str] = frozenset({"timed_out", "timeout"})
+_EXCEPTIONAL_RUNTIME_HEALTH_STATES: frozenset[str] = frozenset({"degraded", "recovered"})
 
 
 def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -1167,6 +1168,16 @@ def _normalize_reported_runtime_health(state_payload: Optional[Dict[str, Any]]) 
     return "stable"
 
 
+def _extract_reported_runtime_health_reason(state_payload: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(state_payload, dict) or not state_payload:
+        return None
+    raw_reason = state_payload.get("reason")
+    if raw_reason is None:
+        return None
+    reason = str(raw_reason).strip()
+    return reason or None
+
+
 def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     lifecycle_history = get_execution_lifecycle_history(execution_id)
     uplink_records = get_all_uplink_records(execution_id)
@@ -1192,12 +1203,13 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     reported_result_outcome = _normalize_reported_outcome(latest_result_payload)
     reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
+    reported_runtime_health_reason = _extract_reported_runtime_health_reason(latest_state_payload)
     reported_outcome = reported_result_outcome or reported_state_outcome
-    has_incomplete_uplink_pair = bool(
+    has_missing_uplink_data = bool(
         latest_result_payload is None or latest_state_payload is None
     )
     has_partial_authoritative_observation = bool(
-        latest_phase and has_incomplete_uplink_pair
+        latest_phase and has_missing_uplink_data
     )
     reported_outcome_recorded_at = (
         latest_result_recorded_at
@@ -1212,7 +1224,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     delayed_observation = bool(
         outcome_conflict
         and latest_lifecycle_event_at > 0.0
-        and float(reported_outcome_recorded_at or 0.0)
+        and (reported_outcome_recorded_at or 0.0)
         > latest_lifecycle_event_at
     )
     if outcome_conflict:
@@ -1243,7 +1255,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         reconciliation_reason = "no_lifecycle_or_uplink_observation"
     canonical_runtime_health = (
         reported_runtime_health
-        if reported_runtime_health in {"degraded", "recovered"}
+        if reported_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
         else "stable"
     )
     canonical_outcome = latest_phase or reported_outcome
@@ -1269,7 +1281,13 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
             else ("reported_uplink" if reported_outcome else "none")
         ),
         "reported_runtime_health": reported_runtime_health,
+        "reported_runtime_health_reason": reported_runtime_health_reason,
         "canonical_runtime_health": canonical_runtime_health,
+        "canonical_runtime_health_reason": (
+            reported_runtime_health_reason
+            if canonical_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
+            else None
+        ),
         "reconciliation_status": reconciliation_status,
         "reconciliation_reason": reconciliation_reason,
         "reconciliation_conflict": outcome_conflict,

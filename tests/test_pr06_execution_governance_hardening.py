@@ -401,6 +401,7 @@ def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():
     degraded_truth = get_uplink_truth_state(execution_id)
     assert degraded_truth["canonical_outcome"] == "running"
     assert degraded_truth["canonical_runtime_health"] == "degraded"
+    assert degraded_truth["canonical_runtime_health_reason"] == "network_pressure"
 
     record_state_uplink(
         execution_id=execution_id,
@@ -411,4 +412,5 @@ def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():
     recovered_truth = get_uplink_truth_state(execution_id)
     assert recovered_truth["canonical_outcome"] == "running"
     assert recovered_truth["canonical_runtime_health"] == "recovered"
+    assert recovered_truth["canonical_runtime_health_reason"] == "link_restored"
     assert recovered_truth["authoritative_outcome_source"] == "center_lifecycle"
