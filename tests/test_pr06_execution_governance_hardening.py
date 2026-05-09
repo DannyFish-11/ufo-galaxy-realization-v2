@@ -283,7 +283,7 @@ def test_canonical_truth_prefers_authoritative_terminal_lifecycle_over_conflicti
         execution_id=execution_id,
         device_id=device_id,
         execution_type=ExecutionType.goal_execution,
-        payload={"status": "failed", "error": "stale downstream error projection"},
+        payload={"status": "failed", "error": "downstream error projection"},
     )
     record_execution_lifecycle_event(
         execution_id=execution_id,
@@ -350,7 +350,7 @@ def test_reported_vs_canonical_truth_distinction_for_uplink_only_partial_state()
     assert truth_state["canonical_outcome"] == "running"
     assert truth_state["authoritative_outcome_source"] == "reported_uplink"
     assert truth_state["reconciliation_status"] == "uplink_only_observation"
-    assert truth_state["reconciliation_partial_observation"] is True
+    assert truth_state["reconciliation_partial_observation"] is False
 
 
 def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():

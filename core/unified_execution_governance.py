@@ -1193,8 +1193,11 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
     reported_outcome = reported_result_outcome or reported_state_outcome
-    has_partial_observation = bool(
+    has_partial_uplink_observation = bool(
         latest_result_payload is None or latest_state_payload is None
+    )
+    has_partial_authoritative_observation = bool(
+        latest_phase and has_partial_uplink_observation
     )
     outcome_conflict = bool(
         is_terminal
@@ -1218,7 +1221,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
             if delayed_observation
             else "reported_terminal_outcome_conflicts_with_authoritative_lifecycle"
         )
-    elif is_terminal and has_partial_observation:
+    elif is_terminal and has_partial_authoritative_observation:
         reconciliation_status = "accepted_partial_observation"
         reconciliation_reason = "authoritative_terminal_phase_with_partial_uplink_observation"
     elif is_terminal:
@@ -1233,9 +1236,11 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     else:
         reconciliation_status = "missing"
         reconciliation_reason = "no_lifecycle_or_uplink_observation"
-    authoritative_runtime_health = "degraded" if reported_runtime_health == "degraded" else "stable"
-    if reported_runtime_health == "recovered":
-        authoritative_runtime_health = "recovered"
+    authoritative_runtime_health = (
+        reported_runtime_health
+        if reported_runtime_health in {"degraded", "recovered"}
+        else "stable"
+    )
     canonical_outcome = latest_phase or reported_outcome
 
     return {
@@ -1264,7 +1269,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reconciliation_reason": reconciliation_reason,
         "reconciliation_conflict": outcome_conflict,
         "reconciliation_delayed_observation": delayed_observation,
-        "reconciliation_partial_observation": has_partial_observation,
+        "reconciliation_partial_observation": has_partial_authoritative_observation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     }
