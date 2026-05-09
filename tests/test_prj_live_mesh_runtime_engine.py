@@ -660,6 +660,40 @@ class TestGroupG_BarrierCoordination:
                 MeshCoordinatorStatus.failed,
             )
 
+    def test_g8_barrier_release_records_merging_step(self) -> None:
+        state = _make_coordinator_state(
+            participant_device_ids=["mstep1", "mstep2"],
+            barrier_posture="soft_barrier",
+        )
+        engine = LiveMeshRuntimeEngine()
+        result = engine.run(
+            state,
+            participant_results={"mstep1": {"v": 1}, "mstep2": {"v": 2}},
+        )
+        final_state = result.coordinator_state
+        assert final_state is not None
+        assert any(
+            "advanced to merging" in (getattr(event, "message", "") or "")
+            for event in final_state.coordination_events
+        )
+
+    def test_g9_not_required_barrier_records_merging_step(self) -> None:
+        state = _make_coordinator_state(
+            participant_device_ids=["nstep1", "nstep2"],
+            barrier_posture="none",
+        )
+        engine = LiveMeshRuntimeEngine()
+        result = engine.run(
+            state,
+            participant_results={"nstep1": {"v": 1}, "nstep2": {"v": 2}},
+        )
+        final_state = result.coordinator_state
+        assert final_state is not None
+        assert any(
+            "advanced to merging" in (getattr(event, "message", "") or "")
+            for event in final_state.coordination_events
+        )
+
 
 # ---------------------------------------------------------------------------
 # Group H: Merge / aggregation
