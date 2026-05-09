@@ -261,3 +261,156 @@ def test_governance_runtime_authority_is_stable_across_execution_modes(execution
     truth_state = get_uplink_truth_state(execution_id)
     assert truth_state["lifecycle_phase"] == "succeeded"
     assert truth_state["is_terminal"] is True
+
+
+def test_canonical_truth_prefers_authoritative_terminal_lifecycle_over_conflicting_result():
+    execution_id = "exec-pr06-authority-selection"
+    device_id = "device-pr06-authority-selection"
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.created,
+    )
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.running,
+        enforce_transition=False,
+    )
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        payload={"status": "failed", "error": "downstream error projection"},
+    )
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.succeeded,
+    )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["reported_outcome"] == "failed"
+    assert truth_state["canonical_outcome"] == "succeeded"
+    assert truth_state["authoritative_outcome_source"] == "center_lifecycle"
+    assert truth_state["reconciliation_conflict"] is True
+    assert truth_state["reconciliation_status"] == "conflict_center_truth_retained"
+
+
+def test_reconciliation_marks_delayed_conflict_when_conflicting_report_arrives_after_terminal_phase():
+    execution_id = "exec-pr06-delayed-conflict"
+    device_id = "device-pr06-delayed-conflict"
+    with patch(
+        "core.unified_execution_governance.time.time",
+        side_effect=[100.0, 101.0, 105.0],
+    ):
+        record_execution_lifecycle_event(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=ExecutionType.goal_execution,
+            phase=ExecutionLifecyclePhase.created,
+        )
+        record_execution_lifecycle_event(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=ExecutionType.goal_execution,
+            phase=ExecutionLifecyclePhase.succeeded,
+            enforce_transition=False,
+        )
+        record_result_uplink(
+            execution_id=execution_id,
+            device_id=device_id,
+            execution_type=ExecutionType.goal_execution,
+            payload={"status": "failed"},
+        )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["canonical_outcome"] == "succeeded"
+    assert truth_state["reconciliation_conflict"] is True
+    assert truth_state["reconciliation_delayed_observation"] is True
+    assert truth_state["reconciliation_status"] == "delayed_conflict_center_truth_retained"
+
+
+def test_reported_vs_canonical_truth_distinction_for_uplink_only_state_observation():
+    execution_id = "exec-pr06-uplink-only-partial"
+    device_id = "device-pr06-uplink-only-partial"
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.parallel_subtask,
+        payload={"phase": "running", "progress": 0.3},
+    )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["lifecycle_phase"] is None
+    assert truth_state["reported_outcome"] == "running"
+    assert truth_state["canonical_outcome"] == "running"
+    assert truth_state["authoritative_outcome_source"] == "reported_uplink"
+    assert truth_state["reconciliation_status"] == "uplink_only_observation"
+    assert truth_state["reconciliation_partial_observation"] is False
+
+
+def test_partial_authoritative_observation_is_explicitly_marked():
+    execution_id = "exec-pr06-partial-authoritative"
+    device_id = "device-pr06-partial-authoritative"
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.created,
+    )
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        phase=ExecutionLifecyclePhase.succeeded,
+        enforce_transition=False,
+    )
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        payload={"status": "ok"},
+    )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["canonical_outcome"] == "succeeded"
+    assert truth_state["reconciliation_status"] == "accepted_partial_observation"
+    assert truth_state["reconciliation_partial_observation"] is True
+
+
+def test_runtime_truth_is_stable_across_degraded_then_recovered_observations():
+    execution_id = "exec-pr06-degraded-recovered"
+    device_id = "device-pr06-degraded-recovered"
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        phase=ExecutionLifecyclePhase.running,
+        enforce_transition=False,
+    )
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"phase": "running", "degraded": True, "reason": "network_pressure"},
+    )
+    degraded_truth = get_uplink_truth_state(execution_id)
+    assert degraded_truth["canonical_outcome"] == "running"
+    assert degraded_truth["canonical_runtime_health"] == "degraded"
+    assert degraded_truth["canonical_runtime_health_reason"] == "network_pressure"
+
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"phase": "running", "recovered": True, "reason": "link_restored"},
+    )
+    recovered_truth = get_uplink_truth_state(execution_id)
+    assert recovered_truth["canonical_outcome"] == "running"
+    assert recovered_truth["canonical_runtime_health"] == "recovered"
+    assert recovered_truth["canonical_runtime_health_reason"] == "link_restored"
+    assert recovered_truth["authoritative_outcome_source"] == "center_lifecycle"

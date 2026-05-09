@@ -1112,27 +1112,160 @@ def get_all_uplink_records(execution_id: str) -> List[Dict[str, Any]]:
         return [record.to_dict() for record in _execution_uplink_records.get(execution_id, [])]
 
 
+_TERMINAL_LIFECYCLE_PHASES: frozenset[str] = frozenset(
+    {
+        ExecutionLifecyclePhase.succeeded.value,
+        ExecutionLifecyclePhase.failed.value,
+        ExecutionLifecyclePhase.timed_out.value,
+        ExecutionLifecyclePhase.cancelled.value,
+    }
+)
+_SUCCESSFUL_REPORTED_STATUSES: frozenset[str] = frozenset(
+    {"ok", "success", "succeeded", "completed", "done"}
+)
+_FAILED_REPORTED_STATUSES: frozenset[str] = frozenset({"failed", "failure", "error"})
+_CANCELLED_REPORTED_STATUSES: frozenset[str] = frozenset({"cancelled", "canceled"})
+_TIMED_OUT_REPORTED_STATUSES: frozenset[str] = frozenset({"timed_out", "timeout"})
+_EXCEPTIONAL_RUNTIME_HEALTH_STATES: frozenset[str] = frozenset({"degraded", "recovered"})
+
+
+def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(payload, dict) or not payload:
+        return None
+
+    normalized_status = str(payload.get("status") or "").strip().lower()
+    if normalized_status in _SUCCESSFUL_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.succeeded.value
+    if normalized_status in _FAILED_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.failed.value
+    if normalized_status in _CANCELLED_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.cancelled.value
+    if normalized_status in _TIMED_OUT_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.timed_out.value
+
+    normalized_phase = str(payload.get("phase") or "").strip().lower()
+    if normalized_phase in _TERMINAL_LIFECYCLE_PHASES:
+        return normalized_phase
+    if normalized_phase in {
+        ExecutionLifecyclePhase.running.value,
+        ExecutionLifecyclePhase.admitted.value,
+        ExecutionLifecyclePhase.created.value,
+        ExecutionLifecyclePhase.interrupted.value,
+        ExecutionLifecyclePhase.retrying.value,
+        ExecutionLifecyclePhase.replayed.value,
+    }:
+        return normalized_phase
+    return None
+
+
+def _normalize_reported_runtime_health(state_payload: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(state_payload, dict) or not state_payload:
+        return "unknown"
+    if bool(state_payload.get("recovered")):
+        return "recovered"
+    if bool(state_payload.get("degraded")):
+        return "degraded"
+    return "stable"
+
+
+def _extract_reported_runtime_health_reason(state_payload: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(state_payload, dict) or not state_payload:
+        return None
+    raw_reason = state_payload.get("reason")
+    if raw_reason is None:
+        return None
+    reason = str(raw_reason).strip()
+    return reason or None
+
+
 def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     lifecycle_history = get_execution_lifecycle_history(execution_id)
     uplink_records = get_all_uplink_records(execution_id)
     latest_phase = lifecycle_history[-1]["phase"] if lifecycle_history else None
     latest_result_payload = None
     latest_state_payload = None
+    latest_result_recorded_at = None
+    latest_state_recorded_at = None
     for record in uplink_records:
         if record["kind"] == UplinkKind.result_uplink.value:
             latest_result_payload = record["payload"]
+            latest_result_recorded_at = float(record.get("recorded_at", 0.0) or 0.0)
         elif record["kind"] == UplinkKind.state_uplink.value:
             latest_state_payload = record["payload"]
+            latest_state_recorded_at = float(record.get("recorded_at", 0.0) or 0.0)
+
+    latest_lifecycle_event_at = (
+        float(lifecycle_history[-1].get("event_at", 0.0) or 0.0)
+        if lifecycle_history
+        else 0.0
+    )
+    is_terminal = latest_phase in _TERMINAL_LIFECYCLE_PHASES
+    reported_result_outcome = _normalize_reported_outcome(latest_result_payload)
+    reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
+    reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
+    reported_runtime_health_reason = _extract_reported_runtime_health_reason(latest_state_payload)
+    reported_outcome = reported_result_outcome or reported_state_outcome
+    has_incomplete_uplink_data = bool(
+        latest_result_payload is None or latest_state_payload is None
+    )
+    has_partial_authoritative_observation = bool(
+        latest_phase and has_incomplete_uplink_data
+    )
+    reported_outcome_recorded_at = (
+        latest_result_recorded_at
+        if reported_result_outcome is not None
+        else latest_state_recorded_at
+    )
+    outcome_conflict = bool(
+        is_terminal
+        and reported_outcome in _TERMINAL_LIFECYCLE_PHASES
+        and reported_outcome != latest_phase
+    )
+    delayed_observation = bool(
+        outcome_conflict
+        and latest_lifecycle_event_at > 0.0
+        and reported_outcome_recorded_at is not None
+        and reported_outcome_recorded_at > 0.0
+        and reported_outcome_recorded_at
+        > latest_lifecycle_event_at
+    )
+    if outcome_conflict:
+        reconciliation_status = (
+            "delayed_conflict_center_truth_retained"
+            if delayed_observation
+            else "conflict_center_truth_retained"
+        )
+        reconciliation_reason = (
+            "reported_terminal_outcome_arrived_after_authoritative_terminal_phase"
+            if delayed_observation
+            else "reported_terminal_outcome_conflicts_with_authoritative_lifecycle"
+        )
+    elif is_terminal and has_partial_authoritative_observation:
+        reconciliation_status = "accepted_partial_observation"
+        reconciliation_reason = "authoritative_terminal_phase_with_partial_uplink_observation"
+    elif is_terminal:
+        reconciliation_status = "accepted"
+        reconciliation_reason = "authoritative_terminal_phase_aligned_with_observation"
+    elif latest_phase:
+        reconciliation_status = "in_progress"
+        reconciliation_reason = "authoritative_lifecycle_not_terminal"
+    elif reported_outcome:
+        reconciliation_status = "uplink_only_observation"
+        reconciliation_reason = "reported_observation_without_lifecycle_authority"
+    else:
+        reconciliation_status = "missing"
+        reconciliation_reason = "no_lifecycle_or_uplink_observation"
+    canonical_runtime_health = (
+        reported_runtime_health
+        if reported_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
+        else "stable"
+    )
+    canonical_outcome = latest_phase or reported_outcome
+
     return {
         "execution_id": execution_id,
         "lifecycle_phase": latest_phase,
-        "is_terminal": latest_phase
-        in {
-            ExecutionLifecyclePhase.succeeded.value,
-            ExecutionLifecyclePhase.failed.value,
-            ExecutionLifecyclePhase.timed_out.value,
-            ExecutionLifecyclePhase.cancelled.value,
-        },
+        "is_terminal": is_terminal,
         "result_uplink": latest_result_payload,
         "state_uplink": latest_state_payload,
         "result_uplink_count": sum(
@@ -1142,6 +1275,26 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
             1 for record in uplink_records if record["kind"] == UplinkKind.state_uplink.value
         ),
         "lifecycle_event_count": len(lifecycle_history),
+        "reported_outcome": reported_outcome,
+        "canonical_outcome": canonical_outcome,
+        "authoritative_outcome_source": (
+            "center_lifecycle"
+            if latest_phase
+            else ("reported_uplink" if reported_outcome else "none")
+        ),
+        "reported_runtime_health": reported_runtime_health,
+        "reported_runtime_health_reason": reported_runtime_health_reason,
+        "canonical_runtime_health": canonical_runtime_health,
+        "canonical_runtime_health_reason": (
+            reported_runtime_health_reason
+            if canonical_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
+            else None
+        ),
+        "reconciliation_status": reconciliation_status,
+        "reconciliation_reason": reconciliation_reason,
+        "reconciliation_conflict": outcome_conflict,
+        "reconciliation_delayed_observation": delayed_observation,
+        "reconciliation_partial_observation": has_partial_authoritative_observation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     }
