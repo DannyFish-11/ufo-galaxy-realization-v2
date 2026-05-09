@@ -107,6 +107,7 @@ reconciliation gaps``.
 
 from __future__ import annotations
 
+import copy
 import threading as _threading
 import time
 import uuid
@@ -1042,18 +1043,14 @@ def _reconcile_terminal_signal(
                 kind != AndroidParticipantTruthKind.failure
                 and envelope.result_success is not False
             )
-            error_detail = ""
-            if not is_success:
-                error_detail = (
-                    str(envelope.payload.get("error_message") or "")
-                    or str(envelope.payload.get("error") or "")
-                    or str(envelope.payload.get("details") or "")
-                    or "android participant truth terminal failure"
-                )
             result_obj = DelegatedExecutionResult(
                 success=is_success,
-                result_payload=dict(envelope.result_payload),
-                error_detail=error_detail,
+                result_payload=copy.deepcopy(envelope.result_payload),
+                error_detail=(
+                    _extract_terminal_error_detail(envelope.payload)
+                    if not is_success
+                    else ""
+                ),
                 completed_at=time.time(),
             )
             updated = apply_result(record, result_obj, runtime=runtime)
@@ -1066,6 +1063,16 @@ def _reconcile_terminal_signal(
         return True, update_desc, "", phase_str
     except Exception as exc:  # noqa: BLE001
         return False, "", f"apply_signal_error:{exc}", ""
+
+
+def _extract_terminal_error_detail(payload: Dict[str, Any]) -> str:
+    """Return the most useful terminal error detail from an Android truth payload."""
+    return (
+        str(payload.get("error_message") or "")
+        or str(payload.get("error") or "")
+        or str(payload.get("details") or "")
+        or "android participant truth terminal failure"
+    )
 
 
 def _reconcile_status_signal(

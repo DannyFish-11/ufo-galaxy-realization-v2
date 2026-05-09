@@ -449,7 +449,7 @@ class TestGroupF_FailureSignal:
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert "fail" in outcome.canonical_update.lower()
 
-    def test_f3_failure_materialises_result_object(self) -> None:
+    def test_f3_failure_materializes_result_object(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-f3", initial_phase="in_progress")
         env = AndroidParticipantTruthEnvelope(
             truth_kind=AndroidParticipantTruthKind.failure,
@@ -462,7 +462,7 @@ class TestGroupF_FailureSignal:
         assert latest is not None
         assert latest.result is not None
         assert latest.result.success is False
-        assert "boom" in latest.result.error_detail
+        assert latest.result.error_detail == "boom"
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +496,7 @@ class TestGroupG_ResultSuccessSignal:
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert "complet" in outcome.canonical_update.lower()
 
-    def test_g3_result_success_materialises_result_payload(self) -> None:
+    def test_g3_result_success_materializes_result_payload(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-g3", initial_phase="in_progress")
         env = AndroidParticipantTruthEnvelope(
             truth_kind=AndroidParticipantTruthKind.result,
@@ -510,6 +510,7 @@ class TestGroupG_ResultSuccessSignal:
         assert latest is not None
         assert latest.result is not None
         assert latest.result.success is True
+        assert latest.result.error_detail == ""
         assert latest.result.result_payload == {"value": 42}
 
 
@@ -534,7 +535,7 @@ class TestGroupH_ResultFailureSignal:
         phase = outcome.tracking_record_phase.lower()
         assert "fail" in phase, f"Expected failed phase, got: {phase}"
 
-    def test_h2_result_failure_materialises_error_result(self) -> None:
+    def test_h2_result_failure_materializes_error_result(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-h2", initial_phase="in_progress")
         env = AndroidParticipantTruthEnvelope(
             truth_kind=AndroidParticipantTruthKind.result,
@@ -550,7 +551,7 @@ class TestGroupH_ResultFailureSignal:
         assert latest.result is not None
         assert latest.result.success is False
         assert latest.result.result_payload == {"step": "resume"}
-        assert "remote_failed" in latest.result.error_detail
+        assert latest.result.error_detail == "remote_failed"
 
 
 # ---------------------------------------------------------------------------

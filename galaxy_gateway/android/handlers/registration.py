@@ -128,13 +128,10 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
         return 0
 
     async def _flush() -> None:
-        async def _ws_send(message: Dict[str, Any]) -> None:
-            await websocket.send_json(message)
-
         try:
             delivered, skipped = await _pending_delivery_buffer.flush(
                 device_id,
-                _ws_send,
+                websocket.send_json,
             )
             logger.info(
                 "handle_device_register: canonical reconnect replay complete "
@@ -634,7 +631,10 @@ async def handle_device_register(
         # new attachment ("new_attachment").  This is the server-side canonical
         # answer to "is this a reconnect or a brand-new connection?".
         ack["continuity_outcome"] = _reconnect_outcome
-        if _reg_entry is not None and getattr(_reg_entry, "runtime_session_id", ""):
+        # ``_reg_entry`` is produced by guarded registry calls above; keep this
+        # defensive lookup so ack construction still degrades safely if a
+        # partial/mock entry without runtime_session_id reaches this path.
+        if _reg_entry is not None and getattr(_reg_entry, "runtime_session_id", None) is not None:
             ack["runtime_session_id"] = _reg_entry.runtime_session_id
         ack["recovery_replay_buffered_count"] = _recovery_replay_buffered_count
         ack["recovery_replay_scheduled"] = _recovery_replay_scheduled

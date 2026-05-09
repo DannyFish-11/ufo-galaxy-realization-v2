@@ -803,7 +803,7 @@ class TestReconnectContinuitySemantics:
         registry = get_session_registry()
 
         # First registration
-        assert isinstance(ack := await bridge.handle_message(
+        ack = await bridge.handle_message(
             ws1,
             _v3(
                 "device_register",
@@ -811,11 +811,11 @@ class TestReconnectContinuitySemantics:
                 platform="android",
                 runtime_attachment_session_id=attachment_id,
             ),
-        ), dict)
+        )
+        assert isinstance(ack, dict)
         runtime_session_id_before = ack.get("runtime_session_id")
         assert runtime_session_id_before, (
-            "device_register_ack should surface the preserved runtime_session_id "
-            "as a recovery proof field"
+            "Expected runtime_session_id in device_register_ack but got None"
         )
         # Capture the runtime_session_id after first registration
         entry1 = registry.get_active_for_device(device_id)
@@ -870,6 +870,7 @@ class TestReconnectContinuitySemantics:
         )
         assert ack1["recovery_replay_scheduled"] is False
         assert ack1["recovery_replay_buffered_count"] == 0
+        assert ack1["runtime_session_id"]
 
         await bridge.disconnect_device(device_id)
 
@@ -1014,7 +1015,6 @@ class TestReconnectContinuitySemantics:
             ),
         )
 
-        assert future.done() is True
         assert future.result()["payload"]["result"]["value"] == "final"
 
         completed = get_execution_tracking_record(runtime_session_id)
