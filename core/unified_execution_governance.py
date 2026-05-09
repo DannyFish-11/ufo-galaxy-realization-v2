@@ -836,7 +836,11 @@ def _resolve_local_inference_availability(
     if callable(inferred_value):
         try:
             return bool(inferred_value())
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "_resolve_local_inference_availability: snapshot local-ai probe failed: %s",
+                exc,
+            )
             return False
     return False
 

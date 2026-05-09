@@ -106,15 +106,12 @@ SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
 _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
     {"completed", "failed", "stagnation", "gate_decision"}
 )
-_ANDROID_MILLISECOND_EPOCH_THRESHOLD: float = 1_000_000_000_000.0
+_EPOCH_MILLISECOND_CONVERSION_THRESHOLD: float = 1_000_000_000_000.0
 _ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
-_ANDROID_REPORTED_MODE_MAP: Dict[str, str] = {
-    "local": "local",
-    "local_only": "local",
-    "cross_device": "cross_device",
-    "transitioning": "transitioning",
-    "unknown": "unknown",
-}
+_ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {"local_only": "local"}
+_ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset(
+    {"local", "cross_device", "transitioning", "unknown"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -805,7 +802,11 @@ def _coerce_optional_bool(value: Any) -> Optional[bool]:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
-        return bool(value)
+        if value in (0, 0.0):
+            return False
+        if value in (1, 1.0):
+            return True
+        return None
     if isinstance(value, str):
         normalized = value.strip().lower()
         if normalized in {"true", "1", "yes", "y", "on"}:
@@ -831,7 +832,7 @@ def _normalize_optional_timestamp(raw_value: Any) -> Optional[float]:
         value = float(raw_value)
     except (TypeError, ValueError):
         return None
-    if value > _ANDROID_MILLISECOND_EPOCH_THRESHOLD:
+    if value > _EPOCH_MILLISECOND_CONVERSION_THRESHOLD:
         value /= _ANDROID_MILLISECONDS_TO_SECONDS
     return value
 
@@ -846,7 +847,9 @@ def _normalize_capability_report_semantics(
     absorbed_at = time.time()
     normalized_mode_state = _coerce_optional_str(metadata.get("mode_state"), lowercase=True)
     raw_mode_state = normalized_mode_state or ""
-    canonical_mode = _ANDROID_REPORTED_MODE_MAP.get(raw_mode_state)
+    canonical_mode = _ANDROID_REPORTED_MODE_ALIASES.get(raw_mode_state, raw_mode_state or None)
+    if canonical_mode not in _ANDROID_CANONICAL_MODE_VALUES:
+        canonical_mode = None
     if normalized_mode_state and canonical_mode is None:
         logger.debug(
             "_normalize_capability_report_semantics: unmapped mode_state=%r for device_id=%r",

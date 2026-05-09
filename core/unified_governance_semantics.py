@@ -533,7 +533,7 @@ def build_unified_governance_state(
                     "android_reported_local_inference_available"
                 ),
                 "android_semantics_absorbed_at": float(
-                    runtime_state_for_device.get("android_semantics_absorbed_at", 0.0) or 0.0
+                    runtime_state_for_device.get("android_semantics_absorbed_at", 0.0)
                 ),
                 "android_semantics_reported_at": (
                     float(runtime_state_for_device.get("android_semantics_reported_at"))
