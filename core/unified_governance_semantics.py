@@ -221,7 +221,11 @@ def resolve_governance_path_decision(
     dispatch_eligible: bool,
     takeover_eligible: bool,
     takeover_active: bool,
+    highest_priority_execution_type: Optional[str] = None,
+    blocked_execution_types: Optional[List[str]] = None,
 ) -> GovernancePathDecision:
+    blocked_execution_types = [str(v).strip() for v in (blocked_execution_types or []) if str(v).strip()]
+    highest_priority_execution_type = str(highest_priority_execution_type or "").strip()
     if takeover_active and path != GovernancePath.takeover:
         return GovernancePathDecision(
             path=path,
@@ -273,6 +277,15 @@ def resolve_governance_path_decision(
                 blocked_by=None if takeover_eligible else "takeover_gate",
             )
         if path == GovernancePath.delegated_execution:
+            if "goal_execution" in blocked_execution_types:
+                return GovernancePathDecision(
+                    path=path,
+                    precedence_rank=_rank_for_path(path),
+                    authority_owner="v2_authority",
+                    android_scope="blocked_by_execution_runtime",
+                    eligible=False,
+                    blocked_by="execution_runtime_blocked:goal_execution",
+                )
             return GovernancePathDecision(
                 path=path,
                 precedence_rank=_rank_for_path(path),
@@ -286,6 +299,15 @@ def resolve_governance_path_decision(
             GovernancePath.local_grounding,
             GovernancePath.local_execution,
         ):
+            if highest_priority_execution_type == "takeover_request":
+                return GovernancePathDecision(
+                    path=path,
+                    precedence_rank=_rank_for_path(path),
+                    authority_owner="v2_authority",
+                    android_scope="blocked_by_takeover_runtime_priority",
+                    eligible=False,
+                    blocked_by="execution_runtime_priority:takeover_request",
+                )
             return GovernancePathDecision(
                 path=path,
                 precedence_rank=_rank_for_path(path),
@@ -395,6 +417,12 @@ def build_unified_governance_state(
                 dispatch_eligible=dispatch_eligible,
                 takeover_eligible=takeover_eligible,
                 takeover_active=takeover_active,
+                highest_priority_execution_type=runtime_state_for_device.get(
+                    "highest_priority_execution_type"
+                ),
+                blocked_execution_types=list(
+                    runtime_state_for_device.get("blocked_execution_types", [])
+                ),
             )
             decision_dict = decision.to_dict()
             decision_dict["decision_causality"] = {
@@ -410,6 +438,21 @@ def build_unified_governance_state(
                 ),
                 "blocked_execution_types": list(
                     runtime_state_for_device.get("blocked_execution_types", [])
+                ),
+                "offline_queue_depth": int(
+                    runtime_state_for_device.get("offline_queue_depth", 0) or 0
+                ),
+                "execution_busy": bool(
+                    runtime_state_for_device.get("execution_busy", False)
+                ),
+                "local_inference_available": bool(
+                    runtime_state_for_device.get("local_inference_available", False)
+                ),
+                "runtime_health_status": runtime_state_for_device.get(
+                    "runtime_health_status"
+                ),
+                "current_fallback_tier": runtime_state_for_device.get(
+                    "current_fallback_tier"
                 ),
             }
             paths[path.value] = decision_dict

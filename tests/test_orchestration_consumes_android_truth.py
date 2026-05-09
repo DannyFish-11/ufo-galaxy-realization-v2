@@ -64,6 +64,9 @@ def _make_snapshot(
     local_loop_ready: Optional[bool] = None,
     warmup_result: Optional[str] = None,
     current_fallback_tier: Optional[str] = None,
+    offline_queue_depth: Optional[int] = None,
+    runtime_health_snapshot: Optional[Dict[str, Any]] = None,
+    local_ai_ready: Optional[bool] = None,
     mobilevlm_present: Optional[bool] = None,
     mobilevlm_checksum_ok: Optional[bool] = None,
     seeclick_present: Optional[bool] = None,
@@ -74,6 +77,12 @@ def _make_snapshot(
     snap.local_loop_ready = local_loop_ready
     snap.warmup_result = warmup_result
     snap.current_fallback_tier = current_fallback_tier
+    snap.offline_queue_depth = offline_queue_depth
+    snap.runtime_health_snapshot = runtime_health_snapshot
+    if local_ai_ready is None:
+        snap.is_local_ai_ready = lambda: False
+    else:
+        snap.is_local_ai_ready = lambda: bool(local_ai_ready)
     snap.mobilevlm_present = mobilevlm_present
     snap.mobilevlm_checksum_ok = mobilevlm_checksum_ok
     snap.seeclick_present = seeclick_present
@@ -131,7 +140,10 @@ class TestSentinelsExported:
             ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION,
         )
 
-        assert "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
+        assert (
+            "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1"
+            in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
+        )
         assert "model_ready" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
 
 
@@ -221,6 +233,27 @@ class TestScoreCandidateAndroidTruth:
         score, _ = self._score(android_snapshot=snap, execution_busy=True)
         # +10 +5 -15 = 100
         assert score == 100
+
+    def test_queue_depth_penalty_changes_score(self):
+        snap_idle = _make_snapshot(offline_queue_depth=0)
+        snap_busy = _make_snapshot(offline_queue_depth=9)
+        score_idle, _ = self._score(android_snapshot=snap_idle)
+        score_busy, _ = self._score(android_snapshot=snap_busy)
+        assert score_busy < score_idle
+
+    def test_local_inference_availability_boosts_score(self):
+        snap_no_local = _make_snapshot(local_ai_ready=False)
+        snap_local = _make_snapshot(local_ai_ready=True)
+        score_no_local, _ = self._score(android_snapshot=snap_no_local)
+        score_local, _ = self._score(android_snapshot=snap_local)
+        assert score_local > score_no_local
+
+    def test_runtime_health_degraded_penalizes_score(self):
+        snap_ok = _make_snapshot(runtime_health_snapshot={"status": "healthy"})
+        snap_bad = _make_snapshot(runtime_health_snapshot={"status": "degraded"})
+        score_ok, _ = self._score(android_snapshot=snap_ok)
+        score_bad, _ = self._score(android_snapshot=snap_bad)
+        assert score_bad < score_ok
 
     def test_android_truth_does_not_affect_gate_failures(self):
         """Hard gate failures (not_routable) must still reject even with good snapshot."""
@@ -458,6 +491,91 @@ class TestSelectTargetAndroidTruth:
         assert "model_ready" in status.get("authoritative_scoring_fields", [])
         assert "mobilevlm_present" in status.get("capability_presence_only_fields", [])
 
+    def test_blocked_execution_type_runtime_truth_changes_selection(self, monkeypatch):
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        dev_blocked = "dev_blocked_exec"
+        dev_open = "dev_open_exec"
+        entry_blocked = _make_registry_entry(dev_blocked)
+        entry_open = _make_registry_entry(dev_open)
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry_blocked, entry_open],
+        )
+
+        result = _select_target_from_candidates(
+            readiness_inputs={dev_blocked: _make_readiness(), dev_open: _make_readiness()},
+            participation_inputs={
+                dev_blocked: _make_participation(),
+                dev_open: _make_participation(),
+            },
+            reuse_inputs={dev_blocked: False, dev_open: False},
+            android_snapshot_inputs={
+                dev_blocked: _make_snapshot(model_ready=True),
+                dev_open: _make_snapshot(model_ready=True),
+            },
+            execution_runtime_inputs={
+                dev_blocked: {
+                    "device_id": dev_blocked,
+                    "active_execution_count": 1,
+                    "highest_priority_execution_type": "takeover_request",
+                    "blocked_execution_types": ["goal_execution"],
+                },
+                dev_open: {
+                    "device_id": dev_open,
+                    "active_execution_count": 0,
+                    "highest_priority_execution_type": None,
+                    "blocked_execution_types": [],
+                },
+            },
+        )
+        assert result is not None
+        assert result.target_device_id == dev_open
+
+    def test_selection_stability_under_equivalent_truth(self, monkeypatch):
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        dev_a = "dev_equiv_a"
+        dev_b = "dev_equiv_b"
+        entry_a = _make_registry_entry(dev_a)
+        entry_b = _make_registry_entry(dev_b)
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry_a, entry_b],
+        )
+
+        result = _select_target_from_candidates(
+            readiness_inputs={dev_a: _make_readiness(), dev_b: _make_readiness()},
+            participation_inputs={dev_a: _make_participation(), dev_b: _make_participation()},
+            reuse_inputs={dev_a: False, dev_b: False},
+            android_snapshot_inputs={
+                dev_a: _make_snapshot(model_ready=True, local_ai_ready=True),
+                dev_b: _make_snapshot(model_ready=True, local_ai_ready=True),
+            },
+            execution_runtime_inputs={
+                dev_a: {
+                    "device_id": dev_a,
+                    "active_execution_count": 0,
+                    "highest_priority_execution_type": None,
+                    "blocked_execution_types": [],
+                },
+                dev_b: {
+                    "device_id": dev_b,
+                    "active_execution_count": 0,
+                    "highest_priority_execution_type": None,
+                    "blocked_execution_types": [],
+                },
+            },
+        )
+        assert result is not None
+        assert result.target_device_id == dev_a
+
 
 # ---------------------------------------------------------------------------
 # D. select_devices — step 0c re-orders by Android readiness
@@ -559,6 +677,44 @@ class TestSelectDevicesAndroidRoutingWeight:
         # No reordering — first candidate wins.
         assert len(result) == 1
         assert result[0].device_id == "dev_a"
+
+    def test_select_devices_prefers_lower_queue_depth(self, monkeypatch):
+        from galaxy_gateway.routing.device_selection import select_devices
+
+        dev_heavy = _make_device("dev_heavy_queue")
+        dev_light = _make_device("dev_light_queue")
+
+        snap_heavy = _make_snapshot(model_ready=True, offline_queue_depth=12)
+        snap_light = _make_snapshot(model_ready=True, offline_queue_depth=0)
+
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_state_snapshot",
+            lambda device_id: snap_heavy if device_id == "dev_heavy_queue" else snap_light,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.list_recent_execution_events",
+            lambda flow_id, device_id, limit: [],
+        )
+        monkeypatch.setattr(
+            "core.target_device_validator.validate_target_device",
+            lambda tid: MagicMock(ready=True, registered=True, reasons=[]),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+            lambda devices, **kw: [d for d in devices if d.status == "online"],
+            raising=False,
+        )
+        mock_pool = MagicMock()
+        mock_pool.select_device.return_value = None
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+            lambda: mock_pool,
+        )
+
+        result = select_devices(analysis={}, candidates=[dev_heavy, dev_light])
+        assert len(result) == 1
+        assert result[0].device_id == "dev_light_queue"
 
     def test_android_routing_weight_sentinel_present(self):
         from galaxy_gateway.routing.device_selection import (

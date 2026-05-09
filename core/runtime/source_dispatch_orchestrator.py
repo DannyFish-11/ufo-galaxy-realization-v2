@@ -1640,6 +1640,7 @@ def _score_candidate(
     posture: str = "",
     android_snapshot: Any = None,
     execution_busy: bool = False,
+    execution_runtime_state: Optional[Dict[str, Any]] = None,
 ) -> Tuple[int, str]:
     """Score a single dispatch candidate using consolidated truth inputs.
 
@@ -1659,6 +1660,9 @@ def _score_candidate(
       -20  model_ready == False AND current_fallback_tier is absent
                                        (device cannot execute by any path)
       -15  execution_busy == True      (device is currently executing a task)
+      -N   offline_queue_depth > 0     (de-prioritise loaded device)
+      +8   local_ai_ready == True      (local inference available)
+      -10  runtime_health degraded      (runtime health snapshot indicates issues)
 
     Each adjustment is applied independently and only when the corresponding
     field is not None.  Missing snapshot or None fields degrade gracefully
@@ -1738,6 +1742,17 @@ def _score_candidate(
         _local_loop_ready = getattr(android_snapshot, "local_loop_ready", None)
         _warmup_result = getattr(android_snapshot, "warmup_result", None)
         _fallback_tier = getattr(android_snapshot, "current_fallback_tier", None) or ""
+        _offline_queue_depth = getattr(android_snapshot, "offline_queue_depth", None)
+        _runtime_health_snapshot = getattr(android_snapshot, "runtime_health_snapshot", None)
+        _local_ai_ready = False
+        _is_local_ai_ready = getattr(android_snapshot, "is_local_ai_ready", None)
+        if callable(_is_local_ai_ready):
+            try:
+                _local_ai_ready = bool(_is_local_ai_ready())
+            except Exception:
+                _local_ai_ready = False
+        elif _is_local_ai_ready is not None:
+            _local_ai_ready = bool(_is_local_ai_ready)
 
         if _model_ready is True:
             # Local AI inference is ready — prefer this device.
@@ -1755,10 +1770,45 @@ def _score_candidate(
             # Model not ready AND no fallback tier configured: device cannot
             # execute tasks by any path — strong preference to route elsewhere.
             score -= 20
+        if _local_ai_ready:
+            score += 8
+        if isinstance(_offline_queue_depth, int) and _offline_queue_depth > 0:
+            score -= min(_offline_queue_depth, 20)
+        if isinstance(_runtime_health_snapshot, dict):
+            _health_status = str(
+                _runtime_health_snapshot.get("status")
+                or _runtime_health_snapshot.get("state")
+                or _runtime_health_snapshot.get("health")
+                or ""
+            ).strip().lower()
+            _is_degraded = bool(_runtime_health_snapshot.get("is_degraded", False))
+            if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
+                score -= 10
 
     # --- Execution busy penalty (ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION) ---
     if execution_busy:
         score -= 15
+
+    # --- Unified execution-runtime pressure / conflict truth ---
+    if execution_runtime_state:
+        _blocked_types = {
+            str(v).strip()
+            for v in (execution_runtime_state.get("blocked_execution_types") or [])
+            if str(v).strip()
+        }
+        _incoming_execution_type = str(
+            execution_runtime_state.get("incoming_execution_type", "goal_execution")
+        ).strip()
+        if _incoming_execution_type in _blocked_types:
+            return 0, f"execution_runtime:blocked_execution_type:{_incoming_execution_type}"
+        _active_count = int(execution_runtime_state.get("active_execution_count", 0) or 0)
+        if _active_count > 0:
+            score -= min(_active_count * 5, 20)
+        _highest_priority = str(
+            execution_runtime_state.get("highest_priority_execution_type") or ""
+        ).strip()
+        if _highest_priority == "takeover_request":
+            score -= 25
 
     return score, rejection
 
@@ -1770,6 +1820,7 @@ def _select_target_from_candidates(
     participation_inputs: Optional[Dict[str, Any]] = None,
     reuse_inputs: Optional[Dict[str, Any]] = None,
     android_snapshot_inputs: Optional[Dict[str, Any]] = None,
+    execution_runtime_inputs: Optional[Dict[str, Dict[str, Any]]] = None,
     mesh_session_id: Optional[str] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
     """Select the best dispatch target from consolidated truth inputs.
@@ -1843,6 +1894,27 @@ def _select_target_from_candidates(
     if not active_sessions:
         logger.debug("_select_target_from_candidates: no active sessions in registry")
         return None
+
+    execution_runtime_by_device: Dict[str, Dict[str, Any]] = {}
+    if execution_runtime_inputs is not None:
+        execution_runtime_by_device = dict(execution_runtime_inputs)
+    else:
+        try:
+            from core.unified_execution_governance import (
+                get_execution_runtime_snapshot as _get_execution_runtime_snapshot,
+            )
+
+            _runtime_snapshot = _get_execution_runtime_snapshot()
+            execution_runtime_by_device = {
+                str(_entry.get("device_id")): dict(_entry)
+                for _entry in (_runtime_snapshot.get("devices") or [])
+                if isinstance(_entry, dict) and _entry.get("device_id")
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "_select_target_from_candidates: execution runtime snapshot unavailable: %s",
+                exc,
+            )
 
     # --- Step 2: Evaluate each candidate ---
     best_score: int = -1
@@ -1985,6 +2057,7 @@ def _select_target_from_candidates(
             posture=_entry_posture,
             android_snapshot=android_snapshot,
             execution_busy=_execution_busy,
+            execution_runtime_state=execution_runtime_by_device.get(device_id),
         )
 
         if rejection_reason:
@@ -2021,6 +2094,7 @@ def _select_target_from_candidates(
                         ),
                     },
                     "execution_busy": _execution_busy,
+                    "execution_runtime_state": execution_runtime_by_device.get(device_id),
                 },
             )
 
@@ -2040,6 +2114,7 @@ def select_dispatch_target(
     readiness_inputs: Optional[Dict[str, Any]] = None,
     participation_inputs: Optional[Dict[str, Any]] = None,
     reuse_inputs: Optional[Dict[str, Any]] = None,
+    execution_runtime_inputs: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
     """Select a :class:`~contracts.source_dispatch.SourceDispatchTarget`.
 
@@ -2118,6 +2193,7 @@ def select_dispatch_target(
         readiness_inputs=readiness_inputs,
         participation_inputs=participation_inputs,
         reuse_inputs=reuse_inputs,
+        execution_runtime_inputs=execution_runtime_inputs,
         mesh_session_id=_effective_mesh_session_id,
     )
     if candidate_target is not None:

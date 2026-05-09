@@ -820,6 +820,57 @@ def notify_execution_completed(
     return removed
 
 
+def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
+    """Return Android runtime pressure truth for *device_id* (best effort)."""
+    snapshot: Dict[str, Any] = {
+        "offline_queue_depth": 0,
+        "current_fallback_tier": None,
+        "local_inference_available": False,
+        "runtime_health_status": "unknown",
+        "execution_busy": False,
+    }
+    try:
+        from core.android_device_state_store import (
+            get_device_state_snapshot,
+            list_recent_execution_events,
+        )
+
+        device_snapshot = get_device_state_snapshot(device_id)
+        if device_snapshot is not None:
+            _queue_depth = getattr(device_snapshot, "offline_queue_depth", None)
+            if isinstance(_queue_depth, int) and _queue_depth > 0:
+                snapshot["offline_queue_depth"] = int(_queue_depth)
+            snapshot["current_fallback_tier"] = getattr(
+                device_snapshot, "current_fallback_tier", None
+            )
+            _is_local_ai_ready = getattr(device_snapshot, "is_local_ai_ready", None)
+            if callable(_is_local_ai_ready):
+                try:
+                    snapshot["local_inference_available"] = bool(_is_local_ai_ready())
+                except Exception:
+                    snapshot["local_inference_available"] = False
+            _health = getattr(device_snapshot, "runtime_health_snapshot", None)
+            if isinstance(_health, dict):
+                snapshot["runtime_health_status"] = str(
+                    _health.get("status") or _health.get("state") or _health.get("health") or "unknown"
+                ).strip().lower() or "unknown"
+
+        recent_events = list_recent_execution_events(flow_id=None, device_id=device_id, limit=1)
+        if recent_events:
+            recent_event = recent_events[0]
+            _phase = str(getattr(recent_event, "phase", "") or "").strip().lower()
+            _absorbed = float(getattr(recent_event, "absorbed_at", 0) or 0)
+            if _phase in {"planning", "grounding", "execution", "replan"} and (time.time() - _absorbed) < 60.0:
+                snapshot["execution_busy"] = True
+    except Exception as exc:
+        logger.debug(
+            "_get_android_runtime_pressure_snapshot: unavailable for %r: %s",
+            device_id,
+            exc,
+        )
+    return snapshot
+
+
 def get_execution_runtime_snapshot(
     *,
     device_ids: Optional[List[str]] = None,
@@ -843,6 +894,7 @@ def get_execution_runtime_snapshot(
             _get_active_executions(device_id),
             key=lambda t: t[1],
         )
+        runtime_pressure = _get_android_runtime_pressure_snapshot(device_id)
         active_items: List[Dict[str, Any]] = []
         for execution_type, started_at, execution_id in active_entries:
             policy = get_execution_type_policy(execution_type)
@@ -892,6 +944,11 @@ def get_execution_runtime_snapshot(
                     highest_priority.value if highest_priority else None
                 ),
                 "blocked_execution_types": blocked_execution_types,
+                "offline_queue_depth": int(runtime_pressure.get("offline_queue_depth", 0) or 0),
+                "current_fallback_tier": runtime_pressure.get("current_fallback_tier"),
+                "local_inference_available": bool(runtime_pressure.get("local_inference_available", False)),
+                "runtime_health_status": str(runtime_pressure.get("runtime_health_status", "unknown") or "unknown"),
+                "execution_busy": bool(runtime_pressure.get("execution_busy", False)),
                 "_source": "unified_execution_governance.active_registry",
             }
         )
