@@ -96,6 +96,7 @@ import asyncio
 import copy
 import logging
 import threading
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -703,6 +704,7 @@ _LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
     "live_mesh_failed_count": 0,
     "last_live_outcome": None,
     "last_mesh_session_id": None,
+    "last_live_run_at": None,
 }
 
 
@@ -741,6 +743,7 @@ def reset_live_mesh_runtime_proof_snapshot() -> None:
                 "live_mesh_failed_count": 0,
                 "last_live_outcome": None,
                 "last_mesh_session_id": None,
+                "last_live_run_at": None,
             }
         )
 
@@ -768,6 +771,7 @@ def _record_live_mesh_runtime_proof(
         _increment_proof_counter_unlocked("live_mesh_run_count")
         outcome = _normalize_live_outcome(live_run_result)
         _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_outcome"] = outcome or None
+        _LIVE_MESH_RUNTIME_PROOF_STATE["last_live_run_at"] = time.time()
 
         if outcome == "completed":
             _increment_proof_counter_unlocked("live_mesh_completed_count")

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 import importlib
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,41 @@ MESH_RUNTIME_STATUS_RUNTIME_PROVEN: str = "runtime_proven"
 MESH_RUNTIME_STATUS_PARTIAL: str = "partial"
 MESH_RUNTIME_STATUS_CONTRACT_ONLY: str = "contract_only"
 MESH_RUNTIME_STATUS_UNAVAILABLE: str = "unavailable"
+
+# ---------------------------------------------------------------------------
+# Mesh runtime proof quality levels
+# ---------------------------------------------------------------------------
+# These distinguish the *quality* of existing runtime proof from the coarser
+# status field so governance can degrade decisions proportionally.
+
+MESH_RUNTIME_PROOF_QUALITY_LIVE: str = "live"
+# runtime_proven and fresh: live execution ran recently enough to be trusted.
+
+MESH_RUNTIME_PROOF_QUALITY_STALE: str = "stale"
+# runtime_proven in a prior session but last_live_run_at exceeds the staleness
+# threshold; proof exists but may not reflect current runtime conditions.
+
+MESH_RUNTIME_PROOF_QUALITY_PARTIAL: str = "partial"
+# Some execution-level proof exists (e.g. dispatch attempted) but a full
+# live mesh run has never been recorded.
+
+MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED: str = "structurally_inferred"
+# Only sentinel/module-presence proofs are available.  No execution-path
+# evidence at all — purely structural inference from code presence.
+
+MESH_RUNTIME_PROOF_QUALITY_MISSING: str = "missing"
+# No proofs of any kind are present.
+
+MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS: float = 300.0
+# Live mesh execution evidence is considered stale after this many seconds.
+
+MESH_RUNTIME_PROOF_QUALITY_POLICY: str = (
+    "MESH_RUNTIME_PROOF_QUALITY_POLICY_V1: "
+    "governance must not treat partial, stale, missing, or structurally-inferred "
+    "mesh runtime proof as equivalent to live runtime-proven readiness. "
+    "The proof_quality field is authoritative; governance_readiness_impact surfaces "
+    "the downstream effect on canonical decisions."
+)
 
 
 class GovernancePath(str, Enum):
@@ -121,6 +157,81 @@ def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
         return False
 
 
+def _compute_mesh_proof_quality(
+    *,
+    has_live_runtime_path_execution: bool,
+    last_live_run_at: Optional[float],
+    runtime_proof_count: int,
+    live_mesh_run_count: int,
+    stale_after_seconds: float = MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS,
+) -> tuple[str, str]:
+    """Compute mesh runtime proof quality and its governance-readable reason.
+
+    Returns
+    -------
+    tuple[str, str]
+        ``(proof_quality, proof_quality_reason)`` where *proof_quality* is one
+        of the ``MESH_RUNTIME_PROOF_QUALITY_*`` constants and *proof_quality_reason*
+        is a human-readable diagnostic token.
+    """
+    if not has_live_runtime_path_execution:
+        if live_mesh_run_count > 0:
+            # Counters indicate past runs but this session reset them; treat as
+            # structurally inferred since no live path execution this session.
+            pass
+        if runtime_proof_count > 0:
+            return (
+                MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED,
+                "no_live_execution_only_sentinel_presence",
+            )
+        return (
+            MESH_RUNTIME_PROOF_QUALITY_MISSING,
+            "no_proof_of_any_kind",
+        )
+
+    # has_live_runtime_path_execution is True — check staleness
+    if last_live_run_at is None:
+        # Live run happened but no timestamp available; cannot verify freshness
+        return (
+            MESH_RUNTIME_PROOF_QUALITY_STALE,
+            "live_run_recorded_but_timestamp_unavailable",
+        )
+
+    age_s = max(0.0, time.time() - last_live_run_at)
+    if age_s > stale_after_seconds:
+        return (
+            MESH_RUNTIME_PROOF_QUALITY_STALE,
+            f"live_proof_age_{age_s:.0f}s_exceeds_threshold_{stale_after_seconds:.0f}s",
+        )
+
+    return (
+        MESH_RUNTIME_PROOF_QUALITY_LIVE,
+        "live_execution_within_freshness_window",
+    )
+
+
+def _mesh_proof_quality_to_governance_readiness_impact(proof_quality: str) -> str:
+    """Map proof quality to its canonical governance readiness impact token.
+
+    Returns
+    -------
+    str
+        A stable token describing how the proof quality degrades canonical
+        governance readiness.  Consumers MUST NOT treat any value other than
+        ``"none"`` as equivalent to live runtime-proven readiness.
+    """
+    if proof_quality == MESH_RUNTIME_PROOF_QUALITY_LIVE:
+        return "none"
+    if proof_quality == MESH_RUNTIME_PROOF_QUALITY_STALE:
+        return "degraded_stale_proof"
+    if proof_quality == MESH_RUNTIME_PROOF_QUALITY_PARTIAL:
+        return "degraded_partial_proof"
+    if proof_quality == MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED:
+        return "degraded_structurally_inferred"
+    # MISSING or unknown
+    return "blocked_no_proof"
+
+
 def build_mesh_runtime_state(
     coordinator_state: Any = None,
 ) -> Dict[str, Any]:
@@ -196,6 +307,14 @@ def build_mesh_runtime_state(
     )
     has_live_runtime_path_execution = live_runtime_run_count > 0
 
+    # Extract last_live_run_at for staleness detection (added by PR-08v2).
+    _raw_last_live_run_at = live_runtime_proof_snapshot.get("last_live_run_at")
+    last_live_run_at: Optional[float]
+    try:
+        last_live_run_at = float(_raw_last_live_run_at) if _raw_last_live_run_at is not None else None
+    except (TypeError, ValueError):
+        last_live_run_at = None
+
     runtime_proof_count = sum(
         (
             int(has_staged_mesh_dispatch),
@@ -212,6 +331,18 @@ def build_mesh_runtime_state(
     else:
         status = MESH_RUNTIME_STATUS_CONTRACT_ONLY
 
+    # Compute explicit proof quality — finer-grained than status so that
+    # governance can degrade decisions proportionally (PR-08v2 requirement).
+    proof_quality, proof_quality_reason = _compute_mesh_proof_quality(
+        has_live_runtime_path_execution=has_live_runtime_path_execution,
+        last_live_run_at=last_live_run_at,
+        runtime_proof_count=runtime_proof_count,
+        live_mesh_run_count=live_runtime_run_count,
+    )
+    governance_readiness_impact = _mesh_proof_quality_to_governance_readiness_impact(
+        proof_quality
+    )
+
     # Build center-side state machine snapshot (PR-03)
     center_state_snapshot: Dict[str, Any] = {}
     try:
@@ -227,6 +358,9 @@ def build_mesh_runtime_state(
 
     return {
         "status": status,
+        "proof_quality": proof_quality,
+        "proof_quality_reason": proof_quality_reason,
+        "governance_readiness_impact": governance_readiness_impact,
         "runtime_proof_count": runtime_proof_count,
         "runtime_proofs": {
             "staged_mesh_dispatch_orchestration": has_staged_mesh_dispatch,
@@ -251,6 +385,8 @@ def build_mesh_runtime_state(
                 ),
                 "last_live_outcome": live_runtime_proof_snapshot.get("last_live_outcome"),
                 "last_mesh_session_id": live_runtime_proof_snapshot.get("last_mesh_session_id"),
+                "last_live_run_at": last_live_run_at,
+                "proof_stale_after_seconds": MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS,
             },
         },
         "center_runtime_state": center_state_snapshot,
@@ -279,6 +415,7 @@ def build_mesh_runtime_state(
             "multi-Android-device live mesh closure remains constrained without Android-side runtime proof",
         ],
         "_policy": MESH_RUNTIME_STATUS_POLICY,
+        "_proof_quality_policy": MESH_RUNTIME_PROOF_QUALITY_POLICY,
         "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
     }
 
@@ -293,6 +430,7 @@ def resolve_governance_path_decision(
     highest_priority_execution_type: Optional[str] = None,
     blocked_execution_types: Optional[List[str]] = None,
     canonical_execution_gate_decision: str = "allow",
+    mesh_proof_quality: Optional[str] = None,
 ) -> GovernancePathDecision:
     _blocked_execution_types: List[str] = []
     for value in blocked_execution_types or []:
@@ -409,6 +547,20 @@ def resolve_governance_path_decision(
                 android_scope="bounded_local_participation",
                 eligible=True,
             )
+        if path == GovernancePath.multimodal_participation:
+            # Multimodal participation requires live mesh runtime proof.
+            # Partial, stale, structurally-inferred, or missing proof must
+            # degrade this decision so governance does not overstate readiness.
+            _mesh_proof = str(mesh_proof_quality or "").strip().lower()
+            if _mesh_proof and _mesh_proof != MESH_RUNTIME_PROOF_QUALITY_LIVE:
+                return GovernancePathDecision(
+                    path=path,
+                    precedence_rank=_rank_for_path(path),
+                    authority_owner="v2_authority",
+                    android_scope="mesh_proof_degraded",
+                    eligible=False,
+                    blocked_by=f"mesh_proof_quality:{_mesh_proof}",
+                )
         return GovernancePathDecision(
             path=path,
             precedence_rank=_rank_for_path(path),
@@ -479,6 +631,14 @@ def build_unified_governance_state(
         if isinstance(entry.get("device_id"), str) and entry.get("device_id")
     }
 
+    # Build mesh runtime state once up-front so proof quality can be threaded
+    # into every per-device path decision (PR-08v2 degradation requirement).
+    mesh_runtime_state = build_mesh_runtime_state()
+    mesh_proof_quality: Optional[str] = mesh_runtime_state.get("proof_quality")
+    mesh_governance_readiness_impact: str = str(
+        mesh_runtime_state.get("governance_readiness_impact", "blocked_no_proof")
+    )
+
     devices: List[Dict[str, Any]] = []
     local_mode_count = 0
     cross_device_mode_count = 0
@@ -528,6 +688,7 @@ def build_unified_governance_state(
                     runtime_state_for_device.get("blocked_execution_types", [])
                 ),
                 canonical_execution_gate_decision=canonical_gate.decision,
+                mesh_proof_quality=mesh_proof_quality,
             )
             decision_dict = decision.to_dict()
             decision_dict["decision_causality"] = {
@@ -668,6 +829,8 @@ def build_unified_governance_state(
                     runtime_state_for_device.get("execution_busy_window_seconds", 60.0)
                     or 60.0
                 ),
+                "mesh_proof_quality": mesh_proof_quality,
+                "mesh_governance_readiness_impact": mesh_governance_readiness_impact,
             }
             paths[path.value] = decision_dict
 
@@ -691,7 +854,7 @@ def build_unified_governance_state(
         "cross_device_mode_count": cross_device_mode_count,
         "takeover_active_count": takeover_active_count,
         "execution_runtime_state": execution_runtime_state,
-        "mesh_runtime_state": build_mesh_runtime_state(),
+        "mesh_runtime_state": mesh_runtime_state,
         "authority": "v2_semantic_orchestration_authority",
         "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
         "_contract_version": UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
@@ -708,6 +871,13 @@ __all__ = [
     "MESH_RUNTIME_STATUS_PARTIAL",
     "MESH_RUNTIME_STATUS_CONTRACT_ONLY",
     "MESH_RUNTIME_STATUS_UNAVAILABLE",
+    "MESH_RUNTIME_PROOF_QUALITY_LIVE",
+    "MESH_RUNTIME_PROOF_QUALITY_STALE",
+    "MESH_RUNTIME_PROOF_QUALITY_PARTIAL",
+    "MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED",
+    "MESH_RUNTIME_PROOF_QUALITY_MISSING",
+    "MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS",
+    "MESH_RUNTIME_PROOF_QUALITY_POLICY",
     "build_mesh_runtime_state",
     "resolve_governance_path_decision",
     "build_unified_governance_state",
