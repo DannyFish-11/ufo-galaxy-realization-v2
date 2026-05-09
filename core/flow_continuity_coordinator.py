@@ -1167,7 +1167,7 @@ class FlowContinuityCoordinator:
             )
             existing_entry = None
             if isinstance(classify_result, tuple):
-                registry_outcome = str(classify_result[0]) if classify_result else ""
+                registry_outcome = str(classify_result[0]) if len(classify_result) > 0 else ""
                 if len(classify_result) > 1:
                     existing_entry = classify_result[1]
             else:

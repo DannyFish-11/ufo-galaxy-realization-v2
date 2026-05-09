@@ -670,6 +670,9 @@ class MeshSessionLifecycleCoordinator:
             if isinstance(continuity_context, dict):
                 normalized_context = dict(continuity_context)
             else:
+                # Non-dict values are tolerated for backward compatibility with
+                # loosely-typed callers; we normalize to an empty dict and keep
+                # the original type in association metadata for diagnostics.
                 normalized_context = {}
             if not normalized_context.get("prior_session_id"):
                 normalized_context["prior_session_id"] = session_id
@@ -680,7 +683,9 @@ class MeshSessionLifecycleCoordinator:
                 "continuity_context": normalized_context,
                 "associated_at": time.time(),
             }
-            if continuity_context is not None and not isinstance(continuity_context, dict):
+            if continuity_context is None:
+                association["continuity_context_type"] = "none"
+            elif not isinstance(continuity_context, dict):
                 association["continuity_context_type"] = type(continuity_context).__name__
             if resumed_dispatch_id is not None:
                 association["resumed_dispatch_id"] = resumed_dispatch_id

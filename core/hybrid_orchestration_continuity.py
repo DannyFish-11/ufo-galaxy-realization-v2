@@ -1308,6 +1308,11 @@ def recover_hybrid_executions(
             # observe the same durable lifecycle truth.
             try:
                 effective_store.save(record)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "recover_hybrid_executions: failed to persist restart-normalized "
+                    "record execution_id=%s: %s",
+                    record.execution_id,
+                    exc,
+                )
     return [record for record in recovered if not record.is_terminal]

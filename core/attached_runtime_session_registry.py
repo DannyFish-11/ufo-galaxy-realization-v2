@@ -97,12 +97,15 @@ Functions::
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Policy sentinels
@@ -917,6 +920,15 @@ class AttachedSessionRegistry:
         if continuity_epoch >= 0:
             # Preserve monotonic epoch progression across lifecycle transitions.
             # A reconnect/reattach must not silently regress to an older era.
+            if continuity_epoch < entry.continuity_epoch:
+                logger.warning(
+                    "apply_transition: continuity_epoch regression ignored "
+                    "(entry_id=%s, transition=%s, presented=%s, stored=%s)",
+                    entry.entry_id,
+                    transition.value,
+                    continuity_epoch,
+                    entry.continuity_epoch,
+                )
             resolved_continuity_epoch = max(entry.continuity_epoch, continuity_epoch)
         else:
             resolved_continuity_epoch = entry.continuity_epoch
@@ -1665,11 +1677,22 @@ def classify_reconnect_outcome(
             if existing.durable_session_id != durable_session_id:
                 # Durable identity mismatch — different session era → new attachment
                 return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
-        if continuity_epoch >= 0 and existing.continuity_epoch > 0:
-            if continuity_epoch < existing.continuity_epoch:
-                # Presented era regressed — treat as a new attachment to avoid
-                # cross-era continuity confusion on reconnect/resume.
-                return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
+        if (
+            continuity_epoch >= 0
+            and existing.continuity_epoch > 0
+            and continuity_epoch < existing.continuity_epoch
+        ):
+            # Presented era regressed — treat as a new attachment to avoid
+            # cross-era continuity confusion on reconnect/resume.
+            logger.warning(
+                "classify_reconnect_outcome: stale continuity_epoch rejected "
+                "(device_id=%s, attachment_id=%s, presented=%s, stored=%s)",
+                device_id,
+                runtime_attachment_session_id or "<absent>",
+                continuity_epoch,
+                existing.continuity_epoch,
+            )
+            return (_RECONNECT_OUTCOME_NEW_ATTACHMENT, None)
         return (_RECONNECT_OUTCOME_CONTINUITY_RESUME, existing)
 
     # Fallback: no explicit attachment id; treat existing session as continuity resume
