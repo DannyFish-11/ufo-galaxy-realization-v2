@@ -21,6 +21,30 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Re-export so consumers can import from this module without knowing the
+# internal source module.
+try:
+    from core.unified_execution_governance import (  # noqa: F401
+        CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        classify_canonical_proof_input_diagnosis,
+    )
+except ImportError:  # pragma: no cover
+    # Graceful degradation when unified_execution_governance is unavailable.
+    CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY = (  # type: ignore[assignment]
+        "CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY::unavailable"
+    )
+
+    def classify_canonical_proof_input_diagnosis(  # type: ignore[misc]
+        snapshot: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "proof_input_class": "missing",
+            "proof_input_detail": "classify_canonical_proof_input_diagnosis unavailable",
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": ["diagnosis_module_unavailable"],
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
 UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
     "UNIFIED_GOVERNANCE_SEMANTICS_V1: "
     "core.unified_governance_semantics is the canonical governance contract for "
@@ -594,6 +618,7 @@ def build_unified_governance_state(
             resolve_android_execution_gate_decision,
         )
         from core.unified_execution_governance import (
+            classify_canonical_proof_input_diagnosis,
             get_execution_runtime_snapshot,
             is_takeover_active,
         )
@@ -835,6 +860,9 @@ def build_unified_governance_state(
                 ),
                 "mesh_proof_quality": mesh_proof_quality,
                 "mesh_governance_readiness_impact": mesh_governance_readiness_impact,
+                "proof_input_diagnosis": classify_canonical_proof_input_diagnosis(
+                    runtime_state_for_device
+                ),
             }
             paths[path.value] = decision_dict
 
@@ -885,4 +913,7 @@ __all__ = [
     "build_mesh_runtime_state",
     "resolve_governance_path_decision",
     "build_unified_governance_state",
+    # Proof-input diagnosis (re-exported from unified_execution_governance for
+    # convenience so consumers only need one import target).
+    "classify_canonical_proof_input_diagnosis",
 ]
