@@ -1662,6 +1662,11 @@ def _check_mode_readiness_gate(
         from core.android_mode_gate_policy import evaluate_android_mode_readiness
         verdict = evaluate_android_mode_readiness(
             device_id=device_id,
+            # delegated_execution shares the goal_execution gate surface because
+            # both require android_goal_execution_enabled and the same cross-device
+            # readiness posture.  delegated_execution adds its own governance layer
+            # (android_delegated_execution_gate) at the policy level but the
+            # underlying mode-readiness check is identical to goal_execution.
             require_goal_execution=(
                 execution_type in (ExecutionType.goal_execution, ExecutionType.delegated_execution)
             ),
