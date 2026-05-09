@@ -821,6 +821,26 @@ def notify_execution_completed(
     return removed
 
 
+def _resolve_local_inference_availability(
+    *,
+    report_semantics: Optional[Dict[str, Any]],
+    device_snapshot: Any,
+) -> bool:
+    """Return canonical local-inference availability with Android-report precedence."""
+    if isinstance(report_semantics, dict):
+        reported_value = report_semantics.get("local_inference_available")
+        if reported_value is not None:
+            return bool(reported_value)
+
+    inferred_value = getattr(device_snapshot, "is_local_ai_ready", None)
+    if callable(inferred_value):
+        try:
+            return bool(inferred_value())
+        except Exception:
+            return False
+    return False
+
+
 def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     """Return Android runtime pressure truth for *device_id* (best effort)."""
     snapshot: Dict[str, Any] = {
@@ -906,16 +926,6 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 )
             except (TypeError, ValueError):
                 snapshot["android_semantics_age_s"] = None
-            # Precedence contract: when Android explicitly publishes
-            # local_inference_available in capability_report metadata, V2 treats
-            # that Android-reported semantic as authoritative for this field and
-            # only falls back to DeviceStateSnapshot.is_local_ai_ready() when the
-            # Android side did not publish a value.
-            if report_semantics.get("local_inference_available") is not None:
-                snapshot["local_inference_available"] = bool(
-                    report_semantics.get("local_inference_available")
-                )
-
         device_snapshot = get_device_state_snapshot(device_id)
         if device_snapshot is not None:
             _queue_depth = getattr(device_snapshot, "offline_queue_depth", None)
@@ -924,18 +934,10 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             snapshot["current_fallback_tier"] = getattr(
                 device_snapshot, "current_fallback_tier", None
             )
-            _is_local_ai_ready = getattr(device_snapshot, "is_local_ai_ready", None)
-            # Only reach this fallback when Android did not publish an explicit
-            # local_inference_available semantic; otherwise the Android-reported
-            # value above remains authoritative.
-            if (
-                snapshot.get("android_reported_local_inference_available") is None
-                and callable(_is_local_ai_ready)
-            ):
-                try:
-                    snapshot["local_inference_available"] = bool(_is_local_ai_ready())
-                except Exception:
-                    snapshot["local_inference_available"] = False
+            snapshot["local_inference_available"] = _resolve_local_inference_availability(
+                report_semantics=report_semantics,
+                device_snapshot=device_snapshot,
+            )
             _health = getattr(device_snapshot, "runtime_health_snapshot", None)
             if isinstance(_health, dict):
                 snapshot["runtime_health_status"] = str(

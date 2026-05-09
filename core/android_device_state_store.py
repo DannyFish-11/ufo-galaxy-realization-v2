@@ -107,6 +107,7 @@ _ANDROID_TERMINAL_PHASES: frozenset = frozenset(
     {"completed", "failed", "stagnation", "gate_decision"}
 )
 _ANDROID_MILLISECOND_EPOCH_THRESHOLD: float = 1_000_000_000_000.0
+_ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
 _ANDROID_REPORTED_MODE_MAP: Dict[str, str] = {
     "local": "local",
     "local_only": "local",
@@ -831,7 +832,7 @@ def _normalize_optional_timestamp(raw_value: Any) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     if value > _ANDROID_MILLISECOND_EPOCH_THRESHOLD:
-        value /= 1000.0
+        value /= _ANDROID_MILLISECONDS_TO_SECONDS
     return value
 
 
