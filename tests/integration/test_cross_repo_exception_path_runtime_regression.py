@@ -823,12 +823,14 @@ class TestDelegatedExecutionSignalMultiStep:
         assert o_final.record.phase.value == "completed"
         assert o_final.record.phase.is_terminal()
 
-        # Verify no phase regression occurred in the sequence
-        _ordered_phases = ["pending_ack", "acknowledged", "in_progress", "completed", "failed", "timed_out", "cancelled"]
+        # Verify no phase regression occurred in the sequence using the
+        # canonical DelegatedExecutionPhase.can_advance_to() ordering
+        from core.delegated_runtime_execution_tracker import DelegatedExecutionPhase
         for i in range(1, len(phases_seen)):
-            prev_idx = _ordered_phases.index(phases_seen[i - 1])
-            curr_idx = _ordered_phases.index(phases_seen[i])
-            assert curr_idx >= prev_idx, (
+            prev = DelegatedExecutionPhase.from_string(phases_seen[i - 1])
+            curr = DelegatedExecutionPhase.from_string(phases_seen[i])
+            # Either same phase (idempotent) or advancing forward per canonical ordering
+            assert prev == curr or prev.can_advance_to(curr), (
                 f"Phase regression detected: {phases_seen[i - 1]!r} → {phases_seen[i]!r}. "
                 "Delegated execution phases must be monotonically advancing."
             )

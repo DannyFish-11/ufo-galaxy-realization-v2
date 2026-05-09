@@ -70,7 +70,7 @@ from __future__ import annotations
 import time
 import uuid
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -821,9 +821,7 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         participation.orchestration_eligible = True
         participation.participant_tier = "joined_runtime"
 
-        from unittest.mock import MagicMock as MM
-
-        snap_ready = MM()
+        snap_ready = MagicMock()
         snap_ready.model_ready = True
         snap_ready.accessibility_ready = None
         snap_ready.local_loop_ready = None
@@ -855,16 +853,15 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
 
     def test_warmup_failed_reduces_dispatch_score(self):
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock as MM
 
-        readiness = MM()
+        readiness = MagicMock()
         readiness.registered = True
         readiness.routable = True
-        participation = MM()
+        participation = MagicMock()
         participation.orchestration_eligible = True
         participation.participant_tier = "joined_runtime"
 
-        snap_warmup_failed = MM()
+        snap_warmup_failed = MagicMock()
         snap_warmup_failed.model_ready = None
         snap_warmup_failed.accessibility_ready = None
         snap_warmup_failed.local_loop_ready = None
@@ -893,12 +890,11 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
 
     def test_execution_busy_reduces_dispatch_score(self):
         from core.runtime.source_dispatch_orchestrator import _score_candidate
-        from unittest.mock import MagicMock as MM
 
-        readiness = MM()
+        readiness = MagicMock()
         readiness.registered = True
         readiness.routable = True
-        participation = MM()
+        participation = MagicMock()
         participation.orchestration_eligible = True
         participation.participant_tier = "joined_runtime"
 
