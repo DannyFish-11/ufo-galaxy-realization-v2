@@ -1205,11 +1205,11 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
     reported_runtime_health_reason = _extract_reported_runtime_health_reason(latest_state_payload)
     reported_outcome = reported_result_outcome or reported_state_outcome
-    has_missing_uplink_data = bool(
+    has_incomplete_uplink_data = bool(
         latest_result_payload is None or latest_state_payload is None
     )
     has_partial_authoritative_observation = bool(
-        latest_phase and has_missing_uplink_data
+        latest_phase and has_incomplete_uplink_data
     )
     reported_outcome_recorded_at = (
         latest_result_recorded_at
@@ -1224,7 +1224,9 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     delayed_observation = bool(
         outcome_conflict
         and latest_lifecycle_event_at > 0.0
-        and (reported_outcome_recorded_at or 0.0)
+        and reported_outcome_recorded_at is not None
+        and reported_outcome_recorded_at > 0.0
+        and reported_outcome_recorded_at
         > latest_lifecycle_event_at
     )
     if outcome_conflict:

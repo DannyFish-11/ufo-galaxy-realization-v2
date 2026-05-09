@@ -334,7 +334,7 @@ def test_reconciliation_marks_delayed_conflict_when_conflicting_report_arrives_a
     assert truth_state["reconciliation_status"] == "delayed_conflict_center_truth_retained"
 
 
-def test_reported_vs_canonical_truth_distinction_for_uplink_only_partial_state():
+def test_reported_vs_canonical_truth_distinction_for_uplink_only_state_observation():
     execution_id = "exec-pr08-uplink-only-partial"
     device_id = "device-pr08-uplink-only-partial"
     record_state_uplink(
