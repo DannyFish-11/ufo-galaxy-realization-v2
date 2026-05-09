@@ -906,6 +906,11 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 )
             except (TypeError, ValueError):
                 snapshot["android_semantics_age_s"] = None
+            # Precedence contract: when Android explicitly publishes
+            # local_inference_available in capability_report metadata, V2 treats
+            # that Android-reported semantic as authoritative for this field and
+            # only falls back to DeviceStateSnapshot.is_local_ai_ready() when the
+            # Android side did not publish a value.
             if report_semantics.get("local_inference_available") is not None:
                 snapshot["local_inference_available"] = bool(
                     report_semantics.get("local_inference_available")

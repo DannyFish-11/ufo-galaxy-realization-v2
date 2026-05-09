@@ -835,6 +835,12 @@ def _normalize_capability_report_semantics(
     absorbed_at = time.time()
     raw_mode_state = str(metadata.get("mode_state") or "").strip().lower()
     canonical_mode = _ANDROID_REPORTED_MODE_MAP.get(raw_mode_state)
+    if raw_mode_state and canonical_mode is None:
+        logger.debug(
+            "_normalize_capability_report_semantics: unmapped mode_state=%r for device_id=%r",
+            raw_mode_state,
+            device_id,
+        )
     mode_readiness_state = str(metadata.get("mode_readiness_state") or "").strip().lower() or None
     reported_at = _normalize_optional_timestamp(message.get("timestamp"))
     semantics_age_s = None
