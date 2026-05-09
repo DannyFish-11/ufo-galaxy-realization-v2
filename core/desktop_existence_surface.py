@@ -843,7 +843,8 @@ class DesktopExistenceSurfaceBuilder:
             from core.android_device_state_store import list_device_state_snapshots
 
             for snap in list_device_state_snapshots():
-                device_id: str = getattr(snap, "device_id", "android") or "android"
+                device_id_raw = getattr(snap, "device_id", None)
+                device_id: str = device_id_raw if device_id_raw is not None else "android"
                 local_loop = bool(getattr(snap, "local_loop_ready", False))
                 model_rdy = bool(getattr(snap, "model_ready", False))
 
