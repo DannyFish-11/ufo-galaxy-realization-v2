@@ -693,7 +693,7 @@ LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY: str = (
 
 # Runtime-proof evidence snapshot for PR-7 foundational closure.
 # This captures whether the canonical staged_mesh path has actually invoked
-# the live mesh runtime engine in-process (not just sentinel presence).
+# the live mesh runtime engine in process (not just sentinel presence).
 _LIVE_MESH_RUNTIME_PROOF_LOCK = threading.Lock()
 _LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
     "staged_mesh_dispatch_count": 0,

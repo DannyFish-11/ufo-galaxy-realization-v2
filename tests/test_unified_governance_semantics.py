@@ -435,6 +435,6 @@ def test_build_mesh_runtime_state_is_runtime_proven_after_staged_mesh_live_run()
     assert state["status"] == MESH_RUNTIME_STATUS_RUNTIME_PROVEN
     assert state["runtime_proofs"]["live_mesh_runtime_path_execution"] is True
     live_proof = state["runtime_observability"]["live_mesh_runtime_proof"]
-    assert live_proof["staged_mesh_dispatch_count"] >= 1
-    assert live_proof["live_mesh_run_count"] >= 1
+    assert live_proof["staged_mesh_dispatch_count"] == 1
+    assert live_proof["live_mesh_run_count"] == 1
     assert live_proof["last_mesh_session_id"] == "mesh_runtime_proof_session"
