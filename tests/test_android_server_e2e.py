@@ -270,6 +270,46 @@ class TestCapabilityReportSync:
         schema_names = {s["function"]["name"] for s in schemas}
         assert f"gateway__{device_id}__screenshot" in schema_names
 
+    @pytest.mark.asyncio
+    async def test_capability_report_semantics_are_normalized_for_v2_consumers(self, bridge, fresh_registry):
+        from core.android_device_state_store import (
+            get_device_capability_report_semantics,
+            reset_android_device_state_store,
+        )
+
+        reset_android_device_state_store()
+        ws = _make_ws()
+        device_id = "semantic-device-001"
+
+        await bridge.handle_message(ws, _v3_msg("device_register", device_id, platform="android"))
+        await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "capability_report",
+                device_id,
+                platform="android",
+                supported_actions=["tap"],
+                runtime_attachment_session_id="attach-semantic-001",
+                metadata={
+                    "mode_state": "local_only",
+                    "mode_readiness_state": "degraded",
+                    "cross_device_eligibility": False,
+                    "goal_execution_eligibility": False,
+                    "parallel_execution_eligibility": False,
+                    "local_intelligence_status": "disabled",
+                    "local_inference_ready": False,
+                    "local_inference_available": False,
+                },
+            ),
+        )
+
+        semantics = get_device_capability_report_semantics(device_id)
+        assert semantics["canonical_mode"] == "local"
+        assert semantics["reported_mode_state"] == "local_only"
+        assert semantics["cross_device_eligibility"] is False
+        assert semantics["local_inference_available"] is False
+        assert semantics["runtime_attachment_session_id"] == "attach-semantic-001"
+
 
 # ===========================================================================
 # 4. Full E2E: register → capability_report → mock LLM tool_call → task_assign

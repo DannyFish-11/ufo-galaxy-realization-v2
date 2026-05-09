@@ -505,6 +505,46 @@ def build_unified_governance_state(
                 "local_inference_available": bool(
                     runtime_state_for_device.get("local_inference_available", False)
                 ),
+                "android_reported_mode": runtime_state_for_device.get(
+                    "android_reported_mode"
+                ),
+                "android_reported_mode_state": runtime_state_for_device.get(
+                    "android_reported_mode_state"
+                ),
+                "android_reported_mode_readiness_state": runtime_state_for_device.get(
+                    "android_reported_mode_readiness_state"
+                ),
+                "android_reported_cross_device_eligibility": runtime_state_for_device.get(
+                    "android_reported_cross_device_eligibility"
+                ),
+                "android_reported_goal_execution_eligibility": runtime_state_for_device.get(
+                    "android_reported_goal_execution_eligibility"
+                ),
+                "android_reported_parallel_execution_eligibility": runtime_state_for_device.get(
+                    "android_reported_parallel_execution_eligibility"
+                ),
+                "android_reported_local_intelligence_status": runtime_state_for_device.get(
+                    "android_reported_local_intelligence_status"
+                ),
+                "android_reported_local_inference_ready": runtime_state_for_device.get(
+                    "android_reported_local_inference_ready"
+                ),
+                "android_reported_local_inference_available": runtime_state_for_device.get(
+                    "android_reported_local_inference_available"
+                ),
+                "android_semantics_absorbed_at": float(
+                    runtime_state_for_device.get("android_semantics_absorbed_at", 0.0) or 0.0
+                ),
+                "android_semantics_reported_at": (
+                    float(runtime_state_for_device.get("android_semantics_reported_at"))
+                    if runtime_state_for_device.get("android_semantics_reported_at") is not None
+                    else None
+                ),
+                "android_semantics_age_s": (
+                    float(runtime_state_for_device.get("android_semantics_age_s"))
+                    if runtime_state_for_device.get("android_semantics_age_s") is not None
+                    else None
+                ),
                 "runtime_health_status": runtime_state_for_device.get(
                     "runtime_health_status"
                 ),

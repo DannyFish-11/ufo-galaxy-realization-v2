@@ -1072,3 +1072,46 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["snapshot_reconciliation_applied"] is False
         assert device_state["snapshot_ordering_basis"] == "snapshot_seq"
         assert device_state["offline_queue_depth"] == 4
+
+    def test_snapshot_prefers_android_reported_semantics_for_local_inference(self):
+        device_id = "device-runtime-semantics-1"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "local",
+                "reported_mode_state": "local_only",
+                "mode_readiness_state": "degraded",
+                "cross_device_eligibility": False,
+                "goal_execution_eligibility": False,
+                "parallel_execution_eligibility": False,
+                "local_intelligence_status": "disabled",
+                "local_inference_ready": False,
+                "local_inference_available": True,
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": 3.0,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["local_inference_available"] is True
+        assert device_state["android_reported_mode"] == "local"
+        assert device_state["android_reported_mode_state"] == "local_only"
+        assert device_state["android_reported_local_inference_available"] is True
+        assert device_state["android_semantics_age_s"] == 3.0

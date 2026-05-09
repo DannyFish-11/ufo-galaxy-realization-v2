@@ -10,6 +10,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from core.android_device_state_store import absorb_capability_report_semantics
 from core.capability_runtime.capability_state import CapabilityAvailability
 from core.unified.capability_authority import CapabilityAuthority
 from core.unified.capability_contract import CapabilityContract, CapabilitySource
@@ -191,6 +192,16 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
         if device_id in bridge._devices:
             bridge._devices[device_id].supported_actions = list(supported_actions)
             bridge._devices[device_id].last_heartbeat = time.time()
+
+    if device_id:
+        try:
+            absorb_capability_report_semantics(device_id, message)
+        except Exception as semantics_exc:
+            logger.debug(
+                "capability_report: semantic metadata absorb non-fatal: device_id=%s error=%s",
+                device_id,
+                semantics_exc,
+            )
 
     # ── 1. Sync directly to the canonical capability plane ────────────────
     if device_id:
