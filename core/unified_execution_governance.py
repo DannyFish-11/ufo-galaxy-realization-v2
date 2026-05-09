@@ -1173,7 +1173,7 @@ def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[s
     if normalized_status in _CANCELLED_REPORTED_STATUSES:
         return ExecutionLifecyclePhase.cancelled.value
     if normalized_status in _ABORTED_REPORTED_STATUSES:
-        return _CANONICAL_TERMINAL_OUTCOME_ABORTED
+        return ExecutionLifecyclePhase.cancelled.value
     if normalized_status in _TIMED_OUT_REPORTED_STATUSES:
         return ExecutionLifecyclePhase.timed_out.value
     if normalized_status in _INTERRUPTED_REPORTED_STATUSES:
@@ -1230,6 +1230,9 @@ def _merge_reported_terminal_outcomes(
             _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
             _CANONICAL_TERMINAL_OUTCOME_FAILURE,
         }:
+            # Mixed terminal success/failure means some execution units produced
+            # value while others failed, so this is the canonical partial_success
+            # branch rather than a pure terminal conflict.
             return _CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS
         # For non success/failure terminal mismatches, keep deterministic
         # precedence to the latest state uplink terminal observation.
@@ -1282,6 +1285,8 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     is_terminal = bool(lifecycle_terminal_outcome)
     reported_result_outcome = _normalize_reported_outcome(latest_result_payload)
     reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
+    reported_result_terminal_outcome = _normalize_terminal_outcome(reported_result_outcome)
+    reported_state_terminal_outcome = _normalize_terminal_outcome(reported_state_outcome)
     reported_terminal_outcome = _merge_reported_terminal_outcomes(
         reported_result_outcome,
         reported_state_outcome,
@@ -1298,11 +1303,28 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     has_partial_authoritative_observation = bool(
         latest_phase and has_incomplete_uplink_data
     )
-    reported_outcome_recorded_at = (
-        latest_result_recorded_at
-        if reported_result_outcome is not None
-        else latest_state_recorded_at
-    )
+    if reported_result_terminal_outcome and reported_state_terminal_outcome:
+        if reported_result_terminal_outcome == reported_state_terminal_outcome:
+            reported_terminal_outcome_recorded_at = max(
+                float(latest_result_recorded_at or 0.0),
+                float(latest_state_recorded_at or 0.0),
+            )
+        elif {reported_result_terminal_outcome, reported_state_terminal_outcome} == {
+            _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+            _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        }:
+            reported_terminal_outcome_recorded_at = max(
+                float(latest_result_recorded_at or 0.0),
+                float(latest_state_recorded_at or 0.0),
+            )
+        else:
+            reported_terminal_outcome_recorded_at = latest_state_recorded_at
+    elif reported_result_terminal_outcome:
+        reported_terminal_outcome_recorded_at = latest_result_recorded_at
+    elif reported_state_terminal_outcome:
+        reported_terminal_outcome_recorded_at = latest_state_recorded_at
+    else:
+        reported_terminal_outcome_recorded_at = None
     outcome_conflict = bool(
         lifecycle_terminal_outcome
         and reported_terminal_outcome
@@ -1311,9 +1333,9 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     delayed_observation = bool(
         outcome_conflict
         and latest_lifecycle_event_at > 0.0
-        and reported_outcome_recorded_at is not None
-        and reported_outcome_recorded_at > 0.0
-        and reported_outcome_recorded_at
+        and reported_terminal_outcome_recorded_at is not None
+        and reported_terminal_outcome_recorded_at > 0.0
+        and reported_terminal_outcome_recorded_at
         > latest_lifecycle_event_at
     )
     in_progress_terminal_observation = bool(
