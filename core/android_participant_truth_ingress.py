@@ -130,9 +130,11 @@ except Exception:  # pragma: no cover
 try:
     from core.delegated_runtime_execution_tracker import (
         AcknowledgmentSignal,
+        DelegatedExecutionResult,
         DelegatedExecutionTrackingRecord,
         DelegatedExecutionTrackingRuntime,
         apply_acknowledgment_signal,
+        apply_result,
         get_execution_tracking_runtime,
     )
 
@@ -140,9 +142,11 @@ try:
 except ImportError:  # pragma: no cover
     _TRACKER_AVAILABLE = False
     AcknowledgmentSignal = None  # type: ignore[assignment,misc]
+    DelegatedExecutionResult = None  # type: ignore[assignment,misc]
     DelegatedExecutionTrackingRecord = None  # type: ignore[assignment,misc]
     DelegatedExecutionTrackingRuntime = None  # type: ignore[assignment,misc]
     apply_acknowledgment_signal = None  # type: ignore[assignment]
+    apply_result = None  # type: ignore[assignment]
     get_execution_tracking_runtime = None  # type: ignore[assignment]
 
 try:
@@ -1017,27 +1021,47 @@ def _reconcile_terminal_signal(
             phase_str,
         )
 
-    # Map kind → AcknowledgmentSignal
-    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None or apply_acknowledgment_signal is None:
+    # Map kind → tracker mutation
+    if not _TRACKER_AVAILABLE or AcknowledgmentSignal is None:
         return False, "", "tracker_unavailable", ""
 
-    if kind == AndroidParticipantTruthKind.cancel:
-        ack_signal = AcknowledgmentSignal.cancelled
-        update_desc = "cancel_signal_applied→tracking_record_cancelled"
-    elif kind == AndroidParticipantTruthKind.failure:
-        ack_signal = AcknowledgmentSignal.error
-        update_desc = "failure_signal_applied→tracking_record_failed"
-    else:
-        # result — determine success vs failure
-        if envelope.result_success is False:
-            ack_signal = AcknowledgmentSignal.error
-            update_desc = "result_failure_signal_applied→tracking_record_failed"
-        else:
-            ack_signal = AcknowledgmentSignal.final_result
-            update_desc = "result_success_signal_applied→tracking_record_completed"
-
     try:
-        updated = apply_acknowledgment_signal(record, ack_signal, runtime=runtime)
+        if kind == AndroidParticipantTruthKind.cancel:
+            if apply_acknowledgment_signal is None:
+                return False, "", "tracker_unavailable", ""
+            updated = apply_acknowledgment_signal(
+                record,
+                AcknowledgmentSignal.cancelled,
+                runtime=runtime,
+            )
+            update_desc = "cancel_signal_applied→tracking_record_cancelled"
+        else:
+            if apply_result is None or DelegatedExecutionResult is None:
+                return False, "", "tracker_unavailable", ""
+            is_success = (
+                kind != AndroidParticipantTruthKind.failure
+                and envelope.result_success is not False
+            )
+            error_detail = ""
+            if not is_success:
+                error_detail = (
+                    str(envelope.payload.get("error_message") or "")
+                    or str(envelope.payload.get("error") or "")
+                    or str(envelope.payload.get("details") or "")
+                    or "android participant truth terminal failure"
+                )
+            result_obj = DelegatedExecutionResult(
+                success=is_success,
+                result_payload=dict(envelope.result_payload),
+                error_detail=error_detail,
+                completed_at=time.time(),
+            )
+            updated = apply_result(record, result_obj, runtime=runtime)
+            update_desc = (
+                "result_success_signal_applied→tracking_record_completed_with_result"
+                if is_success
+                else "result_failure_signal_applied→tracking_record_failed_with_result"
+            )
         phase_str = str(getattr(updated, "phase", "") or "")
         return True, update_desc, "", phase_str
     except Exception as exc:  # noqa: BLE001

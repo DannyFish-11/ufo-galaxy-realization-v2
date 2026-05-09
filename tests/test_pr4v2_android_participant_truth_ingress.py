@@ -449,6 +449,21 @@ class TestGroupF_FailureSignal:
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert "fail" in outcome.canonical_update.lower()
 
+    def test_f3_failure_materialises_result_object(self) -> None:
+        rt, _ = _make_runtime(contract_id="cid-f3", initial_phase="in_progress")
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.failure,
+            contract_id="cid-f3",
+            payload={"error_message": "boom"},
+        )
+        outcome = reconcile_android_participant_truth(env, runtime=rt)
+        latest = rt.get_latest_for_contract("cid-f3")
+        assert outcome.was_reconciled
+        assert latest is not None
+        assert latest.result is not None
+        assert latest.result.success is False
+        assert "boom" in latest.result.error_detail
+
 
 # ---------------------------------------------------------------------------
 # Group G — result success signal → tracking record completed
@@ -481,6 +496,22 @@ class TestGroupG_ResultSuccessSignal:
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert "complet" in outcome.canonical_update.lower()
 
+    def test_g3_result_success_materialises_result_payload(self) -> None:
+        rt, _ = _make_runtime(contract_id="cid-g3", initial_phase="in_progress")
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.result,
+            contract_id="cid-g3",
+            result_success=True,
+            result_payload={"value": 42},
+        )
+        outcome = reconcile_android_participant_truth(env, runtime=rt)
+        latest = rt.get_latest_for_contract("cid-g3")
+        assert outcome.was_reconciled
+        assert latest is not None
+        assert latest.result is not None
+        assert latest.result.success is True
+        assert latest.result.result_payload == {"value": 42}
+
 
 # ---------------------------------------------------------------------------
 # Group H — result failure signal → tracking record failed
@@ -502,6 +533,24 @@ class TestGroupH_ResultFailureSignal:
         assert outcome.was_reconciled
         phase = outcome.tracking_record_phase.lower()
         assert "fail" in phase, f"Expected failed phase, got: {phase}"
+
+    def test_h2_result_failure_materialises_error_result(self) -> None:
+        rt, _ = _make_runtime(contract_id="cid-h2", initial_phase="in_progress")
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.result,
+            contract_id="cid-h2",
+            result_success=False,
+            payload={"error_message": "remote_failed"},
+            result_payload={"step": "resume"},
+        )
+        outcome = reconcile_android_participant_truth(env, runtime=rt)
+        latest = rt.get_latest_for_contract("cid-h2")
+        assert outcome.was_reconciled
+        assert latest is not None
+        assert latest.result is not None
+        assert latest.result.success is False
+        assert latest.result.result_payload == {"step": "resume"}
+        assert "remote_failed" in latest.result.error_detail
 
 
 # ---------------------------------------------------------------------------

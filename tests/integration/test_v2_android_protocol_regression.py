@@ -803,7 +803,7 @@ class TestReconnectContinuitySemantics:
         registry = get_session_registry()
 
         # First registration
-        await bridge.handle_message(
+        assert isinstance(ack := await bridge.handle_message(
             ws1,
             _v3(
                 "device_register",
@@ -811,17 +811,22 @@ class TestReconnectContinuitySemantics:
                 platform="android",
                 runtime_attachment_session_id=attachment_id,
             ),
+        ), dict)
+        runtime_session_id_before = ack.get("runtime_session_id")
+        assert runtime_session_id_before, (
+            "device_register_ack should surface the preserved runtime_session_id "
+            "as a recovery proof field"
         )
         # Capture the runtime_session_id after first registration
         entry1 = registry.get_active_for_device(device_id)
         assert entry1 is not None, "Registry must have an entry after registration"
-        runtime_session_id_before = entry1.runtime_session_id
+        assert entry1.runtime_session_id == runtime_session_id_before
 
         # Disconnect
         await bridge.disconnect_device(device_id)
 
         # Reconnect via re-registration with same attachment id
-        await bridge.handle_message(
+        ack2 = await bridge.handle_message(
             ws2,
             _v3(
                 "device_register",
@@ -830,12 +835,193 @@ class TestReconnectContinuitySemantics:
                 runtime_attachment_session_id=attachment_id,
             ),
         )
+        assert ack2["runtime_session_id"] == runtime_session_id_before
+        assert ack2["continuity_outcome"] == "continuity_resume"
         entry2 = registry.get_active_for_device(device_id)
         assert entry2 is not None, "Registry must have an active entry after reconnect"
         assert entry2.runtime_session_id == runtime_session_id_before, (
             "Continuity resume must preserve the runtime_session_id — "
             "reconnect_session() must be used instead of register_session()"
         )
+
+    @pytest.mark.asyncio
+    async def test_canonical_reregister_replays_buffered_messages(self) -> None:
+        """Canonical reconnect must replay buffered task dispatches on continuity resume."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from galaxy_gateway.pending_delivery_buffer import pending_delivery_buffer
+
+        bridge = AndroidBridge()
+        device_id = f"replay-resume-{uuid.uuid4().hex[:8]}"
+        attachment_id = str(uuid.uuid4())
+        task_id = f"buffered-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        await pending_delivery_buffer.discard_device(device_id)
+
+        ack1 = await bridge.handle_message(
+            ws1,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        assert ack1["recovery_replay_scheduled"] is False
+        assert ack1["recovery_replay_buffered_count"] == 0
+
+        await bridge.disconnect_device(device_id)
+
+        buffered = await bridge.send_to_device(
+            device_id,
+            {
+                "version": "3.0",
+                "type": "task_assign",
+                "message_id": str(uuid.uuid4()),
+                "device_id": device_id,
+                "task_id": task_id,
+                "timestamp": int(time.time() * 1000),
+                "payload": {"task_type": "resume_task", "step": "replay"},
+            },
+        )
+        assert buffered is not None
+        assert buffered.get("buffered") is True
+        assert pending_delivery_buffer.queue_size(device_id) == 1
+
+        ack2 = await bridge.handle_message(
+            ws2,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        assert ack2["continuity_outcome"] == "continuity_resume"
+        assert ack2["recovery_replay_scheduled"] is True
+        assert ack2["recovery_replay_buffered_count"] == 1
+
+        await asyncio.sleep(0.01)
+
+        ws2.send_json.assert_awaited_once()
+        replayed = ws2.send_json.await_args_list[0].args[0]
+        assert replayed["type"] == "task_assign"
+        assert replayed["task_id"] == task_id
+        assert pending_delivery_buffer.queue_size(device_id) == 0
+        await pending_delivery_buffer.discard_device(device_id)
+
+    @pytest.mark.asyncio
+    async def test_disconnect_reconnect_restores_context_and_converges_result(self) -> None:
+        """Reconnect path must preserve context, resume tracking, and converge the final result."""
+        from core.delegated_runtime_execution_tracker import (
+            DelegatedExecutionPhase,
+            create_execution_tracking_record,
+            get_active_execution_tracking_for_session,
+            get_execution_tracking_record,
+            reset_execution_tracking_runtime,
+        )
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        reset_execution_tracking_runtime()
+
+        bridge = AndroidBridge()
+        device_id = f"resume-proof-{uuid.uuid4().hex[:8]}"
+        attachment_id = str(uuid.uuid4())
+        contract_id = f"contract-{uuid.uuid4().hex[:8]}"
+        task_id = f"task-{uuid.uuid4().hex[:8]}"
+        trace_id = f"trace-{uuid.uuid4().hex[:8]}"
+        ws1 = _make_ws()
+        ws2 = _make_ws()
+
+        ack1 = await bridge.handle_message(
+            ws1,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        runtime_session_id = ack1["runtime_session_id"]
+
+        create_execution_tracking_record(
+            session_id=runtime_session_id,
+            contract_id=contract_id,
+            device_id=device_id,
+            trace_id=trace_id,
+            source_runtime_posture="join_runtime",
+        )
+
+        future = asyncio.get_running_loop().create_future()
+        bridge._pending_responses[task_id] = future
+
+        await bridge.disconnect_device(device_id)
+
+        ack2 = await bridge.handle_message(
+            ws2,
+            _v3(
+                "device_register",
+                device_id,
+                platform="android",
+                runtime_attachment_session_id=attachment_id,
+            ),
+        )
+        assert ack2["continuity_outcome"] == "continuity_resume"
+        assert ack2["runtime_session_id"] == runtime_session_id
+
+        active = get_active_execution_tracking_for_session(runtime_session_id)
+        assert active is not None
+        assert active.phase == DelegatedExecutionPhase.pending_ack
+
+        continuity_payload = {
+            "contract_id": contract_id,
+            "session_id": runtime_session_id,
+            "trace_id": trace_id,
+            "result": {"value": "final"},
+        }
+
+        await bridge.handle_message(
+            ws2,
+            _v3(
+                "task_progress",
+                device_id,
+                task_id=task_id,
+                contract_id=contract_id,
+                session_id=runtime_session_id,
+                trace_id=trace_id,
+                status="running",
+                progress=55,
+                payload=continuity_payload,
+            ),
+        )
+
+        progressed = get_execution_tracking_record(runtime_session_id)
+        assert progressed is not None
+        assert progressed.phase == DelegatedExecutionPhase.in_progress
+
+        await bridge.handle_message(
+            ws2,
+            _v3(
+                "task_result",
+                device_id,
+                task_id=task_id,
+                contract_id=contract_id,
+                session_id=runtime_session_id,
+                trace_id=trace_id,
+                status="completed",
+                payload=continuity_payload,
+            ),
+        )
+
+        assert future.done() is True
+        assert future.result()["payload"]["result"]["value"] == "final"
+
+        completed = get_execution_tracking_record(runtime_session_id)
+        assert completed is not None
+        assert completed.phase == DelegatedExecutionPhase.completed
+        assert completed.result is not None
+        assert completed.result.result_payload["value"] == "final"
 
     def test_device_reconnect_message_is_not_canonical_path_sentinel(self) -> None:
         """The codebase sentinel must affirm that device_reconnect is NOT the canonical path."""
