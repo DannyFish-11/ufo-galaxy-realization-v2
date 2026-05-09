@@ -182,6 +182,16 @@ def _make_mesh_session_dict(
     }
 
 
+def _contains_merging_status_transition_event(events: list[Any]) -> bool:
+    for event in events:
+        kind = getattr(event, "kind", None)
+        kind_value = getattr(kind, "value", None)
+        metadata = getattr(event, "metadata", {}) or {}
+        if kind_value == "coordinator_status_changed" and metadata.get("to_status") == "merging":
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Group A: Policy sentinels
 # ---------------------------------------------------------------------------
@@ -672,10 +682,7 @@ class TestGroupG_BarrierCoordination:
         )
         final_state = result.coordinator_state
         assert final_state is not None
-        assert any(
-            "advanced to merging" in (getattr(event, "message", "") or "")
-            for event in final_state.coordination_events
-        )
+        assert _contains_merging_status_transition_event(final_state.coordination_events)
 
     def test_g9_not_required_barrier_records_merging_step(self) -> None:
         state = _make_coordinator_state(
@@ -689,10 +696,7 @@ class TestGroupG_BarrierCoordination:
         )
         final_state = result.coordinator_state
         assert final_state is not None
-        assert any(
-            "advanced to merging" in (getattr(event, "message", "") or "")
-            for event in final_state.coordination_events
-        )
+        assert _contains_merging_status_transition_event(final_state.coordination_events)
 
 
 # ---------------------------------------------------------------------------

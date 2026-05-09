@@ -418,6 +418,7 @@ def _evaluate_barrier(
             status_event = mod.MeshCoordinationEvent(
                 kind=mod.MeshCoordinationEventKind.coordinator_status_changed,
                 message="Barrier not required: coordinator advanced to merging",
+                metadata={"to_status": "merging", "trigger": "barrier_not_required"},
             )
             updated = coordinator_state.model_copy(
                 update={
@@ -536,6 +537,7 @@ def _evaluate_barrier(
             status_event = mod.MeshCoordinationEvent(
                 kind=mod.MeshCoordinationEventKind.coordinator_status_changed,
                 message="Barrier released: coordinator advanced to merging",
+                metadata={"to_status": "merging", "trigger": "barrier_released"},
             )
             updated = coordinator_state.model_copy(
                 update={

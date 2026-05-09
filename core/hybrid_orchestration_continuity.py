@@ -1267,18 +1267,21 @@ def recover_hybrid_executions(
         for r in records:
             registry.register(r)
 
-    Recovery normalisation
+    Recovery normalization
     ----------------------
-    Restored records are normalised to restart-consistent lifecycle states:
+    Restored records are normalized to restart-consistent lifecycle states:
 
     - ``dispatched``/``running``/``resuming`` -> ``interrupted``
-    - ``created`` -> ``cancelled`` (never started; not recoverable work)
+    - ``created`` -> ``cancelled`` (never dispatched; not recoverable in-flight work)
+
+    The returned records are the same objects loaded from the store and are
+    mutated in-place during normalization.
 
     Returns
     -------
     list of :class:`HybridOrchestrationRecord`
         Records in non-terminal states that are eligible for restoration after
-        restart normalisation.
+        restart normalization.
     """
     effective_store = store if store is not None else get_hybrid_persistence_store()
     recovered = effective_store.list_recoverable()
