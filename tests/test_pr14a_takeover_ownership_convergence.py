@@ -1,0 +1,140 @@
+"""PR-14A: Takeover ownership convergence adjudication regression coverage."""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+
+try:
+    from core.android_delegated_runtime_lifecycle_coordinator import (
+        get_lifecycle_coordinator,
+        reset_lifecycle_coordinator,
+    )
+    from core.android_participant_session_state import reset_participant_session_runtime
+    from core.takeover_tracking import (
+        adjudicate_takeover_ownership_convergence,
+        record_takeover_response,
+        reset_takeover_tracking_runtime,
+    )
+
+    _AVAILABLE = True
+except Exception:  # pragma: no cover  # noqa: BLE001
+    _AVAILABLE = False
+
+
+def _uid() -> str:
+    return str(uuid.uuid4())
+
+
+@pytest.mark.skipif(not _AVAILABLE, reason="takeover ownership convergence modules unavailable")
+class TestTakeoverOwnershipConvergence:
+    def setup_method(self):
+        reset_takeover_tracking_runtime()
+        reset_participant_session_runtime()
+        reset_lifecycle_coordinator()
+
+    def test_A01_accepted_takeover_converges_to_delegated_completion(self):
+        takeover_id = _uid()
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A01",
+            session_id="sess-A01",
+            accepted=True,
+        )
+
+        verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id=takeover_id,
+            device_id="dev-A01",
+            session_id="sess-A01",
+        )
+        assert verdict.ownership_state.value == "delegated_takeover_confirmed"
+        assert verdict.evidence_quality.value == "strong"
+        assert verdict.is_converged is True
+        assert verdict.degraded is False
+
+    def test_A02_rejected_takeover_converges_to_resumed_v2_ownership(self):
+        takeover_id = _uid()
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A02",
+            session_id="sess-A02",
+            accepted=False,
+        )
+
+        verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id=takeover_id,
+            device_id="dev-A02",
+            session_id="sess-A02",
+        )
+        assert verdict.ownership_state.value == "resumed_v2_ownership_confirmed"
+        assert verdict.evidence_quality.value == "strong"
+        assert verdict.is_converged is True
+        assert verdict.degraded is False
+
+    def test_A03_missing_evidence_degrades_to_incomplete(self):
+        verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id="",
+            device_id="dev-A03",
+            session_id="sess-A03",
+        )
+        assert verdict.ownership_state.value == "degraded_incomplete_evidence"
+        assert verdict.degraded is True
+        assert "missing_takeover_id" in verdict.diagnosis
+        assert "missing_takeover_record" in verdict.diagnosis
+
+    def test_A04_conflicting_decisions_degrade_to_conflict_state(self):
+        takeover_id = _uid()
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A04",
+            session_id="sess-A04",
+            accepted=True,
+        )
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A04",
+            session_id="sess-A04",
+            accepted=False,
+        )
+
+        verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id=takeover_id,
+            device_id="dev-A04",
+            session_id="sess-A04",
+        )
+        assert verdict.ownership_state.value == "degraded_conflicting_evidence"
+        assert verdict.evidence_quality.value == "conflicting"
+        assert verdict.is_converged is False
+        assert verdict.degraded is True
+        assert "conflicting_takeover_decisions" in verdict.diagnosis
+
+    def test_A05_lifecycle_coordinator_surfaces_convergence_diagnostics(self):
+        coordinator = get_lifecycle_coordinator()
+        session_id = _uid()
+        takeover_id = _uid()
+
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A05")
+        coordinator.on_takeover_requested(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A05",
+        )
+        coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A05",
+            accepted=True,
+        )
+        outcome = coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A05",
+            accepted=False,
+        )
+
+        diag = outcome.extra.get("ownership_convergence", {})
+        assert diag.get("ownership_state") == "degraded_conflicting_evidence"
+        assert diag.get("evidence_quality") == "conflicting"
+        assert diag.get("degraded") is True
+        assert "conflicting_takeover_decisions" in diag.get("diagnosis", [])

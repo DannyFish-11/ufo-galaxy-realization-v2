@@ -149,12 +149,14 @@ except ImportError:  # pragma: no cover
 
 try:
     from core.takeover_tracking import (
+        adjudicate_takeover_ownership_convergence as _adjudicate_takeover_ownership_convergence,
         record_takeover_response as _record_takeover_tracking,
     )
 
     _TAKEOVER_TRACKING_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
     _TAKEOVER_TRACKING_AVAILABLE = False
+    _adjudicate_takeover_ownership_convergence = None  # type: ignore[assignment]
     _record_takeover_tracking = None  # type: ignore[assignment]
 
 try:
@@ -510,6 +512,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             phase_before = ""
             phase_after = ""
             was_transitioned = False
+            ownership_convergence: Dict[str, Any] = {}
 
             # Step 1: persist takeover decision
             if _TAKEOVER_TRACKING_AVAILABLE and _record_takeover_tracking is not None:
@@ -526,6 +529,20 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     )
                 except Exception as _te:  # noqa: BLE001
                     logger.debug("on_takeover_response: tracking failed (non-fatal): %s", _te)
+                if _adjudicate_takeover_ownership_convergence is not None:
+                    try:
+                        verdict = _adjudicate_takeover_ownership_convergence(
+                            takeover_id=takeover_id,
+                            session_id=session_id,
+                            device_id=device_id,
+                        )
+                        if hasattr(verdict, "to_dict"):
+                            ownership_convergence = verdict.to_dict()
+                    except Exception as _oe:  # noqa: BLE001
+                        logger.debug(
+                            "on_takeover_response: ownership adjudication failed (non-fatal): %s",
+                            _oe,
+                        )
 
             # Step 2: reduce session state
             if _SESSION_STATE_AVAILABLE and _REDUCER_AVAILABLE:
@@ -566,7 +583,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     f"session={session_id!r} takeover_id={takeover_id!r} "
                     f"device={device_id!r}"
                 ),
-                extra={"accepted": accepted, "reason": reason},
+                extra={
+                    "accepted": accepted,
+                    "reason": reason,
+                    "ownership_convergence": ownership_convergence,
+                },
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("on_takeover_response failed (non-fatal): %s", exc)

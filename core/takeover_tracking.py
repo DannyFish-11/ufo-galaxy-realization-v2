@@ -92,6 +92,7 @@ Functions::
     get_takeover_tracking_runtime() -> TakeoverTrackingRuntime
     reset_takeover_tracking_runtime() -> None
     get_takeover_record(takeover_id, ...) -> TakeoverTrackingRecord | None
+    adjudicate_takeover_ownership_convergence(...) -> TakeoverOwnershipConvergenceVerdict
     list_takeover_records_for_session(session_id, ...) -> list[TakeoverTrackingRecord]
     takeover_tracking_snapshot(...) -> TakeoverTrackingSnapshot
 """
@@ -188,6 +189,25 @@ class TakeoverDecision(str, Enum):
             return cls(value.lower().strip())
         except ValueError:
             return cls.unknown
+
+
+class TakeoverOwnershipState(str, Enum):
+    """Canonical ownership convergence states derived from takeover evidence."""
+
+    delegated_takeover_confirmed = "delegated_takeover_confirmed"
+    resumed_v2_ownership_confirmed = "resumed_v2_ownership_confirmed"
+    unresolved = "unresolved"
+    degraded_incomplete_evidence = "degraded_incomplete_evidence"
+    degraded_conflicting_evidence = "degraded_conflicting_evidence"
+
+
+class TakeoverEvidenceQuality(str, Enum):
+    """Proof quality for ownership convergence adjudication."""
+
+    strong = "strong"
+    partial = "partial"
+    missing = "missing"
+    conflicting = "conflicting"
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +313,42 @@ class TakeoverTrackingSnapshot:
         }
 
 
+@dataclass(frozen=True)
+class TakeoverOwnershipConvergenceVerdict:
+    """Ownership convergence verdict derived from takeover execution evidence."""
+
+    takeover_id: str = ""
+    session_id: str = ""
+    device_id: str = ""
+    ownership_state: TakeoverOwnershipState = TakeoverOwnershipState.unresolved
+    evidence_quality: TakeoverEvidenceQuality = TakeoverEvidenceQuality.missing
+    is_converged: bool = False
+    degraded: bool = True
+    diagnosis: List[str] = field(default_factory=list)
+    latest_decision: TakeoverDecision = TakeoverDecision.unknown
+    total_records: int = 0
+    accepted_count: int = 0
+    rejected_count: int = 0
+    unknown_count: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "takeover_id": self.takeover_id,
+            "session_id": self.session_id,
+            "device_id": self.device_id,
+            "ownership_state": self.ownership_state.value,
+            "evidence_quality": self.evidence_quality.value,
+            "is_converged": self.is_converged,
+            "degraded": self.degraded,
+            "diagnosis": list(self.diagnosis),
+            "latest_decision": self.latest_decision.value,
+            "total_records": self.total_records,
+            "accepted_count": self.accepted_count,
+            "rejected_count": self.rejected_count,
+            "unknown_count": self.unknown_count,
+        }
+
+
 # ---------------------------------------------------------------------------
 # TakeoverTrackingRuntime — in-process ring buffer
 # ---------------------------------------------------------------------------
@@ -322,6 +378,11 @@ class TakeoverTrackingRuntime:
                 if rec.takeover_id == takeover_id:
                     return rec
         return None
+
+    def list_by_takeover_id(self, takeover_id: str) -> List[TakeoverTrackingRecord]:
+        """Return all records with ``takeover_id == takeover_id``, newest-first."""
+        with self._lock:
+            return [r for r in self._ring if r.takeover_id == takeover_id]
 
     def get_by_session_id(self, session_id: str) -> List[TakeoverTrackingRecord]:
         """Return all records for *session_id*, newest-first."""
@@ -483,6 +544,150 @@ def list_takeover_records_for_session(
             "takeover_tracking: list_takeover_records_for_session failed: %s", exc
         )
         return []
+
+
+def adjudicate_takeover_ownership_convergence(
+    *,
+    takeover_id: str,
+    session_id: str = "",
+    device_id: str = "",
+    runtime: Optional[TakeoverTrackingRuntime] = None,
+) -> TakeoverOwnershipConvergenceVerdict:
+    """Adjudicate ownership convergence for a takeover from recorded evidence."""
+    try:
+        _rt = runtime if runtime is not None else get_takeover_tracking_runtime()
+        records = _rt.list_by_takeover_id(takeover_id or "") if takeover_id else []
+        diagnosis: List[str] = []
+
+        if not takeover_id:
+            diagnosis.append("missing_takeover_id")
+        if not session_id:
+            diagnosis.append("missing_session_id")
+        if not device_id:
+            diagnosis.append("missing_device_id")
+        if not records:
+            diagnosis.append("missing_takeover_record")
+
+        accepted_count = sum(1 for r in records if r.decision == TakeoverDecision.accepted)
+        rejected_count = sum(1 for r in records if r.decision == TakeoverDecision.rejected)
+        unknown_count = sum(1 for r in records if r.decision == TakeoverDecision.unknown)
+        latest_decision = records[0].decision if records else TakeoverDecision.unknown
+
+        session_ids = {r.session_id for r in records if r.session_id}
+        device_ids = {r.device_id for r in records if r.device_id}
+        if session_id and records and any(r.session_id and r.session_id != session_id for r in records):
+            diagnosis.append("session_id_conflict")
+        if device_id and records and any(r.device_id and r.device_id != device_id for r in records):
+            diagnosis.append("device_id_conflict")
+        if len(session_ids) > 1:
+            diagnosis.append("multiple_session_ids_for_takeover_id")
+        if len(device_ids) > 1:
+            diagnosis.append("multiple_device_ids_for_takeover_id")
+
+        has_conflict = accepted_count > 0 and rejected_count > 0
+        if has_conflict:
+            diagnosis.append("conflicting_takeover_decisions")
+
+        has_missing = any(tag.startswith("missing_") for tag in diagnosis)
+        has_identity_conflict = any(tag.endswith("_conflict") for tag in diagnosis)
+        if has_conflict or has_identity_conflict:
+            return TakeoverOwnershipConvergenceVerdict(
+                takeover_id=takeover_id or "",
+                session_id=session_id or "",
+                device_id=device_id or "",
+                ownership_state=TakeoverOwnershipState.degraded_conflicting_evidence,
+                evidence_quality=TakeoverEvidenceQuality.conflicting,
+                is_converged=False,
+                degraded=True,
+                diagnosis=diagnosis,
+                latest_decision=latest_decision,
+                total_records=len(records),
+                accepted_count=accepted_count,
+                rejected_count=rejected_count,
+                unknown_count=unknown_count,
+            )
+
+        if has_missing:
+            return TakeoverOwnershipConvergenceVerdict(
+                takeover_id=takeover_id or "",
+                session_id=session_id or "",
+                device_id=device_id or "",
+                ownership_state=TakeoverOwnershipState.degraded_incomplete_evidence,
+                evidence_quality=TakeoverEvidenceQuality.partial if records else TakeoverEvidenceQuality.missing,
+                is_converged=False,
+                degraded=True,
+                diagnosis=diagnosis,
+                latest_decision=latest_decision,
+                total_records=len(records),
+                accepted_count=accepted_count,
+                rejected_count=rejected_count,
+                unknown_count=unknown_count,
+            )
+
+        if latest_decision == TakeoverDecision.accepted:
+            diagnosis.append("delegated_takeover_completion_confirmed")
+            return TakeoverOwnershipConvergenceVerdict(
+                takeover_id=takeover_id,
+                session_id=session_id,
+                device_id=device_id,
+                ownership_state=TakeoverOwnershipState.delegated_takeover_confirmed,
+                evidence_quality=TakeoverEvidenceQuality.strong,
+                is_converged=True,
+                degraded=False,
+                diagnosis=diagnosis,
+                latest_decision=latest_decision,
+                total_records=len(records),
+                accepted_count=accepted_count,
+                rejected_count=rejected_count,
+                unknown_count=unknown_count,
+            )
+
+        if latest_decision == TakeoverDecision.rejected:
+            diagnosis.append("resumed_v2_ownership_transfer_confirmed")
+            return TakeoverOwnershipConvergenceVerdict(
+                takeover_id=takeover_id,
+                session_id=session_id,
+                device_id=device_id,
+                ownership_state=TakeoverOwnershipState.resumed_v2_ownership_confirmed,
+                evidence_quality=TakeoverEvidenceQuality.strong,
+                is_converged=True,
+                degraded=False,
+                diagnosis=diagnosis,
+                latest_decision=latest_decision,
+                total_records=len(records),
+                accepted_count=accepted_count,
+                rejected_count=rejected_count,
+                unknown_count=unknown_count,
+            )
+
+        diagnosis.append("latest_takeover_decision_unknown")
+        return TakeoverOwnershipConvergenceVerdict(
+            takeover_id=takeover_id,
+            session_id=session_id,
+            device_id=device_id,
+            ownership_state=TakeoverOwnershipState.unresolved,
+            evidence_quality=TakeoverEvidenceQuality.partial,
+            is_converged=False,
+            degraded=True,
+            diagnosis=diagnosis,
+            latest_decision=latest_decision,
+            total_records=len(records),
+            accepted_count=accepted_count,
+            rejected_count=rejected_count,
+            unknown_count=unknown_count,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("takeover_tracking: adjudicate_takeover_ownership_convergence failed: %s", exc)
+        return TakeoverOwnershipConvergenceVerdict(
+            takeover_id=takeover_id or "",
+            session_id=session_id or "",
+            device_id=device_id or "",
+            ownership_state=TakeoverOwnershipState.degraded_incomplete_evidence,
+            evidence_quality=TakeoverEvidenceQuality.missing,
+            is_converged=False,
+            degraded=True,
+            diagnosis=["adjudication_error"],
+        )
 
 
 def takeover_tracking_snapshot(
