@@ -153,6 +153,21 @@ TAKEOVER_ID_IS_CORRELATION_KEY_POLICY: str = (
 
 _RING_BUFFER_CAPACITY: int = 256
 
+
+def _has_identity_conflict(
+    records: List["TakeoverTrackingRecord"],
+    *,
+    field_name: str,
+    expected_value: str,
+) -> bool:
+    if not expected_value or not records:
+        return False
+    return any(
+        getattr(record, field_name, "")
+        and getattr(record, field_name, "") != expected_value
+        for record in records
+    )
+
 # ---------------------------------------------------------------------------
 # TakeoverDecision enum
 # ---------------------------------------------------------------------------
@@ -382,7 +397,7 @@ class TakeoverTrackingRuntime:
     def list_by_takeover_id(self, takeover_id: str) -> List[TakeoverTrackingRecord]:
         """Return all records with ``takeover_id == takeover_id``.
 
-        Records are returned in ring-buffer order, which is newest-first
+        Records are returned in chronological ring-buffer order, which is newest-first
         because :meth:`record` writes using ``appendleft``.
         """
         with self._lock:
@@ -583,15 +598,15 @@ def adjudicate_takeover_ownership_convergence(
         if records:
             latest_decision = records[0].decision
 
-        has_session_id_conflict = bool(
-            session_id
-            and records
-            and any(r.session_id and r.session_id != session_id for r in records)
+        has_session_id_conflict = _has_identity_conflict(
+            records,
+            field_name="session_id",
+            expected_value=session_id,
         )
-        has_device_id_conflict = bool(
-            device_id
-            and records
-            and any(r.device_id and r.device_id != device_id for r in records)
+        has_device_id_conflict = _has_identity_conflict(
+            records,
+            field_name="device_id",
+            expected_value=device_id,
         )
         if has_session_id_conflict:
             diagnosis.append("session_id_conflict")
@@ -643,7 +658,11 @@ def adjudicate_takeover_ownership_convergence(
                 session_id=session_id or "",
                 device_id=device_id or "",
                 ownership_state=TakeoverOwnershipState.degraded_incomplete_evidence,
-                evidence_quality=TakeoverEvidenceQuality.partial if records else TakeoverEvidenceQuality.missing,
+                evidence_quality=(
+                    TakeoverEvidenceQuality.missing
+                    if has_missing_takeover_record
+                    else TakeoverEvidenceQuality.partial
+                ),
                 is_converged=False,
                 degraded=True,
                 diagnosis=diagnosis,
