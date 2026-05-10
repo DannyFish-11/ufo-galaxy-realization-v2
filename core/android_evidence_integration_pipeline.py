@@ -522,8 +522,10 @@ def _evaluate_lifecycle_truth_dimension(
     """Evaluate the execution lifecycle truth dimension for *device_id*.
 
     Reads Android execution lifecycle truth quality from
-    ``get_execution_lifecycle_truth_binding``.  Degraded qualities
-    (missing_remote, stale_remote, conflicting_remote) → DEGRADED.
+    ``get_execution_lifecycle_truth_binding``. Either degrading quality
+    values (missing_remote, stale_remote, conflicting_remote) or an explicit
+    ``android_lifecycle_truth_degraded`` flag from the binding forces a
+    DEGRADED verdict.
     v2_local_only with no active executions → ADEQUATE (clean idle).
     """
     try:
@@ -538,7 +540,9 @@ def _evaluate_lifecycle_truth_dimension(
             getattr(binding, "android_lifecycle_truth_governance_impact", "none")
         )
 
-        if quality_value in _DEGRADING_LIFECYCLE_TRUTH_QUALITIES and degraded:
+        # Fail closed: either a degrading quality token or an explicit degraded
+        # lifecycle binding flag is sufficient to deny lifecycle truth passing.
+        if quality_value in _DEGRADING_LIFECYCLE_TRUTH_QUALITIES or degraded:
             return AndroidEvidenceDimensionResult(
                 dimension=AndroidEvidenceDimension.lifecycle_truth,
                 grade=AndroidEvidenceGrade.degraded,
