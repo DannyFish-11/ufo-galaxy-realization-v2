@@ -681,7 +681,7 @@ def build_unified_governance_state(
             get_android_evidence_integration_summary,
         )
     except Exception:
-        def get_android_evidence_integration_summary(  # type: ignore[misc]
+        def _fallback_android_evidence_integration_summary(  # type: ignore[misc]
             device_id: str,
             execution_id: str = "",
             *,
@@ -698,6 +698,7 @@ def build_unified_governance_state(
                     "android_evidence_integration_summary_unavailable"
                 ],
             }
+        get_android_evidence_integration_summary = _fallback_android_evidence_integration_summary
 
     if device_ids is None:
         try:
