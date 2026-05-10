@@ -1385,3 +1385,123 @@ class TestPriorPRSentinelsIntact:
         )
 
         assert "CANONICAL_PROOF_INPUT_DIAGNOSIS_V1" in CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY
+
+
+# ===========================================================================
+# O — Recovery truth gap degradation (PR-13A)
+# ===========================================================================
+
+
+class TestRecoveryTruthGapDegradation:
+    """Recovery truth-quality should influence integration interpretation."""
+
+    def test_recovery_partial_gap_downgrades_allow_to_conditionally_allow(self) -> None:
+        with (
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "classify_canonical_proof_input_diagnosis",
+                return_value={
+                    "proof_input_class": "complete",
+                    "proof_input_degradation_causes": [],
+                    "proof_input_conflicts": [],
+                },
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "get_execution_lifecycle_truth_binding",
+                return_value=TestContractValidStrongEvidence()._make_strong_lifecycle(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "build_governance_authority_evidence",
+                return_value=TestContractValidStrongEvidence()._make_strong_audit(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "verify_governance_authority_integrity",
+                return_value=[],
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "query_closed_loop_governance_state",
+                return_value=TestContractValidStrongEvidence()._make_strong_view(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "assert_closed_loop_invariants",
+                return_value=[],
+            ),
+        ):
+            verdict = evaluate_android_evidence_integration(
+                "dev_recovery_partial",
+                "exec_recovery_partial",
+                runtime_state={
+                    "recovery_closure_quality": "partial_convergence",
+                    "recovery_truth_gap_types": ["partial", "duplicated"],
+                },
+            )
+        assert verdict.integration_allowed is True
+        assert verdict.integration_decision == IntegrationDecision.conditionally_allow
+        assert verdict.recovery_truth_quality == "adequate"
+        assert verdict.recovery_truth_degraded is False
+        assert verdict.recovery_truth_gap_types == ["partial", "duplicated"]
+
+    def test_recovery_missing_conflicting_replay_fragmented_forces_deny(self) -> None:
+        with (
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "classify_canonical_proof_input_diagnosis",
+                return_value={
+                    "proof_input_class": "complete",
+                    "proof_input_degradation_causes": [],
+                    "proof_input_conflicts": [],
+                },
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "get_execution_lifecycle_truth_binding",
+                return_value=TestContractValidStrongEvidence()._make_strong_lifecycle(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "build_governance_authority_evidence",
+                return_value=TestContractValidStrongEvidence()._make_strong_audit(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "verify_governance_authority_integrity",
+                return_value=[],
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "query_closed_loop_governance_state",
+                return_value=TestContractValidStrongEvidence()._make_strong_view(),
+            ),
+            patch(
+                "core.android_evidence_integration_pipeline."
+                "assert_closed_loop_invariants",
+                return_value=[],
+            ),
+        ):
+            verdict = evaluate_android_evidence_integration(
+                "dev_recovery_severe",
+                "exec_recovery_severe",
+                runtime_state={
+                    "recovery_closure_quality": "no_recovery",
+                    "recovery_truth_gap_types": [
+                        "missing",
+                        "conflicting",
+                        "replay_fragmented",
+                    ],
+                },
+            )
+        assert verdict.integration_allowed is False
+        assert verdict.integration_decision == IntegrationDecision.deny
+        assert verdict.recovery_truth_quality == "degraded"
+        assert verdict.recovery_truth_degraded is True
+        assert verdict.recovery_truth_gap_types == [
+            "missing",
+            "conflicting",
+            "replay_fragmented",
+        ]
+        assert "recovery_truth:degraded:" in " ".join(verdict.degradation_causes)

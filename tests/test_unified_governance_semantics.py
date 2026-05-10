@@ -247,6 +247,10 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert "android_evidence_integration_allowed" in causality
     assert "android_evidence_integration_grade" in causality
     assert "android_evidence_integration_degradation_causes" in causality
+    assert "android_evidence_recovery_truth_quality" in causality
+    assert "android_evidence_recovery_truth_degraded" in causality
+    assert "android_evidence_recovery_truth_gap_types" in causality
+    assert "android_evidence_recovery_truth_diagnosis" in causality
     assert cross["android_evidence_integration"]["execution_id"] == "exec_cross_1"
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
@@ -413,6 +417,77 @@ def test_build_unified_governance_state_stale_android_truth_downgrades_canonical
     assert causality["android_runtime_truth_authority"] == "downgraded_to_unknown"
     assert causality["android_runtime_truth_usable"] is False
     assert causality["android_reported_mode"] is None
+
+
+def test_build_unified_governance_state_surfaces_recovery_truth_diagnostics() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_cross")]
+    mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_cross": SimpleNamespace(
+            is_dispatch_eligible=True,
+            is_takeover_eligible=True,
+            is_cross_device_ready=True,
+        )
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+                "offline_queue_depth": 0,
+                "execution_busy": False,
+                "local_inference_available": True,
+                "runtime_health_status": "healthy",
+                "current_fallback_tier": None,
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+    recovery_integration = {
+        "device_id": "dev_cross",
+        "execution_id": "exec_recovery",
+        "integration_decision": "conditionally_allow",
+        "integration_allowed": True,
+        "overall_grade": "adequate",
+        "dimension_results": [],
+        "degradation_causes": ["recovery_truth:adequate:partial evidence"],
+        "recovery_truth_quality": "adequate",
+        "recovery_truth_degraded": False,
+        "recovery_truth_gap_types": ["partial", "duplicated"],
+        "recovery_truth_diagnosis": "recovery_truth_quality_assessed",
+    }
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ), patch(
+        "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
+        return_value=recovery_integration,
+    ):
+        state = build_unified_governance_state()
+
+    causality = state["devices"][0]["governance_precedence"]["delegated_execution"][
+        "decision_causality"
+    ]
+    assert causality["android_evidence_recovery_truth_quality"] == "adequate"
+    assert causality["android_evidence_recovery_truth_degraded"] is False
+    assert causality["android_evidence_recovery_truth_gap_types"] == [
+        "partial",
+        "duplicated",
+    ]
+    assert causality["android_evidence_recovery_truth_diagnosis"] == "recovery_truth_quality_assessed"
 
 
 def test_build_mesh_runtime_state_stays_partial_without_live_runtime_execution_proof() -> None:

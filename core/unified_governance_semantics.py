@@ -733,6 +733,10 @@ def build_unified_governance_state(
                 "degradation_causes": [
                     "android_evidence_integration_summary_unavailable"
                 ],
+                "recovery_truth_quality": "not_provided",
+                "recovery_truth_degraded": False,
+                "recovery_truth_gap_types": [],
+                "recovery_truth_diagnosis": "recovery_truth_not_provided",
             }
         android_evidence_integration_summary_fn = _fallback_get_android_evidence_integration_summary
 
@@ -803,6 +807,10 @@ def build_unified_governance_state(
                 "degradation_causes": [
                     "android_evidence_integration_summary_invalid_shape"
                 ],
+                "recovery_truth_quality": "not_provided",
+                "recovery_truth_degraded": False,
+                "recovery_truth_gap_types": [],
+                "recovery_truth_diagnosis": "recovery_truth_not_provided",
             }
 
         canonical_gate = resolve_android_execution_gate_decision(
@@ -1040,6 +1048,18 @@ def build_unified_governance_state(
                 ),
                 "android_evidence_integration_degradation_causes": list(
                     android_evidence_integration.get("degradation_causes", [])
+                ),
+                "android_evidence_recovery_truth_quality": android_evidence_integration.get(
+                    "recovery_truth_quality"
+                ),
+                "android_evidence_recovery_truth_degraded": bool(
+                    android_evidence_integration.get("recovery_truth_degraded", False)
+                ),
+                "android_evidence_recovery_truth_gap_types": list(
+                    android_evidence_integration.get("recovery_truth_gap_types", [])
+                ),
+                "android_evidence_recovery_truth_diagnosis": android_evidence_integration.get(
+                    "recovery_truth_diagnosis"
                 ),
             }
             paths[path.value] = decision_dict
