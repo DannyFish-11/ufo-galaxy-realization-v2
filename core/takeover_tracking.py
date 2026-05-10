@@ -168,6 +168,14 @@ def _has_identity_conflict(
         for record in records
     )
 
+
+def _has_multiple_non_empty_values(
+    records: List["TakeoverTrackingRecord"],
+    *,
+    field_name: str,
+) -> bool:
+    return len({getattr(record, field_name, "") for record in records if getattr(record, field_name, "")}) > 1
+
 # ---------------------------------------------------------------------------
 # TakeoverDecision enum
 # ---------------------------------------------------------------------------
@@ -395,7 +403,7 @@ class TakeoverTrackingRuntime:
         return None
 
     def list_by_takeover_id(self, takeover_id: str) -> List[TakeoverTrackingRecord]:
-        """Return all records with ``takeover_id == takeover_id``.
+        """Return all records matching the given ``takeover_id``.
 
         Records are returned in chronological ring-buffer order, which is newest-first
         because :meth:`record` writes using ``appendleft``.
@@ -612,8 +620,14 @@ def adjudicate_takeover_ownership_convergence(
             diagnosis.append("session_id_conflict")
         if has_device_id_conflict:
             diagnosis.append("device_id_conflict")
-        has_multiple_session_ids = len({r.session_id for r in records if r.session_id}) > 1
-        has_multiple_device_ids = len({r.device_id for r in records if r.device_id}) > 1
+        has_multiple_session_ids = _has_multiple_non_empty_values(
+            records,
+            field_name="session_id",
+        )
+        has_multiple_device_ids = _has_multiple_non_empty_values(
+            records,
+            field_name="device_id",
+        )
         if has_multiple_session_ids:
             diagnosis.append("multiple_session_ids_for_takeover_id")
         if has_multiple_device_ids:
@@ -726,7 +740,7 @@ def adjudicate_takeover_ownership_convergence(
             unknown_count=unknown_count,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
+        logger.warning(
             "takeover_tracking: adjudicate_takeover_ownership_convergence failed: "
             "takeover_id=%r session_id=%r device_id=%r exc=%s",
             takeover_id,

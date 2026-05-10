@@ -148,7 +148,7 @@ class TestTakeoverOwnershipConvergence:
         session_id = _uid()
         takeover_id = _uid()
 
-        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A05")
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A07")
         coordinator.on_takeover_requested(
             session_id=session_id,
             takeover_id=takeover_id,
