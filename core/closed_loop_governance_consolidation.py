@@ -122,7 +122,10 @@ CROSS_STAGE_INVARIANT_POLICY: str = (
     "for a given execution_id (invariant I-06)."
 )
 
-# Ordered list of all terminal lifecycle phases (for invariant checks)
+# Ordered list of all terminal lifecycle phases (for invariant checks).
+# These values MUST remain synchronized with ExecutionLifecyclePhase in
+# core.unified_execution_governance (the authoritative enum definition).
+# Drift between these constants and the enum is a governance regression.
 _TERMINAL_PHASES: frozenset[str] = frozenset(
     {"succeeded", "failed", "timed_out", "interrupted", "cancelled"}
 )
@@ -573,6 +576,17 @@ def query_closed_loop_governance_state(
             "for execution_id=%r device_id=%r: %s",
             execution_id, device_id, exc,
         )
+        store_read_violation = ClosedLoopInvariantViolation(
+            invariant_id="I-STORE-READ-ERROR",
+            description=(
+                "Governance store read failed: closed-loop state could not be derived. "
+                "This indicates a runtime error in the governance infrastructure."
+            ),
+            execution_id=execution_id,
+            device_id=device_id,
+            stage=ClosedLoopStage.unknown,
+            detail=str(exc),
+        )
         return ClosedLoopGovernanceView(
             execution_id=execution_id,
             device_id=device_id,
@@ -587,7 +601,7 @@ def query_closed_loop_governance_state(
             uplink_result_count=0,
             uplink_state_count=0,
             terminal_truth_authoritative_source="none",
-            invariant_violations=[],
+            invariant_violations=[store_read_violation],
             loop_is_coherent=False,
         )
 

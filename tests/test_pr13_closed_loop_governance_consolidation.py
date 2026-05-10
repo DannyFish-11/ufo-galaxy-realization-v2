@@ -958,10 +958,10 @@ class TestGroupE_AuditAndSentinelCoverage:
         """E01: CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL is present and well-formed."""
         assert isinstance(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL, str)
         assert len(CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL) > 50
-        assert "PR13" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL or \
+        # Sentinel uses 'PR13_V2' format
+        assert "PR13_V2" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL or \
                "PR-13" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
-        assert "closed_loop" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL.lower() or \
-               "CLOSED_LOOP" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
+        assert "CLOSED_LOOP" in CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL
 
     def test_E02_contract_version_is_correct(self):
         """E02: CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION matches expected value."""
