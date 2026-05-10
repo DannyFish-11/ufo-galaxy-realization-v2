@@ -188,6 +188,22 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
         "active_device_count": 1,
         "active_execution_total_count": 1,
     }
+    cross_repo_truth_report = {
+        "pipeline_verdict": "complete",
+        "is_complete": True,
+        "primary_sources_complete": True,
+        "primary_sources_fresh": True,
+        "downgrade_reasons": [],
+        "sources": [
+            {
+                "source_id": "real_device_verification",
+                "authority": "primary",
+                "status": "present",
+                "freshness_secs": 4.0,
+                "is_stale": False,
+            }
+        ],
+    }
 
     with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
         "core.android_mode_gate_policy.build_mode_state_for_device",
@@ -201,6 +217,9 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     ), patch(
         "core.unified_execution_governance.get_execution_runtime_snapshot",
         return_value=runtime_snapshot,
+    ), patch(
+        "core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
+        return_value=cross_repo_truth_report,
     ):
         state = build_unified_governance_state()
 
@@ -251,6 +270,14 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert "android_evidence_recovery_truth_degraded" in causality
     assert "android_evidence_recovery_truth_gap_types" in causality
     assert "android_evidence_recovery_truth_diagnosis" in causality
+    assert causality["canonical_truth_provenance"] == "inferred_reconciliation"
+    assert causality["canonical_truth_inferred"] is True
+    assert causality["canonical_truth_confirmed"] is False
+    assert causality["canonical_truth_source_trust_level"] == "low"
+    assert causality["cross_repo_truth_pipeline_verdict"] == "complete"
+    assert causality["cross_repo_truth_is_complete"] is True
+    assert causality["cross_repo_truth_primary_sources_fresh"] is True
+    assert causality["cross_repo_truth_source_provenance"][0]["source_trust_level"] == "primary"
     assert cross["android_evidence_integration"]["execution_id"] == "exec_cross_1"
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
@@ -417,6 +444,10 @@ def test_build_unified_governance_state_stale_android_truth_downgrades_canonical
     assert causality["android_runtime_truth_authority"] == "downgraded_to_unknown"
     assert causality["android_runtime_truth_usable"] is False
     assert causality["android_reported_mode"] is None
+    assert causality["canonical_truth_provenance"] == "stale_remote_evidence"
+    assert causality["canonical_truth_confirmed"] is False
+    assert causality["canonical_truth_inferred"] is False
+    assert causality["canonical_truth_source_trust_level"] == "low"
 
 
 def test_build_unified_governance_state_surfaces_recovery_truth_diagnostics() -> None:

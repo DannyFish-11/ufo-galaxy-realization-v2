@@ -917,6 +917,14 @@ class TestGroupE_AuditSummaryAndSentinelCoverage:
             "sentinel",
             "contract_version",
             "_policy",
+            "canonical_truth_provenance",
+            "canonical_truth_source_trust_level",
+            "canonical_truth_freshness_state",
+            "canonical_truth_freshness_reason",
+            "canonical_truth_confirmed",
+            "canonical_truth_inferred",
+            "cross_repo_truth_pipeline_verdict",
+            "cross_repo_truth_source_provenance",
         ]
         for field_name in required_fields:
             assert field_name in summary, (
@@ -965,3 +973,6 @@ class TestGroupE_AuditSummaryAndSentinelCoverage:
         assert summary["canonical_terminal_outcome"] == "success"
         assert summary["authority_source"] == "center_lifecycle"
         assert summary["integrity_violations"] == []
+        assert summary["canonical_truth_provenance"] == "v2_local_state"
+        assert summary["canonical_truth_source_trust_level"] == "medium"
+        assert summary["canonical_truth_confirmed"] is False

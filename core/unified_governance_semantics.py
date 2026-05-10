@@ -302,6 +302,141 @@ def _extract_primary_execution_id(runtime_state: Dict[str, Any]) -> str:
     return ""
 
 
+def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
+    """Normalize cross-repo evidence report object/dict to a stable shape."""
+    report_dict: Dict[str, Any] = {}
+    if isinstance(raw_report, dict):
+        report_dict = dict(raw_report)
+    elif hasattr(raw_report, "to_dict"):
+        try:
+            report_dict = dict(raw_report.to_dict())  # type: ignore[union-attr]
+        except Exception:
+            report_dict = {}
+
+    normalized_sources: List[Dict[str, Any]] = []
+    for source in report_dict.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        normalized_sources.append(
+            {
+                "source_id": str(source.get("source_id") or ""),
+                # Canonical trust level is the source authority class from PR-05
+                # (primary/secondary/advisory) plus concrete ingestion status.
+                "source_trust_level": str(source.get("authority") or "unknown"),
+                "status": str(source.get("status") or "unknown"),
+                "freshness_secs": source.get("freshness_secs"),
+                "is_stale": bool(source.get("is_stale", False)),
+            }
+        )
+
+    return {
+        "pipeline_verdict": str(report_dict.get("pipeline_verdict") or "insufficient"),
+        "is_complete": bool(report_dict.get("is_complete", False)),
+        "primary_sources_complete": bool(
+            report_dict.get("primary_sources_complete", False)
+        ),
+        "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
+        "downgrade_reasons": list(report_dict.get("downgrade_reasons") or []),
+        "source_provenance": normalized_sources,
+    }
+
+
+def _derive_canonical_truth_basis(
+    *,
+    runtime_state_for_device: Dict[str, Any],
+    proof_input_diagnosis: Dict[str, Any],
+    cross_repo_truth_report: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify canonical decision truth basis for audit/provenance surfaces.
+
+    Parameters
+    ----------
+    runtime_state_for_device:
+        Device-level runtime truth snapshot used by canonical decisions.
+    proof_input_diagnosis:
+        Canonical proof-input diagnosis result (includes proof_input_class).
+    cross_repo_truth_report:
+        Normalized PR-05 cross-repo evidence report summary.
+
+    Returns
+    -------
+    dict
+        Stable audit-facing fields:
+        ``canonical_truth_provenance``,
+        ``canonical_truth_source_trust_level``,
+        ``canonical_truth_freshness_state``,
+        ``canonical_truth_freshness_reason``,
+        ``canonical_truth_confirmed``, and
+        ``canonical_truth_inferred``.
+    """
+    lifecycle_truth_quality = str(
+        runtime_state_for_device.get("android_lifecycle_truth_quality") or "v2_local_only"
+    ).strip().lower() or "v2_local_only"
+    freshness_state = str(
+        runtime_state_for_device.get("android_semantics_freshness_state") or ""
+    ).strip().lower()
+    proof_input_class = str(
+        proof_input_diagnosis.get("proof_input_class") or "missing"
+    ).strip().lower() or "missing"
+    snapshot_reconciliation_status = str(
+        runtime_state_for_device.get("snapshot_reconciliation_status") or ""
+    ).strip().lower()
+    cross_repo_verdict = str(
+        cross_repo_truth_report.get("pipeline_verdict") or "insufficient"
+    ).strip().lower() or "insufficient"
+    cross_repo_primary_fresh = bool(
+        cross_repo_truth_report.get("primary_sources_fresh", False)
+    )
+
+    stale_remote = (
+        freshness_state == "stale"
+        or lifecycle_truth_quality == "stale_remote"
+        or proof_input_class == "stale"
+        or cross_repo_verdict == "stale"
+    )
+    if stale_remote:
+        provenance = "stale_remote_evidence"
+    elif lifecycle_truth_quality == "android_remote_confirmed":
+        provenance = "android_confirmed_truth"
+    elif snapshot_reconciliation_status not in {"", "missing", "unavailable"}:
+        provenance = "inferred_reconciliation"
+    else:
+        provenance = "v2_local_state"
+
+    freshness_reason = runtime_state_for_device.get("android_semantics_freshness_reason")
+    if not freshness_reason:
+        freshness_reason = (
+            f"cross_repo_pipeline_verdict:{cross_repo_verdict};"
+            f"runtime_freshness_state:{freshness_state or 'unknown'};"
+            f"lifecycle_truth_quality:{lifecycle_truth_quality}"
+        )
+
+    if provenance == "android_confirmed_truth":
+        trust_level = "high" if cross_repo_primary_fresh else "medium"
+    elif provenance == "v2_local_state":
+        trust_level = "medium"
+    else:
+        trust_level = "low"
+
+    if freshness_state:
+        canonical_freshness = freshness_state
+    elif cross_repo_primary_fresh:
+        canonical_freshness = "fresh"
+    elif cross_repo_verdict == "stale":
+        canonical_freshness = "stale"
+    else:
+        canonical_freshness = "unknown"
+
+    return {
+        "canonical_truth_provenance": provenance,
+        "canonical_truth_source_trust_level": trust_level,
+        "canonical_truth_freshness_state": canonical_freshness,
+        "canonical_truth_freshness_reason": freshness_reason,
+        "canonical_truth_confirmed": provenance == "android_confirmed_truth",
+        "canonical_truth_inferred": provenance == "inferred_reconciliation",
+    }
+
+
 def _normalize_reason_tokens(raw_value: Any) -> List[str]:
     """Normalize arbitrary reason payloads into a stable token list."""
     if raw_value is None:
@@ -911,6 +1046,30 @@ def build_unified_governance_state(
             }
         android_evidence_integration_summary_fn = _fallback_get_android_evidence_integration_summary
 
+    try:
+        from core.canonical_cross_repo_evidence_pipeline import (
+            get_canonical_cross_repo_evidence_report,
+        )
+        canonical_cross_repo_report_fn = get_canonical_cross_repo_evidence_report
+    except Exception:
+        def _fallback_get_canonical_cross_repo_evidence_report() -> Dict[str, Any]:  # type: ignore[misc]
+            return {
+                "pipeline_verdict": "insufficient",
+                "is_complete": False,
+                "primary_sources_complete": False,
+                "primary_sources_fresh": False,
+                "downgrade_reasons": [
+                    "canonical_cross_repo_evidence_report_unavailable"
+                ],
+                "sources": [],
+            }
+
+        canonical_cross_repo_report_fn = _fallback_get_canonical_cross_repo_evidence_report
+
+    cross_repo_truth_report = _normalize_cross_repo_truth_report(
+        canonical_cross_repo_report_fn()
+    )
+
     if device_ids is None:
         try:
             device_ids = [e.device_id for e in list_active_sessions()]
@@ -1040,6 +1199,11 @@ def build_unified_governance_state(
             ownership_transfer_proof_diagnosis=ownership_transfer_proof_diagnosis,
             mesh_runtime_state=mesh_runtime_state,
             mesh_proof_quality=mesh_proof_quality,
+        )
+        canonical_truth_basis = _derive_canonical_truth_basis(
+            runtime_state_for_device=runtime_state_for_device,
+            proof_input_diagnosis=proof_input_diagnosis,
+            cross_repo_truth_report=cross_repo_truth_report,
         )
 
         paths: Dict[str, Dict[str, Any]] = {}
@@ -1282,6 +1446,25 @@ def build_unified_governance_state(
                     ownership_transfer_proof_diagnosis
                 ),
                 "android_originated_canonical_diagnosis": android_originated_canonical_diagnosis,
+                **canonical_truth_basis,
+                "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get(
+                    "pipeline_verdict"
+                ),
+                "cross_repo_truth_is_complete": bool(
+                    cross_repo_truth_report.get("is_complete", False)
+                ),
+                "cross_repo_truth_primary_sources_complete": bool(
+                    cross_repo_truth_report.get("primary_sources_complete", False)
+                ),
+                "cross_repo_truth_primary_sources_fresh": bool(
+                    cross_repo_truth_report.get("primary_sources_fresh", False)
+                ),
+                "cross_repo_truth_downgrade_reasons": list(
+                    cross_repo_truth_report.get("downgrade_reasons", [])
+                ),
+                "cross_repo_truth_source_provenance": list(
+                    cross_repo_truth_report.get("source_provenance", [])
+                ),
             }
             paths[path.value] = decision_dict
 
