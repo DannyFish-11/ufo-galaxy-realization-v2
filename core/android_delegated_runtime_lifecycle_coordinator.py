@@ -541,6 +541,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         "on_takeover_response: ownership adjudication failed (non-fatal): %s",
                         _oe,
                     )
+                    ownership_convergence = {
+                        "ownership_state": "adjudication_error",
+                        "degraded": True,
+                        "diagnosis": ["adjudication_error"],
+                    }
 
             # Step 2: reduce session state
             if _SESSION_STATE_AVAILABLE and _REDUCER_AVAILABLE:
