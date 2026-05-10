@@ -43,6 +43,7 @@ documents are **authoritative and current** vs historical or superseded.
 |----------|---------|
 | [CONFIGURATION_AUTHORITY.md](CONFIGURATION_AUTHORITY.md) | Configuration authority chain |
 | [COMMAND_PROTOCOL.md](COMMAND_PROTOCOL.md) | Command protocol specification |
+| [V2_ANDROID_TRUTH_CONTRACT.md](V2_ANDROID_TRUTH_CONTRACT.md) | Canonical Android truth contract and fallback semantics for V2 governance |
 | [OBSERVABILITY.md](OBSERVABILITY.md) | Observability architecture |
 | [WINDOWS_STATUS_BOARD.md](WINDOWS_STATUS_BOARD.md) | Status board v2 operator surface |
 | [MESH_SESSION_CONTRACT.md](MESH_SESSION_CONTRACT.md) | Mesh session contract |
