@@ -52,6 +52,7 @@ def _load_real_android_runtime_evidence() -> Dict[str, Any]:
 
 
 def _find_message_by_type(messages: list[Any], message_type: str) -> Dict[str, Any] | None:
+    """Return first AIP message matching *message_type* after strip/lower normalization."""
     return next(
         (
             m
@@ -63,6 +64,8 @@ def _find_message_by_type(messages: list[Any], message_type: str) -> Dict[str, A
 
 
 def _extract_runtime_payloads(evidence: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+    # Android runtime evidence has appeared under multiple top-level list keys
+    # across cross-repo iterations; support all known variants for compatibility.
     messages = evidence.get("messages")
     if not isinstance(messages, list):
         messages = evidence.get("aip_messages")

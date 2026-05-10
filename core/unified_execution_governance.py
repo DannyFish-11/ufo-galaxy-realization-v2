@@ -2092,7 +2092,9 @@ _ANDROID_TERMINAL_EXECUTION_PHASES: frozenset[str] = frozenset(
         "error",
         "timed_out",
         "timeout",
+        # Android runtime emits stagnation_detected as a terminal failed outcome.
         "stagnation_detected",
+        # Android runtime gate_decision marks a gate-terminal resolution event.
         "gate_decision",
     }
 )
