@@ -1491,7 +1491,7 @@ class TestRecoveryTruthGapDegradation:
                     "recovery_truth_gap_types": [
                         "missing",
                         "conflicting",
-                        "replay-fragmented",
+                        "replay_fragmented",
                     ],
                 },
             )

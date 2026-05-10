@@ -103,6 +103,7 @@ Functions::
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -957,12 +958,16 @@ def _assess_recovery_truth_adjustment(
     else:
         quality = AndroidEvidenceGrade.strong.value
 
-    diagnosis = (
-        "recovery_truth_quality_assessed;"
-        f"closure_quality={closure_quality or 'unspecified'};"
-        f"gap_types={gap_types or ['none']};"
-        f"quality={quality};"
-        f"severe={severe}"
+    diagnosis = json.dumps(
+        {
+            "label": "recovery_truth_quality_assessed",
+            "closure_quality": closure_quality or "unspecified",
+            "gap_types": gap_types or ["none"],
+            "quality": quality,
+            "severe": severe,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
     )
     cause = (
         None
