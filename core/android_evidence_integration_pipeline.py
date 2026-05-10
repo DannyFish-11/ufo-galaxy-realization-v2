@@ -408,6 +408,10 @@ class AndroidEvidenceIntegrationVerdict:
     overall_grade: AndroidEvidenceGrade
     dimension_results: List[AndroidEvidenceDimensionResult] = field(default_factory=list)
     degradation_causes: List[str] = field(default_factory=list)
+    recovery_truth_quality: str = "not_provided"
+    recovery_truth_degraded: bool = False
+    recovery_truth_gap_types: List[str] = field(default_factory=list)
+    recovery_truth_diagnosis: str = "recovery_truth_not_provided"
     evaluated_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -419,6 +423,10 @@ class AndroidEvidenceIntegrationVerdict:
             "overall_grade": self.overall_grade.value,
             "dimension_results": [r.to_dict() for r in self.dimension_results],
             "degradation_causes": list(self.degradation_causes),
+            "recovery_truth_quality": self.recovery_truth_quality,
+            "recovery_truth_degraded": self.recovery_truth_degraded,
+            "recovery_truth_gap_types": list(self.recovery_truth_gap_types),
+            "recovery_truth_diagnosis": self.recovery_truth_diagnosis,
             "evaluated_at": self.evaluated_at,
             "_sentinel": ANDROID_EVIDENCE_INTEGRATION_SENTINEL,
             "_contract_version": ANDROID_EVIDENCE_INTEGRATION_CONTRACT_VERSION,
@@ -834,6 +842,145 @@ def _derive_decision(
 
 
 # ---------------------------------------------------------------------------
+# Recovery truth quality adjustment (PR-13A)
+# ---------------------------------------------------------------------------
+
+_RECOVERY_GAP_ALIAS_MAP: Dict[str, str] = {
+    "stale": "stale",
+    "partial": "partial",
+    "missing": "missing",
+    "duplicate": "duplicated",
+    "duplicated": "duplicated",
+    "duplicate_result": "duplicated",
+    "duplicate_results": "duplicated",
+    "conflict": "conflicting",
+    "conflicting": "conflicting",
+    "replay_fragmented": "replay_fragmented",
+    "replay-fragmented": "replay_fragmented",
+    "replay_fragment": "replay_fragmented",
+    "replay-fragment": "replay_fragmented",
+}
+_RECOVERY_DEGRADING_GAPS: frozenset[str] = frozenset(
+    {"stale", "partial", "missing", "duplicated", "conflicting", "replay_fragmented"}
+)
+_RECOVERY_SEVERE_GAPS: frozenset[str] = frozenset(
+    {"missing", "conflicting", "replay_fragmented"}
+)
+
+
+def _extract_recovery_gap_types(runtime_state: Optional[Dict[str, Any]]) -> List[str]:
+    if not isinstance(runtime_state, dict):
+        return []
+
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    raw_values: List[str] = []
+    for key in ("recovery_truth_gap_types", "recovery_evidence_gap_types"):
+        value = runtime_state.get(key)
+        if isinstance(value, (list, tuple, set)):
+            raw_values.extend(str(item).strip().lower() for item in value if str(item).strip())
+        elif isinstance(value, str) and value.strip():
+            raw_values.append(value.strip().lower())
+    gap_descriptions = runtime_state.get("gap_descriptions")
+    if isinstance(gap_descriptions, (list, tuple, set)):
+        for description in gap_descriptions:
+            desc = str(description).strip().lower()
+            if not desc:
+                continue
+            for token in _RECOVERY_DEGRADING_GAPS:
+                if token in desc:
+                    raw_values.append(token)
+            if "replay" in desc and "fragment" in desc:
+                raw_values.append("replay_fragmented")
+            if "duplicate" in desc:
+                raw_values.append("duplicated")
+            if "conflict" in desc:
+                raw_values.append("conflicting")
+
+    duplicate_count = _safe_int(
+        runtime_state.get("recovery_duplicate_result_count")
+        or runtime_state.get("duplicate_result_count")
+        or 0
+    )
+    replay_fragment_count = _safe_int(
+        runtime_state.get("recovery_replay_fragment_count")
+        or runtime_state.get("replay_fragment_count")
+        or 0
+    )
+    if duplicate_count > 0:
+        raw_values.append("duplicated")
+    if replay_fragment_count > 0:
+        raw_values.append("replay_fragmented")
+
+    normalized: List[str] = []
+    for raw in raw_values:
+        mapped = _RECOVERY_GAP_ALIAS_MAP.get(raw)
+        if mapped and mapped in _RECOVERY_DEGRADING_GAPS and mapped not in normalized:
+            normalized.append(mapped)
+    return normalized
+
+
+def _assess_recovery_truth_adjustment(
+    runtime_state: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    closure_quality = ""
+    if isinstance(runtime_state, dict):
+        closure_quality = str(
+            runtime_state.get("recovery_closure_quality")
+            or runtime_state.get("overall_recovery_quality")
+            or ""
+        ).strip().lower()
+    gap_types = _extract_recovery_gap_types(runtime_state)
+
+    if not closure_quality and not gap_types:
+        return {
+            "applies": False,
+            "quality": "not_provided",
+            "degraded": False,
+            "gap_types": [],
+            "diagnosis": "recovery_truth_not_provided",
+            "severe": False,
+            "cause": None,
+        }
+
+    severe = bool(set(gap_types) & _RECOVERY_SEVERE_GAPS) or closure_quality == "no_recovery"
+    has_degradation = bool(gap_types) or closure_quality in {"partial_convergence", "degraded_recovery", "no_recovery"}
+
+    if severe:
+        quality = AndroidEvidenceGrade.degraded.value
+    elif has_degradation:
+        quality = AndroidEvidenceGrade.adequate.value
+    else:
+        quality = AndroidEvidenceGrade.strong.value
+
+    diagnosis = (
+        "recovery_truth_quality_assessed:"
+        f"closure_quality={closure_quality or 'unspecified'};"
+        f"gap_types={gap_types or ['none']};"
+        f"quality={quality};"
+        f"severe={severe}"
+    )
+    cause = (
+        None
+        if quality == AndroidEvidenceGrade.strong.value
+        else f"recovery_truth:{quality}:{diagnosis}"
+    )
+    return {
+        "applies": True,
+        "quality": quality,
+        "degraded": severe,
+        "gap_types": gap_types,
+        "diagnosis": diagnosis,
+        "severe": severe,
+        "cause": cause,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -894,6 +1041,20 @@ def evaluate_android_evidence_integration(
                     f"{r.dimension.value}:{r.grade.value}:{r.reason[:120]}"
                 )
 
+        recovery_adjustment = _assess_recovery_truth_adjustment(runtime_state)
+        if recovery_adjustment["applies"]:
+            if recovery_adjustment["quality"] == AndroidEvidenceGrade.degraded.value:
+                overall_grade = _worst_grade([overall_grade, AndroidEvidenceGrade.degraded])
+                decision = IntegrationDecision.deny
+                integration_allowed = False
+            elif recovery_adjustment["quality"] == AndroidEvidenceGrade.adequate.value:
+                overall_grade = _worst_grade([overall_grade, AndroidEvidenceGrade.adequate])
+                if decision == IntegrationDecision.allow:
+                    decision = IntegrationDecision.conditionally_allow
+                integration_allowed = decision != IntegrationDecision.deny
+            if recovery_adjustment["cause"]:
+                degradation_causes.append(str(recovery_adjustment["cause"]))
+
         return AndroidEvidenceIntegrationVerdict(
             device_id=device_id,
             execution_id=execution_id,
@@ -902,6 +1063,10 @@ def evaluate_android_evidence_integration(
             overall_grade=overall_grade,
             dimension_results=dimension_results,
             degradation_causes=degradation_causes,
+            recovery_truth_quality=str(recovery_adjustment["quality"]),
+            recovery_truth_degraded=bool(recovery_adjustment["degraded"]),
+            recovery_truth_gap_types=list(recovery_adjustment["gap_types"]),
+            recovery_truth_diagnosis=str(recovery_adjustment["diagnosis"]),
             evaluated_at=eval_time,
         )
     except Exception as exc:  # noqa: BLE001
@@ -960,6 +1125,10 @@ def get_android_evidence_integration_summary(
             "overall_grade": AndroidEvidenceGrade.absent.value,
             "dimension_results": [],
             "degradation_causes": [f"summary_error:{type(exc).__name__}"],
+            "recovery_truth_quality": "not_provided",
+            "recovery_truth_degraded": False,
+            "recovery_truth_gap_types": [],
+            "recovery_truth_diagnosis": "recovery_truth_not_provided",
             "evaluated_at": time.time(),
             "_sentinel": ANDROID_EVIDENCE_INTEGRATION_SENTINEL,
             "_contract_version": ANDROID_EVIDENCE_INTEGRATION_CONTRACT_VERSION,
