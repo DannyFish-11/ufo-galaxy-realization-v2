@@ -156,12 +156,17 @@ STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY: str = (
 CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY: str = (
     "POLICY::CANONICAL_PROOF_INPUT_DIAGNOSIS_V1: "
     "Canonical governance diagnosis MUST classify Android/runtime proof inputs "
-    "as one of: complete, stale, conflicting, malformed, partial, or missing. "
+    "as one of: complete, stale, conflicting, malformed, unknown, downgraded, "
+    "partial, or missing. "
     "Semantic conflicts between Android-reported fields (e.g., cross_device mode "
     "with cross_device_eligibility=False, or local_inference_available=True with "
     "local_intelligence_status=disabled) MUST be surfaced as 'conflicting' rather "
-    "than collapsing into generic denial reasons. Each degraded state MUST carry "
-    "explicit degradation_causes and conflict descriptions for debuggability."
+    "than collapsing into generic denial reasons. "
+    "Android-reported downgrade signals MUST be surfaced as 'downgraded'. "
+    "Unrecognised contract keys MUST be surfaced as 'unknown'. "
+    "Each degraded state MUST carry explicit degradation_causes and conflict "
+    "descriptions for debuggability. Only 'complete' is a passing classification; "
+    "all other classes are explicitly non-passing."
 )
 
 # ---------------------------------------------------------------------------

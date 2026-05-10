@@ -8,6 +8,41 @@ This module defines one stable contract that expresses:
 2. Unified authority precedence across local planning, local grounding,
    local execution, delegated execution, takeover, and multimodal participation.
 3. A panel/operator-consumable governance state snapshot.
+
+Android truth hardening series
+-------------------------------
+This module has been progressively hardened across the Android-truth PR series:
+
+- PR-5  / ``core.unified_execution_governance`` — Execution lifecycle truth
+         quality (``android_remote_confirmed``, ``missing_remote``, etc.) is
+         now embedded in ``decision_causality`` via
+         ``get_execution_lifecycle_truth_binding()``.
+- PR-7A / ``core.android_mode_gate_policy`` — Absent, stale, conflicting, or
+         downgraded Android capability truth now degrades the canonical gate
+         decision to ``deny`` via
+         ``ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY``.
+         ``proof_input_diagnosis`` is computed *before* the gate call so that
+         truth quality drives the decision rather than only observability.
+- PR-8  / ``core.android_evidence_integration_pipeline`` — A single end-to-end
+         integration verdict (capability truth + lifecycle truth + audit
+         authority + closed-loop invariants) is now threaded into every device
+         entry in the governance state under ``android_evidence_integration``
+         and mirrored in ``decision_causality`` as
+         ``android_evidence_integration_*`` fields.
+- PR-9  / ``core.unified_execution_governance`` — Canonical
+         ``classify_canonical_proof_input_diagnosis()`` distinguishes all eight
+         proof-input classes (``complete``, ``stale``, ``conflicting``,
+         ``malformed``, ``unknown``, ``downgraded``, ``partial``, ``missing``).
+         Only ``complete`` is a passing classification.
+
+Primary regression suites covering this module
+-----------------------------------------------
+- ``tests/test_pr5_execution_runtime_truth_binding.py``
+- ``tests/test_pr7a_android_governance_truth_hardening.py``
+- ``tests/test_pr8_android_evidence_integration_e2e.py``
+- ``tests/test_pr9_canonical_proof_input_diagnosis.py``
+- ``tests/test_pr11a_android_truth_followup_verification.py``
+- ``tests/test_pr12_android_truth_final_audit.py``
 """
 
 from __future__ import annotations
