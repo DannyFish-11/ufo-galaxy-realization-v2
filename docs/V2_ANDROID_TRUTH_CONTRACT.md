@@ -234,3 +234,16 @@ After this PR the repository is in a stable, coherent state:
 
 Maintainers should treat the invariants in Section 5 as the canonical
 regression boundary when evolving the Android-truth contract.
+
+## 8. Post-series stability pass (PR-13A)
+
+PR-13A adds narrow stability hardening so future iteration fails in explicit,
+diagnosable ways instead of drifting into implicit optimism:
+
+- `classify_canonical_proof_input_diagnosis()` now treats unrecognized
+  `android_semantics_contract_state` values as `proof_input_class="unknown"`
+  with an explicit degradation cause, instead of allowing accidental pass
+  classification.
+- Diagnosis token fields (`android_semantics_*_keys`, downgraded reasons, and
+  conflict tokens) are normalized to stable string lists so malformed scalar
+  inputs stay readable and do not degrade into character-split diagnostics.

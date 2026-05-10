@@ -2943,6 +2943,39 @@ def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
 # Canonical proof input diagnosis
 # ---------------------------------------------------------------------------
 
+_CANONICAL_PROOF_INPUT_CONTRACT_STATES: frozenset = frozenset(
+    {
+        "complete",
+        "stale",
+        "conflicting",
+        "malformed",
+        "unknown",
+        "downgraded",
+        "partial",
+        "missing",
+        # Ingress may collapse semantic contradiction into coarse contract-state.
+        "incompatible",
+    }
+)
+
+
+def _normalize_diagnosis_token_list(raw_value: Any) -> List[str]:
+    """Normalize diagnosis token inputs into a stable list-of-strings form."""
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        token = raw_value.strip()
+        return [token] if token else []
+    if isinstance(raw_value, (list, tuple, set, frozenset)):
+        normalized: List[str] = []
+        for item in raw_value:
+            token = str(item).strip()
+            if token:
+                normalized.append(token)
+        return normalized
+    token = str(raw_value).strip()
+    return [token] if token else []
+
 
 def classify_canonical_proof_input_diagnosis(
     snapshot: Dict[str, Any],
@@ -3001,38 +3034,57 @@ def classify_canonical_proof_input_diagnosis(
     # This format is stable across versions; consumers may split on the first
     # ":" to extract cause_type for programmatic checks.
 
+    snapshot_dict: Dict[str, Any] = snapshot if isinstance(snapshot, dict) else {}
     contract_state = str(
-        snapshot.get("android_semantics_contract_state") or "missing"
+        snapshot_dict.get("android_semantics_contract_state") or "missing"
     ).strip().lower()
-    missing_keys: List[str] = list(
-        snapshot.get("android_semantics_missing_keys") or []
+    missing_keys: List[str] = _normalize_diagnosis_token_list(
+        snapshot_dict.get("android_semantics_missing_keys")
     )
-    malformed_keys: List[str] = list(
-        snapshot.get("android_semantics_malformed_keys") or []
+    malformed_keys: List[str] = _normalize_diagnosis_token_list(
+        snapshot_dict.get("android_semantics_malformed_keys")
     )
-    unknown_keys: List[str] = list(
-        snapshot.get("android_semantics_unknown_keys") or []
+    unknown_keys: List[str] = _normalize_diagnosis_token_list(
+        snapshot_dict.get("android_semantics_unknown_keys")
     )
-    downgraded_reasons: List[str] = list(
-        snapshot.get("android_semantics_downgraded_reasons") or []
+    downgraded_reasons: List[str] = _normalize_diagnosis_token_list(
+        snapshot_dict.get("android_semantics_downgraded_reasons")
     )
     freshness_state = str(
-        snapshot.get("android_semantics_freshness_state") or "unknown"
+        snapshot_dict.get("android_semantics_freshness_state") or "unknown"
     ).strip().lower()
     freshness_reason = str(
-        snapshot.get("android_semantics_freshness_reason") or ""
+        snapshot_dict.get("android_semantics_freshness_reason") or ""
     ).strip()
     runtime_truth_authority = str(
-        snapshot.get("android_runtime_truth_authority") or "unknown"
+        snapshot_dict.get("android_runtime_truth_authority") or "unknown"
     ).strip().lower()
 
+    if contract_state not in _CANONICAL_PROOF_INPUT_CONTRACT_STATES:
+        degradation_causes.append(
+            f"unrecognized_android_semantics_contract_state:{contract_state}"
+        )
+        return {
+            "proof_input_class": "unknown",
+            "proof_input_detail": (
+                "Android capability report contains unrecognized "
+                f"contract_state={contract_state!r}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
     # --- semantic conflict check (highest priority) ---
-    detected_conflicts = _detect_android_semantics_conflicts(snapshot)
+    detected_conflicts = _detect_android_semantics_conflicts(snapshot_dict)
+    ingress_conflicts = _normalize_diagnosis_token_list(
+        snapshot_dict.get("android_semantics_conflicts")
+    )
     if detected_conflicts or contract_state == "incompatible":
         # Merge locally re-derived conflicts with any ingress-side conflicts that
         # survived in the runtime snapshot so diagnosis remains stable end-to-end.
         all_conflicts = sorted(
-            set(detected_conflicts + list(snapshot.get("android_semantics_conflicts") or []))
+            set(detected_conflicts + ingress_conflicts)
         )
         if not all_conflicts:
             # Defensive fallback: ingress may have already classified the contract as

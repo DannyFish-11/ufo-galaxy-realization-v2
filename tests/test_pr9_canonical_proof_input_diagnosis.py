@@ -28,8 +28,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
-
 from core.unified_execution_governance import (
     CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
     _detect_android_semantics_conflicts,
@@ -886,6 +884,26 @@ class TestGroupD_BoundaryEdgeCases:
         ]:
             result = classify_canonical_proof_input_diagnosis(snap)
             assert result["_policy"] == CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY
+
+    def test_d8_unrecognized_contract_state_is_unknown_not_complete(self) -> None:
+        """Unrecognized contract-state values stay diagnosable and non-passing."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(android_semantics_contract_state="future_contract_state")
+        )
+        assert result["proof_input_class"] == "unknown"
+        causes = result["proof_input_degradation_causes"]
+        assert any("unrecognized_android_semantics_contract_state" in cause for cause in causes)
+
+    def test_d9_scalar_conflicts_are_not_character_split(self) -> None:
+        """String-typed conflicts must stay single conflict tokens."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="incompatible",
+                android_semantics_conflicts="android_capability_contract_incompatible",
+            )
+        )
+        assert result["proof_input_class"] == "conflicting"
+        assert result["proof_input_conflicts"] == ["android_capability_contract_incompatible"]
 
 
 # ===========================================================================
