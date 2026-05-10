@@ -134,9 +134,30 @@ CANONICAL_ANDROID_EXECUTION_GATE_POLICY: str = (
     "local inference availability."
 )
 
+ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY: str = (
+    "POLICY::ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS: "
+    "When Android-originated capability truth quality is 'missing', 'stale', "
+    "'conflicting', or 'downgraded', resolve_android_execution_gate_decision() "
+    "MUST return 'deny' rather than allowing execution to proceed on absent or "
+    "unverified evidence.  Absent Android truth is NOT treated as implicit "
+    "positive evidence.  The decision reason will include "
+    "'android_capability_truth_degraded:<quality>' for observability."
+)
+
 ANDROID_MODE_GATE_POLICY_PR_SENTINEL: str = (
     "ANDROID_MODE_GATE_POLICY_PR_SENTINEL::v1 present"
 )
+
+# Truth-quality classes that degrade the canonical execution gate decision.
+# Any proof_input_class from classify_canonical_proof_input_diagnosis() that
+# falls in this set will cause resolve_android_execution_gate_decision() to
+# return decision="deny" regardless of other gate inputs.
+_ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES: frozenset = frozenset({
+    "missing",
+    "stale",
+    "conflicting",
+    "downgraded",
+})
 
 # ---------------------------------------------------------------------------
 # AndroidDeviceMode
@@ -368,6 +389,11 @@ class AndroidCanonicalExecutionGateDecision:
     fallback_tier: Optional[str] = None
     model_ready: Optional[bool] = None
     reasons: tuple[str, ...] = field(default_factory=tuple)
+    # PR-7A: Android capability truth quality that influenced this decision.
+    # None when the caller did not supply truth quality information.
+    android_capability_truth_quality: Optional[str] = None
+    # PR-7A: True when absent/stale/conflicting Android truth caused a deny.
+    android_capability_truth_degraded: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -380,6 +406,8 @@ class AndroidCanonicalExecutionGateDecision:
             "fallback_tier": self.fallback_tier,
             "model_ready": self.model_ready,
             "reasons": list(self.reasons),
+            "android_capability_truth_quality": self.android_capability_truth_quality,
+            "android_capability_truth_degraded": self.android_capability_truth_degraded,
             "_policy": CANONICAL_ANDROID_EXECUTION_GATE_POLICY,
         }
 
@@ -392,12 +420,61 @@ def resolve_android_execution_gate_decision(
     local_inference_available: bool,
     fallback_tier: Optional[str],
     model_ready: Optional[bool] = None,
+    android_capability_truth_quality: Optional[str] = None,
 ) -> AndroidCanonicalExecutionGateDecision:
-    """Resolve canonical allow/deny/defer decision from unified Android gate inputs."""
+    """Resolve canonical allow/deny/defer decision from unified Android gate inputs.
+
+    Parameters
+    ----------
+    policy_eligible:
+        Whether the device is policy-eligible for dispatch.
+    readiness_ready:
+        Whether the device passed all readiness gates.
+    execution_busy:
+        Whether the device is currently busy with an execution.
+    local_inference_available:
+        Whether local inference is available on the device.
+    fallback_tier:
+        Optional fallback tier name.
+    model_ready:
+        Whether the model is ready (optional).
+    android_capability_truth_quality:
+        The ``proof_input_class`` from
+        :func:`~core.unified_execution_governance.classify_canonical_proof_input_diagnosis`.
+        When this is ``'missing'``, ``'stale'``, ``'conflicting'``, or
+        ``'downgraded'``, the gate decision is immediately forced to ``'deny'``
+        regardless of other gate inputs.  Absent Android truth is NOT treated
+        as positive evidence — see
+        :data:`ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY`.
+    """
     normalized_fallback_tier = str(fallback_tier or "").strip() or None
     has_fallback = bool(normalized_fallback_tier)
     capability_ready = bool(local_inference_available or has_fallback or model_ready is True)
     reasons: List[str] = []
+
+    # PR-7A: Check Android capability truth quality first.
+    # Missing, stale, conflicting, or downgraded Android truth degrades the
+    # gate decision to "deny" — absence is not positive evidence.
+    normalized_truth_quality = str(android_capability_truth_quality or "").strip().lower() or None
+    truth_degraded = normalized_truth_quality in _ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES
+    if truth_degraded:
+        reasons.append(
+            f"android_capability_truth_degraded:{normalized_truth_quality}"
+        )
+        return AndroidCanonicalExecutionGateDecision(
+            decision="deny",
+            policy_eligible=bool(policy_eligible),
+            readiness_ready=bool(readiness_ready),
+            capability_ready=capability_ready,
+            execution_busy=bool(execution_busy),
+            local_inference_available=bool(local_inference_available),
+            fallback_tier=normalized_fallback_tier,
+            model_ready=model_ready,
+            reasons=tuple(reasons),
+            android_capability_truth_quality=normalized_truth_quality,
+            android_capability_truth_degraded=True,
+        )
+
     decision = "allow"
 
     if not policy_eligible:
@@ -430,6 +507,8 @@ def resolve_android_execution_gate_decision(
         fallback_tier=normalized_fallback_tier,
         model_ready=model_ready,
         reasons=tuple(reasons),
+        android_capability_truth_quality=normalized_truth_quality,
+        android_capability_truth_degraded=False,
     )
 
 
