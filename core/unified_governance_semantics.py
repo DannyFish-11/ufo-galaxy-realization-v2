@@ -163,6 +163,16 @@ UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
 )
 
 UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION: str = "1.0.0"
+ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_CONTRACT_VERSION: str = "17.0.0"
+ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_POLICY: str = (
+    "POLICY::ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_V1: "
+    "V2 canonical diagnosis surfaces MUST reconcile Android-originated runtime, "
+    "capability, recovery, takeover, and mesh diagnostics into stable per-domain "
+    "canonical diagnosis classes with preserved Android-local reason tokens. "
+    "Panel/operator/audit paths MUST expose these canonicalized diagnostics via "
+    "decision_causality so Android-local causes remain visible rather than only "
+    "center-inferred summaries."
+)
 MESH_RUNTIME_STATUS_POLICY: str = (
     "MESH_RUNTIME_STATUS_POLICY_V1: "
     "multi-device mesh runtime status must be surfaced as explicit "
@@ -290,6 +300,112 @@ def _extract_primary_execution_id(runtime_state: Dict[str, Any]) -> str:
         if isinstance(execution_id, str) and execution_id.strip():
             return execution_id.strip()
     return ""
+
+
+def _normalize_reason_tokens(raw_value: Any) -> List[str]:
+    """Normalize arbitrary reason payloads into a stable token list."""
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        token = raw_value.strip()
+        return [token] if token else []
+    if isinstance(raw_value, (list, tuple, set)):
+        normalized: List[str] = []
+        for item in raw_value:
+            token = str(item).strip()
+            if token and token not in normalized:
+                normalized.append(token)
+        return normalized
+    token = str(raw_value).strip()
+    return [token] if token else []
+
+
+def _build_android_originated_canonical_diagnosis(
+    *,
+    runtime_state_for_device: Dict[str, Any],
+    proof_input_diagnosis: Dict[str, Any],
+    android_evidence_integration: Dict[str, Any],
+    ownership_transfer_proof_class: Optional[str],
+    ownership_transfer_proof_diagnosis: List[str],
+    mesh_runtime_state: Dict[str, Any],
+    mesh_proof_quality: Optional[str],
+) -> Dict[str, Any]:
+    """Reconcile Android-originated diagnostics into stable canonical domains."""
+    runtime_class = str(
+        runtime_state_for_device.get("android_lifecycle_truth_quality") or "missing_remote"
+    ).strip().lower() or "missing_remote"
+    runtime_reasons = _normalize_reason_tokens(
+        runtime_state_for_device.get("android_lifecycle_truth_reason")
+    )
+    runtime_reasons.extend(
+        _normalize_reason_tokens(runtime_state_for_device.get("snapshot_reconciliation_reason"))
+    )
+    runtime_reasons = list(dict.fromkeys(runtime_reasons))
+
+    capability_class = str(
+        proof_input_diagnosis.get("proof_input_class") or "missing"
+    ).strip().lower() or "missing"
+    capability_reasons = _normalize_reason_tokens(
+        proof_input_diagnosis.get("proof_input_degradation_causes")
+    )
+    capability_reasons.extend(
+        _normalize_reason_tokens(proof_input_diagnosis.get("proof_input_conflicts"))
+    )
+    capability_reasons.extend(
+        _normalize_reason_tokens(runtime_state_for_device.get("android_semantics_contract_diagnosis"))
+    )
+    capability_reasons.extend(
+        _normalize_reason_tokens(runtime_state_for_device.get("android_semantics_downgraded_reasons"))
+    )
+    capability_reasons = list(dict.fromkeys(capability_reasons))
+
+    recovery_class = str(
+        android_evidence_integration.get("recovery_truth_quality") or "not_provided"
+    ).strip().lower() or "not_provided"
+    recovery_reasons = _normalize_reason_tokens(
+        android_evidence_integration.get("recovery_truth_gap_types")
+    )
+    recovery_reasons.extend(
+        _normalize_reason_tokens(android_evidence_integration.get("recovery_truth_diagnosis"))
+    )
+    recovery_reasons = list(dict.fromkeys(recovery_reasons))
+
+    takeover_class = str(ownership_transfer_proof_class or "incomplete").strip().lower() or "incomplete"
+    takeover_reasons = _normalize_reason_tokens(ownership_transfer_proof_diagnosis)
+
+    mesh_class = str(
+        mesh_runtime_state.get("proof_quality") or mesh_proof_quality or "missing"
+    ).strip().lower() or "missing"
+    mesh_reasons = _normalize_reason_tokens(mesh_runtime_state.get("proof_quality_reason"))
+    mesh_reasons.extend(
+        _normalize_reason_tokens(mesh_runtime_state.get("governance_readiness_impact"))
+    )
+    mesh_reasons = list(dict.fromkeys(mesh_reasons))
+
+    return {
+        "runtime": {
+            "canonical_class": runtime_class,
+            "android_local_reasons": runtime_reasons,
+        },
+        "capability": {
+            "canonical_class": capability_class,
+            "android_local_reasons": capability_reasons,
+        },
+        "recovery": {
+            "canonical_class": recovery_class,
+            "android_local_reasons": recovery_reasons,
+        },
+        "takeover": {
+            "canonical_class": takeover_class,
+            "android_local_reasons": takeover_reasons,
+        },
+        "mesh": {
+            "canonical_class": mesh_class,
+            "android_local_reasons": mesh_reasons,
+        },
+        "_policy": ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_POLICY,
+        "_contract_version": ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_CONTRACT_VERSION,
+    }
 
 
 def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
@@ -916,6 +1032,16 @@ def build_unified_governance_state(
                     "ownership_transfer_proof_quality_lookup_failed"
                 ]
 
+        android_originated_canonical_diagnosis = _build_android_originated_canonical_diagnosis(
+            runtime_state_for_device=runtime_state_for_device,
+            proof_input_diagnosis=proof_input_diagnosis,
+            android_evidence_integration=android_evidence_integration,
+            ownership_transfer_proof_class=ownership_transfer_proof_class,
+            ownership_transfer_proof_diagnosis=ownership_transfer_proof_diagnosis,
+            mesh_runtime_state=mesh_runtime_state,
+            mesh_proof_quality=mesh_proof_quality,
+        )
+
         paths: Dict[str, Dict[str, Any]] = {}
         for path in GovernancePath:
             decision = resolve_governance_path_decision(
@@ -1155,6 +1281,7 @@ def build_unified_governance_state(
                 "ownership_transfer_proof_diagnosis": list(
                     ownership_transfer_proof_diagnosis
                 ),
+                "android_originated_canonical_diagnosis": android_originated_canonical_diagnosis,
             }
             paths[path.value] = decision_dict
 
@@ -1168,6 +1295,7 @@ def build_unified_governance_state(
                 "takeover_active": takeover_active,
                 "runtime_execution_state": runtime_state_for_device,
                 "android_evidence_integration": android_evidence_integration,
+                "android_originated_canonical_diagnosis": android_originated_canonical_diagnosis,
                 "governance_precedence": paths,
                 "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             }
@@ -1203,6 +1331,8 @@ __all__ = [
     "MESH_RUNTIME_PROOF_QUALITY_MISSING",
     "MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS",
     "MESH_RUNTIME_PROOF_QUALITY_POLICY",
+    "ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_CONTRACT_VERSION",
+    "ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_POLICY",
     "build_mesh_runtime_state",
     "resolve_governance_path_decision",
     "build_unified_governance_state",
