@@ -572,6 +572,84 @@ class LiveMeshSessionCoordinator:
             _logger.warning("LiveMeshSessionCoordinator._try_advance_barrier_unlocked: %s", exc)
 
     # ------------------------------------------------------------------
+    # Android participant signal routing (PR-2)
+    # ------------------------------------------------------------------
+
+    def on_android_participant_signal(
+        self,
+        device_id: str,
+        signal_kind: str,
+        *,
+        result_payload: Optional[Dict[str, Any]] = None,
+        failure_reason: str = "",
+        session_id: str = "",
+    ) -> bool:
+        """Route an Android-originated mesh participation signal to this coordinator.
+
+        This method is the live coordinator's entry point for real Android
+        participant signals.  It translates the ``signal_kind`` string into the
+        appropriate coordinator lifecycle event and applies it, making
+        ``runtime_closed`` reachable from real Android participation.
+
+        Signal routing
+        --------------
+        * ``"readiness_confirmed"`` → :meth:`on_participant_ready`
+        * ``"barrier_reached"`` → :meth:`on_participant_working`
+        * ``"task_completed"`` → :meth:`on_participant_result` (triggers barrier
+          re-evaluation)
+        * ``"task_failed"`` → :meth:`on_participant_failed`
+        * ``"participant_dropped"`` → :meth:`on_participant_dropped`
+
+        Parameters
+        ----------
+        device_id:
+            Android device identifier.
+        signal_kind:
+            String matching an :class:`~core.mesh.android_mesh_participant_signal_adapter.AndroidMeshParticipantSignalKind`
+            value.
+        result_payload:
+            Optional result dict for ``"task_completed"`` signals.
+        failure_reason:
+            Optional failure reason for ``"task_failed"`` and
+            ``"participant_dropped"`` signals.
+        session_id:
+            Optional session identifier (for logging only; coordinator already
+            holds the session state).
+
+        Returns
+        -------
+        bool
+            ``True`` iff the signal was successfully routed and applied.
+            ``False`` on unknown signal kind or error.
+        """
+        try:
+            from core.mesh.android_mesh_participant_signal_adapter import (  # noqa: PLC0415
+                AndroidMeshParticipantSignal,
+                AndroidMeshParticipantSignalKind,
+                apply_android_participation_signal,
+            )
+
+            kind = AndroidMeshParticipantSignalKind.from_string(signal_kind)
+            signal = AndroidMeshParticipantSignal(
+                signal_kind=kind,
+                device_id=device_id,
+                session_id=session_id or (getattr(self._state, "session_id", None) or ""),
+                result_payload=result_payload or {},
+                failure_reason=failure_reason,
+            )
+            outcome = apply_android_participation_signal(self, signal)
+            return outcome.applied
+        except Exception as exc:
+            self._errors.append(f"on_android_participant_signal_error:{device_id}:{signal_kind}:{exc}")
+            _logger.warning(
+                "LiveMeshSessionCoordinator.on_android_participant_signal [%s/%s]: %s",
+                device_id,
+                signal_kind,
+                exc,
+            )
+            return False
+
+    # ------------------------------------------------------------------
     # Finalisation
     # ------------------------------------------------------------------
 
