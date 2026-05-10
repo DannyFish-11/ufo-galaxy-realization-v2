@@ -782,6 +782,23 @@ def build_unified_governance_state(
                 "android_semantics_malformed_keys": list(
                     runtime_state_for_device.get("android_semantics_malformed_keys", [])
                 ),
+                "android_semantics_unknown_keys": list(
+                    runtime_state_for_device.get("android_semantics_unknown_keys", [])
+                ),
+                "android_semantics_conflicts": list(
+                    runtime_state_for_device.get("android_semantics_conflicts", [])
+                ),
+                "android_semantics_downgraded_reasons": list(
+                    runtime_state_for_device.get(
+                        "android_semantics_downgraded_reasons", []
+                    )
+                ),
+                "android_semantics_governance_readiness_impact": runtime_state_for_device.get(
+                    "android_semantics_governance_readiness_impact"
+                ),
+                "android_semantics_contract_diagnosis": runtime_state_for_device.get(
+                    "android_semantics_contract_diagnosis"
+                ),
                 "android_semantics_absorbed_at": float(
                     runtime_state_for_device.get("android_semantics_absorbed_at", 0.0)
                 ),

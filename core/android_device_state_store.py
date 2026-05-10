@@ -137,6 +137,16 @@ _ANDROID_CANONICAL_GATE_BOOLEAN_FIELDS: tuple[str, ...] = (
     "local_inference_ready",
     "local_inference_available",
 )
+ANDROID_CAPABILITY_CANONICAL_CONTRACT_VERSION: str = "2.0"
+_ANDROID_CANONICAL_MODE_READINESS_VALUES: frozenset[str] = frozenset(
+    {"ready", "degraded", "blocked", "unknown", "transitioning"}
+)
+_ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES: frozenset[str] = frozenset(
+    {"ready", "enabled", "degraded", "disabled", "unavailable", "unknown"}
+)
+_ANDROID_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset[str] = frozenset(
+    {"disabled", "unavailable", "unknown"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -885,10 +895,21 @@ def _normalize_capability_report_semantics(
         metadata.get("mode_readiness_state"),
         lowercase=True,
     )
+    if (
+        mode_readiness_state is not None
+        and mode_readiness_state not in _ANDROID_CANONICAL_MODE_READINESS_VALUES
+    ):
+        mode_readiness_state = None
     local_intelligence_status = _coerce_optional_str(
         metadata.get("local_intelligence_status"),
         lowercase=True,
     )
+    if (
+        local_intelligence_status is not None
+        and local_intelligence_status
+        not in _ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES
+    ):
+        local_intelligence_status = None
     degraded_mode = _coerce_optional_bool(metadata.get("degraded_mode"))
     cross_device_eligibility = _coerce_optional_bool(
         metadata.get("cross_device_eligibility")
@@ -909,6 +930,11 @@ def _normalize_capability_report_semantics(
         key
         for key in _ANDROID_CANONICAL_GATE_METADATA_KEYS
         if key not in metadata
+    )
+    unknown_canonical_gate_metadata_keys = sorted(
+        str(key)
+        for key in metadata
+        if str(key) not in _ANDROID_CANONICAL_GATE_METADATA_KEYS
     )
     malformed_canonical_gate_metadata_keys: List[str] = []
     if "mode_state" in metadata and canonical_mode is None:
@@ -931,14 +957,108 @@ def _normalize_capability_report_semantics(
     malformed_canonical_gate_metadata_keys = sorted(
         set(malformed_canonical_gate_metadata_keys)
     )
+    semantic_conflicts: List[str] = []
+    if canonical_mode == "cross_device" and cross_device_eligibility is False:
+        semantic_conflicts.append(
+            "mode_cross_device_conflicts_with_cross_device_eligibility_false"
+        )
+    if canonical_mode == "local" and cross_device_eligibility is True:
+        semantic_conflicts.append(
+            "mode_local_conflicts_with_cross_device_eligibility_true"
+        )
+    if goal_execution_eligibility is True and cross_device_eligibility is False:
+        semantic_conflicts.append(
+            "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false"
+        )
+    if parallel_execution_eligibility is True and goal_execution_eligibility is False:
+        semantic_conflicts.append(
+            "parallel_execution_eligibility_true_conflicts_with_goal_execution_eligibility_false"
+        )
+    if local_inference_ready is True and local_inference_available is False:
+        semantic_conflicts.append(
+            "local_inference_ready_true_conflicts_with_local_inference_available_false"
+        )
+    if (
+        local_inference_available is True
+        and local_intelligence_status in _ANDROID_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES
+    ):
+        semantic_conflicts.append(
+            "local_inference_available_true_conflicts_with_local_intelligence_status_"
+            f"{local_intelligence_status}"
+        )
+    semantic_conflicts = sorted(set(semantic_conflicts))
+    downgraded_canonical_gate_metadata_reasons: List[str] = []
+    if degraded_mode is True:
+        downgraded_canonical_gate_metadata_reasons.append("degraded_mode_true")
+    if mode_readiness_state in {"degraded", "blocked", "transitioning", "unknown"}:
+        downgraded_canonical_gate_metadata_reasons.append(
+            f"mode_readiness_state_{mode_readiness_state}"
+        )
+    if local_intelligence_status in {
+        "degraded",
+        "disabled",
+        "unavailable",
+        "unknown",
+    }:
+        downgraded_canonical_gate_metadata_reasons.append(
+            f"local_intelligence_status_{local_intelligence_status}"
+        )
+    downgraded_canonical_gate_metadata_reasons = sorted(
+        set(downgraded_canonical_gate_metadata_reasons)
+    )
     if not metadata:
         canonical_gate_metadata_state = "missing"
     elif malformed_canonical_gate_metadata_keys:
         canonical_gate_metadata_state = "malformed"
+    elif unknown_canonical_gate_metadata_keys:
+        canonical_gate_metadata_state = "unknown"
     elif missing_canonical_gate_metadata_keys:
         canonical_gate_metadata_state = "partial"
+    elif semantic_conflicts:
+        canonical_gate_metadata_state = "incompatible"
+    elif downgraded_canonical_gate_metadata_reasons:
+        canonical_gate_metadata_state = "downgraded"
     else:
         canonical_gate_metadata_state = "complete"
+    readiness_impact_by_state = {
+        "complete": "allow",
+        "downgraded": "degrade",
+        "missing": "block",
+        "partial": "block",
+        "malformed": "block",
+        "unknown": "block",
+        "incompatible": "block",
+    }
+    canonical_gate_governance_readiness_impact = readiness_impact_by_state.get(
+        canonical_gate_metadata_state,
+        "block",
+    )
+    if canonical_gate_metadata_state == "complete":
+        canonical_gate_contract_diagnosis = (
+            "Android capability_report satisfied the canonical capability contract."
+        )
+    elif canonical_gate_metadata_state == "unknown":
+        canonical_gate_contract_diagnosis = (
+            "Android capability_report contains unknown canonical gate metadata keys: "
+            f"{unknown_canonical_gate_metadata_keys}"
+        )
+    elif canonical_gate_metadata_state == "incompatible":
+        canonical_gate_contract_diagnosis = (
+            "Android capability_report contains semantically incompatible canonical "
+            f"gate metadata: {semantic_conflicts}"
+        )
+    elif canonical_gate_metadata_state == "downgraded":
+        canonical_gate_contract_diagnosis = (
+            "Android capability_report is canonically downgraded by degraded runtime "
+            f"truth: {downgraded_canonical_gate_metadata_reasons}"
+        )
+    else:
+        canonical_gate_contract_diagnosis = (
+            "Android capability_report canonical contract state is "
+            f"{canonical_gate_metadata_state}; "
+            f"missing={missing_canonical_gate_metadata_keys}; "
+            f"malformed={malformed_canonical_gate_metadata_keys}"
+        )
     reported_at = _normalize_optional_timestamp(message.get("timestamp"))
     semantics_age_s = None
     if reported_at is not None:
@@ -959,6 +1079,16 @@ def _normalize_capability_report_semantics(
         "canonical_gate_metadata_complete": canonical_gate_metadata_state == "complete",
         "missing_canonical_gate_metadata_keys": missing_canonical_gate_metadata_keys,
         "malformed_canonical_gate_metadata_keys": malformed_canonical_gate_metadata_keys,
+        "unknown_canonical_gate_metadata_keys": unknown_canonical_gate_metadata_keys,
+        "canonical_gate_semantic_conflicts": semantic_conflicts,
+        "downgraded_canonical_gate_metadata_reasons": (
+            downgraded_canonical_gate_metadata_reasons
+        ),
+        "canonical_gate_governance_readiness_impact": (
+            canonical_gate_governance_readiness_impact
+        ),
+        "canonical_gate_contract_version": ANDROID_CAPABILITY_CANONICAL_CONTRACT_VERSION,
+        "canonical_gate_contract_diagnosis": canonical_gate_contract_diagnosis,
         "runtime_attachment_session_id": _coerce_optional_str(
             message.get("runtime_attachment_session_id")
         ),

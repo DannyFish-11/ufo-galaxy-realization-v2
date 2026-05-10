@@ -586,10 +586,17 @@ def _check_snapshot_gates(device_id: str) -> tuple:
             semantics.get("canonical_gate_metadata_state") or "missing"
         ).strip().lower()
         if semantics_state != "complete":
+            diagnosis = semantics.get("canonical_gate_contract_diagnosis")
             reason = (
-                "Android capability_report canonical gate metadata is "
-                f"{semantics_state}; missing={semantics.get('missing_canonical_gate_metadata_keys', [])}; "
-                f"malformed={semantics.get('malformed_canonical_gate_metadata_keys', [])}"
+                "Android capability_report canonical gate contract is "
+                f"{semantics_state}; diagnosis={diagnosis!r}; "
+                f"missing={semantics.get('missing_canonical_gate_metadata_keys', [])}; "
+                f"malformed={semantics.get('malformed_canonical_gate_metadata_keys', [])}; "
+                f"unknown={semantics.get('unknown_canonical_gate_metadata_keys', [])}; "
+                f"conflicts={semantics.get('canonical_gate_semantic_conflicts', [])}; "
+                f"downgraded={semantics.get('downgraded_canonical_gate_metadata_reasons', [])}; "
+                "readiness_impact="
+                f"{semantics.get('canonical_gate_governance_readiness_impact', 'block')}"
             )
             local_loop_reason = reason
             if snap is None:
@@ -598,7 +605,12 @@ def _check_snapshot_gates(device_id: str) -> tuple:
                 GateEvalResult(_ANDROID_CROSS_DEVICE_GATE, False, reason, "android_capability_report_semantics"),
                 GateEvalResult(_ANDROID_GOAL_EXEC_GATE, False, reason, "android_capability_report_semantics"),
                 GateEvalResult(_ANDROID_PARALLEL_GATE, False, reason, "android_capability_report_semantics"),
-                GateEvalResult(_DEVICE_LOCAL_LOOP_GATE, False, local_loop_reason, "android_capability_report_semantics"),
+                GateEvalResult(
+                    _DEVICE_LOCAL_LOOP_GATE,
+                    False,
+                    local_loop_reason,
+                    "android_capability_report_semantics",
+                ),
                 snapshot_age_s,
             )
 
@@ -651,7 +663,9 @@ def _check_snapshot_gates(device_id: str) -> tuple:
             GateEvalResult(
                 _ANDROID_PARALLEL_GATE,
                 parallel_ok,
-                f"{cross_reason_prefix}; parallel_execution_eligibility={semantics.get('parallel_execution_eligibility')!r}",
+                f"{cross_reason_prefix}; "
+                "parallel_execution_eligibility="
+                f"{semantics.get('parallel_execution_eligibility')!r}",
                 "android_capability_report_semantics",
             ),
             GateEvalResult(

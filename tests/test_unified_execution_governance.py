@@ -1436,6 +1436,118 @@ class TestExecutionRuntimeSnapshot:
         assert device_state["android_reported_local_inference_available"] is None
         assert device_state["local_inference_available"] is False
         assert device_state["android_semantics_freshness_state"] == "unknown"
-        assert device_state["android_semantics_freshness_reason"] == "android_semantics_contract_incomplete"
+        assert (
+            device_state["android_semantics_freshness_reason"]
+            == f"android_semantics_contract_{expected_contract_state}"
+        )
         assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
         assert device_state["android_runtime_truth_usable"] is False
+
+    def test_snapshot_surfaces_unknown_contract_drift_and_blocks_truth(self):
+        device_id = "device-runtime-semantics-unknown"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "cross_device",
+                "reported_mode_state": "cross_device_active",
+                "canonical_gate_metadata_state": "unknown",
+                "canonical_gate_metadata_complete": False,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
+                "unknown_canonical_gate_metadata_keys": ["extra_capability_flag"],
+                "canonical_gate_semantic_conflicts": [],
+                "downgraded_canonical_gate_metadata_reasons": [],
+                "canonical_gate_governance_readiness_impact": "block",
+                "canonical_gate_contract_diagnosis": "unknown field extra_capability_flag",
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": 3.0,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["android_semantics_contract_state"] == "unknown"
+        assert device_state["android_semantics_unknown_keys"] == ["extra_capability_flag"]
+        assert device_state["android_semantics_governance_readiness_impact"] == "block"
+        assert device_state["android_semantics_freshness_reason"] == "android_semantics_contract_unknown"
+        assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"
+        assert device_state["android_reported_mode"] is None
+
+    def test_snapshot_surfaces_downgraded_contract_truth_and_blocks_authority(self):
+        device_id = "device-runtime-semantics-downgraded"
+        state_snapshot = MagicMock()
+        state_snapshot.offline_queue_depth = 0
+        state_snapshot.current_fallback_tier = None
+        state_snapshot.runtime_health_snapshot = {"status": "healthy"}
+        state_snapshot.is_local_ai_ready = lambda: False
+
+        with patch(
+            "core.android_device_state_store.get_device_state_snapshot",
+            return_value=state_snapshot,
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value={
+                "canonical_mode": "cross_device",
+                "reported_mode_state": "cross_device_degraded",
+                "mode_readiness_state": "degraded",
+                "cross_device_eligibility": True,
+                "goal_execution_eligibility": True,
+                "parallel_execution_eligibility": True,
+                "local_intelligence_status": "degraded",
+                "local_inference_ready": False,
+                "local_inference_available": False,
+                "canonical_gate_metadata_state": "downgraded",
+                "canonical_gate_metadata_complete": False,
+                "missing_canonical_gate_metadata_keys": [],
+                "malformed_canonical_gate_metadata_keys": [],
+                "unknown_canonical_gate_metadata_keys": [],
+                "canonical_gate_semantic_conflicts": [],
+                "downgraded_canonical_gate_metadata_reasons": [
+                    "degraded_mode_true",
+                    "local_intelligence_status_degraded",
+                    "mode_readiness_state_degraded",
+                ],
+                "canonical_gate_governance_readiness_impact": "degrade",
+                "canonical_gate_contract_diagnosis": "degraded runtime truth",
+                "absorbed_at": 123.0,
+                "reported_at": 120.0,
+                "semantics_age_s": 3.0,
+            },
+        ), patch(
+            "core.android_device_state_store.get_device_snapshot_reconciliation",
+            return_value={"status": "accepted", "reason": "initial_snapshot", "applied": True},
+        ), patch(
+            "core.android_device_state_store.list_recent_execution_events",
+            return_value=[],
+        ):
+            snapshot = get_execution_runtime_snapshot(device_ids=[device_id])
+
+        device_state = snapshot["devices"][0]
+        assert device_state["android_semantics_contract_state"] == "downgraded"
+        assert device_state["android_semantics_downgraded_reasons"] == [
+            "degraded_mode_true",
+            "local_intelligence_status_degraded",
+            "mode_readiness_state_degraded",
+        ]
+        assert device_state["android_semantics_governance_readiness_impact"] == "degrade"
+        assert (
+            device_state["android_semantics_freshness_reason"]
+            == "android_semantics_contract_downgraded"
+        )
+        assert device_state["android_runtime_truth_authority"] == "downgraded_to_unknown"

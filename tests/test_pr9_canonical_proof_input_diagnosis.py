@@ -3,14 +3,14 @@
 PR-09 Regression suite — Canonical proof-input diagnosis and observability.
 
 Validates that governance diagnosis surfaces missing / partial / malformed /
-stale / conflicting Android/runtime proof inputs as **explicit and
+unknown / downgraded / stale / conflicting Android/runtime proof inputs as **explicit and
 distinguishable** canonical explanations rather than collapsing them into
 generic outcomes.
 
 Acceptance criteria (from PR-09 problem statement):
 - Canonical degraded/conflict states become materially more observable and
   diagnosable.
-- Missing / partial / malformed / stale / conflicting semantics are
+- Missing / partial / malformed / unknown / downgraded / stale / conflicting semantics are
   distinguishable in canonical diagnostics.
 - Regression tests prove explanatory causality is preserved on real canonical
   paths.
@@ -49,6 +49,9 @@ _BASE_FRESH_COMPLETE: dict = {
     "android_semantics_contract_complete": True,
     "android_semantics_missing_keys": [],
     "android_semantics_malformed_keys": [],
+    "android_semantics_unknown_keys": [],
+    "android_semantics_conflicts": [],
+    "android_semantics_downgraded_reasons": [],
     "android_semantics_freshness_state": "fresh",
     "android_semantics_freshness_reason": "android_semantics_age_within_threshold",
     "android_runtime_truth_authority": "authoritative",
@@ -75,7 +78,7 @@ def _snap(**overrides: object) -> dict:
 
 
 class TestGroupA_ClassifyProofInputDiagnosis:
-    """All six proof-input classes are reachable and return the right shape."""
+    """All proof-input classes are reachable and return the right shape."""
 
     def test_a1_empty_snapshot_yields_missing(self) -> None:
         """No semantics at all → class=missing."""
@@ -117,7 +120,35 @@ class TestGroupA_ClassifyProofInputDiagnosis:
         causes = result["proof_input_degradation_causes"]
         assert any("malformed_canonical_gate_metadata_keys" in c for c in causes)
 
-    def test_a5_stale_freshness_state(self) -> None:
+    def test_a5_unknown_contract_keys(self) -> None:
+        """Unknown keys indicate contract drift → class=unknown."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="unknown",
+                android_semantics_unknown_keys=["extra_capability_flag"],
+            )
+        )
+        assert result["proof_input_class"] == "unknown"
+        causes = result["proof_input_degradation_causes"]
+        assert any("unknown_canonical_gate_metadata_keys" in c for c in causes)
+
+    def test_a6_downgraded_runtime_truth(self) -> None:
+        """Degraded Android truth must remain diagnosably downgraded."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="downgraded",
+                android_semantics_downgraded_reasons=[
+                    "degraded_mode_true",
+                    "mode_readiness_state_degraded",
+                ],
+                android_runtime_truth_authority="downgraded_to_unknown",
+            )
+        )
+        assert result["proof_input_class"] == "downgraded"
+        causes = result["proof_input_degradation_causes"]
+        assert any("android_semantics_downgraded" in c for c in causes)
+
+    def test_a7_stale_freshness_state(self) -> None:
         """Semantics older than threshold → class=stale."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -130,7 +161,7 @@ class TestGroupA_ClassifyProofInputDiagnosis:
         causes = result["proof_input_degradation_causes"]
         assert any("android_semantics_stale" in c for c in causes)
 
-    def test_a6_authority_downgraded_yields_stale_even_if_freshness_state_unknown(self) -> None:
+    def test_a8_authority_downgraded_yields_stale_even_if_freshness_state_unknown(self) -> None:
         """Authority downgraded → class=stale regardless of freshness_state."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -140,7 +171,7 @@ class TestGroupA_ClassifyProofInputDiagnosis:
         )
         assert result["proof_input_class"] == "stale"
 
-    def test_a7_conflicting_mode_and_eligibility(self) -> None:
+    def test_a9_conflicting_mode_and_eligibility(self) -> None:
         """mode=cross_device + cross_device_eligibility=False → class=conflicting."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -155,14 +186,14 @@ class TestGroupA_ClassifyProofInputDiagnosis:
             for c in result["proof_input_conflicts"]
         )
 
-    def test_a8_complete_and_conflict_free(self) -> None:
+    def test_a10_complete_and_conflict_free(self) -> None:
         """All keys present, fresh, no conflicts → class=complete."""
         result = classify_canonical_proof_input_diagnosis(_BASE_FRESH_COMPLETE)
         assert result["proof_input_class"] == "complete"
         assert result["proof_input_conflicts"] == []
         assert result["proof_input_degradation_causes"] == []
 
-    def test_a9_all_six_classes_are_distinguishable(self) -> None:
+    def test_a11_all_classes_are_distinguishable(self) -> None:
         """Each class must be a distinct, non-overlapping string value."""
         missing = classify_canonical_proof_input_diagnosis({})
         partial = classify_canonical_proof_input_diagnosis(
@@ -175,6 +206,19 @@ class TestGroupA_ClassifyProofInputDiagnosis:
             _snap(
                 android_semantics_contract_state="malformed",
                 android_semantics_malformed_keys=["mode_state"],
+            )
+        )
+        unknown = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="unknown",
+                android_semantics_unknown_keys=["extra_capability_flag"],
+            )
+        )
+        downgraded = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="downgraded",
+                android_semantics_downgraded_reasons=["degraded_mode_true"],
+                android_runtime_truth_authority="downgraded_to_unknown",
             )
         )
         stale = classify_canonical_proof_input_diagnosis(
@@ -195,13 +239,15 @@ class TestGroupA_ClassifyProofInputDiagnosis:
             missing["proof_input_class"],
             partial["proof_input_class"],
             malformed["proof_input_class"],
+            unknown["proof_input_class"],
+            downgraded["proof_input_class"],
             stale["proof_input_class"],
             conflicting["proof_input_class"],
             complete["proof_input_class"],
         }
-        assert len(classes) == 6, f"Expected 6 distinct classes, got: {classes}"
+        assert len(classes) == 8, f"Expected 8 distinct classes, got: {classes}"
 
-    def test_a10_conflict_takes_priority_over_malformed(self) -> None:
+    def test_a12_conflict_takes_priority_over_malformed(self) -> None:
         """Conflicting fields take priority over malformed keys in classification."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -213,7 +259,42 @@ class TestGroupA_ClassifyProofInputDiagnosis:
         )
         assert result["proof_input_class"] == "conflicting"
 
-    def test_a11_malformed_takes_priority_over_stale(self) -> None:
+    def test_a13_malformed_takes_priority_over_unknown(self) -> None:
+        """Malformed keys take priority over unknown-key drift."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="malformed",
+                android_semantics_malformed_keys=["mode_state"],
+                android_semantics_unknown_keys=["extra_capability_flag"],
+            )
+        )
+        assert result["proof_input_class"] == "malformed"
+
+    def test_a14_unknown_takes_priority_over_stale(self) -> None:
+        """Unknown keys take priority over stale because the contract drift is causal."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="unknown",
+                android_semantics_unknown_keys=["extra_capability_flag"],
+                android_semantics_freshness_state="stale",
+                android_runtime_truth_authority="downgraded_to_unknown",
+            )
+        )
+        assert result["proof_input_class"] == "unknown"
+
+    def test_a15_downgraded_takes_priority_over_stale(self) -> None:
+        """Downgraded contract truth should not be mislabeled as stale."""
+        result = classify_canonical_proof_input_diagnosis(
+            _snap(
+                android_semantics_contract_state="downgraded",
+                android_semantics_downgraded_reasons=["mode_readiness_state_degraded"],
+                android_semantics_freshness_state="unknown",
+                android_runtime_truth_authority="downgraded_to_unknown",
+            )
+        )
+        assert result["proof_input_class"] == "downgraded"
+
+    def test_a16_malformed_takes_priority_over_stale(self) -> None:
         """Malformed keys take priority over stale in classification."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -225,7 +306,7 @@ class TestGroupA_ClassifyProofInputDiagnosis:
         )
         assert result["proof_input_class"] == "malformed"
 
-    def test_a12_stale_takes_priority_over_partial(self) -> None:
+    def test_a17_stale_takes_priority_over_partial(self) -> None:
         """Stale takes priority over partial in classification."""
         result = classify_canonical_proof_input_diagnosis(
             _snap(
@@ -520,10 +601,67 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
                 f"path={path_name}: expected malformed, got {diag['proof_input_class']}"
             )
 
-    def test_c4_stale_semantics_surfaced_in_causality(self) -> None:
-        """Stale semantics → proof_input_diagnosis.proof_input_class=stale."""
+    def test_c4_unknown_semantics_surfaced_in_causality(self) -> None:
+        """Unknown contract drift → proof_input_diagnosis.proof_input_class=unknown."""
         state = self._run_governance_state(
             "device-c4",
+            {
+                "android_semantics_contract_state": "unknown",
+                "android_semantics_missing_keys": [],
+                "android_semantics_malformed_keys": [],
+                "android_semantics_unknown_keys": ["extra_capability_flag"],
+                "android_semantics_freshness_state": "fresh",
+                "android_runtime_truth_authority": "authoritative",
+                "android_reported_mode": "cross_device",
+                "android_reported_cross_device_eligibility": True,
+                "android_reported_goal_execution_eligibility": True,
+                "android_reported_local_inference_available": False,
+                "android_reported_local_inference_ready": False,
+                "android_reported_local_intelligence_status": "ready",
+            },
+        )
+        device = state["devices"][0]
+        for path_name in [p.value for p in GovernancePath]:
+            causality = device["governance_precedence"][path_name]["decision_causality"]
+            diag = causality["proof_input_diagnosis"]
+            assert diag["proof_input_class"] == "unknown", (
+                f"path={path_name}: expected unknown, got {diag['proof_input_class']}"
+            )
+
+    def test_c5_downgraded_semantics_surfaced_in_causality(self) -> None:
+        """Downgraded Android truth → proof_input_diagnosis.proof_input_class=downgraded."""
+        state = self._run_governance_state(
+            "device-c5",
+            {
+                "android_semantics_contract_state": "downgraded",
+                "android_semantics_missing_keys": [],
+                "android_semantics_malformed_keys": [],
+                "android_semantics_downgraded_reasons": [
+                    "degraded_mode_true",
+                    "mode_readiness_state_degraded",
+                ],
+                "android_semantics_freshness_state": "unknown",
+                "android_runtime_truth_authority": "downgraded_to_unknown",
+                "android_reported_mode": "cross_device",
+                "android_reported_cross_device_eligibility": True,
+                "android_reported_goal_execution_eligibility": True,
+                "android_reported_local_inference_available": False,
+                "android_reported_local_inference_ready": False,
+                "android_reported_local_intelligence_status": "degraded",
+            },
+        )
+        device = state["devices"][0]
+        for path_name in [p.value for p in GovernancePath]:
+            causality = device["governance_precedence"][path_name]["decision_causality"]
+            diag = causality["proof_input_diagnosis"]
+            assert diag["proof_input_class"] == "downgraded", (
+                f"path={path_name}: expected downgraded, got {diag['proof_input_class']}"
+            )
+
+    def test_c6_stale_semantics_surfaced_in_causality(self) -> None:
+        """Stale semantics → proof_input_diagnosis.proof_input_class=stale."""
+        state = self._run_governance_state(
+            "device-c6",
             {
                 "android_semantics_contract_state": "complete",
                 "android_semantics_missing_keys": [],
@@ -547,10 +685,10 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
                 f"path={path_name}: expected stale, got {diag['proof_input_class']}"
             )
 
-    def test_c5_conflicting_semantics_surfaced_in_causality(self) -> None:
+    def test_c7_conflicting_semantics_surfaced_in_causality(self) -> None:
         """Semantic conflicts → proof_input_diagnosis.proof_input_class=conflicting."""
         state = self._run_governance_state(
-            "device-c5",
+            "device-c7",
             {
                 "android_semantics_contract_state": "complete",
                 "android_semantics_missing_keys": [],
@@ -574,10 +712,10 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
             )
             assert len(diag["proof_input_conflicts"]) >= 1
 
-    def test_c6_complete_semantics_surfaced_in_causality(self) -> None:
+    def test_c8_complete_semantics_surfaced_in_causality(self) -> None:
         """Complete fresh semantics → proof_input_diagnosis.proof_input_class=complete."""
         state = self._run_governance_state(
-            "device-c6",
+            "device-c8",
             {
                 "android_semantics_contract_state": "complete",
                 "android_semantics_missing_keys": [],
@@ -601,10 +739,10 @@ class TestGroupC_DecisionCausalityCarriesProofInputDiagnosis:
                 f"path={path_name}: expected complete, got {diag['proof_input_class']}"
             )
 
-    def test_c7_proof_input_diagnosis_dict_has_required_keys(self) -> None:
+    def test_c9_proof_input_diagnosis_dict_has_required_keys(self) -> None:
         """proof_input_diagnosis always has the required structural keys."""
         state = self._run_governance_state(
-            "device-c7",
+            "device-c9",
             {
                 "android_semantics_contract_state": "missing",
                 "android_semantics_missing_keys": [],
@@ -645,7 +783,14 @@ class TestGroupD_BoundaryEdgeCases:
         snapshot = {k: None for k in _BASE_FRESH_COMPLETE}
         result = classify_canonical_proof_input_diagnosis(snapshot)
         assert result["proof_input_class"] in {
-            "complete", "stale", "conflicting", "malformed", "partial", "missing"
+            "complete",
+            "stale",
+            "conflicting",
+            "malformed",
+            "unknown",
+            "downgraded",
+            "partial",
+            "missing",
         }
 
     def test_d2_malformed_keys_empty_list_with_malformed_state(self) -> None:
@@ -668,7 +813,10 @@ class TestGroupD_BoundaryEdgeCases:
             )
         )
         assert result["proof_input_class"] == "conflicting"
-        assert "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false" in result["proof_input_conflicts"]
+        assert (
+            "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false"
+            in result["proof_input_conflicts"]
+        )
 
     def test_d4_inference_ready_true_but_available_false_is_conflicting(self) -> None:
         """local_inference_ready=True + local_inference_available=False is conflicting."""
@@ -682,7 +830,10 @@ class TestGroupD_BoundaryEdgeCases:
             )
         )
         assert result["proof_input_class"] == "conflicting"
-        assert "local_inference_ready_true_conflicts_with_local_inference_available_false" in result["proof_input_conflicts"]
+        assert (
+            "local_inference_ready_true_conflicts_with_local_inference_available_false"
+            in result["proof_input_conflicts"]
+        )
 
     def test_d5_freshness_reason_is_preserved_in_stale_detail(self) -> None:
         """Stale diagnosis detail contains the freshness_reason string."""

@@ -1647,7 +1647,12 @@ def _apply_android_runtime_truth_freshness_governance(
             report_semantics=None,
             device_snapshot=device_snapshot,
         )
-        snapshot["android_semantics_freshness_reason"] = "android_semantics_contract_incomplete"
+        contract_state = str(
+            snapshot.get("android_semantics_contract_state") or "incomplete"
+        ).strip().lower()
+        snapshot["android_semantics_freshness_reason"] = (
+            f"android_semantics_contract_{contract_state}"
+        )
         snapshot["android_runtime_truth_authority"] = "downgraded_to_unknown"
         return
 
@@ -1697,6 +1702,11 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         "android_semantics_contract_complete": False,
         "android_semantics_missing_keys": [],
         "android_semantics_malformed_keys": [],
+        "android_semantics_unknown_keys": [],
+        "android_semantics_conflicts": [],
+        "android_semantics_downgraded_reasons": [],
+        "android_semantics_governance_readiness_impact": "block",
+        "android_semantics_contract_diagnosis": None,
         "android_semantics_absorbed_at": 0.0,
         "android_semantics_reported_at": None,
         "android_semantics_age_s": None,
@@ -1762,6 +1772,22 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             )
             snapshot["android_semantics_malformed_keys"] = list(
                 report_semantics.get("malformed_canonical_gate_metadata_keys") or []
+            )
+            snapshot["android_semantics_unknown_keys"] = list(
+                report_semantics.get("unknown_canonical_gate_metadata_keys") or []
+            )
+            snapshot["android_semantics_conflicts"] = list(
+                report_semantics.get("canonical_gate_semantic_conflicts") or []
+            )
+            snapshot["android_semantics_downgraded_reasons"] = list(
+                report_semantics.get("downgraded_canonical_gate_metadata_reasons") or []
+            )
+            snapshot["android_semantics_governance_readiness_impact"] = str(
+                report_semantics.get("canonical_gate_governance_readiness_impact")
+                or "block"
+            )
+            snapshot["android_semantics_contract_diagnosis"] = (
+                report_semantics.get("canonical_gate_contract_diagnosis")
             )
             _semantics_absorbed_at = report_semantics.get("absorbed_at")
             try:
@@ -1965,6 +1991,25 @@ def get_execution_runtime_snapshot(
                 ),
                 "android_semantics_malformed_keys": list(
                     runtime_pressure.get("android_semantics_malformed_keys", [])
+                ),
+                "android_semantics_unknown_keys": list(
+                    runtime_pressure.get("android_semantics_unknown_keys", [])
+                ),
+                "android_semantics_conflicts": list(
+                    runtime_pressure.get("android_semantics_conflicts", [])
+                ),
+                "android_semantics_downgraded_reasons": list(
+                    runtime_pressure.get("android_semantics_downgraded_reasons", [])
+                ),
+                "android_semantics_governance_readiness_impact": str(
+                    runtime_pressure.get(
+                        "android_semantics_governance_readiness_impact",
+                        "block",
+                    )
+                    or "block"
+                ),
+                "android_semantics_contract_diagnosis": runtime_pressure.get(
+                    "android_semantics_contract_diagnosis"
                 ),
                 "android_semantics_absorbed_at": float(
                     runtime_pressure.get("android_semantics_absorbed_at", 0.0) or 0.0
@@ -2479,15 +2524,17 @@ def classify_canonical_proof_input_diagnosis(
 
     Classification priority (highest → lowest):
 
-    1. ``"conflicting"`` — semantic conflicts detected between related fields
-       (e.g., mode=cross_device + cross_device_eligibility=False).  Indicates
-       a producer disagreement; the inputs cannot all be trusted simultaneously.
+    1. ``"conflicting"`` — semantically incompatible fields were reported.
     2. ``"malformed"`` — one or more required canonical gate metadata keys carry
        invalid / unparseable values.
-    3. ``"stale"`` — semantics are present but older than the freshness threshold.
-    4. ``"partial"`` — some required canonical gate metadata keys are absent.
-    5. ``"missing"`` — no Android capability semantics were reported at all.
-    6. ``"complete"`` — all required keys present, no conflicts, fresh.
+    3. ``"unknown"`` — the payload contains unknown canonical gate metadata keys,
+       indicating contract drift between Android and V2.
+    4. ``"downgraded"`` — the contract is syntactically valid but Android itself
+       reports degraded capability truth that must reduce canonical readiness.
+    5. ``"stale"`` — semantics are present but older than the freshness threshold.
+    6. ``"partial"`` — some required canonical gate metadata keys are absent.
+    7. ``"missing"`` — no Android capability semantics were reported at all.
+    8. ``"complete"`` — all keys present, no conflicts, fresh.
 
     Parameters
     ----------
@@ -2502,7 +2549,7 @@ def classify_canonical_proof_input_diagnosis(
     -------
     Dict[str, Any]
         ``proof_input_class``
-            One of the six classification strings above.
+            One of the eight classification strings above.
         ``proof_input_detail``
             A single human-readable sentence explaining the classification.
         ``proof_input_conflicts``
@@ -2530,6 +2577,12 @@ def classify_canonical_proof_input_diagnosis(
     malformed_keys: List[str] = list(
         snapshot.get("android_semantics_malformed_keys") or []
     )
+    unknown_keys: List[str] = list(
+        snapshot.get("android_semantics_unknown_keys") or []
+    )
+    downgraded_reasons: List[str] = list(
+        snapshot.get("android_semantics_downgraded_reasons") or []
+    )
     freshness_state = str(
         snapshot.get("android_semantics_freshness_state") or "unknown"
     ).strip().lower()
@@ -2542,16 +2595,21 @@ def classify_canonical_proof_input_diagnosis(
 
     # --- semantic conflict check (highest priority) ---
     detected_conflicts = _detect_android_semantics_conflicts(snapshot)
-    if detected_conflicts:
-        for conflict in detected_conflicts:
+    if detected_conflicts or contract_state == "incompatible":
+        all_conflicts = sorted(
+            set(detected_conflicts + list(snapshot.get("android_semantics_conflicts") or []))
+        )
+        if not all_conflicts:
+            all_conflicts = ["android_capability_contract_incompatible"]
+        for conflict in all_conflicts:
             degradation_causes.append(f"semantic_conflict:{conflict}")
         return {
             "proof_input_class": "conflicting",
             "proof_input_detail": (
-                f"Android-reported fields carry {len(detected_conflicts)} semantic "
-                f"conflict(s): {', '.join(detected_conflicts)}"
+                f"Android-reported fields carry {len(all_conflicts)} semantic "
+                f"conflict(s): {', '.join(all_conflicts)}"
             ),
-            "proof_input_conflicts": detected_conflicts,
+            "proof_input_conflicts": all_conflicts,
             "proof_input_degradation_causes": degradation_causes,
             "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
         }
@@ -2567,6 +2625,42 @@ def classify_canonical_proof_input_diagnosis(
             "proof_input_detail": (
                 f"Android capability report has malformed canonical gate metadata; "
                 f"malformed_keys={cause_keys}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- unknown contract drift (next priority) ---
+    if unknown_keys or contract_state == "unknown":
+        cause_keys = unknown_keys or []
+        degradation_causes.append(
+            f"unknown_canonical_gate_metadata_keys:{cause_keys}"
+        )
+        return {
+            "proof_input_class": "unknown",
+            "proof_input_detail": (
+                "Android capability report contains unknown canonical gate "
+                f"metadata keys: {cause_keys}"
+            ),
+            "proof_input_conflicts": [],
+            "proof_input_degradation_causes": degradation_causes,
+            "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        }
+
+    # --- downgraded but not malformed/drifted ---
+    if downgraded_reasons or contract_state == "downgraded":
+        cause_reasons = downgraded_reasons or [
+            "android_capability_contract_downgraded"
+        ]
+        degradation_causes.append(
+            f"android_semantics_downgraded:{cause_reasons}"
+        )
+        return {
+            "proof_input_class": "downgraded",
+            "proof_input_detail": (
+                "Android capability report is canonically downgraded by Android-"
+                f"reported degraded truth; downgraded_reasons={cause_reasons}"
             ),
             "proof_input_conflicts": [],
             "proof_input_degradation_causes": degradation_causes,

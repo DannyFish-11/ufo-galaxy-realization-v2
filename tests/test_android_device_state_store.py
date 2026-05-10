@@ -192,10 +192,16 @@ def test_capability_report_semantics_normalize_android_mode_gate_states():
 
     assert semantics["canonical_mode"] == "cross_device"
     assert stored["canonical_mode"] == "cross_device"
-    assert semantics["canonical_gate_metadata_state"] == "complete"
-    assert semantics["canonical_gate_metadata_complete"] is True
+    assert semantics["canonical_gate_metadata_state"] == "downgraded"
+    assert semantics["canonical_gate_metadata_complete"] is False
     assert semantics["missing_canonical_gate_metadata_keys"] == []
     assert semantics["malformed_canonical_gate_metadata_keys"] == []
+    assert semantics["downgraded_canonical_gate_metadata_reasons"] == [
+        "degraded_mode_true",
+        "local_intelligence_status_degraded",
+        "mode_readiness_state_degraded",
+    ]
+    assert semantics["canonical_gate_governance_readiness_impact"] == "degrade"
 
 
 def test_capability_report_semantics_surface_partial_and_malformed_contract_metadata():
@@ -216,6 +222,58 @@ def test_capability_report_semantics_surface_partial_and_malformed_contract_meta
     assert "cross_device_eligibility" in semantics["malformed_canonical_gate_metadata_keys"]
     assert "goal_execution_eligibility" in semantics["missing_canonical_gate_metadata_keys"]
     assert "local_inference_available" in semantics["missing_canonical_gate_metadata_keys"]
+
+
+def test_capability_report_semantics_reject_unknown_contract_keys():
+    semantics = absorb_capability_report_semantics(
+        "gate-dev-unknown",
+        {
+            "metadata": {
+                "degraded_mode": False,
+                "mode_state": "cross_device_active",
+                "mode_readiness_state": "ready",
+                "cross_device_eligibility": True,
+                "goal_execution_eligibility": True,
+                "parallel_execution_eligibility": True,
+                "local_intelligence_status": "ready",
+                "local_inference_ready": True,
+                "local_inference_available": True,
+                "extra_capability_flag": True,
+            }
+        },
+    )
+
+    assert semantics["canonical_gate_metadata_state"] == "unknown"
+    assert semantics["canonical_gate_metadata_complete"] is False
+    assert semantics["unknown_canonical_gate_metadata_keys"] == ["extra_capability_flag"]
+    assert semantics["canonical_gate_governance_readiness_impact"] == "block"
+
+
+def test_capability_report_semantics_reject_semantically_incompatible_payloads():
+    semantics = absorb_capability_report_semantics(
+        "gate-dev-conflict",
+        {
+            "metadata": {
+                "degraded_mode": False,
+                "mode_state": "cross_device_active",
+                "mode_readiness_state": "ready",
+                "cross_device_eligibility": False,
+                "goal_execution_eligibility": True,
+                "parallel_execution_eligibility": True,
+                "local_intelligence_status": "ready",
+                "local_inference_ready": True,
+                "local_inference_available": True,
+            }
+        },
+    )
+
+    assert semantics["canonical_gate_metadata_state"] == "incompatible"
+    assert semantics["canonical_gate_metadata_complete"] is False
+    assert semantics["canonical_gate_semantic_conflicts"] == [
+        "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false",
+        "mode_cross_device_conflicts_with_cross_device_eligibility_false",
+    ]
+    assert semantics["canonical_gate_governance_readiness_impact"] == "block"
 
 
 # ---------------------------------------------------------------------------
