@@ -51,7 +51,18 @@ def _load_real_android_runtime_evidence() -> Dict[str, Any]:
     return evidence
 
 
-def _extract_runtime_messages(evidence: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+def _find_message_by_type(messages: list[Any], message_type: str) -> Dict[str, Any] | None:
+    return next(
+        (
+            m
+            for m in messages
+            if isinstance(m, dict) and str(m.get("type", "")).strip().lower() == message_type
+        ),
+        None,
+    )
+
+
+def _extract_runtime_payloads(evidence: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     messages = evidence.get("messages")
     if not isinstance(messages, list):
         messages = evidence.get("aip_messages")
@@ -60,22 +71,8 @@ def _extract_runtime_messages(evidence: Dict[str, Any]) -> Tuple[str, Dict[str, 
     if not isinstance(messages, list):
         messages = []
 
-    state_msg = next(
-        (
-            m
-            for m in messages
-            if isinstance(m, dict) and str(m.get("type", "")).strip().lower() == "device_state_snapshot"
-        ),
-        None,
-    )
-    event_msg = next(
-        (
-            m
-            for m in messages
-            if isinstance(m, dict) and str(m.get("type", "")).strip().lower() == "device_execution_event"
-        ),
-        None,
-    )
+    state_msg = _find_message_by_type(messages, "device_state_snapshot")
+    event_msg = _find_message_by_type(messages, "device_execution_event")
 
     snapshot_payload = evidence.get("device_state_snapshot_payload")
     execution_payload = evidence.get("device_execution_event_payload")
@@ -119,7 +116,7 @@ def test_real_android_artifact_declares_real_runtime_participation() -> None:
 
 def test_real_android_runtime_participation_drives_v2_governance_regression_path() -> None:
     evidence = _load_real_android_runtime_evidence()
-    device_id, snapshot_payload, execution_payload = _extract_runtime_messages(evidence)
+    device_id, snapshot_payload, execution_payload = _extract_runtime_payloads(evidence)
 
     _clear_execution_governance_runtime_state()
     reset_android_device_state_store()
