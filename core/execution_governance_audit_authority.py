@@ -101,6 +101,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.unified_execution_governance import get_uplink_truth_state
+
 logger = logging.getLogger("Galaxy.ExecutionGovernanceAuditAuthority")
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,10 @@ class GovernanceAuditStage(str, Enum):
     """
 
     admission = "admission"
-    """Execution was admitted by the governance layer (accepted=True verdict)."""
+    """Admission evidence inferred retroactively from the presence of lifecycle events
+    or uplink records.  The governance runtime does not emit an explicit admission event;
+    instead, the existence of any governance artifact (lifecycle event or uplink record)
+    serves as evidence that the execution was accepted and entered the governance layer."""
 
     lifecycle = "lifecycle"
     """At least one lifecycle event has been recorded for the execution."""
@@ -304,6 +309,21 @@ _STAGE_ORDER: List[GovernanceAuditStage] = [
     GovernanceAuditStage.reconciliation,
     GovernanceAuditStage.terminal,
 ]
+
+# Required predecessor stages for each stage.  uplink_observation is intentionally
+# absent as a required predecessor: executions may reach reconciliation and terminal
+# truth via center-lifecycle authority alone, without any uplink records.
+_REQUIRED_PREDECESSORS: Dict[GovernanceAuditStage, List[GovernanceAuditStage]] = {
+    GovernanceAuditStage.lifecycle: [GovernanceAuditStage.admission],
+    GovernanceAuditStage.reconciliation: [
+        GovernanceAuditStage.admission,
+        GovernanceAuditStage.lifecycle,
+    ],
+    GovernanceAuditStage.terminal: [
+        GovernanceAuditStage.admission,
+        GovernanceAuditStage.lifecycle,
+    ],
+}
 
 
 def _stage_index(stage: GovernanceAuditStage) -> int:
@@ -483,8 +503,6 @@ def build_governance_authority_evidence(
         Complete authority chain evidence, including audit entries for each
         stage and the highest stage reached.
     """
-    from core.unified_execution_governance import get_uplink_truth_state  # noqa: PLC0415
-
     truth = get_uplink_truth_state(execution_id)
 
     # Build one entry per stage
@@ -548,8 +566,6 @@ def verify_governance_authority_integrity(
         Empty when all invariants pass.  Non-empty lists indicate
         governance authority regressions that MUST be treated as bugs.
     """
-    from core.unified_execution_governance import get_uplink_truth_state  # noqa: PLC0415
-
     violations: List[GovernanceAuthorityViolation] = []
     truth = get_uplink_truth_state(execution_id)
     evidence = build_governance_authority_evidence(execution_id, device_id)
@@ -592,15 +608,7 @@ def verify_governance_authority_integrity(
             ))
 
     # I-A3: Monotonic chain — the core stages must be forward-progressing.
-    #       Specifically: reconciliation and terminal MUST NOT be reached
-    #       without prior lifecycle evidence.  uplink_observation is an
-    #       optional stage: executions may reach terminal truth via the
-    #       center-lifecycle authority alone, without any uplinks.
-    _REQUIRED_PREDECESSORS: Dict[GovernanceAuditStage, List[GovernanceAuditStage]] = {
-        GovernanceAuditStage.lifecycle: [GovernanceAuditStage.admission],
-        GovernanceAuditStage.reconciliation: [GovernanceAuditStage.admission, GovernanceAuditStage.lifecycle],
-        GovernanceAuditStage.terminal: [GovernanceAuditStage.admission, GovernanceAuditStage.lifecycle],
-    }
+    #       Uses the module-level _REQUIRED_PREDECESSORS constant.
     by_stage_map = {e.stage: e for e in evidence.audit_entries}
     for stage, required_preds in _REQUIRED_PREDECESSORS.items():
         stage_entry = by_stage_map.get(stage)
