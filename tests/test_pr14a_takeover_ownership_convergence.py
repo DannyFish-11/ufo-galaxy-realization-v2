@@ -126,6 +126,12 @@ class TestTakeoverOwnershipConvergence:
             device_id="dev-A05",
             accepted=True,
         )
+        first_verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id=takeover_id,
+            device_id="dev-A05",
+            session_id=session_id,
+        )
+        assert first_verdict.ownership_state.value == "delegated_takeover_confirmed"
         outcome = coordinator.on_takeover_response(
             session_id=session_id,
             takeover_id=takeover_id,

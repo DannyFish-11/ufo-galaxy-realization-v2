@@ -579,7 +579,9 @@ def adjudicate_takeover_ownership_convergence(
         accepted_count = sum(1 for r in records if r.decision == TakeoverDecision.accepted)
         rejected_count = sum(1 for r in records if r.decision == TakeoverDecision.rejected)
         unknown_count = sum(1 for r in records if r.decision == TakeoverDecision.unknown)
-        latest_decision = records[0].decision if records else TakeoverDecision.unknown
+        latest_decision = TakeoverDecision.unknown
+        if records:
+            latest_decision = records[0].decision
 
         has_session_id_conflict = bool(
             session_id
