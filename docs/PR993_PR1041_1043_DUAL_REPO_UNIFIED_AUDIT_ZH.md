@@ -3,7 +3,8 @@
 > 类型：单 PR、双仓一体化联合审查交付物（中文）  
 > 审查对象：`DannyFish-11/ufo-galaxy-realization-v2` + `DannyFish-11/ufo-galaxy-android`  
 > V2 基线：`061633fbaa6a7c1743baa57ffcf656e01226014f`  
-> Android 基线：`894fde816a46899830e8985e8d6ee06d236ab126`（GitHub API 返回 ref）  
+> Android 基线：`894fde816a46899830e8985e8d6ee06d236ab126`（GitHub API 返回的仓库默认分支提交 ref，审查时点）  
+> 审查时点：`2026-05-10`  
 > 方法：只以真实代码/真实 handler/真实状态路径/真实测试为证据；不以命名相似或文档叙事替代实现证据。
 
 ---
@@ -38,6 +39,8 @@
 ## 2) 按定义逐项联合审查（PR993 + PR1041~1043）
 
 > 说明：仓内无 `PR1041/1042/1043` 字面标签。此处按已合并语义主题进行“定义域映射审查”，并显式区分定义层/实现层/证明层/跨仓运行层。
+>
+> 这三个编号来自本次 issue 的外部审查基线要求（任务定义层），并非仓内源码中的内建标签。
 
 | 定义域 | 定义层期望 | V2 实现 | Android 实现 | 联合完成级别 | 结论 |
 |---|---|---|---|---|---|
@@ -146,6 +149,7 @@
   - Android：CI 接入 `assembleDebug`、`testDebugUnitTest`、最小 emulator smoke
 - **依赖顺序**：首要
 - **验收标准**：至少 1 条真实 `register→capability→dispatch→result→truth` 跨仓 CI 绿灯
+- **验收标准**：至少 3 条真实跨仓 CI 场景（主链成功、断连恢复、takeover 失败回落）全部绿灯
 - **推进效果**：从“回归证明存在”推进到“跨仓运行证据开始成立”
 
 ### PR-B：takeover + recovery ownership transfer 实机证据
@@ -192,4 +196,3 @@
    - resumed ownership transfer 的跨仓实证
    - full mesh runtime closed
 6. **最高优先级真实缺口**：先补“真实双仓运行回归闭环（PR-A）”，再补“接管恢复权威闭环（PR-B）”。没有这两项，任何“已完全兑现定义”的说法都不严谨。
-
