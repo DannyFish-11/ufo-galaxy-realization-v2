@@ -27,7 +27,7 @@
    2.11 [Distributed-Center Coordination Semantics](#211-distributed-center-coordination-semantics)  
    2.12 [Local-Link vs. Cross-Device Path Consistency](#212-local-link-vs-cross-device-path-consistency)  
    2.13 [Mesh/Network Participation and Degraded Partial Participation](#213-meshnetwork-participation-and-degraded-partial-participation)  
-   2.14 [Recovery Semantics After Interruption, Partition, Reconnect, Restart](#214-recovery-semantics-after-interruption-partition-reconnect-restart)  
+   2.14 [Recovery Semantics After Interruption, Partition, Reconnect, Restart, or Stale Replay](#214-recovery-semantics-after-interruption-partition-reconnect-restart-or-stale-replay)  
    2.15 [Multi-Device Simultaneous or Conflicting Takeover Conditions](#215-multi-device-simultaneous-or-conflicting-takeover-conditions)  
    2.16 [Authoritative Source Selection and Convergence Under Disagreement](#216-authoritative-source-selection-and-convergence-under-disagreement)  
    2.17 [True Two-Runtime / Multi-Runtime Cross-Repository Validation](#217-true-two-runtime--multi-runtime-cross-repository-validation)  
@@ -1052,7 +1052,7 @@ Duration: 2 sprints.
 **Milestone 7 — True two-runtime validation**: Phase 7 items complete. Joint CI gate, real two-runtime
 integration tests, and network-realistic convergence tests are operational. Duration: 3 sprints.
 
-**Total estimated path**: 16 sprints (assuming 2-week sprints, ~8 months).  
+**Total estimated path**: 16 sprints (assuming 2-week sprints ≈ 32 weeks, ~7–8 months).  
 Items within the same phase can be parallelized across teams.
 
 ---
