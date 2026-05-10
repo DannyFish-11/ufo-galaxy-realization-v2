@@ -121,7 +121,7 @@
 | true cross-repo runtime regression | 当前未看到可复现实机双仓 CI 证据 | — | 仍是核心缺口 |
 
 补充证据：
-- V2 工作流注释已明确 Android 仓还需独立 `./gradlew assembleDebug / testDebugUnitTest / emulator smoke` 才能形成完整双仓 CI 闭环（`.github/workflows/dual_repo_integration.yml`）。
+- V2 现有工作流（已存在文件 `.github/workflows/dual_repo_integration.yml`）注释已明确：Android 仓仍需独立 `./gradlew assembleDebug / testDebugUnitTest / emulator smoke`，才能形成完整双仓 CI 闭环。
 
 ---
 
