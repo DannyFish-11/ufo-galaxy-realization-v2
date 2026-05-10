@@ -30,8 +30,9 @@ C.  evaluate_android_evidence_integration: complete/strong Android evidence →
     allow verdict with all dimensions passing.
 
 D.  Capability truth degradation → deny:
-    degraded proof_input_class ('missing', 'stale', 'conflicting',
-    'downgraded') causes integration_allowed=False with diagnosable causes.
+    non-complete proof_input_class ('missing', 'stale', 'conflicting',
+    'downgraded', 'partial', 'unknown', 'malformed') causes
+    integration_allowed=False with diagnosable causes.
 
 E.  Lifecycle truth degradation → deny:
     missing_remote / stale_remote / conflicting_remote lifecycle truth causes
@@ -73,8 +74,7 @@ N.  Prior PR module sentinels are still present and accessible from within
 from __future__ import annotations
 
 import json
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -387,7 +387,10 @@ class TestContractValidEvidence:
 class TestCapabilityTruthDegradation:
     """Each degrading capability truth class must produce integration_allowed=False."""
 
-    @pytest.mark.parametrize("proof_class", ["missing", "stale", "conflicting", "downgraded"])
+    @pytest.mark.parametrize(
+        "proof_class",
+        ["missing", "stale", "conflicting", "downgraded", "partial", "unknown", "malformed"],
+    )
     def test_degraded_capability_class_denies(self, proof_class: str) -> None:
         from core.android_evidence_integration_pipeline import (
             _evaluate_capability_truth_dimension,
@@ -407,7 +410,10 @@ class TestCapabilityTruthDegradation:
             assert result.passed is False
             assert result.grade in (AndroidEvidenceGrade.absent, AndroidEvidenceGrade.degraded)
 
-    @pytest.mark.parametrize("proof_class", ["missing", "stale", "conflicting", "downgraded"])
+    @pytest.mark.parametrize(
+        "proof_class",
+        ["missing", "stale", "conflicting", "downgraded", "partial", "unknown", "malformed"],
+    )
     def test_degraded_capability_causes_overall_deny(self, proof_class: str) -> None:
         mock_diagnosis = {
             "proof_input_class": proof_class,
@@ -480,6 +486,25 @@ class TestCapabilityTruthDegradation:
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
+            assert result.grade == AndroidEvidenceGrade.degraded
+
+    def test_partial_capability_grade_is_degraded(self) -> None:
+        from core.android_evidence_integration_pipeline import (
+            _evaluate_capability_truth_dimension,
+        )
+
+        mock_diagnosis = {
+            "proof_input_class": "partial",
+            "proof_input_degradation_causes": ["missing_canonical_gate_metadata_keys:['android_reported_mode']"],
+            "proof_input_conflicts": [],
+        }
+        with patch(
+            "core.android_evidence_integration_pipeline."
+            "classify_canonical_proof_input_diagnosis",
+            return_value=mock_diagnosis,
+        ):
+            result = _evaluate_capability_truth_dimension("dev_test", {})
+            assert result.passed is False
             assert result.grade == AndroidEvidenceGrade.degraded
 
     def test_complete_capability_passes(self) -> None:

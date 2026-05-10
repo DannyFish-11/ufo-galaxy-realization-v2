@@ -125,7 +125,11 @@ try:
     )
 except Exception:  # pragma: no cover
     def classify_canonical_proof_input_diagnosis(snapshot):  # type: ignore[misc]
-        return {"proof_input_class": "missing", "proof_input_degradation_causes": ["module_unavailable"], "proof_input_conflicts": []}
+        return {
+            "proof_input_class": "missing",
+            "proof_input_degradation_causes": ["module_unavailable"],
+            "proof_input_conflicts": [],
+        }
 
     def get_execution_lifecycle_truth_binding(device_id):  # type: ignore[misc]
         return None  # type: ignore[return-value]
@@ -178,8 +182,7 @@ END_TO_END_ANDROID_EVIDENCE_GATE_POLICY: str = (
     "V2 canonical execution readiness and governance decisions MUST be gated by "
     "real or contract-valid Android evidence across four dimensions: "
     "(1) CAPABILITY TRUTH — Android capability truth quality classified from "
-    "    classify_canonical_proof_input_diagnosis() must not be 'missing', "
-    "    'stale', 'conflicting', or 'downgraded'; "
+    "    classify_canonical_proof_input_diagnosis() must be 'complete'; "
     "(2) LIFECYCLE TRUTH — Android execution lifecycle truth quality from "
     "    get_execution_lifecycle_truth_binding() must not be "
     "    'missing_remote', 'stale_remote', or 'conflicting_remote' when V2 "
@@ -427,9 +430,10 @@ class AndroidEvidenceIntegrationVerdict:
 # Internal helpers — one per evidence dimension
 # ---------------------------------------------------------------------------
 
-# Capability truth quality values that degrade the gate.
-_DEGRADING_CAPABILITY_TRUTH_CLASSES: frozenset = frozenset(
-    {"missing", "stale", "conflicting", "downgraded"}
+# Capability truth quality values that are explicitly non-passing.
+# Only proof_input_class="complete" is treated as positive capability evidence.
+_NON_PASSING_CAPABILITY_TRUTH_CLASSES: frozenset = frozenset(
+    {"missing", "stale", "conflicting", "downgraded", "partial", "unknown", "malformed"}
 )
 
 # Lifecycle truth quality values that degrade the gate when V2 has active
@@ -446,8 +450,10 @@ def _evaluate_capability_truth_dimension(
     """Evaluate the capability truth dimension for *device_id*.
 
     Reads Android capability snapshot quality from
-    ``classify_canonical_proof_input_diagnosis``.  Missing, stale,
-    conflicting, or downgraded truth → DEGRADED.
+    ``classify_canonical_proof_input_diagnosis``. Only ``proof_input_class=
+    "complete"`` passes this dimension. All other classes are explicitly
+    non-passing so Android-backed evidence remains the canonical source of
+    truth for execution readiness.
     """
     try:
         snapshot = runtime_state or {}
@@ -456,13 +462,17 @@ def _evaluate_capability_truth_dimension(
         degradation_causes = list(diagnosis.get("proof_input_degradation_causes") or [])
         conflicts = list(diagnosis.get("proof_input_conflicts") or [])
 
-        if proof_class in _DEGRADING_CAPABILITY_TRUTH_CLASSES:
+        if proof_class != "complete":
+            if proof_class not in _NON_PASSING_CAPABILITY_TRUTH_CLASSES:
+                degradation_causes.append(
+                    f"unrecognized_proof_input_class:{proof_class or 'missing'}"
+                )
             return AndroidEvidenceDimensionResult(
                 dimension=AndroidEvidenceDimension.capability_truth,
                 grade=AndroidEvidenceGrade.degraded if proof_class != "missing" else AndroidEvidenceGrade.absent,
                 passed=False,
                 reason=(
-                    f"capability_truth_class={proof_class!r} is in degrading set; "
+                    f"capability_truth_class={proof_class!r} is non-passing; "
                     f"optimistic_fallback_eliminated_by:"
                     f"ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY"
                 ),
@@ -474,14 +484,9 @@ def _evaluate_capability_truth_dimension(
                 },
             )
 
-        grade = (
-            AndroidEvidenceGrade.strong
-            if proof_class == "complete"
-            else AndroidEvidenceGrade.adequate
-        )
         return AndroidEvidenceDimensionResult(
             dimension=AndroidEvidenceDimension.capability_truth,
-            grade=grade,
+            grade=AndroidEvidenceGrade.strong,
             passed=True,
             reason=f"capability_truth_class={proof_class!r} is non-degrading",
             detail={
