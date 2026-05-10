@@ -89,7 +89,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.UnifiedExecutionGovernance")
 
@@ -1117,6 +1118,7 @@ _TERMINAL_LIFECYCLE_PHASES: frozenset[str] = frozenset(
         ExecutionLifecyclePhase.succeeded.value,
         ExecutionLifecyclePhase.failed.value,
         ExecutionLifecyclePhase.timed_out.value,
+        ExecutionLifecyclePhase.interrupted.value,
         ExecutionLifecyclePhase.cancelled.value,
     }
 )
@@ -1125,8 +1127,38 @@ _SUCCESSFUL_REPORTED_STATUSES: frozenset[str] = frozenset(
 )
 _FAILED_REPORTED_STATUSES: frozenset[str] = frozenset({"failed", "failure", "error"})
 _CANCELLED_REPORTED_STATUSES: frozenset[str] = frozenset({"cancelled", "canceled"})
+_ABORTED_REPORTED_STATUSES: frozenset[str] = frozenset({"aborted", "abort"})
 _TIMED_OUT_REPORTED_STATUSES: frozenset[str] = frozenset({"timed_out", "timeout"})
+_INTERRUPTED_REPORTED_STATUSES: frozenset[str] = frozenset({"interrupted", "interrupt"})
+_PARTIAL_SUCCESS_REPORTED_STATUSES: frozenset[str] = frozenset(
+    {"partial", "partial_success", "partially_succeeded", "degraded_success"}
+)
 _EXCEPTIONAL_RUNTIME_HEALTH_STATES: frozenset[str] = frozenset({"degraded", "recovered"})
+_CANONICAL_TERMINAL_OUTCOME_SUCCESS: str = "success"
+_CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS: str = "partial_success"
+_CANONICAL_TERMINAL_OUTCOME_FAILURE: str = "failure"
+_CANONICAL_TERMINAL_OUTCOME_ABORTED: str = "aborted"
+_CANONICAL_TERMINAL_OUTCOME_TIMEOUT: str = "timeout"
+_CANONICAL_TERMINAL_OUTCOME_INTERRUPTED: str = "interrupted"
+_TERMINAL_OUTCOME_VALUES: frozenset[str] = frozenset(
+    {
+        _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        _CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS,
+        _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        _CANONICAL_TERMINAL_OUTCOME_ABORTED,
+        _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
+        _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
+    }
+)
+_LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME: Mapping[str, str] = MappingProxyType(
+    {
+        ExecutionLifecyclePhase.succeeded.value: _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        ExecutionLifecyclePhase.failed.value: _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        ExecutionLifecyclePhase.timed_out.value: _CANONICAL_TERMINAL_OUTCOME_TIMEOUT,
+        ExecutionLifecyclePhase.cancelled.value: _CANONICAL_TERMINAL_OUTCOME_ABORTED,
+        ExecutionLifecyclePhase.interrupted.value: _CANONICAL_TERMINAL_OUTCOME_INTERRUPTED,
+    }
+)
 
 
 def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -1140,9 +1172,21 @@ def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[s
         return ExecutionLifecyclePhase.failed.value
     if normalized_status in _CANCELLED_REPORTED_STATUSES:
         return ExecutionLifecyclePhase.cancelled.value
+    if normalized_status in _ABORTED_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.cancelled.value
     if normalized_status in _TIMED_OUT_REPORTED_STATUSES:
         return ExecutionLifecyclePhase.timed_out.value
+    if normalized_status in _INTERRUPTED_REPORTED_STATUSES:
+        return ExecutionLifecyclePhase.interrupted.value
+    if normalized_status in _PARTIAL_SUCCESS_REPORTED_STATUSES:
+        return _CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS
+    normalized_outcome = str(payload.get("outcome") or "").strip().lower()
+    if normalized_outcome in _TERMINAL_OUTCOME_VALUES:
+        return normalized_outcome
 
+    normalized_terminal_phase = str(payload.get("terminal_phase") or "").strip().lower()
+    if normalized_terminal_phase in _TERMINAL_LIFECYCLE_PHASES:
+        return normalized_terminal_phase
     normalized_phase = str(payload.get("phase") or "").strip().lower()
     if normalized_phase in _TERMINAL_LIFECYCLE_PHASES:
         return normalized_phase
@@ -1156,6 +1200,44 @@ def _normalize_reported_outcome(payload: Optional[Dict[str, Any]]) -> Optional[s
     }:
         return normalized_phase
     return None
+
+
+def _normalize_terminal_outcome(outcome: Optional[str]) -> Optional[str]:
+    normalized = str(outcome or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized in _LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME:
+        return _LIFECYCLE_PHASE_TO_CANONICAL_TERMINAL_OUTCOME[normalized]
+    if normalized in _TERMINAL_OUTCOME_VALUES:
+        return normalized
+    return None
+
+
+def _merge_reported_terminal_outcomes(
+    result_outcome: Optional[str],
+    state_outcome: Optional[str],
+) -> Optional[str]:
+    result_terminal = _normalize_terminal_outcome(result_outcome)
+    state_terminal = _normalize_terminal_outcome(state_outcome)
+    if result_terminal and state_terminal:
+        if result_terminal == state_terminal:
+            return result_terminal
+        # partial_success is reserved for explicit mixed success/failure evidence.
+        # Other terminal mismatches (e.g. timeout vs failure) are treated as
+        # conflicts and keep deterministic precedence rather than collapsing to
+        # partial_success.
+        if {result_terminal, state_terminal} == {
+            _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+            _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        }:
+            # Mixed terminal success/failure means some execution units produced
+            # value while others failed, so this is the canonical partial_success
+            # branch rather than a pure terminal conflict.
+            return _CANONICAL_TERMINAL_OUTCOME_PARTIAL_SUCCESS
+        # For non success/failure terminal mismatches, keep deterministic
+        # precedence to the latest state uplink terminal observation.
+        return state_terminal
+    return result_terminal or state_terminal
 
 
 def _normalize_reported_runtime_health(state_payload: Optional[Dict[str, Any]]) -> str:
@@ -1199,11 +1281,21 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         if lifecycle_history
         else 0.0
     )
-    is_terminal = latest_phase in _TERMINAL_LIFECYCLE_PHASES
+    lifecycle_terminal_outcome = _normalize_terminal_outcome(latest_phase)
+    is_terminal = bool(lifecycle_terminal_outcome)
     reported_result_outcome = _normalize_reported_outcome(latest_result_payload)
     reported_state_outcome = _normalize_reported_outcome(latest_state_payload)
+    reported_result_terminal_outcome = _normalize_terminal_outcome(reported_result_outcome)
+    reported_state_terminal_outcome = _normalize_terminal_outcome(reported_state_outcome)
+    reported_terminal_outcome = _merge_reported_terminal_outcomes(
+        reported_result_outcome,
+        reported_state_outcome,
+    )
     reported_runtime_health = _normalize_reported_runtime_health(latest_state_payload)
     reported_runtime_health_reason = _extract_reported_runtime_health_reason(latest_state_payload)
+    # reported_outcome keeps backward-compatible phase-level projection
+    # (legacy callers may rely on running/admitted/etc). Terminal callers
+    # should use *_terminal_outcome fields for canonical completion closure.
     reported_outcome = reported_result_outcome or reported_state_outcome
     has_incomplete_uplink_data = bool(
         latest_result_payload is None or latest_state_payload is None
@@ -1211,23 +1303,57 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     has_partial_authoritative_observation = bool(
         latest_phase and has_incomplete_uplink_data
     )
-    reported_outcome_recorded_at = (
-        latest_result_recorded_at
-        if reported_result_outcome is not None
-        else latest_state_recorded_at
-    )
+    if reported_result_terminal_outcome and reported_state_terminal_outcome:
+        if reported_result_terminal_outcome == reported_state_terminal_outcome:
+            reported_terminal_outcome_recorded_at = max(
+                float(latest_result_recorded_at or 0.0),
+                float(latest_state_recorded_at or 0.0),
+            )
+        elif {reported_result_terminal_outcome, reported_state_terminal_outcome} == {
+            _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+            _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+        }:
+            reported_terminal_outcome_recorded_at = max(
+                float(latest_result_recorded_at or 0.0),
+                float(latest_state_recorded_at or 0.0),
+            )
+        else:
+            reported_terminal_outcome_recorded_at = latest_state_recorded_at
+    elif reported_result_terminal_outcome:
+        reported_terminal_outcome_recorded_at = latest_result_recorded_at
+    elif reported_state_terminal_outcome:
+        reported_terminal_outcome_recorded_at = latest_state_recorded_at
+    else:
+        reported_terminal_outcome_recorded_at = None
     outcome_conflict = bool(
-        is_terminal
-        and reported_outcome in _TERMINAL_LIFECYCLE_PHASES
-        and reported_outcome != latest_phase
+        lifecycle_terminal_outcome
+        and reported_terminal_outcome
+        and reported_terminal_outcome != lifecycle_terminal_outcome
     )
     delayed_observation = bool(
         outcome_conflict
         and latest_lifecycle_event_at > 0.0
-        and reported_outcome_recorded_at is not None
-        and reported_outcome_recorded_at > 0.0
-        and reported_outcome_recorded_at
+        and reported_terminal_outcome_recorded_at is not None
+        and reported_terminal_outcome_recorded_at > 0.0
+        and reported_terminal_outcome_recorded_at
         > latest_lifecycle_event_at
+    )
+    in_progress_terminal_observation = bool(
+        latest_phase and not lifecycle_terminal_outcome and reported_terminal_outcome
+    )
+    terminal_truth_authoritative_source = (
+        "center_lifecycle"
+        if lifecycle_terminal_outcome
+        else (
+            "reported_uplink"
+            if (reported_terminal_outcome and not latest_phase)
+            else "none"
+        )
+    )
+    canonical_terminal_outcome = (
+        lifecycle_terminal_outcome
+        if lifecycle_terminal_outcome
+        else (reported_terminal_outcome if not latest_phase else None)
     )
     if outcome_conflict:
         reconciliation_status = (
@@ -1246,9 +1372,15 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     elif is_terminal:
         reconciliation_status = "accepted"
         reconciliation_reason = "authoritative_terminal_phase_aligned_with_observation"
+    elif in_progress_terminal_observation:
+        reconciliation_status = "terminal_observation_held_for_lifecycle_authority"
+        reconciliation_reason = "reported_terminal_outcome_arrived_before_authoritative_lifecycle_termination"
     elif latest_phase:
         reconciliation_status = "in_progress"
         reconciliation_reason = "authoritative_lifecycle_not_terminal"
+    elif reported_terminal_outcome:
+        reconciliation_status = "uplink_only_terminal_observation"
+        reconciliation_reason = "reported_terminal_outcome_without_lifecycle_authority"
     elif reported_outcome:
         reconciliation_status = "uplink_only_observation"
         reconciliation_reason = "reported_observation_without_lifecycle_authority"
@@ -1260,7 +1392,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         if reported_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
         else "stable"
     )
-    canonical_outcome = latest_phase or reported_outcome
+    canonical_outcome = latest_phase or reported_outcome or reported_terminal_outcome
 
     return {
         "execution_id": execution_id,
@@ -1277,10 +1409,14 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "lifecycle_event_count": len(lifecycle_history),
         "reported_outcome": reported_outcome,
         "canonical_outcome": canonical_outcome,
+        "reported_terminal_outcome": reported_terminal_outcome,
+        "canonical_terminal_outcome": canonical_terminal_outcome,
+        "terminal_truth_authoritative_source": terminal_truth_authoritative_source,
+        "terminal_truth_determined": canonical_terminal_outcome is not None,
         "authoritative_outcome_source": (
             "center_lifecycle"
             if latest_phase
-            else ("reported_uplink" if reported_outcome else "none")
+            else ("reported_uplink" if (reported_outcome or reported_terminal_outcome) else "none")
         ),
         "reported_runtime_health": reported_runtime_health,
         "reported_runtime_health_reason": reported_runtime_health_reason,
@@ -1295,6 +1431,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reconciliation_conflict": outcome_conflict,
         "reconciliation_delayed_observation": delayed_observation,
         "reconciliation_partial_observation": has_partial_authoritative_observation,
+        "reconciliation_terminal_observation_held": in_progress_terminal_observation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     }
