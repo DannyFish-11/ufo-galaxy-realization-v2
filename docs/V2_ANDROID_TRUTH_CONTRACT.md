@@ -133,8 +133,10 @@ diagnostics aligned in one canonical governance view.
 - `complete` — all required semantics present, fresh, and conflict-free
 
 Only `complete` is positive evidence. Degraded classes are preserved in
-`proof_input_diagnosis`, and PR-7A additionally upgrades `missing`, `stale`,
-`conflicting`, and `downgraded` into canonical gate denials.
+`proof_input_diagnosis`, and canonical gate evaluation upgrades any
+non-complete / incompatible truth class (`missing`, `stale`, `conflicting`,
+`partial`, `malformed`, `unknown`, `incompatible`, `downgraded`) into
+canonical gate denial.
 
 ### Lifecycle truth
 
