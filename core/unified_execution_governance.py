@@ -2039,7 +2039,18 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             snapshot["latest_execution_event_phase"] = _phase or None
             snapshot["latest_execution_event_absorbed_at"] = _absorbed
             snapshot["latest_execution_event_age_s"] = _age_s
-            if _phase in {"planning", "grounding", "execution", "replan"} and _age_s < EXECUTION_BUSY_THRESHOLD_SECONDS:
+            if _phase in {
+                "planning",
+                "grounding",
+                "execution",
+                "replan",
+                "running",
+                "admitted",
+                "execution_started",
+                "execution_progress",
+                "active",
+                "activating",
+            } and _age_s < EXECUTION_BUSY_THRESHOLD_SECONDS:
                 snapshot["execution_busy"] = True
     except Exception as exc:
         logger.debug(
@@ -2056,11 +2067,36 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
 
 # Android execution phases considered "actively executing" on the Android side.
 _ANDROID_ACTIVE_EXECUTION_PHASES: frozenset[str] = frozenset(
-    {"planning", "grounding", "execution", "replan", "running", "admitted"}
+    {
+        "planning",
+        "grounding",
+        "execution",
+        "replan",
+        "running",
+        "admitted",
+        # Android runtime truth uplink phase vocabulary (PR-5B / sequencer).
+        "execution_started",
+        "execution_progress",
+        "active",
+        "activating",
+    }
 )
 # Android execution phases that indicate terminal completion on the Android side.
 _ANDROID_TERMINAL_EXECUTION_PHASES: frozenset[str] = frozenset(
-    {"completed", "succeeded", "failed", "cancelled", "canceled", "error", "timed_out"}
+    {
+        "completed",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "canceled",
+        "error",
+        "timed_out",
+        "timeout",
+        # Android runtime emits stagnation_detected as a terminal failed outcome.
+        "stagnation_detected",
+        # Android runtime gate_decision marks a gate-terminal resolution event.
+        "gate_decision",
+    }
 )
 
 

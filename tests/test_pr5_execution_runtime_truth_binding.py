@@ -167,6 +167,14 @@ class TestGroupB_ClassifyQuality:
         assert quality == AndroidExecutionLifecycleTruthQuality.android_remote_confirmed.value
         assert "age=" in reason or "active" in reason.lower()
 
+    def test_active_with_android_execution_started_phase_returns_confirmed(self) -> None:
+        quality, _ = _classify_android_execution_lifecycle_truth_quality(
+            active_execution_count=1,
+            latest_execution_event_phase="execution_started",
+            latest_execution_event_age_s=3.0,
+        )
+        assert quality == AndroidExecutionLifecycleTruthQuality.android_remote_confirmed.value
+
     def test_active_with_old_android_event_returns_stale_remote(self) -> None:
         stale_age = ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS + 30
         quality, reason = _classify_android_execution_lifecycle_truth_quality(
@@ -185,6 +193,14 @@ class TestGroupB_ClassifyQuality:
         )
         assert quality == AndroidExecutionLifecycleTruthQuality.conflicting_remote.value
         assert "terminal" in reason.lower() or "completed" in reason.lower()
+
+    def test_v2_active_android_stagnation_detected_returns_conflicting(self) -> None:
+        quality, _ = _classify_android_execution_lifecycle_truth_quality(
+            active_execution_count=1,
+            latest_execution_event_phase="stagnation_detected",
+            latest_execution_event_age_s=2.0,
+        )
+        assert quality == AndroidExecutionLifecycleTruthQuality.conflicting_remote.value
 
     def test_v2_idle_android_active_returns_conflicting(self) -> None:
         quality, reason = _classify_android_execution_lifecycle_truth_quality(
