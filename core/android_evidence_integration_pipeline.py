@@ -464,6 +464,8 @@ def _evaluate_capability_truth_dimension(
 
         if proof_class != "complete":
             if proof_class not in _NON_PASSING_CAPABILITY_TRUTH_CLASSES:
+                # Defensive forward-compatibility: unknown/new proof classes
+                # must fail the gate and remain explicitly diagnosable.
                 degradation_causes.append(
                     f"unrecognized_proof_input_class:{proof_class or 'missing'}"
                 )
