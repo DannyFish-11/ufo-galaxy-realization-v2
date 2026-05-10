@@ -162,11 +162,11 @@ def _has_identity_conflict(
 ) -> bool:
     if not expected_value or not records:
         return False
-    return any(
-        getattr(record, field_name, "")
-        and getattr(record, field_name, "") != expected_value
-        for record in records
-    )
+    for record in records:
+        observed = getattr(record, field_name, "")
+        if observed and observed != expected_value:
+            return True
+    return False
 
 
 def _has_multiple_non_empty_values(

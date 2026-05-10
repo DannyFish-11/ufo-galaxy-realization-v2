@@ -19,7 +19,7 @@ try:
     )
 
     _AVAILABLE = True
-except Exception:  # pragma: no cover  # noqa: BLE001
+except ImportError:  # pragma: no cover
     _AVAILABLE = False
 
 
