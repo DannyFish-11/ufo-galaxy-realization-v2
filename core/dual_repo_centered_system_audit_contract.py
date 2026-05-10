@@ -315,7 +315,7 @@ class DualRepoPRRoadmapItem:
             "targeted_problems": self.targeted_problems,
             "key_landing_zones_v2": self.key_landing_zones_v2,
             "key_landing_zones_android": self.key_landing_zones_android,
-            "dependencies": [],
+            "dependencies": self.dependencies,
             "acceptance_criteria": self.acceptance_criteria,
             "definition_fulfillment_advance": self.definition_fulfillment_advance,
         }

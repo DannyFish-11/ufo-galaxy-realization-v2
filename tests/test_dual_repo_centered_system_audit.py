@@ -197,11 +197,11 @@ class TestGroupC_DefinitionAreaAuditCoverage:
             assert expected_id in domain_ids, f"定义域 {expected_id} 缺失"
 
     def test_each_audit_has_v2_anchors(self, audits) -> None:
-        # D9（可观测性）Android 侧可无 anchor，但 V2 侧必须有
+        """所有定义域审计在 V2 侧必须有至少一个代码锚点。"""
         for audit in audits:
-            if audit.domain_id not in {"D9"}:  # D7 V2 side should have anchors
-                if audit.domain_id == "D7":
-                    assert len(audit.v2_anchors) > 0, f"{audit.domain_id} V2 锚点不能为空"
+            assert len(audit.v2_anchors) > 0, (
+                f"定义域 {audit.domain_id} 必须有至少一个 V2 侧代码锚点"
+            )
 
     def test_each_audit_has_fulfillment_status(self, audits) -> None:
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
