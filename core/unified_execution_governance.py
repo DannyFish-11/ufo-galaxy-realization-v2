@@ -2963,9 +2963,6 @@ def _normalize_diagnosis_token_list(raw_value: Any) -> List[str]:
     """Normalize diagnosis token inputs into a stable list-of-strings form."""
     if raw_value is None:
         return []
-    if isinstance(raw_value, str):
-        token = raw_value.strip()
-        return [token] if token else []
     if isinstance(raw_value, (list, tuple, set, frozenset)):
         normalized: List[str] = []
         for item in raw_value:
