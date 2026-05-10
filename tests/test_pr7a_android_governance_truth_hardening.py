@@ -74,6 +74,15 @@ class TestPolicySentinelAccessibility:
         )
         assert "NONE" in CAPABILITY_ABSENT_GOVERNANCE_POLICY or "0" in CAPABILITY_ABSENT_GOVERNANCE_POLICY
 
+    def test_capability_absent_policy_references_absent_semantics(self) -> None:
+        from galaxy_gateway.android.capabilities import (
+            CAPABILITY_ABSENT_GOVERNANCE_POLICY,
+        )
+        policy_lower = CAPABILITY_ABSENT_GOVERNANCE_POLICY.lower()
+        # Must reference the degradation semantics
+        assert "absent" in policy_lower or "missing" in policy_lower
+        assert "governance" in policy_lower or "degrade" in policy_lower
+
 
 # ===========================================================================
 # B — resolve_android_execution_gate_decision: degrading truth → "deny"
@@ -270,6 +279,21 @@ class TestDegradedDecisionReasons:
         # The reason should identify the specific truth quality class
         reason_str = " ".join(result.reasons)
         assert "missing" in reason_str
+
+    def test_stale_reason_includes_stale_quality_class(self) -> None:
+        result = self._resolve("stale")
+        reason_str = " ".join(result.reasons)
+        assert "stale" in reason_str
+
+    def test_conflicting_reason_includes_conflicting_quality_class(self) -> None:
+        result = self._resolve("conflicting")
+        reason_str = " ".join(result.reasons)
+        assert "conflicting" in reason_str
+
+    def test_downgraded_reason_includes_downgraded_quality_class(self) -> None:
+        result = self._resolve("downgraded")
+        reason_str = " ".join(result.reasons)
+        assert "downgraded" in reason_str
 
 
 # ===========================================================================
@@ -474,9 +498,67 @@ class TestGovernanceStateWiring:
     that the decision_causality exposes the degradation.
     """
 
-    def _make_snapshot_without_android_semantics(self) -> Dict[str, Any]:
-        """Runtime snapshot with no Android capability semantics — 'missing' class."""
-        return {}
+    def _make_runtime_snapshot_with_device(self, device_id: str = "dev_wire") -> Dict[str, Any]:
+        """Runtime snapshot with a device and missing Android semantics → 'missing' class."""
+        return {
+            "devices": [
+                {
+                    "device_id": device_id,
+                    "active_execution_count": 0,
+                    "highest_priority_execution_type": None,
+                    "blocked_execution_types": [],
+                    "offline_queue_depth": 0,
+                    "execution_busy": False,
+                    "local_inference_available": True,
+                    "runtime_health_status": "healthy",
+                    "current_fallback_tier": None,
+                    # No android_semantics fields → proof_input_class = "missing"
+                }
+            ],
+            "active_device_count": 1,
+            "active_execution_total_count": 0,
+        }
+
+    def _build_state_with_device(
+        self,
+        device_id: str = "dev_wire",
+        mode_value: str = "cross_device",
+    ) -> Dict[str, Any]:
+        """Build governance state with a mocked single device."""
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from core.unified_governance_semantics import build_unified_governance_state
+
+        active_sessions = [SimpleNamespace(device_id=device_id)]
+        mode_map = {
+            device_id: SimpleNamespace(mode=SimpleNamespace(value=mode_value))
+        }
+        readiness_map = {
+            device_id: SimpleNamespace(
+                is_dispatch_eligible=True,
+                is_takeover_eligible=True,
+                is_cross_device_ready=True,
+            )
+        }
+        runtime_snapshot = self._make_runtime_snapshot_with_device(device_id)
+
+        with patch(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            return_value=active_sessions,
+        ), patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda d: mode_map[d],
+        ), patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda d: readiness_map[d],
+        ), patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ), patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ):
+            return build_unified_governance_state()
 
     def test_governance_state_returns_without_raising(self) -> None:
         from core.unified_governance_semantics import build_unified_governance_state
@@ -486,26 +568,41 @@ class TestGovernanceStateWiring:
         assert "devices" in result
 
     def test_decision_causality_includes_android_capability_truth_quality(self) -> None:
-        """When governance state is built, decision_causality carries truth quality."""
-        from core.unified_governance_semantics import build_unified_governance_state
-        result = build_unified_governance_state(device_ids=[])
-        # No devices → check structure only
-        assert result["devices"] == [] or all(
-            any(
-                "android_capability_truth_quality" in path_data.get("decision_causality", {})
-                for path_data in device.get("governance_precedence", {}).values()
+        """When governance state is built with a device, decision_causality carries truth quality."""
+        result = self._build_state_with_device()
+        assert len(result["devices"]) == 1, "Expected exactly one device in governance state"
+        device = result["devices"][0]
+        for path_data in device.get("governance_precedence", {}).values():
+            causality = path_data.get("decision_causality", {})
+            assert "android_capability_truth_quality" in causality, (
+                f"android_capability_truth_quality missing from causality for path "
+                f"{path_data.get('path', '?')}"
             )
-            for device in result["devices"]
-        )
 
     def test_decision_causality_includes_android_capability_truth_degraded(self) -> None:
-        """decision_causality must expose the truth-degraded flag."""
-        from core.unified_governance_semantics import build_unified_governance_state
-        result = build_unified_governance_state(device_ids=[])
-        for device in result["devices"]:
-            for path_data in device.get("governance_precedence", {}).values():
-                causality = path_data.get("decision_causality", {})
-                assert "android_capability_truth_degraded" in causality
+        """decision_causality must expose the truth-degraded flag for every path."""
+        result = self._build_state_with_device()
+        assert len(result["devices"]) == 1, "Expected exactly one device in governance state"
+        device = result["devices"][0]
+        for path_data in device.get("governance_precedence", {}).values():
+            causality = path_data.get("decision_causality", {})
+            assert "android_capability_truth_degraded" in causality, (
+                f"android_capability_truth_degraded missing from causality"
+            )
+
+    def test_missing_android_truth_degrades_canonical_gate_to_deny(self) -> None:
+        """When Android truth is missing, the canonical gate must be deny, not allow."""
+        result = self._build_state_with_device(mode_value="cross_device")
+        assert len(result["devices"]) == 1
+        device = result["devices"][0]
+        delegated = device["governance_precedence"].get("delegated_execution", {})
+        causality = delegated.get("decision_causality", {})
+        # Missing Android truth must degrade to deny
+        assert causality.get("canonical_execution_gate_decision") == "deny", (
+            "Expected canonical_execution_gate_decision='deny' when Android truth is missing"
+        )
+        assert causality.get("android_capability_truth_degraded") is True
+        assert causality.get("android_capability_truth_quality") == "missing"
 
 
 # ===========================================================================
@@ -520,29 +617,93 @@ class TestProofInputDiagnosisPreComputed:
     proof_input_class from the diagnosis.
     """
 
+    def _build_state_with_device(
+        self, device_id: str = "dev_m", android_semantics: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from core.unified_governance_semantics import build_unified_governance_state
+
+        device_snapshot: Dict[str, Any] = {
+            "device_id": device_id,
+            "active_execution_count": 0,
+            "highest_priority_execution_type": None,
+            "blocked_execution_types": [],
+            "offline_queue_depth": 0,
+            "execution_busy": False,
+            "local_inference_available": True,
+            "runtime_health_status": "healthy",
+            "current_fallback_tier": None,
+        }
+        if android_semantics:
+            device_snapshot.update(android_semantics)
+
+        active_sessions = [SimpleNamespace(device_id=device_id)]
+        mode_map = {
+            device_id: SimpleNamespace(mode=SimpleNamespace(value="cross_device"))
+        }
+        readiness_map = {
+            device_id: SimpleNamespace(
+                is_dispatch_eligible=True,
+                is_takeover_eligible=True,
+                is_cross_device_ready=True,
+            )
+        }
+        runtime_snapshot = {
+            "devices": [device_snapshot],
+            "active_device_count": 1,
+            "active_execution_total_count": 0,
+        }
+
+        with patch(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            return_value=active_sessions,
+        ), patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda d: mode_map[d],
+        ), patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda d: readiness_map[d],
+        ), patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ), patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ):
+            return build_unified_governance_state()
+
     def test_gate_decision_truth_quality_matches_proof_input_class(self) -> None:
         """
-        When we call build_unified_governance_state with a device that has
-        no Android semantics, decision_causality.android_capability_truth_quality
-        should be 'missing' (from proof_input_diagnosis) and the gate decision
-        should be 'deny'.
+        android_capability_truth_quality in decision_causality must match the
+        proof_input_class from proof_input_diagnosis — confirming pre-computation.
         """
-        from core.unified_governance_semantics import build_unified_governance_state
-        # No active devices → nothing to check inside, but structure is valid
-        result = build_unified_governance_state(device_ids=[])
-        # All device entries must have android_capability_truth_quality in causality
-        for device in result.get("devices", []):
-            for path_data in device.get("governance_precedence", {}).values():
-                causality = path_data.get("decision_causality", {})
-                truth_quality = causality.get("android_capability_truth_quality")
-                proof_diagnosis = causality.get("proof_input_diagnosis", {})
-                if proof_diagnosis:
-                    expected_class = proof_diagnosis.get("proof_input_class")
-                    # The truth quality must match the proof input class
-                    assert truth_quality == expected_class, (
-                        f"android_capability_truth_quality={truth_quality!r} "
-                        f"!= proof_input_class={expected_class!r}"
-                    )
+        result = self._build_state_with_device()
+        assert len(result["devices"]) == 1
+        device = result["devices"][0]
+        for path_data in device.get("governance_precedence", {}).values():
+            causality = path_data.get("decision_causality", {})
+            truth_quality = causality.get("android_capability_truth_quality")
+            proof_diagnosis = causality.get("proof_input_diagnosis", {})
+            expected_class = proof_diagnosis.get("proof_input_class")
+            assert truth_quality == expected_class, (
+                f"android_capability_truth_quality={truth_quality!r} "
+                f"!= proof_input_class={expected_class!r}"
+            )
+
+    def test_missing_truth_quality_is_deny_in_governance_state(self) -> None:
+        """
+        When Android truth is 'missing', the canonical gate in governance state
+        must be 'deny' — not 'allow'.  This is the canonical PR-7A contract.
+        """
+        result = self._build_state_with_device()  # No android_semantics → "missing"
+        assert len(result["devices"]) == 1
+        device = result["devices"][0]
+        delegated = device["governance_precedence"].get("delegated_execution", {})
+        causality = delegated.get("decision_causality", {})
+        assert causality.get("canonical_execution_gate_decision") == "deny"
+        assert causality.get("android_capability_truth_degraded") is True
+        assert causality.get("android_capability_truth_quality") == "missing"
 
     def test_resolve_gate_decision_missing_truth_quality_is_deny(self) -> None:
         """
