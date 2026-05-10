@@ -469,9 +469,10 @@ def _evaluate_capability_truth_dimension(
                 degradation_causes.append(
                     f"unrecognized_proof_input_class:{proof_class or 'missing'}"
                 )
-            degradation_causes.append(
-                f"non_passing_capability_truth_class:{proof_class or 'missing'}"
-            )
+            else:
+                degradation_causes.append(
+                    f"non_passing_capability_truth_class:{proof_class or 'missing'}"
+                )
             return AndroidEvidenceDimensionResult(
                 dimension=AndroidEvidenceDimension.capability_truth,
                 grade=AndroidEvidenceGrade.degraded if proof_class != "missing" else AndroidEvidenceGrade.absent,
