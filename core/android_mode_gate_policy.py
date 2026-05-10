@@ -137,10 +137,12 @@ CANONICAL_ANDROID_EXECUTION_GATE_POLICY: str = (
 ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY: str = (
     "POLICY::ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS: "
     "When Android-originated capability truth quality is 'missing', 'stale', "
-    "'conflicting', or 'downgraded', resolve_android_execution_gate_decision() "
-    "MUST return 'deny' rather than allowing execution to proceed on absent or "
-    "unverified evidence.  Absent Android truth is NOT treated as implicit "
-    "positive evidence.  The decision reason will include "
+    "'conflicting', 'partial', 'malformed', 'unknown', 'incompatible', or "
+    "'downgraded', resolve_android_execution_gate_decision() MUST return "
+    "'deny' rather than allowing execution to proceed on absent, malformed, "
+    "drifted, incompatible, or otherwise unverified evidence.  Absent Android "
+    "truth is NOT treated as implicit positive evidence.  The decision reason "
+    "will include "
     "'android_capability_truth_degraded:<quality>' for observability."
 )
 
@@ -156,6 +158,10 @@ _ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES: frozenset = frozenset({
     "missing",
     "stale",
     "conflicting",
+    "partial",
+    "malformed",
+    "unknown",
+    "incompatible",
     "downgraded",
 })
 
@@ -441,10 +447,12 @@ def resolve_android_execution_gate_decision(
     android_capability_truth_quality:
         The ``proof_input_class`` from
         :func:`~core.unified_execution_governance.classify_canonical_proof_input_diagnosis`.
-        When this is ``'missing'``, ``'stale'``, ``'conflicting'``, or
-        ``'downgraded'``, the gate decision is immediately forced to ``'deny'``
-        regardless of other gate inputs.  Absent Android truth is NOT treated
-        as positive evidence — see
+        When this is any non-complete or incompatible capability-truth class
+        (``'missing'``, ``'stale'``, ``'conflicting'``, ``'partial'``,
+        ``'malformed'``, ``'unknown'``, ``'incompatible'``, or
+        ``'downgraded'``), the gate decision is immediately forced to
+        ``'deny'`` regardless of other gate inputs.  Absent Android truth is
+        NOT treated as positive evidence — see
         :data:`ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY`.
     """
     normalized_fallback_tier = str(fallback_tier or "").strip() or None
@@ -453,8 +461,8 @@ def resolve_android_execution_gate_decision(
     reasons: List[str] = []
 
     # PR-7A: Check Android capability truth quality first.
-    # Missing, stale, conflicting, or downgraded Android truth degrades the
-    # gate decision to "deny" — absence is not positive evidence.
+    # Any non-complete or degraded Android truth degrades the gate decision to
+    # "deny" — absence is not positive evidence.
     normalized_truth_quality = str(android_capability_truth_quality or "").strip().lower() or None
     truth_degraded = normalized_truth_quality in _ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES
     if truth_degraded:

@@ -38,6 +38,8 @@ M. proof_input_diagnosis is computed before gate call in governance state.
 
 from __future__ import annotations
 
+import pytest
+
 from typing import Any, Dict, Optional
 
 
@@ -91,8 +93,9 @@ class TestPolicySentinelAccessibility:
 class TestGateDecisionDegradingTruth:
     """
     When android_capability_truth_quality is a degrading class
-    ("missing", "stale", "conflicting", "downgraded"), the gate decision
-    must be "deny" regardless of other inputs.
+    ("missing", "stale", "conflicting", "partial", "malformed", "unknown",
+    "incompatible", "downgraded"), the gate decision must be "deny"
+    regardless of other inputs.
     """
 
     def _resolve(self, truth_quality: str, **kwargs: Any):
@@ -120,6 +123,22 @@ class TestGateDecisionDegradingTruth:
 
     def test_conflicting_truth_produces_deny(self) -> None:
         result = self._resolve("conflicting")
+        assert result.decision == "deny"
+
+    def test_partial_truth_produces_deny(self) -> None:
+        result = self._resolve("partial")
+        assert result.decision == "deny"
+
+    def test_malformed_truth_produces_deny(self) -> None:
+        result = self._resolve("malformed")
+        assert result.decision == "deny"
+
+    def test_unknown_truth_produces_deny(self) -> None:
+        result = self._resolve("unknown")
+        assert result.decision == "deny"
+
+    def test_incompatible_truth_produces_deny(self) -> None:
+        result = self._resolve("incompatible")
         assert result.decision == "deny"
 
     def test_downgraded_truth_produces_deny(self) -> None:
@@ -172,29 +191,6 @@ class TestGateDecisionNonDegradingTruth:
 
     def test_complete_truth_allows_when_all_gates_pass(self) -> None:
         result = self._resolve("complete")
-        assert result.decision == "allow"
-
-    def test_partial_truth_follows_normal_gate_logic(self) -> None:
-        # "partial" is NOT in the degrading class set; normal gate logic applies.
-        result = self._resolve(
-            "partial",
-            policy_eligible=True,
-            readiness_ready=True,
-            execution_busy=False,
-            local_inference_available=True,
-        )
-        # With all gates passing, decision is allow
-        assert result.decision == "allow"
-
-    def test_unknown_truth_class_follows_normal_gate_logic(self) -> None:
-        # "unknown" is not a degrading class
-        result = self._resolve(
-            "unknown",
-            policy_eligible=True,
-            readiness_ready=True,
-            execution_busy=False,
-            local_inference_available=True,
-        )
         assert result.decision == "allow"
 
 
@@ -270,6 +266,22 @@ class TestDegradedDecisionReasons:
         result = self._resolve("conflicting")
         assert any("android_capability_truth_degraded" in r for r in result.reasons)
 
+    def test_partial_truth_reason_contains_degraded_token(self) -> None:
+        result = self._resolve("partial")
+        assert any("android_capability_truth_degraded" in r for r in result.reasons)
+
+    def test_malformed_truth_reason_contains_degraded_token(self) -> None:
+        result = self._resolve("malformed")
+        assert any("android_capability_truth_degraded" in r for r in result.reasons)
+
+    def test_unknown_truth_reason_contains_degraded_token(self) -> None:
+        result = self._resolve("unknown")
+        assert any("android_capability_truth_degraded" in r for r in result.reasons)
+
+    def test_incompatible_truth_reason_contains_degraded_token(self) -> None:
+        result = self._resolve("incompatible")
+        assert any("android_capability_truth_degraded" in r for r in result.reasons)
+
     def test_downgraded_truth_reason_contains_degraded_token(self) -> None:
         result = self._resolve("downgraded")
         assert any("android_capability_truth_degraded" in r for r in result.reasons)
@@ -289,6 +301,26 @@ class TestDegradedDecisionReasons:
         result = self._resolve("conflicting")
         reason_str = " ".join(result.reasons)
         assert "conflicting" in reason_str
+
+    def test_partial_reason_includes_partial_quality_class(self) -> None:
+        result = self._resolve("partial")
+        reason_str = " ".join(result.reasons)
+        assert "partial" in reason_str
+
+    def test_malformed_reason_includes_malformed_quality_class(self) -> None:
+        result = self._resolve("malformed")
+        reason_str = " ".join(result.reasons)
+        assert "malformed" in reason_str
+
+    def test_unknown_reason_includes_unknown_quality_class(self) -> None:
+        result = self._resolve("unknown")
+        reason_str = " ".join(result.reasons)
+        assert "unknown" in reason_str
+
+    def test_incompatible_reason_includes_incompatible_quality_class(self) -> None:
+        result = self._resolve("incompatible")
+        reason_str = " ".join(result.reasons)
+        assert "incompatible" in reason_str
 
     def test_downgraded_reason_includes_downgraded_quality_class(self) -> None:
         result = self._resolve("downgraded")
@@ -320,6 +352,18 @@ class TestTruthDegradedFlag:
 
     def test_conflicting_sets_degraded_true(self) -> None:
         assert self._resolve("conflicting").android_capability_truth_degraded is True
+
+    def test_partial_sets_degraded_true(self) -> None:
+        assert self._resolve("partial").android_capability_truth_degraded is True
+
+    def test_malformed_sets_degraded_true(self) -> None:
+        assert self._resolve("malformed").android_capability_truth_degraded is True
+
+    def test_unknown_sets_degraded_true(self) -> None:
+        assert self._resolve("unknown").android_capability_truth_degraded is True
+
+    def test_incompatible_sets_degraded_true(self) -> None:
+        assert self._resolve("incompatible").android_capability_truth_degraded is True
 
     def test_downgraded_sets_degraded_true(self) -> None:
         assert self._resolve("downgraded").android_capability_truth_degraded is True
@@ -587,7 +631,7 @@ class TestGovernanceStateWiring:
         for path_data in device.get("governance_precedence", {}).values():
             causality = path_data.get("decision_causality", {})
             assert "android_capability_truth_degraded" in causality, (
-                f"android_capability_truth_degraded missing from causality"
+                "android_capability_truth_degraded missing from causality"
             )
 
     def test_missing_android_truth_degrades_canonical_gate_to_deny(self) -> None:
@@ -704,6 +748,84 @@ class TestProofInputDiagnosisPreComputed:
         assert causality.get("canonical_execution_gate_decision") == "deny"
         assert causality.get("android_capability_truth_degraded") is True
         assert causality.get("android_capability_truth_quality") == "missing"
+
+    @pytest.mark.parametrize(
+        ("android_semantics", "expected_proof_input_class"),
+        [
+            (
+                {
+                    "android_semantics_contract_state": "partial",
+                    "android_semantics_missing_keys": ["goal_execution_eligibility"],
+                    "android_semantics_freshness_state": "fresh",
+                    "android_runtime_truth_authority": "authoritative",
+                    "android_runtime_truth_usable": True,
+                },
+                "partial",
+            ),
+            (
+                {
+                    "android_semantics_contract_state": "malformed",
+                    "android_semantics_malformed_keys": ["mode_state"],
+                    "android_runtime_truth_authority": "downgraded_to_unknown",
+                    "android_runtime_truth_usable": False,
+                },
+                "malformed",
+            ),
+            (
+                {
+                    "android_semantics_contract_state": "unknown",
+                    "android_semantics_unknown_keys": ["extra_capability_flag"],
+                    "android_runtime_truth_authority": "downgraded_to_unknown",
+                    "android_runtime_truth_usable": False,
+                },
+                "unknown",
+            ),
+            (
+                {
+                    "android_semantics_contract_state": "downgraded",
+                    "android_semantics_downgraded_reasons": ["degraded_mode_true"],
+                    "android_runtime_truth_authority": "downgraded_to_unknown",
+                    "android_runtime_truth_usable": False,
+                },
+                "downgraded",
+            ),
+        ],
+    )
+    def test_weak_android_truth_quality_denies_governance_state(
+        self,
+        android_semantics: Dict[str, Any],
+        expected_proof_input_class: str,
+    ) -> None:
+        result = self._build_state_with_device(android_semantics=android_semantics)
+        assert len(result["devices"]) == 1
+        device = result["devices"][0]
+        delegated = device["governance_precedence"].get("delegated_execution", {})
+        causality = delegated.get("decision_causality", {})
+        proof_input_diagnosis = causality.get("proof_input_diagnosis", {})
+        assert causality.get("canonical_execution_gate_decision") == "deny"
+        assert causality.get("android_capability_truth_degraded") is True
+        assert proof_input_diagnosis.get("proof_input_class") == expected_proof_input_class
+        assert causality.get("android_capability_truth_quality") == expected_proof_input_class
+
+    def test_incompatible_contract_state_is_classified_as_conflicting_truth_quality_and_denies(self) -> None:
+        """'incompatible' contract state is canonically diagnosed as conflicting truth."""
+        result = self._build_state_with_device(
+            android_semantics={
+                "android_semantics_contract_state": "incompatible",
+                "android_semantics_conflicts": [
+                    "android_capability_contract_incompatible"
+                ],
+                "android_runtime_truth_authority": "downgraded_to_unknown",
+                "android_runtime_truth_usable": False,
+            }
+        )
+        device = result["devices"][0]
+        delegated = device["governance_precedence"].get("delegated_execution", {})
+        causality = delegated.get("decision_causality", {})
+        proof_input_diagnosis = causality.get("proof_input_diagnosis", {})
+        assert causality.get("canonical_execution_gate_decision") == "deny"
+        assert proof_input_diagnosis.get("proof_input_class") == "conflicting"
+        assert causality.get("android_capability_truth_quality") == "conflicting"
 
     def test_resolve_gate_decision_missing_truth_quality_is_deny(self) -> None:
         """
