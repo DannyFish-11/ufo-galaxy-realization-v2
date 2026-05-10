@@ -750,7 +750,7 @@ class TestProofInputDiagnosisPreComputed:
         assert causality.get("android_capability_truth_quality") == "missing"
 
     @pytest.mark.parametrize(
-        ("android_semantics", "expected_truth_quality"),
+        ("android_semantics", "expected_proof_input_class"),
         [
             (
                 {
@@ -805,16 +805,18 @@ class TestProofInputDiagnosisPreComputed:
     def test_weak_android_truth_quality_denies_governance_state(
         self,
         android_semantics: Dict[str, Any],
-        expected_truth_quality: str,
+        expected_proof_input_class: str,
     ) -> None:
         result = self._build_state_with_device(android_semantics=android_semantics)
         assert len(result["devices"]) == 1
         device = result["devices"][0]
         delegated = device["governance_precedence"].get("delegated_execution", {})
         causality = delegated.get("decision_causality", {})
+        proof_input_diagnosis = causality.get("proof_input_diagnosis", {})
         assert causality.get("canonical_execution_gate_decision") == "deny"
         assert causality.get("android_capability_truth_degraded") is True
-        assert causality.get("android_capability_truth_quality") == expected_truth_quality
+        assert proof_input_diagnosis.get("proof_input_class") == expected_proof_input_class
+        assert causality.get("android_capability_truth_quality") == expected_proof_input_class
 
     def test_resolve_gate_decision_missing_truth_quality_is_deny(self) -> None:
         """
