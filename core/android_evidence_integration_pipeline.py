@@ -538,7 +538,7 @@ def _evaluate_lifecycle_truth_dimension(
             getattr(binding, "android_lifecycle_truth_governance_impact", "none")
         )
 
-        if quality_value in _DEGRADING_LIFECYCLE_TRUTH_QUALITIES and degraded:
+        if quality_value in _DEGRADING_LIFECYCLE_TRUTH_QUALITIES or degraded:
             return AndroidEvidenceDimensionResult(
                 dimension=AndroidEvidenceDimension.lifecycle_truth,
                 grade=AndroidEvidenceGrade.degraded,
