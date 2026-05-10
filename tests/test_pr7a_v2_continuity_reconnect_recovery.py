@@ -803,7 +803,7 @@ class TestOfflineReplaySequenceInterpretation:
 
     def test_G07_mixed_scenario_real_android_behavior(self) -> None:
         """A realistic offline replay: some items stale, some duplicate, one gap, some ok."""
-        seen: set = set()
+        seen: set[str] = set()
         items = [
             {"item_id": "i1", "session_epoch": 3, "sequence_position": 1},
             {"item_id": "i2", "session_epoch": 1, "sequence_position": 2},  # stale epoch
@@ -830,7 +830,7 @@ class TestOfflineReplaySequenceInterpretation:
 
     def test_G09_gap_exposed_item_still_registers_idempotency_key(self) -> None:
         """Even a gap_exposed item registers its key to prevent future duplicates."""
-        seen: set = set()
+        seen: set[str] = set()
         items = [
             {"item_id": "i1", "session_epoch": 3, "sequence_position": 1},
             {"item_id": "i2", "session_epoch": 3, "sequence_position": 5},  # gap
