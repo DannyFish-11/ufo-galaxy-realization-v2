@@ -860,10 +860,10 @@ _RECOVERY_GAP_ALIAS_MAP: Dict[str, str] = {
     "replay_fragment": "replay_fragmented",
     "replay-fragment": "replay_fragmented",
 }
-_RECOVERY_DEGRADING_GAPS: frozenset[str] = frozenset(
+_RECOVERY_DEGRADING_GAPS: frozenset = frozenset(
     {"stale", "partial", "missing", "duplicated", "conflicting", "replay_fragmented"}
 )
-_RECOVERY_SEVERE_GAPS: frozenset[str] = frozenset(
+_RECOVERY_SEVERE_GAPS: frozenset = frozenset(
     {"missing", "conflicting", "replay_fragmented"}
 )
 
@@ -958,7 +958,7 @@ def _assess_recovery_truth_adjustment(
         quality = AndroidEvidenceGrade.strong.value
 
     diagnosis = (
-        "recovery_truth_quality_assessed:"
+        "recovery_truth_quality_assessed;"
         f"closure_quality={closure_quality or 'unspecified'};"
         f"gap_types={gap_types or ['none']};"
         f"quality={quality};"

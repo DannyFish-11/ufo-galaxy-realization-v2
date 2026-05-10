@@ -1444,7 +1444,7 @@ class TestRecoveryTruthGapDegradation:
         assert verdict.integration_decision == IntegrationDecision.conditionally_allow
         assert verdict.recovery_truth_quality == "adequate"
         assert verdict.recovery_truth_degraded is False
-        assert set(verdict.recovery_truth_gap_types) == {"partial", "duplicated"}
+        assert verdict.recovery_truth_gap_types == ["partial", "duplicated"]
 
     def test_recovery_missing_conflicting_replay_fragmented_forces_deny(self) -> None:
         with (
@@ -1499,9 +1499,9 @@ class TestRecoveryTruthGapDegradation:
         assert verdict.integration_decision == IntegrationDecision.deny
         assert verdict.recovery_truth_quality == "degraded"
         assert verdict.recovery_truth_degraded is True
-        assert set(verdict.recovery_truth_gap_types) == {
+        assert verdict.recovery_truth_gap_types == [
             "missing",
             "conflicting",
             "replay_fragmented",
-        }
+        ]
         assert "recovery_truth:degraded:" in " ".join(verdict.degradation_causes)
