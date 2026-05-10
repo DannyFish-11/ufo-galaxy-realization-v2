@@ -536,8 +536,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                             session_id=session_id,
                             device_id=device_id,
                         )
-                        if hasattr(verdict, "to_dict"):
-                            ownership_convergence = verdict.to_dict()
+                        ownership_convergence = verdict.to_dict()
                     except Exception as _oe:  # noqa: BLE001
                         logger.debug(
                             "on_takeover_response: ownership adjudication failed (non-fatal): %s",

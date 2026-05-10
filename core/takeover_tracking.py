@@ -559,15 +559,6 @@ def adjudicate_takeover_ownership_convergence(
 ) -> TakeoverOwnershipConvergenceVerdict:
     """Adjudicate ownership convergence for a takeover from recorded evidence."""
     try:
-        def _has_identity_mismatch(field_name: str, expected_value: str) -> bool:
-            if not expected_value or not records:
-                return False
-            for _record in records:
-                observed = getattr(_record, field_name, "")
-                if observed and observed != expected_value:
-                    return True
-            return False
-
         _rt = runtime if runtime is not None else get_takeover_tracking_runtime()
         records = _rt.list_by_takeover_id(takeover_id or "") if takeover_id else []
         diagnosis: List[str] = []
@@ -590,16 +581,22 @@ def adjudicate_takeover_ownership_convergence(
         unknown_count = sum(1 for r in records if r.decision == TakeoverDecision.unknown)
         latest_decision = records[0].decision if records else TakeoverDecision.unknown
 
-        session_ids = {r.session_id for r in records if r.session_id}
-        device_ids = {r.device_id for r in records if r.device_id}
-        has_session_id_conflict = _has_identity_mismatch("session_id", session_id)
-        has_device_id_conflict = _has_identity_mismatch("device_id", device_id)
+        has_session_id_conflict = bool(
+            session_id
+            and records
+            and any(r.session_id and r.session_id != session_id for r in records)
+        )
+        has_device_id_conflict = bool(
+            device_id
+            and records
+            and any(r.device_id and r.device_id != device_id for r in records)
+        )
         if has_session_id_conflict:
             diagnosis.append("session_id_conflict")
         if has_device_id_conflict:
             diagnosis.append("device_id_conflict")
-        has_multiple_session_ids = len(session_ids) > 1
-        has_multiple_device_ids = len(device_ids) > 1
+        has_multiple_session_ids = len({r.session_id for r in records if r.session_id}) > 1
+        has_multiple_device_ids = len({r.device_id for r in records if r.device_id}) > 1
         if has_multiple_session_ids:
             diagnosis.append("multiple_session_ids_for_takeover_id")
         if has_multiple_device_ids:
@@ -708,7 +705,14 @@ def adjudicate_takeover_ownership_convergence(
             unknown_count=unknown_count,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("takeover_tracking: adjudicate_takeover_ownership_convergence failed: %s", exc)
+        logger.debug(
+            "takeover_tracking: adjudicate_takeover_ownership_convergence failed: "
+            "takeover_id=%r session_id=%r device_id=%r exc=%s",
+            takeover_id,
+            session_id,
+            device_id,
+            exc,
+        )
         return TakeoverOwnershipConvergenceVerdict(
             takeover_id=takeover_id or "",
             session_id=session_id or "",
