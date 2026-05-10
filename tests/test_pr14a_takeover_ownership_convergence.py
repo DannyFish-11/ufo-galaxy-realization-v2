@@ -157,28 +157,28 @@ class TestTakeoverOwnershipConvergence:
         session_id = _uid()
         takeover_id = _uid()
 
-        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A07")
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A08")
         coordinator.on_takeover_requested(
             session_id=session_id,
             takeover_id=takeover_id,
-            device_id="dev-A07",
+            device_id="dev-A08",
         )
         coordinator.on_takeover_response(
             session_id=session_id,
             takeover_id=takeover_id,
-            device_id="dev-A07",
+            device_id="dev-A08",
             accepted=True,
         )
         first_verdict = adjudicate_takeover_ownership_convergence(
             takeover_id=takeover_id,
-            device_id="dev-A07",
+            device_id="dev-A08",
             session_id=session_id,
         )
         assert first_verdict.ownership_state.value == "delegated_takeover_confirmed"
         outcome = coordinator.on_takeover_response(
             session_id=session_id,
             takeover_id=takeover_id,
-            device_id="dev-A07",
+            device_id="dev-A08",
             accepted=False,
         )
 
