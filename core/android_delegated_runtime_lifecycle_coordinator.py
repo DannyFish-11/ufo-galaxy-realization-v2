@@ -529,19 +529,18 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     )
                 except Exception as _te:  # noqa: BLE001
                     logger.debug("on_takeover_response: tracking failed (non-fatal): %s", _te)
-                if _adjudicate_takeover_ownership_convergence is not None:
-                    try:
-                        verdict = _adjudicate_takeover_ownership_convergence(
-                            takeover_id=takeover_id,
-                            session_id=session_id,
-                            device_id=device_id,
-                        )
-                        ownership_convergence = verdict.to_dict()
-                    except Exception as _oe:  # noqa: BLE001
-                        logger.debug(
-                            "on_takeover_response: ownership adjudication failed (non-fatal): %s",
-                            _oe,
-                        )
+                try:
+                    verdict = _adjudicate_takeover_ownership_convergence(
+                        takeover_id=takeover_id,
+                        session_id=session_id,
+                        device_id=device_id,
+                    )
+                    ownership_convergence = verdict.to_dict()
+                except Exception as _oe:  # noqa: BLE001
+                    logger.debug(
+                        "on_takeover_response: ownership adjudication failed (non-fatal): %s",
+                        _oe,
+                    )
 
             # Step 2: reduce session state
             if _SESSION_STATE_AVAILABLE and _REDUCER_AVAILABLE:

@@ -723,7 +723,7 @@ def adjudicate_takeover_ownership_convergence(
             evidence_quality=TakeoverEvidenceQuality.missing,
             is_converged=False,
             degraded=True,
-            diagnosis=["adjudication_error"],
+            diagnosis=["adjudication_error", f"{type(exc).__name__}:{exc}"],
         )
 
 

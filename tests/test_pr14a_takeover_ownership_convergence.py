@@ -83,7 +83,7 @@ class TestTakeoverOwnershipConvergence:
         assert "missing_takeover_id" in verdict.diagnosis
         assert "missing_takeover_record" in verdict.diagnosis
 
-    def test_A04_conflicting_decisions_degrade_to_conflict_state(self):
+    def test_A04_missing_session_id_is_reported_explicitly(self):
         takeover_id = _uid()
         record_takeover_response(
             takeover_id=takeover_id,
@@ -91,17 +91,51 @@ class TestTakeoverOwnershipConvergence:
             session_id="sess-A04",
             accepted=True,
         )
-        record_takeover_response(
+        verdict = adjudicate_takeover_ownership_convergence(
             takeover_id=takeover_id,
             device_id="dev-A04",
-            session_id="sess-A04",
+            session_id="",
+        )
+        assert verdict.ownership_state.value == "degraded_incomplete_evidence"
+        assert "missing_session_id" in verdict.diagnosis
+        assert "missing_device_id" not in verdict.diagnosis
+
+    def test_A05_missing_device_id_is_reported_explicitly(self):
+        takeover_id = _uid()
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A05",
+            session_id="sess-A05",
+            accepted=True,
+        )
+        verdict = adjudicate_takeover_ownership_convergence(
+            takeover_id=takeover_id,
+            device_id="",
+            session_id="sess-A05",
+        )
+        assert verdict.ownership_state.value == "degraded_incomplete_evidence"
+        assert "missing_device_id" in verdict.diagnosis
+        assert "missing_session_id" not in verdict.diagnosis
+
+    def test_A06_conflicting_decisions_degrade_to_conflict_state(self):
+        takeover_id = _uid()
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A06",
+            session_id="sess-A06",
+            accepted=True,
+        )
+        record_takeover_response(
+            takeover_id=takeover_id,
+            device_id="dev-A06",
+            session_id="sess-A06",
             accepted=False,
         )
 
         verdict = adjudicate_takeover_ownership_convergence(
             takeover_id=takeover_id,
-            device_id="dev-A04",
-            session_id="sess-A04",
+            device_id="dev-A06",
+            session_id="sess-A06",
         )
         assert verdict.ownership_state.value == "degraded_conflicting_evidence"
         assert verdict.evidence_quality.value == "conflicting"
@@ -109,7 +143,7 @@ class TestTakeoverOwnershipConvergence:
         assert verdict.degraded is True
         assert "conflicting_takeover_decisions" in verdict.diagnosis
 
-    def test_A05_lifecycle_coordinator_surfaces_convergence_diagnostics(self):
+    def test_A07_lifecycle_coordinator_surfaces_convergence_diagnostics(self):
         coordinator = get_lifecycle_coordinator()
         session_id = _uid()
         takeover_id = _uid()
