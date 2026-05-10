@@ -26,13 +26,28 @@ logger = logging.getLogger(__name__)
 try:
     from core.unified_execution_governance import (  # noqa: F401
         CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY,
+        EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL,
+        EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION,
+        ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS,
+        AndroidExecutionLifecycleTruthQuality,
+        ExecutionLifecycleTruthBinding,
         classify_canonical_proof_input_diagnosis,
+        get_execution_lifecycle_truth_binding,
     )
 except ImportError:  # pragma: no cover
     # Graceful degradation when unified_execution_governance is unavailable.
     CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY = (  # type: ignore[assignment]
         "CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY::unavailable"
     )
+    ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY = (  # type: ignore[assignment]
+        "ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY::unavailable"
+    )
+    EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL = (  # type: ignore[assignment]
+        "EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL::unavailable"
+    )
+    EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION = "unavailable"  # type: ignore[assignment]
+    ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS = 60.0  # type: ignore[assignment]
 
     def classify_canonical_proof_input_diagnosis(  # type: ignore[misc]
         snapshot: Dict[str, Any],
@@ -44,6 +59,11 @@ except ImportError:  # pragma: no cover
             "proof_input_degradation_causes": ["diagnosis_module_unavailable"],
             "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
         }
+
+    def get_execution_lifecycle_truth_binding(  # type: ignore[misc]
+        device_id: str,
+    ) -> Any:
+        return None
 
 UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
     "UNIFIED_GOVERNANCE_SEMANTICS_V1: "
@@ -880,6 +900,23 @@ def build_unified_governance_state(
                 "proof_input_diagnosis": classify_canonical_proof_input_diagnosis(
                     runtime_state_for_device
                 ),
+                # ── PR-5: Android execution lifecycle truth quality ───────────
+                # Reflects Android-remote-confirmed vs V2-local-only vs
+                # stale/missing/conflicting remote state.  These fields ensure
+                # decision_causality reflects Android truth quality rather than
+                # only V2-local bookkeeping.
+                "android_lifecycle_truth_quality": runtime_state_for_device.get(
+                    "android_lifecycle_truth_quality"
+                ),
+                "android_lifecycle_truth_reason": runtime_state_for_device.get(
+                    "android_lifecycle_truth_reason"
+                ),
+                "android_lifecycle_truth_degraded": bool(
+                    runtime_state_for_device.get("android_lifecycle_truth_degraded", False)
+                ),
+                "android_lifecycle_truth_governance_impact": runtime_state_for_device.get(
+                    "android_lifecycle_truth_governance_impact"
+                ),
             }
             paths[path.value] = decision_dict
 
@@ -933,4 +970,12 @@ __all__ = [
     # Proof-input diagnosis (re-exported from unified_execution_governance for
     # convenience so consumers only need one import target).
     "classify_canonical_proof_input_diagnosis",
+    # PR-5: Android execution lifecycle truth quality (re-exported).
+    "ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY",
+    "EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL",
+    "EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION",
+    "ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS",
+    "AndroidExecutionLifecycleTruthQuality",
+    "ExecutionLifecycleTruthBinding",
+    "get_execution_lifecycle_truth_binding",
 ]
