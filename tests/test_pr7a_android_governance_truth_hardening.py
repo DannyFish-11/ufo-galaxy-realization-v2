@@ -807,7 +807,7 @@ class TestProofInputDiagnosisPreComputed:
         assert proof_input_diagnosis.get("proof_input_class") == expected_proof_input_class
         assert causality.get("android_capability_truth_quality") == expected_proof_input_class
 
-    def test_incompatible_contract_state_maps_to_conflicting_truth_quality_and_denies(self) -> None:
+    def test_incompatible_contract_state_is_diagnosed_as_conflicting_truth_quality_and_denies(self) -> None:
         result = self._build_state_with_device(
             android_semantics={
                 "android_semantics_contract_state": "incompatible",

@@ -461,8 +461,8 @@ def resolve_android_execution_gate_decision(
     reasons: List[str] = []
 
     # PR-7A: Check Android capability truth quality first.
-    # Any non-complete, incompatible, or otherwise degraded Android truth
-    # degrades the gate decision to "deny" — absence is not positive evidence.
+    # Any non-complete or degraded Android truth degrades the gate decision to
+    # "deny" — absence is not positive evidence.
     normalized_truth_quality = str(android_capability_truth_quality or "").strip().lower() or None
     truth_degraded = normalized_truth_quality in _ANDROID_CAPABILITY_TRUTH_DEGRADING_CLASSES
     if truth_degraded:
