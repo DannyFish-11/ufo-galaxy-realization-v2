@@ -307,12 +307,19 @@ def test_build_unified_governance_state_local_inference_changes_canonical_gate_d
     denied_causality = denied_decision["decision_causality"]
     assert denied_causality["canonical_execution_gate_decision"] == "deny"
 
+    # PR-7A hardening: without Android capability truth in the runtime snapshot,
+    # proof_input_class is "missing", which degrades the gate to "deny" regardless
+    # of local_inference_available.  Absent Android truth is NOT positive evidence.
     allowed_device = allowed_state["devices"][0]
     allowed_decision = allowed_device["governance_precedence"]["delegated_execution"]
-    assert allowed_decision["eligible"] is True
-    assert allowed_decision["blocked_by"] is None
     allowed_causality = allowed_decision["decision_causality"]
-    assert allowed_causality["canonical_execution_gate_decision"] == "allow"
+    # With missing Android truth, even local_inference_available=True cannot
+    # promote the gate to "allow".  The gate must remain "deny".
+    assert allowed_causality["canonical_execution_gate_decision"] == "deny"
+    assert allowed_decision["eligible"] is False
+    assert allowed_decision["blocked_by"] == "canonical_execution_gate:deny"
+    # The degradation reason must be present in the causality.
+    assert allowed_causality.get("android_capability_truth_degraded") is True
     assert allowed_causality["snapshot_continuity_state"] == "unavailable"
 
 
@@ -379,7 +386,11 @@ def test_build_unified_governance_state_stale_android_truth_downgrades_canonical
     assert delegated["blocked_by"] == "canonical_execution_gate:deny"
     causality = delegated["decision_causality"]
     assert causality["canonical_execution_gate_decision"] == "deny"
-    assert "capability_unavailable" in causality["canonical_execution_gate_reasons"]
+    # PR-7A hardening: stale Android truth triggers android_capability_truth_degraded
+    # reason, not capability_unavailable — the gate is denied by truth quality, not
+    # by capability check.
+    assert "android_capability_truth_degraded:stale" in causality["canonical_execution_gate_reasons"]
+    assert causality.get("android_capability_truth_degraded") is True
     assert causality["android_semantics_age_s"] == 121.0
     assert causality["android_semantics_freshness_threshold_s"] == 120.0
     assert causality["android_semantics_freshness_state"] == "stale"

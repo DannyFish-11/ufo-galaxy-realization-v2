@@ -98,6 +98,11 @@ class AndroidDevice:
     screen_height: Optional[int] = None
     capabilities: int = 0
     supported_actions: List[str] = field(default_factory=list)
+    # PR-7A: tracks whether capabilities were explicitly reported by the Android
+    # device on registration, or whether the field carries its zero/absent default.
+    # Absent capability evidence MUST NOT be treated as positive fitness evidence
+    # by governance layers.
+    capabilities_explicitly_reported: bool = False
 
     # 连接状态
     connected: bool = False
@@ -121,6 +126,7 @@ class AndroidDevice:
             "screen_height": self.screen_height,
             "capabilities": self.capabilities,
             "capabilities_list": DeviceCapability.to_list(self.capabilities),
+            "capabilities_explicitly_reported": self.capabilities_explicitly_reported,
             "supported_actions": self.supported_actions,
             "connected": self.connected,
             "last_heartbeat": self.last_heartbeat,
@@ -129,7 +135,22 @@ class AndroidDevice:
 
     @classmethod
     def from_registration(cls, data: Dict) -> "AndroidDevice":
-        """从注册消息创建设备"""
+        """从注册消息创建设备
+
+        PR-7A governance hardening: capabilities default to NONE (0) when the
+        Android device does not report them.  Absent capability evidence must
+        degrade governance decisions rather than be treated as an implicit grant
+        of default capabilities.  Use ``capabilities_explicitly_reported`` to
+        distinguish real evidence from the unverified absent state.
+        """
+        raw_caps = data.get("capabilities")
+        if raw_caps is not None:
+            caps = int(raw_caps)
+            caps_reported = True
+        else:
+            # PR-7A: absent capability report → NONE, not optimistic default.
+            caps = DeviceCapability.NONE
+            caps_reported = False
         return cls(
             device_id=data.get("device_id", str(uuid.uuid4())),
             device_type=DeviceType(data.get("device_type", "android_phone")),
@@ -140,7 +161,8 @@ class AndroidDevice:
             sdk_version=data.get("sdk_version"),
             screen_width=data.get("screen_width"),
             screen_height=data.get("screen_height"),
-            capabilities=data.get("capabilities", DeviceCapability.get_android_default()),
+            capabilities=caps,
+            capabilities_explicitly_reported=caps_reported,
             connected=True,
             last_heartbeat=time.time(),
         )

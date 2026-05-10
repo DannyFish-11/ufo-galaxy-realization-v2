@@ -705,6 +705,18 @@ def build_unified_governance_state(
         dispatch_eligible = bool(getattr(readiness, "is_dispatch_eligible", False))
         takeover_eligible = bool(getattr(readiness, "is_takeover_eligible", False))
         runtime_state_for_device = dict(runtime_by_device.get(device_id, {}))
+
+        # PR-7A: Compute proof_input_diagnosis BEFORE the canonical gate so
+        # that Android capability truth quality can degrade the gate decision.
+        # Absent/stale/conflicting/downgraded Android truth must NOT be treated
+        # as positive evidence — the gate decision must reflect this explicitly.
+        proof_input_diagnosis = classify_canonical_proof_input_diagnosis(
+            runtime_state_for_device
+        )
+        android_capability_truth_quality: Optional[str] = str(
+            proof_input_diagnosis.get("proof_input_class") or ""
+        ).strip() or None
+
         canonical_gate = resolve_android_execution_gate_decision(
             policy_eligible=dispatch_eligible,
             readiness_ready=bool(getattr(readiness, "is_cross_device_ready", False)),
@@ -713,6 +725,7 @@ def build_unified_governance_state(
                 runtime_state_for_device.get("local_inference_available", False)
             ),
             fallback_tier=runtime_state_for_device.get("current_fallback_tier"),
+            android_capability_truth_quality=android_capability_truth_quality,
         )
         if mode == "local":
             local_mode_count += 1
@@ -897,8 +910,18 @@ def build_unified_governance_state(
                 ),
                 "mesh_proof_quality": mesh_proof_quality,
                 "mesh_governance_readiness_impact": mesh_governance_readiness_impact,
-                "proof_input_diagnosis": classify_canonical_proof_input_diagnosis(
-                    runtime_state_for_device
+                # PR-7A: use the pre-computed proof_input_diagnosis (computed
+                # before the canonical gate so truth quality affects the
+                # gate decision, not only observability).
+                "proof_input_diagnosis": proof_input_diagnosis,
+                # PR-7A: Android capability truth quality fields.
+                # These expose whether the gate decision was degraded due to
+                # absent/stale/conflicting Android capability evidence, so
+                # operators can distinguish truth-driven denials from
+                # eligibility-driven denials.
+                "android_capability_truth_quality": android_capability_truth_quality,
+                "android_capability_truth_degraded": bool(
+                    canonical_gate.android_capability_truth_degraded
                 ),
                 # ── PR-5: Android execution lifecycle truth quality ───────────
                 # Reflects Android-remote-confirmed vs V2-local-only vs

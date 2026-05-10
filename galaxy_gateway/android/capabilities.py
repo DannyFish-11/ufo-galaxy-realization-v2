@@ -7,6 +7,21 @@ Provides the ``DeviceCapability`` bitmask class, aligned with AIPMessageV3.kt.
 
 from typing import List
 
+# ---------------------------------------------------------------------------
+# PR-7A Governance hardening policy
+# ---------------------------------------------------------------------------
+
+CAPABILITY_ABSENT_GOVERNANCE_POLICY: str = (
+    "POLICY::CAPABILITY_ABSENT_GOVERNANCE: "
+    "When an Android device registers without reporting explicit capabilities, "
+    "the system MUST treat capability state as absent/unverified (NONE=0), "
+    "not as an implicit grant of default capabilities.  Absent capability "
+    "evidence degrades readiness and execution gate decisions; it is NEVER "
+    "treated as positive evidence of device fitness.  Callers must use "
+    "AndroidDevice.capabilities_explicitly_reported to determine whether "
+    "the capability bitmask reflects real device evidence or unverified state."
+)
+
 
 class DeviceCapability:
     NONE = 0
@@ -47,7 +62,14 @@ class DeviceCapability:
 
     @classmethod
     def get_android_default(cls) -> int:
-        """获取 Android 设备的默认能力"""
+        """获取 Android 设备的默认能力
+
+        .. deprecated::
+            Do not use this value as a governance default when a device has not
+            reported capabilities.  Absent capability evidence must be treated
+            as ``NONE`` (0) so that governance decisions degrade conservatively.
+            See :data:`CAPABILITY_ABSENT_GOVERNANCE_POLICY`.
+        """
         return (cls.NETWORK | cls.STORAGE | cls.COMPUTE |
                 cls.GUI_READ | cls.GUI_WRITE | cls.GUI_SCREENSHOT |
                 cls.INPUT_TOUCH | cls.INPUT_VOICE |
