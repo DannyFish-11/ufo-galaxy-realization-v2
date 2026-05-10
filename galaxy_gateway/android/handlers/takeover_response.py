@@ -39,17 +39,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Direct tracking hook — patchable module-level reference.
-# Tests that verify tracking integration patch this symbol directly.
-# ---------------------------------------------------------------------------
-try:
-    from core.takeover_tracking import (
-        record_takeover_response as _record_takeover_response,
-    )
-except ImportError:  # pragma: no cover
-    _record_takeover_response = None  # type: ignore[assignment]
-
 try:
     from core.attached_runtime_session_registry import (
         lookup_session_by_device as _lookup_session_by_device,
@@ -57,9 +46,8 @@ try:
 except ImportError:  # pragma: no cover
     _lookup_session_by_device = None  # type: ignore[assignment]
 
-# PR-11-V2: lifecycle coordinator — session state reduction and audit are
-# performed by the coordinator.  Tracking is called directly above so that
-# it remains patchable in unit tests.
+# PR-11-V2: lifecycle coordinator — all tracking, session state reduction,
+# and audit are performed by the coordinator.
 try:
     from core.android_delegated_runtime_lifecycle_coordinator import (
         get_lifecycle_coordinator as _get_lifecycle_coordinator,
@@ -109,10 +97,8 @@ async def handle_takeover_response(
     Processing order:
 
     1. Extract wire fields from *message*.
-    2. Persist the takeover decision via :func:`~core.takeover_tracking.record_takeover_response`
-       (``_record_takeover_response`` — directly patchable for unit tests).
-    3. Delegate session-state reduction and audit to the lifecycle coordinator.
-    4. Return a typed ACK to the Android runtime.
+    2. Delegate session-state reduction, tracking, and audit to the lifecycle coordinator.
+    3. Return a typed ACK to the Android runtime.
 
     Parameters
     ----------
@@ -149,32 +135,7 @@ async def handle_takeover_response(
         reason,
     )
 
-    # Step 1: persist takeover decision to the canonical tracking store.
-    # This call is intentionally made directly (not via the coordinator) so
-    # that unit tests can patch ``_record_takeover_response`` in this module
-    # and verify tracking behaviour without having to mock the entire
-    # coordinator chain.
-    if _record_takeover_response is not None:
-        try:
-            _record_takeover_response(
-                takeover_id=takeover_id,
-                device_id=device_id,
-                accepted=accepted,
-                reason=reason,
-                session_id=session_id or None,
-                task_id=task_id,
-                trace_id=trace_id,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug(
-                "takeover_response: tracking call failed (non-fatal): "
-                "takeover_id=%r device_id=%s exc=%s",
-                takeover_id,
-                device_id,
-                exc,
-            )
-
-    # Step 2: delegate session-state reduction and audit to the coordinator.
+    # Step 1: delegate session-state reduction, tracking, and audit to the coordinator.
     if _get_lifecycle_coordinator is not None:
         try:
             outcome = _get_lifecycle_coordinator().on_takeover_response(
