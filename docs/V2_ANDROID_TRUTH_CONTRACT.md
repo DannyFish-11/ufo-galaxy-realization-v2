@@ -20,7 +20,9 @@
 > `tests/test_pr9_canonical_proof_input_diagnosis.py`,
 > `tests/integration/test_pr6a_real_android_execution_governance_regression.py`,
 > `tests/test_pr13_closed_loop_governance_consolidation.py`,
-> `tests/test_pr14_governance_audit_authority.py`
+> `tests/test_pr14_governance_audit_authority.py`,
+> `tests/test_pr11a_android_truth_followup_verification.py`,
+> `tests/test_pr12_android_truth_final_audit.py`
 
 ## 1. Contract summary
 
@@ -193,6 +195,8 @@ These suites are the maintainer guardrails for future refactors:
 | `tests/integration/test_pr6a_real_android_execution_governance_regression.py` | A claimed “real Android” path must actually provide real-device evidence and drive the V2 governance path with Android payloads, not Python-only stubs |
 | `tests/test_pr13_closed_loop_governance_consolidation.py` | Closed-loop stage ordering and cross-stage invariants (activation → execution → observation → reconciliation → completion) remain enforced |
 | `tests/test_pr14_governance_audit_authority.py` | Audit authority chain remains monotonic and center-authoritative; terminal truth cannot be overridden by uplink observations; cross-device isolation remains absolute |
+| `tests/test_pr11a_android_truth_followup_verification.py` | Protocol-only evidence (no capability contract metadata) still fails integration; unrecognised proof-input classes are fail-closed; explicit lifecycle-degraded flag overrides quality value; invalid integration summary shapes fail closed; governance state readiness-impact semantics are preserved |
+| `tests/test_pr12_android_truth_final_audit.py` | All series sentinels are importable and non-empty; contract versions are stable strings; policy constants follow the `POLICY::` naming convention; all eight proof-input classes are recognised by the pipeline; decision-causality expected fields are stable across the hardening series |
 
 ## 6. Reviewer checklist for future changes
 
@@ -211,3 +215,22 @@ When reviewing Android governance changes, confirm:
 
 If a change breaks one of those rules, it is not just a refactor; it is a
 contract change and should be reviewed as governance behavior.
+
+## 7. Final audit state (PR-12)
+
+PR-12 is the final audit-and-polish step for the Android-truth hardening series.
+After this PR the repository is in a stable, coherent state:
+
+- All series sentinels (`PR5_V2`, `PR8_V2`, `PR13_V2`, `PR14_V2`) are
+  importable and verified by `test_pr12_android_truth_final_audit.py`.
+- `CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY` now enumerates all eight proof-input
+  classes (`complete`, `stale`, `conflicting`, `malformed`, `unknown`,
+  `downgraded`, `partial`, `missing`) to match the implementation.
+- The `core/unified_governance_semantics.py` module docstring now references
+  the full hardening series so maintainers can trace which PR introduced each
+  capability.
+- This document's regression suite table and primary suite header now include
+  PR-11A and PR-12 follow-up tests.
+
+Maintainers should treat the invariants in Section 5 as the canonical
+regression boundary when evolving the Android-truth contract.
