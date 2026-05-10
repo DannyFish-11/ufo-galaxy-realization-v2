@@ -661,7 +661,42 @@ class TestEvaluateReadinessAndroidGateOff:
         assert verdict.is_dispatch_eligible is False
         assert "android_cross_device_enabled" in verdict.blocking_gates
         reasons = {gate.gate_name: gate.reason for gate in verdict.gate_results}
-        assert "canonical gate metadata is partial" in reasons["android_cross_device_enabled"]
+        assert "canonical gate contract is partial" in reasons["android_cross_device_enabled"]
+
+    def test_J7_unknown_capability_report_contract_blocks_dispatch(self):
+        register_session("dev_unknown_semantics", posture="join_runtime")
+        snap = _make_snapshot(
+            cross_device_enabled=True,
+            goal_execution_enabled=True,
+            parallel_execution_enabled=True,
+        )
+        semantics = {
+            "canonical_mode": "cross_device",
+            "reported_mode_state": "cross_device_active",
+            "canonical_gate_metadata_state": "unknown",
+            "canonical_gate_metadata_complete": False,
+            "missing_canonical_gate_metadata_keys": [],
+            "malformed_canonical_gate_metadata_keys": [],
+            "unknown_canonical_gate_metadata_keys": ["extra_capability_flag"],
+            "canonical_gate_semantic_conflicts": [],
+            "downgraded_canonical_gate_metadata_reasons": [],
+            "canonical_gate_governance_readiness_impact": "block",
+            "canonical_gate_contract_diagnosis": "unknown field extra_capability_flag",
+        }
+        with patch(
+            "galaxy_gateway.cross_device_switch.is_cross_device_enabled", return_value=True
+        ), patch(
+            "core.android_device_state_store.get_device_state_snapshot", return_value=snap
+        ), patch(
+            "core.android_device_state_store.get_device_capability_report_semantics",
+            return_value=semantics,
+        ):
+            verdict = evaluate_android_mode_readiness("dev_unknown_semantics")
+
+        assert verdict.is_dispatch_eligible is False
+        reasons = {gate.gate_name: gate.reason for gate in verdict.gate_results}
+        assert "canonical gate contract is unknown" in reasons["android_cross_device_enabled"]
+        assert "unknown=['extra_capability_flag']" in reasons["android_cross_device_enabled"]
 
 
 # ---------------------------------------------------------------------------
