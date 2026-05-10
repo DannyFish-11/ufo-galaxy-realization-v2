@@ -427,6 +427,22 @@ class TestGroupE_DecisionCausalityFieldStability:
             "dimension_results": [],
             "degradation_causes": [],
         }
+        cross_repo_truth_report = {
+            "pipeline_verdict": "complete",
+            "is_complete": True,
+            "primary_sources_complete": True,
+            "primary_sources_fresh": True,
+            "downgrade_reasons": [],
+            "sources": [
+                {
+                    "source_id": "real_device_verification",
+                    "authority": "primary",
+                    "status": "present",
+                    "freshness_secs": 3.0,
+                    "is_stale": False,
+                }
+            ],
+        }
 
         from core.unified_governance_semantics import build_unified_governance_state
 
@@ -443,6 +459,8 @@ class TestGroupE_DecisionCausalityFieldStability:
                   MagicMock(return_value=runtime_snapshot)),
             patch("core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
                   MagicMock(return_value=integration_summary)),
+            patch("core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
+                  MagicMock(return_value=cross_repo_truth_report)),
         ):
             state = build_unified_governance_state()
         return state
@@ -478,3 +496,14 @@ class TestGroupE_DecisionCausalityFieldStability:
         assert "android_evidence_integration_allowed" in causality
         assert "android_evidence_integration_grade" in causality
         assert "android_evidence_integration_degradation_causes" in causality
+        assert "canonical_truth_provenance" in causality
+        assert "canonical_truth_source_trust_level" in causality
+        assert "canonical_truth_freshness_state" in causality
+        assert "canonical_truth_confirmed" in causality
+        assert "canonical_truth_inferred" in causality
+        assert "cross_repo_truth_pipeline_verdict" in causality
+        assert "cross_repo_truth_source_provenance" in causality
+        assert causality["canonical_truth_provenance"] == "android_confirmed_truth"
+        assert causality["canonical_truth_source_trust_level"] == "high"
+        assert causality["canonical_truth_confirmed"] is True
+        assert causality["canonical_truth_inferred"] is False

@@ -330,6 +330,124 @@ def _stage_index(stage: GovernanceAuditStage) -> int:
     return _STAGE_ORDER.index(stage)
 
 
+def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
+    """Normalize cross-repo evidence report object/dict to a stable audit shape."""
+    report_dict: Dict[str, Any] = {}
+    if isinstance(raw_report, dict):
+        report_dict = dict(raw_report)
+    elif hasattr(raw_report, "to_dict"):
+        try:
+            report_dict = dict(raw_report.to_dict())  # type: ignore[union-attr]
+        except Exception:
+            report_dict = {}
+
+    normalized_sources: List[Dict[str, Any]] = []
+    for source in report_dict.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        normalized_sources.append(
+            {
+                "source_id": str(source.get("source_id") or ""),
+                "source_trust_level": str(source.get("authority") or "unknown"),
+                "status": str(source.get("status") or "unknown"),
+                "freshness_secs": source.get("freshness_secs"),
+                "is_stale": bool(source.get("is_stale", False)),
+            }
+        )
+
+    return {
+        "pipeline_verdict": str(report_dict.get("pipeline_verdict") or "insufficient"),
+        "is_complete": bool(report_dict.get("is_complete", False)),
+        "primary_sources_complete": bool(
+            report_dict.get("primary_sources_complete", False)
+        ),
+        "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
+        "downgrade_reasons": list(report_dict.get("downgrade_reasons") or []),
+        "source_provenance": normalized_sources,
+    }
+
+
+def _derive_audit_truth_basis(
+    *,
+    truth: Dict[str, Any],
+    evidence: GovernanceAuthorityEvidence,
+    cross_repo_truth_report: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify audit truth provenance/trust/freshness/inferred-vs-confirmed.
+
+    Parameters
+    ----------
+    truth:
+        Raw uplink/lifecycle reconciliation truth from
+        ``get_uplink_truth_state(execution_id)``.
+    evidence:
+        PR-14 authority-chain evidence for the execution/device pair.
+    cross_repo_truth_report:
+        Normalized PR-05 cross-repo evidence report summary.
+
+    Returns
+    -------
+    dict
+        Stable audit-facing fields:
+        ``canonical_truth_provenance``,
+        ``canonical_truth_source_trust_level``,
+        ``canonical_truth_freshness_state``,
+        ``canonical_truth_freshness_reason``,
+        ``canonical_truth_confirmed``, and
+        ``canonical_truth_inferred``.
+    """
+    reconciliation_status = str(truth.get("reconciliation_status") or "missing").strip().lower()
+    authority_source = str(evidence.authority_source or "none").strip().lower()
+    cross_repo_verdict = str(
+        cross_repo_truth_report.get("pipeline_verdict") or "insufficient"
+    ).strip().lower()
+    cross_repo_primary_fresh = bool(
+        cross_repo_truth_report.get("primary_sources_fresh", False)
+    )
+
+    stale_remote = reconciliation_status in {
+        "stale_rejected",
+        "reconnect_delayed_rejected",
+        "out_of_order_rejected",
+    } or cross_repo_verdict == "stale"
+    if stale_remote:
+        provenance = "stale_remote_evidence"
+    elif (
+        authority_source == "reported_uplink"
+        and evidence.canonical_terminal_outcome not in (None, "")
+    ):
+        provenance = "android_confirmed_truth"
+    elif reconciliation_status not in {"missing", "unavailable"} and authority_source == "none":
+        provenance = "inferred_reconciliation"
+    else:
+        provenance = "v2_local_state"
+
+    if provenance == "android_confirmed_truth":
+        trust_level = "high" if cross_repo_primary_fresh else "medium"
+    elif provenance == "v2_local_state":
+        trust_level = "medium"
+    else:
+        trust_level = "low"
+
+    freshness_state = "unknown"
+    if stale_remote:
+        freshness_state = "stale"
+    elif cross_repo_primary_fresh:
+        freshness_state = "fresh"
+
+    return {
+        "canonical_truth_provenance": provenance,
+        "canonical_truth_source_trust_level": trust_level,
+        "canonical_truth_freshness_state": freshness_state,
+        "canonical_truth_freshness_reason": (
+            f"reconciliation_status:{reconciliation_status};"
+            f"cross_repo_pipeline_verdict:{cross_repo_verdict}"
+        ),
+        "canonical_truth_confirmed": provenance == "android_confirmed_truth",
+        "canonical_truth_inferred": provenance == "inferred_reconciliation",
+    }
+
+
 def _build_admission_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
     """Build the admission stage entry from uplink truth state."""
     lifecycle_event_count: int = truth.get("lifecycle_event_count", 0) or 0
@@ -678,6 +796,35 @@ def get_governance_audit_summary(
     """
     evidence = build_governance_authority_evidence(execution_id, device_id)
     violations = verify_governance_authority_integrity(execution_id, device_id)
+    truth = get_uplink_truth_state(execution_id)
+
+    try:
+        from core.canonical_cross_repo_evidence_pipeline import (
+            get_canonical_cross_repo_evidence_report,
+        )
+
+        cross_repo_truth_report = _normalize_cross_repo_truth_report(
+            get_canonical_cross_repo_evidence_report()
+        )
+    except Exception:
+        cross_repo_truth_report = _normalize_cross_repo_truth_report(
+            {
+                "pipeline_verdict": "insufficient",
+                "is_complete": False,
+                "primary_sources_complete": False,
+                "primary_sources_fresh": False,
+                "downgrade_reasons": [
+                    "canonical_cross_repo_evidence_report_unavailable"
+                ],
+                "sources": [],
+            }
+        )
+
+    canonical_truth_basis = _derive_audit_truth_basis(
+        truth=truth,
+        evidence=evidence,
+        cross_repo_truth_report=cross_repo_truth_report,
+    )
 
     return {
         "execution_id": execution_id,
@@ -696,4 +843,23 @@ def get_governance_audit_summary(
         "sentinel": GOVERNANCE_AUDIT_AUTHORITY_SENTINEL,
         "contract_version": GOVERNANCE_AUDIT_CONTRACT_VERSION,
         "_policy": GOVERNANCE_AUDIT_AUTHORITY_POLICY,
+        **canonical_truth_basis,
+        "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get(
+            "pipeline_verdict"
+        ),
+        "cross_repo_truth_is_complete": bool(
+            cross_repo_truth_report.get("is_complete", False)
+        ),
+        "cross_repo_truth_primary_sources_complete": bool(
+            cross_repo_truth_report.get("primary_sources_complete", False)
+        ),
+        "cross_repo_truth_primary_sources_fresh": bool(
+            cross_repo_truth_report.get("primary_sources_fresh", False)
+        ),
+        "cross_repo_truth_downgrade_reasons": list(
+            cross_repo_truth_report.get("downgrade_reasons", [])
+        ),
+        "cross_repo_truth_source_provenance": list(
+            cross_repo_truth_report.get("source_provenance", [])
+        ),
     }
