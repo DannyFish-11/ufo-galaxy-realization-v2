@@ -380,7 +380,11 @@ class TakeoverTrackingRuntime:
         return None
 
     def list_by_takeover_id(self, takeover_id: str) -> List[TakeoverTrackingRecord]:
-        """Return all records with ``takeover_id == takeover_id``, newest-first."""
+        """Return all records with ``takeover_id == takeover_id``.
+
+        Records are returned in ring-buffer order, which is newest-first
+        because :meth:`record` writes using ``appendleft``.
+        """
         with self._lock:
             return [r for r in self._ring if r.takeover_id == takeover_id]
 
@@ -555,17 +559,30 @@ def adjudicate_takeover_ownership_convergence(
 ) -> TakeoverOwnershipConvergenceVerdict:
     """Adjudicate ownership convergence for a takeover from recorded evidence."""
     try:
+        def _has_identity_mismatch(field_name: str, expected_value: str) -> bool:
+            if not expected_value or not records:
+                return False
+            for _record in records:
+                observed = getattr(_record, field_name, "")
+                if observed and observed != expected_value:
+                    return True
+            return False
+
         _rt = runtime if runtime is not None else get_takeover_tracking_runtime()
         records = _rt.list_by_takeover_id(takeover_id or "") if takeover_id else []
         diagnosis: List[str] = []
+        has_missing_takeover_id = not takeover_id
+        has_missing_session_id = not session_id
+        has_missing_device_id = not device_id
+        has_missing_takeover_record = not records
 
-        if not takeover_id:
+        if has_missing_takeover_id:
             diagnosis.append("missing_takeover_id")
-        if not session_id:
+        if has_missing_session_id:
             diagnosis.append("missing_session_id")
-        if not device_id:
+        if has_missing_device_id:
             diagnosis.append("missing_device_id")
-        if not records:
+        if has_missing_takeover_record:
             diagnosis.append("missing_takeover_record")
 
         accepted_count = sum(1 for r in records if r.decision == TakeoverDecision.accepted)
@@ -575,21 +592,35 @@ def adjudicate_takeover_ownership_convergence(
 
         session_ids = {r.session_id for r in records if r.session_id}
         device_ids = {r.device_id for r in records if r.device_id}
-        if session_id and records and any(r.session_id and r.session_id != session_id for r in records):
+        has_session_id_conflict = _has_identity_mismatch("session_id", session_id)
+        has_device_id_conflict = _has_identity_mismatch("device_id", device_id)
+        if has_session_id_conflict:
             diagnosis.append("session_id_conflict")
-        if device_id and records and any(r.device_id and r.device_id != device_id for r in records):
+        if has_device_id_conflict:
             diagnosis.append("device_id_conflict")
-        if len(session_ids) > 1:
+        has_multiple_session_ids = len(session_ids) > 1
+        has_multiple_device_ids = len(device_ids) > 1
+        if has_multiple_session_ids:
             diagnosis.append("multiple_session_ids_for_takeover_id")
-        if len(device_ids) > 1:
+        if has_multiple_device_ids:
             diagnosis.append("multiple_device_ids_for_takeover_id")
 
         has_conflict = accepted_count > 0 and rejected_count > 0
         if has_conflict:
             diagnosis.append("conflicting_takeover_decisions")
 
-        has_missing = any(tag.startswith("missing_") for tag in diagnosis)
-        has_identity_conflict = any(tag.endswith("_conflict") for tag in diagnosis)
+        has_missing = (
+            has_missing_takeover_id
+            or has_missing_session_id
+            or has_missing_device_id
+            or has_missing_takeover_record
+        )
+        has_identity_conflict = (
+            has_session_id_conflict
+            or has_device_id_conflict
+            or has_multiple_session_ids
+            or has_multiple_device_ids
+        )
         if has_conflict or has_identity_conflict:
             return TakeoverOwnershipConvergenceVerdict(
                 takeover_id=takeover_id or "",
