@@ -680,8 +680,9 @@ def build_unified_governance_state(
         from core.android_evidence_integration_pipeline import (
             get_android_evidence_integration_summary,
         )
+        android_evidence_integration_summary_fn = get_android_evidence_integration_summary
     except Exception:
-        def _fallback_android_evidence_integration_summary(  # type: ignore[misc]
+        def _fallback_get_android_evidence_integration_summary(  # type: ignore[misc]
             device_id: str,
             execution_id: str = "",
             *,
@@ -698,7 +699,7 @@ def build_unified_governance_state(
                     "android_evidence_integration_summary_unavailable"
                 ],
             }
-        get_android_evidence_integration_summary = _fallback_android_evidence_integration_summary
+        android_evidence_integration_summary_fn = _fallback_get_android_evidence_integration_summary
 
     if device_ids is None:
         try:
@@ -751,7 +752,7 @@ def build_unified_governance_state(
             proof_input_diagnosis.get("proof_input_class") or ""
         ).strip() or None
         primary_execution_id = _extract_primary_execution_id(runtime_state_for_device)
-        android_evidence_integration = get_android_evidence_integration_summary(
+        android_evidence_integration = android_evidence_integration_summary_fn(
             device_id,
             primary_execution_id,
             runtime_state=runtime_state_for_device,
