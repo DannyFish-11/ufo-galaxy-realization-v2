@@ -41,11 +41,15 @@ def _make_ws() -> MagicMock:
     return ws
 
 
-def _derive_execution_id_and_outcome(
+def _derive_execution_id_and_terminal_phase(
     messages: list[Dict[str, Any]],
     device_id: str,
 ) -> Tuple[str, ExecutionLifecyclePhase]:
-    execution_msg = next((m for m in messages if m.get("type") == "device_execution_event"), {})
+    execution_msg = next((m for m in messages if m.get("type") == "device_execution_event"), None)
+    assert execution_msg is not None, (
+        "Dual-runtime evidence replay must include a canonical device_execution_event "
+        "message to drive canonical closure/audit validation."
+    )
     payload = execution_msg.get("payload") if isinstance(execution_msg, dict) else {}
     if not isinstance(payload, dict):
         payload = {}
@@ -58,6 +62,11 @@ def _derive_execution_id_and_outcome(
         or payload.get("taskId")
         or f"dual_runtime_{device_id}"
     )
+    if execution_id == f"dual_runtime_{device_id}":
+        raise AssertionError(
+            "device_execution_event payload must include flow_id/task_id/execution_id "
+            "for canonical governance closure/audit validation."
+        )
     phase = str(payload.get("phase") or "").strip().lower()
     if phase in {"failed", "failure", "error"}:
         return execution_id, ExecutionLifecyclePhase.failed
@@ -135,7 +144,7 @@ def test_cross_repo_dual_runtime_evidence_exercises_closure_audit_readiness_and_
         bridge = AndroidBridge()
         ws = _make_ws()
         device_id, _ = asyncio.run(_replay_canonical_messages(bridge, ws, messages))
-        execution_id, terminal_phase = _derive_execution_id_and_outcome(messages, device_id)
+        execution_id, terminal_phase = _derive_execution_id_and_terminal_phase(messages, device_id)
 
         record_execution_lifecycle_event(
             execution_id=execution_id,
@@ -174,8 +183,13 @@ def test_cross_repo_dual_runtime_evidence_exercises_closure_audit_readiness_and_
         assert closed_loop["closed_loop_view"]["loop_is_coherent"] is True
 
         audit_summary = get_governance_audit_summary(execution_id, device_id)
-        canonical_truth_keys = [k for k in audit_summary if k.startswith("canonical_truth_")]
-        assert canonical_truth_keys
+        for required_key in (
+            "canonical_truth_provenance",
+            "canonical_truth_source_trust_level",
+            "canonical_truth_freshness_state",
+            "canonical_truth_freshness_reason",
+        ):
+            assert required_key in audit_summary
         assert isinstance(audit_summary.get("cross_repo_truth_pipeline_verdict"), str)
         assert "cross_repo_truth_source_provenance" in audit_summary
 
@@ -184,7 +198,10 @@ def test_cross_repo_dual_runtime_evidence_exercises_closure_audit_readiness_and_
         assert readiness.status != "not_registered"
 
         governance_state = build_unified_governance_state(device_ids=[device_id])
-        device_view = next(d for d in governance_state["devices"] if d["device_id"] == device_id)
+        device_view = next((d for d in governance_state["devices"] if d["device_id"] == device_id), None)
+        assert device_view is not None, (
+            "Replayed dual-runtime Android participant must appear in unified governance state."
+        )
         delegated = device_view["governance_precedence"]["delegated_execution"]
         causality = delegated["decision_causality"]
         diagnosis = causality["android_originated_canonical_diagnosis"]
