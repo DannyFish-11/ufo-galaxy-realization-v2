@@ -245,6 +245,16 @@ class TestGroupA_ClassifyProofInputDiagnosis:
             conflicting["proof_input_class"],
             complete["proof_input_class"],
         }
+        assert classes == {
+            "missing",
+            "partial",
+            "malformed",
+            "unknown",
+            "downgraded",
+            "stale",
+            "conflicting",
+            "complete",
+        }
         assert len(classes) == 8, f"Expected 8 distinct classes, got: {classes}"
 
     def test_a12_conflict_takes_priority_over_malformed(self) -> None:

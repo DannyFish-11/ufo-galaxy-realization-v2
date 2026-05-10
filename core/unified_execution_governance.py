@@ -2600,6 +2600,8 @@ def classify_canonical_proof_input_diagnosis(
             set(detected_conflicts + list(snapshot.get("android_semantics_conflicts") or []))
         )
         if not all_conflicts:
+            # Defensive fallback: ingress may have already classified the contract as
+            # incompatible even when only the coarse state survived transport.
             all_conflicts = ["android_capability_contract_incompatible"]
         for conflict in all_conflicts:
             degradation_causes.append(f"semantic_conflict:{conflict}")

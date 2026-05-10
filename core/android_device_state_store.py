@@ -899,6 +899,11 @@ def _normalize_capability_report_semantics(
         mode_readiness_state is not None
         and mode_readiness_state not in _ANDROID_CANONICAL_MODE_READINESS_VALUES
     ):
+        logger.debug(
+            "_normalize_capability_report_semantics: invalid mode_readiness_state=%r for device_id=%r",
+            metadata.get("mode_readiness_state"),
+            device_id,
+        )
         mode_readiness_state = None
     local_intelligence_status = _coerce_optional_str(
         metadata.get("local_intelligence_status"),
@@ -909,6 +914,11 @@ def _normalize_capability_report_semantics(
         and local_intelligence_status
         not in _ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES
     ):
+        logger.debug(
+            "_normalize_capability_report_semantics: invalid local_intelligence_status=%r for device_id=%r",
+            metadata.get("local_intelligence_status"),
+            device_id,
+        )
         local_intelligence_status = None
     degraded_mode = _coerce_optional_bool(metadata.get("degraded_mode"))
     cross_device_eligibility = _coerce_optional_bool(
