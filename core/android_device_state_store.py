@@ -137,6 +137,8 @@ _ANDROID_CANONICAL_GATE_BOOLEAN_FIELDS: tuple[str, ...] = (
     "local_inference_ready",
     "local_inference_available",
 )
+# 2.0 = strict canonical validation for unknown metadata keys, semantic
+# incompatibilities, and downgraded Android-reported runtime truth.
 ANDROID_CAPABILITY_CANONICAL_CONTRACT_VERSION: str = "2.0"
 _ANDROID_CANONICAL_MODE_READINESS_VALUES: frozenset[str] = frozenset(
     {"ready", "degraded", "blocked", "unknown", "transitioning"}

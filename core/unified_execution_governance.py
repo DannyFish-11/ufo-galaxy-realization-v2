@@ -2596,6 +2596,8 @@ def classify_canonical_proof_input_diagnosis(
     # --- semantic conflict check (highest priority) ---
     detected_conflicts = _detect_android_semantics_conflicts(snapshot)
     if detected_conflicts or contract_state == "incompatible":
+        # Merge locally re-derived conflicts with any ingress-side conflicts that
+        # survived in the runtime snapshot so diagnosis remains stable end-to-end.
         all_conflicts = sorted(
             set(detected_conflicts + list(snapshot.get("android_semantics_conflicts") or []))
         )
