@@ -268,11 +268,12 @@ class TestGroupC_TruthBinding:
         _clear_execution_governance_runtime_state()
 
     def test_returns_ExecutionLifecycleTruthBinding_instance(self) -> None:
-        with (
-            patch(
-                "core.unified_execution_governance.get_device_state_snapshot",
-                return_value=None,
-            ) if False else patch("builtins.bool", bool),
+        with patch(
+            "core.unified_execution_governance._get_android_runtime_pressure_snapshot",
+            return_value={
+                "latest_execution_event_phase": None,
+                "latest_execution_event_age_s": None,
+            },
         ):
             binding = get_execution_lifecycle_truth_binding("dev-X")
         assert isinstance(binding, ExecutionLifecycleTruthBinding)

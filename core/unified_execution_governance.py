@@ -2091,14 +2091,12 @@ def _classify_android_execution_lifecycle_truth_quality(
     """
     v2_has_active = active_execution_count > 0
     android_has_event = latest_execution_event_phase is not None
-    android_active = (
-        android_has_event
-        and str(latest_execution_event_phase).lower() in _ANDROID_ACTIVE_EXECUTION_PHASES
+    # Normalize the phase string once to avoid redundant conversions.
+    normalized_phase: str = (
+        str(latest_execution_event_phase).lower() if android_has_event else ""
     )
-    android_terminal = (
-        android_has_event
-        and str(latest_execution_event_phase).lower() in _ANDROID_TERMINAL_EXECUTION_PHASES
-    )
+    android_active = android_has_event and normalized_phase in _ANDROID_ACTIVE_EXECUTION_PHASES
+    android_terminal = android_has_event and normalized_phase in _ANDROID_TERMINAL_EXECUTION_PHASES
 
     def _age_str() -> str:
         if latest_execution_event_age_s is None:
@@ -2247,6 +2245,11 @@ def get_execution_lifecycle_truth_binding(
             latest_android_event_age_s=latest_age_s,
         )
     except Exception as exc:  # noqa: BLE001
+        # Broad catch is intentional: this function is documented to never raise.
+        # The possible sources of failure include ImportError, AttributeError, and
+        # ValueError from the android_device_state_store layer, as well as any
+        # unexpected runtime exception.  A safe fallback binding is returned so
+        # callers are never disrupted by store unavailability.
         logger.debug(
             "get_execution_lifecycle_truth_binding: assessment failed for %r: %s",
             device_id,
@@ -2255,7 +2258,7 @@ def get_execution_lifecycle_truth_binding(
         return ExecutionLifecycleTruthBinding(
             device_id=device_id,
             android_lifecycle_truth_quality=AndroidExecutionLifecycleTruthQuality.v2_local_only,
-            android_lifecycle_truth_reason=f"assessment_error:{exc}",
+            android_lifecycle_truth_reason=f"assessment_error:{type(exc).__name__}",
             android_lifecycle_truth_degraded=False,
             android_lifecycle_truth_governance_impact="none",
         )
