@@ -145,6 +145,15 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
             {
                 "device_id": "dev_cross",
                 "active_execution_count": 1,
+                "active_executions": [
+                    {
+                        "execution_type": "takeover_request",
+                        "execution_id": "exec_cross_1",
+                        "started_at": 450.0,
+                        "priority": 0,
+                        "blocks_lower_priority": True,
+                    }
+                ],
                 "highest_priority_execution_type": "takeover_request",
                 "blocked_execution_types": ["goal_execution", "parallel_subtask"],
                 "offline_queue_depth": 3,
@@ -233,6 +242,12 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert causality["latest_execution_event_absorbed_at"] == 450.0
     assert causality["latest_execution_event_age_s"] == 6.0
     assert causality["execution_busy_window_seconds"] == 60.0
+    assert causality["android_evidence_integration_execution_id"] == "exec_cross_1"
+    assert "android_evidence_integration_decision" in causality
+    assert "android_evidence_integration_allowed" in causality
+    assert "android_evidence_integration_grade" in causality
+    assert "android_evidence_integration_degradation_causes" in causality
+    assert cross["android_evidence_integration"]["execution_id"] == "exec_cross_1"
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL

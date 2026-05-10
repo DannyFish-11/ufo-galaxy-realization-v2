@@ -191,6 +191,17 @@ def _snapshot_continuity_state(
     return "unavailable"
 
 
+def _extract_primary_execution_id(runtime_state: Dict[str, Any]) -> str:
+    """Extract the first usable execution_id from runtime state."""
+    for item in runtime_state.get("active_executions", []) or []:
+        if not isinstance(item, dict):
+            continue
+        execution_id = item.get("execution_id")
+        if isinstance(execution_id, str) and execution_id.strip():
+            return execution_id.strip()
+    return ""
+
+
 def _has_sentinel(module_path: str, sentinel_name: str) -> bool:
     """Return True when a sentinel constant can be imported and is truthy."""
     try:
@@ -665,6 +676,30 @@ def build_unified_governance_state(
             "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             "_contract_version": UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
         }
+    try:
+        from core.android_evidence_integration_pipeline import (
+            get_android_evidence_integration_summary,
+        )
+        android_evidence_integration_summary_fn = get_android_evidence_integration_summary
+    except Exception:
+        def _fallback_get_android_evidence_integration_summary(  # type: ignore[misc]
+            device_id: str,
+            execution_id: str = "",
+            *,
+            runtime_state: Optional[Dict[str, Any]] = None,
+        ) -> Dict[str, Any]:
+            return {
+                "device_id": device_id,
+                "execution_id": execution_id,
+                "integration_decision": "deny",
+                "integration_allowed": False,
+                "overall_grade": "absent",
+                "dimension_results": [],
+                "degradation_causes": [
+                    "android_evidence_integration_summary_unavailable"
+                ],
+            }
+        android_evidence_integration_summary_fn = _fallback_get_android_evidence_integration_summary
 
     if device_ids is None:
         try:
@@ -716,6 +751,24 @@ def build_unified_governance_state(
         android_capability_truth_quality: Optional[str] = str(
             proof_input_diagnosis.get("proof_input_class") or ""
         ).strip() or None
+        primary_execution_id = _extract_primary_execution_id(runtime_state_for_device)
+        android_evidence_integration = android_evidence_integration_summary_fn(
+            device_id,
+            primary_execution_id,
+            runtime_state=runtime_state_for_device,
+        )
+        if not isinstance(android_evidence_integration, dict):
+            android_evidence_integration = {
+                "device_id": device_id,
+                "execution_id": primary_execution_id,
+                "integration_decision": "deny",
+                "integration_allowed": False,
+                "overall_grade": "absent",
+                "dimension_results": [],
+                "degradation_causes": [
+                    "android_evidence_integration_summary_invalid_shape"
+                ],
+            }
 
         canonical_gate = resolve_android_execution_gate_decision(
             policy_eligible=dispatch_eligible,
@@ -940,6 +993,19 @@ def build_unified_governance_state(
                 "android_lifecycle_truth_governance_impact": runtime_state_for_device.get(
                     "android_lifecycle_truth_governance_impact"
                 ),
+                "android_evidence_integration_execution_id": primary_execution_id,
+                "android_evidence_integration_decision": android_evidence_integration.get(
+                    "integration_decision"
+                ),
+                "android_evidence_integration_allowed": bool(
+                    android_evidence_integration.get("integration_allowed", False)
+                ),
+                "android_evidence_integration_grade": android_evidence_integration.get(
+                    "overall_grade"
+                ),
+                "android_evidence_integration_degradation_causes": list(
+                    android_evidence_integration.get("degradation_causes", [])
+                ),
             }
             paths[path.value] = decision_dict
 
@@ -952,6 +1018,7 @@ def build_unified_governance_state(
                 "takeover_eligible": takeover_eligible,
                 "takeover_active": takeover_active,
                 "runtime_execution_state": runtime_state_for_device,
+                "android_evidence_integration": android_evidence_integration,
                 "governance_precedence": paths,
                 "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             }

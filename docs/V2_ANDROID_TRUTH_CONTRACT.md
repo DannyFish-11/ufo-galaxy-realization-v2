@@ -101,6 +101,19 @@ is using Android truth correctly. The per-device snapshot includes:
 If a future change hides one of those fields, converts it to an implicit default,
 or stops propagating it into causality, it is changing the truth contract.
 
+`build_unified_governance_state()` also exposes the PR-8 integration summary per
+device (`android_evidence_integration`) and mirrors its key diagnostics in
+`decision_causality`:
+
+- `android_evidence_integration_execution_id`
+- `android_evidence_integration_decision`
+- `android_evidence_integration_allowed`
+- `android_evidence_integration_grade`
+- `android_evidence_integration_degradation_causes`
+
+This keeps capability/lifecycle/runtime diagnostics and final integration
+diagnostics aligned in one canonical governance view.
+
 ## 3. Missing, stale, and conflicting truth handling
 
 ### Capability truth
@@ -191,6 +204,8 @@ When reviewing Android governance changes, confirm:
 3. `decision_causality` still carries the same truth-quality and degradation
    fields that operators and tests use.
 4. PR-8 integration still denies when any evidence dimension is degraded.
+   For capability truth, only `proof_input_class="complete"` is a passing
+   integration input; all other classes are non-passing.
 5. PR-13 / PR-14 invariants still make V2-owned terminal and authority truth win
    over late or conflicting Android observations.
 
