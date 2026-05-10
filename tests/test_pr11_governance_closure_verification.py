@@ -325,6 +325,9 @@ class TestGroupC_DelayedConflictingObservations:
 
         with patch("core.unified_execution_governance.time.time",
                    side_effect=[100.0, 101.0, 110.0]):
+            # t=100: created lifecycle event
+            # t=101: timed_out lifecycle event (terminal — center authority set)
+            # t=110: result uplink arrives late (after terminal — delayed conflict)
             record_execution_lifecycle_event(
                 execution_id=eid, device_id=did,
                 execution_type=ExecutionType.goal_execution,
@@ -357,6 +360,9 @@ class TestGroupC_DelayedConflictingObservations:
 
         with patch("core.unified_execution_governance.time.time",
                    side_effect=[200.0, 201.0, 210.0]):
+            # t=200: succeeded lifecycle event (terminal — center authority set)
+            # t=201: (unused; reserved for potential future events)
+            # t=210: result uplink arrives late (after terminal — delayed conflict)
             record_execution_lifecycle_event(
                 execution_id=eid, device_id=did,
                 execution_type=ExecutionType.delegated_execution,
@@ -408,6 +414,9 @@ class TestGroupC_DelayedConflictingObservations:
 
         with patch("core.unified_execution_governance.time.time",
                    side_effect=[300.0, 301.0, 305.0, 310.0, 315.0]):
+            # t=300: succeeded lifecycle event (terminal — center authority set)
+            # t=301, 305, 310: three successive late conflicting uplinks (failed/timeout/failed)
+            # t=315: (reserved for any additional uplink if needed)
             record_execution_lifecycle_event(
                 execution_id=eid, device_id=did,
                 execution_type=ExecutionType.goal_execution,
