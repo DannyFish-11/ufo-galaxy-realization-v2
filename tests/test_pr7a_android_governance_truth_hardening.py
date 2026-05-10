@@ -782,17 +782,6 @@ class TestProofInputDiagnosisPreComputed:
             ),
             (
                 {
-                    "android_semantics_contract_state": "incompatible",
-                    "android_semantics_conflicts": [
-                        "android_capability_contract_incompatible"
-                    ],
-                    "android_runtime_truth_authority": "downgraded_to_unknown",
-                    "android_runtime_truth_usable": False,
-                },
-                "conflicting",
-            ),
-            (
-                {
                     "android_semantics_contract_state": "downgraded",
                     "android_semantics_downgraded_reasons": ["degraded_mode_true"],
                     "android_runtime_truth_authority": "downgraded_to_unknown",
@@ -817,6 +806,25 @@ class TestProofInputDiagnosisPreComputed:
         assert causality.get("android_capability_truth_degraded") is True
         assert proof_input_diagnosis.get("proof_input_class") == expected_proof_input_class
         assert causality.get("android_capability_truth_quality") == expected_proof_input_class
+
+    def test_incompatible_contract_state_maps_to_conflicting_truth_quality_and_denies(self) -> None:
+        result = self._build_state_with_device(
+            android_semantics={
+                "android_semantics_contract_state": "incompatible",
+                "android_semantics_conflicts": [
+                    "android_capability_contract_incompatible"
+                ],
+                "android_runtime_truth_authority": "downgraded_to_unknown",
+                "android_runtime_truth_usable": False,
+            }
+        )
+        device = result["devices"][0]
+        delegated = device["governance_precedence"].get("delegated_execution", {})
+        causality = delegated.get("decision_causality", {})
+        proof_input_diagnosis = causality.get("proof_input_diagnosis", {})
+        assert causality.get("canonical_execution_gate_decision") == "deny"
+        assert proof_input_diagnosis.get("proof_input_class") == "conflicting"
+        assert causality.get("android_capability_truth_quality") == "conflicting"
 
     def test_resolve_gate_decision_missing_truth_quality_is_deny(self) -> None:
         """
