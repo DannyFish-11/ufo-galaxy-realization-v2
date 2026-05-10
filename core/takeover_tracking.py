@@ -147,11 +147,27 @@ TAKEOVER_ID_IS_CORRELATION_KEY_POLICY: str = (
     "session_id is a secondary index only."
 )
 
+# PR-16: Policy sentinel — resumed ownership transfer requires fresh proof.
+RESUMED_OWNERSHIP_TRANSFER_REQUIRES_FRESH_PROOF_POLICY: str = (
+    "POLICY::RESUMED_OWNERSHIP_TRANSFER_REQUIRES_FRESH_PROOF: "
+    "A resumed V2 ownership-transfer convergence MUST be backed by a "
+    "non-stale takeover-response record.  Evidence older than "
+    "OWNERSHIP_STALE_EVIDENCE_THRESHOLD_SECONDS is classified as "
+    "'degraded_stale_evidence' and MUST NOT be treated as confirmed closure.  "
+    "Callers MUST check TakeoverOwnershipConvergenceVerdict.is_converged "
+    "AND TakeoverOwnershipConvergenceVerdict.degraded before acting on the result."
+)
+
 # ---------------------------------------------------------------------------
 # Internal constants
 # ---------------------------------------------------------------------------
 
 _RING_BUFFER_CAPACITY: int = 256
+
+# PR-16: Threshold after which a confirmed ownership-transfer record is
+# considered stale.  Adjudication will return degraded_stale_evidence for
+# evidence older than this value.
+OWNERSHIP_STALE_EVIDENCE_THRESHOLD_SECONDS: float = 300.0
 
 
 def _has_identity_conflict(
@@ -222,6 +238,8 @@ class TakeoverOwnershipState(str, Enum):
     unresolved = "unresolved"
     degraded_incomplete_evidence = "degraded_incomplete_evidence"
     degraded_conflicting_evidence = "degraded_conflicting_evidence"
+    # PR-16: stale evidence — evidence exists but is too old to be trusted.
+    degraded_stale_evidence = "degraded_stale_evidence"
 
 
 class TakeoverEvidenceQuality(str, Enum):
@@ -231,6 +249,8 @@ class TakeoverEvidenceQuality(str, Enum):
     partial = "partial"
     missing = "missing"
     conflicting = "conflicting"
+    # PR-16: stale — evidence is present but older than the staleness threshold.
+    stale = "stale"
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +373,8 @@ class TakeoverOwnershipConvergenceVerdict:
     accepted_count: int = 0
     rejected_count: int = 0
     unknown_count: int = 0
+    # PR-16: wall-clock timestamp of the most recent evidence record (0.0 = unknown).
+    latest_record_at: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -369,6 +391,7 @@ class TakeoverOwnershipConvergenceVerdict:
             "accepted_count": self.accepted_count,
             "rejected_count": self.rejected_count,
             "unknown_count": self.unknown_count,
+            "latest_record_at": self.latest_record_at,
         }
 
 
@@ -579,9 +602,19 @@ def adjudicate_takeover_ownership_convergence(
     session_id: str = "",
     device_id: str = "",
     runtime: Optional[TakeoverTrackingRuntime] = None,
+    stale_threshold_seconds: float = OWNERSHIP_STALE_EVIDENCE_THRESHOLD_SECONDS,
+    now: Optional[float] = None,
 ) -> TakeoverOwnershipConvergenceVerdict:
-    """Adjudicate ownership convergence for a takeover from recorded evidence."""
+    """Adjudicate ownership convergence for a takeover from recorded evidence.
+
+    PR-16: Stale-evidence detection is now built in.  When the most recent
+    record is older than *stale_threshold_seconds* and would otherwise
+    produce a confirmed ownership state, the verdict is downgraded to
+    ``degraded_stale_evidence`` so that resumed ownership transfer is never
+    silently treated as confirmed closure based on outdated proof.
+    """
     try:
+        _now = now if now is not None else time.time()
         _rt = runtime if runtime is not None else get_takeover_tracking_runtime()
         records = _rt.list_by_takeover_id(takeover_id or "") if takeover_id else []
         diagnosis: List[str] = []
@@ -603,8 +636,10 @@ def adjudicate_takeover_ownership_convergence(
         rejected_count = sum(1 for r in records if r.decision == TakeoverDecision.rejected)
         unknown_count = sum(1 for r in records if r.decision == TakeoverDecision.unknown)
         latest_decision = TakeoverDecision.unknown
+        latest_record_at: float = 0.0
         if records:
             latest_decision = records[0].decision
+            latest_record_at = float(records[0].recorded_at or 0.0)
 
         has_session_id_conflict = _has_identity_conflict(
             records,
@@ -664,6 +699,7 @@ def adjudicate_takeover_ownership_convergence(
                 accepted_count=accepted_count,
                 rejected_count=rejected_count,
                 unknown_count=unknown_count,
+                latest_record_at=latest_record_at,
             )
 
         if has_missing:
@@ -685,9 +721,41 @@ def adjudicate_takeover_ownership_convergence(
                 accepted_count=accepted_count,
                 rejected_count=rejected_count,
                 unknown_count=unknown_count,
+                latest_record_at=latest_record_at,
             )
 
+        # PR-16: Stale-evidence check — applies to both accepted and rejected
+        # convergence paths.  Confirmed ownership based on stale proof MUST be
+        # downgraded so that callers cannot mistake old evidence for closure.
+        is_stale = (
+            stale_threshold_seconds > 0
+            and latest_record_at > 0.0
+            and (_now - latest_record_at) > stale_threshold_seconds
+        )
+
         if latest_decision == TakeoverDecision.accepted:
+            if is_stale:
+                evidence_age_s = _now - latest_record_at
+                diagnosis.append(
+                    f"stale_takeover_evidence:age_s={evidence_age_s:.1f}"
+                    f":threshold_s={stale_threshold_seconds:.1f}"
+                )
+                return TakeoverOwnershipConvergenceVerdict(
+                    takeover_id=takeover_id,
+                    session_id=session_id,
+                    device_id=device_id,
+                    ownership_state=TakeoverOwnershipState.degraded_stale_evidence,
+                    evidence_quality=TakeoverEvidenceQuality.stale,
+                    is_converged=False,
+                    degraded=True,
+                    diagnosis=diagnosis,
+                    latest_decision=latest_decision,
+                    total_records=len(records),
+                    accepted_count=accepted_count,
+                    rejected_count=rejected_count,
+                    unknown_count=unknown_count,
+                    latest_record_at=latest_record_at,
+                )
             diagnosis.append("delegated_takeover_completion_confirmed")
             return TakeoverOwnershipConvergenceVerdict(
                 takeover_id=takeover_id,
@@ -703,9 +771,32 @@ def adjudicate_takeover_ownership_convergence(
                 accepted_count=accepted_count,
                 rejected_count=rejected_count,
                 unknown_count=unknown_count,
+                latest_record_at=latest_record_at,
             )
 
         if latest_decision == TakeoverDecision.rejected:
+            if is_stale:
+                evidence_age_s = _now - latest_record_at
+                diagnosis.append(
+                    f"stale_resumed_ownership_transfer_evidence:age_s={evidence_age_s:.1f}"
+                    f":threshold_s={stale_threshold_seconds:.1f}"
+                )
+                return TakeoverOwnershipConvergenceVerdict(
+                    takeover_id=takeover_id,
+                    session_id=session_id,
+                    device_id=device_id,
+                    ownership_state=TakeoverOwnershipState.degraded_stale_evidence,
+                    evidence_quality=TakeoverEvidenceQuality.stale,
+                    is_converged=False,
+                    degraded=True,
+                    diagnosis=diagnosis,
+                    latest_decision=latest_decision,
+                    total_records=len(records),
+                    accepted_count=accepted_count,
+                    rejected_count=rejected_count,
+                    unknown_count=unknown_count,
+                    latest_record_at=latest_record_at,
+                )
             diagnosis.append("resumed_v2_ownership_transfer_confirmed")
             return TakeoverOwnershipConvergenceVerdict(
                 takeover_id=takeover_id,
@@ -721,6 +812,7 @@ def adjudicate_takeover_ownership_convergence(
                 accepted_count=accepted_count,
                 rejected_count=rejected_count,
                 unknown_count=unknown_count,
+                latest_record_at=latest_record_at,
             )
 
         diagnosis.append("latest_takeover_decision_unknown")
@@ -738,6 +830,7 @@ def adjudicate_takeover_ownership_convergence(
             accepted_count=accepted_count,
             rejected_count=rejected_count,
             unknown_count=unknown_count,
+            latest_record_at=latest_record_at,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(

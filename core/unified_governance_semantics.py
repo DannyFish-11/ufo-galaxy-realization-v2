@@ -34,6 +34,15 @@ This module has been progressively hardened across the Android-truth PR series:
          proof-input classes (``complete``, ``stale``, ``conflicting``,
          ``malformed``, ``unknown``, ``downgraded``, ``partial``, ``missing``).
          Only ``complete`` is a passing classification.
+- PR-16 / ``core.ownership_transfer_proof_quality`` — Proof-quality-aware
+         ownership-transfer semantics.  Resumed ownership transfer is not
+         treated as complete unless supported by sufficient evidence.  Explicit
+         ``degraded_stale_evidence``, ``degraded_partial``,
+         ``degraded_conflicting``, ``degraded_unresolved``, and ``incomplete``
+         classes surface via ``decision_causality`` fields
+         ``ownership_transfer_proof_class``,
+         ``ownership_transfer_is_sufficient_for_closure``, and
+         ``ownership_transfer_proof_degraded``.
 
 Primary regression suites covering this module
 -----------------------------------------------
@@ -97,6 +106,52 @@ except ImportError:  # pragma: no cover
 
     def get_execution_lifecycle_truth_binding(  # type: ignore[misc]
         device_id: str,
+    ) -> Any:
+        return None
+
+# PR-16: Re-export ownership-transfer proof quality so consumers only need
+# one import target.
+try:
+    from core.ownership_transfer_proof_quality import (  # noqa: F401
+        OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
+        OWNERSHIP_TRANSFER_PROOF_QUALITY_CONTRACT_VERSION,
+        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY,
+        OWNERSHIP_TRANSFER_PROOF_QUALITY_POLICY,
+        STALE_OWNERSHIP_EVIDENCE_THRESHOLD_SECONDS,
+        OwnershipTransferProofClass,
+        OwnershipTransferProofQualityResult,
+        classify_ownership_transfer_proof_quality,
+        get_latest_ownership_transfer_proof_quality_for_device,
+    )
+    _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE = False
+    OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL = (  # type: ignore[assignment]
+        "OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL::unavailable"
+    )
+    OWNERSHIP_TRANSFER_PROOF_QUALITY_CONTRACT_VERSION = "unavailable"  # type: ignore[assignment]
+    RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY = (  # type: ignore[assignment]
+        "POLICY::RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF::unavailable"
+    )
+    OWNERSHIP_TRANSFER_PROOF_QUALITY_POLICY = (  # type: ignore[assignment]
+        "POLICY::OWNERSHIP_TRANSFER_PROOF_QUALITY::unavailable"
+    )
+    STALE_OWNERSHIP_EVIDENCE_THRESHOLD_SECONDS = 300.0  # type: ignore[assignment]
+
+    def classify_ownership_transfer_proof_quality(  # type: ignore[misc]
+        verdict: Any,
+        *,
+        now: Optional[float] = None,
+        stale_threshold_seconds: float = 300.0,
+    ) -> Any:
+        return None
+
+    def get_latest_ownership_transfer_proof_quality_for_device(  # type: ignore[misc]
+        device_id: str,
+        *,
+        session_id: str = "",
+        now: Optional[float] = None,
+        stale_threshold_seconds: float = 300.0,
     ) -> Any:
         return None
 
@@ -831,6 +886,36 @@ def build_unified_governance_state(
         if takeover_active:
             takeover_active_count += 1
 
+        # PR-16: Classify ownership-transfer proof quality for this device so
+        # that governance state carries explicit degraded/confirmed classification
+        # rather than only raw ownership_state strings.  This ensures resumed
+        # ownership transfer is never silently treated as confirmed closure
+        # based on insufficient evidence.
+        ownership_transfer_proof_result: Optional[Any] = None
+        ownership_transfer_proof_class: Optional[str] = None
+        ownership_transfer_proof_sufficient: bool = False
+        ownership_transfer_proof_degraded: bool = True
+        ownership_transfer_proof_diagnosis: List[str] = []
+        if _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE:
+            try:
+                ownership_transfer_proof_result = (
+                    get_latest_ownership_transfer_proof_quality_for_device(device_id)
+                )
+                if ownership_transfer_proof_result is not None:
+                    _pq = ownership_transfer_proof_result
+                    ownership_transfer_proof_class = str(
+                        getattr(_pq.proof_class, "value", str(_pq.proof_class))
+                    )
+                    ownership_transfer_proof_sufficient = bool(
+                        _pq.is_sufficient_for_closure
+                    )
+                    ownership_transfer_proof_degraded = bool(_pq.degraded)
+                    ownership_transfer_proof_diagnosis = list(_pq.diagnosis)
+            except Exception:
+                ownership_transfer_proof_diagnosis = [
+                    "ownership_transfer_proof_quality_lookup_failed"
+                ]
+
         paths: Dict[str, Dict[str, Any]] = {}
         for path in GovernancePath:
             decision = resolve_governance_path_decision(
@@ -1061,6 +1146,15 @@ def build_unified_governance_state(
                 "android_evidence_recovery_truth_diagnosis": android_evidence_integration.get(
                     "recovery_truth_diagnosis"
                 ),
+                # PR-16: Ownership-transfer proof quality.  Consumers MUST
+                # check ownership_transfer_proof_sufficient before treating
+                # any ownership-transfer state as confirmed closure.
+                "ownership_transfer_proof_class": ownership_transfer_proof_class,
+                "ownership_transfer_proof_sufficient": ownership_transfer_proof_sufficient,
+                "ownership_transfer_proof_degraded": ownership_transfer_proof_degraded,
+                "ownership_transfer_proof_diagnosis": list(
+                    ownership_transfer_proof_diagnosis
+                ),
             }
             paths[path.value] = decision_dict
 
@@ -1123,4 +1217,15 @@ __all__ = [
     "AndroidExecutionLifecycleTruthQuality",
     "ExecutionLifecycleTruthBinding",
     "get_execution_lifecycle_truth_binding",
+    # PR-16: Ownership-transfer proof quality (re-exported from
+    # core.ownership_transfer_proof_quality for convenience).
+    "OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL",
+    "OWNERSHIP_TRANSFER_PROOF_QUALITY_CONTRACT_VERSION",
+    "RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY",
+    "OWNERSHIP_TRANSFER_PROOF_QUALITY_POLICY",
+    "STALE_OWNERSHIP_EVIDENCE_THRESHOLD_SECONDS",
+    "OwnershipTransferProofClass",
+    "OwnershipTransferProofQualityResult",
+    "classify_ownership_transfer_proof_quality",
+    "get_latest_ownership_transfer_proof_quality_for_device",
 ]
