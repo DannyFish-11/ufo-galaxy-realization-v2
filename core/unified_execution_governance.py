@@ -164,6 +164,37 @@ CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY: str = (
     "explicit degradation_causes and conflict descriptions for debuggability."
 )
 
+# ---------------------------------------------------------------------------
+# PR-5: Android execution lifecycle truth quality constants and policy
+# ---------------------------------------------------------------------------
+
+#: Seconds after which an Android execution event is considered stale when
+#: V2 has active executions tracked locally.
+ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS: float = 60.0
+
+#: Sentinel identifying the PR-5 execution lifecycle truth binding module.
+EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL: str = (
+    "EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL::PR5_V2 present"
+)
+
+#: Contract version for the lifecycle truth binding data model.
+EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION: str = "5.0.0"
+
+ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY: str = (
+    "POLICY::ANDROID_EXECUTION_LIFECYCLE_TRUTH_V1: "
+    "V2 execution runtime snapshots and decision causality MUST reflect the "
+    "quality of Android-remote lifecycle confirmation, not only V2-local "
+    "bookkeeping.  The truth quality MUST be one of: "
+    "v2_local_only (no active execution, no Android events), "
+    "android_remote_confirmed (V2 active AND recent Android events agree), "
+    "stale_remote (V2 active AND Android events exist but are too old), "
+    "missing_remote (V2 active AND no Android lifecycle evidence received), "
+    "conflicting_remote (contradiction between V2-local and Android-remote state). "
+    "Degraded truth quality (missing_remote, stale_remote, conflicting_remote) "
+    "MUST cause diagnosable governance degradation and MUST be visible in "
+    "decision_causality and runtime snapshot outputs."
+)
+
 _ANDROID_REPORTED_RUNTIME_TRUTH_FIELDS: Tuple[str, ...] = (
     "android_reported_mode",
     "android_reported_mode_state",
@@ -433,6 +464,71 @@ class ReplayReason(str, Enum):
 class UplinkKind(str, Enum):
     result_uplink = "result_uplink"
     state_uplink = "state_uplink"
+
+
+class AndroidExecutionLifecycleTruthQuality(str, Enum):
+    """Quality of Android-remote lifecycle confirmation vs V2-local execution tracking.
+
+    This enum classifies the reliability of execution runtime truth as seen
+    from the V2 control plane.  It is the primary output of the PR-5 data
+    model introduced by :func:`get_execution_lifecycle_truth_binding`.
+
+    Values
+    ------
+    v2_local_only
+        No active V2-tracked executions and no Android events — idle baseline
+        state where V2 local bookkeeping and Android are in silent agreement.
+    android_remote_confirmed
+        V2 has active tracked executions AND recent Android execution events
+        confirm the activity within the staleness threshold.  Highest quality.
+    stale_remote
+        V2 has active tracked executions AND Android events exist but are older
+        than :data:`ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS`.
+        Governance should treat runtime truth as degraded.
+    missing_remote
+        V2 has active tracked executions BUT no Android lifecycle evidence has
+        been received for this device.  Governance must not rely on Android
+        confirmation.
+    conflicting_remote
+        Contradiction between V2-local state and Android-remote state.
+        Examples: V2 tracks an active execution but Android reports a terminal
+        phase; or Android reports an active execution that V2 has no record of.
+        Requires explicit investigation and causes governance degradation.
+    """
+
+    v2_local_only = "v2_local_only"
+    android_remote_confirmed = "android_remote_confirmed"
+    stale_remote = "stale_remote"
+    missing_remote = "missing_remote"
+    conflicting_remote = "conflicting_remote"
+
+
+# Map AndroidExecutionLifecycleTruthQuality → canonical governance impact label.
+# Callers that gate on truth quality MUST consult this mapping rather than
+# hard-coding impact strings.
+_ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT: Mapping[
+    AndroidExecutionLifecycleTruthQuality, str
+] = MappingProxyType(
+    {
+        AndroidExecutionLifecycleTruthQuality.v2_local_only: "none",
+        AndroidExecutionLifecycleTruthQuality.android_remote_confirmed: "none",
+        AndroidExecutionLifecycleTruthQuality.stale_remote: "degraded",
+        AndroidExecutionLifecycleTruthQuality.missing_remote: "degraded",
+        AndroidExecutionLifecycleTruthQuality.conflicting_remote: "blocked",
+    }
+)
+
+# Set of truth qualities that indicate the runtime snapshot is degraded and
+# that governance decisions should surface a diagnostic reason.
+_ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES: frozenset[
+    AndroidExecutionLifecycleTruthQuality
+] = frozenset(
+    {
+        AndroidExecutionLifecycleTruthQuality.stale_remote,
+        AndroidExecutionLifecycleTruthQuality.missing_remote,
+        AndroidExecutionLifecycleTruthQuality.conflicting_remote,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -814,6 +910,79 @@ class ExecutionUplinkRecord:
             "payload": dict(self.payload),
             "sequence": int(self.sequence),
             "recorded_at": float(self.recorded_at),
+        }
+
+
+# ---------------------------------------------------------------------------
+# PR-5: ExecutionLifecycleTruthBinding — Android lifecycle truth quality model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ExecutionLifecycleTruthBinding:
+    """Binding quality between V2-local execution tracking and Android-remote
+    lifecycle evidence.
+
+    This dataclass captures the PR-5 data model that distinguishes V2-local
+    tracked execution state from Android-remote-confirmed state, stale remote
+    state, missing remote state, and conflicting remote state.
+
+    Produced by :func:`get_execution_lifecycle_truth_binding` and embedded
+    in :func:`get_execution_runtime_snapshot` per-device entries and in
+    ``decision_causality`` via :mod:`core.unified_governance_semantics`.
+
+    Attributes
+    ----------
+    device_id
+        The Android device identifier.
+    android_lifecycle_truth_quality
+        Canonical :class:`AndroidExecutionLifecycleTruthQuality` classification
+        for this device's execution state.
+    android_lifecycle_truth_reason
+        Human-readable reason string explaining the quality classification.
+    android_lifecycle_truth_degraded
+        ``True`` when the quality is one of ``stale_remote``, ``missing_remote``,
+        or ``conflicting_remote`` — signals that governance decisions MUST
+        surface a diagnostic reason.
+    android_lifecycle_truth_governance_impact
+        Canonical governance impact label: ``"none"`` | ``"degraded"`` | ``"blocked"``.
+    active_execution_count
+        Number of active executions tracked locally by V2 for this device.
+    latest_android_event_phase
+        Most recent Android-reported execution phase (from
+        ``android_device_state_store``), or ``None`` if unavailable.
+    latest_android_event_age_s
+        Age in seconds of the most recent Android execution event, or ``None``
+        if unavailable.
+    assessed_at
+        Unix epoch seconds when this binding was assessed.
+    """
+
+    device_id: str
+    android_lifecycle_truth_quality: AndroidExecutionLifecycleTruthQuality
+    android_lifecycle_truth_reason: str = ""
+    android_lifecycle_truth_degraded: bool = False
+    android_lifecycle_truth_governance_impact: str = "none"
+    active_execution_count: int = 0
+    latest_android_event_phase: Optional[str] = None
+    latest_android_event_age_s: Optional[float] = None
+    assessed_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "device_id": self.device_id,
+            "android_lifecycle_truth_quality": self.android_lifecycle_truth_quality.value,
+            "android_lifecycle_truth_reason": self.android_lifecycle_truth_reason,
+            "android_lifecycle_truth_degraded": self.android_lifecycle_truth_degraded,
+            "android_lifecycle_truth_governance_impact": (
+                self.android_lifecycle_truth_governance_impact
+            ),
+            "active_execution_count": self.active_execution_count,
+            "latest_android_event_phase": self.latest_android_event_phase,
+            "latest_android_event_age_s": self.latest_android_event_age_s,
+            "assessed_at": float(self.assessed_at),
+            "_policy": ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY,
+            "_contract_version": EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION,
         }
 
 
@@ -1881,6 +2050,220 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     return snapshot
 
 
+# ---------------------------------------------------------------------------
+# PR-5: Android execution lifecycle truth quality classification
+# ---------------------------------------------------------------------------
+
+# Android execution phases considered "actively executing" on the Android side.
+_ANDROID_ACTIVE_EXECUTION_PHASES: frozenset[str] = frozenset(
+    {"planning", "grounding", "execution", "replan", "running", "admitted"}
+)
+# Android execution phases that indicate terminal completion on the Android side.
+_ANDROID_TERMINAL_EXECUTION_PHASES: frozenset[str] = frozenset(
+    {"completed", "succeeded", "failed", "cancelled", "canceled", "error", "timed_out"}
+)
+
+
+def _classify_android_execution_lifecycle_truth_quality(
+    *,
+    active_execution_count: int,
+    latest_execution_event_phase: Optional[str],
+    latest_execution_event_age_s: Optional[float],
+) -> Tuple[str, str]:
+    """Classify Android execution lifecycle truth quality for a single device.
+
+    Parameters
+    ----------
+    active_execution_count:
+        Number of active executions currently tracked by V2-local registry.
+    latest_execution_event_phase:
+        Most recent Android-reported execution event phase, or ``None`` if no
+        events have been received.
+    latest_execution_event_age_s:
+        Age in seconds of the most recent Android event, or ``None``.
+
+    Returns
+    -------
+    Tuple[str, str]
+        ``(quality_value, reason)`` where *quality_value* is an
+        :class:`AndroidExecutionLifecycleTruthQuality` string value and
+        *reason* is a human-readable diagnostic string.
+    """
+    v2_has_active = active_execution_count > 0
+    android_has_event = latest_execution_event_phase is not None
+    # Normalize the phase string once to avoid redundant conversions.
+    normalized_phase: str = (
+        str(latest_execution_event_phase).lower() if android_has_event else ""
+    )
+    android_active = android_has_event and normalized_phase in _ANDROID_ACTIVE_EXECUTION_PHASES
+    android_terminal = android_has_event and normalized_phase in _ANDROID_TERMINAL_EXECUTION_PHASES
+
+    def _age_str() -> str:
+        if latest_execution_event_age_s is None:
+            return "unknown"
+        return f"{latest_execution_event_age_s:.1f}s"
+
+    # ── No V2 active executions ──────────────────────────────────────────────
+    if not v2_has_active:
+        if android_active:
+            # Android is reporting an active execution that V2 has no record of.
+            return (
+                AndroidExecutionLifecycleTruthQuality.conflicting_remote.value,
+                (
+                    f"android_reports_active_phase={latest_execution_event_phase!r}"
+                    f"(age={_age_str()})_but_v2_has_no_active_execution_tracked"
+                ),
+            )
+        # Both idle or Android shows terminal/no event — clean idle state.
+        return (
+            AndroidExecutionLifecycleTruthQuality.v2_local_only.value,
+            "no_active_execution_in_v2_or_android_confirmed_idle",
+        )
+
+    # ── V2 has active executions ─────────────────────────────────────────────
+    if not android_has_event:
+        # V2 is tracking executions but no Android evidence received at all.
+        return (
+            AndroidExecutionLifecycleTruthQuality.missing_remote.value,
+            "v2_tracking_active_execution_but_no_android_lifecycle_evidence_received",
+        )
+
+    if android_terminal:
+        # Android has reported terminal completion but V2 still tracks as active.
+        return (
+            AndroidExecutionLifecycleTruthQuality.conflicting_remote.value,
+            (
+                f"android_reports_terminal_phase={latest_execution_event_phase!r}"
+                f"(age={_age_str()})_but_v2_still_tracking_active_execution"
+            ),
+        )
+
+    if android_active:
+        # Android confirms active execution — check staleness.
+        if latest_execution_event_age_s is None:
+            return (
+                AndroidExecutionLifecycleTruthQuality.stale_remote.value,
+                (
+                    "android_reports_active_but_event_age_unavailable_"
+                    "treating_as_stale"
+                ),
+            )
+        if (
+            latest_execution_event_age_s
+            > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS
+        ):
+            return (
+                AndroidExecutionLifecycleTruthQuality.stale_remote.value,
+                (
+                    f"android_event_age={_age_str()}_exceeds_stale_threshold="
+                    f"{ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS}s"
+                ),
+            )
+        return (
+            AndroidExecutionLifecycleTruthQuality.android_remote_confirmed.value,
+            (
+                f"android_confirms_active_phase={latest_execution_event_phase!r}"
+                f"_age={_age_str()}_within_threshold"
+            ),
+        )
+
+    # Android has an event with an unknown/unclassified phase while V2 is active.
+    if latest_execution_event_age_s is not None and (
+        latest_execution_event_age_s
+        > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS
+    ):
+        return (
+            AndroidExecutionLifecycleTruthQuality.stale_remote.value,
+            (
+                f"android_unclassified_phase={latest_execution_event_phase!r}"
+                f"_age={_age_str()}_exceeds_stale_threshold"
+            ),
+        )
+    return (
+        AndroidExecutionLifecycleTruthQuality.v2_local_only.value,
+        (
+            f"v2_active_android_has_unclassified_phase="
+            f"{latest_execution_event_phase!r}"
+        ),
+    )
+
+
+def get_execution_lifecycle_truth_binding(
+    device_id: str,
+) -> ExecutionLifecycleTruthBinding:
+    """Return the Android execution lifecycle truth binding for *device_id*.
+
+    Reads the V2-local active execution registry and the Android execution
+    event store to produce a canonical :class:`ExecutionLifecycleTruthBinding`
+    that classifies how well Android-remote lifecycle state confirms V2-local
+    tracking.
+
+    This is the primary PR-5 public API.  Callers that build runtime snapshots
+    or decision causality MUST call this function rather than reading V2-local
+    tracking alone.
+
+    Never raises — returns a ``v2_local_only`` binding on any error.
+
+    Parameters
+    ----------
+    device_id:
+        The Android device identifier to assess.
+
+    Returns
+    -------
+    ExecutionLifecycleTruthBinding
+        Always returned; never raises.
+    """
+    try:
+        active_entries = _get_active_executions(device_id)
+        active_count = len(active_entries)
+
+        # Read Android execution event truth from the pressure snapshot
+        # (already reads from android_device_state_store in a best-effort way).
+        pressure = _get_android_runtime_pressure_snapshot(device_id)
+        latest_phase = pressure.get("latest_execution_event_phase")
+        latest_age_s: Optional[float] = pressure.get("latest_execution_event_age_s")
+
+        quality_value, reason = _classify_android_execution_lifecycle_truth_quality(
+            active_execution_count=active_count,
+            latest_execution_event_phase=latest_phase,
+            latest_execution_event_age_s=latest_age_s,
+        )
+        quality = AndroidExecutionLifecycleTruthQuality(quality_value)
+        degraded = quality in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
+        impact = str(
+            _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT.get(quality, "none")
+        )
+        return ExecutionLifecycleTruthBinding(
+            device_id=device_id,
+            android_lifecycle_truth_quality=quality,
+            android_lifecycle_truth_reason=reason,
+            android_lifecycle_truth_degraded=degraded,
+            android_lifecycle_truth_governance_impact=impact,
+            active_execution_count=active_count,
+            latest_android_event_phase=latest_phase,
+            latest_android_event_age_s=latest_age_s,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Broad catch is intentional: this function is documented to never raise.
+        # The possible sources of failure include ImportError, AttributeError, and
+        # ValueError from the android_device_state_store layer, as well as any
+        # unexpected runtime exception.  A safe fallback binding is returned so
+        # callers are never disrupted by store unavailability.
+        logger.debug(
+            "get_execution_lifecycle_truth_binding: assessment failed for %r: %s",
+            device_id,
+            exc,
+        )
+        return ExecutionLifecycleTruthBinding(
+            device_id=device_id,
+            android_lifecycle_truth_quality=AndroidExecutionLifecycleTruthQuality.v2_local_only,
+            android_lifecycle_truth_reason=f"assessment_error:{type(exc).__name__}",
+            android_lifecycle_truth_degraded=False,
+            android_lifecycle_truth_governance_impact="none",
+        )
+
+
 def get_execution_runtime_snapshot(
     *,
     device_ids: Optional[List[str]] = None,
@@ -1905,6 +2288,8 @@ def get_execution_runtime_snapshot(
             key=lambda t: t[1],
         )
         runtime_pressure = _get_android_runtime_pressure_snapshot(device_id)
+        # PR-5: Compute Android execution lifecycle truth binding for this device.
+        truth_binding = get_execution_lifecycle_truth_binding(device_id)
         active_items: List[Dict[str, Any]] = []
         for execution_type, started_at, execution_id in active_entries:
             policy = get_execution_type_policy(execution_type)
@@ -2075,6 +2460,13 @@ def get_execution_runtime_snapshot(
                         "execution_busy_window_seconds", EXECUTION_BUSY_THRESHOLD_SECONDS
                     )
                     or EXECUTION_BUSY_THRESHOLD_SECONDS
+                ),
+                # ── PR-5: Android execution lifecycle truth binding ───────────
+                "android_lifecycle_truth_quality": truth_binding.android_lifecycle_truth_quality.value,
+                "android_lifecycle_truth_reason": truth_binding.android_lifecycle_truth_reason,
+                "android_lifecycle_truth_degraded": truth_binding.android_lifecycle_truth_degraded,
+                "android_lifecycle_truth_governance_impact": (
+                    truth_binding.android_lifecycle_truth_governance_impact
                 ),
                 "_source": "unified_execution_governance.active_registry",
             }
