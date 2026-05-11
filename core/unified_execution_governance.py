@@ -1460,8 +1460,9 @@ def _classify_uplink_terminal_confirmation(
     if reported_result_terminal_outcome == reported_state_terminal_outcome:
         return False, "cross_uplink_confirmed"
 
-    # success/failure dual-source mismatch is intentionally mergeable:
-    # it is canonical partial_success rather than unresolved terminal conflict.
+    # success/failure dual-source mismatch is intentionally mergeable because it
+    # represents a semantically valid partial_success terminal family:
+    # some execution units produced value while others failed.
     if {
         reported_result_terminal_outcome,
         reported_state_terminal_outcome,

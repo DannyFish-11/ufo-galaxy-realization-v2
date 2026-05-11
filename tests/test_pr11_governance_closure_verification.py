@@ -458,6 +458,7 @@ class TestGroupD_PartialAndDegradedObservations:
 
         truth = get_uplink_truth_state(eid)
         assert truth["lifecycle_phase"] is None
+        assert truth["reported_terminal_outcome"] == "success"
         assert truth["terminal_truth_determined"] is False
         assert truth["canonical_terminal_outcome"] is None
         assert truth["terminal_truth_authoritative_source"] == "none"

@@ -124,10 +124,15 @@ def test_uplink_only_conflicting_terminal_outcomes_require_reconciliation():
 
     truth_state = get_uplink_truth_state(execution_id)
     assert truth_state["lifecycle_phase"] is None
+    assert truth_state["reported_terminal_outcome"] == "failure"
     assert truth_state["terminal_truth_determined"] is False
     assert truth_state["canonical_terminal_outcome"] is None
     assert truth_state["terminal_truth_authoritative_source"] == "none"
     assert truth_state["reconciliation_status"] == "uplink_terminal_observation_requires_reconciliation"
+    assert (
+        truth_state["reconciliation_reason"]
+        == "conflicting_terminal_observations_without_lifecycle_authority"
+    )
     assert truth_state["reconciliation_uplink_terminal_confirmation"] == "conflicting_terminal_unresolved"
 
 
