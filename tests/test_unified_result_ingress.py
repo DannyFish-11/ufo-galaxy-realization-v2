@@ -447,7 +447,7 @@ class TestCompletionIngressNotify:
 
         assert not outcome.completion_notified  # not notified but no exception
 
-    def test_E03_completion_ingress_notify_false_does_not_claim_full_closure(self):
+    def test_E03_notify_false_prevents_full_closure(self):
         """notify() returns False must not be treated as full closure success."""
         from core.unified_result_ingress import UnifiedResultIngress
 
