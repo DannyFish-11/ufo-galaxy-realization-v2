@@ -5349,13 +5349,16 @@ def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
 
 
 def _classify_operational_decision_authority(sources: Any) -> str:
+    boundary_v2 = "v2_authoritative"
+    boundary_android = "android_originated"
+    boundary_joint = "joint_cross_repo_derived"
     source_list = [
         str(source)
         for source in (sources or [])
         if source is not None
     ]
     if not source_list:
-        return "v2_authoritative"
+        return boundary_v2
     has_android_origin = any(
         "android" in source.lower() or "galaxy_gateway.android" in source.lower()
         for source in source_list
@@ -5365,10 +5368,39 @@ def _classify_operational_decision_authority(sources: Any) -> str:
         for source in source_list
     )
     if has_android_origin and has_v2_origin:
-        return "joint_cross_repo_derived"
+        return boundary_joint
     if has_android_origin:
-        return "android_originated"
-    return "v2_authoritative"
+        return boundary_android
+    return boundary_v2
+
+
+def _source_of_truth_boundaries() -> Dict[str, str]:
+    return {
+        "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
+        "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
+        "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
+    }
+
+
+def _empty_operational_state_board() -> Dict[str, Any]:
+    return {
+        "authority": "unavailable",
+        "contract_version": "0.0.0",
+        "categories": [],
+        "task_execution_visibility": {
+            "task_initiated": False,
+            "result_closure_established": False,
+            "active_session_count": 0,
+            "participant_total_count": 0,
+        },
+        "dependencies_and_blockers": {
+            "missing_required_routes": [],
+            "waiting_dependencies": [],
+            "blocked": False,
+            "incomplete": False,
+            "degraded_capability_device_count": 0,
+        },
+    }
 
 
 def _build_operational_state_board_from_contract(
@@ -5467,11 +5499,7 @@ def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = N
             "state_contract": state_contract,
         }
         result["operational_state_board"] = _build_operational_state_board_from_contract(state_contract)
-        result["source_of_truth_boundaries"] = {
-            "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
-            "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
-            "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
-        }
+        result["source_of_truth_boundaries"] = _source_of_truth_boundaries()
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: operational state board attachment failed: %s",
@@ -5629,29 +5657,8 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             "reachable_executor_count": 0,
             "source": "fallback",
         },
-        "operational_state_board": {
-            "authority": "unavailable",
-            "contract_version": "0.0.0",
-            "categories": [],
-            "task_execution_visibility": {
-                "task_initiated": False,
-                "result_closure_established": False,
-                "active_session_count": 0,
-                "participant_total_count": 0,
-            },
-            "dependencies_and_blockers": {
-                "missing_required_routes": [],
-                "waiting_dependencies": [],
-                "blocked": False,
-                "incomplete": False,
-                "degraded_capability_device_count": 0,
-            },
-        },
-        "source_of_truth_boundaries": {
-            "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
-            "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
-            "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
-        },
+        "operational_state_board": _empty_operational_state_board(),
+        "source_of_truth_boundaries": _source_of_truth_boundaries(),
         "projection_surface_role": "desktop_status_board_truth",
         "board_facing_default": True,
         "_assembled_at": time.time(),
