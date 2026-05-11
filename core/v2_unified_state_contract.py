@@ -51,7 +51,7 @@ __all__ = [
 
 
 V2_UNIFIED_STATE_CONTRACT_AUTHORITY: str = "core.v2_unified_state_contract::v2-side-executable-state-contract"
-V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.1.0"
+V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.2.0"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -77,9 +77,12 @@ class ContractDecision:
     active: Optional[bool] = None
     complete: Optional[bool] = None
     quality: Optional[str] = None
+    # lifecycle_stage classifies this decision into the operational lifecycle:
+    # observation | admission | readiness | eligibility | execution | closure | conditions
+    lifecycle_stage: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "decision_id": self.decision_id,
             "label": self.label,
             "state": self.state,
@@ -94,6 +97,9 @@ class ContractDecision:
             "complete": self.complete,
             "quality": self.quality,
         }
+        if self.lifecycle_stage is not None:
+            result["lifecycle_stage"] = self.lifecycle_stage
+        return result
 
 
 @dataclass
@@ -251,6 +257,20 @@ def build_v2_unified_state_contract(
         "recovery_active": recovery_active,
     }
 
+    # gateway_bridge_presence: is the Android gateway/bridge connection present and serving
+    gateway_bridge_present = (
+        android_attached
+        and (
+            device_evidence.get("android_device_count", 0) > 0
+            or android_evidence.get("snapshot_count", 0) > 0
+        )
+    )
+    gateway_bridge_degraded = gateway_bridge_present and capability_degraded
+
+    # runtime_host_dispatch_binding: is the dispatch binding to the Android runtime active
+    dispatch_bound = task_initiated and android_attached and main_chain_available
+    dispatch_available = android_attached and main_chain_available and not task_initiated
+
     derived_state = {
         "registration_state": ContractDecision(
             decision_id="registration_state",
@@ -293,6 +313,7 @@ def build_v2_unified_state_contract(
             },
             observable=True,
             acceptable=main_chain_available,
+            lifecycle_stage="observation",
         ),
         "capability_visibility": ContractDecision(
             decision_id="capability_visibility",
@@ -334,6 +355,51 @@ def build_v2_unified_state_contract(
             },
             observable=android_attached or capability_visible,
             acceptable=not android_attached or capability_visible,
+            lifecycle_stage="observation",
+        ),
+        "gateway_bridge_presence": ContractDecision(
+            decision_id="gateway_bridge_presence",
+            label="Gateway / bridge presence",
+            state=(
+                "not_applicable"
+                if not android_attached
+                else (
+                    "degraded"
+                    if gateway_bridge_degraded
+                    else "present" if gateway_bridge_present else "absent"
+                )
+            ),
+            summary=(
+                "Gateway/bridge presence is not applicable without Android context."
+                if not android_attached
+                else (
+                    "Android gateway/bridge is present but reporting degraded capability."
+                    if gateway_bridge_degraded
+                    else (
+                        "Android gateway/bridge connection is confirmed present."
+                        if gateway_bridge_present
+                        else "Android context exists but gateway/bridge connection is not confirmed."
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.android_device_state_store",
+                "galaxy_gateway.android.handlers.capability_report",
+            ),
+            reasons=[
+                f"android_attached={android_attached}",
+                f"gateway_bridge_present={gateway_bridge_present}",
+                f"gateway_bridge_degraded={gateway_bridge_degraded}",
+            ],
+            evidence={
+                "android_device_count": device_evidence.get("android_device_count", 0),
+                "snapshot_count": android_evidence.get("snapshot_count", 0),
+                "capability_degraded": capability_degraded,
+            },
+            observable=android_attached or gateway_bridge_present,
+            acceptable=not android_attached or gateway_bridge_present,
+            active=gateway_bridge_present,
+            lifecycle_stage="observation",
         ),
         "operational_readiness": ContractDecision(
             decision_id="operational_readiness",
@@ -365,99 +431,7 @@ def build_v2_unified_state_contract(
             },
             observable=True,
             acceptable=main_chain_available,
-        ),
-        "active_path": ContractDecision(
-            decision_id="active_path",
-            label="Active path",
-            state=active_path,
-            summary=f"Current active path is {active_path}.",
-            sources=_base_sources(
-                "core.operational_registration_path",
-                "core.runtime_readiness_matrix",
-                "core.attached_runtime_session_registry",
-            ),
-            reasons=[
-                f"main_chain_available={main_chain_available}",
-                f"cross_device_available={cross_device_available}",
-                f"compat_only_available={compat_only_available}",
-            ],
-            evidence={
-                "main_chain_available": main_chain_available,
-                "cross_device_available": cross_device_available,
-                "compat_only_available": compat_only_available,
-            },
-            observable=True,
-            acceptable=main_chain_available,
-            active=active_path != "blocked",
-            quality=success_quality,
-        ),
-        "compat_only_path": ContractDecision(
-            decision_id="compat_only_path",
-            label="Compat-only path",
-            state=("active" if active_path == "compat" else "available" if compat_only_available else "not_available"),
-            summary=(
-                "Only the compat path is currently available."
-                if active_path == "compat"
-                else (
-                    "Compat fallback exists but is not the active path."
-                    if compat_only_available
-                    else "Compat fallback is not currently in use."
-                )
-            ),
-            sources=_base_sources(
-                "core.operational_registration_path",
-                "core.runtime_readiness_matrix",
-            ),
-            reasons=[
-                f"compat_only_available={compat_only_available}",
-                f"active_path={active_path}",
-            ],
-            evidence={"compat_only_available": compat_only_available},
-            observable=compat_only_available or active_path == "compat",
-            acceptable=compat_only_available,
-            active=active_path == "compat",
-        ),
-        "degraded_path": ContractDecision(
-            decision_id="degraded_path",
-            label="Compat/degraded path",
-            state="degraded_operation" if degraded else "canonical_operation",
-            summary=("Current path is degraded or warning-qualified." if degraded else "Current path is canonical."),
-            sources=_base_sources(
-                "core.runtime_readiness_matrix",
-                "core.android_device_state_store",
-                "core.operational_registration_path",
-            ),
-            reasons=[
-                f"validation_status={validation.overall_status.value}",
-                f"runtime_verdict={runtime_verdict}",
-                f"capability_degraded={capability_degraded}",
-            ],
-            evidence={"degraded": degraded},
-            observable=True,
-            acceptable=main_chain_available,
-            active=degraded,
-        ),
-        "recovery_active_state": ContractDecision(
-            decision_id="recovery_active_state",
-            label="Recovery-active state",
-            state="active" if recovery_active else "inactive",
-            summary=(
-                "Recovery/reconciliation is currently active."
-                if recovery_active
-                else "Recovery is not currently active."
-            ),
-            sources=_base_sources(
-                "core.attached_runtime_session_registry",
-                "core.android_participant_session_state",
-            ),
-            reasons=[f"recovery_active={recovery_active}"],
-            evidence={
-                "replaced_session_count": session_evidence.get("replaced_session_count", 0),
-                "detached_session_count": session_evidence.get("detached_session_count", 0),
-                "invalidated_session_count": session_evidence.get("invalidated_session_count", 0),
-            },
-            observable=recovery_active,
-            active=recovery_active,
+            lifecycle_stage="admission",
         ),
         "main_chain_availability": ContractDecision(
             decision_id="main_chain_availability",
@@ -479,6 +453,7 @@ def build_v2_unified_state_contract(
             observable=True,
             acceptable=main_chain_available,
             active=main_chain_available,
+            lifecycle_stage="admission",
         ),
         "cross_device_availability": ContractDecision(
             decision_id="cross_device_availability",
@@ -516,6 +491,104 @@ def build_v2_unified_state_contract(
             observable=android_attached or cross_device_available,
             acceptable=cross_device_available,
             active=cross_device_available,
+            lifecycle_stage="admission",
+        ),
+        "active_path": ContractDecision(
+            decision_id="active_path",
+            label="Active path",
+            state=active_path,
+            summary=f"Current active path is {active_path}.",
+            sources=_base_sources(
+                "core.operational_registration_path",
+                "core.runtime_readiness_matrix",
+                "core.attached_runtime_session_registry",
+            ),
+            reasons=[
+                f"main_chain_available={main_chain_available}",
+                f"cross_device_available={cross_device_available}",
+                f"compat_only_available={compat_only_available}",
+            ],
+            evidence={
+                "main_chain_available": main_chain_available,
+                "cross_device_available": cross_device_available,
+                "compat_only_available": compat_only_available,
+            },
+            observable=True,
+            acceptable=main_chain_available,
+            active=active_path != "blocked",
+            quality=success_quality,
+            lifecycle_stage="readiness",
+        ),
+        "compat_only_path": ContractDecision(
+            decision_id="compat_only_path",
+            label="Compat-only path",
+            state=("active" if active_path == "compat" else "available" if compat_only_available else "not_available"),
+            summary=(
+                "Only the compat path is currently available."
+                if active_path == "compat"
+                else (
+                    "Compat fallback exists but is not the active path."
+                    if compat_only_available
+                    else "Compat fallback is not currently in use."
+                )
+            ),
+            sources=_base_sources(
+                "core.operational_registration_path",
+                "core.runtime_readiness_matrix",
+            ),
+            reasons=[
+                f"compat_only_available={compat_only_available}",
+                f"active_path={active_path}",
+            ],
+            evidence={"compat_only_available": compat_only_available},
+            observable=compat_only_available or active_path == "compat",
+            acceptable=compat_only_available,
+            active=active_path == "compat",
+            lifecycle_stage="readiness",
+        ),
+        "degraded_path": ContractDecision(
+            decision_id="degraded_path",
+            label="Compat/degraded path",
+            state="degraded_operation" if degraded else "canonical_operation",
+            summary=("Current path is degraded or warning-qualified." if degraded else "Current path is canonical."),
+            sources=_base_sources(
+                "core.runtime_readiness_matrix",
+                "core.android_device_state_store",
+                "core.operational_registration_path",
+            ),
+            reasons=[
+                f"validation_status={validation.overall_status.value}",
+                f"runtime_verdict={runtime_verdict}",
+                f"capability_degraded={capability_degraded}",
+            ],
+            evidence={"degraded": degraded},
+            observable=True,
+            acceptable=main_chain_available,
+            active=degraded,
+            lifecycle_stage="readiness",
+        ),
+        "recovery_active_state": ContractDecision(
+            decision_id="recovery_active_state",
+            label="Recovery-active state",
+            state="active" if recovery_active else "inactive",
+            summary=(
+                "Recovery/reconciliation is currently active."
+                if recovery_active
+                else "Recovery is not currently active."
+            ),
+            sources=_base_sources(
+                "core.attached_runtime_session_registry",
+                "core.android_participant_session_state",
+            ),
+            reasons=[f"recovery_active={recovery_active}"],
+            evidence={
+                "replaced_session_count": session_evidence.get("replaced_session_count", 0),
+                "detached_session_count": session_evidence.get("detached_session_count", 0),
+                "invalidated_session_count": session_evidence.get("invalidated_session_count", 0),
+            },
+            observable=recovery_active,
+            active=recovery_active,
+            lifecycle_stage="readiness",
         ),
         "session_continuity": ContractDecision(
             decision_id="session_continuity",
@@ -569,6 +642,102 @@ def build_v2_unified_state_contract(
             observable=android_attached or session_evidence.get("total_session_count", 0) > 0,
             acceptable=session_evidence.get("active_session_count", 0) > 0,
             active=session_evidence.get("active_session_count", 0) > 0,
+            lifecycle_stage="readiness",
+        ),
+        "participant_device_session_dependencies": ContractDecision(
+            decision_id="participant_device_session_dependencies",
+            label="Participant / device / session dependencies",
+            state=(
+                "not_applicable"
+                if not android_attached
+                else (
+                    "satisfied"
+                    if cross_device_available
+                    else "partial" if capability_visible or session_evidence.get("active_session_count", 0) > 0
+                    else "waiting_dependency"
+                )
+            ),
+            summary=(
+                "Participant/device/session dependencies are not applicable without Android context."
+                if not android_attached
+                else (
+                    "All participant/device/session dependencies are satisfied."
+                    if cross_device_available
+                    else (
+                        "Some dependencies are present but the full dependency set is not yet satisfied."
+                        if capability_visible or session_evidence.get("active_session_count", 0) > 0
+                        else "Participant/device/session dependencies are all still waiting."
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.android_participant_session_state",
+                "core.attached_runtime_session_registry",
+                "core.android_device_state_store",
+            ),
+            reasons=[
+                f"android_attached={android_attached}",
+                f"android_device_count={device_evidence.get('android_device_count', 0)}",
+                f"capability_visible={capability_visible}",
+                f"active_session_count={session_evidence.get('active_session_count', 0)}",
+                f"participant_total_count={session_evidence.get('participant_total_count', 0)}",
+            ],
+            evidence={
+                "android_device_count": device_evidence.get("android_device_count", 0),
+                "capability_visible_count": android_evidence.get("capability_visible_count", 0),
+                "active_session_count": session_evidence.get("active_session_count", 0),
+                "participant_total_count": session_evidence.get("participant_total_count", 0),
+                "cross_device_available": cross_device_available,
+            },
+            observable=android_attached,
+            acceptable=not android_attached or cross_device_available,
+            active=cross_device_available,
+            lifecycle_stage="readiness",
+        ),
+        "runtime_host_dispatch_binding": ContractDecision(
+            decision_id="runtime_host_dispatch_binding",
+            label="Runtime host / dispatch binding",
+            state=(
+                "not_applicable"
+                if not android_attached
+                else (
+                    "active"
+                    if dispatch_bound
+                    else "available" if dispatch_available else "unavailable"
+                )
+            ),
+            summary=(
+                "Runtime host/dispatch binding is not applicable without Android context."
+                if not android_attached
+                else (
+                    "Dispatch binding is active — task is executing via the runtime host."
+                    if dispatch_bound
+                    else (
+                        "Dispatch binding is available and ready to accept task assignment."
+                        if dispatch_available
+                        else "Dispatch binding is unavailable (main chain not ready or Android not attached)."
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.android_runtime_host",
+                "core.android_runtime_dispatch_binding",
+            ),
+            reasons=[
+                f"android_attached={android_attached}",
+                f"main_chain_available={main_chain_available}",
+                f"task_initiated={task_initiated}",
+            ],
+            evidence={
+                "dispatch_bound": dispatch_bound,
+                "dispatch_available": dispatch_available,
+                "task_initiated": task_initiated,
+            },
+            observable=android_attached,
+            acceptable=not android_attached or main_chain_available,
+            eligible=dispatch_available or dispatch_bound,
+            active=dispatch_bound,
+            lifecycle_stage="eligibility",
         ),
     }
 
@@ -604,6 +773,7 @@ def build_v2_unified_state_contract(
             observable=True,
             acceptable=main_chain_available,
             quality="canonical" if main_chain_available and not degraded else "degraded",
+            lifecycle_stage="admission",
         ),
         "cross_device_acceptance": ContractDecision(
             decision_id="cross_device_acceptance",
@@ -637,6 +807,7 @@ def build_v2_unified_state_contract(
             },
             observable=android_attached or cross_device_available,
             acceptable=cross_device_available,
+            lifecycle_stage="admission",
         ),
     }
 
@@ -696,6 +867,7 @@ def build_v2_unified_state_contract(
                 and session_evidence.get("active_session_count", 0) > 0
             ),
             active=task_initiated,
+            lifecycle_stage="eligibility",
         ),
     }
 
@@ -716,6 +888,52 @@ def build_v2_unified_state_contract(
         waiting_dependency_reasons.append("active_session")
 
     closure_quality_state = {
+        "task_execution_visibility": ContractDecision(
+            decision_id="task_execution_visibility",
+            label="Task execution visibility",
+            state=(
+                "not_applicable"
+                if not android_attached
+                else (
+                    "complete"
+                    if result_closure_established
+                    else "active" if task_initiated else "idle"
+                )
+            ),
+            summary=(
+                "Task execution visibility is not applicable without Android context."
+                if not android_attached
+                else (
+                    "Task execution is complete — result closure has been established."
+                    if result_closure_established
+                    else (
+                        "Task execution is currently active."
+                        if task_initiated
+                        else "No task execution is currently active."
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.android_participant_session_state",
+                "core.unified_result_ingress",
+                "core.attached_runtime_session_registry",
+            ),
+            reasons=[
+                f"task_initiated={task_initiated}",
+                f"result_closure_established={result_closure_established}",
+                f"active_session_count={session_evidence.get('active_session_count', 0)}",
+            ],
+            evidence={
+                "task_initiated": task_initiated,
+                "result_closure_established": result_closure_established,
+                "active_session_count": session_evidence.get("active_session_count", 0),
+                "participant_total_count": session_evidence.get("participant_total_count", 0),
+            },
+            observable=task_initiated or result_closure_established,
+            active=task_initiated and not result_closure_established,
+            complete=result_closure_established,
+            lifecycle_stage="execution",
+        ),
         "result_closure": ContractDecision(
             decision_id="result_closure",
             label="Result closure state",
@@ -753,6 +971,7 @@ def build_v2_unified_state_contract(
             observable=task_initiated or result_closure_established,
             complete=result_closure_established,
             quality="canonical" if result_closure_established else "incomplete",
+            lifecycle_stage="closure",
         ),
         "success_quality": ContractDecision(
             decision_id="success_quality",
@@ -778,6 +997,7 @@ def build_v2_unified_state_contract(
             acceptable=main_chain_available,
             active=active_path != "blocked",
             quality=success_quality,
+            lifecycle_stage="closure",
         ),
         "verdict_quality": ContractDecision(
             decision_id="verdict_quality",
@@ -802,6 +1022,7 @@ def build_v2_unified_state_contract(
             },
             observable=True,
             quality=verdict_quality,
+            lifecycle_stage="closure",
         ),
         "blocked_state": ContractDecision(
             decision_id="blocked_state",
@@ -827,6 +1048,7 @@ def build_v2_unified_state_contract(
             },
             observable=not main_chain_available,
             acceptable=main_chain_available,
+            lifecycle_stage="conditions",
         ),
         "waiting_dependency_state": ContractDecision(
             decision_id="waiting_dependency_state",
@@ -844,6 +1066,7 @@ def build_v2_unified_state_contract(
             reasons=list(waiting_dependency_reasons),
             evidence={"waiting_dependencies": list(waiting_dependency_reasons)},
             observable=bool(waiting_dependency_reasons),
+            lifecycle_stage="conditions",
         ),
         "incomplete_state": ContractDecision(
             decision_id="incomplete_state",
@@ -868,6 +1091,7 @@ def build_v2_unified_state_contract(
             },
             observable=task_initiated and not result_closure_established,
             complete=result_closure_established,
+            lifecycle_stage="conditions",
         ),
     }
 
