@@ -49,6 +49,7 @@ from core.operational_registration_path import (
     get_operational_registration_path,
     validate_registration_prerequisites,
 )
+from core.v2_unified_state_contract import build_v2_unified_state_contract
 
 logger = logging.getLogger("Galaxy.OperationalReadinessSurface")
 
@@ -67,11 +68,10 @@ __all__ = [
 
 
 OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
-    "core.operational_readiness_surface::pr1114-followup::"
-    "registration-state-and-clone-to-use-acceptance-surface"
+    "core.operational_readiness_surface::pr1114-followup::" "registration-state-and-clone-to-use-acceptance-surface"
 )
 
-OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.2.0.0"
+OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -251,6 +251,7 @@ class OperationalReadinessReport:
     android_v2_minimum_standard: Dict[str, Any]
     runtime_readiness: Dict[str, Any]
     system_acceptance: Dict[str, Any]
+    state_contract: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -269,6 +270,7 @@ class OperationalReadinessReport:
             "android_v2_minimum_standard": dict(self.android_v2_minimum_standard),
             "runtime_readiness": dict(self.runtime_readiness),
             "system_acceptance": dict(self.system_acceptance),
+            "state_contract": dict(self.state_contract),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -372,10 +374,8 @@ def _collect_android_evidence() -> Dict[str, Any]:
                     capability_visible_count += 1
                 if (
                     semantics.get("degraded_mode") is True
-                    or semantics.get("mode_readiness_state")
-                    in {"degraded", "blocked", "transitioning"}
-                    or semantics.get("canonical_gate_metadata_state")
-                    not in (None, "complete")
+                    or semantics.get("mode_readiness_state") in {"degraded", "blocked", "transitioning"}
+                    or semantics.get("canonical_gate_metadata_state") not in (None, "complete")
                 ):
                     degraded_count += 1
             elif getattr(snap, "degraded_reasons", None):
@@ -388,8 +388,7 @@ def _collect_android_evidence() -> Dict[str, Any]:
         evidence["terminal_execution_event_count"] = sum(
             1
             for event in events
-            if getattr(event, "phase", None)
-            in {"completed", "failed", "stagnation", "gate_decision"}
+            if getattr(event, "phase", None) in {"completed", "failed", "stagnation", "gate_decision"}
         )
         evidence["ecosystem_summary"] = get_device_ecosystem_summary()
     except Exception as exc:  # noqa: BLE001
@@ -519,31 +518,41 @@ def _dynamic_kind_state(
     if kind == RegistrationKind.DEVICE_ANDROID_ADMISSION:
         count = device_evidence.get("android_device_count", 0)
         if count > 0:
-            return SurfaceStatus.ready, f"{count} Android device(s) admitted into V2.", {
-                "android_device_ids": device_evidence.get("android_device_ids", [])
-            }
+            return (
+                SurfaceStatus.ready,
+                f"{count} Android device(s) admitted into V2.",
+                {"android_device_ids": device_evidence.get("android_device_ids", [])},
+            )
         return SurfaceStatus.pending, "Android↔V2 admission path is present but not yet exercised.", {}
 
     if kind == RegistrationKind.DEVICE_ANDROID_STATE:
         count = android_evidence.get("snapshot_count", 0)
         if count > 0:
-            return SurfaceStatus.ready, f"{count} Android device snapshot(s) mirrored on V2.", {
-                "snapshot_device_ids": android_evidence.get("snapshot_device_ids", [])
-            }
+            return (
+                SurfaceStatus.ready,
+                f"{count} Android device snapshot(s) mirrored on V2.",
+                {"snapshot_device_ids": android_evidence.get("snapshot_device_ids", [])},
+            )
         return SurfaceStatus.pending, "Android state store is available but no live snapshot is recorded yet.", {}
 
     if kind == RegistrationKind.CAPABILITY_ANDROID_REPORT:
         visible = android_evidence.get("capability_visible_count", 0)
         degraded = android_evidence.get("degraded_capability_device_count", 0)
         if visible > 0 and degraded == 0:
-            return SurfaceStatus.ready, "Android capability report is visible and canonical.", {
-                "capability_visible_count": visible
-            }
+            return (
+                SurfaceStatus.ready,
+                "Android capability report is visible and canonical.",
+                {"capability_visible_count": visible},
+            )
         if visible > 0:
-            return SurfaceStatus.degraded, "Android capability is visible but degraded/downgraded.", {
-                "capability_visible_count": visible,
-                "degraded_capability_device_count": degraded,
-            }
+            return (
+                SurfaceStatus.degraded,
+                "Android capability is visible but degraded/downgraded.",
+                {
+                    "capability_visible_count": visible,
+                    "degraded_capability_device_count": degraded,
+                },
+            )
         if android_attached:
             return (
                 SurfaceStatus.pending,
@@ -558,10 +567,14 @@ def _dynamic_kind_state(
         if total > 0:
             status = SurfaceStatus.ready if active > 0 else SurfaceStatus.degraded
             summary = f"Attached runtime registry recorded {total} session(s), active={active}."
-            return status, summary, {
-                "active_session_count": active,
-                "total_session_count": total,
-            }
+            return (
+                status,
+                summary,
+                {
+                    "active_session_count": active,
+                    "total_session_count": total,
+                },
+            )
         return (
             SurfaceStatus.pending,
             "Session registry is available but no attached runtime session has been recorded yet.",
@@ -572,15 +585,23 @@ def _dynamic_kind_state(
         total = session_evidence.get("participant_total_count", 0)
         terminal = session_evidence.get("participant_terminal_count", 0)
         if terminal > 0:
-            return SurfaceStatus.ready, f"Android participant lifecycle reached closure for {terminal} session(s).", {
-                "participant_total_count": total,
-                "participant_terminal_count": terminal,
-            }
+            return (
+                SurfaceStatus.ready,
+                f"Android participant lifecycle reached closure for {terminal} session(s).",
+                {
+                    "participant_total_count": total,
+                    "participant_terminal_count": terminal,
+                },
+            )
         if total > 0:
-            return SurfaceStatus.degraded, "Android participant lifecycle is active but not yet closed.", {
-                "participant_total_count": total,
-                "participant_phases": session_evidence.get("participant_phases", []),
-            }
+            return (
+                SurfaceStatus.degraded,
+                "Android participant lifecycle is active but not yet closed.",
+                {
+                    "participant_total_count": total,
+                    "participant_phases": session_evidence.get("participant_phases", []),
+                },
+            )
         if android_attached:
             return (
                 SurfaceStatus.pending,
@@ -611,16 +632,22 @@ def _dynamic_kind_state(
     if kind == RegistrationKind.GOVERNANCE_RELEASE_GATE:
         verdict = runtime_readiness.get("verdict")
         if verdict == "ready":
-            return SurfaceStatus.ready, "Runtime readiness matrix reports READY.", {
-                "runtime_readiness_verdict": verdict
-            }
+            return (
+                SurfaceStatus.ready,
+                "Runtime readiness matrix reports READY.",
+                {"runtime_readiness_verdict": verdict},
+            )
         if verdict in {"degraded", "unknown"}:
-            return SurfaceStatus.degraded, f"Runtime readiness matrix verdict={verdict}.", {
-                "runtime_readiness_verdict": verdict
-            }
-        return SurfaceStatus.blocked, f"Runtime readiness matrix verdict={verdict}.", {
-            "runtime_readiness_verdict": verdict
-        }
+            return (
+                SurfaceStatus.degraded,
+                f"Runtime readiness matrix verdict={verdict}.",
+                {"runtime_readiness_verdict": verdict},
+            )
+        return (
+            SurfaceStatus.blocked,
+            f"Runtime readiness matrix verdict={verdict}.",
+            {"runtime_readiness_verdict": verdict},
+        )
 
     return SurfaceStatus.ready, "Canonical module is present.", {}
 
@@ -762,11 +789,7 @@ def _build_chain_state(
     session_evidence: Dict[str, Any],
 ) -> OperationalChainState:
     by_kind = {state.kind: state for state in kind_states}
-    required_main_chain = [
-        by_kind[kind.value]
-        for kind in path.main_chain_kinds
-        if kind.value in by_kind
-    ]
+    required_main_chain = [by_kind[kind.value] for kind in path.main_chain_kinds if kind.value in by_kind]
     main_chain_blocked = any(item.status == SurfaceStatus.blocked for item in required_main_chain)
     api_missing = sorted(required for required in _REQUIRED_API_PATHS if required not in route_paths)
     main_chain_available = (
@@ -786,13 +809,10 @@ def _build_chain_state(
         and session_evidence.get("active_session_count", 0) > 0
         and session_evidence.get("task_initiated", False)
     )
-    compat_only_available = (
-        not main_chain_available
-        and any(
-            state.path_tier in {PathTier.COMPAT.value, PathTier.FALLBACK.value, PathTier.RECOVERY.value}
-            and state.status != SurfaceStatus.blocked
-            for state in kind_states
-        )
+    compat_only_available = not main_chain_available and any(
+        state.path_tier in {PathTier.COMPAT.value, PathTier.FALLBACK.value, PathTier.RECOVERY.value}
+        and state.status != SurfaceStatus.blocked
+        for state in kind_states
     )
     degraded = (
         validation.overall_status == ValidationStatus.WARN
@@ -848,16 +868,11 @@ def _checkpoint_payload(
     checkpoints: Sequence[AcceptanceCheckpoint],
     chain_state: OperationalChainState,
 ) -> Dict[str, Any]:
-    blocking_failures = [
-        cp.checkpoint_id for cp in checkpoints if cp.blocking and cp.status == SurfaceStatus.blocked
-    ]
+    blocking_failures = [cp.checkpoint_id for cp in checkpoints if cp.blocking and cp.status == SurfaceStatus.blocked]
     degraded = [cp.checkpoint_id for cp in checkpoints if cp.status == SurfaceStatus.degraded]
     pending = [cp.checkpoint_id for cp in checkpoints if cp.status == SurfaceStatus.pending]
     canonical_success = (
-        not blocking_failures
-        and not degraded
-        and not pending
-        and chain_state.success_quality.startswith("canonical")
+        not blocking_failures and not degraded and not pending and chain_state.success_quality.startswith("canonical")
     )
     degraded_success = not blocking_failures and not canonical_success and chain_state.main_chain_available
     return {
@@ -948,8 +963,7 @@ def _build_acceptance_surface(
     if not android_engaged:
         android_status = SurfaceStatus.not_applicable
         android_summary = (
-            "Cross-device path has not been exercised yet; "
-            "Android attachment is optional for current run."
+            "Cross-device path has not been exercised yet; " "Android attachment is optional for current run."
         )
     elif device_evidence.get("android_device_count", 0) > 0:
         android_status = SurfaceStatus.ready
@@ -974,9 +988,10 @@ def _build_acceptance_surface(
     if not android_engaged:
         capability_status = SurfaceStatus.not_applicable
         capability_summary = "Android capability validation skipped because cross-device path is not engaged."
-    elif android_evidence.get("capability_visible_count", 0) > 0 and android_evidence.get(
-        "degraded_capability_device_count", 0
-    ) == 0:
+    elif (
+        android_evidence.get("capability_visible_count", 0) > 0
+        and android_evidence.get("degraded_capability_device_count", 0) == 0
+    ):
         capability_status = SurfaceStatus.ready
         capability_summary = "Android capability report is visible and canonical."
     elif android_evidence.get("capability_visible_count", 0) > 0:
@@ -1043,9 +1058,7 @@ def _build_acceptance_surface(
             summary=closure_summary,
             evidence={
                 "participant_terminal_count": session_evidence.get("participant_terminal_count", 0),
-                "participant_terminal_success_count": session_evidence.get(
-                    "participant_terminal_success_count", 0
-                ),
+                "participant_terminal_success_count": session_evidence.get("participant_terminal_success_count", 0),
                 "terminal_execution_event_count": android_evidence.get("terminal_execution_event_count", 0),
             },
         )
@@ -1054,9 +1067,7 @@ def _build_acceptance_surface(
     quality_status = (
         SurfaceStatus.ready
         if chain_state.success_quality.startswith("canonical")
-        else SurfaceStatus.degraded
-        if chain_state.main_chain_available
-        else SurfaceStatus.blocked
+        else SurfaceStatus.degraded if chain_state.main_chain_available else SurfaceStatus.blocked
     )
     checkpoints.append(
         AcceptanceCheckpoint(
@@ -1073,9 +1084,11 @@ def _build_acceptance_surface(
     payload["summary"] = (
         "Clone-to-use acceptance chain reached canonical success."
         if payload["canonical_success"]
-        else "Clone-to-use acceptance chain is usable but degraded."
-        if payload["degraded_success"]
-        else "Clone-to-use acceptance chain is not yet complete."
+        else (
+            "Clone-to-use acceptance chain is usable but degraded."
+            if payload["degraded_success"]
+            else "Clone-to-use acceptance chain is not yet complete."
+        )
     )
     return payload
 
@@ -1233,6 +1246,17 @@ def build_operational_readiness_report(
         session_evidence=session_evidence,
         chain_state=chain_state,
     )
+    state_contract = build_v2_unified_state_contract(
+        path=path,
+        validation=validation,
+        kind_states=kind_states,
+        route_paths=live_route_paths,
+        runtime_readiness=runtime_readiness,
+        device_evidence=device_evidence,
+        android_evidence=android_evidence,
+        session_evidence=session_evidence,
+        system_acceptance=system_acceptance,
+    ).to_dict()
     progress = _build_registration_progress(
         path,
         validation=validation,
@@ -1255,4 +1279,5 @@ def build_operational_readiness_report(
         android_v2_minimum_standard=android_standard,
         runtime_readiness=runtime_readiness,
         system_acceptance=system_acceptance,
+        state_contract=state_contract,
     )
