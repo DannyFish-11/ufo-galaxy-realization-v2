@@ -8,15 +8,16 @@
 ## 2. 系统本体最终判断
 - 这不是 PoC；也不是成熟闭环系统。
 - 当前本体是：**V2 中心治理权威 + Android 执行参与节点**的分布式执行系统，处于 **mid-stage consolidation（中期收敛）**。
-- 直接依据：`core/joint_dual_repo_cognition_closure_review.py` 计算 `overall_completion_pct=77.3`、`current_stage=mid_stage_consolidation`（由 `build_joint_dual_repo_cognition_closure_review()` 运行时输出）。
+- 直接依据：`core/joint_dual_repo_cognition_closure_review.py` 的 `build_joint_dual_repo_cognition_closure_review()`（返回 `JointCognitionClosureReport`，核心输出含 `overall_completion_pct/current_stage/domain_scores`）。  
+  `tests/test_joint_dual_repo_cognition_closure_review.py` 对加权计算与 stage 判定有回归约束；当前输出 `overall_completion_pct=77.3`、`current_stage=mid_stage_consolidation`。
 
 ## 3. 双仓真实职责划分
 - **V2**：主链裁决与治理权威  
-  `openclawd._determine_execution_path` → `command_router.route_envelope` → `unified_execution_governance.get_uplink_truth_state` → `closed_loop_governance_consolidation.query_closed_loop_governance_state`。
+  `OpenClawd` 执行分支决策（`core/openclawd.py`）→ `command_router.route_envelope` → `unified_execution_governance.get_uplink_truth_state` → `closed_loop_governance_consolidation.query_closed_loop_governance_state`。
 - **Android**：执行与运行态上报参与方  
   `GalaxyConnectionService.kt` 负责 goal_result / diagnostics / readiness / governance / acceptance / strategy 等上报；`AndroidCrossRepoRegressionRuntimeHooks.kt` 将 `LOCAL_RUNTIME/DIAGNOSTICS/RECOVERY/TAKEOVER/MESH` 作为回归流。
 - **已成立协作**：register/capability/state snapshot/execution event 双向 ACK 与回放回归（`tests/integration/test_pr13a_dual_runtime_cross_repo_regression.py`）。
-- **未完全成立协作**：mesh full runtime 与 barrier 协调闭合仍被约束（`core/joint_dual_repo_cognition_closure_review.py` 中 `P6` 的 deferred/constrained 标记）。
+- **未完全成立协作**：mesh full runtime 与 barrier 协调闭合仍被约束（`core/joint_dual_repo_cognition_closure_review.py` 中 proposition_id=`P6_mesh_collaboration_multi_device_runtime` 的 deferred/constrained 标记）。
 
 ## 4. 主链 / 旁路 / compat / fallback / degraded 全景拆解
 - **Canonical 主链**：`OpenClawd` 分支决策 → `CommandRouter.route_envelope`（主入口）→ 网关 handler → 治理真相归并 → 闭环审计。
@@ -26,6 +27,7 @@
 - **recovery path**：`v2_android_recovery_continuity_hardening.py` 明确 reconnect/replay/duplicate/stale 的分级规则。
 
 ## 5. 本地链路真实闭合情况
+- D1~D8 域定义与口径见第 9 节（D1 中心治理、D2 执行链、D3 Android 节点、D4 mesh 编排、D5 多模态主链、D6 能力与就绪治理、D7 可观测操作面、D8 manifestation 语义）。
 - 本地治理与执行主干已高完成：D1=95、D2=88、D7=95（同一 scorecard）。
 - 以该三域加权得到本地链路完成度 **92.7%**（评分逻辑同 `joint_dual_repo_cognition_closure_review`）。
 - 但“本地高分”不等于系统成熟：仍受跨仓真相与恢复语义约束。
@@ -58,7 +60,9 @@
 - **本地链路**：**92.7%**（D1+D2+D7 加权）。
 - **跨设备链路**：**65.1%**（D3+D4+D6 加权）。
 - **系统语义成立度**：**67.2%**（D5+D6+D8 加权）。
-- 统一评分逻辑：全部来自 `core/joint_dual_repo_cognition_closure_review.py` 的同一域分体系，避免多口径。
+- 域定义（均在 `core/joint_dual_repo_cognition_closure_review.py` 的 `domain_scores` 中定义）：  
+  D1=中心治理权威裁决，D2=执行链闭合，D3=Android 运行节点能力，D4=mesh/hybrid 协同编排，D5=多模态主链语义，D6=能力与就绪策略治理，D7=可观测/操作面透明度，D8=manifestation/carrier 语义落地。
+- 统一评分逻辑：全部来自同一 `domain_scores` 体系，避免多口径。
 
 ## 10. 距离成熟系统的结构性差距
 1. **跨仓运行级证据链仍不够硬**：当前大量回归依赖外部 evidence artifact（环境变量注入），非持续在线门禁。
