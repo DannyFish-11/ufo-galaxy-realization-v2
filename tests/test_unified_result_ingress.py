@@ -44,6 +44,7 @@ Group D — Truth chain integration
 Group E — CanonicalCompletionIngress notify
   E01  ingest_result calls CanonicalCompletionIngress.notify()
   E02  ImportError of completion ingress is handled gracefully
+  E03  notify() returning False cannot be counted as full closure success
 
 Group F — Bridge _pending_responses resolution
   F01  process_async resolves bridge._pending_responses future for task_id
@@ -445,6 +446,30 @@ class TestCompletionIngressNotify:
             outcome = ingress.process(_make_event(_make_task_id()))
 
         assert not outcome.completion_notified  # not notified but no exception
+
+    def test_E03_notify_false_prevents_full_closure(self):
+        """notify() returns False must not be treated as full closure success."""
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        mock_ingress = MagicMock()
+        mock_ingress.notify.return_value = False
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=mock_ingress,
+        ):
+            outcome = ingress.process(_make_event(_make_task_id()))
+
+        assert outcome.completion_notified is False
+        assert outcome.is_fully_closed is False
+        assert outcome.incomplete_reason == "completion_not_notified"
 
 
 # ===========================================================================
