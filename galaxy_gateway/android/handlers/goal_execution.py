@@ -96,6 +96,17 @@ try:
 except ImportError:
     _is_cross_device_enabled = None  # type: ignore[assignment]
 
+try:
+    from core.android_originated_main_chain_ingress import (
+        accept_android_originated_nl_into_main_chain as _accept_android_originated_nl_into_main_chain,
+        build_android_originated_governance_context as _build_android_originated_governance_context,
+        is_android_originated_main_chain_accepted as _is_android_originated_main_chain_accepted,
+    )
+except ImportError:
+    _accept_android_originated_nl_into_main_chain = None  # type: ignore[assignment]
+    _build_android_originated_governance_context = None  # type: ignore[assignment]
+    _is_android_originated_main_chain_accepted = None  # type: ignore[assignment]
+
 
 def _build_android_nl_lineage(
     *,
@@ -189,6 +200,58 @@ def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> s
     if status == "degraded":
         return _LINEAGE_QUALITY_DEGRADED_SUCCESS
     return _LINEAGE_QUALITY_CANONICAL_SUCCESS
+
+
+def _evaluate_main_chain_ingress(
+    *,
+    task_id: str,
+    device_id: str,
+    session_id: str,
+    ingress_carrier_context: Optional[Dict[str, Any]],
+    is_stale: bool = False,
+    is_replay: bool = False,
+    is_recovery_assisted: bool = False,
+    is_takeover_scenario: bool = False,
+    is_conflict_present: bool = False,
+    is_multi_device_concurrent: bool = False,
+    is_duplicate: bool = False,
+) -> Tuple[bool, Dict[str, Any], Dict[str, Any], str]:
+    """Evaluate Android-originated ingress against canonical main-chain acceptance."""
+    if (
+        _accept_android_originated_nl_into_main_chain is None
+        or _build_android_originated_governance_context is None
+        or _is_android_originated_main_chain_accepted is None
+    ):
+        return False, {}, {}, "main_chain_ingress_unavailable"
+
+    ingress_result = _accept_android_originated_nl_into_main_chain(
+        device_id=device_id,
+        session_id=session_id,
+        invocation_id=task_id,
+        ingress_carrier_context=ingress_carrier_context,
+        is_stale=is_stale,
+        is_replay=is_replay,
+        is_recovery_assisted=is_recovery_assisted,
+        is_takeover_scenario=is_takeover_scenario,
+        is_conflict_present=is_conflict_present,
+        is_multi_device_concurrent=is_multi_device_concurrent,
+        is_duplicate=is_duplicate,
+    )
+    governance_context = _build_android_originated_governance_context(
+        device_id=device_id,
+        execution_id=task_id,
+        ingress_result=ingress_result,
+    )
+    accepted = _is_android_originated_main_chain_accepted(ingress_result)
+    if ingress_result.blocking_reason:
+        reason = ingress_result.blocking_reason
+    else:
+        reason = (
+            "main_chain_not_accepted:"
+            f" lineage={ingress_result.lineage.value}"
+            f" gap_types={list(ingress_result.gap_types)}"
+        )
+    return accepted, ingress_result.to_dict(), governance_context, reason
 
 
 def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
@@ -378,6 +441,42 @@ async def handle_goal_execution(
     success = result.get("success", False)
     response_text = result.get("response", "") or str(result.get("reply", ""))
     runtime_session_id = result.get("runtime_session_id", "")
+    ingress_ok, ingress_result, governance_context, ingress_reason = _evaluate_main_chain_ingress(
+        task_id=task_id,
+        device_id=device_id,
+        session_id=session_id,
+        ingress_carrier_context=result.get("ingress_carrier_context"),
+        is_stale=bool(payload.get("stale")),
+        is_replay=bool(payload.get("replay")),
+        is_recovery_assisted=bool(payload.get("recovered") or payload.get("recovery")),
+        is_takeover_scenario=bool(payload.get("takeover")),
+        is_conflict_present=bool(payload.get("conflict") or payload.get("partial")),
+        is_multi_device_concurrent=bool(payload.get("multi_device_race")),
+        is_duplicate=bool(payload.get("duplicate")),
+    )
+    if not ingress_ok:
+        return MessageBuilder.error(
+            device_id,
+            "ANDROID_MAIN_CHAIN_INGRESS_REJECTED",
+            f"android nl initiation rejected by main-chain ingress: {ingress_reason}",
+            details={
+                "lineage": _build_android_nl_lineage(
+                    task_id=task_id,
+                    origin_device_id=device_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                    lineage_quality="blocked",
+                    dispatch_lineage="blocked_by_main_chain_ingress",
+                    reconciliation_lineage="not_started",
+                    closure_lineage="not_started",
+                    audit_lineage="main_chain_ingress_rejected",
+                ),
+                "main_chain_ingress": ingress_result,
+                "android_governance_context": governance_context,
+            },
+            correlation_id=task_id,
+        )
 
     goal_task_assign_payload: Dict[str, Any] = {
         "task_id": task_id,
@@ -398,6 +497,9 @@ async def handle_goal_execution(
             trace_id=trace_id,
             runtime_session_id=runtime_session_id,
         ),
+        # Main-chain ingress acceptance evidence for governance/audit consumers.
+        "android_governance_context": governance_context,
+        "main_chain_ingress": ingress_result,
     }
 
     logger.info(
@@ -544,6 +646,42 @@ async def handle_parallel_subtask(
 
     response_text = result.get("response", "") or str(result.get("reply", ""))
     runtime_session_id = result.get("runtime_session_id", "")
+    ingress_ok, ingress_result, governance_context, ingress_reason = _evaluate_main_chain_ingress(
+        task_id=task_id,
+        device_id=device_id,
+        session_id=session_id,
+        ingress_carrier_context=result.get("ingress_carrier_context"),
+        is_stale=bool(payload.get("stale")),
+        is_replay=bool(payload.get("replay")),
+        is_recovery_assisted=bool(payload.get("recovered") or payload.get("recovery")),
+        is_takeover_scenario=bool(payload.get("takeover")),
+        is_conflict_present=bool(payload.get("conflict") or payload.get("partial")),
+        is_multi_device_concurrent=bool(payload.get("multi_device_race")),
+        is_duplicate=bool(payload.get("duplicate")),
+    )
+    if not ingress_ok:
+        return MessageBuilder.error(
+            device_id,
+            "ANDROID_MAIN_CHAIN_INGRESS_REJECTED",
+            f"parallel android nl initiation rejected by main-chain ingress: {ingress_reason}",
+            details={
+                "lineage": _build_android_nl_lineage(
+                    task_id=task_id,
+                    origin_device_id=device_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                    lineage_quality="blocked",
+                    dispatch_lineage="blocked_by_main_chain_ingress",
+                    reconciliation_lineage="not_started",
+                    closure_lineage="not_started",
+                    audit_lineage="main_chain_ingress_rejected",
+                ),
+                "main_chain_ingress": ingress_result,
+                "android_governance_context": governance_context,
+            },
+            correlation_id=task_id,
+        )
 
     # ── Step 2: 查询所有已连接设备 ───────────────────────────────────
     all_device_ids: List[str] = []
@@ -675,6 +813,9 @@ async def handle_parallel_subtask(
                     runtime_session_id=runtime_session_id,
                     dispatch_lineage="parallel_fanout_dispatched",
                 ),
+                # Main-chain ingress acceptance evidence for governance/audit consumers.
+                "android_governance_context": governance_context,
+                "main_chain_ingress": ingress_result,
                 "message": f"Parallel task dispatched to {fanout_summary['fanout']} device(s)",
             },
             correlation_id=task_id,
@@ -704,6 +845,9 @@ async def handle_parallel_subtask(
                 dispatch_lineage="single_device_fallback_dispatch",
                 lineage_quality=_LINEAGE_QUALITY_FALLBACK_SUCCESS,
             ),
+            # Main-chain ingress acceptance evidence for governance/audit consumers.
+            "android_governance_context": governance_context,
+            "main_chain_ingress": ingress_result,
         }
 
         logger.info(
