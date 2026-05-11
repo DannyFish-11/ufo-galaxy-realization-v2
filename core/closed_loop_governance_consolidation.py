@@ -161,9 +161,21 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
     }
 )
 # Keep this as a frozenset to preserve forward compatibility with additional
-# "fully accepted" reconciliation outcomes in future contract revisions.
+# "fully accepted" reconciliation outcomes in future contract revisions
+# (for example: accepted_with_quorum / accepted_with_verified_replay).
 _MATURE_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
+
+GAP_LOOP_NOT_IN_COMPLETION_STAGE = "loop_not_in_completion_stage"
+GAP_TERMINAL_LIFECYCLE_NOT_REACHED = "terminal_lifecycle_not_reached"
+GAP_TERMINAL_TRUTH_UNDETERMINED = "terminal_truth_undetermined"
+GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING = "center_lifecycle_authority_missing"
+GAP_MISSING_RESULT_UPLINK = "missing_result_uplink"
+GAP_MISSING_STATE_UPLINK = "missing_state_uplink"
+GAP_RECONCILIATION_CONFLICT_PRESENT = "reconciliation_conflict_present"
+GAP_RECONCILIATION_NOT_FULLY_ACCEPTED = "reconciliation_not_fully_accepted"
+GAP_RUNTIME_HEALTH_NOT_STABLE = "runtime_health_not_stable"
+GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
 
 
 # ---------------------------------------------------------------------------
@@ -595,23 +607,23 @@ def _classify_system_completion_readiness(
     gap_types: List[str] = []
 
     if stage != ClosedLoopStage.completion:
-        gap_types.append("loop_not_in_completion_stage")
+        gap_types.append(GAP_LOOP_NOT_IN_COMPLETION_STAGE)
     if not is_terminal:
-        gap_types.append("terminal_lifecycle_not_reached")
+        gap_types.append(GAP_TERMINAL_LIFECYCLE_NOT_REACHED)
     if canonical_terminal_outcome is None:
-        gap_types.append("terminal_truth_undetermined")
+        gap_types.append(GAP_TERMINAL_TRUTH_UNDETERMINED)
     if terminal_truth_authoritative_source != "center_lifecycle":
-        gap_types.append("center_lifecycle_authority_missing")
+        gap_types.append(GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING)
     if uplink_result_count <= 0:
-        gap_types.append("missing_result_uplink")
+        gap_types.append(GAP_MISSING_RESULT_UPLINK)
     if uplink_state_count <= 0:
-        gap_types.append("missing_state_uplink")
+        gap_types.append(GAP_MISSING_STATE_UPLINK)
     if reconciliation_conflict:
-        gap_types.append("reconciliation_conflict_present")
+        gap_types.append(GAP_RECONCILIATION_CONFLICT_PRESENT)
     if reconciliation_status not in _MATURE_RECONCILIATION_STATUSES:
-        gap_types.append("reconciliation_not_fully_accepted")
+        gap_types.append(GAP_RECONCILIATION_NOT_FULLY_ACCEPTED)
     if canonical_runtime_health != "stable":
-        gap_types.append("runtime_health_not_stable")
+        gap_types.append(GAP_RUNTIME_HEALTH_NOT_STABLE)
 
     system_completion_ready = len(gap_types) == 0
     if system_completion_ready:
@@ -703,7 +715,7 @@ def query_closed_loop_governance_state(
             loop_is_coherent=False,
             system_completion_ready=False,
             system_completion_level="not_closed",
-            system_completion_gap_types=["governance_store_read_error"],
+            system_completion_gap_types=[GAP_GOVERNANCE_STORE_READ_ERROR],
         )
 
     lifecycle_phase: Optional[str] = uplink_truth.get("lifecycle_phase")

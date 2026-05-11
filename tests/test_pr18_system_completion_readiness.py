@@ -82,7 +82,7 @@ def test_partial_uplink_not_mature():
 
 def test_conflicting_reports_not_mature():
     execution_id = "exec-pr18-conflict-gap"
-    device_id = "device-pr18-delayed-conflict-gap"
+    device_id = "device-pr18-conflict-gap"
 
     record_execution_lifecycle_event(
         execution_id=execution_id,
