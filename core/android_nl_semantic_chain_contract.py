@@ -74,7 +74,10 @@ Android NL 语义链路契约 — 机器可验证的 source/carrier vs semantic-
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Contract sentinel — presence of this constant proves the contract is loaded.
@@ -99,6 +102,9 @@ LOCAL_PLANNER_SERVICE_ROLE: str = "android_local_task_decomposition"
 
 #: V2's OpenClawd + AgentKernel + MultiLLMRouter — the sole LLM semantic authority.
 V2_SEMANTIC_AUTHORITY: str = "v2_openclawd"
+V2_AUTHORITY: str = "v2_authority"
+ANDROID_PARTICIPATION_UNDER_V2_AUTHORITY_BOUNDARY: str = "android_participation_under_v2_authority"
+CENTER_AUTHORITY_BOUNDARY: str = "center_authority"
 
 # ---------------------------------------------------------------------------
 # Source/carrier identifiers
@@ -235,6 +241,10 @@ def get_android_participation_boundary(participation_type: str) -> Dict[str, boo
     key = _normalize_participation_type(participation_type)
     boundary = ANDROID_PARTICIPATION_BOUNDARY_MODEL.get(key)
     if boundary is None:
+        logger.warning(
+            "Unknown Android participation type: %r; applying non-authoritative default boundary",
+            participation_type,
+        )
         return {
             "affects_observation": False,
             "affects_reconciliation": False,

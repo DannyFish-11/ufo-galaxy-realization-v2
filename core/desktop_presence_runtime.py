@@ -616,6 +616,18 @@ class DesktopPresenceRuntime:
         # NL request (resolves DUAL_REPO_REAL_CHAIN_BASELINE_2026 P2 — source/carrier vs
         # semantic-authority split must be machine-verifiable).
         _android_carriers = {"android_vision", "android_goal_execution"}
+        try:
+            from core.android_nl_semantic_chain_contract import (
+                ANDROID_PARTICIPATION_UNDER_V2_AUTHORITY_BOUNDARY as _android_authority_boundary,
+                CENTER_AUTHORITY_BOUNDARY as _center_authority_boundary,
+                V2_AUTHORITY as _v2_authority,
+                V2_SEMANTIC_AUTHORITY as _v2_semantic_authority,
+            )
+        except Exception:
+            _v2_semantic_authority = "v2_openclawd"
+            _v2_authority = "v2_authority"
+            _android_authority_boundary = "android_participation_under_v2_authority"
+            _center_authority_boundary = "center_authority"
         _nl_path_type = (
             "android_cross_device_nl" if source == "android_goal_execution"
             else "android_vision_nl" if source == "android_vision"
@@ -629,16 +641,16 @@ class DesktopPresenceRuntime:
             "invocation_id": rsession.runtime_session_id,
             "control_session_id": control_session_id,
             "origin": "android" if source in _android_carriers else "center",
-            "authority": "v2_authority",
-            "authority_boundary": "android_participation_under_v2_authority"
+            "authority": _v2_authority,
+            "authority_boundary": _android_authority_boundary
             if source in _android_carriers
-            else "center_authority",
+            else _center_authority_boundary,
             # semantic_authority is always V2 — the LLM semantic reasoning chain
             # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
             # which device or adapter surface originated the NL request.
             # Android-side GoalNormalizer = structural normalization only (not LLM).
             # Android-side LocalPlannerService = local task decomposition only (not LLM).
-            "semantic_authority": "v2_openclawd",
+            "semantic_authority": _v2_semantic_authority,
             # nl_path_type distinguishes Android carriers from desktop-direct paths.
             "nl_path_type": _nl_path_type,
             "is_android_carrier": source in _android_carriers,

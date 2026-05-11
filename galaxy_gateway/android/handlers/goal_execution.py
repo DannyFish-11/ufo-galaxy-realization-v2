@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from galaxy_gateway.android.message_builder import MessageBuilder
 
@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
+
+_AUTHORITY_V2 = "v2_authority"
+_AUTHORITY_BOUNDARY_ANDROID_UNDER_V2 = "android_participation_under_v2_authority"
+_LINEAGE_QUALITY_CANONICAL_CANDIDATE = "canonical_candidate"
+_LINEAGE_QUALITY_CANONICAL_SUCCESS = "canonical_success"
+_LINEAGE_QUALITY_REPLAY_ASSISTED = "replay_assisted"
+_LINEAGE_QUALITY_RECOVERY_ASSISTED = "recovery_assisted"
+_LINEAGE_QUALITY_COMPAT_SUCCESS = "compat_success"
+_LINEAGE_QUALITY_FALLBACK_SUCCESS = "fallback_success"
+_LINEAGE_QUALITY_DEGRADED_SUCCESS = "degraded_success"
 
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:
@@ -94,7 +104,7 @@ def _build_android_nl_lineage(
     session_id: str,
     trace_id: str,
     runtime_session_id: str = "",
-    lineage_quality: str = "canonical_candidate",
+    lineage_quality: str = _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
     ingress_lineage: str = "canonical_ingress",
     protocol_lineage: str = "aip_v3_goal_execution",
     routing_lineage: str = "desktop_presence_runtime",
@@ -110,8 +120,8 @@ def _build_android_nl_lineage(
         "lineage_quality": lineage_quality,
         "origin": "android",
         "origin_device_id": origin_device_id,
-        "authority": "v2_authority",
-        "authority_boundary": "android_participation_under_v2_authority",
+        "authority": _AUTHORITY_V2,
+        "authority_boundary": _AUTHORITY_BOUNDARY_ANDROID_UNDER_V2,
         "source": "android_goal_execution",
         "entry_mode": "cross_device",
         "session_id": session_id,
@@ -133,7 +143,7 @@ def _evaluate_android_nl_initiation_gate(
     *,
     device_id: str,
     require_parallel_execution: bool = False,
-) -> tuple[bool, List[str], str]:
+) -> Tuple[bool, List[str], str]:
     """Fail-closed gate for Android NL cross-device initiation.
 
     Returns:
@@ -158,18 +168,27 @@ def _evaluate_android_nl_initiation_gate(
 
 
 def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> str:
-    """Classify result lineage quality with deterministic precedence."""
+    """Classify result lineage quality with deterministic precedence.
+
+    Priority order:
+    1) replay-assisted
+    2) recovery-assisted
+    3) compat-success
+    4) fallback-success
+    5) degraded-success
+    6) canonical-success (default)
+    """
     if payload.get("replay") or payload.get("replay_sequence"):
-        return "replay_assisted"
+        return _LINEAGE_QUALITY_REPLAY_ASSISTED
     if payload.get("recovered") or payload.get("recovery"):
-        return "recovery_assisted"
+        return _LINEAGE_QUALITY_RECOVERY_ASSISTED
     if str(payload.get("route_mode") or "").strip().lower().startswith("compat"):
-        return "compat_success"
+        return _LINEAGE_QUALITY_COMPAT_SUCCESS
     if bool(payload.get("fallback")):
-        return "fallback_success"
+        return _LINEAGE_QUALITY_FALLBACK_SUCCESS
     if status == "degraded":
-        return "degraded_success"
-    return "canonical_success"
+        return _LINEAGE_QUALITY_DEGRADED_SUCCESS
+    return _LINEAGE_QUALITY_CANONICAL_SUCCESS
 
 
 def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
@@ -683,7 +702,7 @@ async def handle_parallel_subtask(
                 trace_id=trace_id,
                 runtime_session_id=runtime_session_id,
                 dispatch_lineage="single_device_fallback_dispatch",
-                lineage_quality="fallback_success",
+                lineage_quality=_LINEAGE_QUALITY_FALLBACK_SUCCESS,
             ),
         }
 
@@ -750,7 +769,7 @@ async def handle_goal_execution_result(
     result_lineage = dict(payload.get("lineage") or {})
     result_lineage.setdefault("origin", "android")
     result_lineage.setdefault("origin_device_id", device_id)
-    result_lineage.setdefault("authority", "v2_authority")
+    result_lineage.setdefault("authority", _AUTHORITY_V2)
     result_lineage.setdefault("source", "android_goal_execution_result")
     result_lineage.setdefault("entry_mode", "cross_device")
     result_lineage.setdefault("task_id", task_id)
@@ -762,7 +781,10 @@ async def handle_goal_execution_result(
     result_lineage.setdefault("reconciliation_lineage", "pending")
     result_lineage.setdefault("closure_lineage", "pending")
     result_lineage.setdefault("audit_lineage", "pending")
-    result_lineage.setdefault("lineage_quality", _determine_result_lineage_quality(payload, status))
+    result_lineage.setdefault(
+        "lineage_quality",
+        _determine_result_lineage_quality(payload, status),
+    )
 
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on
@@ -870,8 +892,8 @@ async def handle_goal_execution_result(
             result_lineage["reconciliation_lineage"] = "truth_chain_incomplete"
             result_lineage["closure_lineage"] = "truth_chain_incomplete"
             result_lineage["audit_lineage"] = "truth_chain_incomplete"
-            if result_lineage.get("lineage_quality") == "canonical_success":
-                result_lineage["lineage_quality"] = "degraded_success"
+            if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
             logger.warning(
                 "handle_goal_execution_result: truth chain incomplete for task_id=%r: %s",
                 task_id,
@@ -913,8 +935,8 @@ async def handle_goal_execution_result(
         result_lineage["reconciliation_lineage"] = "fallback_reconcile"
         result_lineage["closure_lineage"] = "fallback_completion_linkage"
         result_lineage["audit_lineage"] = "fallback_truth_chain"
-        if result_lineage.get("lineage_quality") == "canonical_success":
-            result_lineage["lineage_quality"] = "fallback_success"
+        if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+            result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
         # Fallback completion linkage — only reached when truth chain is unavailable.
         try:
             from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
