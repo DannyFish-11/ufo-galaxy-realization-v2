@@ -1,162 +1,139 @@
-# Recognition/Review PR: Post-1114/1115 System Positioning and Unified Desktop Status Board Audit
+# Authoritative Current-State Audit (Post-1114/1115)
 
-## 1) Scope and intent (this PR)
+## 1) Scope and intent
 
-This is a **recognition/review PR** for `DannyFish-11/ufo-galaxy-realization-v2`, with cross-repo inspection of:
+This PR is a **recognition/current-state audit** for `DannyFish-11/ufo-galaxy-realization-v2`, grounded in cross-repo review of:
 
 - V2: `DannyFish-11/ufo-galaxy-realization-v2`
 - Android: `DannyFish-11/ufo-galaxy-android`
 
-It is intentionally **not** a productization PR. The goal is to provide one authoritative planning snapshot of what is solved, what is only observable, and what remains structurally missing after 1114/1115.
+It is intentionally **not** a productization claim and **not** a statement that V2/Android are already fully symmetric at execution protocol level.
+
+This document is the authoritative current-position ledger after 1114/1115: what is established, what is only observable, what the desktop status board must carry, and what major gaps still block execution-level unification.
 
 ---
 
-## 2) What 1114 and 1115 established
+## 2) What 1114 and 1115 established (authoritative framing)
 
-### 2.1 1114 description/map layer (established)
+### 2.1 1114 established a system-description/map layer
 
-1114 established the **system description/map layer** through the operational registration path:
+1114 established the **description/map layer** through `core/operational_registration_path.py`:
 
-- Canonical registration kinds/tier model (`main_chain`, `cross_device`, `compat/fallback/recovery`) and onboarding spine are codified in `core/operational_registration_path.py`.
-- Clone-to-use structure (ordered onboarding steps + prerequisite validation) is explicit and machine-checkable.
-- This is descriptive and structural; it does not itself close runtime onboarding execution.
+- canonical registration kinds/tier model (`main_chain`, `cross_device`, `compat/fallback/recovery`)
+- explicit onboarding spine and prerequisites
+- machine-checkable path validation
 
-### 2.2 1115 unified observation/readiness/acceptance layer (established)
+This is structural map authority, not full end-to-end runtime closure by itself.
 
-1115 established the **unified operational-readiness / acceptance / success-quality aggregation layer**:
+### 2.2 1115 established a unified observation/aggregation/readiness layer
 
-- `core/operational_readiness_surface.py` aggregates registration state, chain posture, clone-to-use acceptance checkpoints, Android↔V2 minimum admission standard, runtime readiness, and system acceptance.
-- Read-only APIs are exposed via:
-  - `GET /api/v1/projection/operational-readiness`
-  - `GET /api/v1/projection/clone-to-use-acceptance`
-  in `core/routes/operational_readiness.py` and mounted in `core/api_routes.py`.
+1115 established a stronger **unified observation + aggregation** layer via:
 
-This is a strong observability convergence step, but still an **aggregation/read model**, not the same as full end-to-end executable closure.
-
----
-
-## 3) Layer separation (authoritative)
-
-| Layer | What exists now | Current status |
-|---|---|---|
-| **Description layer** | Registration taxonomy, onboarding structure, canonical module map (`core/operational_registration_path.py`) | **Established** |
-| **Observation/readiness/acceptance layer** | Unified readiness + acceptance + success-quality surfaces (`core/operational_readiness_surface.py`, routes) | **Established** |
-| **Execution/productization/unified state protocol layer** | Symmetric Android-side readiness/acceptance truth contract + lower-level unified protocol-driven closure across repos | **Not yet complete** |
-
----
-
-## 4) Desktop status board audit matrix (all required unified items)
-
-Legend for authority class:
-
-- **V2-only**: can be authored and decided from V2 canonical surfaces alone.
-- **Android-required**: requires Android-originated signal to be meaningful.
-- **Joint-state**: requires cross-repo correlation (Android signal + V2 governance/session truth).
-
-| Status-board concept | Current primary surface(s) | Authority class |
-|---|---|---|
-| registration state surface | `operational_readiness.registration_kinds/registration_domains/registration_progress` | **V2-only** (with Android-engagement sub-signals) |
-| operational readiness surface | `operational_readiness.runtime_readiness` + `chain_state` | **V2-only** |
-| clone-to-use acceptance surface | `operational_readiness.clone_to_use_acceptance` checkpoints | **Joint-state** |
-| main chain availability | `chain_state.main_chain_available` | **V2-only** |
-| cross-device availability | `chain_state.cross_device_available` | **Joint-state** |
-| recovery activity | `chain_state.recovery_active` + session evidence | **Joint-state** |
-| compat-only / degraded paths | `chain_state.compat_only_available`, `chain_state.degraded`, readiness verdicts | **V2-only** |
-| active path | `chain_state.active_path` | **V2-only** |
-| success quality / verdict quality | `chain_state.success_quality`, acceptance `success_quality` checkpoint | **Joint-state** |
-| Android ↔ V2 minimum access/admission standard | `android_v2_minimum_standard.minimum_viable_chain_conditions` | **Joint-state** |
-| capability visibility | Android capability semantics mirrored via `core.android_device_state_store` aggregation | **Android-required** |
-| session continuity | attached runtime/session-participant evidence in readiness surface | **Joint-state** |
-| task initiation | acceptance checkpoint `task_initiation` | **Joint-state** |
-| result closure | acceptance checkpoint `result_closure` | **Joint-state** |
-| gateway / bridge presence | `android_v2_minimum_standard` conditions (`gateway_transport`, `android_bridge`) | **Joint-state** |
-| runtime host / dispatch binding | `android_v2_minimum_standard.runtime_binding` + registration kinds | **Joint-state** |
-| participant/device/session dependencies | readiness evidence collectors + minimum-chain condition set | **Joint-state** |
-| governance / acceptance dependencies | `runtime_readiness`, `system_acceptance`, `governance_acceptance` condition | **V2-only** (decision) + **Joint-state** (evidence completeness) |
-| gaps/blockers/degraded/pending prerequisites | acceptance payload (`blocking_failure_ids`, degraded/pending IDs) + `remaining_gaps` | **V2-only** aggregation over joint evidence |
-
----
-
-## 5) Cross-repo audit notes (V2 + Android)
-
-### 5.1 V2-side aggregated authority is now strong
-
-V2 currently has a consolidated read model for registration/readiness/acceptance and panel-level aggregation:
-
-- `core/operational_registration_path.py`
 - `core/operational_readiness_surface.py`
 - `core/routes/operational_readiness.py`
-- `core/unified_panel_aggregation.py`
-- `core/routes/panel.py`
+- `GET /api/v1/projection/operational-readiness`
+- `GET /api/v1/projection/clone-to-use-acceptance`
 
-### 5.2 Android-side signals exist, but symmetry is incomplete
+Current payloads aggregate registration state, readiness, acceptance checkpoints, minimum-access conditions, task/closure evidence, and quality/adjudication signals.
 
-Android has explicit capability/session/bridge semantics that V2 consumes indirectly:
-
-- Capability scheduling basis and execution dimensions in `ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/capability/AndroidCapabilityVector.kt`
-- Runtime bridge/handoff behavior in `.../agent/AgentRuntimeBridge.kt`
-- Durable participant continuity/freshness semantics in `.../session/DurableParticipantIdentity.kt`
-
-Android maintainer docs also define canonical/deprecated boundaries and readiness/degraded checks (`docs/maintainer-guide.md`).
-
-### 5.3 Key current mismatch to call out
-
-Desktop board runtime polling is still primarily projection-centric (`runtime-truth` / `desktop-status-board` / fallback `runtime`) from `windows_client/status_board_v2/projection_reader.py`.
-
-So although 1115 gave us stronger aggregated readiness/acceptance surfaces, desktop presentation is **not yet fully productized into one unified protocol-driven status contract**.
+This is a major convergence step, but still predominantly read-model aggregation rather than full lower-level bilateral protocol closure.
 
 ---
 
-## 6) What is solved vs what is only observable
+## 3) Required conclusions this audit supports
 
-### Solved
-
-1. **System map clarity (1114)**: registration kinds/tiered path/onboarding prerequisites are explicit and machine-checkable.
-2. **Center-side unified observability (1115)**: readiness + acceptance + success-quality + minimum Android↔V2 standard are aggregated into read-only canonical APIs.
-3. **Cross-repo vocabulary basis is materially improved**: V2 can already ingest Android-originated capability/session/participant evidence into one operational report.
-
-### Only made observable (not yet fully closed)
-
-1. End-to-end onboarding/access closure remains partially observational rather than fully executable from one unified path.
-2. Android-side symmetric readiness/acceptance surface is not yet equivalently first-class as V2’s center-side aggregation surface.
-3. Lower-level unified state protocol is still not the sole backbone; aggregation is stronger than protocol unification.
+1. **1114 established a system-description/map layer**, not an end-to-end productized execution layer.
+2. **1115 strengthened unified observation, aggregation, readiness, and acceptance judgment**, but did not fully complete lower-level protocol symmetry.
+3. The **current strongest completed capability is central-side unified observability/aggregation**.
+4. The **desktop status board now has a substantially defined authoritative state-surface set**.
+5. Surfaced states are **not at identical maturity**: some are unified, some only observable, some still missing formal protocolization.
+6. Current V2↔Android relationship is **not full bilateral symmetry**; it is better described as **V2-led aggregation with Android participation and dependency**.
+7. Top unresolved gaps remain **lower-level state protocol strength**, **Android-side symmetric operational surface**, and **end-to-end onboarding/admission/initiation/closure hardening**.
 
 ---
 
-## 7) Top 3 remaining gaps
+## 4) Desktop status board authoritative state ledger
 
-1. **Executable onboarding/access closure gap**
-   - We can diagnose exactly where clone-to-use fails, but full one-shot executable closure across admission → capability → task → closure is not yet universally hardened.
+Board-facing canonical payload path today is `GET /api/v1/projection/desktop-status-board`, including:
 
-2. **Android-side symmetric operational/readiness surface gap**
-   - V2 has a mature aggregation surface; Android still lacks fully symmetric outward readiness/acceptance contract aligned to the same checkpoint grammar.
+- `operational_readiness`
+- `operational_state_board`
+- `source_of_truth_boundaries`
 
-3. **Unified lower-level state protocol gap**
-   - Current convergence is strong at top-level aggregation, but not yet fully enforced by a single end-to-end protocol-level state contract.
+Authority classes exposed by board payload:
+
+- `v2_authoritative`
+- `android_originated`
+- `joint_cross_repo_derived`
+
+### 4.1 State-surface maturity classes
+
+- **Unified-at-aggregation level**: consistently projected and adjudicated in current V2 aggregation layer.
+- **Observable but not yet protocolized**: visible and diagnosable, but lacks full bilateral lower-level contract symmetry.
+- **Contract-missing for execution-level unification**: still lacks sufficiently formal cross-repo/executable contract closure.
+
+### 4.2 State ledger matrix (must-carry set)
+
+| Status-board concept | Current primary surface(s) | Source-of-truth class | Maturity class | Current audit position |
+|---|---|---|---|---|
+| registration state | `operational_readiness.registration_kinds/domains/progress` + `state_contract.derived_state.registration_state` | v2_authoritative | Unified-at-aggregation level | Strongly defined in V2 map + readiness layers. |
+| identity/discoverability presence | registration progress + Android device/session attachment evidence | joint_cross_repo_derived | Observable but not yet protocolized | Presence is visible; bilateral discoverability protocol is not fully symmetric. |
+| capability visibility | `state_contract.derived_state.capability_visibility`, Android capability evidence collectors | android_originated / joint_cross_repo_derived | Observable but not yet protocolized | Strong evidence ingestion; Android-side outward symmetric contract remains incomplete. |
+| operational readiness | `runtime_readiness`, `state_contract.derived_state.operational_readiness` | v2_authoritative | Unified-at-aggregation level | Central readiness adjudication is mature at aggregation layer. |
+| minimum-access/admission state | `clone_to_use_acceptance`, `android_v2_minimum_standard`, `state_contract.acceptance_state.operational_acceptance` | joint_cross_repo_derived | Unified-at-aggregation level | Explicitly surfaced, but still not full bilateral execution closure. |
+| active path | `chain_state.active_path`, `state_contract.derived_state.active_path` | v2_authoritative | Unified-at-aggregation level | Stable board-facing path summary exists. |
+| main-chain availability | `chain_state.main_chain_available`, `state_contract.derived_state.main_chain_availability` | v2_authoritative | Unified-at-aggregation level | Available and adjudicated centrally. |
+| cross-device availability | `chain_state.cross_device_available`, `state_contract.derived_state.cross_device_availability` | joint_cross_repo_derived | Unified-at-aggregation level | Aggregated as joint condition, still dependent on Android evidence completeness. |
+| compat-only/degraded path | `chain_state.compat_only_available/degraded`, `state_contract.derived_state.degraded_path` | v2_authoritative | Unified-at-aggregation level | Clearly surfaced; does not imply protocol-level closure. |
+| recovery-active state | `chain_state.recovery_active`, `state_contract.derived_state.recovery_active_state` | joint_cross_repo_derived | Observable but not yet protocolized | Recovery is visible and categorized, but not yet full bilateral protocolized lifecycle ownership. |
+| gateway/bridge presence | `android_v2_minimum_standard` conditions (`gateway_transport`, `android_bridge`) | joint_cross_repo_derived | Observable but not yet protocolized | Signal exists; stronger bilateral runtime bridge protocol hardening still pending. |
+| runtime host/dispatch binding | `android_v2_minimum_standard.runtime_binding`, registration/runtime domains | joint_cross_repo_derived | Observable but not yet protocolized | Binding visibility exists; formal bilateral operational contract still incomplete. |
+| session continuity | attached runtime + participant session evidence, `state_contract.derived_state.session_continuity` | joint_cross_repo_derived | Unified-at-aggregation level | Good aggregated visibility with continuity diagnostics. |
+| participant/device/session dependencies | readiness evidence + minimum-standard condition sets | joint_cross_repo_derived | Observable but not yet protocolized | Dependency graph is visible but not yet fully executable as a single bilateral protocol spine. |
+| task initiation eligibility | `state_contract.eligibility_state.task_initiation`, acceptance checkpoints | joint_cross_repo_derived | Unified-at-aggregation level | Explicitly represented as eligibility decision. |
+| task execution visibility | `operational_state_board.task_execution_visibility` (`task_initiated`, session counts) | joint_cross_repo_derived | Observable but not yet protocolized | In-flight visibility exists; cross-repo executable authority still incomplete. |
+| result closure state | `state_contract.closure_quality_state.result_closure` + closure checkpoints | joint_cross_repo_derived | Unified-at-aggregation level | Closure is tracked and surfaced, but not yet universally hardened as one-shot bilateral closure path. |
+| success quality / verdict quality | `state_contract.closure_quality_state.success_quality/verdict_quality` | joint_cross_repo_derived | Unified-at-aggregation level | Quality and verdict dimensions are explicit at board layer. |
+| governance / acceptance dependencies | readiness + acceptance + governance condition evidence | v2_authoritative / joint_cross_repo_derived | Observable but not yet protocolized | Governance adjudication is strong centrally; bilateral protocol symmetry still incomplete. |
+| blocked / waiting dependency / incomplete states | `state_contract.closure_quality_state.blocked_state/waiting_dependency_state/incomplete_state`, board `dependencies_and_blockers` | v2_authoritative (aggregation) over joint evidence | Unified-at-aggregation level | Blockers/waiting/incomplete are explicitly surfaced and board-ready. |
 
 ---
 
-## 8) Sequenced roadmap for follow-up PRs
+## 5) Current V2↔Android cross-repo relationship (explicit)
 
-1. **PR-A (execution closure hardening)**
-   - Convert key clone-to-use checkpoints from “observable” to “deterministically executable and closeable” with explicit admission-to-closure automation gates.
+### 5.1 What is currently strongest
 
-2. **PR-B (Android symmetric readiness surface)**
-   - Add Android-native readiness/acceptance/success-quality publication contract matching V2 checkpoint semantics.
+- V2 has the strongest completed layer in **unified observability + aggregation + readiness/acceptance projection**.
+- Desktop board payload now carries structured state categories and source-of-truth boundaries from this aggregation.
 
-3. **PR-C (unified state protocol convergence)**
-   - Define/enforce lower-level cross-repo state protocol (participant/session/runtime/governance transitions) so desktop board items source from protocol truth, not only top-level aggregation.
+### 5.2 What Android currently contributes
 
-4. **PR-D (desktop board contract unification)**
-   - Promote a single board-facing status contract that composes runtime-truth + readiness/acceptance + minimum-standard state in one canonical payload path.
+Android contributes critical operational truth inputs (capability/session/bridge/participant evidence), which V2 consumes and adjudicates in central projections.
+
+### 5.3 What is still not true yet
+
+- Cross-repo state ownership is **not** yet full bilateral protocol symmetry.
+- Top-level aggregation should **not** be interpreted as guaranteed lower-level protocol closure.
+- The current relationship is accurately: **V2-led aggregation authority with Android participation/dependency**.
 
 ---
 
-## 9) Practical bottom line
+## 6) Top unresolved gaps before execution-level unification
 
-After 1114 + 1115, system positioning is:
+1. **Lower-level protocol strength gap**
+   - Aggregation is stronger than protocol symmetry; lower-level bilateral state contract closure is still incomplete.
+2. **Android-side symmetric operational surface gap**
+   - Android-originated evidence is present, but Android does not yet expose fully symmetric outward readiness/acceptance/closure contract semantics equal to V2 aggregation role.
+3. **End-to-end lifecycle hardening gap**
+   - Admission → initiation → execution → closure is not yet universally hardened as one deterministic bilateral executable flow.
 
-- **Strong in center-side aggregation and observability**.
-- **Not yet fully productized** in end-to-end execution closure, Android-side symmetric readiness surface, and lower-level unified protocol semantics.
+---
 
-This document is the planning/reference baseline for the next implementation PR sequence.
+## 7) Authoritative current-position statement
+
+After 1114 + 1115, the system should currently be described as having reached:
+
+- **Unified recognition/observation/aggregation maturity** (strong),
+- but **not yet full execution-level unification** (still incomplete).
+
+This file is the authoritative current-state ledger baseline for subsequent implementation PRs.
