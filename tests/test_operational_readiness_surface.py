@@ -49,7 +49,7 @@ def _required_route_paths() -> set[str]:
     }
 
 
-def test_build_operational_readiness_report_canonical_cross_device():
+def test_build_operational_readiness_report_canonical_cross_device_success_quality():
     with patch(
         "core.operational_readiness_surface.get_operational_registration_path",
         return_value=_make_path(ValidationStatus.PASS),
@@ -125,7 +125,7 @@ def test_build_operational_readiness_report_canonical_cross_device():
     assert android_admission.status == SurfaceStatus.ready
 
 
-def test_build_operational_readiness_report_recovery_and_degraded():
+def test_build_operational_readiness_report_recovery_with_degraded_success():
     with patch(
         "core.operational_readiness_surface.get_operational_registration_path",
         return_value=_make_path(ValidationStatus.WARN),
@@ -214,7 +214,19 @@ def test_operational_readiness_endpoint_returns_report_and_route_context():
     app.include_router(create_router())
     client = TestClient(app, raise_server_exceptions=False)
     fake_report = SimpleNamespace(
-        to_dict=lambda: {"authority": "test-authority", "clone_to_use_acceptance": {}},
+        to_dict=lambda: {
+            "authority": "test-authority",
+            "contract_version": "test-contract",
+            "validation": {},
+            "registration_progress": {},
+            "registration_kinds": [],
+            "registration_domains": [],
+            "chain_state": {"active_path": "main_chain"},
+            "clone_to_use_acceptance": {},
+            "android_v2_minimum_standard": {},
+            "runtime_readiness": {},
+            "system_acceptance": {},
+        },
         contract_version="test-contract",
         validation={},
         chain_state=SimpleNamespace(to_dict=lambda: {"active_path": "main_chain"}),

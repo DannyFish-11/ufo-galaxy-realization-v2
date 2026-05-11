@@ -67,8 +67,8 @@ __all__ = [
 
 
 OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
-    "OPERATIONAL_READINESS_SURFACE_AUTHORITY::core.operational_readiness_surface::"
-    "pr1114-followup::registration-state-and-clone-to-use-acceptance-surface"
+    "core.operational_readiness_surface::pr1114-followup::"
+    "registration-state-and-clone-to-use-acceptance-surface"
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.2.0.0"
@@ -292,7 +292,7 @@ def collect_app_route_paths(app: Any) -> Set[str]:
 def _module_available(module_path: str) -> bool:
     try:
         return importlib.util.find_spec(module_path) is not None
-    except (ImportError, AttributeError, ValueError, ModuleNotFoundError):
+    except (ImportError, AttributeError, ValueError):
         return False
 
 
@@ -1084,14 +1084,14 @@ def _build_android_standard(
             "condition_id": "android_registration_entrypoint",
             "label": "Android registration entrypoint",
             "module": "galaxy_gateway.android.handlers.registration",
-            "satisfied": _module_available("galaxy_gateway.android.handlers.registration"),
+            "structural_present": _module_available("galaxy_gateway.android.handlers.registration"),
             "current_signal": device_evidence.get("android_device_count", 0) > 0,
         },
         {
             "condition_id": "gateway_transport",
             "label": "Gateway transport + Android bridge",
             "module": "galaxy_gateway.routes.websocket + galaxy_gateway.android.bridge",
-            "satisfied": _module_available("galaxy_gateway.routes.websocket")
+            "structural_present": _module_available("galaxy_gateway.routes.websocket")
             and _module_available("galaxy_gateway.android.bridge"),
             "current_signal": bool(device_evidence.get("android_device_count", 0)),
         },
@@ -1099,7 +1099,7 @@ def _build_android_standard(
             "condition_id": "capability_device_state_chain",
             "label": "Android capability report + device state mirror",
             "module": "core.android_device_state_store",
-            "satisfied": _module_available("core.android_device_state_store"),
+            "structural_present": _module_available("core.android_device_state_store"),
             "current_signal": android_evidence.get("capability_visible_count", 0) > 0
             and android_evidence.get("snapshot_count", 0) > 0,
         },
@@ -1107,21 +1107,21 @@ def _build_android_standard(
             "condition_id": "session_continuity",
             "label": "Attached runtime session continuity",
             "module": "core.attached_runtime_session_registry",
-            "satisfied": _module_available("core.attached_runtime_session_registry"),
+            "structural_present": _module_available("core.attached_runtime_session_registry"),
             "current_signal": session_evidence.get("active_session_count", 0) > 0,
         },
         {
             "condition_id": "participant_session_state",
             "label": "Android participant session state",
             "module": "core.android_participant_session_state",
-            "satisfied": _module_available("core.android_participant_session_state"),
+            "structural_present": _module_available("core.android_participant_session_state"),
             "current_signal": session_evidence.get("participant_total_count", 0) > 0,
         },
         {
             "condition_id": "runtime_binding",
             "label": "Runtime host + dispatch binding",
             "module": "core.android_runtime_host + core.android_runtime_dispatch_binding",
-            "satisfied": _module_available("core.android_runtime_host")
+            "structural_present": _module_available("core.android_runtime_host")
             and _module_available("core.android_runtime_dispatch_binding"),
             "current_signal": session_evidence.get("task_initiated", False),
         },
@@ -1129,7 +1129,7 @@ def _build_android_standard(
             "condition_id": "governance_acceptance",
             "label": "Center-side governance and acceptance authority",
             "module": "core.unified_execution_governance",
-            "satisfied": _module_available("core.unified_execution_governance"),
+            "structural_present": _module_available("core.unified_execution_governance"),
             "current_signal": chain_state.main_chain_available,
         },
     ]
@@ -1137,7 +1137,7 @@ def _build_android_standard(
     remaining_gaps = [
         condition["condition_id"]
         for condition in conditions
-        if not condition["satisfied"] or not condition["current_signal"]
+        if not condition["structural_present"] or not condition["current_signal"]
     ]
     return {
         "android_registration_entrypoint": "galaxy_gateway.android.handlers.registration",

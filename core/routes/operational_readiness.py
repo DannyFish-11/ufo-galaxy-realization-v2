@@ -21,6 +21,12 @@ logger = logging.getLogger("Galaxy.Routes.OperationalReadiness")
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
+    """Create the read-only operational readiness router.
+
+    ``service_manager`` and ``config`` are intentionally accepted for parity
+    with the other ``core/routes`` factories, even though this surface is
+    projection-only and does not currently consume them.
+    """
     router = APIRouter()
 
     @router.get("/api/v1/projection/operational-readiness")

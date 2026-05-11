@@ -194,6 +194,9 @@ curl -sS http://127.0.0.1:8299/api/v1/projection/operational-readiness
 curl -sS http://127.0.0.1:8299/api/v1/projection/clone-to-use-acceptance
 ```
 
+这里沿用上文 canonical backend startup 示例的默认本地端口 `8299`；如果你的
+部署改了端口，请把 URL 换成实际监听地址。
+
 这两个只读 surface 建立在现有 canonical 模块之上：
 
 - `core/operational_registration_path.py`
