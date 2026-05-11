@@ -308,6 +308,12 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(device_readiness_routes.create_router())
     except Exception as _e:
         logger.warning("设备就绪路由加载失败（可选）: %s", _e)
+    # PR1114 follow-up: unified operational readiness / clone-to-use acceptance surfaces
+    try:
+        from core.routes import operational_readiness as operational_readiness_routes
+        router.include_router(operational_readiness_routes.create_router())
+    except Exception as _e:
+        logger.warning("可操作就绪面路由加载失败（可选）: %s", _e)
 
     # PR-16: Cross-Plane Contract Map — read-only contract introspection endpoints
     # PR-19: Reliability Contract — GET /api/v1/contracts/reliability is also

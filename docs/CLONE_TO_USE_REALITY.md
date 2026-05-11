@@ -174,3 +174,35 @@ print(path.to_json())
 See `core/operational_registration_path.py` and
 `tests/test_operational_registration_path.py` for the machine-checkable
 implementation and full test coverage.
+
+---
+
+## 9) 第二阶段收口：统一 registration / acceptance 观察面
+
+PR1114 之后，如果你不只想看“有哪些注册种类”，而是想直接看：
+
+- 当前注册推进到哪一层
+- 哪些层是 `ready / degraded / blocked / pending`
+- 当前运行落在 `main_chain / cross_device / recovery / compat` 哪条链
+- clone-to-use 验收到 prerequisites / API / Android 接入 / capability / task / closure 的哪一步
+- Android ↔ V2 的最小接入标准当前是否成立
+
+可直接查询：
+
+```bash
+curl -sS http://127.0.0.1:8299/api/v1/projection/operational-readiness
+curl -sS http://127.0.0.1:8299/api/v1/projection/clone-to-use-acceptance
+```
+
+这两个只读 surface 建立在现有 canonical 模块之上：
+
+- `core/operational_registration_path.py`
+- `core/runtime_readiness_matrix.py`
+- `core/device_readiness.py`
+- `core/android_device_state_store.py`
+- `core/attached_runtime_session_registry.py`
+- `core/android_participant_session_state.py`
+
+它们不会创建平行系统，只负责把现有主链 / cross-device / degraded /
+recovery 信号聚合成更可操作的状态面，便于维护者判断“现在到底注册到哪、
+验收到哪、成功质量是什么”。
