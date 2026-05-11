@@ -157,6 +157,7 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "terminal_observation_held_for_lifecycle_authority",
         "accepted_partial_observation",
         "uplink_only_terminal_observation",
+        "uplink_terminal_observation_requires_reconciliation",
         "uplink_only_observation",
     }
 )

@@ -1400,10 +1400,7 @@ def _merge_reported_terminal_outcomes(
         # Other terminal mismatches (e.g. timeout vs failure) are treated as
         # conflicts and keep deterministic precedence rather than collapsing to
         # partial_success.
-        if {result_terminal, state_terminal} == {
-            _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-            _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-        }:
+        if _is_partial_success_terminal_pair(result_terminal, state_terminal):
             # Mixed terminal success/failure means some execution units produced
             # value while others failed, so this is the canonical partial_success
             # branch rather than a pure terminal conflict.
@@ -1432,6 +1429,56 @@ def _extract_reported_runtime_health_reason(state_payload: Optional[Dict[str, An
         return None
     reason = str(raw_reason).strip()
     return reason or None
+
+
+def _is_partial_success_terminal_pair(
+    result_terminal: Optional[str],
+    state_terminal: Optional[str],
+) -> bool:
+    """Return True when dual-source terminals represent canonical partial_success."""
+    return {result_terminal, state_terminal} == {
+        _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+    }
+
+
+def _classify_uplink_terminal_confirmation(
+    *,
+    latest_phase: Optional[str],
+    reported_terminal_outcome: Optional[str],
+    reported_result_terminal_outcome: Optional[str],
+    reported_state_terminal_outcome: Optional[str],
+) -> Tuple[bool, str]:
+    """Classify whether uplink-only terminal truth is confirmed.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        (requires_reconciliation, confirmation_label)
+    """
+    if not reported_terminal_outcome or latest_phase:
+        return False, "not_applicable"
+
+    has_dual_terminal_uplink_observation = bool(
+        reported_result_terminal_outcome and reported_state_terminal_outcome
+    )
+    if not has_dual_terminal_uplink_observation:
+        return True, "single_source_terminal_unconfirmed"
+
+    if reported_result_terminal_outcome == reported_state_terminal_outcome:
+        return False, "cross_uplink_confirmed"
+
+    # success/failure dual-source mismatch is intentionally mergeable because it
+    # represents a semantically valid partial_success terminal family:
+    # some execution units produced value while others failed, so this is
+    # reconciled as the 'partial_success' canonical terminal outcome.
+    if _is_partial_success_terminal_pair(
+        reported_result_terminal_outcome,
+        reported_state_terminal_outcome,
+    ):
+        return False, "cross_uplink_confirmed"
+
+    return True, "conflicting_terminal_unresolved"
 
 
 def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
@@ -1515,19 +1562,33 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     in_progress_terminal_observation = bool(
         latest_phase and not lifecycle_terminal_outcome and reported_terminal_outcome
     )
+    (
+        uplink_terminal_requires_reconciliation,
+        uplink_terminal_confirmation,
+    ) = _classify_uplink_terminal_confirmation(
+        latest_phase=latest_phase,
+        reported_terminal_outcome=reported_terminal_outcome,
+        reported_result_terminal_outcome=reported_result_terminal_outcome,
+        reported_state_terminal_outcome=reported_state_terminal_outcome,
+    )
+    uplink_terminal_authoritative = bool(
+        reported_terminal_outcome
+        and not latest_phase
+        and not uplink_terminal_requires_reconciliation
+    )
     terminal_truth_authoritative_source = (
         "center_lifecycle"
         if lifecycle_terminal_outcome
         else (
             "reported_uplink"
-            if (reported_terminal_outcome and not latest_phase)
+            if uplink_terminal_authoritative
             else "none"
         )
     )
     canonical_terminal_outcome = (
         lifecycle_terminal_outcome
         if lifecycle_terminal_outcome
-        else (reported_terminal_outcome if not latest_phase else None)
+        else (reported_terminal_outcome if uplink_terminal_authoritative else None)
     )
     if outcome_conflict:
         reconciliation_status = (
@@ -1552,6 +1613,20 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     elif latest_phase:
         reconciliation_status = "in_progress"
         reconciliation_reason = "authoritative_lifecycle_not_terminal"
+    elif uplink_terminal_requires_reconciliation:
+        reconciliation_status = "uplink_terminal_observation_requires_reconciliation"
+        if uplink_terminal_confirmation == "single_source_terminal_unconfirmed":
+            reconciliation_reason = (
+                "single_source_terminal_observation_without_cross_uplink_confirmation"
+            )
+        elif uplink_terminal_confirmation == "conflicting_terminal_unresolved":
+            reconciliation_reason = (
+                "conflicting_terminal_observations_without_lifecycle_authority"
+            )
+        else:
+            reconciliation_reason = (
+                "uplink_terminal_observation_requires_explicit_confirmation"
+            )
     elif reported_terminal_outcome:
         reconciliation_status = "uplink_only_terminal_observation"
         reconciliation_reason = "reported_terminal_outcome_without_lifecycle_authority"
@@ -1606,6 +1681,10 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reconciliation_delayed_observation": delayed_observation,
         "reconciliation_partial_observation": has_partial_authoritative_observation,
         "reconciliation_terminal_observation_held": in_progress_terminal_observation,
+        "reconciliation_uplink_terminal_requires_reconciliation": (
+            uplink_terminal_requires_reconciliation
+        ),
+        "reconciliation_uplink_terminal_confirmation": uplink_terminal_confirmation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     }
