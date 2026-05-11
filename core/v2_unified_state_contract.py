@@ -12,11 +12,21 @@ The contract is intentionally read-only and additive:
 * it formalizes how raw signals become derived state, acceptance,
   eligibility, and closure/quality semantics
 * it stays explicit that Android symmetry is not yet guaranteed by V2 alone
+
+Lifecycle hardening (PR-lifecycle-hardening)
+--------------------------------------------
+``build_v2_unified_state_contract`` now populates a ``lifecycle_hardening``
+field with the :class:`~core.executable_lifecycle_hardening.ExecutableLifecycleState`
+produced by ``core.executable_lifecycle_hardening``.  This makes admission,
+task-initiation gating, and result-closure semantics explicit rather than
+inferred, and exposes degraded/recovery transitions as first-class lifecycle
+stage annotations.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
@@ -29,6 +39,8 @@ from core.operational_registration_path import (
     ValidationStatus,
 )
 
+logger = logging.getLogger("Galaxy.V2UnifiedStateContract")
+
 __all__ = [
     "V2_UNIFIED_STATE_CONTRACT_AUTHORITY",
     "V2_UNIFIED_STATE_CONTRACT_VERSION",
@@ -39,7 +51,7 @@ __all__ = [
 
 
 V2_UNIFIED_STATE_CONTRACT_AUTHORITY: str = "core.v2_unified_state_contract::v2-side-executable-state-contract"
-V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.0.0"
+V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.1.0"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -95,9 +107,10 @@ class V2UnifiedStateContract:
     acceptance_state: Dict[str, ContractDecision]
     eligibility_state: Dict[str, ContractDecision]
     closure_quality_state: Dict[str, ContractDecision]
+    lifecycle_hardening: Optional[Dict[str, Any]] = field(default=None)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "authority": self.authority,
             "contract_version": self.contract_version,
             "path_authority": self.path_authority,
@@ -108,6 +121,9 @@ class V2UnifiedStateContract:
             "eligibility_state": {key: value.to_dict() for key, value in self.eligibility_state.items()},
             "closure_quality_state": {key: value.to_dict() for key, value in self.closure_quality_state.items()},
         }
+        if self.lifecycle_hardening is not None:
+            result["lifecycle_hardening"] = self.lifecycle_hardening
+        return result
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
@@ -140,6 +156,7 @@ def build_v2_unified_state_contract(
     android_evidence: Optional[Dict[str, Any]] = None,
     session_evidence: Optional[Dict[str, Any]] = None,
     system_acceptance: Optional[Dict[str, Any]] = None,
+    result_ingress_evidence: Optional[Dict[str, Any]] = None,
 ) -> V2UnifiedStateContract:
     route_paths_set = set(route_paths or [])
     runtime_readiness = dict(runtime_readiness or {})
@@ -857,6 +874,28 @@ def build_v2_unified_state_contract(
         ),
     }
 
+    # --- Lifecycle hardening ---
+    lifecycle_hardening_dict: Optional[Dict[str, Any]] = None
+    try:
+        from core.executable_lifecycle_hardening import (  # noqa: PLC0415
+            build_executable_lifecycle_state,
+        )
+        lifecycle_state = build_executable_lifecycle_state(
+            validation=validation,
+            kind_states=kind_states,
+            route_paths=route_paths,
+            runtime_readiness=runtime_readiness,
+            device_evidence=device_evidence,
+            android_evidence=android_evidence,
+            session_evidence=session_evidence,
+            system_acceptance=system_acceptance,
+            result_ingress_evidence=result_ingress_evidence,
+        )
+        lifecycle_hardening_dict = lifecycle_state.to_dict()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("lifecycle_hardening population failed: %s", exc)
+        lifecycle_hardening_dict = {"error": str(exc)}
+
     return V2UnifiedStateContract(
         authority=V2_UNIFIED_STATE_CONTRACT_AUTHORITY,
         contract_version=V2_UNIFIED_STATE_CONTRACT_VERSION,
@@ -867,4 +906,5 @@ def build_v2_unified_state_contract(
         acceptance_state=acceptance_state,
         eligibility_state=eligibility_state,
         closure_quality_state=closure_quality_state,
+        lifecycle_hardening=lifecycle_hardening_dict,
     )
