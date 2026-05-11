@@ -108,11 +108,37 @@ _DESKTOP_STATUS_BOARD_PAYLOAD: Dict[str, Any] = {
         "active_weights": {"qwen-vl": 0.77},
         "route_reason": "desktop-topology-route",
     },
+    "operational_state_board": {
+        "authority": "core.v2_unified_state_contract::v2-side-executable-state-contract",
+        "contract_version": "1.0.0",
+        "categories": [
+            {
+                "category_id": "registration_state",
+                "label": "Registration state",
+                "state": "ready",
+                "summary": "Registration is structurally ready on the V2 side.",
+                "source_of_truth_boundary": "v2_authoritative",
+            },
+            {
+                "category_id": "minimum_access_admission_verdict",
+                "label": "Operational acceptance state",
+                "state": "acceptable",
+                "summary": "System is operationally acceptable on canonical V2 terms.",
+                "source_of_truth_boundary": "joint_cross_repo_derived",
+            },
+        ],
+        "dependencies_and_blockers": {
+            "blocked": False,
+            "incomplete": False,
+            "waiting_dependencies": [],
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
 # 1. ProjectionReader tests
 # ---------------------------------------------------------------------------
+
 
 class TestProjectionReaderFile:
     """ProjectionReader reads from a JSON file."""
@@ -163,6 +189,8 @@ class TestProjectionReaderFile:
         assert result["tri_state_phase"] == "silent"
         assert result["primary_model_id"] == "qwen-vl"
         assert result["support_model_ids"] == ["deepseek-chat"]
+        assert "operational_state_board" in result
+        assert result["operational_state_board"]["categories"][0]["category_id"] == "registration_state"
 
     def test_missing_required_field_raises(self, tmp_path):
         bad = dict(_SAMPLE_PROJECTION)
@@ -512,6 +540,16 @@ class TestStatusBoardV2App:
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "Coherence" in out
+
+    def test_render_once_includes_operational_state_board_when_present(self):
+        from windows_client.status_board_v2.app import StatusBoardV2App
+        app = StatusBoardV2App(no_color=True)
+        projection = dict(_SAMPLE_PROJECTION)
+        projection["operational_state_board"] = _DESKTOP_STATUS_BOARD_PAYLOAD["operational_state_board"]
+        out = app.render_once(projection)
+        assert "Operational State Board" in out
+        assert "Registration state" in out
+        assert "joint_cross_repo_derived" in out
 
     def test_render_once_contains_board_title(self):
         # PR-8: board is now a desktop control surface, not read-only.

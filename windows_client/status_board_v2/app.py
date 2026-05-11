@@ -116,6 +116,7 @@ from .domain_surface import DomainSurface
 from .topology_surface import TopologySurface
 from .device_surface import DeviceSurface
 from .metrics_surface import MetricsSurface
+from .operational_state_surface import OperationalStateSurface
 from .liminal_surface import LiminalSurface
 from .manifest_surface import ManifestSurface
 from .return_surface import ReturnSurface
@@ -173,6 +174,7 @@ class StatusBoardV2App:
         self._topology = TopologySurface()
         self._device = DeviceSurface()
         self._metrics = MetricsSurface()
+        self._operational = OperationalStateSurface()
         self._liminal = LiminalSurface()
         self._manifest = ManifestSurface()
         self._return = ReturnSurface()
@@ -226,6 +228,7 @@ class StatusBoardV2App:
             self._topology.render(projection),
             self._device.render(projection),
             self._metrics.render(projection),
+            self._operational.render(projection),
             self._liminal.render(projection),
             self._manifest.render(projection),
             self._return.render(projection),

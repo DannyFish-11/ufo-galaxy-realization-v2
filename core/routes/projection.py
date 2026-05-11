@@ -3872,7 +3872,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # ------------------------------------------------------------------
 
     @router.get("/api/v1/projection/desktop-status-board")
-    async def get_desktop_status_board_integration() -> JSONResponse:
+    async def get_desktop_status_board_integration(request: Request) -> JSONResponse:
         """Return the final integrated desktop status board payload (PR-8).
 
         This endpoint is **read-only** and **additive** (PR-8).  It does not
@@ -3963,7 +3963,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
               "integration_health": "ok"
             }
         """
-        payload = _assemble_desktop_status_board_payload()
+        route_paths = {route.path for route in request.app.routes if hasattr(route, "path")}
+        payload = _assemble_desktop_status_board_payload(route_paths=route_paths)
         return JSONResponse(content=payload)
 
     # ------------------------------------------------------------------
@@ -5347,7 +5348,168 @@ def _minimal_desktop_topology_fallback() -> Dict[str, Any]:
     }
 
 
-def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
+def _classify_operational_decision_authority(sources: Any) -> str:
+    boundary_v2 = "v2_authoritative"
+    boundary_android = "android_originated"
+    boundary_joint = "joint_cross_repo_derived"
+    source_list = [
+        str(source)
+        for source in (sources or [])
+        if source is not None and str(source).strip()
+    ]
+    if not source_list:
+        return boundary_v2
+    has_android_origin = any(
+        "android" in source.lower() or "galaxy_gateway.android" in source.lower()
+        for source in source_list
+    )
+    has_v2_origin = any(
+        source.startswith("core.") or source.startswith("contracts.")
+        for source in source_list
+    )
+    if has_android_origin and has_v2_origin:
+        return boundary_joint
+    if has_android_origin:
+        return boundary_android
+    return boundary_v2
+
+
+def _source_of_truth_boundaries() -> Dict[str, str]:
+    return {
+        "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
+        "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
+        "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
+    }
+
+
+def _empty_operational_state_board() -> Dict[str, Any]:
+    return {
+        "authority": "unavailable",
+        "contract_version": "0.0.0",
+        "categories": [],
+        "task_execution_visibility": {
+            "task_initiated": False,
+            "result_closure_established": False,
+            "active_session_count": 0,
+            "participant_total_count": 0,
+        },
+        "dependencies_and_blockers": {
+            "missing_required_routes": [],
+            "waiting_dependencies": [],
+            "blocked": False,
+            "incomplete": False,
+            "degraded_capability_device_count": 0,
+        },
+    }
+
+
+def _build_operational_state_board_from_contract(
+    state_contract: Dict[str, Any],
+) -> Dict[str, Any]:
+    derived = state_contract.get("derived_state") or {}
+    acceptance = state_contract.get("acceptance_state") or {}
+    eligibility = state_contract.get("eligibility_state") or {}
+    closure = state_contract.get("closure_quality_state") or {}
+    raw = state_contract.get("raw_signals") or {}
+
+    decision_map = {
+        "registration_state": derived.get("registration_state"),
+        "capability_visibility": derived.get("capability_visibility"),
+        "operational_readiness": derived.get("operational_readiness"),
+        "minimum_access_admission_verdict": acceptance.get("operational_acceptance"),
+        "main_chain_availability": derived.get("main_chain_availability"),
+        "cross_device_availability": derived.get("cross_device_availability"),
+        "active_path": derived.get("active_path"),
+        "compat_degraded_path": derived.get("degraded_path"),
+        "recovery_active_state": derived.get("recovery_active_state"),
+        "session_continuity": derived.get("session_continuity"),
+        "task_initiation_eligibility": eligibility.get("task_initiation"),
+        "result_closure_state": closure.get("result_closure"),
+        "success_quality": closure.get("success_quality"),
+        "verdict_quality": closure.get("verdict_quality"),
+        "blocked_state": closure.get("blocked_state"),
+        "waiting_dependency_state": closure.get("waiting_dependency_state"),
+        "incomplete_state": closure.get("incomplete_state"),
+    }
+
+    categories = []
+    for category_id, decision in decision_map.items():
+        if not isinstance(decision, dict):
+            continue
+        sources = decision.get("sources") or []
+        categories.append(
+            {
+                "category_id": category_id,
+                "label": decision.get("label") or category_id,
+                "state": decision.get("state", "unknown"),
+                "summary": decision.get("summary", ""),
+                "why": list(decision.get("reasons") or []),
+                "evidence": dict(decision.get("evidence") or {}),
+                "source_of_truth_boundary": _classify_operational_decision_authority(sources),
+                "source_fragments": list(sources),
+                "observable": decision.get("observable"),
+                "acceptable": decision.get("acceptable"),
+                "eligible": decision.get("eligible"),
+                "active": decision.get("active"),
+                "complete": decision.get("complete"),
+                "quality": decision.get("quality"),
+            }
+        )
+
+    return {
+        "authority": state_contract.get("authority"),
+        "contract_version": state_contract.get("contract_version"),
+        "categories": categories,
+        "task_execution_visibility": {
+            "task_initiated": bool(raw.get("task_initiated")),
+            "result_closure_established": bool(raw.get("result_closure_established")),
+            "active_session_count": raw.get("active_session_count", 0),
+            "participant_total_count": raw.get("participant_total_count", 0),
+        },
+        "dependencies_and_blockers": {
+            "missing_required_routes": list(raw.get("missing_required_routes") or []),
+            "waiting_dependencies": list(
+                (
+                    (closure.get("waiting_dependency_state") or {})
+                    .get("evidence", {})
+                    .get("waiting_dependencies")
+                )
+                or []
+            ),
+            "blocked": (closure.get("blocked_state") or {}).get("state") == "present",
+            "incomplete": (closure.get("incomplete_state") or {}).get("state") == "present",
+            "degraded_capability_device_count": raw.get("degraded_capability_device_count", 0),
+        },
+    }
+
+
+def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = None) -> Dict[str, Any]:
+    try:
+        from core.operational_readiness_surface import build_operational_readiness_report
+
+        normalized_route_paths = route_paths if isinstance(route_paths, set) else set(route_paths or [])
+        report = build_operational_readiness_report(route_paths=normalized_route_paths)
+        state_contract = dict(report.state_contract)
+        result["operational_readiness"] = {
+            "authority": report.authority,
+            "contract_version": report.contract_version,
+            "validation": report.validation,
+            "chain_state": report.chain_state.to_dict(),
+            "clone_to_use_acceptance": report.clone_to_use_acceptance,
+            "android_v2_minimum_standard": report.android_v2_minimum_standard,
+            "state_contract": state_contract,
+        }
+        result["operational_state_board"] = _build_operational_state_board_from_contract(state_contract)
+        result["source_of_truth_boundaries"] = _source_of_truth_boundaries()
+    except Exception as exc:
+        logger.debug(
+            "_assemble_desktop_status_board_payload: operational state board attachment failed: %s",
+            exc,
+        )
+    return result
+
+
+def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str, Any]:
     """PR-8: Assemble the final integrated desktop status board payload.
 
     Builds a :class:`~contracts.desktop_status_projection.DesktopStatusBoardIntegrationPayload`
@@ -5440,6 +5602,7 @@ def _assemble_desktop_status_board_payload() -> Dict[str, Any]:
             exc,
         )
 
+    result = _attach_operational_state_board(result, route_paths=route_paths)
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
     result.setdefault("board_facing_default", True)
     return result
@@ -5495,6 +5658,8 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             "reachable_executor_count": 0,
             "source": "fallback",
         },
+        "operational_state_board": _empty_operational_state_board(),
+        "source_of_truth_boundaries": _source_of_truth_boundaries(),
         "projection_surface_role": "desktop_status_board_truth",
         "board_facing_default": True,
         "_assembled_at": time.time(),
