@@ -458,8 +458,11 @@ class TestGroupD_PartialAndDegradedObservations:
 
         truth = get_uplink_truth_state(eid)
         assert truth["lifecycle_phase"] is None
-        assert truth["terminal_truth_determined"] is True
-        assert truth["terminal_truth_authoritative_source"] == "reported_uplink"
+        assert truth["terminal_truth_determined"] is False
+        assert truth["canonical_terminal_outcome"] is None
+        assert truth["terminal_truth_authoritative_source"] == "none"
+        assert truth["reconciliation_status"] == "uplink_terminal_observation_requires_reconciliation"
+        assert truth["reconciliation_uplink_terminal_confirmation"] == "single_source_terminal_unconfirmed"
 
     def test_D02_state_uplink_only_does_not_assert_terminal(self):
         """D02: state uplink alone must not claim terminal closure."""

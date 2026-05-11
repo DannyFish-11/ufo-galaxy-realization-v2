@@ -82,6 +82,31 @@ def test_uplink_only_partial_success_is_canonically_classified():
     assert truth_state["reconciliation_status"] == "uplink_only_terminal_observation"
 
 
+def test_uplink_only_conflicting_terminal_outcomes_require_reconciliation():
+    execution_id = "exec-pr09-uplink-only-terminal-conflict"
+    device_id = "device-pr09-uplink-only-terminal-conflict"
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.parallel_subtask,
+        payload={"status": "timeout"},
+    )
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.parallel_subtask,
+        payload={"status": "failed", "reason": "executor_crash"},
+    )
+
+    truth_state = get_uplink_truth_state(execution_id)
+    assert truth_state["lifecycle_phase"] is None
+    assert truth_state["terminal_truth_determined"] is False
+    assert truth_state["canonical_terminal_outcome"] is None
+    assert truth_state["terminal_truth_authoritative_source"] == "none"
+    assert truth_state["reconciliation_status"] == "uplink_terminal_observation_requires_reconciliation"
+    assert truth_state["reconciliation_uplink_terminal_confirmation"] == "conflicting_terminal_unresolved"
+
+
 def test_holds_terminal_report_during_non_terminal_lifecycle():
     execution_id = "exec-pr09-terminal-held"
     device_id = "device-pr09-terminal-held"

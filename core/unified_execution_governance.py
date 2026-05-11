@@ -1515,19 +1515,59 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     in_progress_terminal_observation = bool(
         latest_phase and not lifecycle_terminal_outcome and reported_terminal_outcome
     )
+    has_dual_terminal_uplink_observation = bool(
+        reported_result_terminal_outcome and reported_state_terminal_outcome
+    )
+    uplink_terminal_pair_is_mergeable = bool(
+        has_dual_terminal_uplink_observation
+        and (
+            reported_result_terminal_outcome == reported_state_terminal_outcome
+            or {
+                reported_result_terminal_outcome,
+                reported_state_terminal_outcome,
+            }
+            == {
+                _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+                _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+            }
+        )
+    )
+    uplink_terminal_requires_reconciliation = bool(
+        not latest_phase
+        and reported_terminal_outcome
+        and not uplink_terminal_pair_is_mergeable
+    )
+    uplink_terminal_confirmation = (
+        "not_applicable"
+        if not reported_terminal_outcome or latest_phase
+        else (
+            "single_source_terminal_unconfirmed"
+            if not has_dual_terminal_uplink_observation
+            else (
+                "conflicting_terminal_unresolved"
+                if uplink_terminal_requires_reconciliation
+                else "cross_uplink_confirmed"
+            )
+        )
+    )
+    uplink_terminal_authoritative = bool(
+        reported_terminal_outcome
+        and not latest_phase
+        and not uplink_terminal_requires_reconciliation
+    )
     terminal_truth_authoritative_source = (
         "center_lifecycle"
         if lifecycle_terminal_outcome
         else (
             "reported_uplink"
-            if (reported_terminal_outcome and not latest_phase)
+            if uplink_terminal_authoritative
             else "none"
         )
     )
     canonical_terminal_outcome = (
         lifecycle_terminal_outcome
         if lifecycle_terminal_outcome
-        else (reported_terminal_outcome if not latest_phase else None)
+        else (reported_terminal_outcome if uplink_terminal_authoritative else None)
     )
     if outcome_conflict:
         reconciliation_status = (
@@ -1552,6 +1592,13 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     elif latest_phase:
         reconciliation_status = "in_progress"
         reconciliation_reason = "authoritative_lifecycle_not_terminal"
+    elif uplink_terminal_requires_reconciliation:
+        reconciliation_status = "uplink_terminal_observation_requires_reconciliation"
+        reconciliation_reason = (
+            "single_source_terminal_observation_without_cross_uplink_confirmation"
+            if uplink_terminal_confirmation == "single_source_terminal_unconfirmed"
+            else "conflicting_terminal_observations_without_lifecycle_authority"
+        )
     elif reported_terminal_outcome:
         reconciliation_status = "uplink_only_terminal_observation"
         reconciliation_reason = "reported_terminal_outcome_without_lifecycle_authority"
@@ -1606,6 +1653,10 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reconciliation_delayed_observation": delayed_observation,
         "reconciliation_partial_observation": has_partial_authoritative_observation,
         "reconciliation_terminal_observation_held": in_progress_terminal_observation,
+        "reconciliation_uplink_terminal_requires_reconciliation": (
+            uplink_terminal_requires_reconciliation
+        ),
+        "reconciliation_uplink_terminal_confirmation": uplink_terminal_confirmation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
     }
