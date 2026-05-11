@@ -5400,6 +5400,15 @@ def _empty_operational_state_board() -> Dict[str, Any]:
             "incomplete": False,
             "degraded_capability_device_count": 0,
         },
+        "lifecycle_stage_index": {
+            "observation": [],
+            "admission": [],
+            "readiness": [],
+            "eligibility": [],
+            "execution": [],
+            "closure": [],
+            "conditions": [],
+        },
     }
 
 
@@ -5415,6 +5424,7 @@ def _build_operational_state_board_from_contract(
     decision_map = {
         "registration_state": derived.get("registration_state"),
         "capability_visibility": derived.get("capability_visibility"),
+        "gateway_bridge_presence": derived.get("gateway_bridge_presence"),
         "operational_readiness": derived.get("operational_readiness"),
         "minimum_access_admission_verdict": acceptance.get("operational_acceptance"),
         "main_chain_availability": derived.get("main_chain_availability"),
@@ -5423,7 +5433,10 @@ def _build_operational_state_board_from_contract(
         "compat_degraded_path": derived.get("degraded_path"),
         "recovery_active_state": derived.get("recovery_active_state"),
         "session_continuity": derived.get("session_continuity"),
+        "participant_device_session_dependencies": derived.get("participant_device_session_dependencies"),
+        "runtime_host_dispatch_binding": derived.get("runtime_host_dispatch_binding"),
         "task_initiation_eligibility": eligibility.get("task_initiation"),
+        "task_execution_visibility": closure.get("task_execution_visibility"),
         "result_closure_state": closure.get("result_closure"),
         "success_quality": closure.get("success_quality"),
         "verdict_quality": closure.get("verdict_quality"),
@@ -5453,6 +5466,7 @@ def _build_operational_state_board_from_contract(
                 "active": decision.get("active"),
                 "complete": decision.get("complete"),
                 "quality": decision.get("quality"),
+                "lifecycle_stage": decision.get("lifecycle_stage"),
             }
         )
 
@@ -5479,6 +5493,36 @@ def _build_operational_state_board_from_contract(
             "blocked": (closure.get("blocked_state") or {}).get("state") == "present",
             "incomplete": (closure.get("incomplete_state") or {}).get("state") == "present",
             "degraded_capability_device_count": raw.get("degraded_capability_device_count", 0),
+        },
+        "lifecycle_stage_index": {
+            "observation": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "observation"
+            ],
+            "admission": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "admission"
+            ],
+            "readiness": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "readiness"
+            ],
+            "eligibility": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "eligibility"
+            ],
+            "execution": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "execution"
+            ],
+            "closure": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "closure"
+            ],
+            "conditions": [
+                cid for cid, d in decision_map.items()
+                if isinstance(d, dict) and d.get("lifecycle_stage") == "conditions"
+            ],
         },
     }
 
