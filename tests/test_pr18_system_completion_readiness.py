@@ -76,6 +76,8 @@ def test_partial_uplink_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert view.system_completion_level == "closed_with_gaps"
     assert set(view.system_completion_gap_types) == {
         "missing_state_uplink",
@@ -146,7 +148,10 @@ def test_recovered_runtime_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert "runtime_health_not_stable" in view.system_completion_gap_types
+    assert "degraded_path_used" in view.system_completion_gap_types
 
 
 def test_degraded_runtime_not_mature():
@@ -176,7 +181,10 @@ def test_degraded_runtime_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert "runtime_health_not_stable" in view.system_completion_gap_types
+    assert "degraded_path_used" in view.system_completion_gap_types
 
 
 def test_fallback_semantic_path_not_mature():

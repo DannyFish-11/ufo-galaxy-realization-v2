@@ -166,8 +166,19 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
 # additional fully-accepted reconciliation outcomes (for example:
 # accepted_with_quorum / accepted_with_verified_replay).
 _FULLY_ACCEPTED_RECONCILIATION_STATUSES: FrozenSet[str] = frozenset({"accepted"})
+_COMPATIBILITY_RECONCILIATION_STATUSES: FrozenSet[str] = frozenset(
+    {
+        "uplink_only_observation",
+        "uplink_only_terminal_observation",
+        "uplink_terminal_observation_requires_reconciliation",
+    }
+)
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
 TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
+FAILURE_SEMANTIC_FALLBACK_LOCAL: str = "fallback_local"
+_FALLBACK_FAILURE_SEMANTICS: FrozenSet[str] = frozenset(
+    {FAILURE_SEMANTIC_FALLBACK_LOCAL}
+)
 
 GAP_LOOP_NOT_IN_COMPLETION_STAGE = "loop_not_in_completion_stage"
 GAP_TERMINAL_LIFECYCLE_NOT_REACHED = "terminal_lifecycle_not_reached"
@@ -694,22 +705,34 @@ def _derive_closure_path_quality_profile(
     lifecycle_history: List[Dict[str, Any]],
     reconciliation_status: str,
     canonical_runtime_health: str,
+    terminal_truth_authoritative_source: str,
 ) -> ClosurePathQualityProfile:
-    fallback_path_used = any(
-        str(event.get("failure_semantic") or "") == "fallback_local"
-        for event in lifecycle_history
+    """Derive canonical/fallback/compat/degraded closure path quality.
+
+    Precedence when multiple path flags are True:
+    canonical > fallback > compat > degraded > non_canonical.
+    """
+    fallback_path_used = _is_fallback_path_used(lifecycle_history)
+    compat_path_used = reconciliation_status in _COMPATIBILITY_RECONCILIATION_STATUSES
+    degraded_path_used = _is_degraded_path(
+        canonical_runtime_health=canonical_runtime_health,
+        reconciliation_status=reconciliation_status,
     )
-    compat_path_used = reconciliation_status in {
-        "uplink_only_observation",
-        "uplink_only_terminal_observation",
-        "uplink_terminal_observation_requires_reconciliation",
-    }
-    degraded_path_used = (
-        canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS
-        or reconciliation_status == "accepted_partial_observation"
+    has_non_canonical_paths = (
+        fallback_path_used or compat_path_used or degraded_path_used
     )
-    canonical_path_used = not any(
-        (fallback_path_used, compat_path_used, degraded_path_used)
+    has_canonical_reconciliation = (
+        reconciliation_status in _FULLY_ACCEPTED_RECONCILIATION_STATUSES
+    )
+    has_center_authority = (
+        terminal_truth_authoritative_source == TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE
+    )
+    has_lifecycle_evidence = len(lifecycle_history) > 0
+    canonical_path_used = (
+        not has_non_canonical_paths
+        and has_canonical_reconciliation
+        and has_center_authority
+        and has_lifecycle_evidence
     )
 
     mature_closure_blockers: List[str] = []
@@ -738,6 +761,24 @@ def _derive_closure_path_quality_profile(
         degraded_path_used=degraded_path_used,
         closure_authority_quality=closure_authority_quality,
         mature_closure_blockers=mature_closure_blockers,
+    )
+
+
+def _is_fallback_path_used(lifecycle_history: List[Dict[str, Any]]) -> bool:
+    return any(
+        event.get("failure_semantic", "") in _FALLBACK_FAILURE_SEMANTICS
+        for event in lifecycle_history
+    )
+
+
+def _is_degraded_path(
+    *,
+    canonical_runtime_health: str,
+    reconciliation_status: str,
+) -> bool:
+    return (
+        canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS
+        or reconciliation_status == "accepted_partial_observation"
     )
 
 
@@ -848,6 +889,7 @@ def query_closed_loop_governance_state(
         lifecycle_history=lifecycle_history,
         reconciliation_status=reconciliation_status,
         canonical_runtime_health=canonical_runtime_health,
+        terminal_truth_authoritative_source=terminal_truth_authoritative_source,
     )
 
     violations = _check_invariants(
