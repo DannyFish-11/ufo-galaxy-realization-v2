@@ -132,6 +132,10 @@ downstream consumers can see exactly which modules contributed to the result.
 ## Eligibility semantics
 
 Task initiation is not inferred only from observability.
+Task initiation absence alone is also **not** treated as a waiting dependency.
+`waiting_dependency` is reserved for missing prerequisites (for example capability
+visibility or active session continuity), while `active` indicates whether
+execution has actually started.
 
 - `eligible`
   - main chain available

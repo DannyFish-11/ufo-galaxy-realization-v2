@@ -228,6 +228,84 @@ def test_build_operational_readiness_report_recovery_with_degraded_success():
     assert result_closure["status"] == SurfaceStatus.degraded.value
 
 
+def test_task_not_initiated_is_not_waiting_dependency_when_eligible():
+    with (
+        patch(
+            "core.operational_readiness_surface.get_operational_registration_path",
+            return_value=_make_path(ValidationStatus.PASS),
+        ),
+        patch(
+            "core.operational_readiness_surface._module_available",
+            return_value=True,
+        ),
+        patch(
+            "core.operational_readiness_surface._collect_device_evidence",
+            return_value={
+                "known_device_count": 1,
+                "android_device_count": 1,
+                "android_device_ids": ["android-1"],
+                "cross_device_ready_device_ids": ["android-1"],
+            },
+        ),
+        patch(
+            "core.operational_readiness_surface._collect_android_evidence",
+            return_value={
+                "snapshot_count": 1,
+                "snapshot_device_ids": ["android-1"],
+                "capability_semantics_count": 1,
+                "capability_visible_count": 1,
+                "degraded_capability_device_count": 0,
+                "execution_event_count": 0,
+                "terminal_execution_event_count": 0,
+                "ecosystem_summary": {"total_devices_with_snapshot": 1},
+            },
+        ),
+        patch(
+            "core.operational_readiness_surface._collect_session_evidence",
+            return_value={
+                "active_session_count": 1,
+                "total_session_count": 1,
+                "replaced_session_count": 0,
+                "detached_session_count": 0,
+                "invalidated_session_count": 0,
+                "participant_total_count": 1,
+                "participant_active_count": 1,
+                "participant_terminal_count": 0,
+                "participant_terminal_success_count": 0,
+                "task_initiated": False,
+                "result_closure_established": False,
+                "recovery_active": False,
+                "participant_phases": ["active"],
+            },
+        ),
+        patch(
+            "core.operational_readiness_surface._load_runtime_readiness",
+            return_value={
+                "available": True,
+                "verdict": "ready",
+                "blocking": False,
+                "summary": "ready",
+                "matrix": {},
+            },
+        ),
+        patch(
+            "core.operational_readiness_surface._load_system_acceptance",
+            return_value={
+                "available": True,
+                "verdict": "fully_operational",
+                "summary": "ok",
+                "report": {},
+            },
+        ),
+    ):
+        report = build_operational_readiness_report(route_paths=_required_route_paths())
+
+    assert report.state_contract["derived_state"]["cross_device_availability"]["state"] == "available"
+    assert report.state_contract["eligibility_state"]["task_initiation"]["state"] == "eligible"
+    assert report.state_contract["eligibility_state"]["task_initiation"]["active"] is False
+    assert report.state_contract["closure_quality_state"]["waiting_dependency_state"]["state"] == "clear"
+
+
 def test_operational_readiness_routes_expose_expected_paths():
     router = create_router()
     paths = {route.path for route in router.routes}
