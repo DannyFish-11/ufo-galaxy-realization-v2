@@ -648,6 +648,29 @@ def test_50_minimal_fallback_payload_includes_required_keys():
     assert ai.get("topology_authoritative") is False
 
 
+def test_50b_minimal_fallback_payload_includes_operational_state_keys():
+    import importlib
+    routes_mod = importlib.import_module("core.routes.projection")
+    fallback_fn = getattr(routes_mod, "_minimal_desktop_status_board_fallback", None)
+    payload = fallback_fn()
+    assert "operational_state_board" in payload
+    assert "source_of_truth_boundaries" in payload
+
+
+def test_50c_desktop_status_board_assembly_includes_unified_operational_state_board():
+    import importlib
+    routes_mod = importlib.import_module("core.routes.projection")
+    assemble_fn = getattr(routes_mod, "_assemble_desktop_status_board_payload", None)
+    payload = assemble_fn(route_paths={"/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime"})
+    assert "operational_state_board" in payload
+    board = payload["operational_state_board"]
+    assert "categories" in board and isinstance(board["categories"], list)
+    category_ids = {item.get("category_id") for item in board["categories"]}
+    assert "registration_state" in category_ids
+    assert "result_closure_state" in category_ids
+    assert "minimum_access_admission_verdict" in category_ids
+
+
 # ===========================================================================
 # 51-58: readiness and is_canonical convenience properties (PR-8 final)
 # ===========================================================================

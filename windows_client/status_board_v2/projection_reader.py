@@ -265,7 +265,7 @@ def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Di
     topology = _coerce_dict(payload.get("topology_projection"))
     routing_summary = _coerce_dict(payload.get("model_routing_summary"))
 
-    return {
+    projection = {
         "tri_state_phase": _first_not_none(
             payload.get("tri_state_phase"),
             DEFAULT_TRI_STATE_PHASE,
@@ -296,6 +296,10 @@ def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Di
         "current_task_summary": None,
         "timestamp": _coerce_timestamp(payload.get("integrated_at")),
     }
+    for key, value in payload.items():
+        if key not in projection:
+            projection[key] = value
+    return projection
 
 
 def _coerce_list(value: Any) -> List[Any]:
