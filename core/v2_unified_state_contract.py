@@ -404,7 +404,7 @@ def build_v2_unified_state_contract(
         "degraded_path": ContractDecision(
             decision_id="degraded_path",
             label="Compat/degraded path",
-            state="degraded" if degraded else "canonical",
+            state="degraded_operation" if degraded else "canonical_operation",
             summary=("Current path is degraded or warning-qualified." if degraded else "Current path is canonical."),
             sources=_base_sources(
                 "core.runtime_readiness_matrix",
@@ -683,15 +683,16 @@ def build_v2_unified_state_contract(
         ),
     }
 
-    verdict_quality = (
-        "canonical"
-        if success_quality.startswith("canonical") and acceptance_verdict == "fully_operational"
-        else (
-            "recovery"
-            if success_quality == "recovery"
-            else "compat" if success_quality == "compat" else "blocked" if success_quality == "blocked" else "degraded"
-        )
-    )
+    if success_quality.startswith("canonical") and acceptance_verdict == "fully_operational":
+        verdict_quality = "canonical"
+    elif success_quality == "recovery":
+        verdict_quality = "recovery"
+    elif success_quality == "compat":
+        verdict_quality = "compat"
+    elif success_quality == "blocked":
+        verdict_quality = "blocked"
+    else:
+        verdict_quality = "degraded"
     waiting_dependency_reasons = []
     if android_attached and not capability_visible:
         waiting_dependency_reasons.append("capability_visibility")

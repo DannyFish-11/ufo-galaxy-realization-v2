@@ -132,7 +132,11 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
     assert report.state_contract["eligibility_state"]["task_initiation"]["state"] == "eligible"
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "complete"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "canonical"
-    android_admission = next(item for item in report.registration_kinds if item.kind == "device_android_admission")
+    android_admission = next(
+        (item for item in report.registration_kinds if item.kind == "device_android_admission"),
+        None,
+    )
+    assert android_admission is not None
     assert android_admission.status == SurfaceStatus.ready
 
 
