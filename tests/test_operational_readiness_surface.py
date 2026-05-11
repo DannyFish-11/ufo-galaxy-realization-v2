@@ -132,11 +132,9 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
     assert report.state_contract["eligibility_state"]["task_initiation"]["state"] == "eligible"
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "complete"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "canonical"
-    android_admission = next(
-        (item for item in report.registration_kinds if item.kind == "device_android_admission"),
-        None,
-    )
-    assert android_admission is not None
+    android_candidates = [item for item in report.registration_kinds if item.kind == "device_android_admission"]
+    assert android_candidates, "expected device_android_admission registration kind"
+    android_admission = android_candidates[0]
     assert android_admission.status == SurfaceStatus.ready
 
 
@@ -222,9 +220,11 @@ def test_build_operational_readiness_report_recovery_with_degraded_success():
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "incomplete"
     assert report.state_contract["closure_quality_state"]["incomplete_state"]["state"] == "present"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "recovery"
-    result_closure = next(
+    result_closure_candidates = [
         item for item in report.clone_to_use_acceptance["checkpoints"] if item["checkpoint_id"] == "result_closure"
-    )
+    ]
+    assert result_closure_candidates, "expected result_closure checkpoint"
+    result_closure = result_closure_candidates[0]
     assert result_closure["status"] == SurfaceStatus.degraded.value
 
 
