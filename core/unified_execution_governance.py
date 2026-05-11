@@ -1400,10 +1400,7 @@ def _merge_reported_terminal_outcomes(
         # Other terminal mismatches (e.g. timeout vs failure) are treated as
         # conflicts and keep deterministic precedence rather than collapsing to
         # partial_success.
-        if {result_terminal, state_terminal} == {
-            _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-            _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-        }:
+        if _is_partial_success_terminal_pair(result_terminal, state_terminal):
             # Mixed terminal success/failure means some execution units produced
             # value while others failed, so this is the canonical partial_success
             # branch rather than a pure terminal conflict.
@@ -1432,6 +1429,17 @@ def _extract_reported_runtime_health_reason(state_payload: Optional[Dict[str, An
         return None
     reason = str(raw_reason).strip()
     return reason or None
+
+
+def _is_partial_success_terminal_pair(
+    result_terminal: Optional[str],
+    state_terminal: Optional[str],
+) -> bool:
+    """Return True when dual-source terminals represent canonical partial_success."""
+    return {result_terminal, state_terminal} == {
+        _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+    }
 
 
 def _classify_uplink_terminal_confirmation(
@@ -1463,14 +1471,11 @@ def _classify_uplink_terminal_confirmation(
     # success/failure dual-source mismatch is intentionally mergeable because it
     # represents a semantically valid partial_success terminal family:
     # some execution units produced value while others failed, so this is
-    # reconciled as the partial_success canonical outcome.
-    if {
+    # reconciled as the 'partial_success' canonical terminal outcome.
+    if _is_partial_success_terminal_pair(
         reported_result_terminal_outcome,
         reported_state_terminal_outcome,
-    } == {
-        _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-        _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-    }:
+    ):
         return False, "cross_uplink_confirmed"
 
     return True, "conflicting_terminal_unresolved"

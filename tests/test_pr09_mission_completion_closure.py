@@ -82,7 +82,7 @@ def test_uplink_only_partial_success_is_canonically_classified():
     assert truth_state["reconciliation_status"] == "uplink_only_terminal_observation"
 
 
-def test_uplink_only_dual_confirmed_terminal_outcome_becomes_authoritative():
+def test_uplink_only_cross_source_confirmed_terminal_outcome_becomes_authoritative():
     execution_id = "exec-pr09-uplink-only-dual-confirmed"
     device_id = "device-pr09-uplink-only-dual-confirmed"
     record_result_uplink(
