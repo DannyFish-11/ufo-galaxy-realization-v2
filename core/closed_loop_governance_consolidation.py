@@ -89,7 +89,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, FrozenSet, List, Optional, TypedDict
 
 logger = logging.getLogger("Galaxy.ClosedLoopGovernanceConsolidation")
 
@@ -164,7 +164,7 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
 # here means future code revisions may intentionally update this constant with
 # additional fully-accepted reconciliation outcomes (for example:
 # accepted_with_quorum / accepted_with_verified_replay).
-_FULLY_ACCEPTED_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
+_FULLY_ACCEPTED_RECONCILIATION_STATUSES: FrozenSet[str] = frozenset({"accepted"})
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
 TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
 
@@ -181,6 +181,14 @@ GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
 
 
 class CompletionReadinessClassification(TypedDict):
+    """Typed readiness output for mature-closure classification.
+
+    system_completion_level values:
+    - ``not_closed``
+    - ``closed_with_gaps``
+    - ``mature_closed_loop``
+    """
+
     system_completion_ready: bool
     system_completion_level: str
     system_completion_gap_types: List[str]

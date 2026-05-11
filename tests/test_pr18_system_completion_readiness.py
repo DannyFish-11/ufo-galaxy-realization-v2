@@ -80,6 +80,7 @@ def test_partial_uplink_not_mature():
         "missing_state_uplink",
         "reconciliation_not_fully_accepted",
     }
+    assert len(view.system_completion_gap_types) == 2
 
 
 def test_conflicting_reports_not_mature():
@@ -113,6 +114,7 @@ def test_conflicting_reports_not_mature():
         "reconciliation_conflict_present",
         "reconciliation_not_fully_accepted",
     }
+    assert len(view.system_completion_gap_types) == 2
 
 
 def test_recovered_runtime_not_mature():
