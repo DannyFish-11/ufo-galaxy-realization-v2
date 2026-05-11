@@ -747,8 +747,26 @@ class TestCanonicalClosure:
             task_initiated=True,
             result_closure_established=True,
             completion_ingress_confirmed=True,
+            participant_terminal_count=1,
+            participant_terminal_success_count=1,
         )
         assert state.current_stage == LifecycleStage.RESULT_CLOSURE
+
+    def test_android_closure_not_authoritative_without_terminal_continuity(self) -> None:
+        state = _build_state(
+            android_device_count=1,
+            capability_visible_count=1,
+            active_session_count=1,
+            android_device_ids=["device-1"],
+            task_initiated=True,
+            result_closure_established=True,
+            completion_ingress_confirmed=True,
+            participant_terminal_count=0,
+            participant_terminal_success_count=0,
+        )
+        assert state.result_closure.authoritative is False
+        assert "session_continuity_unconfirmed" in state.result_closure.degraded_reasons
+        assert state.stage_gates[LifecycleStage.RESULT_CLOSURE.value].passed is False
 
 
 # =============================================================================
