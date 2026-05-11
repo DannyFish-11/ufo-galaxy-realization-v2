@@ -160,7 +160,7 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "uplink_only_observation",
     }
 )
-# Keep this as a set to preserve forward compatibility with additional
+# Keep this as a frozenset to preserve forward compatibility with additional
 # "fully accepted" reconciliation outcomes in future contract revisions.
 _MATURE_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
@@ -614,9 +614,12 @@ def _classify_system_completion_readiness(
         gap_types.append("runtime_health_not_stable")
 
     system_completion_ready = len(gap_types) == 0
-    system_completion_level = "mature_closed_loop" if system_completion_ready else (
-        "closed_with_gaps" if stage == ClosedLoopStage.completion else "not_closed"
-    )
+    if system_completion_ready:
+        system_completion_level = "mature_closed_loop"
+    elif stage == ClosedLoopStage.completion:
+        system_completion_level = "closed_with_gaps"
+    else:
+        system_completion_level = "not_closed"
     return {
         "system_completion_ready": system_completion_ready,
         "system_completion_level": system_completion_level,
