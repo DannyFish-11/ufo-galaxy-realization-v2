@@ -76,9 +76,10 @@ def test_partial_uplink_not_mature():
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
     assert view.system_completion_level == "closed_with_gaps"
-    assert sorted(view.system_completion_gap_types) == sorted(
-        ["missing_state_uplink", "reconciliation_not_fully_accepted"]
-    )
+    assert set(view.system_completion_gap_types) == {
+        "missing_state_uplink",
+        "reconciliation_not_fully_accepted",
+    }
 
 
 def test_conflicting_reports_not_mature():
@@ -108,9 +109,10 @@ def test_conflicting_reports_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
-    assert sorted(view.system_completion_gap_types) == sorted(
-        ["reconciliation_conflict_present", "reconciliation_not_fully_accepted"]
-    )
+    assert set(view.system_completion_gap_types) == {
+        "reconciliation_conflict_present",
+        "reconciliation_not_fully_accepted",
+    }
 
 
 def test_recovered_runtime_not_mature():

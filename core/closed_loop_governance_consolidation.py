@@ -89,7 +89,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 logger = logging.getLogger("Galaxy.ClosedLoopGovernanceConsolidation")
 
@@ -160,10 +160,10 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "uplink_only_observation",
     }
 )
-# Keep this as a frozenset. Forward compatibility here means future code
-# revisions may expand this constant with additional fully-accepted
-# reconciliation outcomes (for example: accepted_with_quorum /
-# accepted_with_verified_replay).
+# Keep this as a frozenset for immutability in-runtime. Forward compatibility
+# here means future code revisions may intentionally update this constant with
+# additional fully-accepted reconciliation outcomes (for example:
+# accepted_with_quorum / accepted_with_verified_replay).
 _FULLY_ACCEPTED_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
 TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
@@ -178,6 +178,12 @@ GAP_RECONCILIATION_CONFLICT_PRESENT = "reconciliation_conflict_present"
 GAP_RECONCILIATION_NOT_FULLY_ACCEPTED = "reconciliation_not_fully_accepted"
 GAP_RUNTIME_HEALTH_NOT_STABLE = "runtime_health_not_stable"
 GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
+
+
+class CompletionReadinessClassification(TypedDict):
+    system_completion_ready: bool
+    system_completion_level: str
+    system_completion_gap_types: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -575,7 +581,7 @@ def _classify_system_completion_readiness(
     canonical_runtime_health: str,
     uplink_result_count: int,
     uplink_state_count: int,
-) -> Dict[str, Any]:
+) -> CompletionReadinessClassification:
     """Classify system-level completion readiness and closure gap types.
 
     Parameters
@@ -601,7 +607,7 @@ def _classify_system_completion_readiness(
 
     Returns
     -------
-    Dict[str, Any]
+    CompletionReadinessClassification
         ``system_completion_ready`` indicates mature closure; ``system_completion_level``
         differentiates not_closed/closed_with_gaps/mature_closed_loop; and
         ``system_completion_gap_types`` lists explicit structural gaps.
@@ -634,11 +640,11 @@ def _classify_system_completion_readiness(
         system_completion_level = "closed_with_gaps"
     else:
         system_completion_level = "not_closed"
-    return {
-        "system_completion_ready": system_completion_ready,
-        "system_completion_level": system_completion_level,
-        "system_completion_gap_types": gap_types,
-    }
+    return CompletionReadinessClassification(
+        system_completion_ready=system_completion_ready,
+        system_completion_level=system_completion_level,
+        system_completion_gap_types=gap_types,
+    )
 
 
 # ---------------------------------------------------------------------------
