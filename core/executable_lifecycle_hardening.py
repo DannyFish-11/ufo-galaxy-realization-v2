@@ -529,9 +529,11 @@ def _evaluate_registration_gate(
     main_chain_blocked: bool,
     android_device_count: int,
     route_paths_set: frozenset,
+    required_routes: frozenset,
 ) -> LifecycleGateResult:
     """Registration gate: device is visible and registered."""
-    required_routes_missing = not route_paths_set.issuperset({"/api/v1/health"})
+    missing_routes = sorted(r for r in required_routes if r not in route_paths_set)
+    required_routes_missing = bool(missing_routes)
     blocked = validation_status == "FAIL" or required_routes_missing
     degraded = validation_status == "WARN"
     degraded_reasons: List[str] = []
@@ -544,7 +546,7 @@ def _evaluate_registration_gate(
         if validation_status == "FAIL":
             blocked_reason = "Prerequisite validation failed (FAIL status)."
         else:
-            blocked_reason = "Required health route '/api/v1/health' is not registered."
+            blocked_reason = f"Required API route(s) not registered: {missing_routes}."
     else:
         blocked_reason = ""
     return LifecycleGateResult(
@@ -558,6 +560,7 @@ def _evaluate_registration_gate(
             "validation_status": validation_status,
             "main_chain_blocked": main_chain_blocked,
             "android_device_count": android_device_count,
+            "missing_required_routes": missing_routes,
         },
     )
 
@@ -1004,20 +1007,29 @@ def build_executable_lifecycle_state(
     validation_status = _str(getattr(validation, "overall_status", "PASS"))
 
     # --- Derived signals (mirrors v2_unified_state_contract logic) ---
-    _REQUIRED_ROUTES = {
+    _REQUIRED_ROUTES: frozenset = frozenset({
         "/api/v1/health",
         "/api/v1/chat",
         "/api/v1/projection/runtime",
         "/api/v1/projection/operational-readiness",
         "/api/v1/projection/clone-to-use-acceptance",
-    }
+    })
     api_missing = sorted(r for r in _REQUIRED_ROUTES if r not in route_paths_set)
 
     def _status_val(item: Any) -> str:
         return _str(getattr(item, "status", ""))
 
-    main_chain_blocked = any(_status_val(i) == "blocked" for i in kind_states)
-    registration_degraded = any(_status_val(i) == "degraded" for i in kind_states)
+    # Single pass over kind_states to avoid iterating twice.
+    main_chain_blocked = False
+    registration_degraded = False
+    for _ks in kind_states:
+        _sv = _status_val(_ks)
+        if _sv == "blocked":
+            main_chain_blocked = True
+        if _sv == "degraded":
+            registration_degraded = True
+        if main_chain_blocked and registration_degraded:
+            break
 
     android_attached = (
         device_evidence.get("android_device_count", 0) > 0
@@ -1053,6 +1065,7 @@ def build_executable_lifecycle_state(
         main_chain_blocked=main_chain_blocked,
         android_device_count=device_evidence.get("android_device_count", 0),
         route_paths_set=route_paths_set,
+        required_routes=_REQUIRED_ROUTES,
     )
 
     cap_gate = _evaluate_capability_visibility_gate(

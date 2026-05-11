@@ -984,14 +984,14 @@ class TestDegradedStagesAccumulation:
 class TestV2UnifiedStateContractIntegration:
     """Verify lifecycle_hardening is populated in V2UnifiedStateContract."""
 
-    def _build_contract(self) -> Any:
+    def _build_contract(self) -> "V2UnifiedStateContract":
         from core.operational_registration_path import (
             OnboardingValidation,
             PrerequisiteCheck,
             ValidationStatus,
             build_operational_registration_path,
         )
-        from core.v2_unified_state_contract import build_v2_unified_state_contract
+        from core.v2_unified_state_contract import V2UnifiedStateContract, build_v2_unified_state_contract
 
         path = build_operational_registration_path()
         validation = OnboardingValidation(
