@@ -89,7 +89,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional, TypedDict
 
 logger = logging.getLogger("Galaxy.ClosedLoopGovernanceConsolidation")
 
@@ -122,6 +122,16 @@ CROSS_STAGE_INVARIANT_POLICY: str = (
     "for a given execution_id (invariant I-06)."
 )
 
+# System-level completion readiness policy (final-closure hardening).
+SYSTEM_COMPLETION_READINESS_POLICY: str = (
+    "POLICY::SYSTEM_COMPLETION_READINESS_V1: "
+    "A closed loop reaching stage=completion is not automatically treated as "
+    "system-level mature closure. Mature closure requires center_lifecycle "
+    "authority, deterministic terminal truth, both result/state uplinks, "
+    "accepted reconciliation, no conflict, and stable runtime health. "
+    "Any missing condition MUST be surfaced as explicit completion gap types."
+)
+
 # Ordered list of all terminal lifecycle phases (for invariant checks).
 # These values MUST remain synchronized with ExecutionLifecyclePhase in
 # core.unified_execution_governance (the authoritative enum definition).
@@ -150,6 +160,38 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "uplink_only_observation",
     }
 )
+# Keep this as a frozenset for immutability in-runtime. Forward compatibility
+# here means future code revisions may intentionally update this constant with
+# additional fully-accepted reconciliation outcomes (for example:
+# accepted_with_quorum / accepted_with_verified_replay).
+_FULLY_ACCEPTED_RECONCILIATION_STATUSES: FrozenSet[str] = frozenset({"accepted"})
+DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
+TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
+
+GAP_LOOP_NOT_IN_COMPLETION_STAGE = "loop_not_in_completion_stage"
+GAP_TERMINAL_LIFECYCLE_NOT_REACHED = "terminal_lifecycle_not_reached"
+GAP_TERMINAL_TRUTH_UNDETERMINED = "terminal_truth_undetermined"
+GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING = "center_lifecycle_authority_missing"
+GAP_MISSING_RESULT_UPLINK = "missing_result_uplink"
+GAP_MISSING_STATE_UPLINK = "missing_state_uplink"
+GAP_RECONCILIATION_CONFLICT_PRESENT = "reconciliation_conflict_present"
+GAP_RECONCILIATION_NOT_FULLY_ACCEPTED = "reconciliation_not_fully_accepted"
+GAP_RUNTIME_HEALTH_NOT_STABLE = "runtime_health_not_stable"
+GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
+
+
+class CompletionReadinessClassification(TypedDict):
+    """Typed readiness output for mature-closure classification.
+
+    system_completion_level values:
+    - ``not_closed``
+    - ``closed_with_gaps``
+    - ``mature_closed_loop``
+    """
+
+    system_completion_ready: bool
+    system_completion_level: str
+    system_completion_gap_types: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +366,9 @@ class ClosedLoopGovernanceView:
     terminal_truth_authoritative_source: str
     invariant_violations: List[ClosedLoopInvariantViolation] = field(default_factory=list)
     loop_is_coherent: bool = True
+    system_completion_ready: bool = False
+    system_completion_level: str = "not_closed"
+    system_completion_gap_types: List[str] = field(default_factory=list)
     queried_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -343,6 +388,10 @@ class ClosedLoopGovernanceView:
             "terminal_truth_authoritative_source": self.terminal_truth_authoritative_source,
             "invariant_violations": [v.to_dict() for v in self.invariant_violations],
             "loop_is_coherent": self.loop_is_coherent,
+            "system_completion_ready": self.system_completion_ready,
+            "system_completion_level": self.system_completion_level,
+            "system_completion_gap_types": list(self.system_completion_gap_types),
+            "_system_completion_policy": SYSTEM_COMPLETION_READINESS_POLICY,
             "queried_at": self.queried_at,
             "_sentinel": CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL,
             "_contract_version": CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION,
@@ -529,6 +578,83 @@ def _check_invariants(
     return violations
 
 
+def _classify_system_completion_readiness(
+    *,
+    stage: ClosedLoopStage,
+    is_terminal: bool,
+    canonical_terminal_outcome: Optional[str],
+    terminal_truth_authoritative_source: str,
+    reconciliation_status: str,
+    reconciliation_conflict: bool,
+    canonical_runtime_health: str,
+    uplink_result_count: int,
+    uplink_state_count: int,
+) -> CompletionReadinessClassification:
+    """Classify system-level completion readiness and closure gap types.
+
+    Parameters
+    ----------
+    stage
+        Canonical closed-loop stage for the execution.
+    is_terminal
+        Whether lifecycle has reached a terminal phase.
+    canonical_terminal_outcome
+        Canonical terminal outcome resolved by governance truth reconciliation.
+    terminal_truth_authoritative_source
+        Source of terminal truth (expected ``center_lifecycle`` for mature closure).
+    reconciliation_status
+        Reconciliation state emitted by uplink truth selection.
+    reconciliation_conflict
+        Whether lifecycle and uplink terminal observations are conflicting.
+    canonical_runtime_health
+        Runtime health classification from canonical truth (stable/degraded/recovered).
+    uplink_result_count
+        Number of result uplinks observed for this execution.
+    uplink_state_count
+        Number of state uplinks observed for this execution.
+
+    Returns
+    -------
+    CompletionReadinessClassification
+        ``system_completion_ready`` indicates mature closure; ``system_completion_level``
+        differentiates not_closed/closed_with_gaps/mature_closed_loop; and
+        ``system_completion_gap_types`` lists explicit structural gaps.
+    """
+    gap_types: List[str] = []
+
+    if stage != ClosedLoopStage.completion:
+        gap_types.append(GAP_LOOP_NOT_IN_COMPLETION_STAGE)
+    if not is_terminal:
+        gap_types.append(GAP_TERMINAL_LIFECYCLE_NOT_REACHED)
+    if canonical_terminal_outcome is None:
+        gap_types.append(GAP_TERMINAL_TRUTH_UNDETERMINED)
+    if terminal_truth_authoritative_source != TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE:
+        gap_types.append(GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING)
+    if uplink_result_count <= 0:
+        gap_types.append(GAP_MISSING_RESULT_UPLINK)
+    if uplink_state_count <= 0:
+        gap_types.append(GAP_MISSING_STATE_UPLINK)
+    if reconciliation_conflict:
+        gap_types.append(GAP_RECONCILIATION_CONFLICT_PRESENT)
+    if reconciliation_status not in _FULLY_ACCEPTED_RECONCILIATION_STATUSES:
+        gap_types.append(GAP_RECONCILIATION_NOT_FULLY_ACCEPTED)
+    if canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS:
+        gap_types.append(GAP_RUNTIME_HEALTH_NOT_STABLE)
+
+    system_completion_ready = len(gap_types) == 0
+    if system_completion_ready:
+        system_completion_level = "mature_closed_loop"
+    elif stage == ClosedLoopStage.completion:
+        system_completion_level = "closed_with_gaps"
+    else:
+        system_completion_level = "not_closed"
+    return CompletionReadinessClassification(
+        system_completion_ready=system_completion_ready,
+        system_completion_level=system_completion_level,
+        system_completion_gap_types=gap_types,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -603,6 +729,9 @@ def query_closed_loop_governance_state(
             terminal_truth_authoritative_source="none",
             invariant_violations=[store_read_violation],
             loop_is_coherent=False,
+            system_completion_ready=False,
+            system_completion_level="not_closed",
+            system_completion_gap_types=[GAP_GOVERNANCE_STORE_READ_ERROR],
         )
 
     lifecycle_phase: Optional[str] = uplink_truth.get("lifecycle_phase")
@@ -617,6 +746,9 @@ def query_closed_loop_governance_state(
     uplink_result_count: int = int(uplink_truth.get("result_uplink_count") or 0)
     uplink_state_count: int = int(uplink_truth.get("state_uplink_count") or 0)
     has_uplink_observation: bool = (uplink_result_count + uplink_state_count) > 0
+    canonical_runtime_health: str = str(
+        uplink_truth.get("canonical_runtime_health") or DEFAULT_RUNTIME_HEALTH_STATUS
+    )
 
     stage = _derive_closed_loop_stage(
         lifecycle_phase=lifecycle_phase,
@@ -642,6 +774,17 @@ def query_closed_loop_governance_state(
         lifecycle_history=lifecycle_history,
         uplink_truth=uplink_truth,
     )
+    completion_readiness = _classify_system_completion_readiness(
+        stage=stage,
+        is_terminal=is_terminal,
+        canonical_terminal_outcome=canonical_terminal_outcome,
+        terminal_truth_authoritative_source=terminal_truth_authoritative_source,
+        reconciliation_status=reconciliation_status,
+        reconciliation_conflict=reconciliation_conflict,
+        canonical_runtime_health=canonical_runtime_health,
+        uplink_result_count=uplink_result_count,
+        uplink_state_count=uplink_state_count,
+    )
 
     return ClosedLoopGovernanceView(
         execution_id=execution_id,
@@ -659,6 +802,9 @@ def query_closed_loop_governance_state(
         terminal_truth_authoritative_source=terminal_truth_authoritative_source,
         invariant_violations=violations,
         loop_is_coherent=(len(violations) == 0),
+        system_completion_ready=bool(completion_readiness["system_completion_ready"]),
+        system_completion_level=str(completion_readiness["system_completion_level"]),
+        system_completion_gap_types=list(completion_readiness["system_completion_gap_types"]),
     )
 
 
