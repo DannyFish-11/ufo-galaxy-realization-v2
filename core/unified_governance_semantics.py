@@ -239,11 +239,37 @@ _POLICY_RESUMABLE_PHASES: frozenset[str] = frozenset({"planning", "manifest", "e
 _POLICY_INVALID_RECOVERY_QUALITIES: frozenset[str] = frozenset({"", "none", "missing", "not_provided"})
 _POLICY_ESCALATION_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
 _POLICY_ESCALATION_MANUAL_DECISIONS: frozenset[str] = frozenset({"manual_review", "suspend"})
+_POLICY_AUTOMATIC_BLOCK = "block"
+_POLICY_AUTOMATIC_HOLD = "hold"
+_POLICY_AUTOMATIC_ALLOW_DEGRADED = "allow_degraded"
+_POLICY_AUTOMATIC_ALLOW = "allow"
+_POLICY_MANUAL_SUSPEND = "suspend"
+_POLICY_MANUAL_REVIEW = "manual_review"
+_POLICY_MANUAL_OVERRIDE_ELIGIBLE = "override_eligible"
+_POLICY_MANUAL_NONE = "none"
+_POLICY_SEVERITY_CRITICAL = "critical"
+_POLICY_SEVERITY_HIGH = "high"
+_POLICY_SEVERITY_MEDIUM = "medium"
+_POLICY_SEVERITY_LOW = "low"
+_POLICY_CLOSURE_MEETS_CANONICAL = "meets_canonical"
+_POLICY_CLOSURE_MEETS_MINIMUM = "meets_minimum"
+_POLICY_CLOSURE_BELOW_MINIMUM = "below_minimum"
 
 
 def _is_hard_block_reason(blocked_by: str) -> bool:
     normalized = str(blocked_by or "").strip()
     return normalized in _POLICY_HARD_BLOCK_REASONS or normalized.startswith("mesh_proof_quality:")
+
+
+def _has_recovery_truth_quality(recovery_truth_quality: str) -> bool:
+    return str(recovery_truth_quality or "").strip().lower() not in _POLICY_INVALID_RECOVERY_QUALITIES
+
+
+def _is_resumable_state(*, latest_phase: str, recovery_truth_quality: str) -> bool:
+    """Resumable when there is active execution phase or recovery truth allows replay."""
+    return latest_phase in _POLICY_RESUMABLE_PHASES or (
+        _has_recovery_truth_quality(recovery_truth_quality)
+    )
 
 
 class GovernancePath(str, Enum):
@@ -1018,7 +1044,16 @@ def _derive_device_policy_outcome(
     ownership_transfer_proof_degraded: bool,
     mesh_governance_readiness_impact: str,
 ) -> Dict[str, Any]:
-    """Derive executable governance-policy outcomes from unified governance state."""
+    """Derive executable governance-policy outcomes from unified governance state.
+
+    Parameters are pulled from the already-derived unified model:
+    mode/path-precedence facts, runtime causality snapshot, canonical truth basis,
+    recovery/closure evidence, and mesh readiness impact.
+
+    Returns a policy contract dictionary containing authoritative operation class,
+    automatic vs manual decisions, minimum-access/retry/recovery/closure semantics,
+    dependency severity, escalation, and policy metadata.
+    """
     if mode == "local":
         primary_path = "local_execution"
     elif takeover_active:
@@ -1051,25 +1086,26 @@ def _derive_device_policy_outcome(
 
     if hard_block:
         operation_state = "hard_block"
-        automatic_decision = "block"
+        automatic_decision = _POLICY_AUTOMATIC_BLOCK
     elif deferred or (not eligible):
         operation_state = "soft_degraded"
-        automatic_decision = "hold"
+        automatic_decision = _POLICY_AUTOMATIC_HOLD
     elif degraded_signals:
         operation_state = "soft_degraded"
-        automatic_decision = "allow_degraded"
+        automatic_decision = _POLICY_AUTOMATIC_ALLOW_DEGRADED
     else:
         operation_state = "admissible"
-        automatic_decision = "allow"
+        automatic_decision = _POLICY_AUTOMATIC_ALLOW
 
     minimum_viable_access_met = eligible and not hard_block
     retryable = blocked_by not in {"unknown_mode", "local_mode_boundary"}
     latest_phase = str(runtime_state_for_device.get("latest_execution_event_phase") or "").strip().lower()
-    resumable = latest_phase in _POLICY_RESUMABLE_PHASES or (
-        recovery_truth_quality not in _POLICY_INVALID_RECOVERY_QUALITIES
+    resumable = _is_resumable_state(
+        latest_phase=latest_phase,
+        recovery_truth_quality=recovery_truth_quality,
     )
     recovery_eligible = operation_state != "admissible" and (
-        recovery_truth_quality not in _POLICY_INVALID_RECOVERY_QUALITIES
+        _has_recovery_truth_quality(recovery_truth_quality)
     )
 
     closure_acceptable = (
@@ -1078,29 +1114,29 @@ def _derive_device_policy_outcome(
         and freshness_state != "stale"
     )
     if closure_acceptable and not degraded_signals:
-        closure_quality_threshold = "meets_canonical"
+        closure_quality_threshold = _POLICY_CLOSURE_MEETS_CANONICAL
     elif closure_acceptable:
-        closure_quality_threshold = "meets_minimum"
+        closure_quality_threshold = _POLICY_CLOSURE_MEETS_MINIMUM
     else:
-        closure_quality_threshold = "below_minimum"
+        closure_quality_threshold = _POLICY_CLOSURE_BELOW_MINIMUM
 
     if hard_block:
-        dependency_severity = "critical"
-    elif automatic_decision == "hold":
-        dependency_severity = "high"
+        dependency_severity = _POLICY_SEVERITY_CRITICAL
+    elif automatic_decision == _POLICY_AUTOMATIC_HOLD:
+        dependency_severity = _POLICY_SEVERITY_HIGH
     elif operation_state == "soft_degraded":
-        dependency_severity = "medium"
+        dependency_severity = _POLICY_SEVERITY_MEDIUM
     else:
-        dependency_severity = "low"
+        dependency_severity = _POLICY_SEVERITY_LOW
 
-    if hard_block and not retryable:
-        manual_decision = "suspend"
-    elif hard_block or automatic_decision == "hold":
-        manual_decision = "manual_review"
+    if hard_block:
+        manual_decision = _POLICY_MANUAL_REVIEW if retryable else _POLICY_MANUAL_SUSPEND
+    elif automatic_decision == _POLICY_AUTOMATIC_HOLD:
+        manual_decision = _POLICY_MANUAL_REVIEW
     elif not closure_acceptable:
-        manual_decision = "override_eligible"
+        manual_decision = _POLICY_MANUAL_OVERRIDE_ELIGIBLE
     else:
-        manual_decision = "none"
+        manual_decision = _POLICY_MANUAL_NONE
 
     escalation_required = (
         dependency_severity in _POLICY_ESCALATION_SEVERITIES
@@ -1108,7 +1144,7 @@ def _derive_device_policy_outcome(
     )
     escalation_level = (
         "immediate"
-        if dependency_severity == "critical"
+        if dependency_severity == _POLICY_SEVERITY_CRITICAL
         else "operator_review" if escalation_required else "none"
     )
 
@@ -1118,10 +1154,10 @@ def _derive_device_policy_outcome(
     if runtime_health_status:
         reasons.append(f"runtime_health_status:{runtime_health_status}")
     if freshness_state:
-        reasons.append(f"canonical_truth_freshness:{freshness_state}")
-    if mesh_governance_readiness_impact and mesh_governance_readiness_impact != "none":
+        reasons.append(f"canonical_truth_freshness_state:{freshness_state}")
+    if str(mesh_governance_readiness_impact or "").strip() and mesh_governance_readiness_impact != "none":
         reasons.append(f"mesh_readiness_impact:{mesh_governance_readiness_impact}")
-    if recovery_truth_quality:
+    if str(recovery_truth_quality or "").strip():
         reasons.append(f"recovery_truth_quality:{recovery_truth_quality}")
 
     return {
@@ -1137,11 +1173,11 @@ def _derive_device_policy_outcome(
         "retryability": {
             "retryable": retryable,
             "resumable": resumable,
-            "deferral_eligible": automatic_decision == "hold",
+            "deferral_eligible": automatic_decision == _POLICY_AUTOMATIC_HOLD,
         },
         "recovery_eligibility": {
             "eligible": recovery_eligible,
-            "mode": "automatic" if recovery_eligible and manual_decision == "none" else "manual",
+            "mode": "automatic" if recovery_eligible and manual_decision == _POLICY_MANUAL_NONE else "manual",
         },
         "closure_policy": {
             "acceptable": closure_acceptable,
@@ -1155,7 +1191,10 @@ def _derive_device_policy_outcome(
         "escalation": {
             "required": escalation_required,
             "level": escalation_level,
-            "defer_allowed": dependency_severity == "medium" or automatic_decision == "hold",
+            "defer_allowed": (
+                dependency_severity == _POLICY_SEVERITY_MEDIUM
+                or automatic_decision == _POLICY_AUTOMATIC_HOLD
+            ),
         },
         "_policy": UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY,
         "_contract_version": UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,

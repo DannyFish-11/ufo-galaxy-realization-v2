@@ -735,8 +735,4 @@ def test_governance_policy_layer_handles_sparse_runtime_snapshot() -> None:
     policy = state["devices"][0]["governance_policy"]
     assert policy["policy_authoritative"] is True
     assert policy["primary_path"] == "delegated_execution"
-    assert policy["closure_policy"]["quality_threshold"] in {
-        "meets_canonical",
-        "meets_minimum",
-        "below_minimum",
-    }
+    assert policy["closure_policy"]["quality_threshold"] == "below_minimum"
