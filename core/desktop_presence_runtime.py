@@ -628,6 +628,11 @@ class DesktopPresenceRuntime:
             "user_id": user_id or "default",
             "invocation_id": rsession.runtime_session_id,
             "control_session_id": control_session_id,
+            "origin": "android" if source in _android_carriers else "center",
+            "authority": "v2_authority",
+            "authority_boundary": "android_participation_under_v2_authority"
+            if source in _android_carriers
+            else "center_authority",
             # semantic_authority is always V2 — the LLM semantic reasoning chain
             # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
             # which device or adapter surface originated the NL request.
@@ -637,6 +642,8 @@ class DesktopPresenceRuntime:
             # nl_path_type distinguishes Android carriers from desktop-direct paths.
             "nl_path_type": _nl_path_type,
             "is_android_carrier": source in _android_carriers,
+            "ingress_lineage": "canonical_ingress",
+            "routing_lineage": "desktop_presence_runtime",
         }
         if source == "android_vision":
             try:

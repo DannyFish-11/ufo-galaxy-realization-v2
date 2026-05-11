@@ -74,7 +74,7 @@ Android NL 语义链路契约 — 机器可验证的 source/carrier vs semantic-
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # ---------------------------------------------------------------------------
 # Contract sentinel — presence of this constant proves the contract is loaded.
@@ -137,6 +137,54 @@ NL_PATH_TYPES: frozenset = frozenset(
 )
 
 # ---------------------------------------------------------------------------
+# Android participation authority boundary model (single-source contract)
+# ---------------------------------------------------------------------------
+
+ANDROID_PARTICIPATION_SIGNAL: str = "signal_participation"
+ANDROID_PARTICIPATION_EXECUTION: str = "execution_participation"
+ANDROID_PARTICIPATION_TAKEOVER: str = "takeover_participation"
+ANDROID_PARTICIPATION_LOCAL_AUTONOMY: str = "local_autonomy_participation"
+ANDROID_PARTICIPATION_AUTHORITY_ADJACENT: str = "authority_adjacent_participation"
+
+ANDROID_PARTICIPATION_TYPES: frozenset = frozenset(
+    {
+        ANDROID_PARTICIPATION_SIGNAL,
+        ANDROID_PARTICIPATION_EXECUTION,
+        ANDROID_PARTICIPATION_TAKEOVER,
+        ANDROID_PARTICIPATION_LOCAL_AUTONOMY,
+        ANDROID_PARTICIPATION_AUTHORITY_ADJACENT,
+    }
+)
+
+ANDROID_PARTICIPATION_BOUNDARY_MODEL: Dict[str, Dict[str, bool]] = {
+    ANDROID_PARTICIPATION_SIGNAL: {
+        "affects_observation": True,
+        "affects_reconciliation": False,
+        "may_override_v2_authority": False,
+    },
+    ANDROID_PARTICIPATION_EXECUTION: {
+        "affects_observation": True,
+        "affects_reconciliation": True,
+        "may_override_v2_authority": False,
+    },
+    ANDROID_PARTICIPATION_TAKEOVER: {
+        "affects_observation": True,
+        "affects_reconciliation": True,
+        "may_override_v2_authority": False,
+    },
+    ANDROID_PARTICIPATION_LOCAL_AUTONOMY: {
+        "affects_observation": True,
+        "affects_reconciliation": False,
+        "may_override_v2_authority": False,
+    },
+    ANDROID_PARTICIPATION_AUTHORITY_ADJACENT: {
+        "affects_observation": True,
+        "affects_reconciliation": True,
+        "may_override_v2_authority": False,
+    },
+}
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -176,6 +224,19 @@ def is_v2_semantic_authority_path(ingress_carrier_context: Dict[str, Any]) -> bo
         The ``ingress_carrier_context`` dict from a DPR result.
     """
     return ingress_carrier_context.get("semantic_authority") == V2_SEMANTIC_AUTHORITY
+
+
+def get_android_participation_boundary(participation_type: str) -> Dict[str, bool]:
+    """Return canonical authority-boundary policy for the participation type."""
+    key = str(participation_type or "").strip().lower()
+    boundary = ANDROID_PARTICIPATION_BOUNDARY_MODEL.get(key)
+    if boundary is None:
+        return {
+            "affects_observation": False,
+            "affects_reconciliation": False,
+            "may_override_v2_authority": False,
+        }
+    return dict(boundary)
 
 
 def build_android_nl_carrier_context(
