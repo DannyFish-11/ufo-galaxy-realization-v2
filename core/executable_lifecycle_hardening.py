@@ -114,7 +114,7 @@ EXECUTABLE_LIFECYCLE_HARDENING_AUTHORITY: str = (
     "center-governed distributed intelligent agent system"
 )
 
-EXECUTABLE_LIFECYCLE_HARDENING_VERSION: str = "1.0.0"
+EXECUTABLE_LIFECYCLE_HARDENING_VERSION: str = "1.1.0"
 
 # Minimum-access-standard: these conditions must ALL be met for a participant/
 # device to be considered admitted at the canonical level.
@@ -851,6 +851,8 @@ def _evaluate_result_closure(
     task_initiated: bool,
     result_closure_established: bool,
     completion_notified: bool,
+    active_session_count: int,
+    total_session_count: int,
     participant_terminal_count: int,
     participant_terminal_success_count: int,
     task_initiated_gate_passed: bool,
@@ -868,13 +870,36 @@ def _evaluate_result_closure(
     completion_confirmed = completion_ingress_confirmed or completion_notified
 
     degraded_reasons: List[str] = []
+    task_closed = result_closure_established or is_fully_closed
+    session_closed = participant_terminal_count > 0
+    if recovery_active:
+        session_continuity_state = "recovery_active"
+    elif active_session_count > 0:
+        session_continuity_state = "continuous"
+    elif total_session_count > 0 or participant_terminal_count > 0:
+        session_continuity_state = "incomplete"
+    elif android_attached:
+        session_continuity_state = "waiting_dependency"
+    else:
+        session_continuity_state = "not_applicable"
+    task_continuity_confirmed = task_initiated and task_closed
+    session_continuity_confirmed = (
+        (not android_attached)
+        or session_closed
+        or participant_terminal_success_count > 0
+    )
 
     if not android_attached and not task_initiated:
         outcome = ClosureOutcome.NOT_APPLICABLE
     elif failed_explicitly:
         outcome = ClosureOutcome.FAILED
         degraded_reasons.append("explicit_failure")
-    elif result_closure_established or is_fully_closed:
+    # Defensive edge-case handling: result ingress may surface closure evidence
+    # before task-initiation evidence arrives (eventual-consistency race).
+    elif task_closed and not task_initiated:
+        outcome = ClosureOutcome.INCOMPLETE_WAITING
+        degraded_reasons.append("task_continuity_missing_task_initiation")
+    elif task_closed:
         if not completion_confirmed:
             degraded_reasons.append("completion_ingress_not_confirmed")
         if recovery_active:
@@ -903,10 +928,19 @@ def _evaluate_result_closure(
         ClosureOutcome.SUCCESS_DEGRADED,
         ClosureOutcome.SUCCESS_RECOVERY,
     )
-    authoritative_closure = outcome in _success_outcomes and completion_confirmed
+    if outcome in _success_outcomes and not session_continuity_confirmed:
+        degraded_reasons.append("session_continuity_unconfirmed")
+    if outcome in _success_outcomes and not task_continuity_confirmed:
+        degraded_reasons.append("task_continuity_unconfirmed")
+    if outcome == ClosureOutcome.SUCCESS_CANONICAL and degraded_reasons:
+        outcome = ClosureOutcome.SUCCESS_DEGRADED
 
-    session_closed = participant_terminal_count > 0
-    task_closed = result_closure_established or is_fully_closed
+    authoritative_closure = (
+        outcome in _success_outcomes
+        and completion_confirmed
+        and task_continuity_confirmed
+        and session_continuity_confirmed
+    )
 
     closure_state = ResultClosureState(
         outcome=outcome,
@@ -922,12 +956,17 @@ def _evaluate_result_closure(
             "completion_ingress_confirmed": completion_ingress_confirmed,
             "participant_terminal_count": participant_terminal_count,
             "participant_terminal_success_count": participant_terminal_success_count,
+            "active_session_count": active_session_count,
+            "total_session_count": total_session_count,
+            "session_continuity_state": session_continuity_state,
+            "session_continuity_confirmed": session_continuity_confirmed,
+            "task_continuity_confirmed": task_continuity_confirmed,
             "recovery_active": recovery_active,
             "failed_explicitly": failed_explicitly,
         },
     )
 
-    closure_passed = outcome in _success_outcomes
+    closure_passed = authoritative_closure
     stage_gate = LifecycleGateResult(
         stage=LifecycleStage.RESULT_CLOSURE,
         passed=closure_passed,
@@ -1109,6 +1148,8 @@ def build_executable_lifecycle_state(
         task_initiated=task_initiated,
         result_closure_established=result_closure_established,
         completion_notified=completion_notified,
+        active_session_count=active_session_count,
+        total_session_count=int(session_evidence.get("total_session_count", 0)),
         participant_terminal_count=participant_terminal_count,
         participant_terminal_success_count=participant_terminal_success_count,
         task_initiated_gate_passed=task_init_gate.passed,
