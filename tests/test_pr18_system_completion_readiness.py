@@ -23,7 +23,7 @@ def _reset_governance_runtime():
     _clear_execution_governance_runtime_state()
 
 
-def test_mature_closure_requires_authoritative_full_uplink_and_stable_runtime():
+def test_mature_closure_with_full_uplink():
     execution_id = "exec-pr18-mature-closure"
     device_id = "device-pr18-mature-closure"
 
@@ -54,7 +54,7 @@ def test_mature_closure_requires_authoritative_full_uplink_and_stable_runtime():
     assert view.system_completion_gap_types == []
 
 
-def test_partial_uplink_completion_is_not_misjudged_as_mature_closure():
+def test_partial_uplink_not_mature():
     execution_id = "exec-pr18-partial-uplink-gap"
     device_id = "device-pr18-partial-uplink-gap"
 
@@ -80,7 +80,7 @@ def test_partial_uplink_completion_is_not_misjudged_as_mature_closure():
     assert "reconciliation_not_fully_accepted" in view.system_completion_gap_types
 
 
-def test_conflicting_delayed_reports_do_not_become_mature_closure():
+def test_conflicting_reports_not_mature():
     execution_id = "exec-pr18-delayed-conflict-gap"
     device_id = "device-pr18-delayed-conflict-gap"
 
@@ -111,7 +111,7 @@ def test_conflicting_delayed_reports_do_not_become_mature_closure():
     assert "reconciliation_not_fully_accepted" in view.system_completion_gap_types
 
 
-def test_recovered_runtime_is_explicitly_kept_out_of_mature_stable_closure():
+def test_recovered_runtime_not_mature():
     execution_id = "exec-pr18-recovered-runtime-gap"
     device_id = "device-pr18-recovered-runtime-gap"
 

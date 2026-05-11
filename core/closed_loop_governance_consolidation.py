@@ -160,7 +160,10 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "uplink_only_observation",
     }
 )
+# Keep this as a set to preserve forward compatibility with additional
+# "fully accepted" reconciliation outcomes in future contract revisions.
 _MATURE_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
+DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +562,36 @@ def _classify_system_completion_readiness(
     uplink_result_count: int,
     uplink_state_count: int,
 ) -> Dict[str, Any]:
-    """Classify whether completion reached system-level mature closure."""
+    """Classify whether completion reached system-level mature closure.
+
+    Parameters
+    ----------
+    stage
+        Canonical closed-loop stage for the execution.
+    is_terminal
+        Whether lifecycle has reached a terminal phase.
+    canonical_terminal_outcome
+        Canonical terminal outcome resolved by governance truth reconciliation.
+    terminal_truth_authoritative_source
+        Source of terminal truth (expected ``center_lifecycle`` for mature closure).
+    reconciliation_status
+        Reconciliation state emitted by uplink truth selection.
+    reconciliation_conflict
+        Whether lifecycle and uplink terminal observations are conflicting.
+    canonical_runtime_health
+        Runtime health classification from canonical truth (stable/degraded/recovered).
+    uplink_result_count
+        Number of result uplinks observed for this execution.
+    uplink_state_count
+        Number of state uplinks observed for this execution.
+
+    Returns
+    -------
+    Dict[str, Any]
+        ``system_completion_ready`` indicates mature closure; ``system_completion_level``
+        differentiates not_closed/closed_with_gaps/mature_closed_loop; and
+        ``system_completion_gap_types`` lists explicit structural gaps.
+    """
     gap_types: List[str] = []
 
     if stage != ClosedLoopStage.completion:
@@ -683,7 +715,9 @@ def query_closed_loop_governance_state(
     uplink_result_count: int = int(uplink_truth.get("result_uplink_count") or 0)
     uplink_state_count: int = int(uplink_truth.get("state_uplink_count") or 0)
     has_uplink_observation: bool = (uplink_result_count + uplink_state_count) > 0
-    canonical_runtime_health: str = str(uplink_truth.get("canonical_runtime_health") or "stable")
+    canonical_runtime_health: str = str(
+        uplink_truth.get("canonical_runtime_health") or DEFAULT_RUNTIME_HEALTH_STATUS
+    )
 
     stage = _derive_closed_loop_stage(
         lifecycle_phase=lifecycle_phase,
