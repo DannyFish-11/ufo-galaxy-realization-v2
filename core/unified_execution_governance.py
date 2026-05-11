@@ -1462,7 +1462,8 @@ def _classify_uplink_terminal_confirmation(
 
     # success/failure dual-source mismatch is intentionally mergeable because it
     # represents a semantically valid partial_success terminal family:
-    # some execution units produced value while others failed.
+    # some execution units produced value while others failed, so this is
+    # reconciled as the partial_success canonical outcome.
     if {
         reported_result_terminal_outcome,
         reported_state_terminal_outcome,
@@ -1609,11 +1610,18 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         reconciliation_reason = "authoritative_lifecycle_not_terminal"
     elif uplink_terminal_requires_reconciliation:
         reconciliation_status = "uplink_terminal_observation_requires_reconciliation"
-        reconciliation_reason = (
-            "single_source_terminal_observation_without_cross_uplink_confirmation"
-            if uplink_terminal_confirmation == "single_source_terminal_unconfirmed"
-            else "conflicting_terminal_observations_without_lifecycle_authority"
-        )
+        if uplink_terminal_confirmation == "single_source_terminal_unconfirmed":
+            reconciliation_reason = (
+                "single_source_terminal_observation_without_cross_uplink_confirmation"
+            )
+        elif uplink_terminal_confirmation == "conflicting_terminal_unresolved":
+            reconciliation_reason = (
+                "conflicting_terminal_observations_without_lifecycle_authority"
+            )
+        else:
+            reconciliation_reason = (
+                "uplink_terminal_observation_requires_explicit_confirmation"
+            )
     elif reported_terminal_outcome:
         reconciliation_status = "uplink_only_terminal_observation"
         reconciliation_reason = "reported_terminal_outcome_without_lifecycle_authority"
