@@ -701,11 +701,10 @@ def _classify_system_completion_readiness(
         gap_types.append(GAP_COMPAT_PATH_USED)
     if degraded_path_used:
         gap_types.append(GAP_DEGRADED_PATH_USED)
-    # Include android_originated complex scenario gaps
+    # Include android_originated complex scenario gaps (deduplicated via set check)
     if android_originated_gap_types:
-        for ag in android_originated_gap_types:
-            if ag not in gap_types:
-                gap_types.append(ag)
+        existing = set(gap_types)
+        gap_types.extend(ag for ag in android_originated_gap_types if ag not in existing)
 
     system_completion_ready = len(gap_types) == 0
     if system_completion_ready:

@@ -235,7 +235,7 @@ class TestGroupA_AuthorityBoundaryModel:
             )
             assert cls.can_enter_reconciliation is False
 
-    def test_a10b_complete_proof_is_reconciliation_eligible(self):
+    def test_a10_passing_complete_proof_class_is_eligible(self):
         cls = classify_android_participation(
             AndroidParticipationKind.android_originated_signal,
             proof_input_class="complete",
@@ -469,6 +469,34 @@ class TestGroupB_MainChainIngress:
         assert result.is_main_chain_accepted is False
         assert GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN in result.gap_types
         assert result.mature_closure_blocked is True
+
+    def test_b20_fallback_at_lifecycle_level_not_in_nl_ingress_gaps(self):
+        """B-20: NL ingress only tracks NL-level scenario flags.
+        Lifecycle-level fallback (failure_semantic=fallback_local) is detected
+        in the closed_loop_governance layer via lifecycle history — NOT at the
+        NL ingress layer. This test validates the separation of concerns.
+        """
+        icc = build_android_nl_carrier_context(
+            device_id="device-b20",
+            session_id="session-b20",
+            invocation_id="inv-b20",
+        )
+        # NL ingress with no fallback flags set at NL level
+        result = accept_android_originated_nl_into_main_chain(
+            device_id="device-b20",
+            session_id="session-b20",
+            invocation_id="inv-b20",
+            ingress_carrier_context=icc,
+        )
+        # NL ingress should NOT detect lifecycle-level fallback — that is the
+        # responsibility of closed_loop_governance (via lifecycle history).
+        from core.android_originated_main_chain_ingress import (
+            GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED,
+        )
+        assert GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED not in result.gap_types
+        # Android-originated lineage (clean, no NL-level flags)
+        from core.android_originated_main_chain_ingress import ExecutionLineageKind
+        assert result.lineage == ExecutionLineageKind.android_originated
 
     def test_b21_accept_stale_evidence_gap(self):
         icc = build_android_nl_carrier_context(

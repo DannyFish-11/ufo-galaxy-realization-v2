@@ -512,6 +512,12 @@ def accept_android_originated_nl_into_main_chain(
     -------
     AndroidOriginatedIngressResult
         Acceptance result with lineage, gap types, and authority source.
+        Note: ``accepted`` is always ``True`` — this function accepts all
+        Android-originated NL requests for ingress tracking.  The ``gap_types``
+        and ``mature_closure_blocked`` fields express **closure quality**, not
+        admission status.  Gaps do not reject the request; they surface as
+        blockers that prevent the execution from being classified as a mature
+        canonical closure downstream.
     """
     # Build ingress context
     ctx = AndroidOriginatedIngressContext(
@@ -565,6 +571,8 @@ def accept_android_originated_nl_into_main_chain(
     if is_stale:
         gap_types.append(GAP_ANDROID_ORIGINATED_STALE_EVIDENCE)
     if is_replay and not is_stale:
+        # is_stale takes precedence: stale covers the case where evidence is
+        # both stale and from a replay queue, so we avoid duplicate gap entries.
         gap_types.append(GAP_ANDROID_ORIGINATED_REPLAY_COMBINED)
     if is_recovery_assisted:
         gap_types.append(GAP_ANDROID_ORIGINATED_REPLAY_COMBINED)
