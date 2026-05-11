@@ -7,8 +7,9 @@ Handles goal_execution, parallel_subtask, and goal_execution_result messages.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from galaxy_gateway.android.message_builder import MessageBuilder
 
@@ -16,6 +17,16 @@ if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
+
+_AUTHORITY_V2 = "v2_authority"
+_AUTHORITY_BOUNDARY_ANDROID_UNDER_V2 = "android_participation_under_v2_authority"
+_LINEAGE_QUALITY_CANONICAL_CANDIDATE = "canonical_candidate"
+_LINEAGE_QUALITY_CANONICAL_SUCCESS = "canonical_success"
+_LINEAGE_QUALITY_REPLAY_ASSISTED = "replay_assisted"
+_LINEAGE_QUALITY_RECOVERY_ASSISTED = "recovery_assisted"
+_LINEAGE_QUALITY_COMPAT_SUCCESS = "compat_success"
+_LINEAGE_QUALITY_FALLBACK_SUCCESS = "fallback_success"
+_LINEAGE_QUALITY_DEGRADED_SUCCESS = "degraded_success"
 
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:
@@ -43,7 +54,9 @@ except ImportError:
 # reconciled into V2 canonical participant truth (truth_kind="result") just
 # like task_result in task_lifecycle.py.
 try:
-    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_goal_result_truth
+    from core.android_participant_truth_ingress import (
+        ingest_android_participant_truth_message as _ingest_goal_result_truth,
+    )
 except ImportError:
     _ingest_goal_result_truth = None  # type: ignore[assignment]
 
@@ -72,6 +85,110 @@ except ImportError:
     _evaluate_execution_governance = None  # type: ignore[assignment]
     _notify_execution_completed = None  # type: ignore[assignment]
     _GOVERNANCE_AVAILABLE = False
+
+try:
+    from core.android_mode_gate_policy import evaluate_android_mode_readiness as _evaluate_android_mode_readiness
+except ImportError:
+    _evaluate_android_mode_readiness = None  # type: ignore[assignment]
+
+try:
+    from galaxy_gateway.cross_device_switch import is_cross_device_enabled as _is_cross_device_enabled
+except ImportError:
+    _is_cross_device_enabled = None  # type: ignore[assignment]
+
+
+def _build_android_nl_lineage(
+    *,
+    task_id: str,
+    origin_device_id: str,
+    session_id: str,
+    trace_id: str,
+    runtime_session_id: str = "",
+    lineage_quality: str = _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
+    ingress_lineage: str = "canonical_ingress",
+    protocol_lineage: str = "aip_v3_goal_execution",
+    routing_lineage: str = "desktop_presence_runtime",
+    dispatch_lineage: str = "governance_gated_dispatch",
+    reconciliation_lineage: str = "pending_android_result_reconciliation",
+    closure_lineage: str = "pending_android_result_closure",
+    audit_lineage: str = "pending_android_result_audit",
+    gate_blocking_reasons: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Build canonical lineage metadata for Android NL cross-device flows."""
+    return {
+        "task_id": task_id,
+        "lineage_quality": lineage_quality,
+        "origin": "android",
+        "origin_device_id": origin_device_id,
+        "authority": _AUTHORITY_V2,
+        "authority_boundary": _AUTHORITY_BOUNDARY_ANDROID_UNDER_V2,
+        "source": "android_goal_execution",
+        "entry_mode": "cross_device",
+        "session_id": session_id,
+        "trace_id": trace_id,
+        "runtime_session_id": runtime_session_id,
+        "ingress_lineage": ingress_lineage,
+        "protocol_lineage": protocol_lineage,
+        "routing_lineage": routing_lineage,
+        "dispatch_lineage": dispatch_lineage,
+        "reconciliation_lineage": reconciliation_lineage,
+        "closure_lineage": closure_lineage,
+        "audit_lineage": audit_lineage,
+        "gate_blocking_reasons": list(gate_blocking_reasons or []),
+        "lineage_recorded_at_ms": int(time.time() * 1000),
+    }
+
+
+def _evaluate_android_nl_initiation_gate(
+    *,
+    device_id: str,
+    require_parallel_execution: bool = False,
+) -> Tuple[bool, List[str], str]:
+    """Fail-closed gate for Android NL cross-device initiation.
+
+    Returns:
+        (is_eligible, blocking_gates, reason)
+    """
+    cross_device_enabled = bool(_is_cross_device_enabled and _is_cross_device_enabled())
+    if not cross_device_enabled:
+        return False, ["v2_cross_device_switch"], "cross_device_disabled"
+
+    if _evaluate_android_mode_readiness is None:
+        return False, ["mode_gate_unavailable"], "mode_gate_unavailable"
+
+    verdict = _evaluate_android_mode_readiness(
+        device_id=device_id,
+        require_goal_execution=not require_parallel_execution,
+        require_parallel_execution=require_parallel_execution,
+    )
+    if verdict.is_dispatch_eligible:
+        return True, [], "dispatch_eligible"
+    blocking = list(verdict.blocking_gates)
+    return False, blocking, "mode_gate_blocked"
+
+
+def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> str:
+    """Classify result lineage quality with deterministic precedence.
+
+    Priority order:
+    1) replay-assisted
+    2) recovery-assisted
+    3) compat-success
+    4) fallback-success
+    5) degraded-success
+    6) canonical-success (default)
+    """
+    if payload.get("replay") or payload.get("replay_sequence"):
+        return _LINEAGE_QUALITY_REPLAY_ASSISTED
+    if payload.get("recovered") or payload.get("recovery"):
+        return _LINEAGE_QUALITY_RECOVERY_ASSISTED
+    if str(payload.get("route_mode") or "").strip().lower().startswith("compat"):
+        return _LINEAGE_QUALITY_COMPAT_SUCCESS
+    if bool(payload.get("fallback")):
+        return _LINEAGE_QUALITY_FALLBACK_SUCCESS
+    if status == "degraded":
+        return _LINEAGE_QUALITY_DEGRADED_SUCCESS
+    return _LINEAGE_QUALITY_CANONICAL_SUCCESS
 
 
 def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
@@ -159,6 +276,32 @@ async def handle_goal_execution(
             correlation_id=task_id,
         )
 
+    gate_ok, gate_blocking_gates, gate_reason = _evaluate_android_nl_initiation_gate(
+        device_id=device_id,
+        require_parallel_execution=False,
+    )
+    if not gate_ok:
+        lineage = _build_android_nl_lineage(
+            task_id=task_id,
+            origin_device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+            lineage_quality="blocked",
+            ingress_lineage="blocked_ingress",
+            dispatch_lineage="blocked_by_cross_device_gate",
+            reconciliation_lineage="not_started",
+            closure_lineage="not_started",
+            audit_lineage="blocked_pre_dispatch",
+            gate_blocking_reasons=gate_blocking_gates,
+        )
+        return MessageBuilder.error(
+            device_id,
+            "ANDROID_NL_INITIATION_BLOCKED",
+            f"android nl initiation blocked: {gate_reason}",
+            details={"blocking_gates": gate_blocking_gates, "lineage": lineage},
+            correlation_id=task_id,
+        )
+
     # ── Unified Execution Governance check ───────────────────────────────
     # Consult the unified governance layer before proceeding.  This enforces
     # acceptance conditions, conflict detection (e.g., active takeover blocks
@@ -181,6 +324,21 @@ async def handle_goal_execution(
                 device_id,
                 "GOVERNANCE_REJECTED",
                 _gov_verdict.rejection_reason,
+                details={
+                    "blocking_gates": list(_gov_verdict.blocking_gates),
+                    "lineage": _build_android_nl_lineage(
+                        task_id=task_id,
+                        origin_device_id=device_id,
+                        session_id=session_id,
+                        trace_id=trace_id,
+                        lineage_quality="blocked",
+                        dispatch_lineage="blocked_by_governance",
+                        reconciliation_lineage="not_started",
+                        closure_lineage="not_started",
+                        audit_lineage="governance_rejected",
+                        gate_blocking_reasons=list(_gov_verdict.blocking_gates),
+                    ),
+                },
                 correlation_id=task_id,
             )
 
@@ -233,6 +391,13 @@ async def handle_goal_execution(
         "success": success,
         "group_id": payload.get("group_id"),
         "subtask_index": payload.get("subtask_index"),
+        "lineage": _build_android_nl_lineage(
+            task_id=task_id,
+            origin_device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+            runtime_session_id=runtime_session_id,
+        ),
     }
 
     logger.info(
@@ -279,6 +444,32 @@ async def handle_parallel_subtask(
             correlation_id=task_id,
         )
 
+    gate_ok, gate_blocking_gates, gate_reason = _evaluate_android_nl_initiation_gate(
+        device_id=device_id,
+        require_parallel_execution=True,
+    )
+    if not gate_ok:
+        lineage = _build_android_nl_lineage(
+            task_id=task_id,
+            origin_device_id=device_id,
+            session_id=session_id,
+            trace_id=trace_id,
+            lineage_quality="blocked",
+            ingress_lineage="blocked_ingress",
+            dispatch_lineage="blocked_parallel_dispatch_gate",
+            reconciliation_lineage="not_started",
+            closure_lineage="not_started",
+            audit_lineage="blocked_pre_dispatch",
+            gate_blocking_reasons=gate_blocking_gates,
+        )
+        return MessageBuilder.error(
+            device_id,
+            "ANDROID_NL_INITIATION_BLOCKED",
+            f"parallel android nl initiation blocked: {gate_reason}",
+            details={"blocking_gates": gate_blocking_gates, "lineage": lineage},
+            correlation_id=task_id,
+        )
+
     # ── Unified Execution Governance check ───────────────────────────────
     # Consult the unified governance layer before proceeding.  This enforces
     # acceptance conditions, conflict detection (e.g., active takeover blocks
@@ -301,6 +492,21 @@ async def handle_parallel_subtask(
                 device_id,
                 "GOVERNANCE_REJECTED",
                 _gov_verdict.rejection_reason,
+                details={
+                    "blocking_gates": list(_gov_verdict.blocking_gates),
+                    "lineage": _build_android_nl_lineage(
+                        task_id=task_id,
+                        origin_device_id=device_id,
+                        session_id=session_id,
+                        trace_id=trace_id,
+                        lineage_quality="blocked",
+                        dispatch_lineage="blocked_by_governance",
+                        reconciliation_lineage="not_started",
+                        closure_lineage="not_started",
+                        audit_lineage="governance_rejected",
+                        gate_blocking_reasons=list(_gov_verdict.blocking_gates),
+                    ),
+                },
                 correlation_id=task_id,
             )
 
@@ -461,6 +667,14 @@ async def handle_parallel_subtask(
                 "dispatch_failed": fanout_summary["failed"],
                 "spine_blocked": _spine_blocked_count,
                 "runtime_session_id": runtime_session_id,
+                "lineage": _build_android_nl_lineage(
+                    task_id=task_id,
+                    origin_device_id=device_id,
+                    session_id=session_id,
+                    trace_id=trace_id,
+                    runtime_session_id=runtime_session_id,
+                    dispatch_lineage="parallel_fanout_dispatched",
+                ),
                 "message": f"Parallel task dispatched to {fanout_summary['fanout']} device(s)",
             },
             correlation_id=task_id,
@@ -481,6 +695,15 @@ async def handle_parallel_subtask(
             "group_id": group_id,
             "subtask_index": 0,
             "device_ids": target_device_ids,
+            "lineage": _build_android_nl_lineage(
+                task_id=task_id,
+                origin_device_id=device_id,
+                session_id=session_id,
+                trace_id=trace_id,
+                runtime_session_id=runtime_session_id,
+                dispatch_lineage="single_device_fallback_dispatch",
+                lineage_quality=_LINEAGE_QUALITY_FALLBACK_SUCCESS,
+            ),
         }
 
         logger.info(
@@ -543,6 +766,25 @@ async def handle_goal_execution_result(
     latency_ms = payload.get("latency_ms", 0)
     group_id = payload.get("group_id")
     subtask_index = payload.get("subtask_index")
+    result_lineage = dict(payload.get("lineage") or {})
+    result_lineage.setdefault("origin", "android")
+    result_lineage.setdefault("origin_device_id", device_id)
+    result_lineage.setdefault("authority", _AUTHORITY_V2)
+    result_lineage.setdefault("source", "android_goal_execution_result")
+    result_lineage.setdefault("entry_mode", "cross_device")
+    result_lineage.setdefault("task_id", task_id)
+    result_lineage.setdefault("session_id", payload.get("session_id") or message.get("session_id") or "")
+    result_lineage.setdefault("trace_id", trace_id)
+    result_lineage.setdefault("protocol_lineage", "aip_v3_goal_execution_result")
+    result_lineage.setdefault("routing_lineage", "task_result_canonical_truth_chain")
+    result_lineage.setdefault("dispatch_lineage", "android_execution_completed")
+    result_lineage.setdefault("reconciliation_lineage", "pending")
+    result_lineage.setdefault("closure_lineage", "pending")
+    result_lineage.setdefault("audit_lineage", "pending")
+    result_lineage.setdefault(
+        "lineage_quality",
+        _determine_result_lineage_quality(payload, status),
+    )
 
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on
@@ -589,6 +831,7 @@ async def handle_goal_execution_result(
                 "steps": payload.get("steps", []),
                 "group_id": group_id,
                 "subtask_index": subtask_index,
+                "lineage": result_lineage,
             }
             await store_task_result(
                 task_id=task_id,
@@ -646,12 +889,20 @@ async def handle_goal_execution_result(
             result_status=status,
         )
         if not _ger_ttc_outcome.is_truth_chain_complete:
+            result_lineage["reconciliation_lineage"] = "truth_chain_incomplete"
+            result_lineage["closure_lineage"] = "truth_chain_incomplete"
+            result_lineage["audit_lineage"] = "truth_chain_incomplete"
+            if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
             logger.warning(
                 "handle_goal_execution_result: truth chain incomplete for task_id=%r: %s",
                 task_id,
                 _ger_ttc_outcome.incomplete_reason,
             )
         else:
+            result_lineage["reconciliation_lineage"] = "canonical_truth_chain_reconciled"
+            result_lineage["closure_lineage"] = "canonical_completion_linked"
+            result_lineage["audit_lineage"] = "canonical_truth_chain_complete"
             logger.debug(
                 "handle_goal_execution_result: truth chain complete for task_id=%r",
                 task_id,
@@ -681,6 +932,11 @@ async def handle_goal_execution_result(
                     "goal_execution_result fallback reconcile failed (non-fatal): %s", rec_err
                 )
         _try_ingest_goal_result_truth(message)
+        result_lineage["reconciliation_lineage"] = "fallback_reconcile"
+        result_lineage["closure_lineage"] = "fallback_completion_linkage"
+        result_lineage["audit_lineage"] = "fallback_truth_chain"
+        if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+            result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
         # Fallback completion linkage — only reached when truth chain is unavailable.
         try:
             from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
