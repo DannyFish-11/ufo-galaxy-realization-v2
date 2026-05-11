@@ -9,6 +9,7 @@ from core.closed_loop_governance_consolidation import (
 from core.unified_execution_governance import (
     ExecutionLifecyclePhase,
     ExecutionType,
+    FailureSemantic,
     _clear_execution_governance_runtime_state,
     record_execution_lifecycle_event,
     record_result_uplink,
@@ -75,12 +76,15 @@ def test_partial_uplink_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert view.system_completion_level == "closed_with_gaps"
     assert set(view.system_completion_gap_types) == {
         "missing_state_uplink",
         "reconciliation_not_fully_accepted",
+        "degraded_path_used",
     }
-    assert len(view.system_completion_gap_types) == 2
+    assert len(view.system_completion_gap_types) == 3
 
 
 def test_conflicting_reports_not_mature():
@@ -144,7 +148,10 @@ def test_recovered_runtime_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert "runtime_health_not_stable" in view.system_completion_gap_types
+    assert "degraded_path_used" in view.system_completion_gap_types
 
 
 def test_degraded_runtime_not_mature():
@@ -174,4 +181,65 @@ def test_degraded_runtime_not_mature():
     view = query_closed_loop_governance_state(execution_id, device_id)
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
+    assert view.degraded_path_used is True
+    assert view.closure_authority_quality == "degraded"
     assert "runtime_health_not_stable" in view.system_completion_gap_types
+    assert "degraded_path_used" in view.system_completion_gap_types
+
+
+def test_fallback_semantic_path_not_mature():
+    execution_id = "exec-pr18-fallback-path-gap"
+    device_id = "device-pr18-fallback-path-gap"
+
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        phase=ExecutionLifecyclePhase.succeeded,
+        failure_semantic=FailureSemantic.fallback_local,
+        enforce_transition=False,
+    )
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"status": "ok"},
+    )
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"phase": "succeeded"},
+    )
+
+    view = query_closed_loop_governance_state(execution_id, device_id)
+    assert view.stage == ClosedLoopStage.completion
+    assert view.system_completion_ready is False
+    assert view.fallback_path_used is True
+    assert view.closure_authority_quality == "fallback"
+    assert "fallback_path_used" in view.system_completion_gap_types
+
+
+def test_uplink_only_terminal_marks_compat_path():
+    execution_id = "exec-pr18-compat-path-gap"
+    device_id = "device-pr18-compat-path-gap"
+
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        payload={"status": "ok"},
+    )
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.goal_execution,
+        payload={"phase": "succeeded"},
+    )
+
+    view = query_closed_loop_governance_state(execution_id, device_id)
+    assert view.system_completion_ready is False
+    assert view.compat_path_used is True
+    assert view.canonical_path_used is False
+    assert view.closure_authority_quality == "compat"
+    assert "compat_path_used" in view.system_completion_gap_types
