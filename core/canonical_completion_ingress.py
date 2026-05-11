@@ -146,8 +146,13 @@ class CanonicalCompletionIngress:
                     )
                     try:
                         existing.cancel()
-                    except Exception:
-                        pass
+                    except Exception as _cancel_exc:
+                        logger.debug(
+                            "canonical_completion_ingress: cancel() raised for "
+                            "handoff_id=%r: %s",
+                            handoff_id,
+                            _cancel_exc,
+                        )
                 self._futures_by_handoff_id[handoff_id] = fut
                 logger.debug(
                     "canonical_completion_ingress: registered handoff_id=%r", handoff_id
@@ -163,8 +168,13 @@ class CanonicalCompletionIngress:
                     )
                     try:
                         existing_tid.cancel()
-                    except Exception:
-                        pass
+                    except Exception as _cancel_exc:
+                        logger.debug(
+                            "canonical_completion_ingress: cancel() raised for "
+                            "task_id=%r: %s",
+                            task_id,
+                            _cancel_exc,
+                        )
                 self._futures_by_task_id[task_id] = fut
                 logger.debug(
                     "canonical_completion_ingress: registered task_id=%r", task_id
