@@ -540,12 +540,19 @@ def _evaluate_registration_gate(
     if main_chain_blocked and not blocked:
         degraded = True
         degraded_reasons.append("main_chain_blocked")
+    if blocked:
+        if validation_status == "FAIL":
+            blocked_reason = "Prerequisite validation failed (FAIL status)."
+        else:
+            blocked_reason = "Required health route '/api/v1/health' is not registered."
+    else:
+        blocked_reason = ""
     return LifecycleGateResult(
         stage=LifecycleStage.REGISTRATION,
         passed=not blocked,
         blocked=blocked,
         degraded=degraded,
-        blocked_reason="Prerequisites failed or required health route missing." if blocked else "",
+        blocked_reason=blocked_reason,
         degraded_reasons=degraded_reasons,
         evidence={
             "validation_status": validation_status,
@@ -589,7 +596,15 @@ def _evaluate_capability_visibility_gate(
         passed=capability_visible,
         blocked=False,
         degraded=bool(degraded_reasons),
-        blocked_reason="" if capability_visible else "Android is attached but capability visibility is still pending.",
+        blocked_reason=(
+            ""
+            if capability_visible
+            else (
+                "Android device is attached but capability reporting has not yet completed. "
+                "Check that the Android app has completed its capability report handshake and "
+                "that the gateway capability_report handler is receiving messages."
+            )
+        ),
         degraded_reasons=degraded_reasons,
         evidence={
             "android_attached": android_attached,
@@ -836,6 +851,7 @@ def _evaluate_result_closure(
     participant_terminal_count: int,
     participant_terminal_success_count: int,
     task_initiated_gate_passed: bool,
+    task_initiation_blocking_gates: List[str],
     recovery_active: bool,
     degraded: bool,
     android_attached: bool,
@@ -919,7 +935,12 @@ def _evaluate_result_closure(
         passed=closure_passed,
         blocked=outcome == ClosureOutcome.INCOMPLETE_BLOCKED,
         degraded=bool(degraded_reasons) and closure_passed,
-        blocked_reason="Closure blocked: task initiation gate blocked before execution." if outcome == ClosureOutcome.INCOMPLETE_BLOCKED else "",
+        blocked_reason=(
+            f"Closure blocked: task initiation gate blocked before execution could complete "
+            f"(blocking gates: {task_initiation_blocking_gates})."
+            if outcome == ClosureOutcome.INCOMPLETE_BLOCKED
+            else ""
+        ),
         degraded_reasons=degraded_reasons if closure_passed else [],
         evidence=closure_state.evidence,
     )
@@ -1083,6 +1104,7 @@ def build_executable_lifecycle_state(
         participant_terminal_count=participant_terminal_count,
         participant_terminal_success_count=participant_terminal_success_count,
         task_initiated_gate_passed=task_init_gate.passed,
+        task_initiation_blocking_gates=task_init_gate_obj.blocking_gates,
         recovery_active=recovery_active,
         degraded=degraded,
         android_attached=android_attached,

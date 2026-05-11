@@ -893,7 +893,14 @@ def build_v2_unified_state_contract(
         )
         lifecycle_hardening_dict = lifecycle_state.to_dict()
     except Exception as exc:  # pragma: no cover
-        logger.warning("lifecycle_hardening population failed: %s", exc)
+        logger.warning(
+            "lifecycle_hardening population failed: %s "
+            "(validation_status=%s, android_device_count=%s, runtime_verdict=%s)",
+            exc,
+            getattr(getattr(validation, "overall_status", None), "value", "unknown"),
+            (device_evidence or {}).get("android_device_count", 0),
+            (runtime_readiness or {}).get("verdict", "unknown"),
+        )
         lifecycle_hardening_dict = {"error": str(exc)}
 
     return V2UnifiedStateContract(
