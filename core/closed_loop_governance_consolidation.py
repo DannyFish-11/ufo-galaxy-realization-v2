@@ -160,11 +160,12 @@ _ACTIVE_RECONCILIATION_STATUSES: frozenset[str] = frozenset(
         "uplink_only_observation",
     }
 )
-# Keep this as a frozenset to preserve forward compatibility with additional
-# "fully accepted" reconciliation outcomes in future contract revisions
+# Keep this as a frozenset. Forward compatibility here means future code
+# revisions may expand this constant with additional "fully accepted" outcomes
 # (for example: accepted_with_quorum / accepted_with_verified_replay).
 _MATURE_RECONCILIATION_STATUSES: frozenset[str] = frozenset({"accepted"})
 DEFAULT_RUNTIME_HEALTH_STATUS: str = "stable"
+TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE: str = "center_lifecycle"
 
 GAP_LOOP_NOT_IN_COMPLETION_STAGE = "loop_not_in_completion_stage"
 GAP_TERMINAL_LIFECYCLE_NOT_REACHED = "terminal_lifecycle_not_reached"
@@ -612,7 +613,7 @@ def _classify_system_completion_readiness(
         gap_types.append(GAP_TERMINAL_LIFECYCLE_NOT_REACHED)
     if canonical_terminal_outcome is None:
         gap_types.append(GAP_TERMINAL_TRUTH_UNDETERMINED)
-    if terminal_truth_authoritative_source != "center_lifecycle":
+    if terminal_truth_authoritative_source != TERMINAL_TRUTH_SOURCE_CENTER_LIFECYCLE:
         gap_types.append(GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING)
     if uplink_result_count <= 0:
         gap_types.append(GAP_MISSING_RESULT_UPLINK)
@@ -622,7 +623,7 @@ def _classify_system_completion_readiness(
         gap_types.append(GAP_RECONCILIATION_CONFLICT_PRESENT)
     if reconciliation_status not in _MATURE_RECONCILIATION_STATUSES:
         gap_types.append(GAP_RECONCILIATION_NOT_FULLY_ACCEPTED)
-    if canonical_runtime_health != "stable":
+    if canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS:
         gap_types.append(GAP_RUNTIME_HEALTH_NOT_STABLE)
 
     system_completion_ready = len(gap_types) == 0

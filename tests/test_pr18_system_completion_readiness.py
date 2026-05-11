@@ -139,3 +139,33 @@ def test_recovered_runtime_not_mature():
     assert view.stage == ClosedLoopStage.completion
     assert view.system_completion_ready is False
     assert "runtime_health_not_stable" in view.system_completion_gap_types
+
+
+def test_degraded_runtime_not_mature():
+    execution_id = "exec-pr18-degraded-runtime-gap"
+    device_id = "device-pr18-degraded-runtime-gap"
+
+    record_execution_lifecycle_event(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        phase=ExecutionLifecyclePhase.succeeded,
+        enforce_transition=False,
+    )
+    record_result_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"status": "ok"},
+    )
+    record_state_uplink(
+        execution_id=execution_id,
+        device_id=device_id,
+        execution_type=ExecutionType.delegated_execution,
+        payload={"phase": "succeeded", "degraded": True, "reason": "latency_spike"},
+    )
+
+    view = query_closed_loop_governance_state(execution_id, device_id)
+    assert view.stage == ClosedLoopStage.completion
+    assert view.system_completion_ready is False
+    assert "runtime_health_not_stable" in view.system_completion_gap_types
