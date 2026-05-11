@@ -247,3 +247,39 @@
 - 本文结论严格基于本仓代码与测试可见证据。  
 - 对“另一仓（Android 仓）实时实现细节”无法在本仓直接全量证明的部分，按“跨仓规则+回放测试+证据管线”间接验证处理，不做越界脑补。  
 - 若需最终“跨仓全闭环”确认，需在双仓联调环境执行端到端实机验收。
+
+---
+
+## 附录：统一可操作注册路径（PR993 对齐）
+
+本仓提供机器可校验的统一注册路径模块 `core/operational_registration_path.py`，
+对齐 PR993 中心分布式智能体系统定义，涵盖：
+
+- **所有注册种类**（设备、能力、会话、网关、运行时、治理）及其规范模块位置
+- **完整 clone-to-use 接入路径**（12 步骤，含指令与验证标准）
+- **注册前提 fail-fast 校验**（可在启动前运行）
+- **主链 / 跨设备 / 兼容层分层说明**
+
+### 快速使用
+
+```python
+# 校验注册前提
+from core.operational_registration_path import validate_registration_prerequisites
+v = validate_registration_prerequisites()
+print(v.summary)
+
+# 查看完整注册路径（JSON 格式）
+from core.operational_registration_path import get_operational_registration_path
+path = get_operational_registration_path()
+print(path.to_json())
+```
+
+### 注册层级速查
+
+| 层级 | 注册种类 |
+|------|---------|
+| `main_chain`（主链） | `device_canonical`、`capability_registry`、`gateway_websocket`、`governance_unified`、`runtime_subject`、`session_attached_runtime`、`gateway_device_router`、`capability_resolver`、`session_canonical_axis`、`capability_bus`、`governance_release_gate` |
+| `cross_device`（跨设备） | `device_android_admission`、`device_android_state`、`capability_android_report`、`session_android_participant`、`runtime_android_host`、`runtime_dispatch_binding`、`gateway_android_bridge` |
+| `compat`（兼容层） | `device_index`（DeviceRegistry，叠加在 UDM 上的兼容索引层） |
+
+完整测试覆盖见 `tests/test_operational_registration_path.py`（85 个测试）。
