@@ -193,6 +193,14 @@ GAP_FALLBACK_PATH_USED = "fallback_path_used"
 GAP_COMPAT_PATH_USED = "compat_path_used"
 GAP_DEGRADED_PATH_USED = "degraded_path_used"
 GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
+# Android-originated complex scenario gap types (PR-Final)
+GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN = "android_originated_without_main_chain"
+GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED = "android_originated_fallback_combined"
+GAP_ANDROID_ORIGINATED_REPLAY_COMBINED = "android_originated_replay_combined"
+GAP_ANDROID_ORIGINATED_TAKEOVER_COMBINED = "android_originated_takeover_combined"
+GAP_ANDROID_ORIGINATED_CONFLICT_PARTIAL = "android_originated_conflict_partial"
+GAP_ANDROID_ORIGINATED_MULTI_DEVICE_RACE = "android_originated_multi_device_race"
+GAP_ANDROID_ORIGINATED_STALE_EVIDENCE = "android_originated_stale_evidence"
 
 
 class CompletionReadinessClassification(TypedDict):
@@ -399,6 +407,10 @@ class ClosedLoopGovernanceView:
     degraded_path_used: bool = False
     closure_authority_quality: str = "non_canonical"
     mature_closure_blockers: List[str] = field(default_factory=list)
+    # Full-chain lineage (PR-Final: android_originated + all lineage types)
+    android_originated: bool = False
+    android_originated_lineage: str = "unknown"
+    android_originated_gap_types: List[str] = field(default_factory=list)
     queried_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -427,6 +439,9 @@ class ClosedLoopGovernanceView:
             "degraded_path_used": self.degraded_path_used,
             "closure_authority_quality": self.closure_authority_quality,
             "mature_closure_blockers": list(self.mature_closure_blockers),
+            "android_originated": self.android_originated,
+            "android_originated_lineage": self.android_originated_lineage,
+            "android_originated_gap_types": list(self.android_originated_gap_types),
             "_system_completion_policy": SYSTEM_COMPLETION_READINESS_POLICY,
             "queried_at": self.queried_at,
             "_sentinel": CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL,
@@ -628,6 +643,7 @@ def _classify_system_completion_readiness(
     fallback_path_used: bool,
     compat_path_used: bool,
     degraded_path_used: bool,
+    android_originated_gap_types: Optional[List[str]] = None,
 ) -> CompletionReadinessClassification:
     """Classify system-level completion readiness and closure gap types.
 
@@ -685,6 +701,10 @@ def _classify_system_completion_readiness(
         gap_types.append(GAP_COMPAT_PATH_USED)
     if degraded_path_used:
         gap_types.append(GAP_DEGRADED_PATH_USED)
+    # Include android_originated complex scenario gaps (deduplicated via set check)
+    if android_originated_gap_types:
+        existing = set(gap_types)
+        gap_types.extend(ag for ag in android_originated_gap_types if ag not in existing)
 
     system_completion_ready = len(gap_types) == 0
     if system_completion_ready:
@@ -790,6 +810,7 @@ def _is_degraded_path(
 def query_closed_loop_governance_state(
     execution_id: str,
     device_id: str = "",
+    android_governance_context: Optional[Dict[str, Any]] = None,
 ) -> ClosedLoopGovernanceView:
     """Return the canonical closed-loop governance view for *execution_id*.
 
@@ -920,6 +941,28 @@ def query_closed_loop_governance_state(
         fallback_path_used=closure_path_quality["fallback_path_used"],
         compat_path_used=closure_path_quality["compat_path_used"],
         degraded_path_used=closure_path_quality["degraded_path_used"],
+        android_originated_gap_types=(
+            list(android_governance_context.get("gap_types", []))
+            if android_governance_context
+            else None
+        ),
+    )
+
+    # Extract android_originated fields from governance context (PR-Final)
+    android_originated = bool(
+        android_governance_context.get("android_originated", False)
+        if android_governance_context
+        else False
+    )
+    android_originated_lineage = str(
+        android_governance_context.get("lineage", "unknown")
+        if android_governance_context
+        else "unknown"
+    )
+    android_originated_gap_types_list: List[str] = list(
+        android_governance_context.get("gap_types", [])
+        if android_governance_context
+        else []
     )
 
     return ClosedLoopGovernanceView(
@@ -947,6 +990,9 @@ def query_closed_loop_governance_state(
         degraded_path_used=bool(closure_path_quality["degraded_path_used"]),
         closure_authority_quality=str(closure_path_quality["closure_authority_quality"]),
         mature_closure_blockers=list(closure_path_quality["mature_closure_blockers"]),
+        android_originated=android_originated,
+        android_originated_lineage=android_originated_lineage,
+        android_originated_gap_types=android_originated_gap_types_list,
     )
 
 
