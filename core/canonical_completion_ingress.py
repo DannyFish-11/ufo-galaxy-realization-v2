@@ -58,6 +58,25 @@ NOTIFY_BROADCASTS_TO_ALL_TERMINAL_WAITERS_POLICY: str = (
     "registered Future.  Non-terminal envelopes (ack) do NOT resolve the Future."
 )
 
+DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY: str = (
+    "POLICY::DUPLICATE_REGISTRATION_CANCELS_ORPHAN: "
+    "If register_pending_dispatch is called with a handoff_id or task_id that "
+    "already has a pending (not-done) Future registered, the existing Future is "
+    "cancelled before the new Future is stored.  This prevents silent orphaning "
+    "of the first waiter in retry/re-dispatch scenarios.  Callers that register "
+    "the same key twice MUST be aware that the first awaiter will receive a "
+    "CancelledError."
+)
+
+IS_TERMINAL_ATTRIBUTE_ERROR_POLICY: str = (
+    "POLICY::IS_TERMINAL_ATTRIBUTE_ERROR: "
+    "In notify(), if envelope.is_terminal raises AttributeError (attribute absent) "
+    "the envelope is treated as terminal per original design intent.  If it raises "
+    "any other exception (broken property, runtime error) the envelope is treated as "
+    "non-terminal and notify() returns False without resolving any Future.  "
+    "This prevents a malformed envelope from prematurely closing a dispatch Future."
+)
+
 
 # ---------------------------------------------------------------------------
 # CanonicalCompletionIngress
@@ -117,11 +136,35 @@ class CanonicalCompletionIngress:
 
         with self._lock:
             if handoff_id:
+                existing = self._futures_by_handoff_id.get(handoff_id)
+                if existing is not None and not existing.done():
+                    logger.warning(
+                        "canonical_completion_ingress: duplicate registration for "
+                        "handoff_id=%r — cancelling orphaned previous Future to "
+                        "prevent silent hang. See DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY.",
+                        handoff_id,
+                    )
+                    try:
+                        existing.cancel()
+                    except Exception:
+                        pass
                 self._futures_by_handoff_id[handoff_id] = fut
                 logger.debug(
                     "canonical_completion_ingress: registered handoff_id=%r", handoff_id
                 )
             if task_id:
+                existing_tid = self._futures_by_task_id.get(task_id)
+                if existing_tid is not None and not existing_tid.done():
+                    logger.warning(
+                        "canonical_completion_ingress: duplicate registration for "
+                        "task_id=%r — cancelling orphaned previous Future. "
+                        "See DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY.",
+                        task_id,
+                    )
+                    try:
+                        existing_tid.cancel()
+                    except Exception:
+                        pass
                 self._futures_by_task_id[task_id] = fut
                 logger.debug(
                     "canonical_completion_ingress: registered task_id=%r", task_id
@@ -177,14 +220,27 @@ class CanonicalCompletionIngress:
         """
         # Only resolve for terminal responses.
         try:
-            if not envelope.is_terminal:
-                logger.debug(
-                    "canonical_completion_ingress: notify skipped (non-terminal kind=%s)",
-                    getattr(envelope, "response_kind", "?"),
-                )
-                return False
-        except Exception:
-            pass  # Treat as terminal if attribute is absent
+            is_terminal_flag = envelope.is_terminal
+        except AttributeError:
+            # Attribute absent → treat as terminal per original design intent.
+            is_terminal_flag = True
+        except Exception as exc:
+            # Unexpected error accessing is_terminal (broken property, etc.).
+            # Default to non-terminal for safety: do not resolve a Future based
+            # on a malformed envelope.  See IS_TERMINAL_ATTRIBUTE_ERROR_POLICY.
+            logger.debug(
+                "canonical_completion_ingress: unexpected error reading is_terminal "
+                "from kind=%s: %s — treating as non-terminal for safety",
+                getattr(envelope, "response_kind", "?"),
+                exc,
+            )
+            return False
+        if not is_terminal_flag:
+            logger.debug(
+                "canonical_completion_ingress: notify skipped (non-terminal kind=%s)",
+                getattr(envelope, "response_kind", "?"),
+            )
+            return False
 
         handoff_id = getattr(envelope, "handoff_id", None) or ""
         task_id = getattr(envelope, "task_id", None) or ""
@@ -404,6 +460,8 @@ __all__ = [
     "CANONICAL_COMPLETION_INGRESS_SENTINEL",
     "FUTURE_RESOLUTION_IS_IDEMPOTENT_POLICY",
     "NOTIFY_BROADCASTS_TO_ALL_TERMINAL_WAITERS_POLICY",
+    "DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY",
+    "IS_TERMINAL_ATTRIBUTE_ERROR_POLICY",
     # Class
     "CanonicalCompletionIngress",
     # Singleton factory
