@@ -191,7 +191,6 @@ def build_v2_unified_state_contract(
         android_attached
         and capability_visible
         and session_evidence.get("active_session_count", 0) > 0
-        and bool(session_evidence.get("task_initiated", False))
     )
     compat_only_available = not main_chain_available and any(
         getattr(state, "path_tier", "")
@@ -715,8 +714,6 @@ def build_v2_unified_state_contract(
         waiting_dependency_reasons.append("capability_visibility")
     if android_attached and session_evidence.get("active_session_count", 0) == 0:
         waiting_dependency_reasons.append("active_session")
-    if android_attached and not task_initiated:
-        waiting_dependency_reasons.append("task_initiation")
 
     closure_quality_state = {
         "result_closure": ContractDecision(
