@@ -226,6 +226,24 @@ UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY: str = (
     "closure acceptability thresholds, and automatic/manual action routing."
 )
 UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION: str = "1.0.0"
+_POLICY_HARD_BLOCK_REASONS: frozenset[str] = frozenset(
+    {
+        "canonical_execution_gate:deny",
+        "dispatch_gate",
+        "takeover_gate",
+        "unknown_mode",
+        "execution_runtime_blocked:goal_execution",
+    }
+)
+_POLICY_RESUMABLE_PHASES: frozenset[str] = frozenset({"planning", "manifest", "execution"})
+_POLICY_INVALID_RECOVERY_QUALITIES: frozenset[str] = frozenset({"", "none", "missing", "not_provided"})
+_POLICY_ESCALATION_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
+_POLICY_ESCALATION_MANUAL_DECISIONS: frozenset[str] = frozenset({"manual_review", "suspend"})
+
+
+def _is_hard_block_reason(blocked_by: str) -> bool:
+    normalized = str(blocked_by or "").strip()
+    return normalized in _POLICY_HARD_BLOCK_REASONS or normalized.startswith("mesh_proof_quality:")
 
 
 class GovernancePath(str, Enum):
@@ -1011,14 +1029,7 @@ def _derive_device_policy_outcome(
     blocked_by = str(primary_decision.get("blocked_by") or "").strip()
     eligible = bool(primary_decision.get("eligible", False))
 
-    hard_block_reasons = {
-        "canonical_execution_gate:deny",
-        "dispatch_gate",
-        "takeover_gate",
-        "unknown_mode",
-        "execution_runtime_blocked:goal_execution",
-    }
-    hard_block = blocked_by in hard_block_reasons or blocked_by.startswith("mesh_proof_quality:")
+    hard_block = _is_hard_block_reason(blocked_by)
     deferred = blocked_by == "canonical_execution_gate:defer"
 
     runtime_health_status = str(runtime_state_for_device.get("runtime_health_status") or "").strip().lower()
@@ -1054,11 +1065,11 @@ def _derive_device_policy_outcome(
     minimum_viable_access_met = eligible and not hard_block
     retryable = blocked_by not in {"unknown_mode", "local_mode_boundary"}
     latest_phase = str(runtime_state_for_device.get("latest_execution_event_phase") or "").strip().lower()
-    resumable = latest_phase in {"planning", "manifest", "execution"} or (
-        recovery_truth_quality not in {"", "none", "missing", "not_provided"}
+    resumable = latest_phase in _POLICY_RESUMABLE_PHASES or (
+        recovery_truth_quality not in _POLICY_INVALID_RECOVERY_QUALITIES
     )
     recovery_eligible = operation_state != "admissible" and (
-        recovery_truth_quality not in {"", "none", "missing", "not_provided"}
+        recovery_truth_quality not in _POLICY_INVALID_RECOVERY_QUALITIES
     )
 
     closure_acceptable = (
@@ -1091,10 +1102,10 @@ def _derive_device_policy_outcome(
     else:
         manual_decision = "none"
 
-    escalation_required = dependency_severity in {"critical", "high"} or manual_decision in {
-        "manual_review",
-        "suspend",
-    }
+    escalation_required = (
+        dependency_severity in _POLICY_ESCALATION_SEVERITIES
+        or manual_decision in _POLICY_ESCALATION_MANUAL_DECISIONS
+    )
     escalation_level = (
         "immediate"
         if dependency_severity == "critical"

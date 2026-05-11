@@ -684,3 +684,59 @@ def test_governance_policy_layer_defer_requires_manual_review() -> None:
     assert policy["manual_decision"] == "manual_review"
     assert policy["retryability"]["deferral_eligible"] is True
     assert policy["escalation"]["required"] is True
+
+
+def test_governance_policy_layer_handles_sparse_runtime_snapshot() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_sparse")]
+    mode_map = {"dev_sparse": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_sparse": SimpleNamespace(
+            is_dispatch_eligible=True,
+            is_takeover_eligible=True,
+            is_cross_device_ready=True,
+        )
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_sparse",
+                "blocked_execution_types": [],
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    allow_gate = SimpleNamespace(
+        decision="allow",
+        reasons=["allow_sparse_runtime_shape"],
+        capability_ready=True,
+        android_capability_truth_degraded=False,
+    )
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
+        return_value=allow_gate,
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ):
+        state = build_unified_governance_state()
+
+    policy = state["devices"][0]["governance_policy"]
+    assert policy["policy_authoritative"] is True
+    assert policy["primary_path"] == "delegated_execution"
+    assert policy["closure_policy"]["quality_threshold"] in {
+        "meets_canonical",
+        "meets_minimum",
+        "below_minimum",
+    }
