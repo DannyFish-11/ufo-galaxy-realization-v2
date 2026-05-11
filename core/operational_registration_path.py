@@ -167,7 +167,7 @@ class RegistrationKind(str, Enum):
     CAPABILITY_RESOLVER = "capability_resolver"
     """Unified capability resolver — resolves capabilities across devices.
 
-    Module: ``core/unified/capability_resolver.py`` (or ``core/unified_capability_resolver.py``)
+    Module: ``core/unified/capability_resolver.py``
     """
 
     # --- Session / identity / continuity layer ---
@@ -996,7 +996,7 @@ def _check_module(
             message=f"Module '{module_dotted}' is locatable.",
             module_checked=module_dotted,
         )
-    except (ValueError, ModuleNotFoundError, ImportError):
+    except (ValueError, ModuleNotFoundError, ImportError) as exc:
         # find_spec raised because a parent __init__ has an absent hard dependency.
         # The source file exists but can't be fully initialised in this environment.
         return PrerequisiteCheck(
@@ -1004,7 +1004,7 @@ def _check_module(
             status=ValidationStatus.WARN,
             message=(
                 f"Module '{module_dotted}' source exists but its dependencies may be "
-                "absent in this environment (install requirements.txt to resolve)."
+                f"absent in this environment (install requirements.txt to resolve): {exc}"
             ),
             module_checked=module_dotted,
         )
@@ -1062,7 +1062,9 @@ def validate_registration_prerequisites() -> OnboardingValidation:
                 cap_reg_module = candidate
                 break
         except (ValueError, ModuleNotFoundError, ImportError):
-            cap_reg_spec = True  # source exists, dep absent
+            # find_spec raised due to a missing dependency in the package __init__.
+            # Treat as found (source exists, only deps absent).
+            cap_reg_spec = True  # cap_reg_found: source locatable, deps may be absent
             cap_reg_module = candidate
             break
 
@@ -1227,6 +1229,10 @@ def build_operational_registration_path() -> OperationalRegistrationPath:
 
     main_chain = _classify_by_tier(kinds, PathTier.MAIN_CHAIN)
     cross_device = _classify_by_tier(kinds, PathTier.CROSS_DEVICE)
+    # COMPAT, FALLBACK, and RECOVERY tiers are all grouped into the 'compat_kinds'
+    # bucket because they share the same operational meaning to consumers of this
+    # path: they are non-canonical supporting paths that extend or degrade
+    # gracefully rather than being required for baseline system operation.
     compat = [
         rk.kind for rk in kinds
         if rk.path_tier in (PathTier.COMPAT, PathTier.FALLBACK, PathTier.RECOVERY)

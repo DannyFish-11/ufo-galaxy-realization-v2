@@ -221,7 +221,12 @@ class TestPrerequisiteValidation:
         assert v.summary
 
     def test_no_failed_checks_on_clean_install(self) -> None:
-        """All core modules must be locatable in this repository."""
+        """All core modules must be locatable in this repository.
+
+        This test verifies the real module locations in this codebase.
+        If run in a stripped environment that's missing core/ or galaxy_gateway/,
+        the test will fail — that is the intended fail-fast behaviour.
+        """
         v = validate_registration_prerequisites()
         assert len(v.failed_checks) == 0, (
             f"Unexpected FAIL checks: {[c.name for c in v.failed_checks]}"

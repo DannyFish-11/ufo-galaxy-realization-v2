@@ -130,7 +130,8 @@ system (PR993) are present before you start the backend:
 from core.operational_registration_path import validate_registration_prerequisites
 v = validate_registration_prerequisites()
 print(v.summary)
-# Expected: "Registration prerequisite validation PASSED: all N checks passed."
+# Expected: "Registration prerequisite validation PASSED: all 11 checks passed."
+# (or PASSED WITH WARNINGS if optional deps are absent)
 if v.failed_checks:
     for c in v.failed_checks:
         print(f"FAIL: {c.name} — {c.message}")
