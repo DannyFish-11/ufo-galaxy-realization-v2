@@ -178,6 +178,9 @@ GAP_MISSING_STATE_UPLINK = "missing_state_uplink"
 GAP_RECONCILIATION_CONFLICT_PRESENT = "reconciliation_conflict_present"
 GAP_RECONCILIATION_NOT_FULLY_ACCEPTED = "reconciliation_not_fully_accepted"
 GAP_RUNTIME_HEALTH_NOT_STABLE = "runtime_health_not_stable"
+GAP_FALLBACK_PATH_USED = "fallback_path_used"
+GAP_COMPAT_PATH_USED = "compat_path_used"
+GAP_DEGRADED_PATH_USED = "degraded_path_used"
 GAP_GOVERNANCE_STORE_READ_ERROR = "governance_store_read_error"
 
 
@@ -193,6 +196,15 @@ class CompletionReadinessClassification(TypedDict):
     system_completion_ready: bool
     system_completion_level: str
     system_completion_gap_types: List[str]
+
+
+class ClosurePathQualityProfile(TypedDict):
+    canonical_path_used: bool
+    fallback_path_used: bool
+    compat_path_used: bool
+    degraded_path_used: bool
+    closure_authority_quality: str
+    mature_closure_blockers: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +382,12 @@ class ClosedLoopGovernanceView:
     system_completion_ready: bool = False
     system_completion_level: str = "not_closed"
     system_completion_gap_types: List[str] = field(default_factory=list)
+    canonical_path_used: bool = False
+    fallback_path_used: bool = False
+    compat_path_used: bool = False
+    degraded_path_used: bool = False
+    closure_authority_quality: str = "non_canonical"
+    mature_closure_blockers: List[str] = field(default_factory=list)
     queried_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -392,6 +410,12 @@ class ClosedLoopGovernanceView:
             "system_completion_ready": self.system_completion_ready,
             "system_completion_level": self.system_completion_level,
             "system_completion_gap_types": list(self.system_completion_gap_types),
+            "canonical_path_used": self.canonical_path_used,
+            "fallback_path_used": self.fallback_path_used,
+            "compat_path_used": self.compat_path_used,
+            "degraded_path_used": self.degraded_path_used,
+            "closure_authority_quality": self.closure_authority_quality,
+            "mature_closure_blockers": list(self.mature_closure_blockers),
             "_system_completion_policy": SYSTEM_COMPLETION_READINESS_POLICY,
             "queried_at": self.queried_at,
             "_sentinel": CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL,
@@ -590,6 +614,9 @@ def _classify_system_completion_readiness(
     canonical_runtime_health: str,
     uplink_result_count: int,
     uplink_state_count: int,
+    fallback_path_used: bool,
+    compat_path_used: bool,
+    degraded_path_used: bool,
 ) -> CompletionReadinessClassification:
     """Classify system-level completion readiness and closure gap types.
 
@@ -641,6 +668,12 @@ def _classify_system_completion_readiness(
         gap_types.append(GAP_RECONCILIATION_NOT_FULLY_ACCEPTED)
     if canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS:
         gap_types.append(GAP_RUNTIME_HEALTH_NOT_STABLE)
+    if fallback_path_used:
+        gap_types.append(GAP_FALLBACK_PATH_USED)
+    if compat_path_used:
+        gap_types.append(GAP_COMPAT_PATH_USED)
+    if degraded_path_used:
+        gap_types.append(GAP_DEGRADED_PATH_USED)
 
     system_completion_ready = len(gap_types) == 0
     if system_completion_ready:
@@ -653,6 +686,58 @@ def _classify_system_completion_readiness(
         system_completion_ready=system_completion_ready,
         system_completion_level=system_completion_level,
         system_completion_gap_types=gap_types,
+    )
+
+
+def _derive_closure_path_quality_profile(
+    *,
+    lifecycle_history: List[Dict[str, Any]],
+    reconciliation_status: str,
+    canonical_runtime_health: str,
+) -> ClosurePathQualityProfile:
+    fallback_path_used = any(
+        str(event.get("failure_semantic") or "") == "fallback_local"
+        for event in lifecycle_history
+    )
+    compat_path_used = reconciliation_status in {
+        "uplink_only_observation",
+        "uplink_only_terminal_observation",
+        "uplink_terminal_observation_requires_reconciliation",
+    }
+    degraded_path_used = (
+        canonical_runtime_health != DEFAULT_RUNTIME_HEALTH_STATUS
+        or reconciliation_status == "accepted_partial_observation"
+    )
+    canonical_path_used = not any(
+        (fallback_path_used, compat_path_used, degraded_path_used)
+    )
+
+    mature_closure_blockers: List[str] = []
+    if fallback_path_used:
+        mature_closure_blockers.append(GAP_FALLBACK_PATH_USED)
+    if compat_path_used:
+        mature_closure_blockers.append(GAP_COMPAT_PATH_USED)
+    if degraded_path_used:
+        mature_closure_blockers.append(GAP_DEGRADED_PATH_USED)
+
+    if canonical_path_used:
+        closure_authority_quality = "canonical"
+    elif fallback_path_used:
+        closure_authority_quality = "fallback"
+    elif compat_path_used:
+        closure_authority_quality = "compat"
+    elif degraded_path_used:
+        closure_authority_quality = "degraded"
+    else:
+        closure_authority_quality = "non_canonical"
+
+    return ClosurePathQualityProfile(
+        canonical_path_used=canonical_path_used,
+        fallback_path_used=fallback_path_used,
+        compat_path_used=compat_path_used,
+        degraded_path_used=degraded_path_used,
+        closure_authority_quality=closure_authority_quality,
+        mature_closure_blockers=mature_closure_blockers,
     )
 
 
@@ -759,6 +844,11 @@ def query_closed_loop_governance_state(
         has_uplink_observation=has_uplink_observation,
         lifecycle_event_count=lifecycle_event_count,
     )
+    closure_path_quality = _derive_closure_path_quality_profile(
+        lifecycle_history=lifecycle_history,
+        reconciliation_status=reconciliation_status,
+        canonical_runtime_health=canonical_runtime_health,
+    )
 
     violations = _check_invariants(
         execution_id=execution_id,
@@ -785,6 +875,9 @@ def query_closed_loop_governance_state(
         canonical_runtime_health=canonical_runtime_health,
         uplink_result_count=uplink_result_count,
         uplink_state_count=uplink_state_count,
+        fallback_path_used=closure_path_quality["fallback_path_used"],
+        compat_path_used=closure_path_quality["compat_path_used"],
+        degraded_path_used=closure_path_quality["degraded_path_used"],
     )
 
     return ClosedLoopGovernanceView(
@@ -806,6 +899,12 @@ def query_closed_loop_governance_state(
         system_completion_ready=bool(completion_readiness["system_completion_ready"]),
         system_completion_level=str(completion_readiness["system_completion_level"]),
         system_completion_gap_types=list(completion_readiness["system_completion_gap_types"]),
+        canonical_path_used=bool(closure_path_quality["canonical_path_used"]),
+        fallback_path_used=bool(closure_path_quality["fallback_path_used"]),
+        compat_path_used=bool(closure_path_quality["compat_path_used"]),
+        degraded_path_used=bool(closure_path_quality["degraded_path_used"]),
+        closure_authority_quality=str(closure_path_quality["closure_authority_quality"]),
+        mature_closure_blockers=list(closure_path_quality["mature_closure_blockers"]),
     )
 
 
