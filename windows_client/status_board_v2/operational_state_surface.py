@@ -7,9 +7,11 @@ from . import _ansi
 _BOLD = _ansi.BOLD
 _DIM = "\033[90m"
 _UNKNOWN = "unknown"
+_DEFAULT_CLIP_LENGTH = 76
 
 
-def _clip(value: str, max_len: int = 76) -> str:
+def _clip(value: str, max_len: int = _DEFAULT_CLIP_LENGTH) -> str:
+    # max_len - 1 keeps room for the trailing ellipsis.
     return value if len(value) <= max_len else value[: max_len - 1] + "…"
 
 

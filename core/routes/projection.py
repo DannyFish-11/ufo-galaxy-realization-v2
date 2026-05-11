@@ -5355,7 +5355,7 @@ def _classify_operational_decision_authority(sources: Any) -> str:
     source_list = [
         str(source)
         for source in (sources or [])
-        if source is not None
+        if source is not None and str(source).strip()
     ]
     if not source_list:
         return boundary_v2
@@ -5487,7 +5487,8 @@ def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = N
     try:
         from core.operational_readiness_surface import build_operational_readiness_report
 
-        report = build_operational_readiness_report(route_paths=set(route_paths or []))
+        normalized_route_paths = route_paths if isinstance(route_paths, set) else set(route_paths or [])
+        report = build_operational_readiness_report(route_paths=normalized_route_paths)
         state_contract = dict(report.state_contract)
         result["operational_readiness"] = {
             "authority": report.authority,
