@@ -292,7 +292,8 @@ def collect_app_route_paths(app: Any) -> Set[str]:
 def _module_available(module_path: str) -> bool:
     try:
         return importlib.util.find_spec(module_path) is not None
-    except (ImportError, AttributeError, ValueError):
+    except (ImportError, AttributeError, ValueError) as exc:
+        logger.debug("OperationalReadinessSurface: module lookup failed for %s: %s", module_path, exc)
         return False
 
 
@@ -1172,7 +1173,7 @@ def _build_android_standard(
             "success_quality": chain_state.success_quality,
         },
         "remaining_gaps": remaining_gaps,
-        "dual_repo_anchor_note": (
+        "architecture_note": (
             "Android is the distributed runtime participant; V2 remains the center-side "
             "governance, orchestration, truth convergence, and acceptance authority."
         ),
