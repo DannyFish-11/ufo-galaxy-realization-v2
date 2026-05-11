@@ -895,7 +895,9 @@ def build_v2_unified_state_contract(
     except Exception as exc:  # pragma: no cover
         logger.warning(
             "lifecycle_hardening population failed: %s "
-            "(validation_status=%s, android_device_count=%s, runtime_verdict=%s)",
+            "(validation_status=%s, android_device_count=%s, runtime_verdict=%s). "
+            "Contract will include error stub in lifecycle_hardening field; "
+            "the rest of the contract remains usable but lifecycle gating is unavailable.",
             exc,
             getattr(getattr(validation, "overall_status", None), "value", "unknown"),
             (device_evidence or {}).get("android_device_count", 0),

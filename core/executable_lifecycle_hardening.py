@@ -865,6 +865,7 @@ def _evaluate_result_closure(
     failed_explicitly = bool(result_ingress_evidence.get("explicit_failure", False))
     is_fully_closed = bool(result_ingress_evidence.get("is_fully_closed", False))
     completion_ingress_confirmed = bool(result_ingress_evidence.get("completion_ingress_confirmed", False))
+    completion_confirmed = completion_ingress_confirmed or completion_notified
 
     degraded_reasons: List[str] = []
 
@@ -874,10 +875,7 @@ def _evaluate_result_closure(
         outcome = ClosureOutcome.FAILED
         degraded_reasons.append("explicit_failure")
     elif result_closure_established or is_fully_closed:
-        if completion_ingress_confirmed or completion_notified:
-            authoritative_closure = True
-        else:
-            authoritative_closure = False
+        if not completion_confirmed:
             degraded_reasons.append("completion_ingress_not_confirmed")
         if recovery_active:
             outcome = ClosureOutcome.SUCCESS_RECOVERY
@@ -900,11 +898,12 @@ def _evaluate_result_closure(
         outcome = ClosureOutcome.INCOMPLETE_WAITING
         degraded_reasons.append("awaiting_task_initiation")
 
-    authoritative_closure = outcome in (
+    _success_outcomes = (
         ClosureOutcome.SUCCESS_CANONICAL,
         ClosureOutcome.SUCCESS_DEGRADED,
         ClosureOutcome.SUCCESS_RECOVERY,
-    ) and (completion_ingress_confirmed or completion_notified)
+    )
+    authoritative_closure = outcome in _success_outcomes and completion_confirmed
 
     session_closed = participant_terminal_count > 0
     task_closed = result_closure_established or is_fully_closed
@@ -914,7 +913,7 @@ def _evaluate_result_closure(
         authoritative=authoritative_closure,
         session_closed=session_closed,
         task_closed=task_closed,
-        completion_notified=completion_notified or completion_ingress_confirmed,
+        completion_notified=completion_confirmed,
         degraded_reasons=degraded_reasons,
         evidence={
             "task_initiated": task_initiated,
@@ -928,11 +927,7 @@ def _evaluate_result_closure(
         },
     )
 
-    closure_passed = outcome in (
-        ClosureOutcome.SUCCESS_CANONICAL,
-        ClosureOutcome.SUCCESS_DEGRADED,
-        ClosureOutcome.SUCCESS_RECOVERY,
-    )
+    closure_passed = outcome in _success_outcomes
     stage_gate = LifecycleGateResult(
         stage=LifecycleStage.RESULT_CLOSURE,
         passed=closure_passed,
