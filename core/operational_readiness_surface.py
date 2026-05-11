@@ -321,6 +321,7 @@ def _collect_device_evidence() -> Dict[str, Any]:
         evidence["android_device_count"] = len(android_ids)
         evidence["android_device_ids"] = android_ids
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: device inventory probe failed: %s", exc)
         evidence["device_inventory_error"] = str(exc)
 
     try:
@@ -330,6 +331,7 @@ def _collect_device_evidence() -> Dict[str, Any]:
         ready_ids = [item.device_id for item in readiness]
         evidence["cross_device_ready_device_ids"] = ready_ids
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: cross-device readiness probe failed: %s", exc)
         evidence["cross_device_readiness_error"] = str(exc)
     return evidence
 
@@ -391,6 +393,7 @@ def _collect_android_evidence() -> Dict[str, Any]:
         )
         evidence["ecosystem_summary"] = get_device_ecosystem_summary()
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: android state probe failed: %s", exc)
         evidence["android_state_error"] = str(exc)
     return evidence
 
@@ -421,6 +424,7 @@ def _collect_session_evidence() -> Dict[str, Any]:
         evidence["detached_session_count"] = registry_snapshot.detached_count
         evidence["invalidated_session_count"] = registry_snapshot.invalidated_count
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: attached session probe failed: %s", exc)
         evidence["attached_session_error"] = str(exc)
 
     try:
@@ -439,6 +443,7 @@ def _collect_session_evidence() -> Dict[str, Any]:
         evidence["result_closure_established"] = snapshot.terminal_count > 0
         evidence["recovery_active"] = any(phase == "reconciling" for phase in phases)
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: participant session probe failed: %s", exc)
         evidence["participant_session_error"] = str(exc)
 
     evidence["recovery_active"] = evidence["recovery_active"] or any(
@@ -465,6 +470,7 @@ def _load_runtime_readiness() -> Dict[str, Any]:
             "matrix": matrix,
         }
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: runtime readiness probe failed: %s", exc)
         return {
             "available": False,
             "verdict": "unknown",
@@ -487,6 +493,7 @@ def _load_system_acceptance() -> Dict[str, Any]:
             "report": payload,
         }
     except Exception as exc:  # noqa: BLE001
+        logger.warning("OperationalReadinessSurface: system acceptance probe failed: %s", exc)
         return {
             "available": False,
             "verdict": "acceptance_unknown_insufficient_evidence",
