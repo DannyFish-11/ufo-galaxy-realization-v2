@@ -1434,6 +1434,46 @@ def _extract_reported_runtime_health_reason(state_payload: Optional[Dict[str, An
     return reason or None
 
 
+def _classify_uplink_terminal_confirmation(
+    *,
+    latest_phase: Optional[str],
+    reported_terminal_outcome: Optional[str],
+    reported_result_terminal_outcome: Optional[str],
+    reported_state_terminal_outcome: Optional[str],
+) -> Tuple[bool, str]:
+    """Classify whether uplink-only terminal truth is confirmed.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        (requires_reconciliation, confirmation_label)
+    """
+    if not reported_terminal_outcome or latest_phase:
+        return False, "not_applicable"
+
+    has_dual_terminal_uplink_observation = bool(
+        reported_result_terminal_outcome and reported_state_terminal_outcome
+    )
+    if not has_dual_terminal_uplink_observation:
+        return True, "single_source_terminal_unconfirmed"
+
+    if reported_result_terminal_outcome == reported_state_terminal_outcome:
+        return False, "cross_uplink_confirmed"
+
+    # success/failure dual-source mismatch is intentionally mergeable:
+    # it is canonical partial_success rather than unresolved terminal conflict.
+    if {
+        reported_result_terminal_outcome,
+        reported_state_terminal_outcome,
+    } == {
+        _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
+        _CANONICAL_TERMINAL_OUTCOME_FAILURE,
+    }:
+        return False, "cross_uplink_confirmed"
+
+    return True, "conflicting_terminal_unresolved"
+
+
 def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     lifecycle_history = get_execution_lifecycle_history(execution_id)
     uplink_records = get_all_uplink_records(execution_id)
@@ -1515,40 +1555,14 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     in_progress_terminal_observation = bool(
         latest_phase and not lifecycle_terminal_outcome and reported_terminal_outcome
     )
-    has_dual_terminal_uplink_observation = bool(
-        reported_result_terminal_outcome and reported_state_terminal_outcome
-    )
-    uplink_terminal_pair_is_mergeable = bool(
-        has_dual_terminal_uplink_observation
-        and (
-            reported_result_terminal_outcome == reported_state_terminal_outcome
-            or {
-                reported_result_terminal_outcome,
-                reported_state_terminal_outcome,
-            }
-            == {
-                _CANONICAL_TERMINAL_OUTCOME_SUCCESS,
-                _CANONICAL_TERMINAL_OUTCOME_FAILURE,
-            }
-        )
-    )
-    uplink_terminal_requires_reconciliation = bool(
-        not latest_phase
-        and reported_terminal_outcome
-        and not uplink_terminal_pair_is_mergeable
-    )
-    uplink_terminal_confirmation = (
-        "not_applicable"
-        if not reported_terminal_outcome or latest_phase
-        else (
-            "single_source_terminal_unconfirmed"
-            if not has_dual_terminal_uplink_observation
-            else (
-                "conflicting_terminal_unresolved"
-                if uplink_terminal_requires_reconciliation
-                else "cross_uplink_confirmed"
-            )
-        )
+    (
+        uplink_terminal_requires_reconciliation,
+        uplink_terminal_confirmation,
+    ) = _classify_uplink_terminal_confirmation(
+        latest_phase=latest_phase,
+        reported_terminal_outcome=reported_terminal_outcome,
+        reported_result_terminal_outcome=reported_result_terminal_outcome,
+        reported_state_terminal_outcome=reported_state_terminal_outcome,
     )
     uplink_terminal_authoritative = bool(
         reported_terminal_outcome
