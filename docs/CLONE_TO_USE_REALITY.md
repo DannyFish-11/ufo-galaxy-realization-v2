@@ -209,3 +209,19 @@ curl -sS http://127.0.0.1:8299/api/v1/projection/clone-to-use-acceptance
 它们不会创建平行系统，只负责把现有主链 / cross-device / degraded /
 recovery 信号聚合成更可操作的状态面，便于维护者判断“现在到底注册到哪、
 验收到哪、成功质量是什么”。
+
+从 PR 的统一语义角度看，更底层、可复用的 V2-side 语义契约现在由
+`core/v2_unified_state_contract.py` 定义，并由上述 readiness/acceptance
+surface 暴露为 `state_contract` 字段。其语义说明见：
+
+- `docs/V2_UNIFIED_STATE_CONTRACT.md`
+
+该契约明确区分：
+
+- raw signals
+- derived state
+- acceptance / eligibility
+- closure / quality
+
+同时保持诚实边界：它是 **V2 侧合同**，并不在这一阶段宣称 Android 已经与
+V2 完全对称。

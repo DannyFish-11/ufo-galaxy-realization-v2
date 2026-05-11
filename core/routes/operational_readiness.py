@@ -48,6 +48,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             "chain_state": report.chain_state.to_dict(),
             "clone_to_use_acceptance": report.clone_to_use_acceptance,
             "android_v2_minimum_standard": report.android_v2_minimum_standard,
+            "state_contract": report.state_contract,
         }
         return JSONResponse(content=payload)
 
