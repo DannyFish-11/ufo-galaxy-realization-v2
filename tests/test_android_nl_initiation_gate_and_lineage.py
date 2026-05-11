@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from galaxy_gateway.android.handlers import goal_execution as ge
 
 
-def _message(*, goal: str = "打开微信", task_id: str = "task-1") -> dict:
+def _build_goal_execution_message(*, goal: str = "打开微信", task_id: str = "task-1") -> dict:
     return {
         "device_id": "android-device-1",
         "payload": {
@@ -20,7 +20,7 @@ def _message(*, goal: str = "打开微信", task_id: str = "task-1") -> dict:
 
 
 def test_goal_execution_blocked_when_cross_device_disabled() -> None:
-    msg = _message()
+    msg = _build_goal_execution_message()
     with patch.object(ge, "_is_cross_device_enabled", lambda: False):
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
     assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
@@ -29,7 +29,7 @@ def test_goal_execution_blocked_when_cross_device_disabled() -> None:
 
 
 def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
-    msg = _message(task_id="task-2")
+    msg = _build_goal_execution_message(task_id="task-2")
     fake_runtime = SimpleNamespace(
         handle_request=AsyncMock(
             return_value={
@@ -64,7 +64,7 @@ def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
 
 
 def test_goal_execution_governance_reject_stamps_blocked_lineage() -> None:
-    msg = _message(task_id="task-3")
+    msg = _build_goal_execution_message(task_id="task-3")
     with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
         ge,
         "_evaluate_android_mode_readiness",
@@ -95,6 +95,16 @@ def test_participation_boundary_model_never_allows_authority_override() -> None:
     for participation_type in ANDROID_PARTICIPATION_TYPES:
         boundary = get_android_participation_boundary(participation_type)
         assert boundary["may_override_v2_authority"] is False
+
+
+def test_goal_execution_blocked_when_mode_gate_unavailable() -> None:
+    msg = _build_goal_execution_message(task_id="task-3b")
+    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
+        ge, "_evaluate_android_mode_readiness", None
+    ):
+        result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
+    assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
+    assert "mode_gate_unavailable" in result["details"]["blocking_gates"]
 
 
 def test_goal_execution_result_lineage_replay_assisted() -> None:

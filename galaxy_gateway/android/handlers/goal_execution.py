@@ -134,7 +134,11 @@ def _evaluate_android_nl_initiation_gate(
     device_id: str,
     require_parallel_execution: bool = False,
 ) -> tuple[bool, List[str], str]:
-    """Fail-closed gate for Android NL cross-device initiation."""
+    """Fail-closed gate for Android NL cross-device initiation.
+
+    Returns:
+        (is_eligible, blocking_gates, reason)
+    """
     cross_device_enabled = bool(_is_cross_device_enabled and _is_cross_device_enabled())
     if not cross_device_enabled:
         return False, ["v2_cross_device_switch"], "cross_device_disabled"
@@ -151,6 +155,21 @@ def _evaluate_android_nl_initiation_gate(
         return True, [], "dispatch_eligible"
     blocking = list(verdict.blocking_gates)
     return False, blocking, "mode_gate_blocked"
+
+
+def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> str:
+    """Classify result lineage quality with deterministic precedence."""
+    if payload.get("replay") or payload.get("replay_sequence"):
+        return "replay_assisted"
+    if payload.get("recovered") or payload.get("recovery"):
+        return "recovery_assisted"
+    if str(payload.get("route_mode") or "").strip().lower().startswith("compat"):
+        return "compat_success"
+    if bool(payload.get("fallback")):
+        return "fallback_success"
+    if status == "degraded":
+        return "degraded_success"
+    return "canonical_success"
 
 
 def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
@@ -743,17 +762,7 @@ async def handle_goal_execution_result(
     result_lineage.setdefault("reconciliation_lineage", "pending")
     result_lineage.setdefault("closure_lineage", "pending")
     result_lineage.setdefault("audit_lineage", "pending")
-    result_lineage.setdefault("lineage_quality", "canonical_success")
-    if payload.get("replay") or payload.get("replay_sequence"):
-        result_lineage["lineage_quality"] = "replay_assisted"
-    elif payload.get("recovered") or payload.get("recovery"):
-        result_lineage["lineage_quality"] = "recovery_assisted"
-    elif str(payload.get("route_mode") or "").strip().lower().startswith("compat"):
-        result_lineage["lineage_quality"] = "compat_success"
-    elif bool(payload.get("fallback")):
-        result_lineage["lineage_quality"] = "fallback_success"
-    elif status == "degraded":
-        result_lineage["lineage_quality"] = "degraded_success"
+    result_lineage.setdefault("lineage_quality", _determine_result_lineage_quality(payload, status))
 
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on

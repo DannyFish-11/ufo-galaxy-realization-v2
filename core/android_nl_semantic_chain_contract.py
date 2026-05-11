@@ -212,6 +212,10 @@ def is_android_nl_carrier(source: str) -> bool:
     return source in ANDROID_CARRIER_SOURCES
 
 
+def _normalize_participation_type(participation_type: str) -> str:
+    return str(participation_type or "").strip().lower()
+
+
 def is_v2_semantic_authority_path(ingress_carrier_context: Dict[str, Any]) -> bool:
     """Return True when *ingress_carrier_context* confirms V2 as semantic authority.
 
@@ -228,7 +232,7 @@ def is_v2_semantic_authority_path(ingress_carrier_context: Dict[str, Any]) -> bo
 
 def get_android_participation_boundary(participation_type: str) -> Dict[str, bool]:
     """Return canonical authority-boundary policy for the participation type."""
-    key = str(participation_type or "").strip().lower()
+    key = _normalize_participation_type(participation_type)
     boundary = ANDROID_PARTICIPATION_BOUNDARY_MODEL.get(key)
     if boundary is None:
         return {
