@@ -872,19 +872,16 @@ def _evaluate_result_closure(
     degraded_reasons: List[str] = []
     task_closed = result_closure_established or is_fully_closed
     session_closed = participant_terminal_count > 0
-    session_continuity_state = (
-        "recovery_active"
-        if recovery_active
-        else (
-            "continuous"
-            if active_session_count > 0
-            else (
-                "incomplete"
-                if total_session_count > 0 or participant_terminal_count > 0
-                else "waiting_dependency" if android_attached else "not_applicable"
-            )
-        )
-    )
+    if recovery_active:
+        session_continuity_state = "recovery_active"
+    elif active_session_count > 0:
+        session_continuity_state = "continuous"
+    elif total_session_count > 0 or participant_terminal_count > 0:
+        session_continuity_state = "incomplete"
+    elif android_attached:
+        session_continuity_state = "waiting_dependency"
+    else:
+        session_continuity_state = "not_applicable"
     task_continuity_confirmed = task_initiated and task_closed
     session_continuity_confirmed = (
         (not android_attached)
@@ -897,6 +894,8 @@ def _evaluate_result_closure(
     elif failed_explicitly:
         outcome = ClosureOutcome.FAILED
         degraded_reasons.append("explicit_failure")
+    # Defensive edge-case handling: result ingress may surface closure evidence
+    # before task-initiation evidence arrives (eventual-consistency race).
     elif task_closed and not task_initiated:
         outcome = ClosureOutcome.INCOMPLETE_WAITING
         degraded_reasons.append("task_continuity_missing_task_initiation")
@@ -933,6 +932,8 @@ def _evaluate_result_closure(
         degraded_reasons.append("session_continuity_unconfirmed")
     if outcome in _success_outcomes and not task_continuity_confirmed:
         degraded_reasons.append("task_continuity_unconfirmed")
+    if outcome == ClosureOutcome.SUCCESS_CANONICAL and degraded_reasons:
+        outcome = ClosureOutcome.SUCCESS_DEGRADED
 
     authoritative_closure = (
         outcome in _success_outcomes

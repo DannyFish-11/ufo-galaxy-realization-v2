@@ -702,6 +702,8 @@ class TestCanonicalClosure:
             result_closure_established=True,
             is_fully_closed=True,
             completion_ingress_confirmed=True,
+            participant_terminal_count=1,
+            participant_terminal_success_count=1,
         )
         assert state.result_closure.outcome == ClosureOutcome.SUCCESS_CANONICAL
 
@@ -752,7 +754,7 @@ class TestCanonicalClosure:
         )
         assert state.current_stage == LifecycleStage.RESULT_CLOSURE
 
-    def test_android_closure_not_authoritative_without_terminal_continuity(self) -> None:
+    def test_closure_requires_terminal_continuity(self) -> None:
         state = _build_state(
             android_device_count=1,
             capability_visible_count=1,
