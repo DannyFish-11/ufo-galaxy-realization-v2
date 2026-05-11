@@ -243,7 +243,14 @@ def _evaluate_main_chain_ingress(
         ingress_result=ingress_result,
     )
     accepted = _is_android_originated_main_chain_accepted(ingress_result)
-    reason = ingress_result.blocking_reason or "main_chain_not_accepted"
+    if ingress_result.blocking_reason:
+        reason = ingress_result.blocking_reason
+    else:
+        reason = (
+            "main_chain_not_accepted:"
+            f" lineage={ingress_result.lineage.value}"
+            f" gap_types={list(ingress_result.gap_types)}"
+        )
     return accepted, ingress_result.to_dict(), governance_context, reason
 
 
@@ -490,6 +497,7 @@ async def handle_goal_execution(
             trace_id=trace_id,
             runtime_session_id=runtime_session_id,
         ),
+        # Main-chain ingress acceptance evidence for governance/audit consumers.
         "android_governance_context": governance_context,
         "main_chain_ingress": ingress_result,
     }
@@ -805,6 +813,7 @@ async def handle_parallel_subtask(
                     runtime_session_id=runtime_session_id,
                     dispatch_lineage="parallel_fanout_dispatched",
                 ),
+                # Main-chain ingress acceptance evidence for governance/audit consumers.
                 "android_governance_context": governance_context,
                 "main_chain_ingress": ingress_result,
                 "message": f"Parallel task dispatched to {fanout_summary['fanout']} device(s)",
@@ -836,6 +845,7 @@ async def handle_parallel_subtask(
                 dispatch_lineage="single_device_fallback_dispatch",
                 lineage_quality=_LINEAGE_QUALITY_FALLBACK_SUCCESS,
             ),
+            # Main-chain ingress acceptance evidence for governance/audit consumers.
             "android_governance_context": governance_context,
             "main_chain_ingress": ingress_result,
         }

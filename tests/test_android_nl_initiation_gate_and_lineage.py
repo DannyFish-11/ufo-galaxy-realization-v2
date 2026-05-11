@@ -243,3 +243,46 @@ def test_parallel_subtask_blocked_when_main_chain_ingress_unavailable() -> None:
 
     assert result["error_code"] == "ANDROID_MAIN_CHAIN_INGRESS_REJECTED"
     assert result["details"]["lineage"]["dispatch_lineage"] == "blocked_by_main_chain_ingress"
+
+
+def test_goal_execution_blocked_when_main_chain_context_builder_unavailable() -> None:
+    msg = _build_goal_execution_message(task_id="task-2c")
+    fake_runtime = SimpleNamespace(
+        handle_request=AsyncMock(
+            return_value={
+                "success": True,
+                "response": "帮你打开微信",
+                "runtime_session_id": "runtime-2c",
+                "ingress_carrier_context": {
+                    "carrier": "android_goal_execution",
+                    "semantic_authority": "v2_openclawd",
+                    "nl_path_type": "android_cross_device_nl",
+                    "is_android_carrier": True,
+                },
+            }
+        )
+    )
+    with patch.object(ge, "_is_cross_device_enabled", lambda: True), patch.object(
+        ge,
+        "_evaluate_android_mode_readiness",
+        lambda **_: SimpleNamespace(is_dispatch_eligible=True, blocking_gates=[]),
+    ), patch.object(
+        ge,
+        "_evaluate_execution_governance",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            accepted=True,
+            blocking_gates=[],
+            rejection_reason="",
+            conflict=False,
+            active_conflicting_type=None,
+        ),
+    ), patch.object(
+        ge, "_build_android_originated_governance_context", None
+    ), patch(
+        "core.desktop_presence_runtime.get_desktop_presence_runtime",
+        return_value=fake_runtime,
+    ):
+        result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
+
+    assert result["error_code"] == "ANDROID_MAIN_CHAIN_INGRESS_REJECTED"
+    assert "main_chain_ingress_unavailable" in result["error_message"]
