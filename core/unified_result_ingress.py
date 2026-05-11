@@ -555,7 +555,14 @@ class UnifiedResultIngress:
                     event.task_id,
                     event.source_channel.value,
                 )
-            return True  # notify() ran without raising — that's success
+                return True
+            logger.warning(
+                "unified_result_ingress: completion ingress returned non-notified "
+                "task_id=%r source=%s",
+                event.task_id,
+                event.source_channel.value,
+            )
+            return False
         except Exception as _e:
             logger.debug(
                 "unified_result_ingress: completion ingress skipped (non-fatal): %s", _e
