@@ -117,3 +117,60 @@ bash scripts/quick_verify.sh
 ```
 
 If both pass, you have a confirmed local baseline for supported clone-to-use flow.
+
+---
+
+## 8) Unified registration prerequisites (PR993-aligned)
+
+The machine-checkable registration prerequisite validator confirms that all
+canonical modules required by the center-governed distributed intelligent agent
+system (PR993) are present before you start the backend:
+
+```python
+from core.operational_registration_path import validate_registration_prerequisites
+v = validate_registration_prerequisites()
+print(v.summary)
+# Expected: "Registration prerequisite validation PASSED: all 11 checks passed."
+# (or PASSED WITH WARNINGS if optional deps are absent)
+if v.failed_checks:
+    for c in v.failed_checks:
+        print(f"FAIL: {c.name} — {c.message}")
+    raise SystemExit(1)
+```
+
+Or to see the full operational registration path (all registration kinds,
+onboarding steps, and tier map):
+
+```python
+from core.operational_registration_path import get_operational_registration_path
+path = get_operational_registration_path()
+print(path.to_json())
+```
+
+### Registration tiers
+
+| Tier | What it covers |
+|------|---------------|
+| `main_chain` | Device canonical (UDM), capability registry, gateway WebSocket, unified governance, runtime subject shell, session/axis, device router |
+| `cross_device` | Android admission, Android state store, Android capability report, Android session participant, Android runtime host, dispatch binding, Android bridge |
+| `compat` | Legacy device index (DeviceRegistry) — layered over UDM, preserved for compatibility |
+
+### Key registration kinds and their canonical modules
+
+| Kind | Canonical module |
+|------|-----------------|
+| `device_canonical` | `core/unified/device_manager.py` (UDM — write SSOT) |
+| `device_android_admission` | `galaxy_gateway/android/handlers/registration.py` |
+| `device_android_state` | `core/android_device_state_store.py` |
+| `capability_registry` | `core/agent/capability_registry.py` |
+| `capability_android_report` | `galaxy_gateway/android/handlers/capability_report.py` |
+| `session_attached_runtime` | `core/attached_runtime_session_registry.py` (session SSOT) |
+| `session_android_participant` | `core/android_participant_session_state.py` |
+| `gateway_websocket` | `galaxy_gateway/routes/websocket.py` |
+| `gateway_device_router` | `galaxy_gateway/device_router.py` |
+| `governance_unified` | `core/unified_execution_governance.py` |
+| `runtime_subject` | `core/desktop_presence_runtime.py` |
+
+See `core/operational_registration_path.py` and
+`tests/test_operational_registration_path.py` for the machine-checkable
+implementation and full test coverage.
