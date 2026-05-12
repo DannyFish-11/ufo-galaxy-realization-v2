@@ -98,6 +98,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 import threading
 import time
 import uuid
@@ -106,6 +107,11 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 logger = logging.getLogger("Galaxy.ExecutableLifecycleHardening")
+
+
+def _new_transition_event_id() -> str:
+    return uuid.uuid4().hex
+
 
 # ---------------------------------------------------------------------------
 # Authority sentinels
@@ -451,7 +457,7 @@ class LifecycleTransitionEvent:
     from_state: Optional[str] = None
     to_state: Optional[str] = None
     evidence: Dict[str, Any] = field(default_factory=dict)
-    event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    event_id: str = field(default_factory=_new_transition_event_id)
     event_at: float = field(default_factory=time.time)
     sequence: int = 0
 
@@ -558,7 +564,14 @@ def _str(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
+# Keep only a bounded in-process lineage window to prevent unbounded memory
+# growth while preserving enough context for short-horizon operator/audit use.
+# 256 retains meaningful transition context for recent lifecycle evolution while
+# keeping per-subject memory small and predictable under high churn.
 _TRANSITION_HISTORY_MAX_EVENTS: int = 256
+_SESSION_CONTINUITY_BREAK_STATES: frozenset[str] = frozenset(
+    {"incomplete", "waiting_dependency", "not_applicable"}
+)
 _transition_history_lock = threading.Lock()
 _transition_history_by_subject: Dict[str, List[LifecycleTransitionEvent]] = {}
 _transition_last_snapshot_by_subject: Dict[str, Dict[str, Any]] = {}
@@ -589,7 +602,9 @@ def _derive_transition_subject_id(
             candidates.append(str(participant_id))
     if not candidates:
         return "subject:global"
-    return f"subject:{'|'.join(sorted(set(candidates)))}"
+    normalized = "|".join(sorted(set(candidates)))
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    return f"subject:{digest}"
 
 
 def _extract_active_path(system_acceptance: Dict[str, Any]) -> str:
@@ -774,9 +789,8 @@ def _build_transition_lineage(
                 )
 
             if previous["session_continuity_state"] != current_snapshot["session_continuity_state"]:
-                break_states = {"incomplete", "waiting_dependency", "not_applicable"}
                 resumed = (
-                    previous["session_continuity_state"] in break_states
+                    previous["session_continuity_state"] in _SESSION_CONTINUITY_BREAK_STATES
                     and current_snapshot["session_continuity_state"] == "continuous"
                 )
                 new_events.append(

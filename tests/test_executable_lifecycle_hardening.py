@@ -1082,10 +1082,12 @@ class TestStructuredTransitionEventLineage:
         assert "closure_succeeded" in by_transition
         assert "operator_intervention_recorded" in by_transition
         assert by_transition["closure_succeeded"]["cause"] == "closure_state_changed"
+        assert by_transition["closure_succeeded"]["from_state"] is not None
+        assert by_transition["closure_succeeded"]["evidence"]["closure_authoritative"] is True
         assert by_transition["closure_succeeded"]["to_state"] in {
-            "success_canonical",
-            "success_degraded",
-            "success_recovery",
+            ClosureOutcome.SUCCESS_CANONICAL.value,
+            ClosureOutcome.SUCCESS_DEGRADED.value,
+            ClosureOutcome.SUCCESS_RECOVERY.value,
         }
 
 
