@@ -586,10 +586,10 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             ownership_proof_quality: Dict[str, Any] = {}
             metadata_dict: Dict[str, Any] = dict(metadata or {})
             metadata_takeover_id = str(metadata_dict.get("takeover_id") or "")
-            metadata_takeover_conflict = bool(
+            has_metadata_takeover_conflict = bool(
                 takeover_id and metadata_takeover_id and metadata_takeover_id != takeover_id
             )
-            if metadata_takeover_conflict:
+            if has_metadata_takeover_conflict:
                 metadata_dict["metadata_takeover_id"] = metadata_takeover_id
             metadata_dict["takeover_id"] = takeover_id or metadata_takeover_id
 
@@ -702,7 +702,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
 
             accepted_effective = accepted
             takeover_gate_reasons = []
-            if metadata_takeover_conflict:
+            if has_metadata_takeover_conflict:
                 accepted_effective = False
                 takeover_gate_reasons.append("metadata_takeover_id_conflict")
             if accepted and not takeover_authority_permits:
