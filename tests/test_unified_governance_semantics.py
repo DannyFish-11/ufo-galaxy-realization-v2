@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from core.unified_governance_semantics import (
     GovernancePath,
+    UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,
     MESH_RUNTIME_STATUS_PARTIAL,
     MESH_RUNTIME_STATUS_RUNTIME_PROVEN,
     build_mesh_runtime_state,
@@ -570,3 +571,168 @@ def test_build_mesh_runtime_state_is_runtime_proven_after_staged_mesh_live_run()
     assert live_proof["staged_mesh_dispatch_count"] == 1
     assert live_proof["live_mesh_run_count"] == 1
     assert live_proof["last_mesh_session_id"] == "mesh_runtime_proof_session"
+
+
+def test_governance_policy_layer_hard_block_and_summary() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_cross")]
+    mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_cross": SimpleNamespace(
+            is_dispatch_eligible=True,
+            is_takeover_eligible=True,
+            is_cross_device_ready=True,
+        )
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+                "offline_queue_depth": 0,
+                "execution_busy": False,
+                "local_inference_available": False,
+                "runtime_health_status": "healthy",
+                "current_fallback_tier": None,
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ):
+        state = build_unified_governance_state()
+
+    policy = state["devices"][0]["governance_policy"]
+    assert policy["operation_state"] == "hard_block"
+    assert policy["automatic_decision"] == "block"
+    assert policy["dependency_classification"]["severity"] == "critical"
+    assert state["policy_layer"]["summary"]["hard_block_count"] == 1
+    assert state["policy_layer"]["_contract_version"] == UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION
+
+
+def test_governance_policy_layer_defer_requires_manual_review() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_cross")]
+    mode_map = {"dev_cross": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_cross": SimpleNamespace(
+            is_dispatch_eligible=True,
+            is_takeover_eligible=True,
+            is_cross_device_ready=True,
+        )
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_cross",
+                "active_execution_count": 0,
+                "highest_priority_execution_type": None,
+                "blocked_execution_types": [],
+                "offline_queue_depth": 0,
+                "execution_busy": False,
+                "local_inference_available": True,
+                "runtime_health_status": "healthy",
+                "current_fallback_tier": None,
+                "latest_execution_event_phase": "execution",
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    defer_gate = SimpleNamespace(
+        decision="defer",
+        reasons=["policy_defer_for_review"],
+        capability_ready=True,
+        android_capability_truth_degraded=False,
+    )
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
+        return_value=defer_gate,
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ):
+        state = build_unified_governance_state()
+
+    policy = state["devices"][0]["governance_policy"]
+    assert policy["operation_state"] == "soft_degraded"
+    assert policy["automatic_decision"] == "hold"
+    assert policy["manual_decision"] == "manual_review"
+    assert policy["retryability"]["deferral_eligible"] is True
+    assert policy["escalation"]["required"] is True
+
+
+def test_governance_policy_layer_handles_sparse_runtime_snapshot() -> None:
+    active_sessions = [SimpleNamespace(device_id="dev_sparse")]
+    mode_map = {"dev_sparse": SimpleNamespace(mode=SimpleNamespace(value="cross_device"))}
+    readiness_map = {
+        "dev_sparse": SimpleNamespace(
+            is_dispatch_eligible=True,
+            is_takeover_eligible=True,
+            is_cross_device_ready=True,
+        )
+    }
+    runtime_snapshot = {
+        "devices": [
+            {
+                "device_id": "dev_sparse",
+                "blocked_execution_types": [],
+            }
+        ],
+        "active_device_count": 0,
+        "active_execution_total_count": 0,
+    }
+
+    allow_gate = SimpleNamespace(
+        decision="allow",
+        reasons=["allow_sparse_runtime_shape"],
+        capability_ready=True,
+        android_capability_truth_degraded=False,
+    )
+
+    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
+        "core.android_mode_gate_policy.build_mode_state_for_device",
+        side_effect=lambda device_id: mode_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+        side_effect=lambda device_id: readiness_map[device_id],
+    ), patch(
+        "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
+        return_value=allow_gate,
+    ), patch(
+        "core.unified_execution_governance.is_takeover_active",
+        return_value=False,
+    ), patch(
+        "core.unified_execution_governance.get_execution_runtime_snapshot",
+        return_value=runtime_snapshot,
+    ):
+        state = build_unified_governance_state()
+
+    policy = state["devices"][0]["governance_policy"]
+    assert policy["policy_authoritative"] is True
+    assert policy["primary_path"] == "delegated_execution"
+    assert policy["closure_policy"]["quality_threshold"] == "below_minimum"

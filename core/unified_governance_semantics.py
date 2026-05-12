@@ -218,6 +218,59 @@ MESH_RUNTIME_PROOF_QUALITY_POLICY: str = (
     "the downstream effect on canonical decisions."
 )
 
+UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY: str = (
+    "UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY_V1: "
+    "policy-layer outcomes are derived from unified governance precedence and "
+    "decision causality, and are authoritative for hard-block vs degraded "
+    "operation, minimum viable access, retry/resume/recovery eligibility, "
+    "closure acceptability thresholds, and automatic/manual action routing."
+)
+UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION: str = "1.0.0"
+_POLICY_HARD_BLOCK_REASONS: frozenset[str] = frozenset(
+    {
+        "canonical_execution_gate:deny",
+        "dispatch_gate",
+        "takeover_gate",
+        "unknown_mode",
+        "execution_runtime_blocked:goal_execution",
+    }
+)
+_POLICY_RESUMABLE_PHASES: frozenset[str] = frozenset({"planning", "manifest", "execution"})
+_POLICY_INVALID_RECOVERY_QUALITIES: frozenset[str] = frozenset({"", "none", "missing", "not_provided"})
+_POLICY_ESCALATION_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
+_POLICY_ESCALATION_MANUAL_DECISIONS: frozenset[str] = frozenset({"manual_review", "suspend"})
+_POLICY_AUTOMATIC_BLOCK = "block"
+_POLICY_AUTOMATIC_HOLD = "hold"
+_POLICY_AUTOMATIC_ALLOW_DEGRADED = "allow_degraded"
+_POLICY_AUTOMATIC_ALLOW = "allow"
+_POLICY_MANUAL_SUSPEND = "suspend"
+_POLICY_MANUAL_REVIEW = "manual_review"
+_POLICY_MANUAL_OVERRIDE_ELIGIBLE = "override_eligible"
+_POLICY_MANUAL_NONE = "none"
+_POLICY_SEVERITY_CRITICAL = "critical"
+_POLICY_SEVERITY_HIGH = "high"
+_POLICY_SEVERITY_MEDIUM = "medium"
+_POLICY_SEVERITY_LOW = "low"
+_POLICY_CLOSURE_MEETS_CANONICAL = "meets_canonical"
+_POLICY_CLOSURE_MEETS_MINIMUM = "meets_minimum"
+_POLICY_CLOSURE_BELOW_MINIMUM = "below_minimum"
+
+
+def _is_hard_block_reason(blocked_by: str) -> bool:
+    normalized = str(blocked_by or "").strip()
+    return normalized in _POLICY_HARD_BLOCK_REASONS or normalized.startswith("mesh_proof_quality:")
+
+
+def _has_recovery_truth_quality(recovery_truth_quality: str) -> bool:
+    return str(recovery_truth_quality or "").strip().lower() not in _POLICY_INVALID_RECOVERY_QUALITIES
+
+
+def _is_resumable_state(*, latest_phase: str, recovery_truth_quality: str) -> bool:
+    """Resumable when there is active execution phase or recovery truth allows replay."""
+    return latest_phase in _POLICY_RESUMABLE_PHASES or (
+        _has_recovery_truth_quality(recovery_truth_quality)
+    )
+
 
 class GovernancePath(str, Enum):
     local_planning = "local_planning"
@@ -979,6 +1032,175 @@ def resolve_governance_path_decision(
     )
 
 
+def _derive_device_policy_outcome(
+    *,
+    mode: str,
+    takeover_active: bool,
+    paths: Dict[str, Dict[str, Any]],
+    runtime_state_for_device: Dict[str, Any],
+    canonical_truth_basis: Dict[str, Any],
+    android_evidence_integration: Dict[str, Any],
+    ownership_transfer_proof_sufficient: bool,
+    ownership_transfer_proof_degraded: bool,
+    mesh_governance_readiness_impact: str,
+) -> Dict[str, Any]:
+    """Derive executable governance-policy outcomes from unified governance state.
+
+    Parameters are pulled from the already-derived unified model:
+    mode/path-precedence facts, runtime causality snapshot, canonical truth basis,
+    recovery/closure evidence, and mesh readiness impact.
+
+    Returns a policy contract dictionary containing authoritative operation class,
+    automatic vs manual decisions, minimum-access/retry/recovery/closure semantics,
+    dependency severity, escalation, and policy metadata.
+    """
+    if mode == "local":
+        primary_path = "local_execution"
+    elif takeover_active:
+        primary_path = "takeover"
+    else:
+        primary_path = "delegated_execution"
+    primary_decision = dict(paths.get(primary_path, {}))
+    blocked_by = str(primary_decision.get("blocked_by") or "").strip()
+    eligible = bool(primary_decision.get("eligible", False))
+
+    hard_block = _is_hard_block_reason(blocked_by)
+    deferred = blocked_by == "canonical_execution_gate:defer"
+
+    runtime_health_status = str(runtime_state_for_device.get("runtime_health_status") or "").strip().lower()
+    freshness_state = str(
+        canonical_truth_basis.get("canonical_truth_freshness_state") or ""
+    ).strip().lower()
+    integration_allowed = bool(android_evidence_integration.get("integration_allowed", False))
+    recovery_truth_quality = str(
+        android_evidence_integration.get("recovery_truth_quality") or ""
+    ).strip().lower()
+    recovery_truth_degraded = bool(android_evidence_integration.get("recovery_truth_degraded", False))
+    degraded_signals = (
+        runtime_health_status == "degraded"
+        or freshness_state == "stale"
+        or recovery_truth_degraded
+        or ownership_transfer_proof_degraded
+        or mesh_governance_readiness_impact != "none"
+    )
+
+    if hard_block:
+        operation_state = "hard_block"
+        automatic_decision = _POLICY_AUTOMATIC_BLOCK
+    elif deferred or (not eligible):
+        operation_state = "soft_degraded"
+        automatic_decision = _POLICY_AUTOMATIC_HOLD
+    elif degraded_signals:
+        operation_state = "soft_degraded"
+        automatic_decision = _POLICY_AUTOMATIC_ALLOW_DEGRADED
+    else:
+        operation_state = "admissible"
+        automatic_decision = _POLICY_AUTOMATIC_ALLOW
+
+    minimum_viable_access_met = eligible and not hard_block
+    retryable = blocked_by not in {"unknown_mode", "local_mode_boundary"}
+    latest_phase = str(runtime_state_for_device.get("latest_execution_event_phase") or "").strip().lower()
+    resumable = _is_resumable_state(
+        latest_phase=latest_phase,
+        recovery_truth_quality=recovery_truth_quality,
+    )
+    recovery_eligible = operation_state != "admissible" and (
+        _has_recovery_truth_quality(recovery_truth_quality)
+    )
+
+    closure_acceptable = (
+        ownership_transfer_proof_sufficient
+        and integration_allowed
+        and freshness_state != "stale"
+    )
+    if closure_acceptable and not degraded_signals:
+        closure_quality_threshold = _POLICY_CLOSURE_MEETS_CANONICAL
+    elif closure_acceptable:
+        closure_quality_threshold = _POLICY_CLOSURE_MEETS_MINIMUM
+    else:
+        closure_quality_threshold = _POLICY_CLOSURE_BELOW_MINIMUM
+
+    if hard_block:
+        dependency_severity = _POLICY_SEVERITY_CRITICAL
+    elif automatic_decision == _POLICY_AUTOMATIC_HOLD:
+        dependency_severity = _POLICY_SEVERITY_HIGH
+    elif operation_state == "soft_degraded":
+        dependency_severity = _POLICY_SEVERITY_MEDIUM
+    else:
+        dependency_severity = _POLICY_SEVERITY_LOW
+
+    if hard_block:
+        manual_decision = _POLICY_MANUAL_REVIEW if retryable else _POLICY_MANUAL_SUSPEND
+    elif automatic_decision == _POLICY_AUTOMATIC_HOLD:
+        manual_decision = _POLICY_MANUAL_REVIEW
+    elif not closure_acceptable:
+        manual_decision = _POLICY_MANUAL_OVERRIDE_ELIGIBLE
+    else:
+        manual_decision = _POLICY_MANUAL_NONE
+
+    escalation_required = (
+        dependency_severity in _POLICY_ESCALATION_SEVERITIES
+        or manual_decision in _POLICY_ESCALATION_MANUAL_DECISIONS
+    )
+    escalation_level = (
+        "immediate"
+        if dependency_severity == _POLICY_SEVERITY_CRITICAL
+        else "operator_review" if escalation_required else "none"
+    )
+
+    reasons: List[str] = []
+    if blocked_by:
+        reasons.append(f"blocked_by:{blocked_by}")
+    if runtime_health_status:
+        reasons.append(f"runtime_health_status:{runtime_health_status}")
+    if freshness_state:
+        reasons.append(f"canonical_truth_freshness_state:{freshness_state}")
+    if str(mesh_governance_readiness_impact or "").strip() and mesh_governance_readiness_impact != "none":
+        reasons.append(f"mesh_readiness_impact:{mesh_governance_readiness_impact}")
+    if str(recovery_truth_quality or "").strip():
+        reasons.append(f"recovery_truth_quality:{recovery_truth_quality}")
+
+    return {
+        "policy_authoritative": True,
+        "operation_state": operation_state,
+        "primary_path": primary_path,
+        "automatic_decision": automatic_decision,
+        "manual_decision": manual_decision,
+        "minimum_viable_access": {
+            "met": minimum_viable_access_met,
+            "authoritative_stage": "admission",
+        },
+        "retryability": {
+            "retryable": retryable,
+            "resumable": resumable,
+            "deferral_eligible": automatic_decision == _POLICY_AUTOMATIC_HOLD,
+        },
+        "recovery_eligibility": {
+            "eligible": recovery_eligible,
+            "mode": "automatic" if recovery_eligible and manual_decision == _POLICY_MANUAL_NONE else "manual",
+        },
+        "closure_policy": {
+            "acceptable": closure_acceptable,
+            "quality_threshold": closure_quality_threshold,
+            "authoritative_stage": "closure",
+        },
+        "dependency_classification": {
+            "severity": dependency_severity,
+            "reasons": reasons,
+        },
+        "escalation": {
+            "required": escalation_required,
+            "level": escalation_level,
+            "defer_allowed": (
+                dependency_severity == _POLICY_SEVERITY_MEDIUM
+                or automatic_decision == _POLICY_AUTOMATIC_HOLD
+            ),
+        },
+        "_policy": UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY,
+        "_contract_version": UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,
+    }
+
+
 def build_unified_governance_state(
     device_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
@@ -1093,6 +1315,7 @@ def build_unified_governance_state(
     )
 
     devices: List[Dict[str, Any]] = []
+    policy_devices: List[Dict[str, Any]] = []
     local_mode_count = 0
     cross_device_mode_count = 0
     takeover_active_count = 0
@@ -1479,10 +1702,37 @@ def build_unified_governance_state(
                 "runtime_execution_state": runtime_state_for_device,
                 "android_evidence_integration": android_evidence_integration,
                 "android_originated_canonical_diagnosis": android_originated_canonical_diagnosis,
+                "governance_policy": _derive_device_policy_outcome(
+                    mode=mode,
+                    takeover_active=takeover_active,
+                    paths=paths,
+                    runtime_state_for_device=runtime_state_for_device,
+                    canonical_truth_basis=canonical_truth_basis,
+                    android_evidence_integration=android_evidence_integration,
+                    ownership_transfer_proof_sufficient=ownership_transfer_proof_sufficient,
+                    ownership_transfer_proof_degraded=ownership_transfer_proof_degraded,
+                    mesh_governance_readiness_impact=mesh_governance_readiness_impact,
+                ),
                 "governance_precedence": paths,
                 "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
             }
         )
+        policy_devices.append(
+            {
+                "device_id": device_id,
+                "policy_outcome": devices[-1]["governance_policy"],
+            }
+        )
+
+    hard_block_count = sum(
+        1 for item in policy_devices if item["policy_outcome"].get("operation_state") == "hard_block"
+    )
+    soft_degraded_count = sum(
+        1 for item in policy_devices if item["policy_outcome"].get("operation_state") == "soft_degraded"
+    )
+    manual_decision_count = sum(
+        1 for item in policy_devices if item["policy_outcome"].get("manual_decision") != "none"
+    )
 
     return {
         "devices": devices,
@@ -1491,6 +1741,17 @@ def build_unified_governance_state(
         "takeover_active_count": takeover_active_count,
         "execution_runtime_state": execution_runtime_state,
         "mesh_runtime_state": mesh_runtime_state,
+        "policy_layer": {
+            "devices": policy_devices,
+            "summary": {
+                "hard_block_count": hard_block_count,
+                "soft_degraded_count": soft_degraded_count,
+                "manual_decision_count": manual_decision_count,
+            },
+            "_policy": UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY,
+            "_contract_version": UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,
+            "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
+        },
         "authority": "v2_semantic_orchestration_authority",
         "_source": UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY,
         "_contract_version": UNIFIED_GOVERNANCE_SEMANTICS_CONTRACT_VERSION,
@@ -1514,6 +1775,8 @@ __all__ = [
     "MESH_RUNTIME_PROOF_QUALITY_MISSING",
     "MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS",
     "MESH_RUNTIME_PROOF_QUALITY_POLICY",
+    "UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY",
+    "UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION",
     "ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_CONTRACT_VERSION",
     "ANDROID_ORIGINATED_CANONICAL_DIAGNOSIS_POLICY",
     "build_mesh_runtime_state",
