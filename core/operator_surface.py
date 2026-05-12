@@ -1842,7 +1842,7 @@ class OperatorSurface:
             OperatorActionKind,
             OperatorActionResult,
             OPERATOR_ACTION_ENTRY_MODE,
-            build_operator_action_result_from_runtime_result as _build_result_from_runtime_result,
+            build_operator_action_result_from_runtime_result as build_result_from_runtime_result,
         )
 
         action_kind = request.action_kind
@@ -1914,7 +1914,7 @@ class OperatorSurface:
                 rr.setdefault("operator_action_layer_policy", OPERATOR_ACTION_LAYER_POLICY)
                 rr.setdefault("control_mode", action_policy.get("control_mode", "manual"))
                 rr.setdefault("approval_gated", action_policy.get("requires_approval", False))
-                return _build_result_from_runtime_result(
+                return build_result_from_runtime_result(
                     action_kind=action_kind,
                     runtime_result=rr,
                 )
