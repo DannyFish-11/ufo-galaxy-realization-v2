@@ -11,6 +11,7 @@
 
 | 文件 | 日期 | 内容 |
 |------|------|------|
+| [ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md](./ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md) | 2026-05-12 | **Follow-up 审计基线**：回答 Android 从 local-only 到跨设备/分布式参与的真实代码条件与缺口 |
 | [PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md](./PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md) | 2026-05-12 | **预实施基线文档**：严格区分真实运行路径、推断关系与契约/审计层 |
 | [DEEP_JOINT_REVIEW_2026.md](./DEEP_JOINT_REVIEW_2026.md) | 2026-04-26 | **深度联合审查主文档**（8 主题全覆盖，含问题全集与 workstream 优先级）|
 | [01_system_positioning.md](./01_system_positioning.md) | 2026-04-24 | 系统整体定位：从真实代码反推系统是什么 |
