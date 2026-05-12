@@ -5,7 +5,7 @@ from core.nl_execution_spine import (
 )
 
 
-def test_build_problem_execution_spine_marks_cross_device_android_participation():
+def test_spine_cross_device_android_participation():
     snap = build_problem_execution_spine(
         message="帮我在手机上打开微信并回复",
         source="chat",
@@ -45,3 +45,19 @@ def test_build_problem_execution_closure_separates_task_and_problem_closure():
         payload={"task_id": "t-1", "problem_closed": True},
     )
     assert closed_problem["problem_closure_stage"] == "closed"
+
+
+def test_spine_goal_truncation_handles_multibyte_chars():
+    long_message = "你好" * 200
+    snap = build_problem_execution_spine(
+        message=long_message,
+        source="chat",
+        entry_mode="local",
+        metadata={"execution_path": "local"},
+        execution_result={"execution_intent": {}},
+        intent="goal_execution",
+    )
+    goal = snap["nl_problem_model"]["goal"]
+    assert goal.startswith("goal_execution:")
+    assert goal.endswith("…")
+    goal.encode("utf-8")

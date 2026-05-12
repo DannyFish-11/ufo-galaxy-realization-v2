@@ -19,6 +19,10 @@ from typing import Any, Dict, Optional
 
 NL_EXECUTION_SPINE_CONTRACT_VERSION = "pr2.1.0.0"
 
+# Cross-repo Android runtime anchors required to complete delegated/takeover
+# participation semantics in the dual-repo execution spine.
+# These are maintained as explicit touch-points so V2 runtime metadata can
+# reference concrete Android code locations that must evolve in lockstep.
 ANDROID_RUNTIME_INTEGRATION_POINTS = (
     "ufo-galaxy-android/agent/HandoffEnvelopeV2.kt",
     "ufo-galaxy-android/agent/DelegatedRuntimeUnit.kt",
@@ -27,6 +31,8 @@ ANDROID_RUNTIME_INTEGRATION_POINTS = (
     "ufo-galaxy-android/network/GalaxyWebSocketClient.kt",
     "ufo-galaxy-android/agent/DelegatedTakeoverExecutor.kt",
 )
+# Keep goal summaries compact in metadata/projection payloads.
+_MAX_GOAL_TEXT_LEN = 240
 
 
 def build_problem_execution_spine(
@@ -134,10 +140,18 @@ def _derive_goal(
     intent: Optional[str],
     execution_intent: Optional[Dict[str, Any]],
 ) -> str:
+    _safe_message = _truncate_text((message or "").strip())
     if execution_intent:
         target = execution_intent.get("target_ref")
         if target:
             return str(target)
     if intent and intent != "chat":
-        return f"{intent}:{message}"
-    return message
+        return f"{intent}:{_safe_message}"
+    return _safe_message
+
+
+def _truncate_text(text: str) -> str:
+    if len(text) <= _MAX_GOAL_TEXT_LEN:
+        return text
+    trimmed = text.encode("utf-8")[:_MAX_GOAL_TEXT_LEN].decode("utf-8", errors="ignore").rstrip()
+    return f"{trimmed}…"

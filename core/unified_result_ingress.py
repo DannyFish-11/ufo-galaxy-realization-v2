@@ -639,9 +639,14 @@ class UnifiedResultIngress:
                 payload=event.payload,
             )
         except Exception as _err:
-            logger.debug(
-                "unified_result_ingress: problem_execution_closure build skipped (non-fatal): %s",
+            logger.warning(
+                "unified_result_ingress: problem_execution_closure build skipped "
+                "(non-fatal) task_id=%r source=%s err_type=%s err=%s",
+                event.task_id,
+                event.source_channel.value,
+                type(_err).__name__,
                 _err,
+                exc_info=True,
             )
             return {}
 
