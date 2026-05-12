@@ -20,7 +20,6 @@ PR-3: Operator Control-Plane Activation — tests proving:
 from __future__ import annotations
 
 import asyncio
-import time
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -91,6 +90,11 @@ class TestOperatorActionContract:
         assert OperatorActionKind.dispatch.value == "dispatch"
         assert OperatorActionKind.device_dispatch.value == "device_dispatch"
         assert OperatorActionKind.flow_cancel.value == "flow_cancel"
+        assert OperatorActionKind.retry_admission.value == "retry_admission"
+        assert (
+            OperatorActionKind.escalate_dependency_failure.value
+            == "escalate_dependency_failure"
+        )
 
     def test_operator_action_request_defaults(self):
         req = OperatorActionRequest()
@@ -317,6 +321,57 @@ class TestOperatorActionEndpoint:
             data = resp.json()
             assert "authority" in data
 
+    def test_approval_gated_action_without_token_rejected(self, client):
+        resp = client.post(
+            "/api/v1/operator/action",
+            json={"action_kind": "escalate_dependency_failure"},
+        )
+        assert resp.status_code in (200, 422)
+        data = resp.json()
+        assert data.get("accepted") is False
+        assert "approval_token" in str(data.get("error", ""))
+
+    def test_approval_gated_action_with_token_accepts_when_state_allows(self):
+        from core.operator_surface import OperatorSurface
+        import unittest.mock as mock
+
+        surface = OperatorSurface()
+        req = OperatorActionRequest(
+            action_kind=OperatorActionKind.escalate_dependency_failure.value,
+            approval_token="approve-1",
+        )
+        mock_availability = {
+            "actions": {
+                OperatorActionKind.escalate_dependency_failure.value: {
+                    "available": True,
+                    "control_mode": "approval_gated",
+                    "requires_approval": True,
+                }
+            },
+            "state_basis": {},
+        }
+        with mock.patch.object(
+            surface,
+            "get_operator_action_availability",
+            return_value=mock_availability,
+        ):
+            result = asyncio.get_event_loop().run_until_complete(
+                surface.execute_operator_action(req)
+            )
+        assert result.accepted is True
+        assert result.runtime_result.get("disposition") == "governed_intervention_recorded"
+
+
+class TestOperatorActionAvailabilityEndpoint:
+    def test_actions_availability_endpoint_exists(self, client):
+        resp = client.get("/api/v1/operator/actions/availability")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "actions" in data
+        assert "mode_legend" in data
+        action = data["actions"].get("retry_admission", {})
+        assert action.get("control_mode") in {"automatic", "manual", "approval_gated"}
+
 
 # ===========================================================================
 # Section 4: POST /api/v1/operator/dispatch (convenience endpoint)
@@ -395,7 +450,6 @@ class TestOperatorFlowCancelEndpoint:
         """When a real flow exists, cancellation should be accepted."""
         from core.delegated_flow_entity import (
             create_delegated_flow_entity,
-            record_delegated_flow,
             get_delegated_flow_entity_runtime,
             DelegatedFlowSignal,
             advance_flow_phase,
