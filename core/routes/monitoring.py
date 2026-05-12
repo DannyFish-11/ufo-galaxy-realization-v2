@@ -27,7 +27,7 @@ Routes owned by this module:
 import logging
 import time as _time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
@@ -150,7 +150,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # PR-I: Operational SLO metrics JSON endpoint
     @router.get("/api/v1/slo/operational")
-    async def operational_slo_metrics():
+    async def operational_slo_metrics(request: Request):
         """Operational SLO metrics JSON endpoint (PR-I).
 
         Returns a JSON snapshot of runtime orchestration counters so
@@ -158,6 +158,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         rejection, startup recovery scan, and durable-audit persistence
         outcomes without ad-hoc log inspection.
         """
+        try:
+            from core.operational_readiness_surface import (  # noqa: PLC0415
+                build_operational_readiness_report,
+                collect_app_route_paths,
+            )
+
+            report = build_operational_readiness_report(
+                route_paths=collect_app_route_paths(request.app)
+            )
+            from core.operational_slo_metrics import get_operational_slo_metrics  # noqa: PLC0415
+            ops = get_operational_slo_metrics()
+            ops.ingest_unified_state_contract(report.state_contract)
+            return JSONResponse(ops.snapshot())
+        except Exception:
+            # Fall back to raw counters to keep endpoint robust under partial
+            # runtime wiring failures.
+            pass
         from core.operational_slo_metrics import get_operational_slo_metrics
         return JSONResponse(get_operational_slo_metrics().snapshot())
 
