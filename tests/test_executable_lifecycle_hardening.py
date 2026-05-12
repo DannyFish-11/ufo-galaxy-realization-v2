@@ -38,7 +38,7 @@ Z. Contract version sentinel format.
 from __future__ import annotations
 
 import json
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import pytest
 
@@ -56,6 +56,9 @@ from core.executable_lifecycle_hardening import (
     TaskInitiationGateResult,
     build_executable_lifecycle_state,
 )
+
+if TYPE_CHECKING:
+    from core.v2_unified_state_contract import V2UnifiedStateContract
 
 
 # ---------------------------------------------------------------------------
@@ -1094,7 +1097,7 @@ class TestStructuredTransitionEventLineage:
 class TestV2UnifiedStateContractIntegration:
     """Verify lifecycle_hardening is populated in V2UnifiedStateContract."""
 
-    def _build_contract(self):
+    def _build_contract(self) -> "V2UnifiedStateContract":
         from core.operational_registration_path import (
             OnboardingValidation,
             PrerequisiteCheck,
