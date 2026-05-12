@@ -460,18 +460,47 @@ class OperationalSLOMetrics:
 
         The ingestion is idempotent per subject + transition sequence:
         transition events that were already processed are ignored.
+
+        Expected minimal payload shape::
+
+            {
+              "raw_signals": {...},
+              "derived_state": {
+                "cross_device_availability": {"state": "..."}
+              },
+              "closure_quality_state": {
+                "success_quality": {"state": "..."},
+                "verdict_quality": {"state": "..."}
+              },
+              "lifecycle_hardening": {
+                "lifecycle_blocked": bool,
+                "task_initiation_gate": {"blocking_gates": [...]},
+                "transition_lineage": {
+                  "subject_id": "...",
+                  "latest_sequence": int,
+                  "events": [{"sequence": int, "transition": "...", ...}]
+                }
+              }
+            }
         """
         if not isinstance(state_contract, dict):
             return
 
         lifecycle = state_contract.get("lifecycle_hardening") or {}
-        if not isinstance(lifecycle, dict) or lifecycle.get("error"):
+        if not isinstance(lifecycle, dict) or "error" in lifecycle:
             return
+
+        def _decision_state(container: Dict[str, Any], key: str) -> str:
+            value = container.get(key)
+            if isinstance(value, dict):
+                return str(value.get("state") or "")
+            return ""
 
         transition_lineage = lifecycle.get("transition_lineage") or {}
         if not isinstance(transition_lineage, dict):
             transition_lineage = {}
-        subject_id = str(transition_lineage.get("subject_id") or "subject:global")
+        # Fallback subject captures identifier-missing lineage.
+        subject_id = str(transition_lineage.get("subject_id") or "subject:missing_identifier")
         latest_sequence = int(transition_lineage.get("latest_sequence") or 0)
         events = transition_lineage.get("events") or []
         if not isinstance(events, list):
@@ -495,14 +524,12 @@ class OperationalSLOMetrics:
             closure_quality_state = state_contract.get("closure_quality_state") or {}
 
             if isinstance(raw_signals, dict) and isinstance(derived_state, dict):
-                cross_device_decision = (
-                    (derived_state.get("cross_device_availability") or {}).get("state")
-                    if isinstance(derived_state.get("cross_device_availability"), dict)
-                    else None
+                cross_device_decision = _decision_state(
+                    derived_state, "cross_device_availability"
                 )
                 expected_cross_device = bool(
-                    raw_signals.get("android_attached")
-                    and raw_signals.get("capability_visible")
+                    raw_signals.get("android_attached") is True
+                    and raw_signals.get("capability_visible") is True
                     and int(raw_signals.get("active_session_count", 0)) > 0
                 )
                 observed_cross_device = cross_device_decision == "available"
@@ -511,16 +538,8 @@ class OperationalSLOMetrics:
                     self._cross_device_consistency_success_total += 1
 
             if isinstance(closure_quality_state, dict):
-                quality_state = (
-                    (closure_quality_state.get("success_quality") or {}).get("state")
-                    if isinstance(closure_quality_state.get("success_quality"), dict)
-                    else None
-                )
-                verdict_state = (
-                    (closure_quality_state.get("verdict_quality") or {}).get("state")
-                    if isinstance(closure_quality_state.get("verdict_quality"), dict)
-                    else None
-                )
+                quality_state = _decision_state(closure_quality_state, "success_quality")
+                verdict_state = _decision_state(closure_quality_state, "verdict_quality")
                 if quality_state:
                     self._quality_distribution[str(quality_state)] = (
                         self._quality_distribution.get(str(quality_state), 0) + 1
@@ -545,12 +564,15 @@ class OperationalSLOMetrics:
 
             previous_sequence = int(self._unified_last_sequence_by_subject.get(subject_id, 0))
             new_events = []
+            max_new_sequence = 0
             for event in events:
                 if not isinstance(event, dict):
                     continue
                 seq = int(event.get("sequence") or 0)
                 if seq > previous_sequence:
                     new_events.append(event)
+                    if seq > max_new_sequence:
+                        max_new_sequence = seq
 
             for event in new_events:
                 transition = str(event.get("transition") or "")
@@ -561,12 +583,11 @@ class OperationalSLOMetrics:
                     subject_state["initialized_at"] = event_at
 
                 if transition.startswith("admission_"):
-                    if to_state:
-                        self._admission_total += 1
-                        if to_state in {"admitted", "admitted_degraded"}:
-                            self._admission_success_total += 1
-                        elif to_state in {"denied", "blocked"}:
-                            self._admission_failure_total += 1
+                    self._admission_total += 1
+                    if to_state in {"admitted", "admitted_degraded"}:
+                        self._admission_success_total += 1
+                    elif to_state in {"denied", "blocked"}:
+                        self._admission_failure_total += 1
 
                 if transition == "readiness_changed" and to_state == "ready":
                     if subject_state.get("readiness_ready_at") is None:
@@ -579,7 +600,9 @@ class OperationalSLOMetrics:
 
                 if transition == "task_initiated":
                     self._task_initiation_total += 1
-                    subject_state["pending_initiations"] = int(subject_state.get("pending_initiations", 0)) + 1
+                    subject_state["pending_initiations"] = (
+                        subject_state.get("pending_initiations", 0) + 1
+                    )
                     readiness_ready_at = subject_state.get("readiness_ready_at")
                     if isinstance(readiness_ready_at, (int, float)) and event_at >= readiness_ready_at:
                         self._task_initiation_latency_count += 1
@@ -595,7 +618,7 @@ class OperationalSLOMetrics:
 
                 if transition in {"continuity_changed", "continuity_resumed"}:
                     self._session_continuity_events_total += 1
-                    if transition != "continuity_resumed" and to_state in {
+                    if transition == "continuity_changed" and to_state in {
                         "incomplete",
                         "waiting_dependency",
                         "not_applicable",
@@ -614,7 +637,7 @@ class OperationalSLOMetrics:
                     self._closure_outcome_distribution[to_state] = (
                         self._closure_outcome_distribution.get(to_state, 0) + 1
                     )
-                    pending = int(subject_state.get("pending_initiations", 0))
+                    pending = subject_state.get("pending_initiations", 0)
                     if pending > 0:
                         subject_state["pending_initiations"] = pending - 1
                         if to_state in {
@@ -626,10 +649,8 @@ class OperationalSLOMetrics:
                     if to_state in {"success_canonical", "success_degraded", "success_recovery"}:
                         self._closure_completed_total += 1
                         if subject_state.get("awaiting_path_switch_outcome"):
-                            quality_state = (
-                                (closure_quality_state.get("success_quality") or {}).get("state")
-                                if isinstance(closure_quality_state.get("success_quality"), dict)
-                                else ""
+                            quality_state = _decision_state(
+                                closure_quality_state, "success_quality"
                             )
                             quality_key = str(quality_state or to_state)
                             self._path_switch_outcome_quality_distribution[quality_key] = (
@@ -641,7 +662,7 @@ class OperationalSLOMetrics:
             self._unified_last_sequence_by_subject[subject_id] = max(
                 previous_sequence,
                 latest_sequence,
-                max((int(event.get("sequence") or 0) for event in new_events), default=0),
+                max_new_sequence,
             )
 
     # ------------------------------------------------------------------
@@ -941,12 +962,6 @@ class OperationalSLOMetrics:
                 "model_alignment": {
                     "uses_unified_state_contract": True,
                     "uses_lifecycle_hardening": True,
-                    "health_buckets": {
-                        "healthy": "success_canonical + non-degraded readiness",
-                        "degraded": "success_degraded / degraded transitions",
-                        "blocked": "lifecycle_blocked + unresolved blockers",
-                        "closure_quality": "success_quality + verdict_quality distributions",
-                    },
                 },
             },
         }

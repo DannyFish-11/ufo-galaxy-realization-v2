@@ -944,6 +944,11 @@ class TestHttpEndpoints(unittest.TestCase):
 
 
 class TestUnifiedReliabilityView(unittest.TestCase):
+    _INIT_EVENT_AT = 1000.0
+    _READINESS_EVENT_AT = 1002.0
+    _TASK_INIT_EVENT_AT = 1004.0
+    _EXPECTED_LATENCY_MS = 2000.0
+
     def _fresh(self):
         from core.operational_slo_metrics import OperationalSLOMetrics
         return OperationalSLOMetrics()
@@ -969,40 +974,60 @@ class TestUnifiedReliabilityView(unittest.TestCase):
                     "subject_id": "subject:android-1",
                     "latest_sequence": 10,
                     "events": [
-                        {"sequence": 1, "transition": "lifecycle_initialized", "event_at": 1000.0},
+                        {
+                            "sequence": 1,
+                            "transition": "lifecycle_initialized",
+                            "event_at": self._INIT_EVENT_AT,
+                        },
                         {
                             "sequence": 2,
                             "transition": "admission_granted",
                             "to_state": "admitted",
-                            "event_at": 1001.0,
+                            "event_at": self._INIT_EVENT_AT + 1.0,
                         },
                         {
                             "sequence": 3,
                             "transition": "readiness_changed",
                             "to_state": "ready",
-                            "event_at": 1002.0,
+                            "event_at": self._READINESS_EVENT_AT,
                         },
-                        {"sequence": 4, "transition": "task_initiated", "event_at": 1004.0},
-                        {"sequence": 5, "transition": "path_switched", "event_at": 1004.5},
+                        {
+                            "sequence": 4,
+                            "transition": "task_initiated",
+                            "event_at": self._TASK_INIT_EVENT_AT,
+                        },
+                        {
+                            "sequence": 5,
+                            "transition": "path_switched",
+                            "event_at": self._TASK_INIT_EVENT_AT + 0.5,
+                        },
                         {
                             "sequence": 6,
                             "transition": "operator_intervention_recorded",
-                            "event_at": 1005.0,
+                            "event_at": self._TASK_INIT_EVENT_AT + 1.0,
                         },
                         {
                             "sequence": 7,
                             "transition": "continuity_changed",
                             "to_state": "waiting_dependency",
-                            "event_at": 1005.5,
+                            "event_at": self._TASK_INIT_EVENT_AT + 1.5,
                         },
-                        {"sequence": 8, "transition": "recovery_started", "event_at": 1006.0},
+                        {
+                            "sequence": 8,
+                            "transition": "recovery_started",
+                            "event_at": self._TASK_INIT_EVENT_AT + 2.0,
+                        },
                         {
                             "sequence": 9,
                             "transition": "closure_succeeded",
                             "to_state": "success_canonical",
-                            "event_at": 1008.0,
+                            "event_at": self._TASK_INIT_EVENT_AT + 4.0,
                         },
-                        {"sequence": 10, "transition": "recovery_completed", "event_at": 1008.5},
+                        {
+                            "sequence": 10,
+                            "transition": "recovery_completed",
+                            "event_at": self._TASK_INIT_EVENT_AT + 4.5,
+                        },
                     ],
                 },
             },
@@ -1016,8 +1041,14 @@ class TestUnifiedReliabilityView(unittest.TestCase):
         self.assertAlmostEqual(unified["admission"]["success_rate"], 1.0)
         self.assertAlmostEqual(unified["admission"]["failure_rate"], 0.0)
         self.assertAlmostEqual(unified["readiness"]["attainment_rate"], 1.0)
-        self.assertAlmostEqual(unified["readiness"]["latency_avg_ms"], 2000.0)
-        self.assertAlmostEqual(unified["task_initiation"]["latency_avg_ms"], 2000.0)
+        # Event timestamps are in seconds. readiness latency:
+        # 1002.0 - 1000.0 = 2.0s; initiation latency:
+        # 1004.0 - 1002.0 = 2.0s. Both should be 2000ms.
+        self.assertAlmostEqual(unified["readiness"]["latency_avg_ms"], self._EXPECTED_LATENCY_MS)
+        self.assertAlmostEqual(
+            unified["task_initiation"]["latency_avg_ms"],
+            self._EXPECTED_LATENCY_MS,
+        )
         self.assertAlmostEqual(unified["task_initiation"]["success_rate"], 1.0)
         self.assertAlmostEqual(unified["closure"]["completion_rate"], 1.0)
         self.assertAlmostEqual(unified["recovery"]["success_rate"], 1.0)

@@ -158,6 +158,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         rejection, startup recovery scan, and durable-audit persistence
         outcomes without ad-hoc log inspection.
         """
+        from core.operational_slo_metrics import get_operational_slo_metrics  # noqa: PLC0415
         try:
             from core.operational_readiness_surface import (  # noqa: PLC0415
                 build_operational_readiness_report,
@@ -167,15 +168,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             report = build_operational_readiness_report(
                 route_paths=collect_app_route_paths(request.app)
             )
-            from core.operational_slo_metrics import get_operational_slo_metrics  # noqa: PLC0415
             ops = get_operational_slo_metrics()
             ops.ingest_unified_state_contract(report.state_contract)
             return JSONResponse(ops.snapshot())
-        except Exception:
-            # Fall back to raw counters to keep endpoint robust under partial
-            # runtime wiring failures.
-            pass
-        from core.operational_slo_metrics import get_operational_slo_metrics
-        return JSONResponse(get_operational_slo_metrics().snapshot())
+        except Exception as exc:
+            logger.warning(
+                "Operational SLO unified ingestion fallback to raw counters: %s",
+                exc,
+            )
+            return JSONResponse(get_operational_slo_metrics().snapshot())
 
     return router
