@@ -25,6 +25,10 @@ Routes
       capability totals.  Corresponds to
       :meth:`~core.operator_surface.OperatorSurface.operator_snapshot`.
 
+  GET /api/v1/operator/actions/availability
+      Policy-aware operator action catalog with per-action availability,
+      control_mode (automatic/manual/approval_gated), and state-basis gating.
+
   GET /api/v1/operator/flows
       List all known delegated flows as :class:`~core.flow_level_operator_surface.FlowOperatorProjection`
       dicts.  Sourced from :class:`~core.flow_level_operator_surface.FlowLevelOperatorSurface`
@@ -147,7 +151,7 @@ Design constraints
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -181,6 +185,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     """
     router = APIRouter()
 
+    def _build_roundtrip_runtime_result(result: Any) -> Dict[str, Any]:
+        payload = dict(getattr(result, "runtime_result", {}) or {})
+        payload.setdefault("accepted", bool(getattr(result, "accepted", False)))
+        payload.setdefault("error", str(getattr(result, "error", "") or ""))
+        payload.setdefault("action_kind", str(getattr(result, "action_kind", "")))
+        return payload
+
     # ------------------------------------------------------------------
     # GET /api/v1/operator/snapshot
     # ------------------------------------------------------------------
@@ -202,6 +213,30 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content=snap.to_dict())
         except Exception as exc:
             logger.error("operator_snapshot endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/actions/availability
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/actions/availability")
+    async def operator_actions_availability() -> JSONResponse:
+        """Return current policy/state-gated operator action availability."""
+        try:
+            from core.operator_surface import get_operator_surface
+
+            surface = get_operator_surface()
+            return JSONResponse(
+                content={
+                    **surface.get_operator_action_availability(),
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
+        except Exception as exc:
+            logger.error("operator_actions_availability endpoint error: %s", exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,
@@ -1000,7 +1035,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     action_kind=result.action_kind,
                     trace_id=result.trace_id,
                     session_id=result.runtime_session_id,
-                    runtime_result=dict(result.runtime_result),
+                    runtime_result=_build_roundtrip_runtime_result(result),
                 )
             except Exception:
                 pass
@@ -1095,7 +1130,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     action_kind=result.action_kind,
                     trace_id=result.trace_id,
                     session_id=result.runtime_session_id,
-                    runtime_result=dict(result.runtime_result),
+                    runtime_result=_build_roundtrip_runtime_result(result),
                 )
             except Exception:
                 pass
@@ -1176,7 +1211,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     action_kind=result.action_kind,
                     trace_id=result.trace_id,
                     session_id=result.runtime_session_id,
-                    runtime_result=dict(result.runtime_result),
+                    runtime_result=_build_roundtrip_runtime_result(result),
                 )
             except Exception:
                 pass

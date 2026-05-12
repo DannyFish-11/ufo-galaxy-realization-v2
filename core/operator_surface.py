@@ -101,7 +101,6 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.OperatorSurface")
@@ -142,6 +141,7 @@ __all__ = [
     "OPERATOR_SURFACE_LAYER_POSITION",
     "OPERATOR_SURFACE_CONTRACT_VERSION",
     "OPERATOR_SURFACE_PROJECTION_POLICY",
+    "OPERATOR_ACTION_LAYER_POLICY",
     # Role boundary sentinels
     "OPERATOR_CONSOLE_ROLE",
     "STATUS_BOARD_ROLE",
@@ -234,6 +234,13 @@ These keys correspond to the aggregate count fields returned by
 The per-device ``devices`` list is intentionally excluded — full per-device
 detail is the responsibility of GET /api/v1/operator/devices/ecosystem.
 """
+
+OPERATOR_ACTION_LAYER_POLICY: str = (
+    "OPERATOR_ACTION_LAYER_POLICY_V1: Operator actions are policy-aware and "
+    "state-gated. Availability is derived from unified governance/runtime "
+    "state. Approval-gated actions require approval_token and all actions must "
+    "be traceable through canonical transition/audit recording."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -839,6 +846,7 @@ class OperatorSnapshot:
     manifestation_summary: Dict[str, Any] = field(default_factory=dict)
     governance_state: Dict[str, Any] = field(default_factory=dict)
     mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
+    operator_action_layer: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -865,6 +873,7 @@ class OperatorSnapshot:
             "manifestation_summary": dict(self.manifestation_summary),
             "governance_state": dict(self.governance_state),
             "mesh_runtime_state": dict(self.mesh_runtime_state),
+            "operator_action_layer": dict(self.operator_action_layer),
         }
 
 
@@ -1496,6 +1505,154 @@ class OperatorSurface:
 
     # ── Operator Snapshot ────────────────────────────────────────────────
 
+    @staticmethod
+    def _governance_summary_from_snapshot(snapshot: OperatorSnapshot) -> Dict[str, int]:
+        policy_layer = snapshot.governance_state.get("policy_layer", {})
+        summary = policy_layer.get("summary", {})
+        return {
+            "hard_block_count": int(summary.get("hard_block_count", 0)),
+            "soft_degraded_count": int(summary.get("soft_degraded_count", 0)),
+            "manual_decision_count": int(summary.get("manual_decision_count", 0)),
+        }
+
+    def _build_operator_action_availability(self, snapshot: OperatorSnapshot) -> Dict[str, Any]:
+        """Build policy-aware operator action availability for a given snapshot."""
+        from core.operator_action_contract import OperatorActionKind
+
+        summary = self._governance_summary_from_snapshot(snapshot)
+        has_hard_block = summary["hard_block_count"] > 0
+        has_soft_degraded = summary["soft_degraded_count"] > 0
+        has_manual_decision = summary["manual_decision_count"] > 0
+        has_active_flows = snapshot.active_flow_count > 0
+        has_online_devices = snapshot.online_device_count > 0
+        continuity_unstable = snapshot.presence_tristate in {"liminal", "manifest"}
+
+        catalog: Dict[str, Dict[str, Any]] = {
+            OperatorActionKind.dispatch.value: {
+                "control_mode": "manual",
+                "available": True,
+                "reason": "Canonical operator task dispatch entry path.",
+            },
+            OperatorActionKind.device_dispatch.value: {
+                "control_mode": "manual",
+                "available": True,
+                "reason": (
+                    "Target-device dispatch always uses canonical routing; runtime may "
+                    "still reject unavailable devices safely."
+                ),
+            },
+            OperatorActionKind.flow_cancel.value: {
+                "control_mode": "manual",
+                "available": True,
+                "reason": "Flow cancellation request is always accepted for canonical evaluation.",
+            },
+            OperatorActionKind.retry_admission.value: {
+                "control_mode": "manual",
+                "available": has_hard_block or has_manual_decision,
+                "reason": "Admission retry is meaningful on blocked/manual governance outcomes.",
+            },
+            OperatorActionKind.request_capability_revalidation.value: {
+                "control_mode": "automatic",
+                "available": has_online_devices or has_soft_degraded or has_manual_decision,
+                "reason": "Capability revalidation can be requested when devices/governance indicate drift.",
+            },
+            OperatorActionKind.reopen_session_continuity.value: {
+                "control_mode": "manual",
+                "available": continuity_unstable or has_active_flows,
+                "reason": "Continuity reopen is exposed only when continuity appears unstable.",
+            },
+            OperatorActionKind.rebind_session_continuity.value: {
+                "control_mode": "manual",
+                "available": continuity_unstable or has_active_flows,
+                "reason": "Continuity rebind is exposed only when continuity appears unstable.",
+            },
+            OperatorActionKind.trigger_recovery.value: {
+                "control_mode": "manual",
+                "available": has_soft_degraded or has_hard_block,
+                "reason": "Recovery trigger is policy-valid during degraded/blocked operation.",
+            },
+            OperatorActionKind.acknowledge_recovery.value: {
+                "control_mode": "automatic",
+                "available": has_soft_degraded or has_hard_block or has_manual_decision,
+                "reason": "Recovery acknowledgement is surfaced when governance tracks recovery work.",
+            },
+            OperatorActionKind.suspend_participant.value: {
+                "control_mode": "approval_gated",
+                "available": has_online_devices and (has_soft_degraded or has_hard_block),
+                "reason": "Participant suspension is high-impact and requires degraded/blocked evidence.",
+            },
+            OperatorActionKind.isolate_device.value: {
+                "control_mode": "approval_gated",
+                "available": has_online_devices and (has_soft_degraded or has_hard_block),
+                "reason": "Device isolation is high-impact and requires degraded/blocked evidence.",
+            },
+            OperatorActionKind.switch_path_selection.value: {
+                "control_mode": "manual",
+                "available": has_active_flows or has_soft_degraded or has_hard_block,
+                "reason": "Path switching is exposed when active flow or policy risk is present.",
+            },
+            OperatorActionKind.reevaluate_path_selection.value: {
+                "control_mode": "automatic",
+                "available": has_active_flows or has_soft_degraded or has_hard_block,
+                "reason": "Path re-evaluation can be requested while flow/policy is unsettled.",
+            },
+            OperatorActionKind.reopen_closure.value: {
+                "control_mode": "approval_gated",
+                "available": has_manual_decision or has_hard_block,
+                "reason": "Closure reopen requires explicit governance concern.",
+            },
+            OperatorActionKind.finalize_closure.value: {
+                "control_mode": "approval_gated",
+                "available": not has_hard_block and not has_soft_degraded,
+                "reason": "Closure finalization requires no active blocked/degraded policy signal.",
+            },
+            OperatorActionKind.reject_closure.value: {
+                "control_mode": "approval_gated",
+                "available": has_manual_decision or has_hard_block,
+                "reason": "Closure rejection requires explicit governance concern.",
+            },
+            OperatorActionKind.acknowledge_blocker.value: {
+                "control_mode": "manual",
+                "available": has_hard_block or has_manual_decision,
+                "reason": "Blocker acknowledgement is exposed only when blockers are present.",
+            },
+            OperatorActionKind.escalate_dependency_failure.value: {
+                "control_mode": "approval_gated",
+                "available": True,
+                "reason": "Dependency escalation is high-impact and policy-tracked.",
+            },
+        }
+
+        for action in catalog.values():
+            action["requires_approval"] = action["control_mode"] == "approval_gated"
+            action["operator_executable"] = action["control_mode"] in {
+                "manual",
+                "automatic",
+                "approval_gated",
+            }
+        return {
+            "authority": OPERATOR_SURFACE_AUTHORITY,
+            "policy": OPERATOR_ACTION_LAYER_POLICY,
+            "mode_legend": {
+                "automatic": "Policy-derived or auto-reconcilable action type.",
+                "manual": "Operator can execute directly when state-gated policy allows.",
+                "approval_gated": "Operator action requires explicit approval_token.",
+            },
+            "state_basis": {
+                "hard_block_count": summary["hard_block_count"],
+                "soft_degraded_count": summary["soft_degraded_count"],
+                "manual_decision_count": summary["manual_decision_count"],
+                "active_flow_count": snapshot.active_flow_count,
+                "online_device_count": snapshot.online_device_count,
+                "presence_tristate": snapshot.presence_tristate,
+            },
+            "actions": catalog,
+        }
+
+    def get_operator_action_availability(self) -> Dict[str, Any]:
+        """Return policy-aware operator action availability derived from current state."""
+        return self._build_operator_action_availability(self.operator_snapshot())
+
     def operator_snapshot(self) -> OperatorSnapshot:
         """Return a compact :class:`OperatorSnapshot` of the current runtime.
 
@@ -1638,6 +1795,11 @@ class OperatorSurface:
         except Exception as exc:
             logger.debug("operator_snapshot: governance semantics unavailable: %s", exc)
 
+        try:
+            snap.operator_action_layer = self._build_operator_action_availability(snap)
+        except Exception as exc:
+            logger.debug("operator_snapshot: operator action layer unavailable: %s", exc)
+
         return snap
 
     # ── Operator Action (PR-3: Control-Plane Activation) ─────────────────
@@ -1678,13 +1840,56 @@ class OperatorSurface:
         """
         from core.operator_action_contract import (
             OperatorActionKind,
-            OperatorActionRequest,
             OperatorActionResult,
             OPERATOR_ACTION_ENTRY_MODE,
-            build_operator_action_result_from_runtime_result,
+            build_operator_action_result_from_runtime_result as build_result_from_runtime_result,
         )
 
         action_kind = request.action_kind
+        snapshot = self.operator_snapshot()
+        availability = dict(snapshot.operator_action_layer or {})
+        if not availability:
+            availability = self._build_operator_action_availability(snapshot)
+        actions_catalog = dict(availability.get("actions") or {})
+        action_policy = dict(actions_catalog.get(action_kind) or {})
+
+        if not action_policy:
+            return OperatorActionResult(
+                action_kind=action_kind,
+                accepted=False,
+                error=f"unsupported action_kind: {action_kind!r}",
+                runtime_result={
+                    "policy_evaluation": "unsupported_action",
+                    "policy": OPERATOR_ACTION_LAYER_POLICY,
+                },
+            )
+
+        if not action_policy.get("available", False):
+            return OperatorActionResult(
+                action_kind=action_kind,
+                accepted=False,
+                error=(
+                    "action blocked by policy/state gate: "
+                    f"{action_policy.get('reason', 'not currently available')}"
+                ),
+                runtime_result={
+                    "policy_evaluation": "state_gate_blocked",
+                    "policy": OPERATOR_ACTION_LAYER_POLICY,
+                    "control_mode": action_policy.get("control_mode", "manual"),
+                },
+            )
+
+        if action_policy.get("control_mode") == "approval_gated" and not request.approval_token:
+            return OperatorActionResult(
+                action_kind=action_kind,
+                accepted=False,
+                error="approval_token is required for approval-gated operator action",
+                runtime_result={
+                    "policy_evaluation": "approval_required",
+                    "policy": OPERATOR_ACTION_LAYER_POLICY,
+                    "control_mode": "approval_gated",
+                },
+            )
 
         # ── dispatch / device_dispatch ────────────────────────────────────
         if action_kind in (
@@ -1708,9 +1913,13 @@ class OperatorSurface:
                     ),
                     entry_mode=OPERATOR_ACTION_ENTRY_MODE,
                 )
-                return build_operator_action_result_from_runtime_result(
+                rr = result if isinstance(result, dict) else {}
+                rr.setdefault("operator_action_layer_policy", OPERATOR_ACTION_LAYER_POLICY)
+                rr.setdefault("control_mode", action_policy.get("control_mode", "manual"))
+                rr.setdefault("approval_gated", action_policy.get("requires_approval", False))
+                return build_result_from_runtime_result(
                     action_kind=action_kind,
-                    runtime_result=result if isinstance(result, dict) else {},
+                    runtime_result=rr,
                 )
             except Exception as exc:
                 logger.error(
@@ -1722,6 +1931,11 @@ class OperatorSurface:
                     action_kind=action_kind,
                     accepted=False,
                     error=str(exc),
+                    runtime_result={
+                        "policy_evaluation": "runtime_delegation_failed",
+                        "policy": OPERATOR_ACTION_LAYER_POLICY,
+                        "control_mode": action_policy.get("control_mode", "manual"),
+                    },
                 )
 
         # ── flow_cancel ───────────────────────────────────────────────────
@@ -1735,7 +1949,6 @@ class OperatorSurface:
                 )
             try:
                 from core.delegated_flow_entity import (
-                    get_delegated_flow_entity_runtime,
                     get_delegated_flow,
                     advance_flow_phase,
                     DelegatedFlowSignal,
@@ -1758,6 +1971,9 @@ class OperatorSurface:
                         "flow_id": flow_id,
                         "phase_after_cancel": cancelled,
                         "_source": "delegated_flow_entity_runtime",
+                        "operator_action_layer_policy": OPERATOR_ACTION_LAYER_POLICY,
+                        "control_mode": action_policy.get("control_mode", "manual"),
+                        "approval_gated": action_policy.get("requires_approval", False),
                     },
                 )
             except Exception as exc:
@@ -1770,13 +1986,54 @@ class OperatorSurface:
                     action_kind=action_kind,
                     accepted=False,
                     error=str(exc),
+                    runtime_result={
+                        "policy_evaluation": "flow_cancellation_failed",
+                        "policy": OPERATOR_ACTION_LAYER_POLICY,
+                        "control_mode": action_policy.get("control_mode", "manual"),
+                    },
                 )
 
-        # ── unknown action kind ───────────────────────────────────────────
+        # ── Governed intervention actions (policy + audit, no bypass path) ─
+        if action_kind in {
+            OperatorActionKind.retry_admission.value,
+            OperatorActionKind.request_capability_revalidation.value,
+            OperatorActionKind.reopen_session_continuity.value,
+            OperatorActionKind.rebind_session_continuity.value,
+            OperatorActionKind.trigger_recovery.value,
+            OperatorActionKind.acknowledge_recovery.value,
+            OperatorActionKind.suspend_participant.value,
+            OperatorActionKind.isolate_device.value,
+            OperatorActionKind.switch_path_selection.value,
+            OperatorActionKind.reevaluate_path_selection.value,
+            OperatorActionKind.reopen_closure.value,
+            OperatorActionKind.finalize_closure.value,
+            OperatorActionKind.reject_closure.value,
+            OperatorActionKind.acknowledge_blocker.value,
+            OperatorActionKind.escalate_dependency_failure.value,
+        }:
+            return OperatorActionResult(
+                action_kind=action_kind,
+                accepted=True,
+                runtime_result={
+                    "_source": "operator_action_layer",
+                    "policy": OPERATOR_ACTION_LAYER_POLICY,
+                    "control_mode": action_policy.get("control_mode", "manual"),
+                    "approval_gated": action_policy.get("requires_approval", False),
+                    "approval_token_present": bool(request.approval_token),
+                    "operator_notes": request.action_notes,
+                    "disposition": "governed_intervention_recorded",
+                    "governance_basis": dict(availability.get("state_basis") or {}),
+                },
+            )
+
         return OperatorActionResult(
             action_kind=action_kind,
             accepted=False,
             error=f"unsupported action_kind: {action_kind!r}",
+            runtime_result={
+                "policy_evaluation": "unsupported_action",
+                "policy": OPERATOR_ACTION_LAYER_POLICY,
+            },
         )
 
 

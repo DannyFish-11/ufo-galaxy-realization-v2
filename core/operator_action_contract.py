@@ -132,6 +132,21 @@ class OperatorActionKind(str, Enum):
     dispatch = "dispatch"
     device_dispatch = "device_dispatch"
     flow_cancel = "flow_cancel"
+    retry_admission = "retry_admission"
+    request_capability_revalidation = "request_capability_revalidation"
+    reopen_session_continuity = "reopen_session_continuity"
+    rebind_session_continuity = "rebind_session_continuity"
+    trigger_recovery = "trigger_recovery"
+    acknowledge_recovery = "acknowledge_recovery"
+    suspend_participant = "suspend_participant"
+    isolate_device = "isolate_device"
+    switch_path_selection = "switch_path_selection"
+    reevaluate_path_selection = "reevaluate_path_selection"
+    reopen_closure = "reopen_closure"
+    finalize_closure = "finalize_closure"
+    reject_closure = "reject_closure"
+    acknowledge_blocker = "acknowledge_blocker"
+    escalate_dependency_failure = "escalate_dependency_failure"
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +190,8 @@ class OperatorActionRequest:
     user_id: str = "operator"
     required_capabilities: List[str] = field(default_factory=list)
     context: List[Dict[str, Any]] = field(default_factory=list)
+    approval_token: Optional[str] = None
+    action_notes: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -186,6 +203,8 @@ class OperatorActionRequest:
             "user_id": self.user_id,
             "required_capabilities": list(self.required_capabilities),
             "context": list(self.context),
+            "approval_token": self.approval_token,
+            "action_notes": self.action_notes,
         }
 
     @classmethod
@@ -199,6 +218,8 @@ class OperatorActionRequest:
             user_id=data.get("user_id", "operator"),
             required_capabilities=list(data.get("required_capabilities") or []),
             context=list(data.get("context") or []),
+            approval_token=data.get("approval_token"),
+            action_notes=str(data.get("action_notes") or ""),
         )
 
 
