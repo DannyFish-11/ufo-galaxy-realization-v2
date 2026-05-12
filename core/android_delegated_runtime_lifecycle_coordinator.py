@@ -160,6 +160,30 @@ except ImportError:  # pragma: no cover
     _record_takeover_tracking = None  # type: ignore[assignment]
 
 try:
+    from core.android_originated_authority_boundary import (
+        AndroidParticipationKind as _AndroidParticipationKind,
+        AndroidSignalPermissionLevel as _AndroidSignalPermissionLevel,
+        classify_android_participation as _classify_android_participation,
+    )
+
+    _AUTHORITY_BOUNDARY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _AUTHORITY_BOUNDARY_AVAILABLE = False
+    _AndroidParticipationKind = None  # type: ignore[assignment,misc]
+    _AndroidSignalPermissionLevel = None  # type: ignore[assignment,misc]
+    _classify_android_participation = None  # type: ignore[assignment]
+
+try:
+    from core.ownership_transfer_proof_quality import (
+        classify_ownership_transfer_proof_quality as _classify_ownership_transfer_proof_quality,
+    )
+
+    _OWNERSHIP_PROOF_QUALITY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _OWNERSHIP_PROOF_QUALITY_AVAILABLE = False
+    _classify_ownership_transfer_proof_quality = None  # type: ignore[assignment]
+
+try:
     from core.android_participant_truth_ingress import (
         ingest_android_participant_truth_message as _ingest_truth,
     )
@@ -237,6 +261,9 @@ COORDINATOR_IS_NON_RAISING_POLICY: str = (
     "the coordinator."
 )
 
+TAKEOVER_GATE_DECISION_CONTINUE: str = "continue"
+TAKEOVER_GATE_DECISION_FORCE_REVALIDATE_SUSPEND: str = "force_revalidate_suspend"
+
 # ---------------------------------------------------------------------------
 # Outcome dataclass
 # ---------------------------------------------------------------------------
@@ -294,6 +321,49 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
     All ``on_*`` methods are non-raising and return
     :class:`AndroidLifecycleCoordinatorOutcome`.
     """
+
+    @staticmethod
+    def _resolve_takeover_continuity_semantics(metadata: Dict[str, Any]) -> str:
+        """Resolve takeover continuity semantics for runtime-path handling."""
+        raw = str(metadata.get("continuity_semantics") or "").strip().lower()
+        if raw in {
+            "resume",
+            "replay",
+            "restart",
+            "reattach",
+            "duplicate_delivery",
+            "stale_result",
+            "partially_recovered_continuation",
+        }:
+            return raw
+        if metadata.get("is_duplicate_delivery"):
+            return "duplicate_delivery"
+        if metadata.get("is_stale"):
+            return "stale_result"
+        if metadata.get("is_replay"):
+            return "replay"
+        if metadata.get("is_restart_recovery"):
+            return "restart"
+        if metadata.get("is_reattach"):
+            return "reattach"
+        if metadata.get("is_recovery_assisted"):
+            return "partially_recovered_continuation"
+        return "resume"
+
+    @staticmethod
+    def _build_takeover_session_axis(
+        *, session_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, str]:
+        """Build explicit session-axis identities for takeover correlation."""
+        return {
+            "runtime_session_id": session_id or "",
+            "runtime_attachment_session_id": str(
+                metadata.get("runtime_attachment_session_id") or ""
+            ),
+            "durable_session_id": str(metadata.get("durable_session_id") or ""),
+            "rebind_recovery_id": str(metadata.get("recovery_id") or ""),
+            "takeover_correlation_id": str(metadata.get("takeover_id") or ""),
+        }
 
     # ------------------------------------------------------------------
     # on_handoff_dispatched
@@ -513,6 +583,77 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             phase_after = ""
             was_transitioned = False
             ownership_convergence: Dict[str, Any] = {}
+            ownership_proof_quality: Dict[str, Any] = {}
+            metadata_dict: Dict[str, Any] = dict(metadata or {})
+            metadata_takeover_id = str(metadata_dict.get("takeover_id") or "")
+            has_metadata_takeover_conflict = bool(
+                takeover_id and metadata_takeover_id and metadata_takeover_id != takeover_id
+            )
+            if has_metadata_takeover_conflict:
+                metadata_dict["metadata_takeover_id"] = metadata_takeover_id
+            metadata_dict["takeover_id"] = takeover_id or metadata_takeover_id
+
+            continuity_semantics = self._resolve_takeover_continuity_semantics(
+                metadata_dict
+            )
+            session_axis = self._build_takeover_session_axis(
+                session_id=session_id,
+                metadata=metadata_dict,
+            )
+            proof_input_class = str(metadata_dict.get("proof_input_class") or "complete")
+            is_stale = bool(
+                metadata_dict.get("is_stale")
+                or continuity_semantics == "stale_result"
+            )
+            is_replay = bool(
+                metadata_dict.get("is_replay")
+                or metadata_dict.get("is_duplicate_delivery")
+                or continuity_semantics in {"replay", "duplicate_delivery"}
+            )
+            is_recovery_assisted = bool(
+                metadata_dict.get("is_recovery_assisted")
+                or metadata_dict.get("is_restart_recovery")
+                or metadata_dict.get("is_reattach")
+                or continuity_semantics in {
+                    "restart",
+                    "reattach",
+                    "partially_recovered_continuation",
+                }
+            )
+            authority_boundary: Dict[str, Any] = {
+                "permission_level": "unknown",
+                "policy": "authority_boundary_unavailable",
+            }
+            takeover_authority_permits = True
+            if (
+                _AUTHORITY_BOUNDARY_AVAILABLE
+                and _classify_android_participation is not None
+                and _AndroidParticipationKind is not None
+                and _AndroidSignalPermissionLevel is not None
+            ):
+                try:
+                    authority_cls = _classify_android_participation(
+                        _AndroidParticipationKind.takeover_participation,
+                        proof_input_class=proof_input_class,
+                        is_stale=is_stale,
+                        is_replay=is_replay,
+                        is_recovery_assisted=is_recovery_assisted,
+                    )
+                    authority_boundary = authority_cls.to_dict()
+                    takeover_authority_permits = (
+                        authority_cls.permission_level
+                        == _AndroidSignalPermissionLevel.takeover_eligible
+                    )
+                except Exception as _authority_error:  # noqa: BLE001
+                    logger.debug(
+                        "on_takeover_response: authority boundary classification failed (non-fatal): %s",
+                        _authority_error,
+                    )
+                    authority_boundary = {
+                        "permission_level": "unknown",
+                        "policy": "authority_boundary_classification_error",
+                        "error": str(_authority_error),
+                    }
 
             # Step 1: persist takeover decision
             if _TAKEOVER_TRACKING_AVAILABLE and _record_takeover_tracking is not None:
@@ -525,7 +666,7 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         session_id=session_id or None,
                         task_id=task_id,
                         trace_id=trace_id,
-                        metadata=metadata,
+                        metadata=metadata_dict,
                     )
                 except Exception as _te:  # noqa: BLE001
                     logger.debug("on_takeover_response: tracking failed (non-fatal): %s", _te)
@@ -536,6 +677,12 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         device_id=device_id,
                     )
                     ownership_convergence = verdict.to_dict()
+                    if (
+                        _OWNERSHIP_PROOF_QUALITY_AVAILABLE
+                        and _classify_ownership_transfer_proof_quality is not None
+                    ):
+                        ownership_proof = _classify_ownership_transfer_proof_quality(verdict)
+                        ownership_proof_quality = ownership_proof.to_dict()
                 except Exception as _oe:  # noqa: BLE001
                     logger.debug(
                         "on_takeover_response: ownership adjudication failed (non-fatal): %s",
@@ -546,13 +693,48 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         "degraded": True,
                         "diagnosis": ["adjudication_error"],
                     }
+                    ownership_proof_quality = {
+                        "proof_class": "incomplete",
+                        "is_sufficient_for_closure": False,
+                        "degraded": True,
+                        "diagnosis": ["adjudication_error"],
+                    }
+
+            accepted_effective = accepted
+            takeover_gate_reasons = []
+            if has_metadata_takeover_conflict:
+                accepted_effective = False
+                takeover_gate_reasons.append("metadata_takeover_id_conflict")
+            if accepted and not takeover_authority_permits:
+                accepted_effective = False
+                takeover_gate_reasons.append("authority_boundary_requires_revalidation")
+            if (
+                accepted
+                and ownership_proof_quality
+                and not bool(ownership_proof_quality.get("is_sufficient_for_closure", False))
+            ):
+                accepted_effective = False
+                takeover_gate_reasons.append("ownership_transfer_proof_insufficient")
+            if accepted and continuity_semantics in {
+                "duplicate_delivery",
+                "stale_result",
+                "replay",
+            }:
+                accepted_effective = False
+                takeover_gate_reasons.append(
+                    f"continuity_semantics_requires_revalidation:{continuity_semantics}"
+                )
 
             # Step 2: reduce session state
             if _SESSION_STATE_AVAILABLE and _REDUCER_AVAILABLE:
                 rec = get_participant_session(session_id) if get_participant_session else None
                 if rec is not None:
                     phase_before = rec.phase.value
-                    result = _reduce_takeover_response(rec, accepted=accepted, takeover_id=takeover_id)
+                    result = _reduce_takeover_response(
+                        rec,
+                        accepted=accepted_effective,
+                        takeover_id=takeover_id,
+                    )
                     updated_rec = result.record
                     phase_after = updated_rec.phase.value
                     was_transitioned = result.was_transitioned
@@ -588,8 +770,19 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                 ),
                 extra={
                     "accepted": accepted,
+                    "effective_accepted": accepted_effective,
                     "reason": reason,
+                    "continuity_semantics": continuity_semantics,
+                    "session_axis": session_axis,
+                    "authority_boundary": authority_boundary,
+                    "takeover_gate_decision": (
+                        TAKEOVER_GATE_DECISION_CONTINUE
+                        if accepted == accepted_effective
+                        else TAKEOVER_GATE_DECISION_FORCE_REVALIDATE_SUSPEND
+                    ),
+                    "takeover_gate_reasons": takeover_gate_reasons,
                     "ownership_convergence": ownership_convergence,
+                    "ownership_proof_quality": ownership_proof_quality,
                 },
             )
         except Exception as exc:  # noqa: BLE001

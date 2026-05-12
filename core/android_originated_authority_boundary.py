@@ -322,10 +322,6 @@ def classify_android_participation(
     AndroidParticipationClassification
         The typed boundary classification for this signal.
     """
-    base_permission = _PERMISSION_TABLE.get(
-        participation_kind, AndroidSignalPermissionLevel.observation_only
-    )
-
     # Stale/replay/recovery-assisted evidence is always downgraded to observation_only
     # or suggestion_only — it cannot enter reconciliation.
     evidence_degraded = is_stale or is_replay or is_recovery_assisted
@@ -344,11 +340,31 @@ def classify_android_participation(
         policy = ANDROID_NL_MUST_ENTER_MAIN_CHAIN_POLICY
 
     elif participation_kind == AndroidParticipationKind.takeover_participation:
-        effective_permission = AndroidSignalPermissionLevel.takeover_eligible
-        reason = (
-            "Takeover participation: Android respond to V2-dispatched takeover. "
-            "Bounded by takeover authority chain. Center retains final authority."
-        )
+        if evidence_degraded or proof_non_passing:
+            effective_permission = AndroidSignalPermissionLevel.suggestion_only
+            degradation_reasons = []
+            if is_stale:
+                degradation_reasons.append("stale evidence")
+            if is_replay:
+                degradation_reasons.append("replay evidence")
+            if is_recovery_assisted:
+                degradation_reasons.append("recovery-assisted evidence")
+            if proof_non_passing:
+                degradation_reasons.append(
+                    f"proof_input_class={proof_input_class!r} (non-passing)"
+                )
+            reason = (
+                "Takeover participation downgraded to suggestion_only: "
+                + ", ".join(degradation_reasons)
+                + ". Takeover responses with degraded proof require center-side "
+                "revalidation before execution ownership can advance."
+            )
+        else:
+            effective_permission = AndroidSignalPermissionLevel.takeover_eligible
+            reason = (
+                "Takeover participation: Android respond to V2-dispatched takeover. "
+                "Bounded by takeover authority chain. Center retains final authority."
+            )
         policy = ANDROID_TAKEOVER_WITHIN_AUTHORITY_BOUNDARY_POLICY
 
     elif participation_kind in _RECONCILIATION_ELIGIBLE_KINDS:
@@ -367,7 +383,7 @@ def classify_android_participation(
                     f"proof_input_class={proof_input_class!r} (non-passing)"
                 )
             reason = (
-                f"Downgraded from reconciliation_eligible to suggestion_only: "
+                "Downgraded from reconciliation_eligible to suggestion_only: "
                 + ", ".join(degradation_reasons)
                 + ". Only 'complete' proof input may enter reconciliation."
             )

@@ -195,6 +195,23 @@ class TestGroupA_AuthorityBoundaryModel:
         assert cls.can_enter_reconciliation is False
         assert cls.can_override_center_authority is False
 
+    def test_a06b_takeover_participation_stale_evidence_requires_revalidation(self):
+        cls = classify_android_participation(
+            AndroidParticipationKind.takeover_participation,
+            proof_input_class="complete",
+            is_stale=True,
+        )
+        assert cls.permission_level == AndroidSignalPermissionLevel.suggestion_only
+        assert "stale" in cls.reason
+
+    def test_a06c_takeover_participation_non_complete_proof_requires_revalidation(self):
+        cls = classify_android_participation(
+            AndroidParticipationKind.takeover_participation,
+            proof_input_class="partial",
+        )
+        assert cls.permission_level == AndroidSignalPermissionLevel.suggestion_only
+        assert "non-passing" in cls.reason
+
     def test_a07_reconciliation_eligibility_downgraded_for_stale(self):
         cls = classify_android_participation(
             AndroidParticipationKind.android_originated_signal,

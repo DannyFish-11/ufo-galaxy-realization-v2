@@ -11,7 +11,10 @@ try:
         get_lifecycle_coordinator,
         reset_lifecycle_coordinator,
     )
-    from core.android_participant_session_state import reset_participant_session_runtime
+    from core.android_participant_session_state import (
+        get_participant_session,
+        reset_participant_session_runtime,
+    )
     from core.takeover_tracking import (
         adjudicate_takeover_ownership_convergence,
         record_takeover_response,
@@ -187,3 +190,86 @@ class TestTakeoverOwnershipConvergence:
         assert diag.get("evidence_quality") == "conflicting"
         assert diag.get("degraded") is True
         assert "conflicting_takeover_decisions" in diag.get("diagnosis", [])
+
+    def test_A09_stale_takeover_response_forces_revalidation_before_acceptance(self):
+        coordinator = get_lifecycle_coordinator()
+        session_id = _uid()
+        takeover_id = _uid()
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A09")
+        coordinator.on_takeover_requested(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A09",
+        )
+
+        outcome = coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A09",
+            accepted=True,
+            metadata={"is_stale": True},
+        )
+        assert outcome.extra.get("effective_accepted") is False
+        assert outcome.extra.get("takeover_gate_decision") == "force_revalidate_suspend"
+        assert "authority_boundary_requires_revalidation" in outcome.extra.get(
+            "takeover_gate_reasons", []
+        )
+        authority = outcome.extra.get("authority_boundary", {})
+        assert authority.get("permission_level") == "suggestion_only"
+        rec = get_participant_session(session_id)
+        assert rec is not None
+        assert rec.phase.value == "handoff_dispatched"
+
+    def test_A10_takeover_response_surfaces_session_axis_and_proof_quality(self):
+        coordinator = get_lifecycle_coordinator()
+        session_id = _uid()
+        takeover_id = _uid()
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A10")
+        coordinator.on_takeover_requested(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A10",
+        )
+
+        outcome = coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A10",
+            accepted=True,
+            metadata={
+                "runtime_attachment_session_id": "att-A10",
+                "durable_session_id": "dur-A10",
+                "recovery_id": "rec-A10",
+                "continuity_semantics": "resume",
+            },
+        )
+        axis = outcome.extra.get("session_axis", {})
+        assert axis.get("runtime_session_id") == session_id
+        assert axis.get("runtime_attachment_session_id") == "att-A10"
+        assert axis.get("durable_session_id") == "dur-A10"
+        assert axis.get("rebind_recovery_id") == "rec-A10"
+        proof = outcome.extra.get("ownership_proof_quality", {})
+        assert "proof_class" in proof
+        assert "is_sufficient_for_closure" in proof
+
+    def test_A11_metadata_takeover_id_conflict_forces_revalidation(self):
+        coordinator = get_lifecycle_coordinator()
+        session_id = _uid()
+        takeover_id = _uid()
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A11")
+        coordinator.on_takeover_requested(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A11",
+        )
+        outcome = coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A11",
+            accepted=True,
+            metadata={"takeover_id": f"conflict-{takeover_id}"},
+        )
+        assert outcome.extra.get("effective_accepted") is False
+        assert "metadata_takeover_id_conflict" in outcome.extra.get(
+            "takeover_gate_reasons", []
+        )
