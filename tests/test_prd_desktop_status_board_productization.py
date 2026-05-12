@@ -202,8 +202,12 @@ def test_A3_contract_decision_to_dict_omits_lifecycle_stage_when_none():
 
 def test_B4_v2_unified_state_contract_version_is_1_2_0():
     from core.v2_unified_state_contract import V2_UNIFIED_STATE_CONTRACT_VERSION
-    assert V2_UNIFIED_STATE_CONTRACT_VERSION == "1.2.0", (
-        f"Expected V2_UNIFIED_STATE_CONTRACT_VERSION='1.2.0', got '{V2_UNIFIED_STATE_CONTRACT_VERSION}'"
+    # PR-1 bumped the contract to 1.3.0 to reflect the addition of the
+    # android_network_participation derived_state decision and the
+    # participation_evidence parameter.
+    assert V2_UNIFIED_STATE_CONTRACT_VERSION in {"1.2.0", "1.3.0"}, (
+        f"Expected V2_UNIFIED_STATE_CONTRACT_VERSION in {{'1.2.0', '1.3.0'}}, "
+        f"got '{V2_UNIFIED_STATE_CONTRACT_VERSION}'"
     )
 
 

@@ -642,6 +642,50 @@ async def handle_device_register(
         ack["registration_fully_attached"] = len(_gaps) == 0
         if _gaps:
             ack["registration_gaps"] = _gaps
+
+        # PR-1: Derive and surface the authoritative Android network participation
+        # tier at the point of registration.  This is the first moment at which V2
+        # can compute a meaningful tier: the device has a WebSocket connection and
+        # has just received a registration ack.  Subsequent capability reports and
+        # mode-gate updates will push the tier higher.
+        try:
+            from core.android_network_participation import (  # noqa: PLC0415
+                build_android_network_participation_state,
+                record_participation_state,
+                AndroidParticipationTransitionSignal,
+            )
+            _reg_posture = ""
+            if _reg_entry is not None:
+                _reg_posture = getattr(_reg_entry, "posture", "") or ""
+            _is_fully_attached = len(_gaps) == 0
+            _signal = (
+                AndroidParticipationTransitionSignal.registration_fully_attached
+                if _is_fully_attached
+                else AndroidParticipationTransitionSignal.registration_partial_attached
+            )
+            _participation_state = build_android_network_participation_state(
+                device_id,
+                websocket_connected=True,
+                registration_ack_success=True,
+                registration_fully_attached=_is_fully_attached,
+                registration_gaps=_gaps,
+                session_posture=_reg_posture,
+                active_session_count=1 if _reg_entry is not None else 0,
+                # capability_visible, cross_device_enabled, readiness_satisfied,
+                # and dispatch_gate_passed are all False at registration time;
+                # they will be updated when capability_report and device_state_snapshot
+                # messages arrive.
+                last_signal=_signal,
+            )
+            record_participation_state(_participation_state)
+            ack["network_participation_tier"] = _participation_state.tier.value
+        except Exception as _npe:
+            logger.debug(
+                "registration: network_participation_tier derivation non-fatal: "
+                "device_id=%s error=%s",
+                device_id, _npe,
+            )
+
         return ack
 
     except Exception as exc:

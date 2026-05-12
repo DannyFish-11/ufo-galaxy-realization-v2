@@ -51,7 +51,7 @@ __all__ = [
 
 
 V2_UNIFIED_STATE_CONTRACT_AUTHORITY: str = "core.v2_unified_state_contract::v2-side-executable-state-contract"
-V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.2.0"
+V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.3.0"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -163,6 +163,7 @@ def build_v2_unified_state_contract(
     session_evidence: Optional[Dict[str, Any]] = None,
     system_acceptance: Optional[Dict[str, Any]] = None,
     result_ingress_evidence: Optional[Dict[str, Any]] = None,
+    participation_evidence: Optional[Dict[str, Any]] = None,
 ) -> V2UnifiedStateContract:
     route_paths_set = set(route_paths or [])
     runtime_readiness = dict(runtime_readiness or {})
@@ -170,6 +171,7 @@ def build_v2_unified_state_contract(
     android_evidence = dict(android_evidence or {})
     session_evidence = dict(session_evidence or {})
     system_acceptance = dict(system_acceptance or {})
+    participation_evidence = dict(participation_evidence or {})
 
     by_kind = {getattr(state, "kind", ""): state for state in kind_states}
     main_chain_states = [by_kind[kind.value] for kind in path.main_chain_kinds if kind.value in by_kind]
@@ -235,6 +237,72 @@ def build_v2_unified_state_contract(
     result_closure_established = bool(session_evidence.get("result_closure_established", False))
     acceptance_verdict = str(system_acceptance.get("verdict", "acceptance_unknown_insufficient_evidence"))
 
+    # --- PR-1: Derive unified Android network participation tier ---
+    # Consume from participation_evidence when caller supplies it; otherwise
+    # derive inline from the signals already available in this call.
+    _participation_tier_str = "local_only"
+    _participation_blocking: List[str] = []
+    _participation_notes: List[str] = []
+    _participation_source = "inline_derivation"
+    try:
+        from core.android_network_participation import (  # noqa: PLC0415
+            derive_android_network_participation_tier,
+            AndroidNetworkParticipationTier,
+        )
+        if participation_evidence:
+            # Caller supplied pre-computed participation evidence
+            _participation_tier_str = participation_evidence.get("tier", "local_only")
+            _participation_blocking = list(participation_evidence.get("blocking_reasons", []))
+            _participation_notes = list(participation_evidence.get("tier_derivation_notes", []))
+            _participation_source = participation_evidence.get("source", "participation_evidence")
+        else:
+            # Derive inline from signals already in this call
+            _pe_websocket = android_attached
+            _pe_reg_ack = android_attached
+            _pe_fully_attached = (
+                android_attached
+                and device_evidence.get("registration_fully_attached", False)
+            )
+            _pe_gaps = list(device_evidence.get("registration_gaps", []))
+            _pe_capability_visible = capability_visible
+            _pe_session_count = session_evidence.get("active_session_count", 0)
+            _pe_posture = session_evidence.get("session_posture", "")
+            _pe_cross_device_enabled = (
+                capability_visible
+                and session_evidence.get("active_session_count", 0) > 0
+            )
+            _pe_readiness = (
+                capability_visible
+                and _pe_session_count > 0
+                and _pe_posture == "join_runtime"
+            )
+            _pe_dispatch = cross_device_available and _pe_readiness
+            _pe_execution = task_initiated and not result_closure_established
+
+            _tier, _participation_blocking, _participation_notes = (
+                derive_android_network_participation_tier(
+                    websocket_connected=_pe_websocket,
+                    registration_ack_success=_pe_reg_ack,
+                    registration_fully_attached=_pe_fully_attached,
+                    registration_gaps=_pe_gaps,
+                    capability_visible=_pe_capability_visible,
+                    active_session_count=_pe_session_count,
+                    session_posture=_pe_posture,
+                    cross_device_enabled=_pe_cross_device_enabled,
+                    readiness_satisfied=_pe_readiness,
+                    dispatch_gate_passed=_pe_dispatch,
+                    execution_active=_pe_execution,
+                )
+            )
+            _participation_tier_str = _tier.value
+    except Exception as _pe_exc:
+        logger.debug(
+            "build_v2_unified_state_contract: participation tier derivation failed: %s",
+            _pe_exc,
+        )
+        _participation_tier_str = "local_only"
+        _participation_blocking = [f"derivation_error: {_pe_exc}"]
+
     raw_signals: Dict[str, Any] = {
         "validation_status": validation.overall_status.value,
         "validation_summary": validation.summary,
@@ -255,6 +323,7 @@ def build_v2_unified_state_contract(
         "task_initiated": task_initiated,
         "result_closure_established": result_closure_established,
         "recovery_active": recovery_active,
+        "android_network_participation_tier": _participation_tier_str,
     }
 
     # gateway_bridge_presence: is the Android gateway/bridge connection present and serving
@@ -738,6 +807,65 @@ def build_v2_unified_state_contract(
             eligible=dispatch_available or dispatch_bound,
             active=dispatch_bound,
             lifecycle_stage="eligibility",
+        ),
+        "android_network_participation": ContractDecision(
+            decision_id="android_network_participation",
+            label="Android network participation tier (PR-1)",
+            state=_participation_tier_str,
+            summary=(
+                "Android device is a confirmed active participant in the "
+                "center-distributed runtime network."
+                if _participation_tier_str == "distributed_participant"
+                else (
+                    "Android device is eligible for dispatch to the distributed network."
+                    if _participation_tier_str == "dispatch_eligible"
+                    else (
+                        "Android device is fully attached and structurally ready for dispatch."
+                        if _participation_tier_str == "fully_attached"
+                        else (
+                            "Android device has cross-device execution enabled but readiness "
+                            "or session conditions are not yet satisfied."
+                            if _participation_tier_str == "cross_device_enabled"
+                            else (
+                                "Android device is registered with full attachment but "
+                                "cross-device gate is off."
+                                if _participation_tier_str == "cross_device_capable"
+                                else (
+                                    "Android device is connected but restricted to "
+                                    "control-only mode."
+                                    if _participation_tier_str == "control_only"
+                                    else "Android device has no active connection to the "
+                                    "distributed network."
+                                )
+                            )
+                        )
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.android_network_participation",
+                "core.android_device_state_store",
+                "core.attached_runtime_session_registry",
+                "core.android_mode_gate_policy",
+            ),
+            reasons=list(_participation_blocking),
+            evidence={
+                "tier": _participation_tier_str,
+                "blocking_reasons": list(_participation_blocking),
+                "derivation_notes": list(_participation_notes),
+                "source": _participation_source,
+                "android_attached": android_attached,
+                "cross_device_available": cross_device_available,
+                "capability_visible": capability_visible,
+                "active_session_count": session_evidence.get("active_session_count", 0),
+            },
+            observable=android_attached,
+            acceptable=_participation_tier_str in {
+                "fully_attached", "dispatch_eligible", "distributed_participant"
+            },
+            eligible=_participation_tier_str in {"dispatch_eligible", "distributed_participant"},
+            active=_participation_tier_str == "distributed_participant",
+            lifecycle_stage="observation",
         ),
     }
 
