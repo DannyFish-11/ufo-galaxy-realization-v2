@@ -635,15 +635,15 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                         authority_cls.permission_level
                         == _AndroidSignalPermissionLevel.takeover_eligible
                     )
-                except Exception as _abe:  # noqa: BLE001
+                except Exception as _authority_error:  # noqa: BLE001
                     logger.debug(
                         "on_takeover_response: authority boundary classification failed (non-fatal): %s",
-                        _abe,
+                        _authority_error,
                     )
                     authority_boundary = {
                         "permission_level": "unknown",
                         "policy": "authority_boundary_classification_error",
-                        "error": str(_abe),
+                        "error": str(_authority_error),
                     }
 
             # Step 1: persist takeover decision
