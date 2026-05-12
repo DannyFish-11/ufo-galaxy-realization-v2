@@ -561,6 +561,27 @@ class DesktopPresenceRuntime:
             metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
         if lane_snapshot is not None:
             metadata["session_execution_lane"] = lane_snapshot
+        # PR-2: stamp additive NL execution spine snapshot so chat-path and
+        # task/delegation path share one problem→intent→route model.
+        try:
+            from core.nl_execution_spine import build_problem_execution_spine
+
+            metadata["problem_execution_spine"] = build_problem_execution_spine(
+                message=message,
+                source=source,
+                entry_mode=entry_mode,
+                metadata=metadata,
+                execution_result=result.get("execution_result"),
+                intent=result.get("intent"),
+            )
+        except Exception as _spine_err:
+            logger.warning(
+                "problem_execution_spine build failed (non-fatal): source=%s entry_mode=%s trace_id=%s err=%s",
+                source,
+                entry_mode,
+                rsession.runtime_session_id,
+                _spine_err,
+            )
         # Block-3: attach the continuous cognitive state snapshot (additive, optional).
         if _cognitive_snap is not None:
             result["cognitive_state"] = _cognitive_snap
