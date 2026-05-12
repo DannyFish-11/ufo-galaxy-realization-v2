@@ -251,3 +251,25 @@ class TestTakeoverOwnershipConvergence:
         proof = outcome.extra.get("ownership_proof_quality", {})
         assert "proof_class" in proof
         assert "is_sufficient_for_closure" in proof
+
+    def test_A11_metadata_takeover_id_conflict_forces_revalidation(self):
+        coordinator = get_lifecycle_coordinator()
+        session_id = _uid()
+        takeover_id = _uid()
+        coordinator.on_handoff_dispatched(session_id=session_id, device_id="dev-A11")
+        coordinator.on_takeover_requested(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A11",
+        )
+        outcome = coordinator.on_takeover_response(
+            session_id=session_id,
+            takeover_id=takeover_id,
+            device_id="dev-A11",
+            accepted=True,
+            metadata={"takeover_id": f"conflict-{takeover_id}"},
+        )
+        assert outcome.extra.get("effective_accepted") is False
+        assert "metadata_takeover_id_conflict" in outcome.extra.get(
+            "takeover_gate_reasons", []
+        )

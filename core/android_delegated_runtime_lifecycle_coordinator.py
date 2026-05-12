@@ -261,6 +261,9 @@ COORDINATOR_IS_NON_RAISING_POLICY: str = (
     "the coordinator."
 )
 
+TAKEOVER_GATE_DECISION_CONTINUE: str = "continue"
+TAKEOVER_GATE_DECISION_FORCE_REVALIDATE_SUSPEND: str = "force_revalidate_suspend"
+
 # ---------------------------------------------------------------------------
 # Outcome dataclass
 # ---------------------------------------------------------------------------
@@ -582,7 +585,13 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             ownership_convergence: Dict[str, Any] = {}
             ownership_proof_quality: Dict[str, Any] = {}
             metadata_dict: Dict[str, Any] = dict(metadata or {})
-            metadata_dict.setdefault("takeover_id", takeover_id or "")
+            metadata_takeover_id = str(metadata_dict.get("takeover_id") or "")
+            metadata_takeover_conflict = bool(
+                takeover_id and metadata_takeover_id and metadata_takeover_id != takeover_id
+            )
+            if metadata_takeover_conflict:
+                metadata_dict["metadata_takeover_id"] = metadata_takeover_id
+            metadata_dict["takeover_id"] = takeover_id or metadata_takeover_id
 
             continuity_semantics = self._resolve_takeover_continuity_semantics(
                 metadata_dict
@@ -693,6 +702,9 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
 
             accepted_effective = accepted
             takeover_gate_reasons = []
+            if metadata_takeover_conflict:
+                accepted_effective = False
+                takeover_gate_reasons.append("metadata_takeover_id_conflict")
             if accepted and not takeover_authority_permits:
                 accepted_effective = False
                 takeover_gate_reasons.append("authority_boundary_requires_revalidation")
@@ -764,9 +776,9 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
                     "session_axis": session_axis,
                     "authority_boundary": authority_boundary,
                     "takeover_gate_decision": (
-                        "continue"
+                        TAKEOVER_GATE_DECISION_CONTINUE
                         if accepted == accepted_effective
-                        else "force_revalidate_suspend"
+                        else TAKEOVER_GATE_DECISION_FORCE_REVALIDATE_SUSPEND
                     ),
                     "takeover_gate_reasons": takeover_gate_reasons,
                     "ownership_convergence": ownership_convergence,
