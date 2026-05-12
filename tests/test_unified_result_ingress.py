@@ -192,6 +192,11 @@ class TestModuleSurface:
         from core.unified_result_ingress import normalize_status
         assert callable(normalize_status)
 
+    def test_A11_outcome_exposes_problem_execution_closure(self):
+        from core.unified_result_ingress import UnifiedResultIngressOutcome
+        outcome = UnifiedResultIngressOutcome()
+        assert isinstance(outcome.problem_execution_closure, dict)
+
 
 # ===========================================================================
 # Group B — Idempotency
@@ -470,6 +475,22 @@ class TestCompletionIngressNotify:
         assert outcome.completion_notified is False
         assert outcome.is_fully_closed is False
         assert outcome.incomplete_reason == "completion_not_notified"
+
+    def test_E04_problem_execution_closure_defaults_to_pending_problem_closure(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        evt = _make_event(_make_task_id(), status="completed", channel="delegated")
+        outcome = ingress.process(evt)
+        assert outcome.problem_execution_closure["task_closure_stage"] == "closed"
+        assert outcome.problem_execution_closure["problem_closure_stage"] == "pending_user_problem_closure"
 
 
 # ===========================================================================

@@ -961,6 +961,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             "mode": result.get("intent", "chat"),
                             "success": result.get("success", True),
                             "runtime_session_id": result.get("runtime_session_id"),
+                            "problem_execution_spine": result.get("metadata", {}).get("problem_execution_spine", {}),
                         })
                     except Exception as e:
                         await websocket.send_json({

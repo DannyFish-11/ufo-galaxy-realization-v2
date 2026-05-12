@@ -234,6 +234,8 @@ class UnifiedResultIngressOutcome:
     continuity_legality_verdict: str = ""
     """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
     value string produced by the continuity gate (empty when not evaluated)."""
+    problem_execution_closure: Dict[str, Any] = field(default_factory=dict)
+    """Additive closure split: task closure vs delegated-step closure vs user-problem closure."""
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +351,10 @@ class UnifiedResultIngress:
             if not outcome.completion_notified:
                 parts.append("completion_not_notified")
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
+        outcome.problem_execution_closure = self._build_problem_execution_closure(
+            event=event,
+            outcome=outcome,
+        )
 
         return outcome
 
@@ -615,6 +621,29 @@ class UnifiedResultIngress:
             outcome.completion_notified,
             outcome.store_task_result_ran,
         )
+
+    def _build_problem_execution_closure(
+        self,
+        *,
+        event: NormalizedResultEvent,
+        outcome: UnifiedResultIngressOutcome,
+    ) -> Dict[str, Any]:
+        try:
+            from core.nl_execution_spine import build_problem_execution_closure
+
+            return build_problem_execution_closure(
+                source_channel=event.source_channel.value,
+                normalized_status=event.normalized_status,
+                truth_chain_complete=outcome.truth_chain_complete,
+                completion_notified=outcome.completion_notified,
+                payload=event.payload,
+            )
+        except Exception as _err:
+            logger.debug(
+                "unified_result_ingress: problem_execution_closure build skipped (non-fatal): %s",
+                _err,
+            )
+            return {}
 
 
 # ---------------------------------------------------------------------------
