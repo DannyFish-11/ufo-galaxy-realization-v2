@@ -98,6 +98,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -114,7 +117,7 @@ EXECUTABLE_LIFECYCLE_HARDENING_AUTHORITY: str = (
     "center-governed distributed intelligent agent system"
 )
 
-EXECUTABLE_LIFECYCLE_HARDENING_VERSION: str = "1.1.0"
+EXECUTABLE_LIFECYCLE_HARDENING_VERSION: str = "1.2.0"
 
 # Minimum-access-standard: these conditions must ALL be met for a participant/
 # device to be considered admitted at the canonical level.
@@ -438,6 +441,36 @@ class ResultClosureState:
 
 
 @dataclass
+class LifecycleTransitionEvent:
+    """Structured lifecycle transition/event record with explicit causality."""
+
+    event_type: str
+    transition: str
+    cause: str
+    reason: str = ""
+    from_state: Optional[str] = None
+    to_state: Optional[str] = None
+    evidence: Dict[str, Any] = field(default_factory=dict)
+    event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    event_at: float = field(default_factory=time.time)
+    sequence: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "sequence": int(self.sequence),
+            "event_type": self.event_type,
+            "transition": self.transition,
+            "cause": self.cause,
+            "reason": self.reason,
+            "from_state": self.from_state,
+            "to_state": self.to_state,
+            "evidence": dict(self.evidence),
+            "event_at": float(self.event_at),
+        }
+
+
+@dataclass
 class ExecutableLifecycleState:
     """Complete hardened executable lifecycle state.
 
@@ -492,6 +525,7 @@ class ExecutableLifecycleState:
     lifecycle_blocked_reason: str = ""
     degraded_stages: List[str] = field(default_factory=list)
     recovery_transition: bool = False
+    transition_lineage: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -506,6 +540,7 @@ class ExecutableLifecycleState:
             "lifecycle_blocked_reason": self.lifecycle_blocked_reason,
             "degraded_stages": list(self.degraded_stages),
             "recovery_transition": self.recovery_transition,
+            "transition_lineage": dict(self.transition_lineage),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -521,6 +556,370 @@ def _str(value: Any) -> str:
     if hasattr(value, "value"):
         return str(value.value)
     return str(value) if value is not None else ""
+
+
+_TRANSITION_HISTORY_MAX_EVENTS: int = 256
+_transition_history_lock = threading.Lock()
+_transition_history_by_subject: Dict[str, List[LifecycleTransitionEvent]] = {}
+_transition_last_snapshot_by_subject: Dict[str, Dict[str, Any]] = {}
+_transition_sequence_by_subject: Dict[str, int] = {}
+
+
+def _clear_lifecycle_transition_runtime_state() -> None:
+    """Clear in-process transition/event history runtime state (test isolation)."""
+    with _transition_history_lock:
+        _transition_history_by_subject.clear()
+        _transition_last_snapshot_by_subject.clear()
+        _transition_sequence_by_subject.clear()
+
+
+def _derive_transition_subject_id(
+    *,
+    device_evidence: Dict[str, Any],
+    session_evidence: Dict[str, Any],
+) -> str:
+    candidates: List[str] = []
+    for key in ("admitted_device_ids", "android_device_ids", "denied_device_ids"):
+        values = device_evidence.get(key, [])
+        if isinstance(values, (list, tuple)):
+            candidates.extend(str(v) for v in values if v is not None)
+    if not candidates:
+        participant_id = session_evidence.get("participant_id")
+        if participant_id:
+            candidates.append(str(participant_id))
+    if not candidates:
+        return "subject:global"
+    return f"subject:{'|'.join(sorted(set(candidates)))}"
+
+
+def _extract_active_path(system_acceptance: Dict[str, Any]) -> str:
+    active_path = system_acceptance.get("active_path")
+    if isinstance(active_path, dict):
+        return str(active_path.get("state") or "unknown")
+    if isinstance(active_path, str):
+        return active_path
+    return str(system_acceptance.get("active_path_state") or "unknown")
+
+
+def _build_transition_lineage(
+    *,
+    subject_id: str,
+    current_stage: LifecycleStage,
+    admission_decision: AdmissionDecision,
+    ops_gate: LifecycleGateResult,
+    task_initiation_gate: TaskInitiationGateResult,
+    task_execution_gate: LifecycleGateResult,
+    closure_state: ResultClosureState,
+    lifecycle_blocked: bool,
+    lifecycle_blocked_reason: str,
+    degraded_stages: List[str],
+    recovery_transition: bool,
+    system_acceptance: Dict[str, Any],
+    result_ingress_evidence: Dict[str, Any],
+) -> Dict[str, Any]:
+    readiness_state = "blocked" if ops_gate.blocked else ("degraded" if ops_gate.degraded else "ready")
+    session_continuity_state = str(closure_state.evidence.get("session_continuity_state", "unknown"))
+    active_path = _extract_active_path(system_acceptance)
+    operator_intervention = bool(
+        result_ingress_evidence.get("operator_intervention")
+        or result_ingress_evidence.get("manual_intervention")
+        or result_ingress_evidence.get("operator_action")
+    )
+    current_snapshot: Dict[str, Any] = {
+        "current_stage": current_stage.value,
+        "admission_outcome": admission_decision.outcome.value,
+        "readiness_state": readiness_state,
+        "recovery_transition": bool(recovery_transition),
+        "session_continuity_state": session_continuity_state,
+        "task_initiated": bool(closure_state.evidence.get("task_initiated", False)),
+        "task_execution_active": bool(task_execution_gate.evidence.get("actively_executing", False)),
+        "closure_outcome": closure_state.outcome.value,
+        "lifecycle_blocked": bool(lifecycle_blocked),
+        "blocking_gates": tuple(task_initiation_gate.blocking_gates),
+        "degraded_active": bool(degraded_stages),
+        "active_path": active_path,
+        "operator_intervention": operator_intervention,
+    }
+
+    def _event(
+        *,
+        event_type: str,
+        transition: str,
+        cause: str,
+        reason: str = "",
+        from_state: Optional[str] = None,
+        to_state: Optional[str] = None,
+        evidence: Optional[Dict[str, Any]] = None,
+    ) -> LifecycleTransitionEvent:
+        return LifecycleTransitionEvent(
+            event_type=event_type,
+            transition=transition,
+            cause=cause,
+            reason=reason,
+            from_state=from_state,
+            to_state=to_state,
+            evidence=dict(evidence or {}),
+        )
+
+    with _transition_history_lock:
+        previous = _transition_last_snapshot_by_subject.get(subject_id)
+        new_events: List[LifecycleTransitionEvent] = []
+
+        if previous is None:
+            new_events.extend(
+                [
+                    _event(
+                        event_type="lifecycle_transition",
+                        transition="lifecycle_initialized",
+                        cause="initial_observation",
+                        to_state=current_snapshot["current_stage"],
+                        evidence={"subject_id": subject_id},
+                    ),
+                    _event(
+                        event_type="admission_event",
+                        transition=f"admission_{current_snapshot['admission_outcome']}",
+                        cause="admission_evaluated",
+                        to_state=current_snapshot["admission_outcome"],
+                        reason=admission_decision.reason,
+                        evidence={"minimum_access_gap": list(admission_decision.minimum_access_gap)},
+                    ),
+                    _event(
+                        event_type="path_event",
+                        transition="path_reevaluated",
+                        cause="path_selection_evaluated",
+                        to_state=current_snapshot["active_path"],
+                        evidence={"readiness_state": current_snapshot["readiness_state"]},
+                    ),
+                ]
+            )
+        else:
+            if previous["current_stage"] != current_snapshot["current_stage"]:
+                new_events.append(
+                    _event(
+                        event_type="lifecycle_transition",
+                        transition="stage_changed",
+                        cause="stage_gate_progression",
+                        from_state=previous["current_stage"],
+                        to_state=current_snapshot["current_stage"],
+                    )
+                )
+
+            if previous["readiness_state"] != current_snapshot["readiness_state"]:
+                new_events.append(
+                    _event(
+                        event_type="readiness_transition",
+                        transition="readiness_changed",
+                        cause="operational_readiness_gate_changed",
+                        from_state=previous["readiness_state"],
+                        to_state=current_snapshot["readiness_state"],
+                        evidence={"blocked_reason": ops_gate.blocked_reason},
+                    )
+                )
+
+            if previous["admission_outcome"] != current_snapshot["admission_outcome"]:
+                if (
+                    previous["admission_outcome"] in {"admitted", "admitted_degraded"}
+                    and current_snapshot["admission_outcome"] not in {"admitted", "admitted_degraded"}
+                ):
+                    transition = "admission_revoked"
+                elif current_snapshot["admission_outcome"] in {"admitted", "admitted_degraded"}:
+                    transition = "admission_granted"
+                elif current_snapshot["admission_outcome"] in {"denied", "blocked"}:
+                    transition = "admission_rejected"
+                else:
+                    transition = "admission_reevaluated"
+                new_events.append(
+                    _event(
+                        event_type="admission_event",
+                        transition=transition,
+                        cause="admission_decision_changed",
+                        from_state=previous["admission_outcome"],
+                        to_state=current_snapshot["admission_outcome"],
+                        reason=admission_decision.reason,
+                    )
+                )
+
+            if (not previous["degraded_active"]) and current_snapshot["degraded_active"]:
+                new_events.append(
+                    _event(
+                        event_type="health_transition",
+                        transition="degraded_entered",
+                        cause="degraded_stage_detected",
+                        to_state="degraded",
+                        evidence={"degraded_stages": list(degraded_stages)},
+                    )
+                )
+            elif previous["degraded_active"] and (not current_snapshot["degraded_active"]):
+                new_events.append(
+                    _event(
+                        event_type="health_transition",
+                        transition="recovered",
+                        cause="degraded_stages_cleared",
+                        from_state="degraded",
+                        to_state="healthy",
+                    )
+                )
+
+            if previous["recovery_transition"] != current_snapshot["recovery_transition"]:
+                new_events.append(
+                    _event(
+                        event_type="recovery_transition",
+                        transition=(
+                            "recovery_started"
+                            if current_snapshot["recovery_transition"]
+                            else "recovery_completed"
+                        ),
+                        cause="session_recovery_state_changed",
+                    )
+                )
+
+            if previous["session_continuity_state"] != current_snapshot["session_continuity_state"]:
+                break_states = {"incomplete", "waiting_dependency", "not_applicable"}
+                resumed = (
+                    previous["session_continuity_state"] in break_states
+                    and current_snapshot["session_continuity_state"] == "continuous"
+                )
+                new_events.append(
+                    _event(
+                        event_type="session_continuity_event",
+                        transition="continuity_resumed" if resumed else "continuity_changed",
+                        cause="session_continuity_state_changed",
+                        from_state=previous["session_continuity_state"],
+                        to_state=current_snapshot["session_continuity_state"],
+                    )
+                )
+
+            if (not previous["task_initiated"]) and current_snapshot["task_initiated"]:
+                new_events.append(
+                    _event(
+                        event_type="task_event",
+                        transition="task_initiated",
+                        cause="task_initiation_gate_passed",
+                        to_state="initiated",
+                        evidence={"blocking_gates": list(task_initiation_gate.blocking_gates)},
+                    )
+                )
+
+            if (not previous["task_execution_active"]) and current_snapshot["task_execution_active"]:
+                new_events.append(
+                    _event(
+                        event_type="task_event",
+                        transition="task_execution_started",
+                        cause="task_execution_gate_active",
+                        to_state="running",
+                    )
+                )
+
+            if previous["closure_outcome"] != current_snapshot["closure_outcome"]:
+                closure_transition = (
+                    "closure_succeeded"
+                    if current_snapshot["closure_outcome"]
+                    in {
+                        ClosureOutcome.SUCCESS_CANONICAL.value,
+                        ClosureOutcome.SUCCESS_DEGRADED.value,
+                        ClosureOutcome.SUCCESS_RECOVERY.value,
+                    }
+                    else "closure_changed"
+                )
+                new_events.append(
+                    _event(
+                        event_type="closure_event",
+                        transition=closure_transition,
+                        cause="closure_state_changed",
+                        from_state=previous["closure_outcome"],
+                        to_state=current_snapshot["closure_outcome"],
+                        evidence={"closure_authoritative": closure_state.authoritative},
+                    )
+                )
+
+            if previous["lifecycle_blocked"] != current_snapshot["lifecycle_blocked"]:
+                new_events.append(
+                    _event(
+                        event_type="dependency_event",
+                        transition=(
+                            "blocker_escalated"
+                            if current_snapshot["lifecycle_blocked"]
+                            else "blocker_cleared"
+                        ),
+                        cause="lifecycle_blocking_changed",
+                        reason=lifecycle_blocked_reason,
+                        evidence={"blocking_gates": list(task_initiation_gate.blocking_gates)},
+                    )
+                )
+            elif (
+                current_snapshot["lifecycle_blocked"]
+                and previous["blocking_gates"] != current_snapshot["blocking_gates"]
+            ):
+                new_events.append(
+                    _event(
+                        event_type="dependency_event",
+                        transition="blocker_reevaluated",
+                        cause="blocking_gate_set_changed",
+                        reason=lifecycle_blocked_reason,
+                        evidence={
+                            "from_blocking_gates": list(previous["blocking_gates"]),
+                            "to_blocking_gates": list(current_snapshot["blocking_gates"]),
+                        },
+                    )
+                )
+
+            if (not previous["operator_intervention"]) and current_snapshot["operator_intervention"]:
+                new_events.append(
+                    _event(
+                        event_type="operator_event",
+                        transition="operator_intervention_recorded",
+                        cause="manual_override_or_intervention_observed",
+                    )
+                )
+
+            if previous["active_path"] != current_snapshot["active_path"]:
+                new_events.append(
+                    _event(
+                        event_type="path_event",
+                        transition="path_switched",
+                        cause="active_path_changed",
+                        from_state=previous["active_path"],
+                        to_state=current_snapshot["active_path"],
+                    )
+                )
+            elif (
+                previous["active_path"] == current_snapshot["active_path"]
+                and (
+                    previous["readiness_state"] != current_snapshot["readiness_state"]
+                    or previous["admission_outcome"] != current_snapshot["admission_outcome"]
+                )
+            ):
+                new_events.append(
+                    _event(
+                        event_type="path_event",
+                        transition="path_reevaluated",
+                        cause="path_dependencies_changed",
+                        to_state=current_snapshot["active_path"],
+                    )
+                )
+
+        next_seq = _transition_sequence_by_subject.get(subject_id, 0)
+        for event in new_events:
+            next_seq += 1
+            event.sequence = next_seq
+        _transition_sequence_by_subject[subject_id] = next_seq
+
+        history = _transition_history_by_subject.setdefault(subject_id, [])
+        history.extend(new_events)
+        if len(history) > _TRANSITION_HISTORY_MAX_EVENTS:
+            history[:] = history[-_TRANSITION_HISTORY_MAX_EVENTS:]
+        _transition_last_snapshot_by_subject[subject_id] = current_snapshot
+        latest_event_at = history[-1].event_at if history else None
+
+        return {
+            "subject_id": subject_id,
+            "latest_sequence": next_seq,
+            "event_count_total": len(history),
+            "event_count_new": len(new_events),
+            "latest_event_at": latest_event_at,
+            "history_limit": _TRANSITION_HISTORY_MAX_EVENTS,
+            "events": [event.to_dict() for event in history],
+        }
 
 
 def _evaluate_registration_gate(
@@ -1209,6 +1608,25 @@ def build_executable_lifecycle_state(
         if stage_gates[stage.value].degraded
     ]
 
+    transition_lineage = _build_transition_lineage(
+        subject_id=_derive_transition_subject_id(
+            device_evidence=device_evidence,
+            session_evidence=session_evidence,
+        ),
+        current_stage=current_stage,
+        admission_decision=admission_decision,
+        ops_gate=ops_gate,
+        task_initiation_gate=task_init_gate_obj,
+        task_execution_gate=exec_gate,
+        closure_state=closure_state,
+        lifecycle_blocked=lifecycle_blocked,
+        lifecycle_blocked_reason=lifecycle_blocked_reason,
+        degraded_stages=degraded_stages,
+        recovery_transition=recovery_active,
+        system_acceptance=dict(system_acceptance or {}),
+        result_ingress_evidence=result_ingress_evidence,
+    )
+
     return ExecutableLifecycleState(
         authority=EXECUTABLE_LIFECYCLE_HARDENING_AUTHORITY,
         contract_version=EXECUTABLE_LIFECYCLE_HARDENING_VERSION,
@@ -1221,4 +1639,5 @@ def build_executable_lifecycle_state(
         lifecycle_blocked_reason=lifecycle_blocked_reason,
         degraded_stages=degraded_stages,
         recovery_transition=recovery_active,
+        transition_lineage=transition_lineage,
     )

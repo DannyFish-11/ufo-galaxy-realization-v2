@@ -38,11 +38,12 @@ Z. Contract version sentinel format.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import List
 
 import pytest
 
 from core.executable_lifecycle_hardening import (
+    _clear_lifecycle_transition_runtime_state,
     EXECUTABLE_LIFECYCLE_HARDENING_AUTHORITY,
     EXECUTABLE_LIFECYCLE_HARDENING_VERSION,
     AdmissionDecision,
@@ -111,6 +112,8 @@ def _build_state(
     is_fully_closed: bool = False,
     completion_ingress_confirmed: bool = False,
     explicit_failure: bool = False,
+    active_path: str = "main_chain",
+    operator_intervention: bool = False,
 ) -> ExecutableLifecycleState:
     default_routes = [
         "/api/v1/health",
@@ -149,8 +152,17 @@ def _build_state(
             "is_fully_closed": is_fully_closed,
             "completion_ingress_confirmed": completion_ingress_confirmed,
             "explicit_failure": explicit_failure,
+            "operator_intervention": operator_intervention,
         },
+        system_acceptance={"active_path": active_path},
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_transition_lineage_runtime() -> None:
+    _clear_lifecycle_transition_runtime_state()
+    yield
+    _clear_lifecycle_transition_runtime_state()
 
 
 # =============================================================================
@@ -428,6 +440,7 @@ class TestExecutableLifecycleState:
             "lifecycle_blocked_reason",
             "degraded_stages",
             "recovery_transition",
+            "transition_lineage",
         ):
             assert key in d
 
@@ -997,6 +1010,83 @@ class TestDegradedStagesAccumulation:
 
 
 # =============================================================================
+# Section X2 — structured transition/event lineage
+# =============================================================================
+
+
+class TestStructuredTransitionEventLineage:
+    def test_initial_snapshot_emits_structured_lineage_bootstrap_events(self) -> None:
+        state = _build_state()
+        lineage = state.transition_lineage
+        assert lineage["event_count_total"] >= 3
+        transitions = {event["transition"] for event in lineage["events"]}
+        assert "lifecycle_initialized" in transitions
+        assert "admission_admitted" in transitions
+        assert "path_reevaluated" in transitions
+
+    def test_admission_and_task_progression_are_recorded_as_transitions(self) -> None:
+        _build_state(
+            android_device_count=1,
+            capability_visible_count=0,
+            active_session_count=0,
+            participant_total_count=1,
+            task_initiated=False,
+            android_device_ids=["device-lineage-1"],
+            active_path="main_chain",
+        )
+        state = _build_state(
+            android_device_count=1,
+            capability_visible_count=1,
+            active_session_count=1,
+            participant_total_count=1,
+            task_initiated=True,
+            android_device_ids=["device-lineage-1"],
+            active_path="cross_device",
+        )
+        transitions = [event["transition"] for event in state.transition_lineage["events"]]
+        assert "admission_granted" in transitions
+        assert "task_initiated" in transitions
+        assert "path_switched" in transitions
+
+    def test_degradation_recovery_and_closure_events_have_explicit_causality(self) -> None:
+        _build_state(
+            validation_status="WARN",
+            task_initiated=True,
+            active_session_count=1,
+            participant_total_count=1,
+            result_closure_established=False,
+            recovery_active=False,
+        )
+        state = _build_state(
+            validation_status="PASS",
+            task_initiated=True,
+            active_session_count=0,
+            total_session_count=1,
+            participant_total_count=1,
+            participant_terminal_count=1,
+            participant_terminal_success_count=1,
+            result_closure_established=True,
+            completion_notified=True,
+            completion_ingress_confirmed=True,
+            recovery_active=True,
+            is_fully_closed=True,
+            active_path="recovery",
+            operator_intervention=True,
+        )
+        events = state.transition_lineage["events"]
+        by_transition = {event["transition"]: event for event in events}
+        assert "recovery_started" in by_transition
+        assert "closure_succeeded" in by_transition
+        assert "operator_intervention_recorded" in by_transition
+        assert by_transition["closure_succeeded"]["cause"] == "closure_state_changed"
+        assert by_transition["closure_succeeded"]["to_state"] in {
+            "success_canonical",
+            "success_degraded",
+            "success_recovery",
+        }
+
+
+# =============================================================================
 # Section Y — V2UnifiedStateContract lifecycle_hardening integration
 # =============================================================================
 
@@ -1004,14 +1094,14 @@ class TestDegradedStagesAccumulation:
 class TestV2UnifiedStateContractIntegration:
     """Verify lifecycle_hardening is populated in V2UnifiedStateContract."""
 
-    def _build_contract(self) -> "V2UnifiedStateContract":
+    def _build_contract(self):
         from core.operational_registration_path import (
             OnboardingValidation,
             PrerequisiteCheck,
             ValidationStatus,
             build_operational_registration_path,
         )
-        from core.v2_unified_state_contract import V2UnifiedStateContract, build_v2_unified_state_contract
+        from core.v2_unified_state_contract import build_v2_unified_state_contract
 
         path = build_operational_registration_path()
         validation = OnboardingValidation(
@@ -1065,6 +1155,10 @@ class TestV2UnifiedStateContractIntegration:
     def test_lifecycle_hardening_has_result_closure(self) -> None:
         contract = self._build_contract()
         assert "result_closure" in contract.lifecycle_hardening
+
+    def test_lifecycle_hardening_has_transition_lineage(self) -> None:
+        contract = self._build_contract()
+        assert "transition_lineage" in contract.lifecycle_hardening
 
     def test_to_dict_includes_lifecycle_hardening(self) -> None:
         contract = self._build_contract()
