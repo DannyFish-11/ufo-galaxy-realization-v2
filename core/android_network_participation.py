@@ -286,15 +286,23 @@ class AndroidNetworkParticipationTier(str, Enum):
         return _ord.get(self.value, 0)
 
     def __ge__(self, other: "AndroidNetworkParticipationTier") -> bool:  # type: ignore[override]
+        if not isinstance(other, AndroidNetworkParticipationTier):
+            return NotImplemented  # type: ignore[return-value]
         return self.ordinal() >= other.ordinal()
 
     def __gt__(self, other: "AndroidNetworkParticipationTier") -> bool:  # type: ignore[override]
+        if not isinstance(other, AndroidNetworkParticipationTier):
+            return NotImplemented  # type: ignore[return-value]
         return self.ordinal() > other.ordinal()
 
     def __le__(self, other: "AndroidNetworkParticipationTier") -> bool:  # type: ignore[override]
+        if not isinstance(other, AndroidNetworkParticipationTier):
+            return NotImplemented  # type: ignore[return-value]
         return self.ordinal() <= other.ordinal()
 
     def __lt__(self, other: "AndroidNetworkParticipationTier") -> bool:  # type: ignore[override]
+        if not isinstance(other, AndroidNetworkParticipationTier):
+            return NotImplemented  # type: ignore[return-value]
         return self.ordinal() < other.ordinal()
 
 
@@ -1088,9 +1096,9 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
                     cfg.get("crossDeviceEnabled", cfg.get("cross_device_enabled", False))
                 )
             # Readiness: all three gates must pass
-            model_ready = bool(snapshot.model_ready)
-            accessibility_ready = bool(snapshot.accessibility_ready)
-            local_loop_ready = bool(snapshot.local_loop_ready)
+            model_ready = bool(getattr(snapshot, "model_ready", False))
+            accessibility_ready = bool(getattr(snapshot, "accessibility_ready", False))
+            local_loop_ready = bool(getattr(snapshot, "local_loop_ready", False))
             readiness_satisfied = model_ready and accessibility_ready and local_loop_ready
 
             # Snapshot presence contributes to capability_visible heuristic

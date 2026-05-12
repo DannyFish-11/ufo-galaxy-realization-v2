@@ -529,8 +529,11 @@ class TestParticipationStore:
 
 class TestResetParticipationStore:
     def test_reset_clears_entries(self):
-        state = build_android_network_participation_state("reset-dev", websocket_connected=True,
-                                                          registration_ack_success=False)
+        state = build_android_network_participation_state(
+            "reset-dev",
+            websocket_connected=True,
+            registration_ack_success=False,
+        )
         record_participation_state(state)
         assert get_stored_participation_state("reset-dev") is not None
 
