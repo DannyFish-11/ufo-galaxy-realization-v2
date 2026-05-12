@@ -871,6 +871,7 @@ class TestHttpEndpoints(unittest.TestCase):
             "recovery",
             "startup_recovery",
             "audit_persistence",
+            "unified_reliability",
         ):
             self.assertIn(key, data, f"Missing key in /api/v1/slo/operational: {key}")
 
@@ -940,6 +941,138 @@ class TestHttpEndpoints(unittest.TestCase):
         self._skip_if_unavailable()
         text = self.client.get("/metrics").text
         self.assertIn("galaxy_ops_audit_persist_successes_total", text)
+
+
+class TestUnifiedReliabilityView(unittest.TestCase):
+    _INIT_EVENT_AT = 1000.0
+    _READINESS_EVENT_AT = 1002.0
+    _TASK_INIT_EVENT_AT = 1004.0
+    _EXPECTED_LATENCY_MS = 2000.0
+
+    def _fresh(self):
+        from core.operational_slo_metrics import OperationalSLOMetrics
+        return OperationalSLOMetrics()
+
+    def _sample_contract(self):
+        return {
+            "raw_signals": {
+                "android_attached": True,
+                "capability_visible": True,
+                "active_session_count": 1,
+            },
+            "derived_state": {
+                "cross_device_availability": {"state": "available"},
+            },
+            "closure_quality_state": {
+                "success_quality": {"state": "canonical_main_chain"},
+                "verdict_quality": {"state": "accept_canonical"},
+            },
+            "lifecycle_hardening": {
+                "lifecycle_blocked": False,
+                "task_initiation_gate": {"blocking_gates": [], "session_gate_met": True},
+                "transition_lineage": {
+                    "subject_id": "subject:android-1",
+                    "latest_sequence": 10,
+                    "events": [
+                        {
+                            "sequence": 1,
+                            "transition": "lifecycle_initialized",
+                            "event_at": self._INIT_EVENT_AT,
+                        },
+                        {
+                            "sequence": 2,
+                            "transition": "admission_granted",
+                            "to_state": "admitted",
+                            "event_at": self._INIT_EVENT_AT + 1.0,
+                        },
+                        {
+                            "sequence": 3,
+                            "transition": "readiness_changed",
+                            "to_state": "ready",
+                            "event_at": self._READINESS_EVENT_AT,
+                        },
+                        {
+                            "sequence": 4,
+                            "transition": "task_initiated",
+                            "event_at": self._TASK_INIT_EVENT_AT,
+                        },
+                        {
+                            "sequence": 5,
+                            "transition": "path_switched",
+                            "event_at": self._TASK_INIT_EVENT_AT + 0.5,
+                        },
+                        {
+                            "sequence": 6,
+                            "transition": "operator_intervention_recorded",
+                            "event_at": self._TASK_INIT_EVENT_AT + 1.0,
+                        },
+                        {
+                            "sequence": 7,
+                            "transition": "continuity_changed",
+                            "to_state": "waiting_dependency",
+                            "event_at": self._TASK_INIT_EVENT_AT + 1.5,
+                        },
+                        {
+                            "sequence": 8,
+                            "transition": "recovery_started",
+                            "event_at": self._TASK_INIT_EVENT_AT + 2.0,
+                        },
+                        {
+                            "sequence": 9,
+                            "transition": "closure_succeeded",
+                            "to_state": "success_canonical",
+                            "event_at": self._TASK_INIT_EVENT_AT + 4.0,
+                        },
+                        {
+                            "sequence": 10,
+                            "transition": "recovery_completed",
+                            "event_at": self._TASK_INIT_EVENT_AT + 4.5,
+                        },
+                    ],
+                },
+            },
+        }
+
+    def test_unified_reliability_indicators_are_populated(self):
+        m = self._fresh()
+        m.ingest_unified_state_contract(self._sample_contract())
+        unified = m.snapshot()["unified_reliability"]
+
+        self.assertAlmostEqual(unified["admission"]["success_rate"], 1.0)
+        self.assertAlmostEqual(unified["admission"]["failure_rate"], 0.0)
+        self.assertAlmostEqual(unified["readiness"]["attainment_rate"], 1.0)
+        # Event timestamps are in seconds. readiness latency:
+        # 1002.0 - 1000.0 = 2.0s; initiation latency:
+        # 1004.0 - 1002.0 = 2.0s. Both should be 2000ms.
+        self.assertAlmostEqual(unified["readiness"]["latency_avg_ms"], self._EXPECTED_LATENCY_MS)
+        self.assertAlmostEqual(
+            unified["task_initiation"]["latency_avg_ms"],
+            self._EXPECTED_LATENCY_MS,
+        )
+        self.assertAlmostEqual(unified["task_initiation"]["success_rate"], 1.0)
+        self.assertAlmostEqual(unified["closure"]["completion_rate"], 1.0)
+        self.assertAlmostEqual(unified["recovery"]["success_rate"], 1.0)
+        self.assertAlmostEqual(unified["cross_device_consistency_rate"], 1.0)
+        self.assertAlmostEqual(unified["session_continuity_break_rate"], 1.0)
+        self.assertEqual(unified["unresolved_blocker_volume"], 0)
+        self.assertEqual(unified["quality_distribution"]["canonical_main_chain"], 1)
+        self.assertEqual(unified["verdict_distribution"]["accept_canonical"], 1)
+        self.assertGreater(unified["operator_intervention_frequency"], 0.0)
+        self.assertGreater(unified["path_switch"]["frequency"], 0.0)
+        self.assertEqual(
+            unified["path_switch"]["outcome_quality_distribution"]["canonical_main_chain"],
+            1,
+        )
+
+    def test_unified_ingestion_is_sequence_idempotent(self):
+        m = self._fresh()
+        contract = self._sample_contract()
+        m.ingest_unified_state_contract(contract)
+        m.ingest_unified_state_contract(contract)
+        unified = m.snapshot()["unified_reliability"]
+        self.assertEqual(unified["admission"]["successes_total"], 1)
+        self.assertEqual(unified["task_initiation"]["initiated_total"], 1)
+        self.assertEqual(unified["closure"]["completed_total"], 1)
 
 
 if __name__ == "__main__":
