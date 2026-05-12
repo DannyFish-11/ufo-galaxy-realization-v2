@@ -1846,7 +1846,10 @@ class OperatorSurface:
         )
 
         action_kind = request.action_kind
-        availability = self.get_operator_action_availability()
+        snapshot = self.operator_snapshot()
+        availability = dict(snapshot.operator_action_layer or {})
+        if not availability:
+            availability = self._build_operator_action_availability(snapshot)
         actions_catalog = dict(availability.get("actions") or {})
         action_policy = dict(actions_catalog.get(action_kind) or {})
 
