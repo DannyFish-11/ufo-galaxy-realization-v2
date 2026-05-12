@@ -326,7 +326,7 @@ class TestOperatorActionEndpoint:
             "/api/v1/operator/action",
             json={"action_kind": "escalate_dependency_failure"},
         )
-        assert resp.status_code in (200, 422)
+        assert resp.status_code == 422
         data = resp.json()
         assert data.get("accepted") is False
         assert "approval_token" in str(data.get("error", ""))
