@@ -1510,9 +1510,9 @@ class OperatorSurface:
         policy_layer = snapshot.governance_state.get("policy_layer", {})
         summary = policy_layer.get("summary", {})
         return {
-            "hard_block_count": int(summary.get("hard_block_count", 0) or 0),
-            "soft_degraded_count": int(summary.get("soft_degraded_count", 0) or 0),
-            "manual_decision_count": int(summary.get("manual_decision_count", 0) or 0),
+            "hard_block_count": int(summary.get("hard_block_count", 0)),
+            "soft_degraded_count": int(summary.get("soft_degraded_count", 0)),
+            "manual_decision_count": int(summary.get("manual_decision_count", 0)),
         }
 
     def _build_operator_action_availability(self, snapshot: OperatorSnapshot) -> Dict[str, Any]:
@@ -1847,7 +1847,8 @@ class OperatorSurface:
 
         action_kind = request.action_kind
         availability = self.get_operator_action_availability()
-        action_policy = dict((availability.get("actions") or {}).get(action_kind) or {})
+        actions_catalog = dict(availability.get("actions") or {})
+        action_policy = dict(actions_catalog.get(action_kind) or {})
 
         if not action_policy:
             return OperatorActionResult(
