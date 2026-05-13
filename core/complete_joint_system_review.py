@@ -1523,7 +1523,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
     """Build V2-side integrity repairs reinforced by this convergence baseline."""
     return [
         IntegrityRepairAction(
-            action_id="A1",
+            action_id="IRA_EVIDENCE_GATE_CLOSURE",
             title_zh="结果闭环判定显式受 evidence acceptance gate 约束",
             status_zh="本次 V2 已补强",
             why_high_value_zh=(
@@ -1542,7 +1542,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
             ),
         ),
         IntegrityRepairAction(
-            action_id="A2",
+            action_id="IRA_ROUTING_TRUTH_STRONG_GATING",
             title_zh="把 Android local inference/fallback/readiness 变成 V2 路由强一致门控",
             status_zh="仍需跨仓跟进",
             why_high_value_zh=(

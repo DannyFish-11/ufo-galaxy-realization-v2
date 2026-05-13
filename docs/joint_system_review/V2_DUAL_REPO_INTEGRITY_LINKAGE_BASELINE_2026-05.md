@@ -119,7 +119,7 @@
 - 变更：`core/unified_result_ingress.py`
 - 目的：避免 `evidence_acceptance_verdict=quarantine/reject` 被后续 `is_fully_closed` 计算覆盖
 - 效果：即使 truth-chain 与 completion notify 成功，若证据门判定为 `quarantine/reject`，结果也不会被标记为 fully closed
-- 回归：`tests/test_unified_result_ingress.py::test_E05_quarantine_verdict_cannot_be_overwritten_by_final_closure_calc`
+- 回归：`tests/test_unified_result_ingress.py::test_E05_quarantine_verdict_blocks_closure`
 
 这属于系统完整性补洞，不是叙事优化：它直接把“结果是否可信可收口”与 canonical evidence gate 绑定到同一条决策链。
 
