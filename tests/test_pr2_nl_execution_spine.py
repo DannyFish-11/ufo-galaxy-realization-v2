@@ -81,3 +81,22 @@ def test_spine_goal_truncation_handles_multibyte_chars():
     assert goal.endswith("…")
     goal.encode("utf-8")
     assert snap["traceability"]["trace_id"] == ""
+
+
+def test_spine_traceability_propagates_trace_id():
+    snap = build_problem_execution_spine(
+        message="帮我总结今天完成情况",
+        source="chat",
+        entry_mode="local",
+        metadata={
+            "execution_path": "local",
+            "trace_id": "trace-123",
+            "runtime_session_id": "rs-123",
+            "request_id": "req-123",
+        },
+        execution_result={"execution_intent": {"task_id": "task-123"}},
+        intent="chat",
+    )
+    assert snap["traceability"]["trace_id"] == "trace-123"
+    assert snap["traceability"]["runtime_session_id"] == "rs-123"
+    assert snap["traceability"]["task_id"] == "task-123"

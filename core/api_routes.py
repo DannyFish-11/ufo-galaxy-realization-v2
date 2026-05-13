@@ -555,6 +555,19 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         "yes",
     )
 
+    def _stamp_problem_closure_to_task_queue(
+        task_id: str,
+        outcome: Any,
+    ) -> None:
+        if task_id not in task_queue or outcome is None:
+            return
+        task_queue[task_id]["problem_execution_closure"] = (
+            outcome.problem_execution_closure
+        )
+        task_queue[task_id]["task_completed"] = outcome.task_completed
+        task_queue[task_id]["problem_solved"] = outcome.problem_solved
+        task_queue[task_id]["problem_solved_via"] = outcome.problem_solved_via
+
     # -----------------------------------------------------------------------
     # [COMPAT] /ws/device/{device_id}
     #
@@ -701,19 +714,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 task_queue[task_id]["status"] = _mapped_status
                                 task_queue[task_id]["result"] = data.get("result", {})
                                 task_queue[task_id]["completed_at"] = datetime.now().isoformat()
-                                if _compat_outcome is not None:
-                                    task_queue[task_id]["problem_execution_closure"] = (
-                                        _compat_outcome.problem_execution_closure
-                                    )
-                                    task_queue[task_id]["task_completed"] = (
-                                        _compat_outcome.task_completed
-                                    )
-                                    task_queue[task_id]["problem_solved"] = (
-                                        _compat_outcome.problem_solved
-                                    )
-                                    task_queue[task_id]["problem_solved_via"] = (
-                                        _compat_outcome.problem_solved_via
-                                    )
+                                _stamp_problem_closure_to_task_queue(
+                                    task_id,
+                                    _compat_outcome,
+                                )
 
                 elif msg_type == "goal_result":
                     # ── goal_result compat-path handler ───────────────────────
@@ -796,19 +800,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 task_queue[_goal_task_id]["status"] = _goal_mapped_status
                                 task_queue[_goal_task_id]["result"] = data.get("result", {})
                                 task_queue[_goal_task_id]["completed_at"] = datetime.now().isoformat()
-                                if _goal_outcome is not None:
-                                    task_queue[_goal_task_id]["problem_execution_closure"] = (
-                                        _goal_outcome.problem_execution_closure
-                                    )
-                                    task_queue[_goal_task_id]["task_completed"] = (
-                                        _goal_outcome.task_completed
-                                    )
-                                    task_queue[_goal_task_id]["problem_solved"] = (
-                                        _goal_outcome.problem_solved
-                                    )
-                                    task_queue[_goal_task_id]["problem_solved_via"] = (
-                                        _goal_outcome.problem_solved_via
-                                    )
+                                _stamp_problem_closure_to_task_queue(
+                                    _goal_task_id,
+                                    _goal_outcome,
+                                )
 
                 elif msg_type == "goal_execution_result":
                     # ── goal_execution_result compat-path handler ──────────────
@@ -906,19 +901,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 task_queue[_ger_task_id]["completed_at"] = (
                                     datetime.now().isoformat()
                                 )
-                                if _ger_outcome is not None:
-                                    task_queue[_ger_task_id]["problem_execution_closure"] = (
-                                        _ger_outcome.problem_execution_closure
-                                    )
-                                    task_queue[_ger_task_id]["task_completed"] = (
-                                        _ger_outcome.task_completed
-                                    )
-                                    task_queue[_ger_task_id]["problem_solved"] = (
-                                        _ger_outcome.problem_solved
-                                    )
-                                    task_queue[_ger_task_id]["problem_solved_via"] = (
-                                        _ger_outcome.problem_solved_via
-                                    )
+                                _stamp_problem_closure_to_task_queue(
+                                    _ger_task_id,
+                                    _ger_outcome,
+                                )
 
                 elif msg_type == "ocr_request":
                     image_b64 = data.get("image", "")

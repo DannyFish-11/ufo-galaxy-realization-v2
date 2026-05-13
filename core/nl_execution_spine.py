@@ -132,7 +132,7 @@ def build_problem_execution_closure(
 ) -> Dict[str, Any]:
     """Build additive closure snapshot separating task/delegation/problem closure."""
     _payload = payload or {}
-    _task_terminal = normalized_status in ("completed", "failed", "cancelled", "degraded")
+    _is_terminal_status = normalized_status in ("completed", "failed", "cancelled", "degraded")
     _delegated_signal = (
         source_channel in ("delegated", "canonical_ws", "compat_ws", "replay")
         or bool(_payload.get("handoff_id"))
@@ -144,7 +144,7 @@ def build_problem_execution_closure(
         or _payload.get("final_user_response")
         or _payload.get("problem_solved")
     )
-    _task_closed = bool(_task_terminal and truth_chain_complete and completion_notified)
+    _task_closed = bool(_is_terminal_status and truth_chain_complete and completion_notified)
     _problem_closed = bool(
         _problem_closed_signal and truth_chain_complete and completion_notified
     )
@@ -167,7 +167,7 @@ def build_problem_execution_closure(
         ),
         "delegated_step_stage": (
             "closed"
-            if (_delegated_signal and _task_terminal)
+            if (_delegated_signal and _is_terminal_status)
             else "not_applicable" if not _delegated_signal else "pending"
         ),
         "problem_closure_stage": "closed" if _problem_closed else "pending_user_problem_closure",
@@ -176,14 +176,14 @@ def build_problem_execution_closure(
         "problem_solved_via": _solved_via if _problem_closed else "pending",
         "degraded_but_problem_solved": _degraded_but_solved,
         "task_completion_semantics": {
-            "terminal_status": _task_terminal,
+            "terminal_status": _is_terminal_status,
             "truth_chain_complete": truth_chain_complete,
             "completion_notified": completion_notified,
             "normalized_status": normalized_status,
         },
         "problem_completion_semantics": {
             "problem_closed_signal": _problem_closed_signal,
-            "requires_followup": (not _problem_closed and _task_terminal),
+            "requires_followup": (not _problem_closed and _is_terminal_status),
             "execution_quality": "degraded" if normalized_status == "degraded" else "normal",
         },
         "source_channel": source_channel,
