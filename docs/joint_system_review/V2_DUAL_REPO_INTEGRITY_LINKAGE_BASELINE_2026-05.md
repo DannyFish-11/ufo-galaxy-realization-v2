@@ -2,11 +2,11 @@
 
 > 目标仓：`DannyFish-11/ufo-galaxy-realization-v2`
 >
-> 联动仓：`DannyFish-11/ufo-galaxy-android`
+> 联动仓： `DannyFish-11/ufo-galaxy-android`
 >
-> 机器基线：`core/complete_joint_system_review.py` + `tests/test_complete_joint_system_review.py`
+> 机器基线： `core/complete_joint_system_review.py` + `tests/test_complete_joint_system_review.py`
 >
-> 补充重审：`core/post_closure_dual_repo_reassessment.py` + `tests/test_post_closure_dual_repo_reassessment.py`
+> 补充重审： `core/post_closure_dual_repo_reassessment.py` + `tests/test_post_closure_dual_repo_reassessment.py`
 
 ## 1. 这到底是一个什么系统
 
