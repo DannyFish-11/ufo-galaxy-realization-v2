@@ -11,6 +11,7 @@
 
 | 文件 | 日期 | 内容 |
 |------|------|------|
+| [V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md](./V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md) | 2026-05-13 | **V2 侧双仓完整性联动基线**：用真实代码回答系统身份、双仓职责、主链路、完成度、跨仓矛盾与下一步 V2 收口重点 |
 | [ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md](./ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md) | 2026-05-12 | **Follow-up 审计基线**：回答 Android 从 local-only 到跨设备/分布式参与的真实代码条件与缺口 |
 | [PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md](./PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md) | 2026-05-12 | **预实施基线文档**：严格区分真实运行路径、推断关系与契约/审计层 |
 | [DEEP_JOINT_REVIEW_2026.md](./DEEP_JOINT_REVIEW_2026.md) | 2026-04-26 | **深度联合审查主文档**（8 主题全覆盖，含问题全集与 workstream 优先级）|
@@ -22,7 +23,7 @@
 
 ---
 
-> 推荐阅读顺序：先读 `DEEP_JOINT_REVIEW_2026.md`（最新、最全、覆盖问题全集），再按需参阅 01-05 补充细节。
+> 推荐阅读顺序：先读 `V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md`（当前这张 V2 侧收敛 PR 的直接基线），再读 `DEEP_JOINT_REVIEW_2026.md` 与 `PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md` 追补细节。
 
 ---
 

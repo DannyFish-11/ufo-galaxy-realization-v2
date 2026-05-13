@@ -52,10 +52,7 @@ logger = logging.getLogger(__name__)
 # Authority metadata
 # ---------------------------------------------------------------------------
 
-REVIEW_PR_TITLE = (
-    "Complete joint dual-repo system review: full-system baseline, proposition "
-    "adjudication, and structured remaining-problem registry (V2 + Android)"
-)
+REVIEW_PR_TITLE = "收敛 V2 双仓完整性联动与全系统认知基线（基于真实代码）"
 REVIEW_AUTHORITY = (
     "COMPLETE_JOINT_SYSTEM_REVIEW::"
     "core.complete_joint_system_review::real-code-only-v2-plus-android"
@@ -287,6 +284,74 @@ class ClosureMapEntry:
 
 
 @dataclass
+class RuntimeFlowStage:
+    """A code-grounded stage in the end-to-end user-problem execution chain."""
+
+    stage_id: str
+    title_zh: str
+    runtime_truth_zh: str
+    v2_anchors: List[str] = field(default_factory=list)
+    android_anchors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "stage_id": self.stage_id,
+            "title_zh": self.title_zh,
+            "runtime_truth_zh": self.runtime_truth_zh,
+            "v2_anchors": list(self.v2_anchors),
+            "android_anchors": list(self.android_anchors),
+        }
+
+
+@dataclass
+class CrossRepoMismatch:
+    """Explicit divergence or weakly-enforced semantic mismatch across repos."""
+
+    mismatch_id: str
+    topic_zh: str
+    v2_truth_zh: str
+    android_truth_zh: str
+    impact_zh: str
+    linked_issue_ids: List[str] = field(default_factory=list)
+    v2_anchors: List[str] = field(default_factory=list)
+    android_anchors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "mismatch_id": self.mismatch_id,
+            "topic_zh": self.topic_zh,
+            "v2_truth_zh": self.v2_truth_zh,
+            "android_truth_zh": self.android_truth_zh,
+            "impact_zh": self.impact_zh,
+            "linked_issue_ids": list(self.linked_issue_ids),
+            "v2_anchors": list(self.v2_anchors),
+            "android_anchors": list(self.android_anchors),
+        }
+
+
+@dataclass
+class V2ConvergencePriority:
+    """Implementation-guiding next-step convergence direction for V2."""
+
+    title_zh: str
+    why_now_zh: str
+    target_outcome_zh: str
+    linked_issue_ids: List[str] = field(default_factory=list)
+    v2_anchors: List[str] = field(default_factory=list)
+    android_anchors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "title_zh": self.title_zh,
+            "why_now_zh": self.why_now_zh,
+            "target_outcome_zh": self.target_outcome_zh,
+            "linked_issue_ids": list(self.linked_issue_ids),
+            "v2_anchors": list(self.v2_anchors),
+            "android_anchors": list(self.android_anchors),
+        }
+
+
+@dataclass
 class CompleteJointSystemReport:
     """Top-level machine-readable report produced by this review."""
 
@@ -302,6 +367,9 @@ class CompleteJointSystemReport:
     domain_statuses: List[DomainStatus] = field(default_factory=list)
     remaining_issues: List[RemainingIssue] = field(default_factory=list)
     closure_map: List[ClosureMapEntry] = field(default_factory=list)
+    runtime_flow: List[RuntimeFlowStage] = field(default_factory=list)
+    cross_repo_mismatches: List[CrossRepoMismatch] = field(default_factory=list)
+    v2_next_convergence_priority: Optional[V2ConvergencePriority] = None
 
     stage: StageVerdict = StageVerdict.MID_STAGE_CONSOLIDATION
     overall_completion_pct: float = 0.0
@@ -323,6 +391,13 @@ class CompleteJointSystemReport:
             "domain_statuses": [d.to_dict() for d in self.domain_statuses],
             "remaining_issues": [r.to_dict() for r in self.remaining_issues],
             "closure_map": [c.to_dict() for c in self.closure_map],
+            "runtime_flow": [f.to_dict() for f in self.runtime_flow],
+            "cross_repo_mismatches": [m.to_dict() for m in self.cross_repo_mismatches],
+            "v2_next_convergence_priority": (
+                self.v2_next_convergence_priority.to_dict()
+                if self.v2_next_convergence_priority
+                else None
+            ),
             "stage": self.stage.value,
             "overall_completion_pct": self.overall_completion_pct,
             "weighted_completion_pct": self.weighted_completion_pct,
@@ -1215,6 +1290,200 @@ def _build_closure_map(
     return result
 
 
+def _build_runtime_flow() -> List[RuntimeFlowStage]:
+    """Build the code-grounded end-to-end execution flow baseline."""
+    return [
+        RuntimeFlowStage(
+            "F1",
+            "问题入口进入 V2 统一首跳",
+            "用户问题并不是直接进入某个单点聊天处理器，而是先经过 "
+            "EntrypointRouter / chat compatibility adapter，随后交给 "
+            "DesktopPresenceRuntime 与 OpenClawd 的 canonical 链。",
+            [
+                "core/unified/entrypoint_router.py",
+                "core/routes/chat.py",
+                "core/desktop_presence_runtime.py",
+                "core/openclawd.py",
+            ],
+            [],
+        ),
+        RuntimeFlowStage(
+            "F2",
+            "V2 判定执行路径与是否跨设备分发",
+            "进入 V2 后，请求先形成统一路由与执行上下文，再由 command_router / "
+            "source_dispatch_orchestrator / device_selection 结合 readiness、"
+            "session、participation truth 判定本地执行、远端 handoff 或分阶段协作。",
+            [
+                "core/command_router.py",
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+                "core/android_device_state_store.py",
+            ],
+            [ANDROID_ANCHOR_WS_CLIENT],
+        ),
+        RuntimeFlowStage(
+            "F3",
+            "Android 作为参与节点接收并落地执行",
+            "当 V2 选择 Android 参与时，Android 不是被动客户端，而是通过 "
+            "GalaxyWebSocketClient 接入、通过 AutonomousExecutionPipeline 与 "
+            "delegated/takeover 路径在本地执行，并受 mesh participation contract "
+            "与 continuity identity 约束。",
+            [
+                "core/android_runtime_dispatch_binding.py",
+                "core/android_delegated_runtime_lifecycle_coordinator.py",
+                "core/android_v2_continuity_contract.py",
+            ],
+            [
+                ANDROID_ANCHOR_WS_CLIENT,
+                ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
+                ANDROID_ANCHOR_MESH_CONTRACT,
+                ANDROID_ANCHOR_CONTINUITY,
+            ],
+        ),
+        RuntimeFlowStage(
+            "F4",
+            "执行信号与结果从 Android 回流到 V2",
+            "Android 的 runtime-state、delegated execution 信号与结果不会在外围停留，"
+            "而是被 V2 吸收进 android_device_state_store、signal reconciler 与 "
+            "unified_result_ingress 的 canonical 链。",
+            [
+                "core/android_device_state_store.py",
+                "core/android_execution_signal_reconciler.py",
+                "core/unified_result_ingress.py",
+            ],
+            [
+                ANDROID_ANCHOR_WS_CLIENT,
+                ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
+            ],
+        ),
+        RuntimeFlowStage(
+            "F5",
+            "V2 完成结果真值、接受门与闭环判定",
+            "结果进入 V2 后要经过 execution evidence、result truth acceptance、"
+            "completion ingress 与 memory backflow，而不是只更新某个任务状态位。",
+            [
+                "core/execution_evidence_model.py",
+                "core/result_truth_acceptance_gate.py",
+                "core/unified_result_ingress.py",
+                "core/canonical_completion_ingress.py",
+            ],
+            [],
+        ),
+        RuntimeFlowStage(
+            "F6",
+            "操作面、观测面与系统收口面读取同一批 runtime truth",
+            "operator / panel / readiness / state contract 这些面板不是独立叙事层，"
+            "而是读取统一治理语义、参与证据与 mesh/runtime 投影来形成当前系统可见面。",
+            [
+                "core/unified_governance_semantics.py",
+                "core/unified_panel_aggregation.py",
+                "core/operator_surface.py",
+                "core/operational_readiness_surface.py",
+                "core/v2_unified_state_contract.py",
+            ],
+            [ANDROID_ANCHOR_MESH_CONTRACT],
+        ),
+    ]
+
+
+def _build_cross_repo_mismatches() -> List[CrossRepoMismatch]:
+    """Build explicit cross-repo semantic contradictions and weak links."""
+    return [
+        CrossRepoMismatch(
+            "M1",
+            "V2 已能看到 Android runtime truth，但编排消费覆盖面仍不完整",
+            "V2 已在 source_dispatch_orchestrator 与 device_selection 中消费 "
+            "android_snapshot / get_device_state_snapshot。",
+            "Android 已通过 GalaxyWebSocketClient 持续上送状态与执行信号。",
+            "这说明双仓 transport 与状态吸收已存在，但 truth 尚未稳定成为所有路由/分发分支的"
+            "统一决策输入，导致“看得见”不等于“真决策”。",
+            ["R1", "R12"],
+            [
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+            ],
+            [ANDROID_ANCHOR_WS_CLIENT],
+        ),
+        CrossRepoMismatch(
+            "M2",
+            "Android 参与能力表达比 V2 当前成熟度叙事更克制",
+            "V2 已具备 mesh_runtime_state、delegated coordination、operator/panel 投影等 richer surface。",
+            "AndroidMeshParticipationContract 明确把 full mesh runtime executable 与 "
+            "participant-level capability 分开，并保留 constrained/deferred 语义。",
+            "如果只看 V2 表面，很容易高估 full mesh 已闭环；Android 合同明确要求当前只能把系统"
+            "定性为‘中心治理 + 参与式协作’，不能拔高为 fully closed mesh runtime。",
+            ["R4", "R13"],
+            [
+                "core/mesh/mesh_runtime_center_state.py",
+                "core/unified_panel_aggregation.py",
+            ],
+            [ANDROID_ANCHOR_MESH_CONTRACT, ANDROID_ANCHOR_MESH_TEST],
+        ),
+        CrossRepoMismatch(
+            "M3",
+            "能力/就绪/本地推理可用性尚未形成稳定统一门控",
+            "V2 有 android_mode_gate_policy、capability_resolver 与 unified governance semantics。",
+            "Android 侧本地执行/本地推理能力真实存在，但其 availability 并未在双仓之间形成强制"
+            "一致的决策消费链。",
+            "这会让 Android 本地能力、V2 readiness judgement、operator 面板之间出现半语义/半治理"
+            "状态，而不是稳定的一条真值轴。",
+            ["R3", "R10"],
+            [
+                "core/android_mode_gate_policy.py",
+                "core/unified/capability_resolver.py",
+            ],
+            [ANDROID_ANCHOR_AUTONOMOUS_PIPELINE, ANDROID_ANCHOR_CAPABILITY_REPORT],
+        ),
+        CrossRepoMismatch(
+            "M4",
+            "session continuity / durable identity 已接通，但跨重启闭环仍弱",
+            "V2 已消费 durable_session_id / continuity_epoch，并在 reconnect 分类与 registry 中保留。",
+            "Android DurableParticipantIdentity 已把 durable identity 作为稳定参与者身份锚点。",
+            "双仓在字段与单次 reconnect 语义上已经联动，但完整的 Android 进程重建 → V2 重启 → "
+            "恢复执行 证明面仍薄，因此 continuity 是部分闭合而不是 fully closed。",
+            ["R9"],
+            [
+                "core/attached_runtime_session_registry.py",
+                "core/flow_continuity_coordinator.py",
+                "core/android_v2_continuity_contract.py",
+            ],
+            [ANDROID_ANCHOR_CONTINUITY],
+        ),
+    ]
+
+
+def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
+    """Build the highest-value next-step V2-side integrity-linkage direction."""
+    return V2ConvergencePriority(
+        title_zh="让 Android truth 成为 V2 编排、闭环与治理的正式输入，而不是仅停留在可见面",
+        why_now_zh=(
+            "当前双仓最关键的未闭合点，不再是 transport 是否存在，而是 Android 已上送的 "
+            "runtime-state / participation / readiness / continuity truth 是否真正进入 V2 的"
+            "路由、dispatch、result acceptance 与 operator 收口链。该方向直接覆盖 R1/R2/R3/R12，"
+            "能把系统从“能描述”推进到“能按真值决策”。"
+        ),
+        target_outcome_zh=(
+            "目标不是新增抽象层，而是在现有 V2 canonical path 上补齐："
+            "(1) 编排分支完整消费 Android truth；"
+            "(2) result acceptance / closure 明确引用参与与连续性证据；"
+            "(3) operator / readiness / board 面与真实决策原因同源可追踪。"
+        ),
+        linked_issue_ids=["R1", "R2", "R3", "R12"],
+        v2_anchors=[
+            "core/runtime/source_dispatch_orchestrator.py",
+            "galaxy_gateway/routing/device_selection.py",
+            "core/unified_result_ingress.py",
+            "core/operational_readiness_surface.py",
+            "core/unified_panel_aggregation.py",
+        ],
+        android_anchors=[
+            ANDROID_ANCHOR_WS_CLIENT,
+            ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
+            ANDROID_ANCHOR_CONTINUITY,
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main build entry point
 # ---------------------------------------------------------------------------
@@ -1230,6 +1499,9 @@ def build_complete_joint_system_review() -> CompleteJointSystemReport:
     domains = _build_domains(p)
     remaining = _build_remaining_issues(p)
     closure_map = _build_closure_map(propositions, remaining)
+    runtime_flow = _build_runtime_flow()
+    mismatches = _build_cross_repo_mismatches()
+    next_priority = _build_v2_next_convergence_priority()
 
     # Unweighted mean
     overall = round(sum(d.completion_pct for d in domains) / len(domains), 1)
@@ -1256,6 +1528,9 @@ def build_complete_joint_system_review() -> CompleteJointSystemReport:
         domain_statuses=domains,
         remaining_issues=remaining,
         closure_map=closure_map,
+        runtime_flow=runtime_flow,
+        cross_repo_mismatches=mismatches,
+        v2_next_convergence_priority=next_priority,
         stage=stage,
         overall_completion_pct=overall,
         weighted_completion_pct=weighted,
@@ -1280,6 +1555,9 @@ __all__ = [
     "DomainStatus",
     "RemainingIssue",
     "ClosureMapEntry",
+    "RuntimeFlowStage",
+    "CrossRepoMismatch",
+    "V2ConvergencePriority",
     "CompleteJointSystemReport",
     "build_complete_joint_system_review",
 ]
