@@ -21,6 +21,7 @@ from core.complete_joint_system_review import (
     REVIEW_AUTHORITY,
     REVIEW_METHODOLOGY,
     REVIEW_PR_TITLE,
+    REVIEW_PR_TITLE_EN,
     REVIEW_SUPERSEDES,
     ClosureMapEntry,
     CompleteJointSystemReport,
@@ -85,6 +86,10 @@ def test_pr_title_signals_joint_system_review() -> None:
     assert "V2" in REVIEW_PR_TITLE
     assert "双仓" in REVIEW_PR_TITLE
     assert "基线" in REVIEW_PR_TITLE
+    english_title = REVIEW_PR_TITLE_EN.lower()
+    assert "dual-repo" in english_title
+    assert "baseline" in english_title
+    assert "integrity linkage" in english_title
 
 
 def test_supersedes_list_includes_prior_baselines() -> None:
@@ -420,6 +425,7 @@ def test_to_dict_has_all_top_level_keys() -> None:
         "authority",
         "methodology",
         "pr_title",
+        "pr_title_en",
         "supersedes",
         "android_audited_ref",
         "generated_at",

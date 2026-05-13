@@ -53,6 +53,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 REVIEW_PR_TITLE = "收敛 V2 双仓完整性联动与全系统认知基线（基于真实代码）"
+REVIEW_PR_TITLE_EN = (
+    "Converge V2 dual-repo integrity linkage and full-system cognition baseline "
+    "(grounded in real code)"
+)
 REVIEW_AUTHORITY = (
     "COMPLETE_JOINT_SYSTEM_REVIEW::"
     "core.complete_joint_system_review::real-code-only-v2-plus-android"
@@ -358,6 +362,7 @@ class CompleteJointSystemReport:
     authority: str = REVIEW_AUTHORITY
     methodology: str = REVIEW_METHODOLOGY
     pr_title: str = REVIEW_PR_TITLE
+    pr_title_en: str = REVIEW_PR_TITLE_EN
     supersedes: List[str] = field(default_factory=lambda: list(REVIEW_SUPERSEDES))
     android_audited_ref: str = ANDROID_AUDITED_REF
     generated_at: float = field(default_factory=time.time)
@@ -383,6 +388,7 @@ class CompleteJointSystemReport:
             "authority": self.authority,
             "methodology": self.methodology,
             "pr_title": self.pr_title,
+            "pr_title_en": self.pr_title_en,
             "supersedes": list(self.supersedes),
             "android_audited_ref": self.android_audited_ref,
             "generated_at": self.generated_at,
@@ -1543,6 +1549,7 @@ __all__ = [
     "REVIEW_AUTHORITY",
     "REVIEW_METHODOLOGY",
     "REVIEW_PR_TITLE",
+    "REVIEW_PR_TITLE_EN",
     "REVIEW_SUPERSEDES",
     "PropositionVerdict",
     "EvidenceState",
