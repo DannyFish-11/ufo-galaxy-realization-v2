@@ -662,6 +662,15 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 elif msg_type == "task_result":
                     task_id = data.get("task_id", "")
                     if task_id:
+                        _raw_status = str(data.get("status", "")).lower().strip()
+                        if _raw_status in ("failed", "error"):
+                            _mapped_status = "failed"
+                        elif _raw_status == "cancelled":
+                            _mapped_status = "cancelled"
+                        elif _raw_status == "degraded":
+                            _mapped_status = "degraded"
+                        else:
+                            _mapped_status = "completed"
                         _compat_outcome = None
                         _compat_was_dedup = False
                         try:
@@ -672,7 +681,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 normalize_status as _normalize_status,
                             )
 
-                            _mapped_status = _normalize_status(data.get("status", ""))
+                            _mapped_status = _normalize_status(_raw_status)
                             _event = NormalizedResultEvent(
                                 task_id=task_id,
                                 device_id=device_id,
@@ -700,16 +709,6 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             )
 
                         if not _compat_was_dedup:
-                            _raw_status = str(data.get("status", "")).lower().strip()
-                            if _raw_status in ("failed", "error"):
-                                _mapped_status = "failed"
-                            elif _raw_status == "cancelled":
-                                _mapped_status = "cancelled"
-                            elif _raw_status == "degraded":
-                                _mapped_status = "degraded"
-                            else:
-                                _mapped_status = "completed"
-
                             if task_id in task_queue:
                                 task_queue[task_id]["status"] = _mapped_status
                                 task_queue[task_id]["result"] = data.get("result", {})
