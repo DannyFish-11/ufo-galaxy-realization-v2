@@ -409,35 +409,42 @@ class TestSelectTargetAndroidTruth:
         # The ready device should win despite being listed second.
         assert result.target_device_id == dev_ready
 
-    def test_android_participation_evidence_changes_winner_when_snapshots_equal(self, monkeypatch):
+    def test_participation_evidence_breaks_tie_in_selection(self, monkeypatch):
         from core.runtime.source_dispatch_orchestrator import (
             _select_target_from_candidates,
         )
 
-        dev_dist = "dev_dist"
-        dev_attach = "dev_attach"
-        entry_dist = _make_registry_entry(dev_dist)
-        entry_attach = _make_registry_entry(dev_attach)
+        device_distributed = "dev_dist"
+        device_attached = "dev_attach"
+        entry_distributed = _make_registry_entry(device_distributed)
+        entry_attached = _make_registry_entry(device_attached)
         snap = _make_snapshot(model_ready=True, local_loop_ready=True)
 
         monkeypatch.setattr(
             "core.attached_runtime_session_registry.list_active_sessions",
-            lambda registry=None: [entry_attach, entry_dist],
+            lambda registry=None: [entry_attached, entry_distributed],
         )
+        part_dist = _make_participation()
+        part_dist.participant_tier = "mesh_participant"
+        part_attach = _make_participation()
+        part_attach.participant_tier = "joined_runtime"
 
         result = _select_target_from_candidates(
-            readiness_inputs={dev_dist: _make_readiness(), dev_attach: _make_readiness()},
-            participation_inputs={dev_dist: _make_participation(), dev_attach: _make_participation()},
-            reuse_inputs={dev_dist: False, dev_attach: False},
-            android_snapshot_inputs={dev_dist: snap, dev_attach: snap},
+            readiness_inputs={
+                device_distributed: _make_readiness(),
+                device_attached: _make_readiness(),
+            },
+            participation_inputs={device_distributed: part_dist, device_attached: part_attach},
+            reuse_inputs={device_distributed: False, device_attached: False},
+            android_snapshot_inputs={device_distributed: snap, device_attached: snap},
             android_participation_inputs={
-                dev_dist: {"tier": "distributed_participant"},
-                dev_attach: {"tier": "fully_attached"},
+                device_distributed: {"tier": "distributed_participant"},
+                device_attached: {"tier": "fully_attached"},
             },
         )
 
         assert result is not None
-        assert result.target_device_id == dev_dist
+        assert result.target_device_id == device_distributed
         assert result.metadata.get("android_participation_truth_consumed") is True
         assert result.metadata.get("android_participation_tier") == "distributed_participant"
 
@@ -804,8 +811,8 @@ class TestSelectDevicesAndroidRoutingWeight:
     ):
         from galaxy_gateway.routing.device_selection import select_devices
 
-        dev_attach = _make_device("dev_attach_tier")
-        dev_dist = _make_device("dev_dist_tier")
+        device_attached = _make_device("dev_attach_tier")
+        device_distributed = _make_device("dev_dist_tier")
         same_snapshot = _make_snapshot(model_ready=True, local_loop_ready=True)
 
         monkeypatch.setattr(
@@ -841,7 +848,7 @@ class TestSelectDevicesAndroidRoutingWeight:
             lambda: mock_pool,
         )
 
-        result = select_devices(analysis={}, candidates=[dev_attach, dev_dist])
+        result = select_devices(analysis={}, candidates=[device_attached, device_distributed])
         assert len(result) == 1
         assert result[0].device_id == "dev_dist_tier"
 

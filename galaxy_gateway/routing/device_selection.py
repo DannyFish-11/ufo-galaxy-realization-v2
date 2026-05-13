@@ -59,6 +59,9 @@ from core.android_device_state_store import (  # noqa: E402
     get_device_state_snapshot,
     list_recent_execution_events,
 )
+from core.android_participation_truth_scoring import (  # noqa: E402
+    get_android_participation_tier_score_bonus,
+)
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
 from core.unified.gateway_capability_projection import (  # noqa: E402
     get_gateway_capabilities_for_device,
@@ -346,15 +349,21 @@ def select_devices(
                     _score -= 10
             try:
                 _participation = get_android_participation_evidence(_did)
-                _tier = str((_participation or {}).get("tier") or "").strip().lower()
-                if _tier == "fully_attached":
-                    _score += 4
-                elif _tier == "dispatch_eligible":
-                    _score += 8
-                elif _tier == "distributed_participant":
-                    _score += 12
-            except Exception:
-                pass
+                _tier_bonus = get_android_participation_tier_score_bonus(_participation)
+                _score += _tier_bonus
+                if _tier_bonus > 0:
+                    logger.debug(
+                        "select_devices: participation tier bonus applied for %s tier=%s bonus=%d",
+                        _did,
+                        str((_participation or {}).get("tier") or "").strip().lower(),
+                        _tier_bonus,
+                    )
+            except Exception as _part_err:
+                logger.debug(
+                    "select_devices: participation evidence unavailable for %s: %s",
+                    _did,
+                    _part_err,
+                )
             try:
                 _recent = list_recent_execution_events(flow_id=None, device_id=_did, limit=1)
                 if _recent:

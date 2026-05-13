@@ -100,6 +100,11 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.android_participation_truth_scoring import (
+    get_android_participation_tier_score_bonus,
+    normalize_android_participation_tier,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1888,15 +1893,7 @@ def _score_candidate(
                 score -= 10
 
     # --- Android participation evidence scoring (additive, non-gating) ---
-    _participation_tier = ""
-    if isinstance(android_participation_evidence, dict):
-        _participation_tier = str(android_participation_evidence.get("tier") or "").strip().lower()
-    if _participation_tier == "fully_attached":
-        score += 4
-    elif _participation_tier == "dispatch_eligible":
-        score += 8
-    elif _participation_tier == "distributed_participant":
-        score += 12
+    score += get_android_participation_tier_score_bonus(android_participation_evidence)
 
     _canonical_gate_decision = "allow"
     try:
@@ -2161,7 +2158,6 @@ def _select_target_from_candidates(
                     device_id,
                     exc,
                 )
-
         # Android execution busy check — deprioritise devices that are
         # currently executing a delegated task (non-terminal phase within
         # the last 60 seconds).
@@ -2265,6 +2261,9 @@ def _select_target_from_candidates(
 
         if score > best_score:
             best_score = score
+            _android_participation_tier = normalize_android_participation_tier(
+                android_participation_evidence
+            )
             reuse_tag = ":reuse_eligible" if reuse_eligible else ""
             android_tag = ":android_truth" if android_snapshot is not None else ""
             best_target = SourceDispatchTarget(
@@ -2284,11 +2283,7 @@ def _select_target_from_candidates(
                         android_participation_evidence,
                         dict,
                     ),
-                    "android_participation_tier": (
-                        str(android_participation_evidence.get("tier") or "")
-                        if isinstance(android_participation_evidence, dict)
-                        else ""
-                    ),
+                    "android_participation_tier": _android_participation_tier,
                     "android_dispatch_field_status": {
                         "authoritative_scoring_fields": list(
                             ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
