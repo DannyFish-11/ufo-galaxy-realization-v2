@@ -85,6 +85,14 @@ KNOWN_SHIM_FILES = {
     "galaxy_gateway/capability_registry.py",              # legacy; copy in galaxy_gateway/legacy/
     "galaxy_gateway/task_router.py",                      # legacy; → galaxy_gateway/routing/
     "galaxy_gateway/handlers/message_handler.py",         # legacy chain-B dispatcher
+    # PR-3 convergence — shims identified during session/continuity/authority unification
+    "core/runtime_closure_audit.py",                      # PR-3 runtime closure audit shim
+    "core/legacy_system_decommission.py",                 # PR-3 legacy system decommission shim
+    "core/llm/execution_authority.py",                    # PR-3 LLM execution authority compat
+    "core/schemas/ugcp/shared.py",                        # PR-3 UGCP shared schema compat
+    "galaxy_gateway/session_roaming.py",                  # PR-3 session roaming compat
+    "galaxy_gateway/enhanced_nlu_v2.py",                  # PR-3 enhanced NLU v2 compat
+    "galaxy_gateway/smart_transport_router.py",           # PR-3 smart transport router compat
 }
 
 # Approved files that may contain `except ImportError` fallback definitions
@@ -116,6 +124,8 @@ APPROVED_IMPORT_FALLBACK_FILES = {
     "galaxy_gateway/routes/tasks.py",
     "galaxy_gateway/routes/llm.py",
     "galaxy_gateway/routes/chat.py",
+    # PR-3 convergence — unified_governance_semantics has a guarded optional dependency
+    "core/unified_governance_semantics.py",               # PR-3: guarded optional dependency
 }
 
 # YAML size limit (bytes) — informational warning only
