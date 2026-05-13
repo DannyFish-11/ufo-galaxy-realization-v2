@@ -373,7 +373,7 @@ class UnifiedResultIngress:
         self._log_outcome(event, outcome)
 
         # Determine overall closure
-        evidence_verdict = str(outcome.evidence_acceptance_verdict or "").strip()
+        evidence_verdict = outcome.evidence_acceptance_verdict or ""
         evidence_gate_blocked = evidence_verdict in EVIDENCE_CLOSURE_BLOCKING_VERDICTS
         outcome.is_fully_closed = (
             not outcome.was_deduplicated

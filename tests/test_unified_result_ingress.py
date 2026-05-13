@@ -510,7 +510,6 @@ class TestCompletionIngressNotify:
         def _force_quarantine(_event: Any, outcome: Any) -> None:
             outcome.evidence_acceptance_verdict = "quarantine"
             outcome.incomplete_reason = "evidence_gate:quarantine"
-            outcome.is_fully_closed = False
 
         ingress._classify_and_apply_evidence_gate = _force_quarantine  # type: ignore[method-assign]
 

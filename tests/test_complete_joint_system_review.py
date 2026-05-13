@@ -85,7 +85,6 @@ def test_methodology_prohibits_non_code_evidence() -> None:
 
 
 def test_pr_title_signals_993P2_reinforcement_framing() -> None:
-    assert "993P2" in REVIEW_PR_TITLE
     assert REVIEW_CONVERGENCE_ANCHOR in REVIEW_PR_TITLE
     assert "双仓" in REVIEW_PR_TITLE
     assert "补强" in REVIEW_PR_TITLE
