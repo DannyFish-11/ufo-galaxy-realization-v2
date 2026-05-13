@@ -568,6 +568,16 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         task_queue[task_id]["problem_solved"] = outcome.problem_solved
         task_queue[task_id]["problem_solved_via"] = outcome.problem_solved_via
 
+    def _normalize_compat_status(raw_status: Any) -> str:
+        _raw = str(raw_status or "").lower().strip()
+        if _raw in ("failed", "error"):
+            return "failed"
+        if _raw == "cancelled":
+            return "cancelled"
+        if _raw == "degraded":
+            return "degraded"
+        return "completed"
+
     # -----------------------------------------------------------------------
     # [COMPAT] /ws/device/{device_id}
     #
@@ -662,15 +672,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 elif msg_type == "task_result":
                     task_id = data.get("task_id", "")
                     if task_id:
-                        _raw_status = str(data.get("status", "")).lower().strip()
-                        if _raw_status in ("failed", "error"):
-                            _mapped_status = "failed"
-                        elif _raw_status == "cancelled":
-                            _mapped_status = "cancelled"
-                        elif _raw_status == "degraded":
-                            _mapped_status = "degraded"
-                        else:
-                            _mapped_status = "completed"
+                        _raw_status = data.get("status", "")
+                        _mapped_status = _normalize_compat_status(_raw_status)
                         _compat_outcome = None
                         _compat_was_dedup = False
                         try:
@@ -678,10 +681,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 NormalizedResultEvent,
                                 ResultSourceChannel,
                                 ingest_result,
-                                normalize_status as _normalize_status,
                             )
-
-                            _mapped_status = _normalize_status(_raw_status)
                             _event = NormalizedResultEvent(
                                 task_id=task_id,
                                 device_id=device_id,
@@ -780,15 +780,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             # Android sends real status (success/failed/error/
                             # cancelled/degraded).  Map to canonical V2 status
                             # rather than silently discarding or assuming success.
-                            _goal_raw_status = str(data.get("status", "")).lower().strip()
-                            if _goal_raw_status in ("failed", "error"):
-                                _goal_mapped_status = "failed"
-                            elif _goal_raw_status == "cancelled":
-                                _goal_mapped_status = "cancelled"
-                            elif _goal_raw_status == "degraded":
-                                _goal_mapped_status = "degraded"
-                            else:
-                                _goal_mapped_status = "completed"
+                            _goal_raw_status = data.get("status", "")
+                            _goal_mapped_status = _normalize_compat_status(_goal_raw_status)
 
                             logger.info(
                                 "compat_ws: goal_result task_id=%s status=%s→%s",
@@ -826,17 +819,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                     if _ger_task_id:
                         # ── Status truth mapping ──────────────────────────────
                         _payload_sub = data.get("payload") or {}
-                        _ger_raw_status = str(
-                            _payload_sub.get("status") or data.get("status", "")
-                        ).lower().strip()
-                        if _ger_raw_status in ("failed", "error"):
-                            _ger_mapped_status = "failed"
-                        elif _ger_raw_status == "cancelled":
-                            _ger_mapped_status = "cancelled"
-                        elif _ger_raw_status == "degraded":
-                            _ger_mapped_status = "degraded"
-                        else:
-                            _ger_mapped_status = "completed"
+                        _ger_raw_status = _payload_sub.get("status") or data.get("status", "")
+                        _ger_mapped_status = _normalize_compat_status(_ger_raw_status)
 
                         # ── Unified result ingress (idempotency + truth chain +
                         #    completion linkage) ─────────────────────────────────
