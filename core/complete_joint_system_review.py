@@ -1523,7 +1523,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
     """Build V2-side integrity repairs reinforced by this convergence baseline."""
     return [
         IntegrityRepairAction(
-            action_id="IRA_EVIDENCE_GATE_CLOSURE",
+            action_id="IRA_EVIDENCE_GATE_BLOCKS_CLOSURE",
             title_zh="结果闭环判定显式受 evidence acceptance gate 约束",
             status_zh="本次 V2 已补强",
             why_high_value_zh=(
