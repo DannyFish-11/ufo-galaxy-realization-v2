@@ -236,6 +236,19 @@ class UnifiedResultIngressOutcome:
     value string produced by the continuity gate (empty when not evaluated)."""
     problem_execution_closure: Dict[str, Any] = field(default_factory=dict)
     """Additive closure split: task closure vs delegated-step closure vs user-problem closure."""
+    # PR-4: Execution evidence and canonical truth fields
+    execution_evidence_state: str = ""
+    """The :class:`~core.execution_evidence_model.ExecutionEvidenceState` value string
+    for this result (e.g. ``completed_strong``, ``android_delegated``, ``failed``)."""
+    evidence_trust_level: str = ""
+    """The :class:`~core.execution_evidence_model.EvidenceTrustLevel` value string
+    (``trusted`` / ``provisional`` / ``quarantine`` / ``rejected``)."""
+    evidence_acceptance_verdict: str = ""
+    """The :class:`~core.result_truth_acceptance_gate.ResultAcceptanceVerdict` value string
+    (``accept`` / ``accept_provisional`` / ``quarantine`` / ``reject``)."""
+    execution_evidence_record: Optional[Dict[str, Any]] = field(default=None)
+    """Serialised :class:`~core.execution_evidence_model.ExecutionEvidenceRecord`
+    dict for operator/audit consumers (None when evidence classification was skipped)."""
 
 
 # ---------------------------------------------------------------------------
@@ -255,8 +268,9 @@ class UnifiedResultIngress:
     2. run_task_result_truth_chain (four-step truth chain)
     3. CanonicalTaskRuntime lifecycle update  (if not already done by step 2)
     4. CanonicalCompletionIngress.notify()    (unblock awaiters)
-    5. store_task_result / memory backflow    (async, best-effort)
-    6. structured logging
+    5. Evidence quality classification (PR-4: execution evidence model + acceptance gate)
+    6. store_task_result / memory backflow    (async, best-effort)
+    7. structured logging
     """
 
     def __init__(self) -> None:
@@ -335,7 +349,18 @@ class UnifiedResultIngress:
         # Step 4: CanonicalCompletionIngress notify
         outcome.completion_notified = self._notify_completion(event)
 
-        # Step 5: structured logging
+        # Step 5: PR-4 execution evidence classification + acceptance gate
+        try:
+            self._classify_and_apply_evidence_gate(event, outcome)
+        except Exception as _ev_err:
+            logger.warning(
+                "unified_result_ingress: evidence gate step raised (non-fatal) "
+                "task_id=%r err=%s",
+                event.task_id,
+                _ev_err,
+            )
+
+        # Step 6: structured logging
         self._log_outcome(event, outcome)
 
         # Determine overall closure
@@ -606,6 +631,89 @@ class UnifiedResultIngress:
                 _e,
             )
             return False
+
+    def _classify_and_apply_evidence_gate(
+        self,
+        event: NormalizedResultEvent,
+        outcome: UnifiedResultIngressOutcome,
+    ) -> None:
+        """PR-4: Build an execution evidence record and apply the acceptance gate.
+
+        This step classifies the execution evidence state for this result and
+        derives an :class:`~core.result_truth_acceptance_gate.ResultAcceptanceVerdict`
+        that affects downstream propagation (user closure, operator surface,
+        board projection).
+
+        Stamps ``outcome`` with ``execution_evidence_state``,
+        ``evidence_trust_level``, ``evidence_acceptance_verdict``, and
+        ``execution_evidence_record`` fields.  If verdict is ``quarantine`` or
+        ``reject``, clears ``is_fully_closed`` so the result does not propagate
+        to user-facing problem closure.
+
+        Failures are caught and logged at WARNING level; the processing chain
+        continues regardless (additive, non-blocking).
+        """
+        try:
+            from core.execution_evidence_model import build_execution_evidence_record
+            from core.result_truth_acceptance_gate import apply_acceptance_gate
+
+            # Extract Android proof class from payload if present
+            android_proof_class = (
+                event.payload.get("proof_class", "")
+                or event.payload.get("android_proof_class", "")
+                or ""
+            )
+
+            evidence_record = build_execution_evidence_record(
+                task_id=event.task_id,
+                device_id=event.device_id,
+                normalized_status=event.normalized_status,
+                source_channel=event.source_channel.value,
+                truth_chain_complete=outcome.truth_chain_complete,
+                android_proof_class=android_proof_class,
+                is_duplicate=outcome.was_deduplicated,
+                payload=event.payload,
+            )
+
+            # Stamp evidence record onto outcome for operator/audit consumers
+            outcome.execution_evidence_record = evidence_record.to_dict()
+
+            # Apply acceptance gate — may clear is_fully_closed for quarantine/reject
+            acceptance = apply_acceptance_gate(evidence_record, outcome)
+
+            # Record to the operator observability ring buffer (non-blocking)
+            try:
+                from core.operator_execution_observability_surface import (
+                    record_operator_evidence_entry,
+                )
+                record_operator_evidence_entry(
+                    task_id=event.task_id,
+                    device_id=event.device_id,
+                    evidence_state=acceptance.evidence_state,
+                    trust_level=acceptance.evidence_trust_level,
+                    acceptance_verdict=acceptance.verdict.value,
+                    truth_chain_complete=outcome.truth_chain_complete,
+                    operator_warning=acceptance.operator_warning,
+                    android_proof_class=android_proof_class,
+                    source_channel=event.source_channel.value,
+                    diagnosis=list(acceptance.diagnosis),
+                )
+            except Exception as _obs_err:
+                logger.debug(
+                    "unified_result_ingress: operator observability record skipped "
+                    "(non-fatal) task_id=%r err=%s",
+                    event.task_id,
+                    _obs_err,
+                )
+
+        except Exception as _e:
+            logger.warning(
+                "unified_result_ingress: evidence gate skipped (non-fatal) "
+                "task_id=%r source=%s err=%s",
+                event.task_id,
+                event.source_channel.value,
+                _e,
+            )
 
     def _log_outcome(
         self, event: NormalizedResultEvent, outcome: UnifiedResultIngressOutcome
