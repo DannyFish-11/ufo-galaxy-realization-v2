@@ -84,7 +84,7 @@ def test_methodology_prohibits_non_code_evidence() -> None:
     assert "narrative" in lower or "no historical pr" in lower or "pr narrative" in lower
 
 
-def test_pr_title_signals_993p2_reinforcement_framing() -> None:
+def test_pr_title_signals_993P2_reinforcement_framing() -> None:
     assert "993P2" in REVIEW_PR_TITLE
     assert REVIEW_CONVERGENCE_ANCHOR in REVIEW_PR_TITLE
     assert "双仓" in REVIEW_PR_TITLE
@@ -96,7 +96,7 @@ def test_pr_title_signals_993p2_reinforcement_framing() -> None:
     assert REVIEW_CONVERGENCE_ANCHOR.lower() in english_title
 
 
-def test_convergence_anchor_is_explicit_993p2() -> None:
+def test_convergence_anchor_is_explicit_993P2() -> None:
     assert REVIEW_CONVERGENCE_ANCHOR == "993P2"
 
 
