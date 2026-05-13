@@ -1037,6 +1037,7 @@ class TestUnifiedReliabilityView(unittest.TestCase):
         m = self._fresh()
         m.ingest_unified_state_contract(self._sample_contract())
         unified = m.snapshot()["unified_reliability"]
+        pr5 = m.snapshot()["pr5_convergence"]
 
         self.assertAlmostEqual(unified["admission"]["success_rate"], 1.0)
         self.assertAlmostEqual(unified["admission"]["failure_rate"], 0.0)
@@ -1063,6 +1064,18 @@ class TestUnifiedReliabilityView(unittest.TestCase):
             unified["path_switch"]["outcome_quality_distribution"]["canonical_main_chain"],
             1,
         )
+        self.assertAlmostEqual(pr5["participation_enablement_rate"], 1.0)
+        self.assertAlmostEqual(pr5["full_attachment_rate"], 1.0)
+        self.assertAlmostEqual(pr5["dispatch_eligibility_rate"], 1.0)
+        self.assertAlmostEqual(pr5["routing_rate"]["cross_device"], 1.0)
+        self.assertAlmostEqual(pr5["natural_language_request_solved_rate"], 1.0)
+        self.assertAlmostEqual(pr5["task_closure_rate"], 1.0)
+        self.assertAlmostEqual(pr5["problem_closure_rate"], 1.0)
+        self.assertAlmostEqual(pr5["operator_intervention_success_rate"], 1.0)
+        self.assertIn(
+            "android_required_runtime_events",
+            pr5["android_integration_expectations"],
+        )
 
     def test_unified_ingestion_is_sequence_idempotent(self):
         m = self._fresh()
@@ -1073,6 +1086,20 @@ class TestUnifiedReliabilityView(unittest.TestCase):
         self.assertEqual(unified["admission"]["successes_total"], 1)
         self.assertEqual(unified["task_initiation"]["initiated_total"], 1)
         self.assertEqual(unified["closure"]["completed_total"], 1)
+
+    def test_latency_budget_summary_updates_stale_and_routing_metrics(self):
+        m = self._fresh()
+        m.ingest_latency_budget_summary(
+            {
+                "projection_stale_snapshot_suspected": True,
+                "projection_stale_snapshot_rate": 0.25,
+                "provider_selection_budget": {"route_type": "android_cross_device"},
+            }
+        )
+        pr5 = m.snapshot()["pr5_convergence"]
+        self.assertGreater(pr5["stale_snapshot_rate"], 0.0)
+        self.assertEqual(pr5["routing_rate"]["samples_total"], 1)
+        self.assertAlmostEqual(pr5["routing_rate"]["cross_device"], 1.0)
 
 
 if __name__ == "__main__":

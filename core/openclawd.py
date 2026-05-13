@@ -1731,7 +1731,19 @@ class OpenClawd:
                 recompute_window_stats=_budget.snapshot_recompute_stats(),
                 projection_window_stats=_budget.snapshot_projection_stats(),
             )
-            return _summary.to_dict()
+            _summary_dict = _summary.to_dict()
+            try:
+                from core.operational_slo_metrics import (  # noqa: PLC0415
+                    get_operational_slo_metrics as _get_ops_metrics,
+                )
+
+                _get_ops_metrics().ingest_latency_budget_summary(_summary_dict)
+            except Exception as _ops_exc:
+                logger.debug(
+                    "_apply_latency_budget operational SLO ingestion failed (swallowed): %s",
+                    _ops_exc,
+                )
+            return _summary_dict
         except Exception as _exc:
             logger.debug("_apply_latency_budget failed (swallowed): %s", _exc)
             return None

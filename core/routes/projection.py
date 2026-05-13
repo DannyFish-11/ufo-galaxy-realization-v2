@@ -5382,6 +5382,97 @@ def _source_of_truth_boundaries() -> Dict[str, str]:
     }
 
 
+def _build_problem_solving_chain_from_contract(state_contract: Dict[str, Any]) -> Dict[str, Any]:
+    lifecycle = state_contract.get("lifecycle_hardening") or {}
+    transition_lineage = lifecycle.get("transition_lineage") or {}
+    events = list(transition_lineage.get("events") or [])
+    if not isinstance(events, list):
+        events = []
+    subject_id = str(transition_lineage.get("subject_id") or "")
+    latest_sequence = int(transition_lineage.get("latest_sequence") or 0)
+    derived = state_contract.get("derived_state") or {}
+    raw = state_contract.get("raw_signals") or {}
+    active_path = ((derived.get("active_path") or {}).get("state") or "unknown")
+    interruptions = [
+        {
+            "sequence": int(event.get("sequence") or 0),
+            "transition": str(event.get("transition") or ""),
+            "to_state": str(event.get("to_state") or ""),
+        }
+        for event in events
+        if isinstance(event, dict)
+        and any(
+            token in str(event.get("transition") or "").lower()
+            for token in ("degraded", "interrupt", "continuity_changed", "waiting_dependency")
+        )
+    ]
+    recoveries = [
+        {
+            "sequence": int(event.get("sequence") or 0),
+            "transition": str(event.get("transition") or ""),
+            "to_state": str(event.get("to_state") or ""),
+        }
+        for event in events
+        if isinstance(event, dict)
+        and str(event.get("transition") or "").lower().startswith("recovery_")
+    ]
+    closure_events = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and "closure" in str(event.get("transition") or "").lower()
+    ]
+    last_closure_event = closure_events[-1] if closure_events else {}
+    final_state = str((last_closure_event or {}).get("to_state") or "unknown")
+    return {
+        "subject_id": subject_id or "subject:unknown",
+        "latest_sequence": latest_sequence,
+        "entry_transition": str((events[0] or {}).get("transition") or "unknown") if events else "unknown",
+        "routing_path": active_path,
+        "android_participation_tier": str(
+            raw.get("android_network_participation_tier") or "local_only"
+        ),
+        "interruption_points": interruptions,
+        "recovery_points": recoveries,
+        "final_state": final_state,
+        "timeline_tail": [
+            {
+                "sequence": int(event.get("sequence") or 0),
+                "transition": str(event.get("transition") or ""),
+                "to_state": str(event.get("to_state") or ""),
+            }
+            for event in events[-5:]
+            if isinstance(event, dict)
+        ],
+    }
+
+
+def _build_operational_hotspots(state_contract: Dict[str, Any]) -> Dict[str, Any]:
+    closure = state_contract.get("closure_quality_state") or {}
+    blocked = (closure.get("blocked_state") or {}).get("state") == "present"
+    waiting = (closure.get("waiting_dependency_state") or {}).get("state") == "present"
+    incomplete = (closure.get("incomplete_state") or {}).get("state") == "present"
+    quality_state = str((closure.get("success_quality") or {}).get("state") or "").lower()
+    verdict_state = str((closure.get("verdict_quality") or {}).get("state") or "").lower()
+    stale = ("stale" in quality_state) or ("stale" in verdict_state)
+    return {
+        "risk_hotspots": {
+            "blocked": blocked,
+            "waiting_dependency": waiting,
+            "incomplete": incomplete,
+        },
+        "degraded_or_stale_truth": {
+            "stale_snapshot_suspected": stale,
+            "success_quality": (closure.get("success_quality") or {}).get("state"),
+            "verdict_quality": (closure.get("verdict_quality") or {}).get("state"),
+        },
+        "recovery_hotspots": {
+            "recovery_active": (state_contract.get("raw_signals") or {}).get("recovery_active"),
+            "waiting_dependency": waiting,
+        },
+    }
+
+
 def _empty_operational_state_board() -> Dict[str, Any]:
     return {
         "authority": "unavailable",
@@ -5400,6 +5491,24 @@ def _empty_operational_state_board() -> Dict[str, Any]:
             "incomplete": False,
             "degraded_capability_device_count": 0,
         },
+        "problem_solving_chain": {
+            "subject_id": "subject:unknown",
+            "latest_sequence": 0,
+            "entry_transition": "unknown",
+            "routing_path": "unknown",
+            "android_participation_tier": "local_only",
+            "interruption_points": [],
+            "recovery_points": [],
+            "final_state": "unknown",
+            "timeline_tail": [],
+        },
+        "operational_hotspots": {
+            "risk_hotspots": {},
+            "degraded_or_stale_truth": {},
+            "recovery_hotspots": {},
+        },
+        "pr5_reliability_metrics": {},
+        "android_observability_alignment": {},
         "lifecycle_stage_index": {
             "observation": [],
             "admission": [],
@@ -5470,7 +5579,7 @@ def _build_operational_state_board_from_contract(
             }
         )
 
-    return {
+    board = {
         "authority": state_contract.get("authority"),
         "contract_version": state_contract.get("contract_version"),
         "categories": categories,
@@ -5525,6 +5634,36 @@ def _build_operational_state_board_from_contract(
             ],
         },
     }
+    board["problem_solving_chain"] = _build_problem_solving_chain_from_contract(state_contract)
+    board["operational_hotspots"] = _build_operational_hotspots(state_contract)
+    try:
+        from core.operational_slo_metrics import get_operational_slo_metrics
+
+        pr5 = (get_operational_slo_metrics().snapshot() or {}).get("pr5_convergence") or {}
+        board["pr5_reliability_metrics"] = {
+            "participation_enablement_rate": pr5.get("participation_enablement_rate"),
+            "full_attachment_rate": pr5.get("full_attachment_rate"),
+            "dispatch_eligibility_rate": pr5.get("dispatch_eligibility_rate"),
+            "routing_rate": dict(pr5.get("routing_rate") or {}),
+            "natural_language_request_solved_rate": pr5.get("natural_language_request_solved_rate"),
+            "task_closure_rate": pr5.get("task_closure_rate"),
+            "problem_closure_rate": pr5.get("problem_closure_rate"),
+            "no_awaiter_forced_closure_rate": pr5.get("no_awaiter_forced_closure_rate"),
+            "recovery_success_rate": pr5.get("recovery_success_rate"),
+            "takeover_degraded_evidence_rate": pr5.get("takeover_degraded_evidence_rate"),
+            "stale_snapshot_rate": pr5.get("stale_snapshot_rate"),
+            "operator_intervention_success_rate": pr5.get(
+                "operator_intervention_success_rate"
+            ),
+            "totals": dict(pr5.get("totals") or {}),
+        }
+        board["android_observability_alignment"] = dict(
+            pr5.get("android_integration_expectations") or {}
+        )
+    except Exception:
+        board["pr5_reliability_metrics"] = {}
+        board["android_observability_alignment"] = {}
+    return board
 
 
 def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = None) -> Dict[str, Any]:
@@ -5534,6 +5673,12 @@ def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = N
         normalized_route_paths = route_paths if isinstance(route_paths, set) else set(route_paths or [])
         report = build_operational_readiness_report(route_paths=normalized_route_paths)
         state_contract = dict(report.state_contract)
+        try:
+            from core.operational_slo_metrics import get_operational_slo_metrics
+
+            get_operational_slo_metrics().ingest_unified_state_contract(state_contract)
+        except Exception:
+            pass
         result["operational_readiness"] = {
             "authority": report.authority,
             "contract_version": report.contract_version,

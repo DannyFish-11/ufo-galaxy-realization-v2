@@ -201,6 +201,7 @@ class TestSnapshot(unittest.TestCase):
         self.assertIn("heartbeat", snap)
         self.assertIn("reconnect", snap)
         self.assertIn("command_latency", snap)
+        self.assertIn("control_loop", snap)
 
         # startup
         self.assertAlmostEqual(snap["startup"]["duration_ms"], 500.0)
@@ -218,6 +219,7 @@ class TestSnapshot(unittest.TestCase):
         self.assertEqual(snap["command_latency"]["sample_count"], 2)
         self.assertIsNotNone(snap["command_latency"]["p50_ms"])
         self.assertIsNotNone(snap["command_latency"]["p95_ms"])
+        self.assertIn("projection_stale_snapshot_rate", snap["control_loop"])
 
     def test_snapshot_null_when_no_data(self):
         from core.slo_metrics import SLOMetrics
@@ -256,6 +258,8 @@ class TestPrometheusText(unittest.TestCase):
             "galaxy_slo_command_latency_p50_ms",
             "galaxy_slo_command_latency_p95_ms",
             "galaxy_slo_command_latency_sample_count",
+            "galaxy_slo_projection_stale_snapshot_rate",
+            "galaxy_slo_projection_window_samples_total",
         ]
         for name in expected:
             self.assertIn(name, text, f"Missing metric: {name}")

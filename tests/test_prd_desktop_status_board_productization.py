@@ -440,6 +440,9 @@ def test_F30_empty_operational_state_board_has_lifecycle_stage_index():
     idx = board["lifecycle_stage_index"]
     for stage in ("observation", "admission", "readiness", "eligibility", "execution", "closure", "conditions"):
         assert stage in idx, f"lifecycle_stage_index missing stage '{stage}'"
+    assert "problem_solving_chain" in board
+    assert "operational_hotspots" in board
+    assert "pr5_reliability_metrics" in board
 
 
 def test_F31_build_operational_state_board_includes_new_categories():
@@ -497,6 +500,24 @@ def test_F34_assemble_desktop_board_includes_new_categories():
         "assembled board missing participant_device_session_dependencies"
     )
     assert "task_execution_visibility" in category_ids, "assembled board missing task_execution_visibility"
+
+
+def test_F34b_board_exposes_pr5_problem_solving_and_hotspot_surfaces():
+    import importlib
+
+    routes_mod = importlib.import_module("core.routes.projection")
+    assemble_fn = getattr(routes_mod, "_assemble_desktop_status_board_payload", None)
+    assert assemble_fn is not None
+    payload = assemble_fn(
+        route_paths={"/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime"}
+    )
+    board = payload.get("operational_state_board") or {}
+    chain = board.get("problem_solving_chain") or {}
+    hotspots = board.get("operational_hotspots") or {}
+    assert "routing_path" in chain
+    assert "timeline_tail" in chain
+    assert "risk_hotspots" in hotspots
+    assert "degraded_or_stale_truth" in hotspots
 
 
 # ---------------------------------------------------------------------------

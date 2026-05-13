@@ -705,6 +705,7 @@ class TestLatencyBudgetSummary:
             "ingest_cadence_policy", "recompute_policy", "projection_refresh_policy",
             "provider_selection_budget", "text_only_fast_path",
             "ingest_window_stats", "recompute_window_stats", "projection_window_stats",
+            "projection_stale_snapshot_suspected", "projection_stale_snapshot_rate",
         }
         assert expected.issubset(set(d.keys()))
 
@@ -814,12 +815,30 @@ class TestBuildLatencyBudgetSummary:
         assert s.provider_selection_budget["route_type"] == "text_only"
         assert s.text_only_fast_path is not None
         assert s.text_only_fast_path["is_text_only"] is True
+        assert s.projection_stale_snapshot_suspected is True
 
     def test_is_json_serialisable(self):
         from core.control_loop_latency_budget import build_latency_budget_summary
 
         s = build_latency_budget_summary(trace_id="t")
         json.dumps(s.to_dict())  # must not raise
+
+    def test_projection_stale_rate_derived_from_projection_window_stats(self):
+        from core.control_loop_latency_budget import (
+            build_latency_budget_summary,
+            ProjectionRefreshPolicy,
+        )
+
+        s = build_latency_budget_summary(
+            projection_refresh_policy=ProjectionRefreshPolicy.COALESCED,
+            projection_window_stats={
+                "total_immediate": 1,
+                "total_coalesced": 1,
+                "total_suppressed": 2,
+            },
+        )
+        assert s.projection_stale_snapshot_suspected is False
+        assert s.projection_stale_snapshot_rate == pytest.approx(0.5)
 
     def test_never_raises_with_no_params(self):
         from core.control_loop_latency_budget import build_latency_budget_summary
