@@ -78,6 +78,7 @@ from core.android_network_participation import (
     apply_participation_signal,
     record_participation_state,
     get_stored_participation_state,
+    list_participation_transition_history,
     reset_participation_store,
     get_participation_state_for_device,
 )
@@ -806,3 +807,100 @@ class TestRegistrationHandlerIntegration:
             last_signal=AndroidParticipationTransitionSignal.registration_partial_attached,
         )
         assert state.tier <= AndroidNetworkParticipationTier.cross_device_capable
+
+
+class TestParticipationTransitionAuditability:
+    def setup_method(self):
+        reset_participation_store()
+
+    def test_transition_history_records_signal_and_tier_change(self):
+        first = build_android_network_participation_state(
+            "hist-device",
+            websocket_connected=True,
+            registration_ack_success=True,
+            registration_fully_attached=False,
+            registration_gaps=["capability_report"],
+            session_posture="join_runtime",
+            active_session_count=1,
+            last_signal=AndroidParticipationTransitionSignal.registration_partial_attached,
+        )
+        record_participation_state(first)
+        second = apply_participation_signal(
+            first,
+            AndroidParticipationTransitionSignal.registration_fully_attached,
+            registration_fully_attached=True,
+            registration_gaps=[],
+            cross_device_enabled=True,
+        )
+        record_participation_state(second)
+        history = list_participation_transition_history("hist-device", limit=10)
+        assert len(history) >= 2
+        assert history[-1]["to_tier"] == second.tier.value
+        assert history[-1]["signal"] == (
+            AndroidParticipationTransitionSignal.registration_fully_attached.value
+        )
+
+
+class TestGatewayHandlerParticipationIntegration:
+    def test_android_device_state_store_participation_evidence_contains_transition_history(self):
+        from core.android_device_state_store import get_android_participation_evidence
+
+        state = build_android_network_participation_state(
+            "android-pr1-device",
+            websocket_connected=True,
+            registration_ack_success=True,
+            registration_fully_attached=True,
+            registration_gaps=[],
+            capability_visible=True,
+            active_session_count=1,
+            session_posture="join_runtime",
+            cross_device_enabled=True,
+            readiness_satisfied=False,
+            dispatch_gate_passed=False,
+            last_signal=AndroidParticipationTransitionSignal.registration_fully_attached,
+        )
+        record_participation_state(state)
+        evidence = get_android_participation_evidence("android-pr1-device", include_history_limit=5)
+        assert evidence["tier"] in {t.value for t in AndroidNetworkParticipationTier}
+        assert evidence["source"] == "core.android_network_participation"
+        assert isinstance(evidence["transition_history"], list)
+
+
+class TestAuthoritativeContractConsumptionPath:
+    def test_contract_consumes_authoritative_participation_accessor_when_device_identity_present(self):
+        from unittest.mock import patch
+        from core.v2_unified_state_contract import build_v2_unified_state_contract
+        from core.operational_registration_path import (
+            get_operational_registration_path,
+            OnboardingValidation,
+            ValidationStatus,
+        )
+
+        path = get_operational_registration_path()
+        validation = OnboardingValidation(checks=[], overall_status=ValidationStatus.PASS, summary="ok")
+        authoritative_state = build_android_network_participation_state(
+            "android-auth-device",
+            **_all_true_conditions(execution_active=False),
+        )
+
+        with patch(
+            "core.android_network_participation.get_participation_state_for_device",
+            return_value=authoritative_state,
+        ) as mocked_get:
+            contract = build_v2_unified_state_contract(
+                path=path,
+                validation=validation,
+                kind_states=[],
+                device_evidence={
+                    "android_device_count": 1,
+                    "android_device_ids": ["android-auth-device"],
+                },
+                android_evidence={"snapshot_count": 1, "capability_visible_count": 1},
+                session_evidence={"active_session_count": 1, "session_posture": "join_runtime"},
+            ).to_dict()
+        assert mocked_get.called
+        assert contract["raw_signals"]["android_network_participation_tier"] == authoritative_state.tier.value
+        decision = contract["derived_state"]["android_network_participation"]
+        assert decision["evidence"]["source"].startswith(
+            "core.android_network_participation.get_participation_state_for_device"
+        )

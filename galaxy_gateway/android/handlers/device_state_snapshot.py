@@ -80,6 +80,7 @@ async def handle_device_state_snapshot(
     reconciliation_status = "unknown"
     applied_to_canonical_truth = False
     canonical_conflict = False
+    participation_tier = None
     try:
         from core.android_device_state_store import (
             absorb_device_state_snapshot,
@@ -100,6 +101,32 @@ async def handle_device_state_snapshot(
             reconciliation_status,
             applied_to_canonical_truth,
         )
+        try:
+            from core.android_network_participation import (  # noqa: PLC0415
+                AndroidParticipationTransitionSignal,
+                refresh_participation_state_from_runtime,
+            )
+
+            readiness_signal = (
+                AndroidParticipationTransitionSignal.readiness_satisfied
+                if (
+                    bool(snap.model_ready)
+                    and bool(snap.accessibility_ready)
+                    and bool(snap.local_loop_ready)
+                )
+                else AndroidParticipationTransitionSignal.readiness_lost
+            )
+            participation_state = refresh_participation_state_from_runtime(
+                device_id,
+                signal=readiness_signal,
+            )
+            participation_tier = participation_state.tier.value
+        except Exception as participation_exc:
+            logger.debug(
+                "device_state_snapshot: participation refresh non-fatal: device_id=%s error=%s",
+                device_id,
+                participation_exc,
+            )
     except ImportError:
         logger.error(
             "device_state_snapshot: core.android_device_state_store not available; snapshot from %s discarded",
@@ -121,6 +148,7 @@ async def handle_device_state_snapshot(
         "reconciliation_status": reconciliation_status,
         "applied_to_canonical_truth": applied_to_canonical_truth,
         "canonical_conflict": canonical_conflict,
+        "network_participation_tier": participation_tier,
     }
 
 

@@ -1280,11 +1280,39 @@ def build_cross_device_readiness_panel_dict(
     cross_device_ready = 0
     dispatch_eligible = 0
     takeover_eligible = 0
+    fully_attached_or_higher = 0
+    distributed_participant_count = 0
 
     for did in resolved_ids:
         try:
             verdict = evaluate_android_mode_readiness(did)
-            devices.append(verdict.to_dict())
+            payload = verdict.to_dict()
+            try:
+                from core.android_device_state_store import get_android_participation_evidence
+                from core.android_network_participation import AndroidNetworkParticipationTier
+
+                participation = get_android_participation_evidence(did, include_history_limit=5)
+                tier = str(participation.get("tier", "local_only"))
+                payload["android_network_participation_tier"] = tier
+                payload["android_network_participation_source"] = participation.get("source")
+                payload["android_network_participation_transition_history"] = list(
+                    participation.get("transition_history", [])
+                )
+                if tier in {
+                    AndroidNetworkParticipationTier.fully_attached.value,
+                    AndroidNetworkParticipationTier.dispatch_eligible.value,
+                    AndroidNetworkParticipationTier.distributed_participant.value,
+                }:
+                    fully_attached_or_higher += 1
+                if tier == AndroidNetworkParticipationTier.distributed_participant.value:
+                    distributed_participant_count += 1
+            except Exception as participation_exc:
+                logger.debug(
+                    "build_cross_device_readiness_panel_dict: participation evidence unavailable for %r: %s",
+                    did,
+                    participation_exc,
+                )
+            devices.append(payload)
             if verdict.is_cross_device_ready:
                 cross_device_ready += 1
             if verdict.is_dispatch_eligible:
@@ -1301,6 +1329,8 @@ def build_cross_device_readiness_panel_dict(
         "cross_device_ready_count": cross_device_ready,
         "dispatch_eligible_count": dispatch_eligible,
         "takeover_eligible_count": takeover_eligible,
+        "fully_attached_or_higher_count": fully_attached_or_higher,
+        "distributed_participant_count": distributed_participant_count,
         "total_devices": len(resolved_ids),
         "_source": ANDROID_MODE_GATE_POLICY_AUTHORITY,
     }

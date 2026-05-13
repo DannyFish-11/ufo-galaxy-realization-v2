@@ -133,7 +133,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -972,6 +972,7 @@ _STORE_CAPACITY: int = 64
 _store_lock = threading.Lock()
 # Maps device_id → most recent AndroidNetworkParticipationState
 _participation_store: Dict[str, AndroidNetworkParticipationState] = {}
+_participation_transition_history: Dict[str, List[Dict[str, Any]]] = {}
 
 
 def record_participation_state(state: AndroidNetworkParticipationState) -> None:
@@ -980,7 +981,33 @@ def record_participation_state(state: AndroidNetworkParticipationState) -> None:
     Thread-safe.  Overwrites the previous entry for the same device.
     """
     with _store_lock:
+        prior = _participation_store.get(state.device_id)
         _participation_store[state.device_id] = state
+        has_meaningful_transition = (
+            prior is None
+            or getattr(prior, "tier", None) != state.tier
+            or state.last_signal is not None
+            or state.prior_tier is not None
+        )
+        if has_meaningful_transition:
+            history = _participation_transition_history.setdefault(state.device_id, [])
+            history.append(
+                {
+                    "device_id": state.device_id,
+                    "recorded_at": time.time(),
+                    "from_tier": (
+                        prior.tier.value
+                        if prior is not None and getattr(prior, "tier", None) is not None
+                        else (state.prior_tier.value if state.prior_tier is not None else None)
+                    ),
+                    "to_tier": state.tier.value,
+                    "signal": state.last_signal.value if state.last_signal is not None else None,
+                    "blocking_reasons": list(state.blocking_reasons),
+                    "derivation_notes": list(state.tier_derivation_notes),
+                }
+            )
+            if len(history) > _STORE_CAPACITY:
+                history[:] = history[-_STORE_CAPACITY:]
     logger.debug(
         "participation_state recorded: device_id=%s tier=%s signal=%s",
         state.device_id,
@@ -1004,6 +1031,37 @@ def reset_participation_store() -> None:
     """
     with _store_lock:
         _participation_store.clear()
+        _participation_transition_history.clear()
+
+
+def list_participation_transition_history(
+    device_id: str,
+    *,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """Return recent participation transition history for *device_id*."""
+    with _store_lock:
+        history = list(_participation_transition_history.get(device_id, []))
+    if limit <= 0:
+        return []
+    return history[-limit:]
+
+
+def refresh_participation_state_from_runtime(
+    device_id: str,
+    *,
+    signal: Optional[AndroidParticipationTransitionSignal] = None,
+) -> AndroidNetworkParticipationState:
+    """Re-derive and record state from runtime stores with transition metadata."""
+    prior_state = get_stored_participation_state(device_id)
+    current_state = _derive_live_state(device_id)
+    updated_state = replace(
+        current_state,
+        prior_tier=prior_state.tier if prior_state is not None else None,
+        last_signal=signal if signal is not None else current_state.last_signal,
+    )
+    record_participation_state(updated_state)
+    return updated_state
 
 
 # ---------------------------------------------------------------------------
@@ -1035,7 +1093,9 @@ def get_participation_state_for_device(
         Always returns a valid state; never raises.
     """
     try:
-        return _derive_live_state(device_id)
+        state = _derive_live_state(device_id)
+        record_participation_state(state)
+        return state
     except Exception as exc:
         logger.warning(
             "get_participation_state_for_device: internal error device_id=%r: %s",
@@ -1152,7 +1212,7 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
             device_id, exc,
         )
 
-    state = build_android_network_participation_state(
+    return build_android_network_participation_state(
         device_id=device_id,
         websocket_connected=websocket_connected,
         registration_ack_success=registration_ack_success,
@@ -1166,5 +1226,3 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
         dispatch_gate_passed=dispatch_gate_passed,
         execution_active=execution_active,
     )
-    record_participation_state(state)
-    return state

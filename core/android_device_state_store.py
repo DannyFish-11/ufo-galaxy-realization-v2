@@ -1496,3 +1496,53 @@ def list_recent_execution_events(
 def get_device_snapshot_reconciliation(device_id: str) -> Dict[str, Any]:
     """Return latest canonical reconciliation decision for a device snapshot stream."""
     return get_android_device_state_store().get_snapshot_reconciliation(device_id)
+
+
+def get_android_participation_evidence(
+    device_id: str,
+    *,
+    include_history_limit: int = 10,
+) -> Dict[str, Any]:
+    """Return canonical Android participation evidence for *device_id*.
+
+    This is a convenience read bridge from android_device_state_store surfaces to
+    ``core.android_network_participation`` so V2 callers consume one
+    authoritative participation truth path.
+    """
+    try:
+        from core.android_network_participation import (
+            get_participation_state_for_device,
+            list_participation_transition_history,
+        )
+
+        state = get_participation_state_for_device(device_id)
+        history = list_participation_transition_history(
+            device_id,
+            limit=include_history_limit,
+        )
+        return {
+            "device_id": device_id,
+            "tier": state.tier.value,
+            "blocking_reasons": list(state.blocking_reasons),
+            "tier_derivation_notes": list(state.tier_derivation_notes),
+            "source": "core.android_network_participation",
+            "transition_history": history,
+            "last_signal": state.last_signal.value if state.last_signal is not None else None,
+            "prior_tier": state.prior_tier.value if state.prior_tier is not None else None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "get_android_participation_evidence failed for device_id=%s: %s",
+            device_id,
+            exc,
+        )
+        return {
+            "device_id": device_id,
+            "tier": "local_only",
+            "blocking_reasons": ["participation_evidence_unavailable"],
+            "tier_derivation_notes": [],
+            "source": "core.android_device_state_store",
+            "transition_history": [],
+            "last_signal": None,
+            "prior_tier": None,
+        }

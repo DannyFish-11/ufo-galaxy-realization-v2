@@ -1246,6 +1246,21 @@ def build_operational_readiness_report(
         session_evidence=session_evidence,
         chain_state=chain_state,
     )
+    participation_evidence: Dict[str, Any] = {}
+    try:
+        from core.android_device_state_store import get_android_participation_evidence
+
+        android_device_ids = list(device_evidence.get("android_device_ids") or [])
+        if android_device_ids:
+            participation_evidence = get_android_participation_evidence(
+                str(android_device_ids[0]),
+                include_history_limit=10,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "OperationalReadinessSurface: participation evidence probe failed: %s",
+            exc,
+        )
     state_contract = build_v2_unified_state_contract(
         path=path,
         validation=validation,
@@ -1256,6 +1271,7 @@ def build_operational_readiness_report(
         android_evidence=android_evidence,
         session_evidence=session_evidence,
         system_acceptance=system_acceptance,
+        participation_evidence=participation_evidence,
     ).to_dict()
     progress = _build_registration_progress(
         path,
