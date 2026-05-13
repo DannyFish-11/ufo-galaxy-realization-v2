@@ -52,11 +52,12 @@ logger = logging.getLogger(__name__)
 # Authority metadata
 # ---------------------------------------------------------------------------
 
-REVIEW_PR_TITLE = "收敛 V2 双仓完整性联动与全系统认知基线（基于真实代码）"
+REVIEW_PR_TITLE = "基于 993P2 收敛双仓系统完整性认知、联动真值与关键缺口补强"
 REVIEW_PR_TITLE_EN = (
-    "Converge V2 dual-repo integrity linkage and full-system cognition baseline "
-    "(grounded in real code)"
+    "Anchor on 993P2 to converge dual-repo system integrity cognition, "
+    "runtime truth linkage, and key-gap reinforcement"
 )
+REVIEW_CONVERGENCE_ANCHOR = "993P2"
 REVIEW_AUTHORITY = (
     "COMPLETE_JOINT_SYSTEM_REVIEW::"
     "core.complete_joint_system_review::real-code-only-v2-plus-android"
@@ -356,6 +357,30 @@ class V2ConvergencePriority:
 
 
 @dataclass
+class IntegrityRepairAction:
+    """Code-grounded V2-side integrity repair/reinforcement action."""
+
+    action_id: str
+    title_zh: str
+    status_zh: str
+    why_high_value_zh: str
+    linked_issue_ids: List[str] = field(default_factory=list)
+    v2_anchors: List[str] = field(default_factory=list)
+    android_dependency_zh: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action_id": self.action_id,
+            "title_zh": self.title_zh,
+            "status_zh": self.status_zh,
+            "why_high_value_zh": self.why_high_value_zh,
+            "linked_issue_ids": list(self.linked_issue_ids),
+            "v2_anchors": list(self.v2_anchors),
+            "android_dependency_zh": self.android_dependency_zh,
+        }
+
+
+@dataclass
 class CompleteJointSystemReport:
     """Top-level machine-readable report produced by this review."""
 
@@ -363,6 +388,7 @@ class CompleteJointSystemReport:
     methodology: str = REVIEW_METHODOLOGY
     pr_title: str = REVIEW_PR_TITLE
     pr_title_en: str = REVIEW_PR_TITLE_EN
+    convergence_anchor: str = REVIEW_CONVERGENCE_ANCHOR
     supersedes: List[str] = field(default_factory=lambda: list(REVIEW_SUPERSEDES))
     android_audited_ref: str = ANDROID_AUDITED_REF
     generated_at: float = field(default_factory=time.time)
@@ -375,6 +401,7 @@ class CompleteJointSystemReport:
     runtime_flow: List[RuntimeFlowStage] = field(default_factory=list)
     cross_repo_mismatches: List[CrossRepoMismatch] = field(default_factory=list)
     v2_next_convergence_priority: Optional[V2ConvergencePriority] = None
+    integrity_repair_actions: List[IntegrityRepairAction] = field(default_factory=list)
 
     stage: StageVerdict = StageVerdict.MID_STAGE_CONSOLIDATION
     overall_completion_pct: float = 0.0
@@ -389,6 +416,7 @@ class CompleteJointSystemReport:
             "methodology": self.methodology,
             "pr_title": self.pr_title,
             "pr_title_en": self.pr_title_en,
+            "convergence_anchor": self.convergence_anchor,
             "supersedes": list(self.supersedes),
             "android_audited_ref": self.android_audited_ref,
             "generated_at": self.generated_at,
@@ -404,6 +432,7 @@ class CompleteJointSystemReport:
                 if self.v2_next_convergence_priority
                 else None
             ),
+            "integrity_repair_actions": [a.to_dict() for a in self.integrity_repair_actions],
             "stage": self.stage.value,
             "overall_completion_pct": self.overall_completion_pct,
             "weighted_completion_pct": self.weighted_completion_pct,
@@ -1490,6 +1519,50 @@ def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
     )
 
 
+def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
+    """Build V2-side integrity repairs reinforced by this convergence baseline."""
+    return [
+        IntegrityRepairAction(
+            action_id="A1",
+            title_zh="结果闭环判定显式受 evidence acceptance gate 约束（quarantine/reject 不得被覆盖）",
+            status_zh="本次 V2 已补强",
+            why_high_value_zh=(
+                "这是双仓闭环可信度的硬门禁：即使 truth-chain/notify 成功，只要证据判定进入 "
+                "quarantine/reject，就不能被标记为 fully_closed。修复该点可防止“低可信结果伪闭环”。"
+            ),
+            linked_issue_ids=["R2", "R3"],
+            v2_anchors=[
+                "core/unified_result_ingress.py",
+                "core/result_truth_acceptance_gate.py",
+                "tests/test_unified_result_ingress.py",
+            ],
+            android_dependency_zh=(
+                "Android 继续提供 proof_class / delegated result 质量信号；"
+                "本修复不依赖 Android 新改动即可生效。"
+            ),
+        ),
+        IntegrityRepairAction(
+            action_id="A2",
+            title_zh="把 Android local inference/fallback/readiness 变成 V2 路由强一致门控",
+            status_zh="仍需跨仓跟进",
+            why_high_value_zh=(
+                "当前 V2 已消费 Android truth，但并非所有编排分支都稳定同源消费。"
+                "该动作是从“可见 truth”走向“真决策 truth”的关键。"
+            ),
+            linked_issue_ids=["R1", "R3", "R12"],
+            v2_anchors=[
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+                "core/android_mode_gate_policy.py",
+            ],
+            android_dependency_zh=(
+                "需要 Android 侧持续稳定上送 local inference / fallback tier / execution pressure 信号，"
+                "并保持契约字段版本一致。"
+            ),
+        ),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Main build entry point
 # ---------------------------------------------------------------------------
@@ -1508,6 +1581,7 @@ def build_complete_joint_system_review() -> CompleteJointSystemReport:
     runtime_flow = _build_runtime_flow()
     mismatches = _build_cross_repo_mismatches()
     next_priority = _build_v2_next_convergence_priority()
+    repair_actions = _build_integrity_repair_actions()
 
     # Unweighted mean
     overall = round(sum(d.completion_pct for d in domains) / len(domains), 1)
@@ -1537,6 +1611,7 @@ def build_complete_joint_system_review() -> CompleteJointSystemReport:
         runtime_flow=runtime_flow,
         cross_repo_mismatches=mismatches,
         v2_next_convergence_priority=next_priority,
+        integrity_repair_actions=repair_actions,
         stage=stage,
         overall_completion_pct=overall,
         weighted_completion_pct=weighted,
@@ -1550,6 +1625,7 @@ __all__ = [
     "REVIEW_METHODOLOGY",
     "REVIEW_PR_TITLE",
     "REVIEW_PR_TITLE_EN",
+    "REVIEW_CONVERGENCE_ANCHOR",
     "REVIEW_SUPERSEDES",
     "PropositionVerdict",
     "EvidenceState",
@@ -1565,6 +1641,7 @@ __all__ = [
     "RuntimeFlowStage",
     "CrossRepoMismatch",
     "V2ConvergencePriority",
+    "IntegrityRepairAction",
     "CompleteJointSystemReport",
     "build_complete_joint_system_review",
 ]

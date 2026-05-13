@@ -496,6 +496,30 @@ class TestCompletionIngressNotify:
         assert outcome.task_completed is True
         assert outcome.problem_solved is False
 
+    def test_E05_quarantine_verdict_cannot_be_overwritten_by_final_closure_calc(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+        ingress._classify_and_apply_evidence_gate = (  # type: ignore[method-assign]
+            lambda _event, outcome: (
+                setattr(outcome, "evidence_acceptance_verdict", "quarantine"),
+                setattr(outcome, "incomplete_reason", "evidence_gate:quarantine"),
+                setattr(outcome, "is_fully_closed", False),
+            )
+        )
+
+        outcome = ingress.process(_make_event(_make_task_id()))
+
+        assert outcome.evidence_acceptance_verdict == "quarantine"
+        assert outcome.is_fully_closed is False
+        assert "evidence_gate:quarantine" in outcome.incomplete_reason
+
 
 # ===========================================================================
 # Group F — Bridge _pending_responses resolution

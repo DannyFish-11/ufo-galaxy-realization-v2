@@ -1,4 +1,4 @@
-# 收敛 V2 双仓完整性联动与全系统认知基线（基于真实代码）
+# 基于 993P2 收敛双仓系统完整性认知、联动真值与关键缺口补强
 
 > 目标仓：`DannyFish-11/ufo-galaxy-realization-v2`
 >
@@ -7,6 +7,8 @@
 > 机器基线： `core/complete_joint_system_review.py` + `tests/test_complete_joint_system_review.py`
 >
 > 补充重审： `core/post_closure_dual_repo_reassessment.py` + `tests/test_post_closure_dual_repo_reassessment.py`
+
+> 收敛锚点：`993P2`（用户指定）
 
 ## 1. 这到底是一个什么系统
 
@@ -110,7 +112,18 @@
 2. result acceptance / closure 显式引用跨仓参与与连续性证据
 3. operator / board / readiness 面板能反映真实决策原因，而不是只反映表面状态
 
-## 7. 本基线的约束口径
+## 7. 本次 V2 侧已落地的关键补强（非文档噪音）
+
+### A1. 结果闭环与证据接受门一致性补强（已实现）
+
+- 变更：`core/unified_result_ingress.py`
+- 目的：避免 `evidence_acceptance_verdict=quarantine/reject` 被后续 `is_fully_closed` 计算覆盖
+- 效果：即使 truth-chain 与 completion notify 成功，若证据门判定为 `quarantine/reject`，结果也不会被标记为 fully closed
+- 回归：`tests/test_unified_result_ingress.py::test_E05_quarantine_verdict_cannot_be_overwritten_by_final_closure_calc`
+
+这属于系统完整性补洞，不是叙事优化：它直接把“结果是否可信可收口”与 canonical evidence gate 绑定到同一条决策链。
+
+## 8. 本基线的约束口径
 
 - 不把 V2 写成整个系统
 - 不把 Android 写成被动终端

@@ -370,10 +370,14 @@ class UnifiedResultIngress:
         self._log_outcome(event, outcome)
 
         # Determine overall closure
+        _evidence_gate_blocked = (
+            outcome.evidence_acceptance_verdict in ("quarantine", "reject")
+        )
         outcome.is_fully_closed = (
             not outcome.was_deduplicated
             and outcome.truth_chain_complete
             and outcome.completion_notified
+            and not _evidence_gate_blocked
         )
         if not outcome.is_fully_closed and not outcome.incomplete_reason:
             parts = []
@@ -381,6 +385,8 @@ class UnifiedResultIngress:
                 parts.append("truth_chain_incomplete")
             if not outcome.completion_notified:
                 parts.append("completion_not_notified")
+            if _evidence_gate_blocked:
+                parts.append(f"evidence_gate:{outcome.evidence_acceptance_verdict}")
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
         outcome.problem_execution_closure = self._build_problem_execution_closure(
             event=event,
