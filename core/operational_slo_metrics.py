@@ -612,9 +612,11 @@ class OperationalSLOMetrics:
                         self._verdict_distribution.get(str(verdict_state), 0) + 1
                     )
                 stale_keywords = ("stale", "out_of_date", "outdated")
+                quality_state_lower = str(quality_state).lower()
+                verdict_state_lower = str(verdict_state).lower()
                 self._stale_snapshot_samples_total += 1
-                if any(token in str(quality_state).lower() for token in stale_keywords) or any(
-                    token in str(verdict_state).lower() for token in stale_keywords
+                if any(token in quality_state_lower for token in stale_keywords) or any(
+                    token in verdict_state_lower for token in stale_keywords
                 ):
                     self._stale_snapshot_detected_total += 1
 
@@ -703,17 +705,27 @@ class OperationalSLOMetrics:
                     self._path_switch_total += 1
                     subject_state["awaiting_path_switch_outcome"] = True
 
-                transition_tokens = " ".join(
-                    [
-                        transition,
-                        str(event.get("from_state") or ""),
-                        to_state,
-                        str((event.get("evidence") or {}).get("degraded_evidence") or ""),
-                    ]
+                transition_lower = transition.lower()
+                from_state_lower = str(event.get("from_state") or "").lower()
+                to_state_lower = to_state.lower()
+                degraded_evidence_lower = str(
+                    (event.get("evidence") or {}).get("degraded_evidence") or ""
                 ).lower()
-                if "takeover" in transition_tokens and "degraded" in transition_tokens:
+                if "takeover" in transition_lower and (
+                    "degraded" in transition_lower
+                    or "degraded" in from_state_lower
+                    or "degraded" in to_state_lower
+                    or "degraded" in degraded_evidence_lower
+                ):
                     self._takeover_degraded_evidence_total += 1
-                if ("forced" in transition_tokens) or ("no_awaiter" in transition_tokens):
+                if (
+                    "forced" in transition_lower
+                    or "no_awaiter" in transition_lower
+                    or "forced" in from_state_lower
+                    or "forced" in to_state_lower
+                    or "no_awaiter" in from_state_lower
+                    or "no_awaiter" in to_state_lower
+                ):
                     self._forced_or_no_awaiter_closure_total += 1
 
                 if transition in {"closure_succeeded", "closure_changed"} and to_state:

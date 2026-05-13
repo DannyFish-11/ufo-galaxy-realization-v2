@@ -5386,8 +5386,6 @@ def _build_problem_solving_chain_from_contract(state_contract: Dict[str, Any]) -
     lifecycle = state_contract.get("lifecycle_hardening") or {}
     transition_lineage = lifecycle.get("transition_lineage") or {}
     events = list(transition_lineage.get("events") or [])
-    if not isinstance(events, list):
-        events = []
     subject_id = str(transition_lineage.get("subject_id") or "")
     latest_sequence = int(transition_lineage.get("latest_sequence") or 0)
     derived = state_contract.get("derived_state") or {}
