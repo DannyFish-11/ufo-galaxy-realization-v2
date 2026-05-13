@@ -269,7 +269,8 @@ class CanonicalCompletionIngress:
 
         if resolved:
             logger.info(
-                "canonical_completion_ingress: notify resolved handoff_id=%r task_id=%r kind=%s problem_closed_signal=%s",
+                "canonical_completion_ingress: notify resolved handoff_id=%r "
+                "task_id=%r kind=%s problem_closed_signal=%s",
                 handoff_id,
                 task_id,
                 getattr(envelope, "response_kind", "?"),

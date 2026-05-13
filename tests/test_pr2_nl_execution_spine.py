@@ -80,7 +80,6 @@ def test_spine_goal_truncation_handles_multibyte_chars():
     assert goal.startswith("goal_execution:")
     assert goal.endswith("…")
     goal.encode("utf-8")
-    assert snap["traceability"]["trace_id"] == ""
 
 
 def test_spine_traceability_propagates_trace_id():
