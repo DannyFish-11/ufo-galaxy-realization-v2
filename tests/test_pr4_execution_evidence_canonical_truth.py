@@ -529,8 +529,9 @@ class TestGroupE_BuildExecutionEvidenceRecord:
         # Pass None task_id should not raise
         rec = build_execution_evidence_record(None, None, None)  # type: ignore
         assert rec is not None
-        assert rec.trust_level in (EvidenceTrustLevel.quarantine, EvidenceTrustLevel.provisional,
-                                   EvidenceTrustLevel.trusted, EvidenceTrustLevel.rejected)
+        # On exception, the fallback returns completed_degraded + quarantine
+        assert rec.evidence_state == ExecutionEvidenceState.completed_degraded
+        assert rec.trust_level == EvidenceTrustLevel.quarantine
 
 
 # ===========================================================================

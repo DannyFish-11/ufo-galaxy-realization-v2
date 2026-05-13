@@ -232,6 +232,10 @@ class OperatorExecutionObservabilitySnapshot:
 # Process-local evidence ring buffer
 # ---------------------------------------------------------------------------
 
+# Process-local evidence ring buffer for operator observability.
+# Size 200 is chosen to hold enough recent results for meaningful operator inspection
+# (typically a few minutes of moderate execution volume) without unbounded memory growth.
+# This constant is not configurable at runtime; restart required to change.
 _EVIDENCE_RING_MAX = 200
 _evidence_ring: List[OperatorExecutionEvidenceEntry] = []
 

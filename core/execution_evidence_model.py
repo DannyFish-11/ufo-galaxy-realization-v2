@@ -170,7 +170,10 @@ DUPLICATE_EVIDENCE_REJECTION_POLICY: str = (
     "task lifecycle state or notify completion awaiters."
 )
 
-# Staleness threshold: evidence older than this (seconds) is classified as stale.
+# Default staleness threshold: evidence older than this (seconds) is classified as stale.
+# 5 minutes is chosen as a balance between accepting delayed Android result messages
+# (common in offline/replay scenarios) and rejecting genuinely stale evidence.
+# This threshold applies to ownership-transfer evidence age in TakeoverTrackingRecord.
 STALE_RESULT_THRESHOLD_SECONDS: float = 300.0
 
 
