@@ -254,6 +254,12 @@ class CanonicalCompletionIngress:
 
         handoff_id = getattr(envelope, "handoff_id", None) or ""
         task_id = getattr(envelope, "task_id", None) or ""
+        problem_closed_signal = bool(
+            getattr(envelope, "problem_closed", False)
+            or getattr(envelope, "final_answer_ready", False)
+            or getattr(envelope, "problem_solved", False)
+            or getattr(envelope, "final_user_response", "")
+        )
 
         resolved = False
         if handoff_id:
@@ -263,14 +269,17 @@ class CanonicalCompletionIngress:
 
         if resolved:
             logger.info(
-                "canonical_completion_ingress: notify resolved handoff_id=%r task_id=%r kind=%s",
+                "canonical_completion_ingress: notify resolved handoff_id=%r "
+                "task_id=%r kind=%s problem_closed_signal=%s",
                 handoff_id,
                 task_id,
                 getattr(envelope, "response_kind", "?"),
+                problem_closed_signal,
             )
         else:
             logger.debug(
-                "canonical_completion_ingress: notify miss handoff_id=%r task_id=%r",
+                "canonical_completion_ingress: notify miss handoff_id=%r "
+                "task_id=%r",
                 handoff_id,
                 task_id,
             )

@@ -2799,6 +2799,52 @@ class OpenClawd:
         return "none"
 
     @staticmethod
+    def _build_execution_path_decision_basis(
+        *,
+        entry_mode: str,
+        execution_result: Dict[str, Any],
+        execution_path: str,
+        cross_device_dispatched: bool,
+    ) -> Dict[str, Any]:
+        """Build additive execution-path decision-basis facts for traceability.
+
+        Parameters
+        ----------
+        entry_mode:
+            Requested execution branch preference (local/cross_device/hybrid).
+        execution_result:
+            Raw execution artifact dict from ``_run_execution``.
+        execution_path:
+            Resolved canonical path label from ``_determine_execution_path``.
+        cross_device_dispatched:
+            Whether a real remote dispatch signal was observed.
+
+        Returns
+        -------
+        dict
+            Structured trace facts used by runtime/problem-spine consumers:
+            decision source, selected path, action signal, and reason string.
+        """
+        _action_taken = str(execution_result.get("action_taken", "none"))
+        _source = "openclawd.determine_execution_path"
+        if cross_device_dispatched:
+            _reason = "cross_device_dispatch_observed"
+        elif _action_taken not in ("none", "noop", "error"):
+            _reason = "local_action_observed"
+        elif entry_mode == "cross_device":
+            _reason = "entry_mode_cross_device_fallback"
+        else:
+            _reason = "no_action_observed"
+        return {
+            "decision_source": _source,
+            "entry_mode": entry_mode,
+            "execution_path": execution_path,
+            "cross_device_dispatched": bool(cross_device_dispatched),
+            "action_taken": _action_taken,
+            "decision_reason": _reason,
+        }
+
+    @staticmethod
     def _build_execution_semantics(
         *,
         kernel_intent_mode: Optional[str],
@@ -3504,9 +3550,20 @@ class OpenClawd:
                     )
                     # ── Decision Execution (PR-8 / PR-4) ─────────────────────
                     _exec_result_k = self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
+                    _cross_device_k = bool(
+                        _exec_result_k.get("remote_dispatch")
+                        or _exec_result_k.get("cross_device_summary")
+                    )
                     _exec_path_k = self._determine_execution_path(
                         entry_mode=_entry_mode,
                         execution_result=_exec_result_k,
+                        cross_device_dispatched=_cross_device_k,
+                    )
+                    _exec_path_basis_k = self._build_execution_path_decision_basis(
+                        entry_mode=_entry_mode,
+                        execution_result=_exec_result_k,
+                        execution_path=_exec_path_k,
+                        cross_device_dispatched=_cross_device_k,
                     )
                     _execution_semantics_k = self._build_execution_semantics(
                         kernel_intent_mode=str(getattr(kernel_result, "mode", "")),
@@ -3626,6 +3683,7 @@ class OpenClawd:
                             # PR-42: explicit dual-track semantics snapshot
                             # (kernel intent vs continuum action vs execution path).
                             "execution_semantics": _execution_semantics_k,
+                            "execution_path_decision_basis": _exec_path_basis_k,
                             # PR-42: explicit PR-14 activation dispatch status.
                             "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
                             # PR-006: delegation_hint_decision records how OpenClawd
@@ -4012,6 +4070,12 @@ class OpenClawd:
                 execution_result=_exec_result2,
                 cross_device_dispatched=_cross_device2,
             )
+            _exec_path_basis2 = self._build_execution_path_decision_basis(
+                entry_mode=_entry_mode,
+                execution_result=_exec_result2,
+                execution_path=_exec_path2,
+                cross_device_dispatched=_cross_device2,
+            )
             _execution_semantics2 = self._build_execution_semantics(
                 kernel_intent_mode=None,
                 continuum_state=_continuum_state_dict2,
@@ -4115,6 +4179,7 @@ class OpenClawd:
                     "execution_path": _exec_path2,
                     # PR-42: explicit execution semantics snapshot for direct path.
                     "execution_semantics": _execution_semantics2,
+                    "execution_path_decision_basis": _exec_path_basis2,
                     # PR-42: explicit PR-14 activation dispatch status.
                     "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
                     # PR-9: subject decision authority annotation (additive)

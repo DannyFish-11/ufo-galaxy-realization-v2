@@ -555,6 +555,34 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         "yes",
     )
 
+    def _stamp_problem_closure_to_task_queue(
+        task_id: str,
+        outcome: Any,
+    ) -> None:
+        if task_id not in task_queue or outcome is None:
+            return
+        task_queue[task_id]["problem_execution_closure"] = (
+            outcome.problem_execution_closure
+        )
+        task_queue[task_id]["task_completed"] = outcome.task_completed
+        task_queue[task_id]["problem_solved"] = outcome.problem_solved
+        task_queue[task_id]["problem_solved_via"] = outcome.problem_solved_via
+
+    def _normalize_compat_status(raw_status: Any) -> str:
+        try:
+            from core.unified_result_ingress import normalize_status as _normalize_status
+
+            return _normalize_status(raw_status)
+        except Exception:
+            _raw = str(raw_status or "").lower().strip()
+            if _raw in ("failed", "error"):
+                return "failed"
+            if _raw == "cancelled":
+                return "cancelled"
+            if _raw == "degraded":
+                return "degraded"
+            return "completed"
+
     # -----------------------------------------------------------------------
     # [COMPAT] /ws/device/{device_id}
     #
@@ -649,76 +677,50 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 elif msg_type == "task_result":
                     task_id = data.get("task_id", "")
                     if task_id:
-                        # ── Compat-path idempotency guard ──────────────────
-                        # Android OfflineTaskQueue can replay task_result messages
-                        # on reconnect.  Suppress duplicate results so that an
-                        # already-closed task is not re-processed.
-                        _compat_already_seen = False
+                        _raw_status = data.get("status", "")
+                        _mapped_status = _normalize_compat_status(_raw_status)
+                        _compat_outcome = None
+                        _compat_was_dedup = False
                         try:
-                            from core.durable_result_idempotency import (
-                                check_result_idempotency as _check_idem,
-                                record_result_idempotency as _record_idem,
+                            from core.unified_result_ingress import (
+                                NormalizedResultEvent,
+                                ResultSourceChannel,
+                                ingest_result,
                             )
-                            if _check_idem(task_id):
-                                _compat_already_seen = True
+                            _event = NormalizedResultEvent(
+                                task_id=task_id,
+                                device_id=device_id,
+                                raw_message_type="task_result",
+                                normalized_result_kind="task_result",
+                                normalized_status=_mapped_status,
+                                source_channel=ResultSourceChannel.COMPAT_WS,
+                                payload=data,
+                                trace_id=data.get("trace_id", ""),
+                                raw_message=data,
+                            )
+                            _compat_outcome = ingest_result(_event)
+                            _compat_was_dedup = _compat_outcome.was_deduplicated
+                            if _compat_was_dedup:
                                 logger.debug(
                                     "compat_ws: duplicate task_result suppressed "
-                                    "(durable store): task_id=%s device_id=%s",
+                                    "(unified ingress): task_id=%s device_id=%s",
                                     task_id,
                                     device_id,
                                 )
-                            else:
-                                _record_idem(task_id)
-                        except Exception as _idem_err:
+                        except Exception as _ingress_err:
                             logger.debug(
-                                "compat_ws: idempotency check skipped (non-fatal): %s",
-                                _idem_err,
+                                "compat_ws: task_result unified ingress skipped (non-fatal): %s",
+                                _ingress_err,
                             )
 
-                        if not _compat_already_seen:
-                            # ── Status truth mapping ───────────────────────
-                            # Android sends the real status field (success/failed/
-                            # error/cancelled).  Map it to an honest completion
-                            # status instead of unconditionally claiming "completed".
-                            _raw_status = str(data.get("status", "")).lower().strip()
-                            if _raw_status in ("failed", "error"):
-                                _mapped_status = "failed"
-                            elif _raw_status == "cancelled":
-                                _mapped_status = "cancelled"
-                            elif _raw_status == "degraded":
-                                _mapped_status = "degraded"
-                            else:
-                                _mapped_status = "completed"
-
+                        if not _compat_was_dedup:
                             if task_id in task_queue:
                                 task_queue[task_id]["status"] = _mapped_status
                                 task_queue[task_id]["result"] = data.get("result", {})
                                 task_queue[task_id]["completed_at"] = datetime.now().isoformat()
-
-                            # ── Truth chain (best-effort) ──────────────────
-                            # Run the canonical four-step truth chain so that the
-                            # execution tracker, lifecycle, and completion ingress
-                            # are updated even on the compat path.
-                            try:
-                                from core.task_result_canonical_truth_chain import (
-                                    run_task_result_truth_chain as _run_ttc,
-                                )
-                                _ttc_outcome = _run_ttc(
-                                    data,
-                                    task_id=task_id,
-                                    result_status=_mapped_status,
-                                )
-                                if not _ttc_outcome.is_truth_chain_complete:
-                                    logger.debug(
-                                        "compat_ws: task_result truth chain incomplete "
-                                        "task_id=%s: %s",
-                                        task_id,
-                                        _ttc_outcome.incomplete_reason,
-                                    )
-                            except Exception as _ttc_err:
-                                logger.debug(
-                                    "compat_ws: truth chain skipped (non-fatal): %s",
-                                    _ttc_err,
+                                _stamp_problem_closure_to_task_queue(
+                                    task_id,
+                                    _compat_outcome,
                                 )
 
                 elif msg_type == "goal_result":
@@ -739,29 +741,43 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                     #                           lifecycle update, completion linkage
                     _goal_task_id = data.get("task_id", "") or data.get("goal_id", "")
                     if _goal_task_id:
-                        # ── Compat-path idempotency guard ──────────────────
+                        _goal_outcome = None
                         _goal_already_seen = False
-                        _goal_idem_key = f"goal_result:{_goal_task_id}"
                         try:
-                            from core.durable_result_idempotency import (
-                                check_result_idempotency as _check_goal_idem,
-                                record_result_idempotency as _record_goal_idem,
+                            from core.unified_result_ingress import (
+                                NormalizedResultEvent,
+                                ResultSourceChannel,
+                                ingest_result,
+                                normalize_status as _normalize_status,
                             )
-                            if _check_goal_idem(_goal_idem_key):
+
+                            _goal_mapped_status = _normalize_status(data.get("status", ""))
+                            _goal_event = NormalizedResultEvent(
+                                task_id=_goal_task_id,
+                                device_id=device_id,
+                                raw_message_type="goal_result",
+                                normalized_result_kind="goal_result",
+                                normalized_status=_goal_mapped_status,
+                                source_channel=ResultSourceChannel.COMPAT_WS,
+                                payload=data,
+                                trace_id=data.get("trace_id", ""),
+                                raw_message=data,
+                                idempotency_key=f"goal_result:{_goal_task_id}",
+                            )
+                            _goal_outcome = ingest_result(_goal_event)
+                            if _goal_outcome.was_deduplicated:
                                 _goal_already_seen = True
                                 logger.debug(
                                     "compat_ws: duplicate goal_result suppressed "
-                                    "(durable store): task_id=%s device_id=%s",
+                                    "(unified ingress): task_id=%s device_id=%s",
                                     _goal_task_id,
                                     device_id,
                                 )
-                            else:
-                                _record_goal_idem(_goal_idem_key)
-                        except Exception as _goal_idem_err:
+                        except Exception as _goal_ingress_err:
                             logger.debug(
-                                "compat_ws: goal_result idempotency check skipped "
+                                "compat_ws: goal_result unified ingress skipped "
                                 "(non-fatal): %s",
-                                _goal_idem_err,
+                                _goal_ingress_err,
                             )
 
                         if not _goal_already_seen:
@@ -769,15 +785,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             # Android sends real status (success/failed/error/
                             # cancelled/degraded).  Map to canonical V2 status
                             # rather than silently discarding or assuming success.
-                            _goal_raw_status = str(data.get("status", "")).lower().strip()
-                            if _goal_raw_status in ("failed", "error"):
-                                _goal_mapped_status = "failed"
-                            elif _goal_raw_status == "cancelled":
-                                _goal_mapped_status = "cancelled"
-                            elif _goal_raw_status == "degraded":
-                                _goal_mapped_status = "degraded"
-                            else:
-                                _goal_mapped_status = "completed"
+                            _goal_raw_status = data.get("status", "")
+                            _goal_mapped_status = _normalize_compat_status(_goal_raw_status)
 
                             logger.info(
                                 "compat_ws: goal_result task_id=%s status=%s→%s",
@@ -788,33 +797,9 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 task_queue[_goal_task_id]["status"] = _goal_mapped_status
                                 task_queue[_goal_task_id]["result"] = data.get("result", {})
                                 task_queue[_goal_task_id]["completed_at"] = datetime.now().isoformat()
-
-                            # ── Truth chain (best-effort) ──────────────────
-                            # Reuse the task_result canonical truth chain for
-                            # goal_result — the four steps (truth_ingress,
-                            # reconcile, authority_update, completion_linkage)
-                            # apply equally to goal execution outcomes.
-                            try:
-                                from core.task_result_canonical_truth_chain import (
-                                    run_task_result_truth_chain as _run_goal_ttc,
-                                )
-                                _goal_ttc_outcome = _run_goal_ttc(
-                                    data,
-                                    task_id=_goal_task_id,
-                                    result_status=_goal_mapped_status,
-                                )
-                                if not _goal_ttc_outcome.is_truth_chain_complete:
-                                    logger.debug(
-                                        "compat_ws: goal_result truth chain incomplete "
-                                        "task_id=%s: %s",
-                                        _goal_task_id,
-                                        _goal_ttc_outcome.incomplete_reason,
-                                    )
-                            except Exception as _goal_ttc_err:
-                                logger.debug(
-                                    "compat_ws: goal_result truth chain skipped "
-                                    "(non-fatal): %s",
-                                    _goal_ttc_err,
+                                _stamp_problem_closure_to_task_queue(
+                                    _goal_task_id,
+                                    _goal_outcome,
                                 )
 
                 elif msg_type == "goal_execution_result":
@@ -839,17 +824,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                     if _ger_task_id:
                         # ── Status truth mapping ──────────────────────────────
                         _payload_sub = data.get("payload") or {}
-                        _ger_raw_status = str(
-                            _payload_sub.get("status") or data.get("status", "")
-                        ).lower().strip()
-                        if _ger_raw_status in ("failed", "error"):
-                            _ger_mapped_status = "failed"
-                        elif _ger_raw_status == "cancelled":
-                            _ger_mapped_status = "cancelled"
-                        elif _ger_raw_status == "degraded":
-                            _ger_mapped_status = "degraded"
-                        else:
-                            _ger_mapped_status = "completed"
+                        _ger_raw_status = _payload_sub.get("status") or data.get("status", "")
+                        _ger_mapped_status = _normalize_compat_status(_ger_raw_status)
 
                         # ── Unified result ingress (idempotency + truth chain +
                         #    completion linkage) ─────────────────────────────────
@@ -857,6 +833,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         # there is no double-check and no premature key recording.
                         _ger_ingress_ok = False
                         _ger_was_dedup = False
+                        _ger_outcome = None
                         try:
                             from core.unified_result_ingress import (
                                 NormalizedResultEvent,
@@ -911,6 +888,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 )
                                 task_queue[_ger_task_id]["completed_at"] = (
                                     datetime.now().isoformat()
+                                )
+                                _stamp_problem_closure_to_task_queue(
+                                    _ger_task_id,
+                                    _ger_outcome,
                                 )
 
                 elif msg_type == "ocr_request":

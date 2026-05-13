@@ -447,15 +447,24 @@ def _run_completion_linkage(
         # CanonicalCompletionIngress.notify() inspects .is_terminal,
         # .handoff_id, and .task_id on the envelope object.
         # Fields are set after instantiation to avoid class-body closure issues.
+
         class _MinimalEnvelope:
             is_terminal: bool
             handoff_id: str
             task_id: str
+            problem_closed: bool
+            final_answer_ready: bool
+            final_user_response: str
+            problem_solved: bool
 
         envelope = _MinimalEnvelope()
         envelope.is_terminal = True
         envelope.handoff_id = message.get("handoff_id") or ""
         envelope.task_id = task_id
+        envelope.problem_closed = bool(message.get("problem_closed"))
+        envelope.final_answer_ready = bool(message.get("final_answer_ready"))
+        envelope.final_user_response = str(message.get("final_user_response") or "")
+        envelope.problem_solved = bool(message.get("problem_solved"))
         # Also try complete_pending_dispatch by task_id directly for robustness.
         resolved_notify = ingress.notify(envelope)
         resolved_direct = ingress.complete_pending_dispatch(task_id, envelope)

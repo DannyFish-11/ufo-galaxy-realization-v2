@@ -229,6 +229,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             resp_dict["reply"] = result.get("response", "")
             resp_dict["trace_id"] = trace_id
             resp_dict["runtime_session_id"] = result.get("runtime_session_id", trace_id)
+            resp_dict["problem_execution_spine"] = metadata.get("problem_execution_spine", {})
             # ── InteractionEnvelope (PR-4) — non-breaking, absent when None ──
             _ie = result.get("interaction_envelope")
             if _ie is not None:

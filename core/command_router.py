@@ -263,6 +263,13 @@ COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED: str = (
     "and records every dispatch decision for fabric observability."
 )
 
+COMMAND_ROUTER_PROBLEM_SPINE_ALIGNMENT_POLICY: str = (
+    "COMMAND_ROUTER_PROBLEM_SPINE_ALIGNMENT_V1: route_envelope() must preserve "
+    "task_id/trace_id metadata so NL problem-routing traces remain joinable "
+    "with result-ingress closure semantics."
+)
+"""Policy sentinel: CommandRouter keeps NL problem spine traceability aligned."""
+
 CANONICAL_TASK_SPINE_INTEGRATED: str = (
     "COMMAND_ROUTER::CANONICAL_TASK_SPINE_V1: CommandRouter.route_envelope() "
     "is the sole system-level dispatch spine for CanonicalTask→TaskEnvelope→"
@@ -1225,6 +1232,17 @@ class CommandRouter:
             logger.debug(
                 "route_envelope: mainline_convergence stamp skipped (non-fatal): %s",
                 _mc_exc,
+            )
+
+        # PR-2: surface additive NL-problem trace alignment at dispatch ingress.
+        _meta_for_trace = envelope.metadata or {}
+        _problem_trace = _meta_for_trace.get("problem_execution_trace")
+        if isinstance(_problem_trace, dict):
+            logger.debug(
+                "route_envelope: problem spine trace alignment task_id=%s trace_id=%s runtime_session_id=%s",
+                envelope.task_id,
+                envelope.trace_id or "",
+                _problem_trace.get("runtime_session_id", ""),
             )
 
         # ── PR-5 Cap 5: ACL check before anything else ──────────────────────
