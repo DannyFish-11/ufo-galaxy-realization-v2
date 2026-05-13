@@ -99,7 +99,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +566,12 @@ class LatencyBudgetSummary:
     projection_window_stats: Optional[Dict[str, Any]] = None
     """Snapshot of :class:`ProjectionRefreshWindow` counters."""
 
+    projection_stale_snapshot_suspected: bool = False
+    """True when the current projection refresh decision indicates duplicate/stale view risk."""
+
+    projection_stale_snapshot_rate: float = 0.0
+    """Observed stale-snapshot ratio from projection window counters (0.0–1.0)."""
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "summary_id": self.summary_id,
@@ -580,6 +586,8 @@ class LatencyBudgetSummary:
             "ingest_window_stats": self.ingest_window_stats,
             "recompute_window_stats": self.recompute_window_stats,
             "projection_window_stats": self.projection_window_stats,
+            "projection_stale_snapshot_suspected": self.projection_stale_snapshot_suspected,
+            "projection_stale_snapshot_rate": self.projection_stale_snapshot_rate,
         }
 
     @classmethod
@@ -597,6 +605,10 @@ class LatencyBudgetSummary:
             ingest_window_stats=d.get("ingest_window_stats"),
             recompute_window_stats=d.get("recompute_window_stats"),
             projection_window_stats=d.get("projection_window_stats"),
+            projection_stale_snapshot_suspected=bool(
+                d.get("projection_stale_snapshot_suspected", False)
+            ),
+            projection_stale_snapshot_rate=float(d.get("projection_stale_snapshot_rate", 0.0)),
         )
 
 
@@ -827,6 +839,17 @@ def build_latency_budget_summary(
         Always returns a valid summary; never raises.
     """
     try:
+        projection_stats = dict(projection_window_stats or {})
+        projection_total = (
+            int(projection_stats.get("total_immediate", 0))
+            + int(projection_stats.get("total_coalesced", 0))
+            + int(projection_stats.get("total_suppressed", 0))
+        )
+        stale_rate = (
+            int(projection_stats.get("total_suppressed", 0)) / projection_total
+            if projection_total > 0
+            else 0.0
+        )
         return LatencyBudgetSummary(
             trace_id=trace_id or "",
             runtime_session_id=runtime_session_id or "",
@@ -846,6 +869,10 @@ def build_latency_budget_summary(
             ingest_window_stats=ingest_window_stats,
             recompute_window_stats=recompute_window_stats,
             projection_window_stats=projection_window_stats,
+            projection_stale_snapshot_suspected=(
+                projection_refresh_policy == ProjectionRefreshPolicy.SUPPRESSED
+            ),
+            projection_stale_snapshot_rate=stale_rate,
         )
     except Exception:
         return LatencyBudgetSummary(

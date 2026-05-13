@@ -243,6 +243,26 @@ class OperationalSLOMetrics:
         self._quality_distribution: Dict[str, int] = {}
         self._verdict_distribution: Dict[str, int] = {}
 
+        # PR-5 convergence counters (runtime-truth backed)
+        self._participation_samples_total: int = 0
+        self._participation_enabled_total: int = 0
+        self._full_attachment_total: int = 0
+        self._dispatch_eligibility_total: int = 0
+
+        self._routing_samples_total: int = 0
+        self._routing_local_total: int = 0
+        self._routing_cross_device_total: int = 0
+
+        self._problem_opened_total: int = 0
+        self._problem_solved_total: int = 0
+
+        self._forced_or_no_awaiter_closure_total: int = 0
+        self._takeover_degraded_evidence_total: int = 0
+        self._stale_snapshot_samples_total: int = 0
+        self._stale_snapshot_detected_total: int = 0
+
+        self._operator_intervention_success_total: int = 0
+
     def reset(self) -> None:
         """Reset all counters to zero (primarily for tests)."""
         with self._lock:
@@ -524,6 +544,37 @@ class OperationalSLOMetrics:
             closure_quality_state = state_contract.get("closure_quality_state") or {}
 
             if isinstance(raw_signals, dict) and isinstance(derived_state, dict):
+                participation_tier = str(
+                    raw_signals.get("android_network_participation_tier") or ""
+                )
+                if not participation_tier and bool(raw_signals.get("android_attached")):
+                    if (
+                        raw_signals.get("capability_visible") is True
+                        and int(raw_signals.get("active_session_count", 0)) > 0
+                    ):
+                        participation_tier = "dispatch_eligible"
+                    elif raw_signals.get("capability_visible") is True:
+                        participation_tier = "fully_attached"
+                    else:
+                        participation_tier = "cross_device_enabled"
+                if participation_tier:
+                    self._participation_samples_total += 1
+                    if participation_tier in {
+                        "cross_device_enabled",
+                        "fully_attached",
+                        "dispatch_eligible",
+                        "distributed_participant",
+                    }:
+                        self._participation_enabled_total += 1
+                    if participation_tier in {
+                        "fully_attached",
+                        "dispatch_eligible",
+                        "distributed_participant",
+                    }:
+                        self._full_attachment_total += 1
+                    if participation_tier in {"dispatch_eligible", "distributed_participant"}:
+                        self._dispatch_eligibility_total += 1
+
                 cross_device_decision = _decision_state(
                     derived_state, "cross_device_availability"
                 )
@@ -537,6 +588,17 @@ class OperationalSLOMetrics:
                 if observed_cross_device == expected_cross_device:
                     self._cross_device_consistency_success_total += 1
 
+                active_path_state = _decision_state(derived_state, "active_path")
+                self._routing_samples_total += 1
+                if active_path_state in {"main_chain", "local"}:
+                    self._routing_local_total += 1
+                elif active_path_state == "cross_device":
+                    self._routing_cross_device_total += 1
+                elif observed_cross_device:
+                    self._routing_cross_device_total += 1
+                else:
+                    self._routing_local_total += 1
+
             if isinstance(closure_quality_state, dict):
                 quality_state = _decision_state(closure_quality_state, "success_quality")
                 verdict_state = _decision_state(closure_quality_state, "verdict_quality")
@@ -548,6 +610,12 @@ class OperationalSLOMetrics:
                     self._verdict_distribution[str(verdict_state)] = (
                         self._verdict_distribution.get(str(verdict_state), 0) + 1
                     )
+                stale_keywords = ("stale", "out_of_date", "outdated")
+                self._stale_snapshot_samples_total += 1
+                if any(token in str(quality_state).lower() for token in stale_keywords) or any(
+                    token in str(verdict_state).lower() for token in stale_keywords
+                ):
+                    self._stale_snapshot_detected_total += 1
 
             task_initiation_gate = lifecycle.get("task_initiation_gate") or {}
             lifecycle_blocked = bool(lifecycle.get("lifecycle_blocked"))
@@ -581,6 +649,7 @@ class OperationalSLOMetrics:
 
                 if transition == "lifecycle_initialized":
                     subject_state["initialized_at"] = event_at
+                    self._problem_opened_total += 1
 
                 if transition.startswith("admission_"):
                     self._admission_total += 1
@@ -627,10 +696,24 @@ class OperationalSLOMetrics:
 
                 if transition == "operator_intervention_recorded":
                     self._operator_interventions_total += 1
+                    subject_state["operator_intervention_pending"] = True
 
                 if transition == "path_switched":
                     self._path_switch_total += 1
                     subject_state["awaiting_path_switch_outcome"] = True
+
+                transition_tokens = " ".join(
+                    [
+                        transition,
+                        str(event.get("from_state") or ""),
+                        to_state,
+                        str((event.get("evidence") or {}).get("degraded_evidence") or ""),
+                    ]
+                ).lower()
+                if "takeover" in transition_tokens and "degraded" in transition_tokens:
+                    self._takeover_degraded_evidence_total += 1
+                if ("forced" in transition_tokens) or ("no_awaiter" in transition_tokens):
+                    self._forced_or_no_awaiter_closure_total += 1
 
                 if transition in {"closure_succeeded", "closure_changed"} and to_state:
                     self._closure_total += 1
@@ -648,6 +731,10 @@ class OperationalSLOMetrics:
                             self._task_initiation_success_total += 1
                     if to_state in {"success_canonical", "success_degraded", "success_recovery"}:
                         self._closure_completed_total += 1
+                        self._problem_solved_total += 1
+                        if subject_state.get("operator_intervention_pending"):
+                            self._operator_intervention_success_total += 1
+                            subject_state["operator_intervention_pending"] = False
                         if subject_state.get("awaiting_path_switch_outcome"):
                             quality_state = _decision_state(
                                 closure_quality_state, "success_quality"
@@ -664,6 +751,28 @@ class OperationalSLOMetrics:
                 latest_sequence,
                 max_new_sequence,
             )
+
+    def ingest_latency_budget_summary(self, summary: Optional[Dict[str, Any]]) -> None:
+        """Ingest runtime latency-budget summary emitted by the control loop."""
+        if not isinstance(summary, dict):
+            return
+        with self._lock:
+            stale_flag = bool(summary.get("projection_stale_snapshot_suspected"))
+            stale_rate = summary.get("projection_stale_snapshot_rate")
+            if stale_flag or isinstance(stale_rate, (int, float)):
+                self._stale_snapshot_samples_total += 1
+                if stale_flag or (isinstance(stale_rate, (int, float)) and stale_rate > 0.0):
+                    self._stale_snapshot_detected_total += 1
+
+            route_type = str(
+                (summary.get("provider_selection_budget") or {}).get("route_type") or ""
+            ).lower()
+            if route_type:
+                self._routing_samples_total += 1
+                if any(token in route_type for token in ("cross", "android", "remote", "delegated")):
+                    self._routing_cross_device_total += 1
+                else:
+                    self._routing_local_total += 1
 
     # ------------------------------------------------------------------
     # Computed properties
@@ -792,6 +901,20 @@ class OperationalSLOMetrics:
             )
             quality_distribution = dict(self._quality_distribution)
             verdict_distribution = dict(self._verdict_distribution)
+            participation_samples_total = self._participation_samples_total
+            participation_enabled_total = self._participation_enabled_total
+            full_attachment_total = self._full_attachment_total
+            dispatch_eligibility_total = self._dispatch_eligibility_total
+            routing_samples_total = self._routing_samples_total
+            routing_local_total = self._routing_local_total
+            routing_cross_device_total = self._routing_cross_device_total
+            problem_opened_total = self._problem_opened_total
+            problem_solved_total = self._problem_solved_total
+            forced_or_no_awaiter_closure_total = self._forced_or_no_awaiter_closure_total
+            takeover_degraded_evidence_total = self._takeover_degraded_evidence_total
+            stale_snapshot_samples_total = self._stale_snapshot_samples_total
+            stale_snapshot_detected_total = self._stale_snapshot_detected_total
+            operator_intervention_success_total = self._operator_intervention_success_total
 
         dispatch_success_rate = (
             dispatch_successes / dispatch_attempts if dispatch_attempts > 0 else 0.0
@@ -868,6 +991,56 @@ class OperationalSLOMetrics:
         )
         path_switch_frequency = (
             path_switch_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
+        )
+        participation_enablement_rate = (
+            participation_enabled_total / participation_samples_total
+            if participation_samples_total > 0
+            else 0.0
+        )
+        full_attachment_rate = (
+            full_attachment_total / participation_samples_total
+            if participation_samples_total > 0
+            else 0.0
+        )
+        dispatch_eligibility_rate = (
+            dispatch_eligibility_total / participation_samples_total
+            if participation_samples_total > 0
+            else 0.0
+        )
+        local_routing_rate = (
+            routing_local_total / routing_samples_total if routing_samples_total > 0 else 0.0
+        )
+        cross_device_routing_rate = (
+            routing_cross_device_total / routing_samples_total
+            if routing_samples_total > 0
+            else 0.0
+        )
+        natural_language_request_solved_rate = (
+            problem_solved_total / problem_opened_total if problem_opened_total > 0 else 0.0
+        )
+        task_closure_rate = (
+            closure_completed_total / task_initiation_total if task_initiation_total > 0 else 0.0
+        )
+        problem_closure_rate = (
+            closure_completed_total / problem_opened_total if problem_opened_total > 0 else 0.0
+        )
+        no_awaiter_forced_closure_rate = (
+            forced_or_no_awaiter_closure_total / closure_total if closure_total > 0 else 0.0
+        )
+        takeover_degraded_evidence_rate = (
+            takeover_degraded_evidence_total / unified_ingest_total
+            if unified_ingest_total > 0
+            else 0.0
+        )
+        stale_snapshot_rate = (
+            stale_snapshot_detected_total / stale_snapshot_samples_total
+            if stale_snapshot_samples_total > 0
+            else 0.0
+        )
+        operator_intervention_success_rate = (
+            operator_intervention_success_total / operator_interventions_total
+            if operator_interventions_total > 0
+            else 0.0
         )
 
         return {
@@ -962,6 +1135,54 @@ class OperationalSLOMetrics:
                 "model_alignment": {
                     "uses_unified_state_contract": True,
                     "uses_lifecycle_hardening": True,
+                },
+            },
+            "pr5_convergence": {
+                "participation_enablement_rate": round(participation_enablement_rate, 6),
+                "full_attachment_rate": round(full_attachment_rate, 6),
+                "dispatch_eligibility_rate": round(dispatch_eligibility_rate, 6),
+                "routing_rate": {
+                    "local": round(local_routing_rate, 6),
+                    "cross_device": round(cross_device_routing_rate, 6),
+                    "samples_total": routing_samples_total,
+                },
+                "natural_language_request_solved_rate": round(
+                    natural_language_request_solved_rate, 6
+                ),
+                "task_closure_rate": round(task_closure_rate, 6),
+                "problem_closure_rate": round(problem_closure_rate, 6),
+                "no_awaiter_forced_closure_rate": round(no_awaiter_forced_closure_rate, 6),
+                "recovery_success_rate": round(unified_recovery_success_rate, 6),
+                "takeover_degraded_evidence_rate": round(
+                    takeover_degraded_evidence_rate, 6
+                ),
+                "stale_snapshot_rate": round(stale_snapshot_rate, 6),
+                "operator_intervention_success_rate": round(
+                    operator_intervention_success_rate, 6
+                ),
+                "totals": {
+                    "problem_opened_total": problem_opened_total,
+                    "problem_solved_total": problem_solved_total,
+                    "forced_or_no_awaiter_closure_total": forced_or_no_awaiter_closure_total,
+                    "takeover_degraded_evidence_total": takeover_degraded_evidence_total,
+                    "stale_snapshot_samples_total": stale_snapshot_samples_total,
+                    "stale_snapshot_detected_total": stale_snapshot_detected_total,
+                    "operator_interventions_total": operator_interventions_total,
+                    "operator_intervention_success_total": operator_intervention_success_total,
+                },
+                "android_integration_expectations": {
+                    "android_required_runtime_events": [
+                        "participation_tier_update",
+                        "routing_decision",
+                        "takeover_or_participation_outcome",
+                        "interruption_or_recovery_event",
+                        "result_closure_event",
+                    ],
+                    "board_projection_required_sections": [
+                        "problem_solving_chain",
+                        "operational_hotspots",
+                        "pr5_reliability_metrics",
+                    ],
                 },
             },
         }
@@ -1067,6 +1288,7 @@ class OperationalSLOMetrics:
         )
 
         ur = snap.get("unified_reliability") or {}
+        pr5 = snap.get("pr5_convergence") or {}
         ur_adm = ur.get("admission") or {}
         ur_readiness = ur.get("readiness") or {}
         ur_task = ur.get("task_initiation") or {}
@@ -1123,6 +1345,69 @@ class OperationalSLOMetrics:
             "galaxy_ops_unified_unresolved_blocker_volume",
             "Unified unresolved blocker volume across tracked subjects",
             float(ur.get("unresolved_blocker_volume", 0) or 0),
+        )
+        _gauge(
+            "galaxy_ops_pr5_participation_enablement_rate",
+            "PR-5 participation enablement rate derived from runtime participation tier",
+            round(float(pr5.get("participation_enablement_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_full_attachment_rate",
+            "PR-5 full attachment rate derived from runtime participation tier",
+            round(float(pr5.get("full_attachment_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_dispatch_eligibility_rate",
+            "PR-5 dispatch eligibility rate derived from runtime participation tier",
+            round(float(pr5.get("dispatch_eligibility_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_local_routing_rate",
+            "PR-5 local routing rate derived from active-path runtime truth",
+            round(float((pr5.get("routing_rate") or {}).get("local", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_cross_device_routing_rate",
+            "PR-5 cross-device routing rate derived from active-path runtime truth",
+            round(
+                float((pr5.get("routing_rate") or {}).get("cross_device", 0.0) or 0.0),
+                6,
+            ),
+        )
+        _gauge(
+            "galaxy_ops_pr5_nl_request_solved_rate",
+            "PR-5 natural-language request to solved rate",
+            round(float(pr5.get("natural_language_request_solved_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_task_closure_rate",
+            "PR-5 task closure rate",
+            round(float(pr5.get("task_closure_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_problem_closure_rate",
+            "PR-5 problem closure rate",
+            round(float(pr5.get("problem_closure_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_no_awaiter_forced_closure_rate",
+            "PR-5 no-awaiter/forced closure rate",
+            round(float(pr5.get("no_awaiter_forced_closure_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_takeover_degraded_evidence_rate",
+            "PR-5 takeover degraded evidence rate",
+            round(float(pr5.get("takeover_degraded_evidence_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_stale_snapshot_rate",
+            "PR-5 stale snapshot rate",
+            round(float(pr5.get("stale_snapshot_rate", 0.0) or 0.0), 6),
+        )
+        _gauge(
+            "galaxy_ops_pr5_operator_intervention_success_rate",
+            "PR-5 operator intervention success rate",
+            round(float(pr5.get("operator_intervention_success_rate", 0.0) or 0.0), 6),
         )
 
         # -- startup recovery scan --

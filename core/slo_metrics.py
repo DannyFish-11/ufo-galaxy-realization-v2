@@ -221,6 +221,34 @@ class SLOMetrics:
             hb_total = self._heartbeat_total
             hb_failures = self._heartbeat_failures
             latency_count = len(self._latency_samples)
+        control_loop_snapshot = {
+            "projection_stale_snapshot_rate": 0.0,
+            "projection_window_samples_total": 0,
+        }
+        try:
+            from core.control_loop_latency_budget import (  # noqa: PLC0415
+                get_control_loop_latency_budget,
+            )
+
+            projection_stats = (
+                get_control_loop_latency_budget().snapshot_projection_stats()
+            )
+            samples_total = (
+                int(projection_stats.get("total_immediate", 0))
+                + int(projection_stats.get("total_coalesced", 0))
+                + int(projection_stats.get("total_suppressed", 0))
+            )
+            stale_rate = (
+                int(projection_stats.get("total_suppressed", 0)) / samples_total
+                if samples_total > 0
+                else 0.0
+            )
+            control_loop_snapshot = {
+                "projection_stale_snapshot_rate": round(stale_rate, 6),
+                "projection_window_samples_total": samples_total,
+            }
+        except Exception:
+            pass
         return {
             "startup": {
                 "duration_ms": self._startup_duration_ms,
@@ -239,6 +267,7 @@ class SLOMetrics:
                 "p50_ms": None if math.isnan(p50) else round(p50, 3),
                 "p95_ms": None if math.isnan(p95) else round(p95, 3),
             },
+            "control_loop": control_loop_snapshot,
         }
 
     def prometheus_text(self) -> str:
@@ -308,6 +337,18 @@ class SLOMetrics:
             "galaxy_slo_command_latency_sample_count",
             "Number of command latency samples currently in the rolling window",
             float(latency_count),
+        )
+
+        control_loop = self.snapshot().get("control_loop") or {}
+        _gauge(
+            "galaxy_slo_projection_stale_snapshot_rate",
+            "Control-loop projection stale snapshot rate (suppressed/total projection decisions)",
+            float(control_loop.get("projection_stale_snapshot_rate", 0.0) or 0.0),
+        )
+        _gauge(
+            "galaxy_slo_projection_window_samples_total",
+            "Control-loop projection decision samples used for stale-rate calculation",
+            float(control_loop.get("projection_window_samples_total", 0.0) or 0.0),
         )
 
         return "\n".join(lines) + "\n"
