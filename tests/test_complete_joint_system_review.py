@@ -92,7 +92,7 @@ def test_pr_title_signals_joint_system_review() -> None:
     assert "dual-repo" in english_title
     assert "anchor" in english_title
     assert "integrity" in english_title
-    assert "993p2" in english_title
+    assert REVIEW_CONVERGENCE_ANCHOR.lower() in english_title
 
 
 def test_convergence_anchor_is_explicit_993p2() -> None:

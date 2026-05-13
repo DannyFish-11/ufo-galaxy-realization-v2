@@ -1524,7 +1524,7 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
     return [
         IntegrityRepairAction(
             action_id="A1",
-            title_zh="结果闭环判定显式受 evidence acceptance gate 约束（阻断型 verdict 不得被覆盖）",
+            title_zh="结果闭环判定显式受 evidence acceptance gate 约束",
             status_zh="本次 V2 已补强",
             why_high_value_zh=(
                 "这是双仓闭环可信度的硬门禁：即使 truth-chain/notify 成功，只要证据判定进入 "

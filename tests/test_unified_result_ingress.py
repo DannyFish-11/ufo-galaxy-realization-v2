@@ -520,6 +520,27 @@ class TestCompletionIngressNotify:
         assert outcome.is_fully_closed is False
         assert "evidence_gate:quarantine" in outcome.incomplete_reason
 
+    def test_E06_quarantine_verdict_adds_reason_when_classifier_did_not_set_one(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        def _force_quarantine_without_reason(_event: Any, outcome: Any) -> None:
+            outcome.evidence_acceptance_verdict = "quarantine"
+
+        ingress._classify_and_apply_evidence_gate = _force_quarantine_without_reason  # type: ignore[method-assign]
+
+        outcome = ingress.process(_make_event(_make_task_id()))
+
+        assert outcome.is_fully_closed is False
+        assert outcome.incomplete_reason == "evidence_gate:quarantine"
+
 
 # ===========================================================================
 # Group F — Bridge _pending_responses resolution
