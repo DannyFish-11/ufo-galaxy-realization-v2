@@ -107,9 +107,18 @@ async def handle_device_state_snapshot(
                 refresh_participation_state_from_runtime,
             )
 
+            readiness_signal = (
+                AndroidParticipationTransitionSignal.readiness_satisfied
+                if (
+                    bool(snap.model_ready)
+                    and bool(snap.accessibility_ready)
+                    and bool(snap.local_loop_ready)
+                )
+                else AndroidParticipationTransitionSignal.readiness_lost
+            )
             participation_state = refresh_participation_state_from_runtime(
                 device_id,
-                signal=AndroidParticipationTransitionSignal.readiness_satisfied,
+                signal=readiness_signal,
             )
             participation_tier = participation_state.tier.value
         except Exception as participation_exc:

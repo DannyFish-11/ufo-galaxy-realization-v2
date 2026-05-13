@@ -1289,6 +1289,7 @@ def build_cross_device_readiness_panel_dict(
             payload = verdict.to_dict()
             try:
                 from core.android_device_state_store import get_android_participation_evidence
+                from core.android_network_participation import AndroidNetworkParticipationTier
 
                 participation = get_android_participation_evidence(did, include_history_limit=5)
                 tier = str(participation.get("tier", "local_only"))
@@ -1297,9 +1298,13 @@ def build_cross_device_readiness_panel_dict(
                 payload["android_network_participation_transition_history"] = list(
                     participation.get("transition_history", [])
                 )
-                if tier in {"fully_attached", "dispatch_eligible", "distributed_participant"}:
+                if tier in {
+                    AndroidNetworkParticipationTier.fully_attached.value,
+                    AndroidNetworkParticipationTier.dispatch_eligible.value,
+                    AndroidNetworkParticipationTier.distributed_participant.value,
+                }:
                     fully_attached_or_higher += 1
-                if tier == "distributed_participant":
+                if tier == AndroidNetworkParticipationTier.distributed_participant.value:
                     distributed_participant_count += 1
             except Exception as participation_exc:
                 logger.debug(

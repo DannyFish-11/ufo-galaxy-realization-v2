@@ -245,10 +245,16 @@ def build_v2_unified_state_contract(
     _participation_blocking: List[str] = []
     _participation_notes: List[str] = []
     _participation_source = "authoritative_unavailable_inline_derivation"
+    _participation_transition_history: List[Dict[str, Any]] = list(
+        participation_evidence.get("transition_history", [])
+    )
+    _participation_last_signal = participation_evidence.get("last_signal")
+    _participation_prior_tier = participation_evidence.get("prior_tier")
     try:
         from core.android_network_participation import (  # noqa: PLC0415
             derive_android_network_participation_tier,
             get_participation_state_for_device,
+            list_participation_transition_history,
         )
         if participation_evidence:
             # Caller supplied pre-computed participation evidence
@@ -258,6 +264,8 @@ def build_v2_unified_state_contract(
             _participation_source = participation_evidence.get("source", "participation_evidence")
         else:
             android_device_ids = list(device_evidence.get("android_device_ids") or [])
+            # PR-1/V2 scope: consume one authoritative Android participant at a
+            # time (primary-first) for this contract projection.
             target_device_id = str(android_device_ids[0]) if android_device_ids else ""
             if target_device_id:
                 state = get_participation_state_for_device(target_device_id)
@@ -265,6 +273,16 @@ def build_v2_unified_state_contract(
                 _participation_blocking = list(state.blocking_reasons)
                 _participation_notes = list(state.tier_derivation_notes)
                 _participation_source = "core.android_network_participation.get_participation_state_for_device"
+                _participation_transition_history = list_participation_transition_history(
+                    target_device_id,
+                    limit=10,
+                )
+                _participation_last_signal = (
+                    state.last_signal.value if state.last_signal is not None else None
+                )
+                _participation_prior_tier = (
+                    state.prior_tier.value if state.prior_tier is not None else None
+                )
             else:
                 # Conservative fallback when no Android device identity is available.
                 _pe_websocket = android_attached
@@ -865,9 +883,9 @@ def build_v2_unified_state_contract(
                 "blocking_reasons": list(_participation_blocking),
                 "derivation_notes": list(_participation_notes),
                 "source": _participation_source,
-                "transition_history": list(participation_evidence.get("transition_history", [])),
-                "last_signal": participation_evidence.get("last_signal"),
-                "prior_tier": participation_evidence.get("prior_tier"),
+                "transition_history": list(_participation_transition_history),
+                "last_signal": _participation_last_signal,
+                "prior_tier": _participation_prior_tier,
                 "android_attached": android_attached,
                 "cross_device_available": cross_device_available,
                 "capability_visible": capability_visible,

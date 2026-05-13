@@ -133,7 +133,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -1007,7 +1007,7 @@ def record_participation_state(state: AndroidNetworkParticipationState) -> None:
                 }
             )
             if len(history) > _STORE_CAPACITY:
-                del history[:-_STORE_CAPACITY]
+                history[:] = history[-_STORE_CAPACITY:]
     logger.debug(
         "participation_state recorded: device_id=%s tier=%s signal=%s",
         state.device_id,
@@ -1055,14 +1055,10 @@ def refresh_participation_state_from_runtime(
     """Re-derive and record state from runtime stores with transition metadata."""
     prior_state = get_stored_participation_state(device_id)
     current_state = _derive_live_state(device_id)
-    if prior_state is None and signal is None:
-        return current_state
-    updated_state = AndroidNetworkParticipationState(
-        **{
-            **current_state.__dict__,
-            "prior_tier": prior_state.tier if prior_state is not None else None,
-            "last_signal": signal or current_state.last_signal,
-        }
+    updated_state = replace(
+        current_state,
+        prior_tier=prior_state.tier if prior_state is not None else None,
+        last_signal=signal if signal is not None else current_state.last_signal,
     )
     record_participation_state(updated_state)
     return updated_state

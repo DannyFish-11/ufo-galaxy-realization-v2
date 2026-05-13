@@ -836,10 +836,9 @@ class TestParticipationTransitionAuditability:
         history = list_participation_transition_history("hist-device", limit=10)
         assert len(history) >= 2
         assert history[-1]["to_tier"] == second.tier.value
-        assert history[-1]["signal"] in {
-            AndroidParticipationTransitionSignal.registration_fully_attached.value,
-            None,
-        }
+        assert history[-1]["signal"] == (
+            AndroidParticipationTransitionSignal.registration_fully_attached.value
+        )
 
 
 class TestGatewayHandlerParticipationIntegration:

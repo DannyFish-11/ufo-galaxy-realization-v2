@@ -1539,7 +1539,7 @@ def get_android_participation_evidence(
         return {
             "device_id": device_id,
             "tier": "local_only",
-            "blocking_reasons": [f"participation_evidence_unavailable: {exc}"],
+            "blocking_reasons": ["participation_evidence_unavailable"],
             "tier_derivation_notes": [],
             "source": "core.android_device_state_store",
             "transition_history": [],
