@@ -133,6 +133,37 @@ Routes
       with action_kind=flow_cancel.  Safe semantics: terminal flows are not
       affected.
 
+  --- PR-4: Operator Action Governance Endpoints ---
+
+  GET /api/v1/operator/actions/audit
+      Full operator action audit log.  Returns recent
+      :class:`~core.pr4_operator_action_governance.OperatorActionAuditRecord` entries
+      with who triggered each action, why it was allowed, pre/post state,
+      success/failure/rollback result, and downstream effects.
+      Supports filtering by action_kind and outcome.
+
+  GET /api/v1/operator/board/operable-truth
+      PR-4 operable board projection showing:
+      (1) what is wrong (block/degraded/manual counts, active blockers),
+      (2) what can currently be done (policy-derived available actions),
+      (3) why actions are available or unavailable (state-basis),
+      (4) last action feedback (kind, outcome, affected entities).
+      Action availability is policy-derived — not hard-coded.
+
+  GET /api/v1/operator/pr4/snapshot
+      Top-level PR-4 operable surface snapshot combining board projection,
+      recent audit records, pending Android-directed action count, and
+      contract version/authority confirmation.
+
+  POST /api/v1/operator/actions/android-directed
+      Dispatch an Android-directed operator action.  Builds an
+      :class:`~core.pr4_operator_action_governance.AndroidDirectedActionSpec`
+      and stores it as pending until the Android device ACKs.
+
+  POST /api/v1/operator/actions/android-directed/{dispatch_id}/ack
+      Record that an Android device has ACKed a directed action.  Removes
+      the action from the pending store.
+
 Design constraints
 ------------------
 - **Read endpoints: Read-only** — no writes, no side-effects.
@@ -1230,6 +1261,285 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             )
         except Exception as exc:
             logger.error("operator_flow_cancel(%s) endpoint error: %s", flow_id, exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ==================================================================
+    # PR-4: Operator Action Governance Endpoints
+    # ==================================================================
+    #
+    # These endpoints expose the PR-4 operator action governance surface:
+    #   - Full operator action audit trail
+    #   - Operable board projection (what is wrong, what can be done,
+    #     why actions are available, last action feedback)
+    #   - Android-directed action dispatch and ACK
+    #   - Top-level PR-4 operable surface snapshot
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/actions/audit
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/actions/audit")
+    async def operator_actions_audit(
+        limit: int = Query(50, ge=1, le=500, description="Maximum records to return"),
+        action_kind: Optional[str] = Query(None, description="Filter by action kind"),
+        outcome: Optional[str] = Query(None, description="Filter by outcome"),
+    ) -> JSONResponse:
+        """Return the operator action audit log.
+
+        Returns recent :class:`~core.pr4_operator_action_governance.OperatorActionAuditRecord`
+        entries, newest first.  Each record carries:
+
+        * who triggered the action (``operator_user_id``)
+        * why it was allowed (``policy_evaluation``, ``policy_basis``)
+        * pre-action runtime state (``pre_state``)
+        * post-action runtime state (``post_state``)
+        * success/failure/rollback result (``outcome``, ``error``, ``rollback_needed``)
+        * downstream runtime/governance effects (``downstream_effects``)
+        * Android-directed action correlation (``android_dispatch_id``, ``android_ack_received``)
+
+        Query parameters:
+
+        * ``limit`` — max records (default 50, max 500).
+        * ``action_kind`` — filter by action kind string.
+        * ``outcome`` — filter by outcome string.
+        """
+        try:
+            from core.pr4_operator_action_governance import get_operator_action_audit_log
+            records = get_operator_action_audit_log(
+                limit=limit,
+                action_kind=action_kind or None,
+                outcome=outcome or None,
+            )
+            return JSONResponse(content={
+                "total": len(records),
+                "records": [r.to_dict() for r in records],
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("operator_actions_audit endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/board/operable-truth
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/board/operable-truth")
+    async def operator_board_operable_truth() -> JSONResponse:
+        """Return the PR-4 operable board projection.
+
+        The operable-truth projection is the policy-driven operator board
+        surface showing:
+
+        * **What is wrong** — hard block count, soft degraded count, manual
+          decision count, active blocker list.
+        * **What can currently be done** — available actions with control_mode,
+          reason, and approval requirements.
+        * **Why actions are available or unavailable** — state-basis breakdown
+          (hard_block_count, active_flow_count, online_device_count, etc.).
+        * **Feedback/result of the last action** — last action kind, outcome,
+          error, affected entities.
+        * **Pending Android-directed actions** — actions dispatched to Android
+          that are awaiting ACK.
+
+        Action availability is policy-derived — not hard-coded.
+        """
+        try:
+            from core.pr4_operator_action_governance import build_operator_board_projection
+            proj = build_operator_board_projection()
+            return JSONResponse(content={
+                **proj.to_dict(),
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("operator_board_operable_truth endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/pr4/snapshot
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/pr4/snapshot")
+    async def pr4_operable_surface_snapshot(
+        audit_limit: int = Query(10, ge=1, le=100, description="Recent audit records to include"),
+    ) -> JSONResponse:
+        """Return the PR-4 operable surface snapshot.
+
+        The top-level PR-4 snapshot combines:
+
+        * :class:`~core.pr4_operator_action_governance.OperatorActionBoardProjection`
+          — operable truth board.
+        * Recent :class:`~core.pr4_operator_action_governance.OperatorActionAuditRecord`
+          entries.
+        * Count of pending Android-directed actions.
+        * Contract version and authority confirmation.
+
+        Use this endpoint to verify that the PR-4 convergence layer is active
+        and to inspect the current operable state of the V2 operator surface.
+        """
+        try:
+            from core.pr4_operator_action_governance import build_pr4_operable_surface_snapshot
+            snap = build_pr4_operable_surface_snapshot(recent_audit_limit=audit_limit)
+            return JSONResponse(content={
+                **snap.to_dict(),
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("pr4_operable_surface_snapshot endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/operator/actions/android-directed
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/operator/actions/android-directed")
+    async def operator_android_directed_action(body: Dict[str, Any]) -> JSONResponse:
+        """Dispatch an Android-directed operator action.
+
+        Builds an :class:`~core.pr4_operator_action_governance.AndroidDirectedActionSpec`
+        for an operator action targeting a specific Android device.  The spec
+        is stored as a pending action until the Android device ACKs it via the
+        execution event channel.
+
+        This endpoint represents the V2 center-side half of the Android-directed
+        operator action convergence (PR-4 requirement: Android-directed actions
+        are real runtime operations, not detached API requests).
+
+        Request body fields
+        -------------------
+        ``action_kind`` (required)
+            An :class:`~core.pr4_operator_action_governance.AndroidDirectedActionKind`
+            value.
+        ``device_id`` (required)
+            The target Android device ID.
+        ``operator_action_id``
+            Optional correlation ID.  Auto-generated when empty.
+        ``user_id``
+            Operator user ID (default: ``"operator"``).
+        ``target_flow_id``
+            Optional target delegated flow ID.
+        ``target_task_id``
+            Optional target task ID.
+        ``target_session_id``
+            Optional target session ID.
+        ``payload``
+            Optional additional payload dict.
+
+        Returns::
+
+            {
+              "android_dispatch_id": str,
+              "action_kind": str,
+              "device_id": str,
+              "dispatched_at": float,
+              "pending": true,
+              "authority": str
+            }
+        """
+        try:
+            from core.pr4_operator_action_governance import (
+                build_android_directed_action_spec,
+                AndroidDirectedActionKind,
+            )
+            import uuid as _uuid
+
+            action_kind = body.get("action_kind", "")
+            device_id = body.get("device_id", "")
+            if not action_kind:
+                return JSONResponse(
+                    content={"error": "action_kind is required", "authority": "OPERATOR_ROUTES_V1"},
+                    status_code=422,
+                )
+            if not device_id:
+                return JSONResponse(
+                    content={"error": "device_id is required", "authority": "OPERATOR_ROUTES_V1"},
+                    status_code=422,
+                )
+
+            spec = build_android_directed_action_spec(
+                action_kind=action_kind,
+                device_id=device_id,
+                operator_action_id=body.get("operator_action_id") or f"opact_{_uuid.uuid4().hex[:12]}",
+                operator_user_id=body.get("user_id", "operator"),
+                target_flow_id=body.get("target_flow_id", ""),
+                target_task_id=body.get("target_task_id", ""),
+                target_session_id=body.get("target_session_id", ""),
+                payload=dict(body.get("payload") or {}),
+            )
+
+            return JSONResponse(content={
+                **spec.to_dict(),
+                "pending": True,
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("operator_android_directed_action endpoint error: %s", exc)
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # POST /api/v1/operator/actions/android-directed/{dispatch_id}/ack
+    # ------------------------------------------------------------------
+
+    @router.post("/api/v1/operator/actions/android-directed/{dispatch_id}/ack")
+    async def operator_android_directed_action_ack(dispatch_id: str) -> JSONResponse:
+        """Acknowledge that an Android device has executed a directed action.
+
+        Called when a ``DEVICE_EXECUTION_EVENT`` with an ``operator_action_id``
+        field is received from the Android device.  Marks the pending action as
+        ACKed and removes it from the pending store.
+
+        Path parameters
+        ---------------
+        ``dispatch_id``
+            The ``android_dispatch_id`` from the
+            :class:`~core.pr4_operator_action_governance.AndroidDirectedActionSpec`.
+
+        Returns::
+
+            {
+              "acked": true,
+              "dispatch_id": str,
+              "authority": str
+            }
+
+        Returns HTTP 404 when the dispatch_id is not found in the pending store.
+        """
+        try:
+            from core.pr4_operator_action_governance import acknowledge_android_directed_action
+            acked = acknowledge_android_directed_action(dispatch_id)
+            if not acked:
+                return JSONResponse(
+                    content={
+                        "detail": f"pending android action '{dispatch_id}' not found",
+                        "authority": "OPERATOR_ROUTES_V1",
+                    },
+                    status_code=404,
+                )
+            return JSONResponse(content={
+                "acked": True,
+                "dispatch_id": dispatch_id,
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error(
+                "operator_android_directed_action_ack(%s) endpoint error: %s",
+                dispatch_id,
+                exc,
+            )
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,

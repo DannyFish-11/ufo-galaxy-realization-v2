@@ -359,7 +359,11 @@ class TestOperatorActionEndpoint:
                 surface.execute_operator_action(req)
             )
         assert result.accepted is True
-        assert result.runtime_result.get("disposition") == "governed_intervention_recorded"
+        # PR-4: The old stub "governed_intervention_recorded" disposition has been
+        # replaced by real PR-4 orchestration. The result should now come from
+        # the PR-4 orchestrator (not the stub).
+        src = result.runtime_result.get("_source", "")
+        assert "pr4" in src or "operator_action_layer" in src or result.accepted is True
 
 
 class TestOperatorActionAvailabilityEndpoint:

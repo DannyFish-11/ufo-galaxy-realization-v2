@@ -1993,7 +1993,9 @@ class OperatorSurface:
                     },
                 )
 
-        # ── Governed intervention actions (policy + audit, no bypass path) ─
+        # ── Governed intervention actions (PR-4: full orchestration + audit) ─
+        # PR-4 replaces the stub "governed_intervention_recorded" disposition
+        # with real runtime orchestration via the PR-4 governance module.
         if action_kind in {
             OperatorActionKind.retry_admission.value,
             OperatorActionKind.request_capability_revalidation.value,
@@ -2011,20 +2013,78 @@ class OperatorSurface:
             OperatorActionKind.acknowledge_blocker.value,
             OperatorActionKind.escalate_dependency_failure.value,
         }:
-            return OperatorActionResult(
-                action_kind=action_kind,
-                accepted=True,
-                runtime_result={
-                    "_source": "operator_action_layer",
-                    "policy": OPERATOR_ACTION_LAYER_POLICY,
-                    "control_mode": action_policy.get("control_mode", "manual"),
-                    "approval_gated": action_policy.get("requires_approval", False),
-                    "approval_token_present": bool(request.approval_token),
-                    "operator_notes": request.action_notes,
-                    "disposition": "governed_intervention_recorded",
-                    "governance_basis": dict(availability.get("state_basis") or {}),
-                },
-            )
+            # Generate an action_id for this invocation so the audit record
+            # can be correlated back to the OperatorActionResult.
+            import uuid as _uuid
+            action_id = f"opact_{_uuid.uuid4().hex[:12]}"
+
+            # Delegate to the PR-4 governed orchestration layer for real
+            # runtime handling + full causal audit recording.
+            try:
+                from core.pr4_operator_action_governance import (
+                    execute_governed_operator_action,
+                    OperatorActionOrchestrationOutcome,
+                )
+                orchestration = execute_governed_operator_action(
+                    action_kind=action_kind,
+                    action_id=action_id,
+                    operator_user_id=request.user_id or "operator",
+                    device_id=request.device_id,
+                    flow_id=request.flow_id,
+                    task_id=None,
+                    session_id=request.session_id or None,
+                    approval_token=request.approval_token,
+                    action_notes=request.action_notes,
+                    policy_evaluation="state_gate_allowed",
+                    policy_basis=action_policy.get("reason", ""),
+                )
+                outcome = orchestration.get("outcome", "")
+                # Treat success/accepted_pending as accepted; rollback/failed as rejected
+                accepted = outcome in {
+                    OperatorActionOrchestrationOutcome.success.value,
+                    OperatorActionOrchestrationOutcome.accepted_pending.value,
+                    OperatorActionOrchestrationOutcome.partial_success.value,
+                }
+                return OperatorActionResult(
+                    action_id=action_id,
+                    action_kind=action_kind,
+                    accepted=accepted,
+                    error=orchestration.get("error", ""),
+                    runtime_result={
+                        "_source": "pr4_operator_action_governance",
+                        "policy": OPERATOR_ACTION_LAYER_POLICY,
+                        "control_mode": action_policy.get("control_mode", "manual"),
+                        "approval_gated": action_policy.get("requires_approval", False),
+                        "approval_token_present": bool(request.approval_token),
+                        "operator_notes": request.action_notes,
+                        "governance_basis": dict(availability.get("state_basis") or {}),
+                        **orchestration,
+                    },
+                )
+            except Exception as exc:
+                logger.error(
+                    "execute_operator_action(%s) PR-4 orchestration failed: %s",
+                    action_kind,
+                    exc,
+                )
+                # Fallback: return accepted with degraded disposition rather
+                # than failing the operator action entirely.
+                return OperatorActionResult(
+                    action_id=action_id,
+                    action_kind=action_kind,
+                    accepted=True,
+                    runtime_result={
+                        "_source": "operator_action_layer_fallback",
+                        "policy": OPERATOR_ACTION_LAYER_POLICY,
+                        "control_mode": action_policy.get("control_mode", "manual"),
+                        "approval_gated": action_policy.get("requires_approval", False),
+                        "approval_token_present": bool(request.approval_token),
+                        "operator_notes": request.action_notes,
+                        "disposition": "governed_intervention_recorded_fallback",
+                        "governance_basis": dict(availability.get("state_basis") or {}),
+                        "pr4_orchestration_error": str(exc),
+                    },
+                )
 
         return OperatorActionResult(
             action_kind=action_kind,
