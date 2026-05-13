@@ -182,6 +182,7 @@ Design constraints
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Query
@@ -1452,7 +1453,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 build_android_directed_action_spec,
                 AndroidDirectedActionKind,
             )
-            import uuid as _uuid
 
             action_kind = body.get("action_kind", "")
             device_id = body.get("device_id", "")
@@ -1470,7 +1470,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             spec = build_android_directed_action_spec(
                 action_kind=action_kind,
                 device_id=device_id,
-                operator_action_id=body.get("operator_action_id") or f"opact_{_uuid.uuid4().hex[:12]}",
+                operator_action_id=body.get("operator_action_id") or f"opact_{uuid.uuid4().hex[:12]}",
                 operator_user_id=body.get("user_id", "operator"),
                 target_flow_id=body.get("target_flow_id", ""),
                 target_task_id=body.get("target_task_id", ""),

@@ -2015,8 +2015,7 @@ class OperatorSurface:
         }:
             # Generate an action_id for this invocation so the audit record
             # can be correlated back to the OperatorActionResult.
-            import uuid as _uuid
-            action_id = f"opact_{_uuid.uuid4().hex[:12]}"
+            action_id = f"opact_{uuid.uuid4().hex[:12]}"
 
             # Delegate to the PR-4 governed orchestration layer for real
             # runtime handling + full causal audit recording.
