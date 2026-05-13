@@ -653,6 +653,7 @@ async def handle_device_register(
                 build_android_network_participation_state,
                 record_participation_state,
                 AndroidParticipationTransitionSignal,
+                list_participation_transition_history,
             )
             _reg_posture = ""
             if _reg_entry is not None:
@@ -679,6 +680,9 @@ async def handle_device_register(
             )
             record_participation_state(_participation_state)
             ack["network_participation_tier"] = _participation_state.tier.value
+            ack["network_participation_transition_history"] = (
+                list_participation_transition_history(device_id, limit=5)
+            )
         except Exception as _npe:
             logger.debug(
                 "registration: network_participation_tier derivation non-fatal: "

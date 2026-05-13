@@ -269,8 +269,27 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
                 _ae_exc,
             )
 
-    return MessageBuilder.capability_report_ack(
+    ack = MessageBuilder.capability_report_ack(
         device_id=device_id or "unknown",
         accepted=True,
         message="capability_report accepted",
     )
+    if device_id:
+        try:
+            from core.android_network_participation import (  # noqa: PLC0415
+                AndroidParticipationTransitionSignal,
+                refresh_participation_state_from_runtime,
+            )
+
+            participation_state = refresh_participation_state_from_runtime(
+                device_id,
+                signal=AndroidParticipationTransitionSignal.capability_visibility_gained,
+            )
+            ack["network_participation_tier"] = participation_state.tier.value
+        except Exception as participation_exc:
+            logger.debug(
+                "capability_report: participation refresh non-fatal: device_id=%s error=%s",
+                device_id,
+                participation_exc,
+            )
+    return ack

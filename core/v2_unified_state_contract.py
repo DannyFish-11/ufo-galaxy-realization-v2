@@ -239,15 +239,16 @@ def build_v2_unified_state_contract(
 
     # --- PR-1: Derive unified Android network participation tier ---
     # Consume from participation_evidence when caller supplies it; otherwise
-    # derive inline from the signals already available in this call.
+    # consume the authoritative per-device state from core.android_network_participation.
+    # As a final fallback only, derive inline from available evidence.
     _participation_tier_str = "local_only"
     _participation_blocking: List[str] = []
     _participation_notes: List[str] = []
-    _participation_source = "inline_derivation"
+    _participation_source = "authoritative_unavailable_inline_derivation"
     try:
         from core.android_network_participation import (  # noqa: PLC0415
             derive_android_network_participation_tier,
-            AndroidNetworkParticipationTier,
+            get_participation_state_for_device,
         )
         if participation_evidence:
             # Caller supplied pre-computed participation evidence
@@ -256,45 +257,55 @@ def build_v2_unified_state_contract(
             _participation_notes = list(participation_evidence.get("tier_derivation_notes", []))
             _participation_source = participation_evidence.get("source", "participation_evidence")
         else:
-            # Derive inline from signals already in this call
-            _pe_websocket = android_attached
-            _pe_reg_ack = android_attached
-            _pe_fully_attached = (
-                android_attached
-                and device_evidence.get("registration_fully_attached", False)
-            )
-            _pe_gaps = list(device_evidence.get("registration_gaps", []))
-            _pe_capability_visible = capability_visible
-            _pe_session_count = session_evidence.get("active_session_count", 0)
-            _pe_posture = session_evidence.get("session_posture", "")
-            _pe_cross_device_enabled = (
-                capability_visible
-                and session_evidence.get("active_session_count", 0) > 0
-            )
-            _pe_readiness = (
-                capability_visible
-                and _pe_session_count > 0
-                and _pe_posture == "join_runtime"
-            )
-            _pe_dispatch = cross_device_available and _pe_readiness
-            _pe_execution = task_initiated and not result_closure_established
-
-            _tier, _participation_blocking, _participation_notes = (
-                derive_android_network_participation_tier(
-                    websocket_connected=_pe_websocket,
-                    registration_ack_success=_pe_reg_ack,
-                    registration_fully_attached=_pe_fully_attached,
-                    registration_gaps=_pe_gaps,
-                    capability_visible=_pe_capability_visible,
-                    active_session_count=_pe_session_count,
-                    session_posture=_pe_posture,
-                    cross_device_enabled=_pe_cross_device_enabled,
-                    readiness_satisfied=_pe_readiness,
-                    dispatch_gate_passed=_pe_dispatch,
-                    execution_active=_pe_execution,
+            android_device_ids = list(device_evidence.get("android_device_ids") or [])
+            target_device_id = str(android_device_ids[0]) if android_device_ids else ""
+            if target_device_id:
+                state = get_participation_state_for_device(target_device_id)
+                _participation_tier_str = state.tier.value
+                _participation_blocking = list(state.blocking_reasons)
+                _participation_notes = list(state.tier_derivation_notes)
+                _participation_source = "core.android_network_participation.get_participation_state_for_device"
+            else:
+                # Conservative fallback when no Android device identity is available.
+                _pe_websocket = android_attached
+                _pe_reg_ack = android_attached
+                _pe_fully_attached = (
+                    android_attached
+                    and device_evidence.get("registration_fully_attached", False)
                 )
-            )
-            _participation_tier_str = _tier.value
+                _pe_gaps = list(device_evidence.get("registration_gaps", []))
+                _pe_capability_visible = capability_visible
+                _pe_session_count = session_evidence.get("active_session_count", 0)
+                _pe_posture = session_evidence.get("session_posture", "")
+                _pe_cross_device_enabled = (
+                    capability_visible
+                    and session_evidence.get("active_session_count", 0) > 0
+                )
+                _pe_readiness = (
+                    capability_visible
+                    and _pe_session_count > 0
+                    and _pe_posture == "join_runtime"
+                )
+                _pe_dispatch = cross_device_available and _pe_readiness
+                _pe_execution = task_initiated and not result_closure_established
+
+                _tier, _participation_blocking, _participation_notes = (
+                    derive_android_network_participation_tier(
+                        websocket_connected=_pe_websocket,
+                        registration_ack_success=_pe_reg_ack,
+                        registration_fully_attached=_pe_fully_attached,
+                        registration_gaps=_pe_gaps,
+                        capability_visible=_pe_capability_visible,
+                        active_session_count=_pe_session_count,
+                        session_posture=_pe_posture,
+                        cross_device_enabled=_pe_cross_device_enabled,
+                        readiness_satisfied=_pe_readiness,
+                        dispatch_gate_passed=_pe_dispatch,
+                        execution_active=_pe_execution,
+                    )
+                )
+                _participation_tier_str = _tier.value
+                _participation_source = "inline_derivation_missing_device_identity"
     except Exception as _pe_exc:
         logger.debug(
             "build_v2_unified_state_contract: participation tier derivation failed: %s",
@@ -854,6 +865,9 @@ def build_v2_unified_state_contract(
                 "blocking_reasons": list(_participation_blocking),
                 "derivation_notes": list(_participation_notes),
                 "source": _participation_source,
+                "transition_history": list(participation_evidence.get("transition_history", [])),
+                "last_signal": participation_evidence.get("last_signal"),
+                "prior_tier": participation_evidence.get("prior_tier"),
                 "android_attached": android_attached,
                 "cross_device_available": cross_device_available,
                 "capability_visible": capability_visible,
