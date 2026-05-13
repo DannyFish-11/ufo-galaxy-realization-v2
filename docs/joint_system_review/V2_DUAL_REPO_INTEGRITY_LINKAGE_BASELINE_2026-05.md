@@ -68,17 +68,17 @@
   - Android → V2 状态与结果的 canonical ingestion path 已存在
   - delegated execution / continuity / participation 已不是空语义
 - **仍是半联通、半语义、半投影、半治理的部分**
-  - Android truth 已可见，但还没有稳定进入所有编排/分发决策分支
+  - Android truth 已进入主要编排/分发评分链，但闭环/治理面的同源消费仍未完全闭合
   - mesh participation contract 已成立，但 full mesh runtime 不能夸大为已闭合
   - local inference availability / readiness / fallback 等信号，跨仓统一门控仍不稳
   - continuity 已联动，但跨重启/恢复的运行级证明仍薄
 
 ## 5. 当前最关键的双仓矛盾/完整性联动缺口
 
-1. **truth 可见，但不等于 truth 可决策**
-   - V2 已消费 `android_snapshot`
+1. **truth 已进入主要决策链，但尚未形成全链同源闭环**
+   - V2 已消费 `android_snapshot` + `get_android_participation_evidence`
    - Android 已持续上送状态
-   - 但 V2 并未在所有路由/dispatch 分支里稳定使用这些真值
+   - 但 result acceptance / closure / operator 治理面的因果映射仍需继续加强
 
 2. **Android 对 mesh 完成度的表达比 V2 表面更克制**
    - Android contract 明确保留 `partial / deferred`
@@ -122,6 +122,15 @@
 - 回归：`tests/test_unified_result_ingress.py::test_E05_quarantine_verdict_blocks_closure`
 
 这属于系统完整性补洞，不是叙事优化：它直接把“结果是否可信可收口”与 canonical evidence gate 绑定到同一条决策链。
+
+### A2. Android participation truth 进入编排/分发评分链（已实现）
+
+- 变更：`core/runtime/source_dispatch_orchestrator.py`、`galaxy_gateway/routing/device_selection.py`
+- 目的：让 Android participation tier 不只停留在 readiness/panel 可见面，而是直接影响 target ranking
+- 效果：
+  - source dispatch 侧新增消费 `get_android_participation_evidence`，并在 metadata 暴露参与真值消费状态
+  - device selection 侧在 runtime truth 权重阶段纳入 participation tier 加分（`fully_attached/dispatch_eligible/distributed_participant`）
+- 回归：`tests/test_orchestration_consumes_android_truth.py` 新增 participation evidence 影响选路顺序测试
 
 ## 8. 本基线的约束口径
 

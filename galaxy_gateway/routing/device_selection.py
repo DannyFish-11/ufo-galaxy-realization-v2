@@ -55,8 +55,12 @@ from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
 from core.android_device_state_store import (  # noqa: E402
+    get_android_participation_evidence,
     get_device_state_snapshot,
     list_recent_execution_events,
+)
+from core.android_participation_truth_scoring import (  # noqa: E402
+    get_android_participation_tier_score_bonus,
 )
 from core.device_pool_manager import get_device_pool_manager  # noqa: E402
 from core.unified.gateway_capability_projection import (  # noqa: E402
@@ -115,6 +119,8 @@ ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION: str = (
     "-20 model_ready=False and no current_fallback_tier, "
     "-min(offline_queue_depth,20), -12 recent_non_terminal_execution_busy, "
     "-10 runtime_health degraded/unhealthy. "
+    "Android participation evidence is also consumed as additive preference "
+    "(+4 fully_attached, +8 dispatch_eligible, +12 distributed_participant). "
     "Candidates are re-ordered by descending score so the most Android-ready "
     "device is preferred.  Devices with no snapshot retain their original order "
     "(no penalty for absent truth — fail-open). "
@@ -341,6 +347,23 @@ def select_devices(
                 _is_degraded = bool(_health.get("is_degraded", False))
                 if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                     _score -= 10
+            try:
+                _participation = get_android_participation_evidence(_did)
+                _tier_bonus = get_android_participation_tier_score_bonus(_participation)
+                _score += _tier_bonus
+                if _tier_bonus > 0:
+                    logger.debug(
+                        "select_devices: participation tier bonus applied for %s tier=%s bonus=%d",
+                        _did,
+                        str((_participation or {}).get("tier") or "").strip().lower(),
+                        _tier_bonus,
+                    )
+            except Exception as _part_err:
+                logger.debug(
+                    "select_devices: participation evidence unavailable for %s: %s",
+                    _did,
+                    _part_err,
+                )
             try:
                 _recent = list_recent_execution_events(flow_id=None, device_id=_did, limit=1)
                 if _recent:

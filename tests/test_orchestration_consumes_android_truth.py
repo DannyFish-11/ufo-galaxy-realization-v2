@@ -409,6 +409,45 @@ class TestSelectTargetAndroidTruth:
         # The ready device should win despite being listed second.
         assert result.target_device_id == dev_ready
 
+    def test_participation_evidence_breaks_tie_in_selection(self, monkeypatch):
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        device_distributed = "dev_dist"
+        device_attached = "dev_attach"
+        entry_distributed = _make_registry_entry(device_distributed)
+        entry_attached = _make_registry_entry(device_attached)
+        snap = _make_snapshot(model_ready=True, local_loop_ready=True)
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry_attached, entry_distributed],
+        )
+        part_dist = _make_participation()
+        part_dist.participant_tier = "mesh_participant"
+        part_attach = _make_participation()
+        part_attach.participant_tier = "joined_runtime"
+
+        result = _select_target_from_candidates(
+            readiness_inputs={
+                device_distributed: _make_readiness(),
+                device_attached: _make_readiness(),
+            },
+            participation_inputs={device_distributed: part_dist, device_attached: part_attach},
+            reuse_inputs={device_distributed: False, device_attached: False},
+            android_snapshot_inputs={device_distributed: snap, device_attached: snap},
+            android_participation_inputs={
+                device_distributed: {"tier": "distributed_participant"},
+                device_attached: {"tier": "fully_attached"},
+            },
+        )
+
+        assert result is not None
+        assert result.target_device_id == device_distributed
+        assert result.metadata.get("android_participation_truth_consumed") is True
+        assert result.metadata.get("android_participation_tier") == "distributed_participant"
+
     def test_no_snapshot_does_not_change_outcome(self, monkeypatch):
         """Absent snapshot → baseline score 100 → normal selection (backward compat)."""
         from core.runtime.source_dispatch_orchestrator import (
@@ -766,6 +805,52 @@ class TestSelectDevicesAndroidRoutingWeight:
         result = select_devices(analysis={}, candidates=[dev_heavy, dev_light])
         assert len(result) == 1
         assert result[0].device_id == "dev_light_queue"
+
+    def test_select_devices_prefers_higher_participation_tier_when_runtime_signals_equal(
+        self, monkeypatch
+    ):
+        from galaxy_gateway.routing.device_selection import select_devices
+
+        device_attached = _make_device("dev_attach_tier")
+        device_distributed = _make_device("dev_dist_tier")
+        same_snapshot = _make_snapshot(model_ready=True, local_loop_ready=True)
+
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_state_snapshot",
+            lambda device_id: same_snapshot,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_android_participation_evidence",
+            lambda device_id: (
+                {"tier": "distributed_participant"}
+                if device_id == "dev_dist_tier"
+                else {"tier": "fully_attached"}
+            ),
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.list_recent_execution_events",
+            lambda flow_id, device_id, limit: [],
+        )
+        monkeypatch.setattr(
+            "core.target_device_validator.validate_target_device",
+            lambda tid: MagicMock(ready=True, registered=True, reasons=[]),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+            lambda devices, **kw: [d for d in devices if d.status == "online"],
+            raising=False,
+        )
+        mock_pool = MagicMock()
+        mock_pool.select_device.return_value = None
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+            lambda: mock_pool,
+        )
+
+        result = select_devices(analysis={}, candidates=[device_attached, device_distributed])
+        assert len(result) == 1
+        assert result[0].device_id == "dev_dist_tier"
 
     def test_android_routing_weight_sentinel_present(self):
         from galaxy_gateway.routing.device_selection import (

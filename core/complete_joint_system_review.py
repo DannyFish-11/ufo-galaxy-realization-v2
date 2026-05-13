@@ -1426,12 +1426,13 @@ def _build_cross_repo_mismatches() -> List[CrossRepoMismatch]:
     return [
         CrossRepoMismatch(
             "M1",
-            "V2 已能看到 Android runtime truth，但编排消费覆盖面仍不完整",
+            "V2 已把 Android runtime truth 接入主要编排评分链，但闭环/治理侧同源消费仍未完全闭合",
             "V2 已在 source_dispatch_orchestrator 与 device_selection 中消费 "
-            "android_snapshot / get_device_state_snapshot。",
+            "android_snapshot / get_device_state_snapshot，并新增消费 "
+            "get_android_participation_evidence。",
             "Android 已通过 GalaxyWebSocketClient 持续上送状态与执行信号。",
-            "这说明双仓 transport 与状态吸收已存在，但 truth 尚未稳定成为所有路由/分发分支的"
-            "统一决策输入，导致“看得见”不等于“真决策”。",
+            "这说明双仓 transport 与状态吸收已进入“可决策”阶段，但 result acceptance、"
+            "closure 与 operator 治理面的同源因果仍需继续加固。",
             ["R1", "R12"],
             [
                 "core/runtime/source_dispatch_orchestrator.py",
@@ -1539,6 +1540,25 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
             android_dependency_zh=(
                 "Android 继续提供 proof_class / delegated result 质量信号；"
                 "本修复不依赖 Android 新改动即可生效。"
+            ),
+        ),
+        IntegrityRepairAction(
+            action_id="IRA_ANDROID_PARTICIPATION_TRUTH_IN_ROUTING",
+            title_zh="Android participation evidence 进入 V2 路由/分发评分链",
+            status_zh="本次 V2 已补强",
+            why_high_value_zh=(
+                "把 Android 参与层级真值直接接入 source_dispatch_orchestrator 与 "
+                "device_selection，可降低“只看 snapshot 不看参与层级”导致的选路偏差，"
+                "把双仓真值从可见面推进到可决策面。"
+            ),
+            linked_issue_ids=["R1", "R3", "R12"],
+            v2_anchors=[
+                "core/runtime/source_dispatch_orchestrator.py",
+                "galaxy_gateway/routing/device_selection.py",
+                "tests/test_orchestration_consumes_android_truth.py",
+            ],
+            android_dependency_zh=(
+                "依赖 Android 侧持续稳定上送参与真值字段；V2 侧已在缺省退化路径下保持兼容。"
             ),
         ),
         IntegrityRepairAction(
