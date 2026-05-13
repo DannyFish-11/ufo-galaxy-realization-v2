@@ -569,14 +569,19 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         task_queue[task_id]["problem_solved_via"] = outcome.problem_solved_via
 
     def _normalize_compat_status(raw_status: Any) -> str:
-        _raw = str(raw_status or "").lower().strip()
-        if _raw in ("failed", "error"):
-            return "failed"
-        if _raw == "cancelled":
-            return "cancelled"
-        if _raw == "degraded":
-            return "degraded"
-        return "completed"
+        try:
+            from core.unified_result_ingress import normalize_status as _normalize_status
+
+            return _normalize_status(raw_status)
+        except Exception:
+            _raw = str(raw_status or "").lower().strip()
+            if _raw in ("failed", "error"):
+                return "failed"
+            if _raw == "cancelled":
+                return "cancelled"
+            if _raw == "degraded":
+                return "degraded"
+            return "completed"
 
     # -----------------------------------------------------------------------
     # [COMPAT] /ws/device/{device_id}

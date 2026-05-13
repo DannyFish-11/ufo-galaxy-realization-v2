@@ -144,10 +144,9 @@ def build_problem_execution_closure(
         or _payload.get("final_user_response")
         or _payload.get("problem_solved")
     )
-    _task_closed = bool(_is_terminal_status and truth_chain_complete and completion_notified)
-    _problem_closed = bool(
-        _problem_closed_signal and truth_chain_complete and completion_notified
-    )
+    _closure_requirements_met = bool(truth_chain_complete and completion_notified)
+    _task_closed = bool(_is_terminal_status and _closure_requirements_met)
+    _problem_closed = bool(_problem_closed_signal and _closure_requirements_met)
     _execution_path = str(_payload.get("execution_path") or "")
     _solved_via = (
         "cross_device"
