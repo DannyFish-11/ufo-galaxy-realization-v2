@@ -21,15 +21,19 @@ from core.complete_joint_system_review import (
     REVIEW_AUTHORITY,
     REVIEW_METHODOLOGY,
     REVIEW_PR_TITLE,
+    REVIEW_PR_TITLE_EN,
     REVIEW_SUPERSEDES,
     ClosureMapEntry,
     CompleteJointSystemReport,
+    CrossRepoMismatch,
     EvidenceState,
     GapClass,
     PropositionVerdict,
     RemainingIssue,
+    RuntimeFlowStage,
     StageGate,
     StageVerdict,
+    V2ConvergencePriority,
     WorkPriority,
     build_complete_joint_system_review,
 )
@@ -79,9 +83,14 @@ def test_methodology_prohibits_non_code_evidence() -> None:
 
 
 def test_pr_title_signals_joint_system_review() -> None:
-    title = REVIEW_PR_TITLE.lower()
-    assert "joint" in title or "dual-repo" in title or "complete" in title
-    assert "remaining" in title or "system review" in title or "baseline" in title
+    assert "V2" in REVIEW_PR_TITLE
+    assert "双仓" in REVIEW_PR_TITLE
+    assert "基线" in REVIEW_PR_TITLE
+    english_title = REVIEW_PR_TITLE_EN.lower()
+    assert "dual-repo" in english_title
+    assert "baseline" in english_title
+    assert "integrity" in english_title
+    assert "linkage" in english_title
 
 
 def test_supersedes_list_includes_prior_baselines() -> None:
@@ -330,6 +339,54 @@ def test_partially_established_propositions_have_blocking_issues() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Runtime flow / cross-repo mismatch / next-step convergence tests
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_flow_has_six_stages_covering_end_to_end_chain() -> None:
+    report = build_complete_joint_system_review()
+    assert len(report.runtime_flow) == 6
+    assert all(isinstance(stage, RuntimeFlowStage) for stage in report.runtime_flow)
+    titles = {stage.title_zh for stage in report.runtime_flow}
+    assert any("入口" in title for title in titles)
+    assert any("分发" in title or "执行路径" in title for title in titles)
+    assert any("回流" in title for title in titles)
+    assert any("闭环" in title or "收口" in title for title in titles)
+
+
+def test_runtime_flow_stages_have_v2_anchors_and_truth_text() -> None:
+    report = build_complete_joint_system_review()
+    for stage in report.runtime_flow:
+        assert stage.runtime_truth_zh
+        assert stage.v2_anchors
+
+
+def test_cross_repo_mismatches_are_explicit_and_linked_to_issues() -> None:
+    report = build_complete_joint_system_review()
+    assert len(report.cross_repo_mismatches) >= 4
+    assert all(isinstance(item, CrossRepoMismatch) for item in report.cross_repo_mismatches)
+    for mismatch in report.cross_repo_mismatches:
+        assert mismatch.topic_zh
+        assert mismatch.v2_truth_zh
+        assert mismatch.android_truth_zh
+        assert mismatch.impact_zh
+        assert mismatch.linked_issue_ids
+        assert mismatch.v2_anchors
+        assert mismatch.android_anchors
+
+
+def test_next_v2_convergence_priority_targets_integrity_linkage() -> None:
+    report = build_complete_joint_system_review()
+    priority = report.v2_next_convergence_priority
+    assert isinstance(priority, V2ConvergencePriority)
+    assert priority is not None
+    assert "V2" in priority.title_zh or "编排" in priority.title_zh
+    assert {"R1", "R2", "R3"}.issubset(set(priority.linked_issue_ids))
+    assert priority.v2_anchors
+    assert priority.android_anchors
+
+
+# ---------------------------------------------------------------------------
 # Stage / completion consistency tests
 # ---------------------------------------------------------------------------
 
@@ -369,6 +426,7 @@ def test_to_dict_has_all_top_level_keys() -> None:
         "authority",
         "methodology",
         "pr_title",
+        "pr_title_en",
         "supersedes",
         "android_audited_ref",
         "generated_at",
@@ -377,6 +435,9 @@ def test_to_dict_has_all_top_level_keys() -> None:
         "domain_statuses",
         "remaining_issues",
         "closure_map",
+        "runtime_flow",
+        "cross_repo_mismatches",
+        "v2_next_convergence_priority",
         "stage",
         "overall_completion_pct",
         "weighted_completion_pct",
@@ -436,3 +497,28 @@ def test_to_dict_closure_map_entries_have_required_fields() -> None:
         assert "verdict" in entry
         assert "closed" in entry
         assert "blocking_issue_ids" in entry
+
+
+def test_to_dict_runtime_flow_entries_have_required_fields() -> None:
+    payload = build_complete_joint_system_review().to_dict()
+    for stage in payload["runtime_flow"]:
+        assert "stage_id" in stage
+        assert "title_zh" in stage
+        assert "runtime_truth_zh" in stage
+        assert "v2_anchors" in stage
+
+
+def test_to_dict_cross_repo_mismatch_entries_have_required_fields() -> None:
+    payload = build_complete_joint_system_review().to_dict()
+    for mismatch in payload["cross_repo_mismatches"]:
+        assert "mismatch_id" in mismatch
+        assert "topic_zh" in mismatch
+        assert "linked_issue_ids" in mismatch
+
+
+def test_to_dict_v2_next_convergence_priority_has_required_fields() -> None:
+    payload = build_complete_joint_system_review().to_dict()
+    priority = payload["v2_next_convergence_priority"]
+    assert priority is not None
+    for key in ("title_zh", "why_now_zh", "target_outcome_zh", "linked_issue_ids", "v2_anchors"):
+        assert key in priority
