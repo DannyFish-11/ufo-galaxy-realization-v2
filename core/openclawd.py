@@ -2806,7 +2806,25 @@ class OpenClawd:
         execution_path: str,
         cross_device_dispatched: bool,
     ) -> Dict[str, Any]:
-        """Build additive execution-path decision-basis facts for traceability."""
+        """Build additive execution-path decision-basis facts for traceability.
+
+        Parameters
+        ----------
+        entry_mode:
+            Requested execution branch preference (local/cross_device/hybrid).
+        execution_result:
+            Raw execution artifact dict from ``_run_execution``.
+        execution_path:
+            Resolved canonical path label from ``_determine_execution_path``.
+        cross_device_dispatched:
+            Whether a real remote dispatch signal was observed.
+
+        Returns
+        -------
+        dict
+            Structured trace facts used by runtime/problem-spine consumers:
+            decision source, selected path, action signal, and reason string.
+        """
         _action_taken = str(execution_result.get("action_taken", "none"))
         _source = "openclawd.determine_execution_path"
         if cross_device_dispatched:

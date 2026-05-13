@@ -230,6 +230,11 @@ def _derive_route_decision_basis(
     metadata: Dict[str, Any],
     execution_result: Dict[str, Any],
 ) -> Dict[str, Any]:
+    """Extract canonical routing-basis facts for NL problem-spine snapshots.
+
+    Combines OpenClawd decision metadata (when present), request entry mode,
+    and execution result action signal into one additive, stable dictionary.
+    """
     _path_basis = metadata.get("execution_path_decision_basis")
     if not isinstance(_path_basis, dict):
         _path_basis = {}
@@ -252,6 +257,11 @@ def _derive_traceability(
     metadata: Dict[str, Any],
     execution_result: Dict[str, Any],
 ) -> Dict[str, Any]:
+    """Build an additive traceability record for request→execution linkage.
+
+    Returns a compact dictionary with trace/session/request/task identifiers
+    so runtime routing and result closure records can be joined deterministically.
+    """
     return {
         "trace_id": metadata.get("trace_id") or execution_result.get("trace_id") or "",
         "runtime_session_id": metadata.get("runtime_session_id") or "",
