@@ -506,13 +506,13 @@ class TestCompletionIngressNotify:
         ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
         ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
         ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
-        ingress._classify_and_apply_evidence_gate = (  # type: ignore[method-assign]
-            lambda _event, outcome: (
-                setattr(outcome, "evidence_acceptance_verdict", "quarantine"),
-                setattr(outcome, "incomplete_reason", "evidence_gate:quarantine"),
-                setattr(outcome, "is_fully_closed", False),
-            )
-        )
+
+        def _force_quarantine(_event: Any, outcome: Any) -> None:
+            outcome.evidence_acceptance_verdict = "quarantine"
+            outcome.incomplete_reason = "evidence_gate:quarantine"
+            outcome.is_fully_closed = False
+
+        ingress._classify_and_apply_evidence_gate = _force_quarantine  # type: ignore[method-assign]
 
         outcome = ingress.process(_make_event(_make_task_id()))
 

@@ -85,7 +85,7 @@ def test_methodology_prohibits_non_code_evidence() -> None:
 
 
 def test_pr_title_signals_joint_system_review() -> None:
-    assert "993P2" in REVIEW_PR_TITLE
+    assert REVIEW_CONVERGENCE_ANCHOR in REVIEW_PR_TITLE
     assert "双仓" in REVIEW_PR_TITLE
     assert "补强" in REVIEW_PR_TITLE
     english_title = REVIEW_PR_TITLE_EN.lower()
@@ -399,7 +399,8 @@ def test_integrity_repair_actions_include_v2_implemented_fix_and_cross_repo_foll
     assert all(isinstance(item, IntegrityRepairAction) for item in actions)
     assert any(action.status_zh == "本次 V2 已补强" for action in actions)
     assert any("跨仓" in action.status_zh for action in actions)
-    implemented = next(action for action in actions if action.status_zh == "本次 V2 已补强")
+    implemented = next((action for action in actions if action.status_zh == "本次 V2 已补强"), None)
+    assert implemented is not None, "Expected at least one V2-implemented integrity action"
     assert any("core/unified_result_ingress.py" in anchor for anchor in implemented.v2_anchors)
 
 

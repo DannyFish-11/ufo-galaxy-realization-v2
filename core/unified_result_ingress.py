@@ -74,6 +74,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.UnifiedResultIngress")
 
+# Evidence verdicts that must block full closure in unified ingress.
+EVIDENCE_CLOSURE_BLOCKING_VERDICTS = frozenset({"quarantine", "reject"})
+
 # ---------------------------------------------------------------------------
 # Authority sentinel
 # ---------------------------------------------------------------------------
@@ -371,7 +374,7 @@ class UnifiedResultIngress:
 
         # Determine overall closure
         _evidence_gate_blocked = (
-            outcome.evidence_acceptance_verdict in ("quarantine", "reject")
+            outcome.evidence_acceptance_verdict in EVIDENCE_CLOSURE_BLOCKING_VERDICTS
         )
         outcome.is_fully_closed = (
             not outcome.was_deduplicated
