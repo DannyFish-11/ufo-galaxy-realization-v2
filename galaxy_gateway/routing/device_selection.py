@@ -55,6 +55,7 @@ from typing import Any, Dict, List, Optional
 
 # Module-level imports so the functions can be patched in tests.
 from core.android_device_state_store import (  # noqa: E402
+    get_android_participation_evidence,
     get_device_state_snapshot,
     list_recent_execution_events,
 )
@@ -115,6 +116,8 @@ ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION: str = (
     "-20 model_ready=False and no current_fallback_tier, "
     "-min(offline_queue_depth,20), -12 recent_non_terminal_execution_busy, "
     "-10 runtime_health degraded/unhealthy. "
+    "Android participation evidence is also consumed as additive preference "
+    "(+4 fully_attached, +8 dispatch_eligible, +12 distributed_participant). "
     "Candidates are re-ordered by descending score so the most Android-ready "
     "device is preferred.  Devices with no snapshot retain their original order "
     "(no penalty for absent truth — fail-open). "
@@ -341,6 +344,17 @@ def select_devices(
                 _is_degraded = bool(_health.get("is_degraded", False))
                 if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                     _score -= 10
+            try:
+                _participation = get_android_participation_evidence(_did)
+                _tier = str((_participation or {}).get("tier") or "").strip().lower()
+                if _tier == "fully_attached":
+                    _score += 4
+                elif _tier == "dispatch_eligible":
+                    _score += 8
+                elif _tier == "distributed_participant":
+                    _score += 12
+            except Exception:
+                pass
             try:
                 _recent = list_recent_execution_events(flow_id=None, device_id=_did, limit=1)
                 if _recent:

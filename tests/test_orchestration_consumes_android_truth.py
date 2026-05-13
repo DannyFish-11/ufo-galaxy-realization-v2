@@ -409,6 +409,38 @@ class TestSelectTargetAndroidTruth:
         # The ready device should win despite being listed second.
         assert result.target_device_id == dev_ready
 
+    def test_android_participation_evidence_changes_winner_when_snapshots_equal(self, monkeypatch):
+        from core.runtime.source_dispatch_orchestrator import (
+            _select_target_from_candidates,
+        )
+
+        dev_dist = "dev_dist"
+        dev_attach = "dev_attach"
+        entry_dist = _make_registry_entry(dev_dist)
+        entry_attach = _make_registry_entry(dev_attach)
+        snap = _make_snapshot(model_ready=True, local_loop_ready=True)
+
+        monkeypatch.setattr(
+            "core.attached_runtime_session_registry.list_active_sessions",
+            lambda registry=None: [entry_attach, entry_dist],
+        )
+
+        result = _select_target_from_candidates(
+            readiness_inputs={dev_dist: _make_readiness(), dev_attach: _make_readiness()},
+            participation_inputs={dev_dist: _make_participation(), dev_attach: _make_participation()},
+            reuse_inputs={dev_dist: False, dev_attach: False},
+            android_snapshot_inputs={dev_dist: snap, dev_attach: snap},
+            android_participation_inputs={
+                dev_dist: {"tier": "distributed_participant"},
+                dev_attach: {"tier": "fully_attached"},
+            },
+        )
+
+        assert result is not None
+        assert result.target_device_id == dev_dist
+        assert result.metadata.get("android_participation_truth_consumed") is True
+        assert result.metadata.get("android_participation_tier") == "distributed_participant"
+
     def test_no_snapshot_does_not_change_outcome(self, monkeypatch):
         """Absent snapshot → baseline score 100 → normal selection (backward compat)."""
         from core.runtime.source_dispatch_orchestrator import (
@@ -766,6 +798,52 @@ class TestSelectDevicesAndroidRoutingWeight:
         result = select_devices(analysis={}, candidates=[dev_heavy, dev_light])
         assert len(result) == 1
         assert result[0].device_id == "dev_light_queue"
+
+    def test_select_devices_prefers_higher_participation_tier_when_runtime_signals_equal(
+        self, monkeypatch
+    ):
+        from galaxy_gateway.routing.device_selection import select_devices
+
+        dev_attach = _make_device("dev_attach_tier")
+        dev_dist = _make_device("dev_dist_tier")
+        same_snapshot = _make_snapshot(model_ready=True, local_loop_ready=True)
+
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_state_snapshot",
+            lambda device_id: same_snapshot,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_android_participation_evidence",
+            lambda device_id: (
+                {"tier": "distributed_participant"}
+                if device_id == "dev_dist_tier"
+                else {"tier": "fully_attached"}
+            ),
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.list_recent_execution_events",
+            lambda flow_id, device_id, limit: [],
+        )
+        monkeypatch.setattr(
+            "core.target_device_validator.validate_target_device",
+            lambda tid: MagicMock(ready=True, registered=True, reasons=[]),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "galaxy_gateway.autonomous_filter.filter_autonomous_devices",
+            lambda devices, **kw: [d for d in devices if d.status == "online"],
+            raising=False,
+        )
+        mock_pool = MagicMock()
+        mock_pool.select_device.return_value = None
+        monkeypatch.setattr(
+            "galaxy_gateway.routing.device_selection.get_device_pool_manager",
+            lambda: mock_pool,
+        )
+
+        result = select_devices(analysis={}, candidates=[dev_attach, dev_dist])
+        assert len(result) == 1
+        assert result[0].device_id == "dev_dist_tier"
 
     def test_android_routing_weight_sentinel_present(self):
         from galaxy_gateway.routing.device_selection import (

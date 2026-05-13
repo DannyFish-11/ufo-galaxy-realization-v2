@@ -1114,6 +1114,17 @@ ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY: str = (
     "not merely an observable surface."
 )
 
+ANDROID_PARTICIPATION_EVIDENCE_IN_SELECTION_POLICY: str = (
+    "POLICY::ANDROID_PARTICIPATION_EVIDENCE_IN_SELECTION: "
+    "_select_target_from_candidates() consumes "
+    "core.android_device_state_store.get_android_participation_evidence() as an "
+    "additional dispatch scoring signal. "
+    "_score_candidate() applies additive bonuses when evidence tier is "
+    "fully_attached / dispatch_eligible / distributed_participant so Android "
+    "network participation truth materially influences target ranking while "
+    "preserving hard readiness/participation/posture gates."
+)
+
 ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS_POLICY: str = (
     "POLICY::ANDROID_DISPATCH_FIELD_AUTHORITATIVE_STATUS: "
     "In _score_candidate(), only the runtime-truth fields "
@@ -1731,6 +1742,7 @@ def _score_candidate(
     reuse_eligible: bool,
     posture: str = "",
     android_snapshot: Any = None,
+    android_participation_evidence: Optional[Dict[str, Any]] = None,
     execution_busy: bool = False,
     execution_runtime_state: Optional[Dict[str, Any]] = None,
 ) -> Tuple[int, str]:
@@ -1875,6 +1887,17 @@ def _score_candidate(
             if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                 score -= 10
 
+    # --- Android participation evidence scoring (additive, non-gating) ---
+    _participation_tier = ""
+    if isinstance(android_participation_evidence, dict):
+        _participation_tier = str(android_participation_evidence.get("tier") or "").strip().lower()
+    if _participation_tier == "fully_attached":
+        score += 4
+    elif _participation_tier == "dispatch_eligible":
+        score += 8
+    elif _participation_tier == "distributed_participant":
+        score += 12
+
     _canonical_gate_decision = "allow"
     try:
         from core.android_mode_gate_policy import resolve_android_execution_gate_decision
@@ -1931,6 +1954,7 @@ def _select_target_from_candidates(
     participation_inputs: Optional[Dict[str, Any]] = None,
     reuse_inputs: Optional[Dict[str, Any]] = None,
     android_snapshot_inputs: Optional[Dict[str, Any]] = None,
+    android_participation_inputs: Optional[Dict[str, Dict[str, Any]]] = None,
     execution_runtime_inputs: Optional[Dict[str, Dict[str, Any]]] = None,
     mesh_session_id: Optional[str] = None,
 ) -> Optional[Any]:  # Optional[SourceDispatchTarget]
@@ -2121,6 +2145,22 @@ def _select_target_from_candidates(
                     device_id,
                     exc,
                 )
+        android_participation_evidence: Optional[Dict[str, Any]] = None
+        if android_participation_inputs is not None and device_id in android_participation_inputs:
+            android_participation_evidence = android_participation_inputs[device_id]
+        else:
+            try:
+                from core.android_device_state_store import (
+                    get_android_participation_evidence as _get_android_participation_evidence,
+                )
+
+                android_participation_evidence = _get_android_participation_evidence(device_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "_select_target_from_candidates: android participation evidence unavailable for %s: %s",
+                    device_id,
+                    exc,
+                )
 
         # Android execution busy check — deprioritise devices that are
         # currently executing a delegated task (non-terminal phase within
@@ -2210,6 +2250,7 @@ def _select_target_from_candidates(
             reuse_eligible=reuse_eligible,
             posture=_entry_posture,
             android_snapshot=android_snapshot,
+            android_participation_evidence=android_participation_evidence,
             execution_busy=_execution_busy,
             execution_runtime_state=execution_runtime_by_device.get(device_id),
         )
@@ -2239,6 +2280,15 @@ def _select_target_from_candidates(
                     "score": score,
                     "reuse_eligible": reuse_eligible,
                     "android_truth_consumed": android_snapshot is not None,
+                    "android_participation_truth_consumed": isinstance(
+                        android_participation_evidence,
+                        dict,
+                    ),
+                    "android_participation_tier": (
+                        str(android_participation_evidence.get("tier") or "")
+                        if isinstance(android_participation_evidence, dict)
+                        else ""
+                    ),
                     "android_dispatch_field_status": {
                         "authoritative_scoring_fields": list(
                             ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
