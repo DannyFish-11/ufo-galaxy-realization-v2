@@ -204,6 +204,7 @@ class TestClassifyReconnectEvent:
 
     def test_no_session_ids_reason_mentions_transport(self):
         result = classify_reconnect_event(
+            device_id="dev-001",
             runtime_session_id=None,
             runtime_attachment_session_id=None,
         )
@@ -234,7 +235,6 @@ class TestClassifyReconnectEvent:
             device_id="dev-001",
             runtime_session_id="rsid-001",
             runtime_attachment_session_id="rasid-001",
-            # has_active_registry_entry is not provided (None)
         )
         assert result.reconnect_class == ContinuityReconnectClass.attachment_only
 
