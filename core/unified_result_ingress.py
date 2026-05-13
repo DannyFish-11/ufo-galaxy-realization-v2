@@ -74,6 +74,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.UnifiedResultIngress")
 
+# Evidence verdicts that must block full closure in unified ingress.
+EVIDENCE_CLOSURE_BLOCKING_VERDICTS = frozenset({"quarantine", "reject"})
+
 # ---------------------------------------------------------------------------
 # Authority sentinel
 # ---------------------------------------------------------------------------
@@ -370,10 +373,13 @@ class UnifiedResultIngress:
         self._log_outcome(event, outcome)
 
         # Determine overall closure
+        evidence_verdict = outcome.evidence_acceptance_verdict or ""
+        evidence_gate_blocked = evidence_verdict in EVIDENCE_CLOSURE_BLOCKING_VERDICTS
         outcome.is_fully_closed = (
             not outcome.was_deduplicated
             and outcome.truth_chain_complete
             and outcome.completion_notified
+            and not evidence_gate_blocked
         )
         if not outcome.is_fully_closed and not outcome.incomplete_reason:
             parts = []
@@ -381,6 +387,8 @@ class UnifiedResultIngress:
                 parts.append("truth_chain_incomplete")
             if not outcome.completion_notified:
                 parts.append("completion_not_notified")
+            if evidence_gate_blocked:
+                parts.append(f"evidence_gate:{evidence_verdict}")
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
         outcome.problem_execution_closure = self._build_problem_execution_closure(
             event=event,

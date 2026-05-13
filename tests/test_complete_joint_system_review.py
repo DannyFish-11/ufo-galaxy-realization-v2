@@ -19,6 +19,7 @@ from __future__ import annotations
 from core.complete_joint_system_review import (
     ANDROID_AUDITED_REF,
     REVIEW_AUTHORITY,
+    REVIEW_CONVERGENCE_ANCHOR,
     REVIEW_METHODOLOGY,
     REVIEW_PR_TITLE,
     REVIEW_PR_TITLE_EN,
@@ -28,6 +29,7 @@ from core.complete_joint_system_review import (
     CrossRepoMismatch,
     EvidenceState,
     GapClass,
+    IntegrityRepairAction,
     PropositionVerdict,
     RemainingIssue,
     RuntimeFlowStage,
@@ -82,15 +84,19 @@ def test_methodology_prohibits_non_code_evidence() -> None:
     assert "narrative" in lower or "no historical pr" in lower or "pr narrative" in lower
 
 
-def test_pr_title_signals_joint_system_review() -> None:
-    assert "V2" in REVIEW_PR_TITLE
+def test_pr_title_signals_993P2_reinforcement_framing() -> None:
+    assert REVIEW_CONVERGENCE_ANCHOR in REVIEW_PR_TITLE
     assert "双仓" in REVIEW_PR_TITLE
-    assert "基线" in REVIEW_PR_TITLE
+    assert "补强" in REVIEW_PR_TITLE
     english_title = REVIEW_PR_TITLE_EN.lower()
     assert "dual-repo" in english_title
-    assert "baseline" in english_title
+    assert "anchor" in english_title
     assert "integrity" in english_title
-    assert "linkage" in english_title
+    assert REVIEW_CONVERGENCE_ANCHOR.lower() in english_title
+
+
+def test_convergence_anchor_is_explicit_993P2() -> None:
+    assert REVIEW_CONVERGENCE_ANCHOR == "993P2"
 
 
 def test_supersedes_list_includes_prior_baselines() -> None:
@@ -386,6 +392,18 @@ def test_next_v2_convergence_priority_targets_integrity_linkage() -> None:
     assert priority.android_anchors
 
 
+def test_integrity_repair_actions_include_v2_implemented_fix_and_cross_repo_followup() -> None:
+    report = build_complete_joint_system_review()
+    actions = report.integrity_repair_actions
+    assert actions
+    assert all(isinstance(item, IntegrityRepairAction) for item in actions)
+    assert any(action.status_zh == "本次 V2 已补强" for action in actions)
+    assert any("跨仓" in action.status_zh for action in actions)
+    implemented = next((action for action in actions if action.status_zh == "本次 V2 已补强"), None)
+    assert implemented is not None, "Expected at least one V2-implemented integrity action"
+    assert any("core/unified_result_ingress.py" in anchor for anchor in implemented.v2_anchors)
+
+
 # ---------------------------------------------------------------------------
 # Stage / completion consistency tests
 # ---------------------------------------------------------------------------
@@ -427,6 +445,7 @@ def test_to_dict_has_all_top_level_keys() -> None:
         "methodology",
         "pr_title",
         "pr_title_en",
+        "convergence_anchor",
         "supersedes",
         "android_audited_ref",
         "generated_at",
@@ -438,6 +457,7 @@ def test_to_dict_has_all_top_level_keys() -> None:
         "runtime_flow",
         "cross_repo_mismatches",
         "v2_next_convergence_priority",
+        "integrity_repair_actions",
         "stage",
         "overall_completion_pct",
         "weighted_completion_pct",
@@ -522,3 +542,19 @@ def test_to_dict_v2_next_convergence_priority_has_required_fields() -> None:
     assert priority is not None
     for key in ("title_zh", "why_now_zh", "target_outcome_zh", "linked_issue_ids", "v2_anchors"):
         assert key in priority
+
+
+def test_to_dict_integrity_repair_actions_have_required_fields() -> None:
+    payload = build_complete_joint_system_review().to_dict()
+    actions = payload["integrity_repair_actions"]
+    assert actions
+    for action in actions:
+        for key in (
+            "action_id",
+            "title_zh",
+            "status_zh",
+            "why_high_value_zh",
+            "linked_issue_ids",
+            "v2_anchors",
+        ):
+            assert key in action
