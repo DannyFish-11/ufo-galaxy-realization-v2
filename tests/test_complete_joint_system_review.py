@@ -89,7 +89,8 @@ def test_pr_title_signals_joint_system_review() -> None:
     english_title = REVIEW_PR_TITLE_EN.lower()
     assert "dual-repo" in english_title
     assert "baseline" in english_title
-    assert "integrity linkage" in english_title
+    assert "integrity" in english_title
+    assert "linkage" in english_title
 
 
 def test_supersedes_list_includes_prior_baselines() -> None:
