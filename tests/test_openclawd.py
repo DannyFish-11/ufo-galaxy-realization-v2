@@ -66,6 +66,19 @@ class TestOpenClawdSessionMemory:
         assert len(oc._session_memory) == 0
 
 
+class TestExecutionPathDecisionBasis:
+    def test_build_execution_path_decision_basis_reports_cross_device_reason(self):
+        basis = OpenClawd._build_execution_path_decision_basis(
+            entry_mode="cross_device",
+            execution_result={"action_taken": "none"},
+            execution_path="cross_device",
+            cross_device_dispatched=True,
+        )
+        assert basis["decision_source"] == "openclawd.determine_execution_path"
+        assert basis["decision_reason"] == "cross_device_dispatch_observed"
+        assert basis["cross_device_dispatched"] is True
+
+
 @pytest.mark.asyncio
 async def test_process_basic_chat():
     """基本聊天消息处理 — mock 意图解析和 LLM"""

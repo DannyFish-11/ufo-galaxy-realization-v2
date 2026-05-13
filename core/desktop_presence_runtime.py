@@ -561,6 +561,22 @@ class DesktopPresenceRuntime:
             metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
         if lane_snapshot is not None:
             metadata["session_execution_lane"] = lane_snapshot
+        metadata.setdefault(
+            "problem_execution_trace",
+            {
+                "trace_id": result.get("trace_id") or rsession.runtime_session_id,
+                "runtime_session_id": result.get("runtime_session_id") or rsession.runtime_session_id,
+                "request_id": metadata.get("request_id") or "",
+                "source": source,
+            },
+        )
+        if "execution_path_decision_basis" not in metadata and isinstance(
+            result.get("execution_result"),
+            dict,
+        ):
+            _exec_basis = result.get("execution_result", {}).get("execution_path_decision_basis")
+            if isinstance(_exec_basis, dict):
+                metadata["execution_path_decision_basis"] = _exec_basis
         # PR-2: stamp additive NL execution spine snapshot so chat-path and
         # task/delegation path share one problem→intent→route model.
         try:

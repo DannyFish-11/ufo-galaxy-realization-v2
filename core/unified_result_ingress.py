@@ -236,6 +236,12 @@ class UnifiedResultIngressOutcome:
     value string produced by the continuity gate (empty when not evaluated)."""
     problem_execution_closure: Dict[str, Any] = field(default_factory=dict)
     """Additive closure split: task closure vs delegated-step closure vs user-problem closure."""
+    task_completed: bool = False
+    """True iff canonical closure semantics classify the task as completed."""
+    problem_solved: bool = False
+    """True iff canonical closure semantics classify the user problem as solved."""
+    problem_solved_via: str = ""
+    """Problem-solving path classification (``local``/``cross_device``/``pending``)."""
     # PR-4: Execution evidence and canonical truth fields
     execution_evidence_state: str = ""
     """The :class:`~core.execution_evidence_model.ExecutionEvidenceState` value string
@@ -379,6 +385,15 @@ class UnifiedResultIngress:
         outcome.problem_execution_closure = self._build_problem_execution_closure(
             event=event,
             outcome=outcome,
+        )
+        outcome.task_completed = bool(
+            outcome.problem_execution_closure.get("task_completed")
+        )
+        outcome.problem_solved = bool(
+            outcome.problem_execution_closure.get("problem_solved")
+        )
+        outcome.problem_solved_via = str(
+            outcome.problem_execution_closure.get("problem_solved_via") or ""
         )
 
         return outcome
@@ -572,11 +587,19 @@ class UnifiedResultIngress:
                 is_terminal: bool = True
                 handoff_id: str = ""
                 task_id: str = ""
+                problem_closed: bool = False
+                final_answer_ready: bool = False
+                final_user_response: str = ""
+                problem_solved: bool = False
 
             env = _Envelope()
             env.is_terminal = True
             env.handoff_id = event.payload.get("handoff_id") or ""
             env.task_id = event.task_id
+            env.problem_closed = bool(event.payload.get("problem_closed"))
+            env.final_answer_ready = bool(event.payload.get("final_answer_ready"))
+            env.final_user_response = str(event.payload.get("final_user_response") or "")
+            env.problem_solved = bool(event.payload.get("problem_solved"))
 
             notified = ingress.notify(env)
             if not notified:

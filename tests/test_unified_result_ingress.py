@@ -196,6 +196,8 @@ class TestModuleSurface:
         from core.unified_result_ingress import UnifiedResultIngressOutcome
         outcome = UnifiedResultIngressOutcome()
         assert isinstance(outcome.problem_execution_closure, dict)
+        assert outcome.task_completed is False
+        assert outcome.problem_solved is False
 
 
 # ===========================================================================
@@ -491,6 +493,8 @@ class TestCompletionIngressNotify:
         outcome = ingress.process(evt)
         assert outcome.problem_execution_closure["task_closure_stage"] == "closed"
         assert outcome.problem_execution_closure["problem_closure_stage"] == "pending_user_problem_closure"
+        assert outcome.task_completed is True
+        assert outcome.problem_solved is False
 
 
 # ===========================================================================
