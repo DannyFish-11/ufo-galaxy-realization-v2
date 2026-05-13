@@ -535,6 +535,7 @@ class OperationalSLOMetrics:
                     "readiness_ready_at": None,
                     "pending_initiations": 0,
                     "awaiting_path_switch_outcome": False,
+                    "operator_intervention_pending": False,
                     "unresolved_blocker_volume": 0,
                 },
             )

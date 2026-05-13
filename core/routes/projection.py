@@ -5417,9 +5417,13 @@ def _build_problem_solving_chain_from_contract(state_contract: Dict[str, Any]) -
         and str(event.get("transition") or "").lower().startswith("recovery_")
     ]
     closure_events = [
-        event for event in events if isinstance(event, dict) and "closure" in str(event.get("transition") or "").lower()
+        event
+        for event in events
+        if isinstance(event, dict)
+        and "closure" in str(event.get("transition") or "").lower()
     ]
-    final_state = str((closure_events[-1] or {}).get("to_state") or "unknown") if closure_events else "unknown"
+    last_closure_event = closure_events[-1] if closure_events else {}
+    final_state = str((last_closure_event or {}).get("to_state") or "unknown")
     return {
         "subject_id": subject_id or "subject:unknown",
         "latest_sequence": latest_sequence,
