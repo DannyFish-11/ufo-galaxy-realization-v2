@@ -684,4 +684,77 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 status_code=200,
             )
 
+    # ── PR-4: Execution evidence state (canonical truth observability) ──────
+
+    @router.get("/api/v1/observability/execution/evidence-state")
+    async def execution_evidence_state(
+        device_id: Optional[str] = Query(default=None, description="Filter by device_id"),
+        max_entries: int = Query(default=50, ge=1, le=200, description="Max entries to return"),
+    ):
+        """
+        Canonical execution evidence state for operator observability (PR-4).
+
+        Returns a snapshot of recent execution evidence records showing:
+        - What actually executed (evidence state: completed_strong, android_delegated, etc.)
+        - How trustworthy the evidence is (trust_level: trusted / provisional / quarantine)
+        - The acceptance verdict (accept / accept_provisional / quarantine / reject)
+        - Whether the four-step truth chain completed for each result
+        - Android-side proof class field presence (cross-repo integration status)
+        - Operator-visible warnings for results requiring attention
+
+        This endpoint is the canonical answer to:
+        "What actually executed, how trustworthy is the evidence, which result is
+        canonical, and does the runtime-visible state reflect that truth consistently?"
+
+        Use this endpoint for operator dashboards, board projections, and any surface
+        that needs to distinguish canonically accepted results from provisional or
+        quarantined ones.
+        """
+        try:
+            from core.operator_execution_observability_surface import (
+                build_operator_execution_observability_snapshot,
+                OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION,
+            )
+            snapshot = build_operator_execution_observability_snapshot(
+                max_entries=max_entries,
+                device_id=device_id or None,
+            )
+            return JSONResponse(snapshot.to_dict())
+        except Exception as exc:
+            logger.warning("execution/evidence-state error: %s", exc)
+            return JSONResponse(
+                {
+                    "error": str(exc),
+                    "schema_version": "4.0.0",
+                    "_partial": True,
+                },
+                status_code=200,
+            )
+
+    @router.get("/api/v1/observability/execution/evidence-state/{task_id}")
+    async def execution_evidence_state_for_task(task_id: str):
+        """
+        Canonical execution evidence state for a specific task_id (PR-4).
+
+        Returns the most recent execution evidence entry for the given task,
+        or 404 if no evidence has been recorded for that task.
+        """
+        try:
+            from core.operator_execution_observability_surface import (
+                get_latest_operator_evidence_entry_for_task,
+            )
+            entry = get_latest_operator_evidence_entry_for_task(task_id)
+            if entry is None:
+                return JSONResponse(
+                    {"task_id": task_id, "found": False, "entry": None},
+                    status_code=200,
+                )
+            return JSONResponse({"task_id": task_id, "found": True, "entry": entry.to_dict()})
+        except Exception as exc:
+            logger.warning("execution/evidence-state/%s error: %s", task_id, exc)
+            return JSONResponse(
+                {"error": str(exc), "task_id": task_id, "_partial": True},
+                status_code=200,
+            )
+
     return router
