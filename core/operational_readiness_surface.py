@@ -81,6 +81,12 @@ _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/projection/clone-to-use-acceptance",
 )
 
+_MINIMAL_HAPPY_PATH_CONTRACT_VERSION: str = "pr8.1.0"
+_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES: tuple[str, ...] = ("fastapi", "uvicorn", "pydantic")
+_MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE = "/api/v1/operator/board/operable-truth"
+_MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE = "/api/v1/operator/actions/android-directed"
+_MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
+
 _DYNAMIC_KIND_STATUS: frozenset[RegistrationKind] = frozenset(
     {
         RegistrationKind.DEVICE_ANDROID_ADMISSION,
@@ -254,6 +260,7 @@ class OperationalReadinessReport:
     state_contract: Dict[str, Any]
     runtime_decision_reasoning: Dict[str, Any]
     unified_mode_model: Dict[str, Any]
+    minimal_happy_path_contract: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -275,6 +282,7 @@ class OperationalReadinessReport:
             "state_contract": dict(self.state_contract),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "unified_mode_model": dict(self.unified_mode_model),
+            "minimal_happy_path_contract": dict(self.minimal_happy_path_contract),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -1204,6 +1212,221 @@ def _build_android_standard(
     }
 
 
+def _has_registered_route(route_paths: Set[str], path: str) -> bool:
+    return path in route_paths
+
+
+def _has_registered_prefix(route_paths: Set[str], prefix: str) -> bool:
+    return any(path.startswith(prefix) for path in route_paths)
+
+
+def _configured_llm_key_names() -> List[str]:
+    import os
+
+    key_names = [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "XAI_API_KEY",
+        "MISTRAL_API_KEY",
+        "MOONSHOT_API_KEY",
+        "GROQ_API_KEY",
+        "LLM_API_KEY",
+    ]
+    return [name for name in key_names if os.environ.get(name, "").strip()]
+
+
+def _build_minimal_happy_path_contract(
+    *,
+    route_paths: Set[str],
+    runtime_readiness: Dict[str, Any],
+    chain_state: OperationalChainState,
+    device_evidence: Dict[str, Any],
+    session_evidence: Dict[str, Any],
+    runtime_decision_reasoning: Dict[str, Any],
+) -> Dict[str, Any]:
+    dependencies_ok = all(_module_available(module_name) for module_name in _MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES)
+    configured_llm_keys = _configured_llm_key_names()
+    has_llm_key = bool(configured_llm_keys)
+    health_route_ok = _has_registered_prefix(route_paths, "/api/v1/health")
+    chat_route_ok = _has_registered_route(route_paths, "/api/v1/chat")
+    operator_board_route_ok = _has_registered_route(
+        route_paths,
+        _MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE,
+    )
+    operator_dispatch_route_ok = _has_registered_route(
+        route_paths,
+        _MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE,
+    )
+    # Android visibility is satisfied by either device admission truth or
+    # participant-session truth; both are valid observability entry points.
+    android_visible = (
+        device_evidence.get("android_device_count", 0) > 0
+        or session_evidence.get("participant_total_count", 0) > 0
+    )
+    task_initiated = bool(session_evidence.get("task_initiated", False))
+    closure_observed = bool(session_evidence.get("result_closure_established", False))
+    readiness_verdict = runtime_readiness.get("verdict", "")
+    service_started = bool(route_paths)
+
+    if operator_dispatch_route_ok and (android_visible or task_initiated):
+        delegated_task_status = SurfaceStatus.ready
+        delegated_task_diagnosis = "检测到 Android 定向委托路由，且已具备可见参与信号。"
+    elif operator_dispatch_route_ok:
+        delegated_task_status = SurfaceStatus.pending
+        delegated_task_diagnosis = "委托路由存在但 Android 参与信号不足。"
+    else:
+        delegated_task_status = SurfaceStatus.blocked
+        delegated_task_diagnosis = f"缺少 {_MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE} 路由。"
+
+    steps = [
+        {
+            "step_id": "1_clone_v2_repo",
+            "description_zh": "克隆 V2 仓库",
+            "status": SurfaceStatus.ready.value,
+            "diagnosis": "代码可执行上下文已存在（当前运行于仓库工作目录）。",
+        },
+        {
+            "step_id": "2_install_dependencies",
+            "description_zh": "安装依赖",
+            "status": (SurfaceStatus.ready if dependencies_ok else SurfaceStatus.blocked).value,
+            "diagnosis": (
+                f"核心依赖可导入（{'/'.join(_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES)}）。"
+                if dependencies_ok
+                else "核心依赖缺失，请先执行 pip install -r requirements.txt。"
+            ),
+        },
+        {
+            "step_id": "3_configure_env",
+            "description_zh": "配置环境变量",
+            "status": (SurfaceStatus.ready if has_llm_key else SurfaceStatus.degraded).value,
+            "diagnosis": (
+                "至少一个 LLM API Key 已配置。"
+                if has_llm_key
+                else "未检测到 LLM API Key；系统可启动但聊天/委托链路可能降级。"
+            ),
+        },
+        {
+            "step_id": "4_start_service",
+            "description_zh": "启动服务",
+            "status": (SurfaceStatus.ready if service_started else SurfaceStatus.pending).value,
+            "diagnosis": (
+                "已观察到路由表，服务已启动。"
+                if service_started
+                else "尚未观察到路由表，请先启动服务（python main.py）。"
+            ),
+        },
+        {
+            "step_id": "5_health_passes",
+            "description_zh": "健康检查通过",
+            "status": (
+                SurfaceStatus.ready
+                if health_route_ok and readiness_verdict != "blocked"
+                else SurfaceStatus.blocked
+            ).value,
+            "diagnosis": (
+                f"健康路由可见，readiness={readiness_verdict or 'unknown'}。"
+                if health_route_ok and readiness_verdict != "blocked"
+                else "健康路由缺失或 readiness=blocked。"
+            ),
+        },
+        {
+            "step_id": "6_chat_works",
+            "description_zh": "聊天接口可用",
+            "status": (SurfaceStatus.ready if chat_route_ok else SurfaceStatus.blocked).value,
+            "diagnosis": "检测到 /api/v1/chat 路由。" if chat_route_ok else "缺少 /api/v1/chat 路由。",
+        },
+        {
+            "step_id": "7_operator_board_routes_work",
+            "description_zh": "operator/board 路由可用",
+            "status": (SurfaceStatus.ready if operator_board_route_ok else SurfaceStatus.blocked).value,
+            "diagnosis": (
+                "检测到 /api/v1/operator/board/operable-truth。"
+                if operator_board_route_ok
+                else "缺少 operator board 路由。"
+            ),
+        },
+        {
+            "step_id": "8_android_connection_visible",
+            "description_zh": "Android 连接可见",
+            "status": (
+                SurfaceStatus.ready
+                if android_visible
+                else SurfaceStatus.pending
+            ).value,
+            "diagnosis": (
+                "已观察到 Android 设备/参与者信号。"
+                if android_visible
+                else "尚未观察到 Android 连接；请检查设备注册与 WS 连接。"
+            ),
+        },
+        {
+            "step_id": "9_delegated_task_sendable",
+            "description_zh": "可发送委托任务",
+            "status": delegated_task_status.value,
+            "diagnosis": delegated_task_diagnosis,
+        },
+        {
+            "step_id": "10_closure_reasoning_observable",
+            "description_zh": "可观察 closure / board reasoning",
+            "status": (
+                SurfaceStatus.ready
+                if operator_board_route_ok and closure_observed
+                else SurfaceStatus.degraded
+                if operator_board_route_ok
+                else SurfaceStatus.blocked
+            ).value,
+            "diagnosis": (
+                "board reasoning 路由可见且已观察到 closure。"
+                if operator_board_route_ok and closure_observed
+                else "board reasoning 路由可见，但当前尚未形成 closure。"
+                if operator_board_route_ok
+                else "缺少 board reasoning 路由，无法观察 closure。"
+            ),
+        },
+    ]
+    blocking_steps = [
+        step["step_id"]
+        for step in steps
+        if step["status"] == SurfaceStatus.blocked.value
+    ]
+    return {
+        "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
+        "contract_version": _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
+        "central_entrypoint": "/api/v1/projection/operability-contract",
+        "steps": steps,
+        "overall_ready": not blocking_steps,
+        "blocking_steps": blocking_steps,
+        "diagnostics": {
+            "env": {
+                "llm_api_key_configured": has_llm_key,
+                "configured_llm_key_names": configured_llm_keys,
+                "hint": f"复制 {_MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE} 为 .env，并至少配置一个 API Key。",
+            },
+            "dependency": {
+                "core_dependencies_ok": dependencies_ok,
+                "required_modules": list(_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES),
+                "hint": "安装依赖: pip install -r requirements.txt",
+            },
+            "android_connection": {
+                "android_visible": android_visible,
+                "android_device_count": int(device_evidence.get("android_device_count", 0)),
+                "participant_total_count": int(session_evidence.get("participant_total_count", 0)),
+                "hint": "检查 Android 端 WS 连接与设备注册。",
+            },
+            "delegated_execution_observability": {
+                "dispatch_route_visible": operator_dispatch_route_ok,
+                "task_initiated_observed": task_initiated,
+                "closure_observed": closure_observed,
+                "runtime_decision_reasoning_present": bool(runtime_decision_reasoning),
+            },
+        },
+    }
+
+
 def build_operational_readiness_report(
     *,
     route_paths: Optional[Iterable[str]] = None,
@@ -1337,6 +1560,14 @@ def build_operational_readiness_report(
         validation=validation,
         kind_states=kind_states,
     )
+    minimal_happy_path_contract = _build_minimal_happy_path_contract(
+        route_paths=live_route_paths,
+        runtime_readiness=runtime_readiness,
+        chain_state=chain_state,
+        device_evidence=device_evidence,
+        session_evidence=session_evidence,
+        runtime_decision_reasoning=runtime_decision_reasoning,
+    )
 
     return OperationalReadinessReport(
         generated_at=time.time(),
@@ -1357,4 +1588,5 @@ def build_operational_readiness_report(
         state_contract=state_contract,
         runtime_decision_reasoning=runtime_decision_reasoning,
         unified_mode_model=dict(runtime_decision_reasoning.get("unified_mode_model") or {}),
+        minimal_happy_path_contract=minimal_happy_path_contract,
     )

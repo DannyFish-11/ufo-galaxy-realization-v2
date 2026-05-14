@@ -606,6 +606,10 @@ class GalaxyUnified:
         if self.config.enable_web_ui:
             print_status(f"API 服务 (REST/WS): http://localhost:{self.config.web_ui_port}", "info")
             print_status(f"API 文档: http://localhost:{self.config.web_ui_port}/docs", "info")
+            print_status(
+                f"最小可操作路径契约: http://localhost:{self.config.web_ui_port}/api/v1/projection/operability-contract",
+                "info",
+            )
         if self.config.enable_device_api:
             print_status(f"设备 API: http://localhost:{self.config.device_api_port}", "info")
         _nats_url_display = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222 (默认)")

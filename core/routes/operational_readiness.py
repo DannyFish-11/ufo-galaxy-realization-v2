@@ -49,6 +49,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             "clone_to_use_acceptance": report.clone_to_use_acceptance,
             "android_v2_minimum_standard": report.android_v2_minimum_standard,
             "state_contract": report.state_contract,
+            "minimal_happy_path_contract": report.minimal_happy_path_contract,
+        }
+        return JSONResponse(content=payload)
+
+    @router.get("/api/v1/projection/operability-contract")
+    async def get_operability_contract(request: Request) -> JSONResponse:
+        route_paths = collect_app_route_paths(request.app)
+        report = build_operational_readiness_report(route_paths=route_paths)
+        payload = {
+            "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
+            "contract_version": report.contract_version,
+            "minimal_happy_path_contract": report.minimal_happy_path_contract,
+            "chain_state": report.chain_state.to_dict(),
+            "runtime_decision_reasoning": report.runtime_decision_reasoning,
+            "state_contract_authority": report.state_contract.get("authority"),
         }
         return JSONResponse(content=payload)
 
