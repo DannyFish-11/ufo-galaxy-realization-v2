@@ -88,7 +88,13 @@ def test_pr_title_signals_next_convergence_framing() -> None:
     # The PR title should reflect the next-step convergence direction
     # (beyond 993P2 into operability audit, closure governance, operator co-source)
     assert "双仓" in REVIEW_PR_TITLE or "可用性" in REVIEW_PR_TITLE or "闭环" in REVIEW_PR_TITLE
-    assert "审查" in REVIEW_PR_TITLE or "治理" in REVIEW_PR_TITLE or "解释" in REVIEW_PR_TITLE
+    assert (
+        "审查" in REVIEW_PR_TITLE
+        or "治理" in REVIEW_PR_TITLE
+        or "解释" in REVIEW_PR_TITLE
+        or "收口" in REVIEW_PR_TITLE
+        or "传播" in REVIEW_PR_TITLE
+    )
     english_title = REVIEW_PR_TITLE_EN.lower()
     assert "dual-repo" in english_title or "operability" in english_title or "closure" in english_title
     assert "governance" in english_title or "operator" in english_title or "convergence" in english_title

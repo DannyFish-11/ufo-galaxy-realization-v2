@@ -52,10 +52,10 @@ logger = logging.getLogger(__name__)
 # Authority metadata
 # ---------------------------------------------------------------------------
 
-REVIEW_PR_TITLE = "基于双仓真实代码收敛系统可用性审查、闭环真值治理与操作面同源解释"
+REVIEW_PR_TITLE = "基于双仓真实代码明确 V2/Android 后续收口责任：推进 Android 真值全链传播与系统可用性补完"
 REVIEW_PR_TITLE_EN = (
-    "Convergence of practical-operability audit, closure-truth governance, "
-    "and operator-surface co-source explanation based on dual-repo real code"
+    "Clarify V2/Android convergence responsibilities with dual-repo real code: "
+    "advance Android truth full-chain propagation and practical operability closure"
 )
 REVIEW_CONVERGENCE_ANCHOR = "993P2"
 REVIEW_AUTHORITY = (
@@ -1517,14 +1517,14 @@ def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
             "PR 1142 已完成编排选路消费 Android participation evidence；"
             "本次 PR 完成了 closure 事件携带 Android context（notify_with_android_context）、"
             "panel 新增 android_participation_verdict 字段，以及 board reasoning API。"
-            "当前最关键未闭合点：board 路由侧（/api/v1/operator/board/operable-truth）"
-            "尚未消费 android_participation_verdict，"
+            "当前最关键未闭合点：board 路由虽已开始消费 android_participation_verdict + "
+            "latest_closure_reasoning，但尚未覆盖所有 operator/readiness 投影，"
             "Android 侧 delegated result 中 participation_tier 字段尚未稳定上送。"
             "这两步完成后，V2 整个 Android truth 传播链才能从 partially_propagated 达到 fully_propagated。"
         ),
         target_outcome_zh=(
             "目标：\n"
-            "(1) board 路由侧消费 android_participation_verdict（V2 侧 operator route 跟进）；\n"
+            "(1) 扩展 board/operator/readiness 全线消费 android_participation_verdict + latest_closure_reasoning；\n"
             "(2) Android delegated result 稳定上送 participation_tier 字段（Android 侧 follow-up）；\n"
             "(3) pr4_operator_action_governance.build_operator_board_projection() 把"
             "    participation tier 纳入 board projection 输出；\n"

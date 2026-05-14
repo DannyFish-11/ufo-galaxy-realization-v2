@@ -63,12 +63,22 @@ class TestAuthoritySentinels:
         assert PR_NEXT_CONVERGENCE_PR_TITLE, "PR title must be non-empty"
         # The Chinese title should contain key terms
         assert "可用性" in PR_NEXT_CONVERGENCE_PR_TITLE or "审查" in PR_NEXT_CONVERGENCE_PR_TITLE
-        assert "闭环" in PR_NEXT_CONVERGENCE_PR_TITLE or "治理" in PR_NEXT_CONVERGENCE_PR_TITLE
+        assert (
+            "闭环" in PR_NEXT_CONVERGENCE_PR_TITLE
+            or "治理" in PR_NEXT_CONVERGENCE_PR_TITLE
+            or "收口" in PR_NEXT_CONVERGENCE_PR_TITLE
+            or "传播" in PR_NEXT_CONVERGENCE_PR_TITLE
+        )
 
     def test_pr_title_en_contains_key_terms(self):
         title_lower = PR_NEXT_CONVERGENCE_PR_TITLE_EN.lower()
         assert "operability" in title_lower or "closure" in title_lower
-        assert "operator" in title_lower or "governance" in title_lower
+        assert (
+            "operator" in title_lower
+            or "governance" in title_lower
+            or "convergence" in title_lower
+            or "responsibilities" in title_lower
+        )
 
     def test_convergence_anchor_is_993p2(self):
         assert PR_NEXT_CONVERGENCE_ANCHOR == "993P2"
