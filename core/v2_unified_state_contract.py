@@ -266,15 +266,13 @@ def build_v2_unified_state_contract(
             target_device_id = str(android_device_ids[0]) if android_device_ids else ""
             if target_device_id:
                 from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
+                from core.v2_android_truth_ssot import ANDROID_PARTICIPATION_PROVENANCE  # noqa: PLC0415
 
                 truth_block = build_v2_android_truth_block(target_device_id, include_history_limit=10)
                 _participation_tier_str = truth_block.participation_tier
                 _participation_blocking = list(truth_block.participation_blocking_reasons)
                 _participation_notes = list(truth_block.participation_tier_notes)
-                _participation_source = (
-                    "core.android_network_participation.get_participation_state_for_device"
-                    " via core.v2_android_truth_ssot"
-                )
+                _participation_source = ANDROID_PARTICIPATION_PROVENANCE
                 _participation_transition_history = list(truth_block.participation_transition_history)
                 _participation_last_signal = truth_block.participation_last_signal
                 _participation_prior_tier = truth_block.participation_prior_tier
