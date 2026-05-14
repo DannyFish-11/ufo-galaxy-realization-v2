@@ -1347,6 +1347,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
           error, affected entities.
         * **Pending Android-directed actions** — actions dispatched to Android
           that are awaiting ACK.
+        * **Unified reasoning contract** — ``runtime_decision_reasoning`` and
+          ``latest_closure_reasoning`` now share the same reasoning block so
+          board/operator consumers do not need to reconcile separate
+          explanation schemas.
 
         Action availability is policy-derived — not hard-coded.
         """

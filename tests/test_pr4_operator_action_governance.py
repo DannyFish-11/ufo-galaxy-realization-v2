@@ -589,6 +589,7 @@ class TestOperatorBoardProjection:
         assert "availability_state_basis" in d
         assert "last_action_id" in d
         assert "android_participation_verdict" in d
+        assert "runtime_decision_reasoning" in d
         assert "latest_closure_reasoning" in d
         assert "authority" in d
 
@@ -667,6 +668,7 @@ class TestOperatorBoardProjection:
         assert reasoning.get("task_id") == "task_board_reasoning_01"
         assert reasoning.get("acceptance_verdict") == "accept"
         assert reasoning.get("android_participation_tier") == "distributed_participant"
+        assert proj.runtime_decision_reasoning == proj.latest_closure_reasoning
         _evidence_ring.clear()
 
 
@@ -949,6 +951,7 @@ class TestPR4Routes:
         assert "unavailable_actions" in data
         assert "system_health_summary" in data
         assert "android_participation_verdict" in data
+        assert "runtime_decision_reasoning" in data
         assert "latest_closure_reasoning" in data
         assert data["authority"] == "OPERATOR_ROUTES_V1"
 

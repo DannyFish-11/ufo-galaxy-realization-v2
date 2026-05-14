@@ -1083,53 +1083,22 @@ def get_board_reasoning_for_closure(
         含 task_id, android_participation_tier, acceptance_verdict, is_fully_closed,
         causal_explanation_zh（中文因果解释）, device_id, generated_at 的字典。
     """
-    tier = android_participation_tier or "unknown"
-    verdict = acceptance_verdict or "unknown"
-    closed = is_fully_closed
+    from core.runtime_decision_reasoning import build_runtime_decision_reasoning_block
 
-    # 基于 tier 和 verdict 生成中文因果解释
-    if verdict in ("quarantine", "reject"):
-        explanation = (
-            f"本次任务（{task_id}）的结果被 result_truth_acceptance_gate 判定为 {verdict}，"
-            f"原因是 Android 节点（tier={tier}）提交的执行证据质量不足，"
-            "无法通过可信度门控，因此 is_fully_closed=False。"
-            "需要 operator 介入确认或等待 Android 侧重新提交高质量证明。"
-        )
-    elif verdict == "accept_provisional":
-        explanation = (
-            f"本次任务（{task_id}）的结果被判定为 accept_provisional，"
-            f"Android 节点（tier={tier}）提交的证据可接受但置信度不足。"
-            "结果已传播到 operator 面板（含 warning 标记），但未传播到用户侧问题闭环。"
-        )
-    elif verdict == "accept" and closed:
-        explanation = (
-            f"本次任务（{task_id}）完全闭环，"
-            f"Android 节点（tier={tier}）提交的执行证据通过了可信度门控（accept），"
-            "结果已传播到所有下游消费方（operator 面板、用户侧闭环、board 投影）。"
-        )
-    elif tier in ("local_only", "unknown"):
-        explanation = (
-            f"本次任务（{task_id}）Android 节点参与层级为 {tier}，"
-            "表示 Android 设备当前处于本地独立模式或参与状态未知，"
-            "V2 编排可能以 V2 本地路径处理了此任务，Android 不是主执行节点。"
-        )
-    else:
-        explanation = (
-            f"本次任务（{task_id}）的 Android 参与层级为 {tier}，"
-            f"acceptance verdict 为 {verdict}，is_fully_closed={closed}。"
-            "如需进一步分析，请查询 operator_execution_observability_surface 的执行证据记录。"
-        )
-
-    return {
-        "task_id": task_id,
-        "android_participation_tier": tier,
-        "acceptance_verdict": verdict,
-        "is_fully_closed": closed,
-        "device_id": device_id,
-        "causal_explanation_zh": explanation,
-        "generated_at": time.time(),
-        "_source": PR_NEXT_CONVERGENCE_CLOSURE_AUDIT_AUTHORITY,
-    }
+    return build_runtime_decision_reasoning_block(
+        task_id=task_id,
+        selected_runtime="android_delegated" if device_id else "v2_local",
+        selected_device=device_id,
+        participation_tier=android_participation_tier or "unknown",
+        mode_state="closure_projection",
+        readiness_summary={"verdict": "closure_projection"},
+        acceptance_verdict=acceptance_verdict or "unknown",
+        is_fully_closed=is_fully_closed,
+        source_of_truth_refs=[
+            PR_NEXT_CONVERGENCE_CLOSURE_AUDIT_AUTHORITY,
+            "core.result_truth_acceptance_gate.evaluate_result_truth_acceptance",
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

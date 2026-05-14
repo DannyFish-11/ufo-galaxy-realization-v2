@@ -521,6 +521,7 @@ class OperatorActionBoardProjection:
     # Android-directed action status
     pending_android_directed_actions: List[Dict[str, Any]] = field(default_factory=list)
     android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
+    runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
     latest_closure_reasoning: Dict[str, Any] = field(default_factory=dict)
 
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
@@ -545,6 +546,7 @@ class OperatorActionBoardProjection:
             "last_action_affected_entity_ids": list(self.last_action_affected_entity_ids),
             "pending_android_directed_actions": list(self.pending_android_directed_actions),
             "android_participation_verdict": dict(self.android_participation_verdict),
+            "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "latest_closure_reasoning": dict(self.latest_closure_reasoning),
             "authority": self.authority,
         }
@@ -1395,6 +1397,9 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         proj.android_participation_verdict = dict(
             getattr(panel_payload, "android_participation_verdict", {}) or {}
         )
+        proj.runtime_decision_reasoning = dict(
+            getattr(panel_payload, "runtime_decision_reasoning", {}) or {}
+        )
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: panel android participation verdict unavailable: %s",
@@ -1406,7 +1411,9 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         from core.operator_execution_observability_surface import (
             _evidence_ring,
         )
-        from core.pr_next_convergence_closure_audit import get_board_reasoning_for_closure
+        from core.runtime_decision_reasoning import (
+            overlay_runtime_decision_reasoning_block,
+        )
 
         evidence_ring_snapshot = list(_evidence_ring)
         latest_entry = evidence_ring_snapshot[-1] if evidence_ring_snapshot else None
@@ -1420,13 +1427,48 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             if device_for_reasoning in (None, ""):
                 device_for_reasoning = proj.android_participation_verdict.get("device_id")
 
-            proj.latest_closure_reasoning = get_board_reasoning_for_closure(
+            reasoning_block = overlay_runtime_decision_reasoning_block(
+                proj.runtime_decision_reasoning,
                 task_id=latest_entry.task_id,
-                android_participation_tier=tier_for_reasoning,
+                selected_runtime="android_delegated" if device_for_reasoning else "v2_local",
+                selected_device=device_for_reasoning,
+                participation_tier=tier_for_reasoning,
+                mode_state=(
+                    proj.runtime_decision_reasoning.get("mode_basis", {}).get("mode_state")
+                    if isinstance(proj.runtime_decision_reasoning, dict)
+                    else None
+                ),
+                readiness_summary={
+                    "verdict": (
+                        proj.runtime_decision_reasoning.get("readiness_basis", {}).get("readiness_state")
+                        if isinstance(proj.runtime_decision_reasoning, dict)
+                        else None
+                    ),
+                },
                 acceptance_verdict=latest_entry.acceptance_verdict or None,
-                is_fully_closed=None,
-                device_id=device_for_reasoning,
+                is_fully_closed=(
+                    latest_entry.acceptance_verdict == "accept"
+                    and bool(latest_entry.truth_chain_complete)
+                ),
+                truth_chain_complete=latest_entry.truth_chain_complete,
+                evidence_state=latest_entry.evidence_state,
+                trust_level=latest_entry.trust_level,
+                operator_warning=latest_entry.operator_warning,
+                source_channel=latest_entry.source_channel,
+                android_proof_class=latest_entry.android_proof_class,
+                blocking_reasons=list(latest_entry.diagnosis),
+                evidence_summary={
+                    "diagnosis": list(latest_entry.diagnosis),
+                },
+                source_of_truth_refs=[
+                    PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY,
+                    "core.operator_execution_observability_surface.record_operator_evidence_entry",
+                ],
             )
+            proj.runtime_decision_reasoning = dict(reasoning_block)
+            proj.latest_closure_reasoning = dict(reasoning_block)
+        elif proj.runtime_decision_reasoning:
+            proj.latest_closure_reasoning = dict(proj.runtime_decision_reasoning)
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: latest closure reasoning unavailable: %s",

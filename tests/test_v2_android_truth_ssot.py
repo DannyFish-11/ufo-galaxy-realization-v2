@@ -745,6 +745,7 @@ class TestGroupI_PanelAggregationSSOT:
 
         mock_build.assert_called_once_with("dev_panel_test")
         assert payload.android_participation_verdict.get("tier") == "dispatch_eligible"
+        assert payload.runtime_decision_reasoning.get("participation_tier") == "dispatch_eligible"
 
     def test_I02_panel_no_snapshots_returns_no_connected_devices(self) -> None:
         """I02：无快照时 android_participation_verdict 包含 no_connected_devices 原因。"""
@@ -762,6 +763,7 @@ class TestGroupI_PanelAggregationSSOT:
         verdict = payload.android_participation_verdict
         assert verdict.get("tier") == "local_only"
         assert "no_connected_devices" in verdict.get("blocking_reasons", [])
+        assert payload.runtime_decision_reasoning.get("blocking_reasons") == ["no_connected_devices"]
 
 
 # ---------------------------------------------------------------------------

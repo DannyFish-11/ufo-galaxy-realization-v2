@@ -50,6 +50,8 @@ def _required_route_paths() -> set[str]:
 
 
 def test_build_operational_readiness_report_canonical_cross_device_success_quality():
+    from core.v2_android_truth_ssot import V2AndroidTruthBlock
+
     with (
         patch(
             "core.operational_readiness_surface.get_operational_registration_path",
@@ -118,6 +120,16 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
                 "report": {},
             },
         ),
+        patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=V2AndroidTruthBlock(
+                device_id="android-1",
+                participation_tier="dispatch_eligible",
+                dispatch_eligible=True,
+                device_mode="cross_device",
+                local_inference_available=True,
+            ),
+        ),
     ):
         report = build_operational_readiness_report(route_paths=_required_route_paths())
 
@@ -132,6 +144,11 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
     assert report.state_contract["eligibility_state"]["task_initiation"]["state"] == "eligible"
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "complete"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "canonical"
+    assert report.runtime_decision_reasoning["participation_tier"] == "dispatch_eligible"
+    assert (
+        report.runtime_decision_reasoning["readiness_basis"]["android_truth_basis"]["source_of_truth_ref"]
+        == "core.v2_android_truth_ssot.build_v2_android_truth_block"
+    )
     android_candidates = [item for item in report.registration_kinds if item.kind == "device_android_admission"]
     assert android_candidates, "expected device_android_admission registration kind"
     android_admission = android_candidates[0]
@@ -218,6 +235,7 @@ def test_build_operational_readiness_report_recovery_with_degraded_success():
     assert report.state_contract["derived_state"]["active_path"]["state"] == "recovery"
     assert report.state_contract["derived_state"]["recovery_active_state"]["state"] == "active"
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "incomplete"
+    assert report.runtime_decision_reasoning["selected_runtime"] == "v2_local"
     assert report.state_contract["closure_quality_state"]["incomplete_state"]["state"] == "present"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "recovery"
     result_closure_candidates = [

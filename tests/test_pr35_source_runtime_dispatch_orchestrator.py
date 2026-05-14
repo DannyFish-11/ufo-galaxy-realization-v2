@@ -731,6 +731,8 @@ class TestSelectDispatchTarget:
         assert target.target_device_id == "dev_001"
         assert target.target_runtime_id == "rt_001"
         assert "explicit" in (target.selection_reason or "")
+        assert target.metadata["runtime_decision_reasoning"]["selected_device"] == "dev_001"
+        assert target.metadata["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "remote_handoff"
 
     def test_from_mesh_session_participant(self):
         from core.runtime.source_dispatch_orchestrator import select_dispatch_target
