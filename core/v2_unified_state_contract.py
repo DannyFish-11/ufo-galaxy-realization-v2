@@ -204,7 +204,7 @@ def build_shared_control_plane_basis(
     except Exception as exc:  # pragma: no cover
         logger.debug(
             "build_shared_control_plane_basis: backbone snapshot unavailable, "
-            "using degraded contract basis: %s",
+            "using degraded contract basis (may lack layering metadata): %s",
             exc,
         )
         backbone_snapshot = {
@@ -234,7 +234,8 @@ def build_control_plane_surface_contract(
     layer = dict(CONTROL_PLANE_SURFACE_LAYERING.get(surface, {}))
     if surface not in CONTROL_PLANE_SURFACE_LAYERING:
         logger.warning(
-            "build_control_plane_surface_contract: unknown surface=%s, using unclassified defaults",
+            "build_control_plane_surface_contract: unknown surface=%s "
+            "(valid: operator, board, panel, desktop_projection), using unclassified defaults",
             surface,
         )
     if not shared_basis:
