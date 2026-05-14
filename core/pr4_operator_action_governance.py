@@ -1598,7 +1598,8 @@ def build_pr4_operable_surface_snapshot(
             )
         except Exception as fallback_exc:
             logger.debug(
-                "build_pr4_operable_surface_snapshot: standardized operator fallback failed: %s",
+                "build_pr4_operable_surface_snapshot: failed to build fallback control plane "
+                "contract for operator surface: %s",
                 fallback_exc,
             )
             operator_control_plane_contract = {

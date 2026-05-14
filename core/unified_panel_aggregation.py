@@ -892,7 +892,7 @@ class UnifiedPanelAggregationService:
             generated_at = payload.generated_at if generated_at_is_valid else time.time()
             if not generated_at_is_valid:
                 logger.warning(
-                    "build_payload: invalid generated_at for control-plane contract age calc: %r, "
+                    "build_payload: invalid generated_at for control-plane contract age calculation: %r, "
                     "using current timestamp as fallback",
                     payload.generated_at,
                 )

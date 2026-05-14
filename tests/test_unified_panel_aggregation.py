@@ -395,6 +395,10 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         self.assertIn("derived_reasoning", typing_block)
         self.assertIn("projection", typing_block)
         self.assertIn("stale_or_cached_summary", typing_block)
+        self.assertIsInstance(typing_block["runtime_truth"], dict)
+        self.assertIsInstance(typing_block["derived_reasoning"], dict)
+        self.assertIsInstance(typing_block["projection"], dict)
+        self.assertIsInstance(typing_block["stale_or_cached_summary"], dict)
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
