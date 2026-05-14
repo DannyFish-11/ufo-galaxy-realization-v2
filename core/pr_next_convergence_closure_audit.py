@@ -87,11 +87,11 @@ PR_NEXT_CONVERGENCE_CONTRACT_VERSION: str = "1.0.0"
 
 # 本次 PR 的标题（中文权威标题）
 PR_NEXT_CONVERGENCE_PR_TITLE: str = (
-    "基于双仓真实代码收敛系统可用性审查、闭环真值治理与操作面同源解释"
+    "基于双仓真实代码明确 V2/Android 后续收口责任：推进 Android 真值全链传播与系统可用性补完"
 )
 PR_NEXT_CONVERGENCE_PR_TITLE_EN: str = (
-    "Convergence of practical-operability audit, closure-truth governance, "
-    "and operator-surface co-source explanation based on dual-repo real code"
+    "Clarify V2/Android convergence responsibilities with dual-repo real code: "
+    "advance Android truth full-chain propagation and practical operability closure"
 )
 
 # 本次 PR 锚点：基于 993P2
@@ -575,6 +575,12 @@ def _collect_probes() -> Dict[str, bool]:
     p["pr4_has_android_directed_action"] = _source_contains(
         "core.pr4_operator_action_governance", "build_android_directed_action_spec"
     )
+    p["pr4_board_consumes_android_participation_verdict"] = _source_contains(
+        "core.pr4_operator_action_governance", "android_participation_verdict"
+    )
+    p["pr4_board_has_latest_closure_reasoning"] = _source_contains(
+        "core.pr4_operator_action_governance", "latest_closure_reasoning"
+    )
 
     # -- readiness surface 层 --
     p["operational_readiness_surface"] = _module_exists("core.operational_readiness_surface")
@@ -947,16 +953,13 @@ def build_closure_governance_propagation_audit() -> ClosureGovernancePropagation
             "但 fully_propagated 仍需 board reasoning 路由和 Android 侧进一步配合。"
         ),
         what_this_pr_fixes_zh=(
-            "本次 PR 在 V2 侧的修复：\n"
-            "1. canonical_completion_ingress.notify_with_android_context()：\n"
-            "   closure 事件现在可以携带 Android 参与层级上下文，让 board 在收到 closure 时\n"
-            "   知道'是什么 tier 的节点完成了这次任务'。\n"
-            "2. unified_panel_aggregation.android_participation_verdict：\n"
-            "   UnifiedPanelPayload 新增该字段，聚合最近一次 participation evidence 摘要，\n"
-            "   panel 面板现在可以直接展示 Android 参与状态。\n"
-            "3. 本模块 get_board_reasoning_for_closure()：\n"
-            "   为 operator route 提供统一的'本次闭环的 Android 参与因果'解释 API，\n"
-            "   不需要每个 route 各自推导。"
+            "本次 PR 在 V2 侧的延续补强：\n"
+            "1. 继续使用 canonical_completion_ingress.notify_with_android_context() 与\n"
+            "   unified_panel_aggregation.android_participation_verdict 作为上游真值来源。\n"
+            "2. pr4_operator_action_governance.build_operator_board_projection() 已开始消费\n"
+            "   android_participation_verdict，并输出 latest_closure_reasoning。\n"
+            "3. board 路由（/api/v1/operator/board/operable-truth）随 projection 直接带出\n"
+            "   Android 参与层级 + 闭环因果解释，减少仅有摘要无决策原因的缺口。"
         ),
         what_still_needs_android_side_zh=(
             "仍需 Android 侧跟进：\n"
@@ -998,7 +1001,9 @@ def build_android_truth_operator_board_audit() -> AndroidTruthInOperatorBoardAud
     completion_has_context = bool(p.get("completion_ingress_has_android_context"))
     board_api = True  # 本模块本身提供 get_board_reasoning_for_closure
     operator_route_can_read = bool(
-        p.get("pr4_has_board_projection") and panel_has_verdict
+        p.get("pr4_has_board_projection")
+        and p.get("pr4_board_consumes_android_participation_verdict")
+        and p.get("pr4_board_has_latest_closure_reasoning")
     )
 
     return AndroidTruthInOperatorBoardAudit(
@@ -1014,19 +1019,19 @@ def build_android_truth_operator_board_audit() -> AndroidTruthInOperatorBoardAud
         ),
         fix_in_this_pr_zh=(
             "本次 PR 补强：\n"
-            "1. UnifiedPanelPayload.android_participation_verdict（新增字段）：\n"
-            "   panel 面板现在可以直接展示 Android 参与状态摘要。\n"
-            "2. CanonicalCompletionIngress.notify_with_android_context()（新增方法）：\n"
-            "   closure 时刻携带 android_participation_tier 上下文，供 board 消费。\n"
-            "3. get_board_reasoning_for_closure()（本模块新增）：\n"
-            "   为 operator route 提供标准化的 Android 参与因果解释 API。"
+            "1. 沿用 UnifiedPanelPayload.android_participation_verdict 与\n"
+            "   CanonicalCompletionIngress.notify_with_android_context() 作为上游真值。\n"
+            "2. pr4_operator_action_governance.build_operator_board_projection() 继续跟进，\n"
+            "   把 android_participation_verdict 与 latest_closure_reasoning 输出到 board。\n"
+            "3. /api/v1/operator/board/operable-truth 现在可直接读取上述字段，\n"
+            "   让 operator 不再只看到摘要而看不到闭环决策原因。"
         ),
         remaining_gap_zh=(
             "仍存在的缺口：\n"
-            "1. board 路由（/api/v1/operator/board/operable-truth）尚未消费 "
-            "   android_participation_verdict 字段。\n"
-            "2. pr4_operator_action_governance.build_operator_board_projection() 还没有"
-            "   把 participation tier 纳入 board projection 输出。\n"
+            "1. board 路由已开始消费 android_participation_verdict + latest_closure_reasoning，"
+            "   但目前仅覆盖 operable-truth 投影，其他 operator/readiness 投影仍需统一消费。\n"
+            "2. latest_closure_reasoning 当前优先读取 operator evidence ring，"
+            "   对长期历史闭环解释仍依赖后续持久化对齐。\n"
             "3. Android 侧需要在 delegated result 中稳定提供 participation_tier 字段，"
             "   才能让 closure 时的 Android context 高置信。"
         ),
@@ -1155,14 +1160,14 @@ def build_convergence_closure_audit() -> ConvergenceClosureAuditRecord:
     ]
 
     what_fixed = [
-        "本次 PR 新增：canonical_completion_ingress.notify_with_android_context()，"
-        "closure 事件现在可以携带 Android participation tier 上下文",
-        "本次 PR 新增：UnifiedPanelPayload.android_participation_verdict 字段，"
-        "panel 面板直接可读 Android 参与状态",
-        "本次 PR 新增：get_board_reasoning_for_closure() —— operator route 标准化"
-        "的 Android 参与因果解释 API，不需要各路由各自推导",
-        "本次 PR 新增：完整的实用性审计（CloneToRunAudit）和三态真实性审计（ThreeStateRuntimeAudit），"
-        "基于真实代码探针生成可机读的审计报告",
+        "延续既有补强：canonical_completion_ingress.notify_with_android_context()，"
+        "closure 事件可携带 Android participation tier 上下文",
+        "延续既有补强：UnifiedPanelPayload.android_participation_verdict 字段，"
+        "panel 面板可直接读到 Android 参与状态",
+        "延续既有补强：get_board_reasoning_for_closure() —— 标准化 Android 参与因果解释 API",
+        "本次继续补强：pr4_operator_action_governance.build_operator_board_projection() "
+        "开始消费 android_participation_verdict + latest_closure_reasoning，"
+        "使 /api/v1/operator/board/operable-truth 输出 Android tier 与闭环解释",
     ]
 
     what_android = [

@@ -588,6 +588,8 @@ class TestOperatorBoardProjection:
         assert "unavailable_actions" in d
         assert "availability_state_basis" in d
         assert "last_action_id" in d
+        assert "android_participation_verdict" in d
+        assert "latest_closure_reasoning" in d
         assert "authority" in d
 
     def test_board_reflects_last_action(self):
@@ -640,6 +642,32 @@ class TestOperatorBoardProjection:
         pending_ids = [a["android_dispatch_id"] for a in proj.pending_android_directed_actions]
         assert spec.android_dispatch_id in pending_ids
         _PENDING_ANDROID_ACTIONS.clear()
+
+    def test_board_includes_latest_closure_reasoning_from_observability(self):
+        from core.operator_execution_observability_surface import (
+            _evidence_ring,
+            record_operator_evidence_entry,
+        )
+        from core.pr4_operator_action_governance import build_operator_board_projection
+
+        _evidence_ring.clear()
+        record_operator_evidence_entry(
+            task_id="task_board_reasoning_01",
+            device_id="device_board_reasoning_01",
+            evidence_state="confirmed_strong",
+            trust_level="trusted",
+            acceptance_verdict="accept",
+            truth_chain_complete=True,
+            android_proof_class="distributed_participant",
+            source_channel="canonical_completion_ingress",
+        )
+
+        proj = build_operator_board_projection()
+        reasoning = proj.latest_closure_reasoning
+        assert reasoning.get("task_id") == "task_board_reasoning_01"
+        assert reasoning.get("acceptance_verdict") == "accept"
+        assert reasoning.get("android_participation_tier") == "distributed_participant"
+        _evidence_ring.clear()
 
 
 # ===========================================================================
@@ -920,6 +948,8 @@ class TestPR4Routes:
         assert "available_actions" in data
         assert "unavailable_actions" in data
         assert "system_health_summary" in data
+        assert "android_participation_verdict" in data
+        assert "latest_closure_reasoning" in data
         assert data["authority"] == "OPERATOR_ROUTES_V1"
 
     def test_pr4_snapshot_returns_200(self, client):
