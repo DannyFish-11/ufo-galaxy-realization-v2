@@ -887,10 +887,11 @@ class UnifiedPanelAggregationService:
                 "active_surface_spec": dict(payload.active_surface_spec),
                 "existence_surface": dict(payload.existence_surface),
             }
+            generated_at = payload.generated_at if isinstance(payload.generated_at, (int, float)) else time.time()
             stale_or_cached_summary = {
                 "has_last_operator_action": bool(payload.last_operator_action),
                 "has_last_execution_result": bool(payload.last_execution_result),
-                "payload_age_seconds": max(0.0, time.time() - float(payload.generated_at or 0.0)),
+                "payload_age_seconds": max(0.0, time.time() - float(generated_at)),
             }
             shared_basis = build_shared_control_plane_basis(
                 reasoning_block=payload.runtime_decision_reasoning,
