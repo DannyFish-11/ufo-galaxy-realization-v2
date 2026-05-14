@@ -735,6 +735,7 @@ class UnifiedPanelAggregationService:
         try:
             from core.android_device_state_store import list_device_state_snapshots
             from core.v2_android_truth_ssot import (
+                ANDROID_PARTICIPATION_TIER_ORDER,
                 V2_ANDROID_TRUTH_SSOT_AUTHORITY,
                 build_v2_android_truth_block,
             )
@@ -759,16 +760,6 @@ class UnifiedPanelAggregationService:
             best_block = None
             best_ordinal = -1
 
-            _tier_order = [
-                "local_only",
-                "control_only",
-                "cross_device_capable",
-                "cross_device_enabled",
-                "fully_attached",
-                "dispatch_eligible",
-                "distributed_participant",
-            ]
-
             for snap in snapshots:
                 snap_device_id = getattr(snap, "device_id", None)
                 if not snap_device_id:
@@ -779,7 +770,7 @@ class UnifiedPanelAggregationService:
                 if blk.distributed_participant:
                     distributed_participant_count += 1
                 try:
-                    ordinal = _tier_order.index(blk.participation_tier)
+                    ordinal = ANDROID_PARTICIPATION_TIER_ORDER.index(blk.participation_tier)
                 except ValueError:
                     ordinal = 0
                 if ordinal > best_ordinal:

@@ -466,7 +466,7 @@ def build_v2_android_truth_block(
         mode_state = build_mode_state_for_device(device_id)
         if mode_state is not None:
             block.device_mode = getattr(mode_state, "mode", block.device_mode)
-            if isinstance(block.device_mode, type(None)):
+            if block.device_mode is None:
                 block.device_mode = "unknown"
             # 将 Enum 转为字符串
             if hasattr(block.device_mode, "value"):
@@ -533,8 +533,8 @@ def build_v2_android_truth_block_multi(
 # get_best_v2_android_truth_block
 # ---------------------------------------------------------------------------
 
-# 参与等级有序列表（从低到高）
-_TIER_ORDER: List[str] = [
+# 参与等级有序列表（从低到高），作为公共常量供消费模块共用
+ANDROID_PARTICIPATION_TIER_ORDER: List[str] = [
     "local_only",
     "control_only",
     "cross_device_capable",
@@ -543,6 +543,9 @@ _TIER_ORDER: List[str] = [
     "dispatch_eligible",
     "distributed_participant",
 ]
+
+# 内部别名，保持向后兼容
+_TIER_ORDER: List[str] = ANDROID_PARTICIPATION_TIER_ORDER
 
 
 def get_best_v2_android_truth_block(

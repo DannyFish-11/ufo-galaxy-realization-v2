@@ -201,13 +201,14 @@ class TestGroupC_V2AndroidTruthBlock:
         assert "tier_derivation_notes" in verdict
         assert "_source" in verdict
 
-    def test_C06_ssot_version_present_simple(self) -> None:
-        """C06b：V2AndroidTruthBlock.ssot_version 为非空字符串。"""
-        from core.v2_android_truth_ssot import V2AndroidTruthBlock
+    def test_C06_ssot_version_is_nonempty_string(self) -> None:
+        """C06：V2AndroidTruthBlock.ssot_version 为非空字符串，匹配合约版本常量。"""
+        from core.v2_android_truth_ssot import V2AndroidTruthBlock, V2_ANDROID_TRUTH_SSOT_CONTRACT_VERSION
 
         blk = V2AndroidTruthBlock()
         assert isinstance(blk.ssot_version, str)
         assert len(blk.ssot_version) > 0
+        assert blk.ssot_version == V2_ANDROID_TRUTH_SSOT_CONTRACT_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -333,11 +334,7 @@ class TestGroupE_BuildBlockSuccess:
         self, tier_value: str = "dispatch_eligible"
     ) -> MagicMock:
         state = MagicMock()
-        tier_enum = MagicMock()
-        tier_enum.value = tier_value
-        tier_enum.ordinal = MagicMock(return_value=5)
-
-        # Make >= comparisons work for dispatch_eligible
+        # Make >= comparisons work by using the real enum
         from core.android_network_participation import AndroidNetworkParticipationTier
 
         state.tier = AndroidNetworkParticipationTier.from_string(tier_value)
