@@ -904,3 +904,6 @@ class TestAuthoritativeContractConsumptionPath:
         assert decision["evidence"]["source"].startswith(
             "core.android_network_participation.get_participation_state_for_device"
         )
+        unified_mode_model = contract["derived_state"]["unified_mode_model"]["evidence"]
+        assert unified_mode_model["execution_location"] == "android_delegated"
+        assert unified_mode_model["participation_layer"] == "dispatch_eligible"

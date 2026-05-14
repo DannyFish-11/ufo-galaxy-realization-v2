@@ -590,6 +590,7 @@ class TestOperatorBoardProjection:
         assert "last_action_id" in d
         assert "android_participation_verdict" in d
         assert "runtime_decision_reasoning" in d
+        assert "unified_mode_model" in d
         assert "latest_closure_reasoning" in d
         assert "authority" in d
 
@@ -668,6 +669,7 @@ class TestOperatorBoardProjection:
         assert reasoning.get("task_id") == "task_board_reasoning_01"
         assert reasoning.get("acceptance_verdict") == "accept"
         assert reasoning.get("android_participation_tier") == "distributed_participant"
+        assert proj.unified_mode_model.get("execution_location") == "android_delegated"
         assert proj.runtime_decision_reasoning == proj.latest_closure_reasoning
         _evidence_ring.clear()
 

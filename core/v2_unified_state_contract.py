@@ -164,6 +164,7 @@ def build_v2_unified_state_contract(
     system_acceptance: Optional[Dict[str, Any]] = None,
     result_ingress_evidence: Optional[Dict[str, Any]] = None,
     participation_evidence: Optional[Dict[str, Any]] = None,
+    governance_evidence: Optional[Dict[str, Any]] = None,
 ) -> V2UnifiedStateContract:
     route_paths_set = set(route_paths or [])
     runtime_readiness = dict(runtime_readiness or {})
@@ -172,6 +173,7 @@ def build_v2_unified_state_contract(
     session_evidence = dict(session_evidence or {})
     system_acceptance = dict(system_acceptance or {})
     participation_evidence = dict(participation_evidence or {})
+    governance_evidence = dict(governance_evidence or {})
 
     by_kind = {getattr(state, "kind", ""): state for state in kind_states}
     main_chain_states = [by_kind[kind.value] for kind in path.main_chain_kinds if kind.value in by_kind]
@@ -250,6 +252,7 @@ def build_v2_unified_state_contract(
     )
     _participation_last_signal = participation_evidence.get("last_signal")
     _participation_prior_tier = participation_evidence.get("prior_tier")
+    _participation_truth_block: Any = None
     try:
         if participation_evidence:
             # Caller supplied pre-computed participation evidence (already SSOT-normalised)
@@ -264,15 +267,23 @@ def build_v2_unified_state_contract(
             target_device_id = str(android_device_ids[0]) if android_device_ids else ""
             if target_device_id:
                 from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
+                from core.v2_android_truth_ssot import ANDROID_PARTICIPATION_PROVENANCE  # noqa: PLC0415
 
-                truth_block = build_v2_android_truth_block(target_device_id, include_history_limit=10)
-                _participation_tier_str = truth_block.participation_tier
-                _participation_blocking = list(truth_block.participation_blocking_reasons)
-                _participation_notes = list(truth_block.participation_tier_notes)
-                _participation_source = "core.v2_android_truth_ssot"
-                _participation_transition_history = list(truth_block.participation_transition_history)
-                _participation_last_signal = truth_block.participation_last_signal
-                _participation_prior_tier = truth_block.participation_prior_tier
+                _participation_truth_block = build_v2_android_truth_block(
+                    target_device_id,
+                    include_history_limit=10,
+                )
+                _participation_tier_str = _participation_truth_block.participation_tier
+                _participation_blocking = list(
+                    _participation_truth_block.participation_blocking_reasons
+                )
+                _participation_notes = list(_participation_truth_block.participation_tier_notes)
+                _participation_source = ANDROID_PARTICIPATION_PROVENANCE
+                _participation_transition_history = list(
+                    _participation_truth_block.participation_transition_history
+                )
+                _participation_last_signal = _participation_truth_block.participation_last_signal
+                _participation_prior_tier = _participation_truth_block.participation_prior_tier
             else:
                 # Conservative fallback when no Android device identity is available.
                 from core.android_network_participation import (  # noqa: PLC0415
@@ -326,6 +337,52 @@ def build_v2_unified_state_contract(
         _participation_tier_str = "local_only"
         _participation_blocking = [f"derivation_error: {_pe_exc}"]
 
+    _unified_mode_model: Dict[str, Any] = {}
+    try:
+        android_device_ids = list(device_evidence.get("android_device_ids") or [])
+        target_device_id = str(android_device_ids[0]) if android_device_ids else ""
+        truth_block_for_mode: Any = _participation_truth_block
+        if target_device_id and truth_block_for_mode is None:
+            from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
+
+            truth_block_for_mode = build_v2_android_truth_block(
+                target_device_id,
+                include_history_limit=10,
+            )
+        from core.v2_unified_mode_model import build_unified_mode_model  # noqa: PLC0415
+
+        _unified_mode_model = build_unified_mode_model(
+            selected_runtime=(
+                "android_delegated"
+                if _participation_tier_str in {"dispatch_eligible", "distributed_participant"}
+                else "v2_local"
+            ),
+            selected_device=target_device_id or None,
+            participation_tier=_participation_tier_str,
+            device_mode=(
+                getattr(truth_block_for_mode, "device_mode", None)
+                if truth_block_for_mode is not None
+                else active_path
+            ),
+            mode_readiness_state=(
+                getattr(truth_block_for_mode, "mode_readiness_state", None)
+                if truth_block_for_mode is not None
+                else None
+            ),
+            android_truth_block=truth_block_for_mode,
+            governance_state=governance_evidence,
+            blocking_reasons=list(_participation_blocking),
+            source_of_truth_refs=[
+                V2_UNIFIED_STATE_CONTRACT_AUTHORITY,
+            ],
+        )
+    except Exception as _umm_exc:
+        logger.debug(
+            "build_v2_unified_state_contract: unified mode model build failed: %s",
+            _umm_exc,
+        )
+        _unified_mode_model = {}
+
     raw_signals: Dict[str, Any] = {
         "validation_status": validation.overall_status.value,
         "validation_summary": validation.summary,
@@ -347,6 +404,9 @@ def build_v2_unified_state_contract(
         "result_closure_established": result_closure_established,
         "recovery_active": recovery_active,
         "android_network_participation_tier": _participation_tier_str,
+        "execution_location_layer": _unified_mode_model.get("execution_location"),
+        "participation_layer": _unified_mode_model.get("participation_layer"),
+        "governance_state_layer": _unified_mode_model.get("governance_state"),
     }
 
     # gateway_bridge_presence: is the Android gateway/bridge connection present and serving
@@ -892,6 +952,30 @@ def build_v2_unified_state_contract(
             eligible=_participation_tier_str in {"dispatch_eligible", "distributed_participant"},
             active=_participation_tier_str == "distributed_participant",
             lifecycle_stage="observation",
+        ),
+        "unified_mode_model": ContractDecision(
+            decision_id="unified_mode_model",
+            label="Unified mode model",
+            state=str(_unified_mode_model.get("execution_location") or "v2_local"),
+            summary=(
+                "Unified mode model separates execution location, participation layer, "
+                "and governance state into one owner-facing basis."
+            ),
+            sources=_base_sources(
+                "core.v2_unified_mode_model",
+                "core.v2_android_truth_ssot",
+                "core.unified_governance_semantics",
+            ),
+            reasons=list(_unified_mode_model.get("blocking_reasons", []) or []),
+            evidence=dict(_unified_mode_model),
+            observable=True,
+            acceptable=_unified_mode_model.get("governance_state") != "governance_blocked",
+            eligible=_unified_mode_model.get("participation_layer") in {
+                "dispatch_eligible",
+                "distributed_participant",
+            },
+            active=_unified_mode_model.get("execution_location") == "android_delegated",
+            lifecycle_stage="readiness",
         ),
     }
 
