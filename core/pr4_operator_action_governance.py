@@ -1465,8 +1465,9 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
                     "core.operator_execution_observability_surface.record_operator_evidence_entry",
                 ],
             )
-            proj.runtime_decision_reasoning = dict(reasoning_block)
-            proj.latest_closure_reasoning = dict(reasoning_block)
+            reasoning_block_dict = dict(reasoning_block)
+            proj.runtime_decision_reasoning = reasoning_block_dict
+            proj.latest_closure_reasoning = reasoning_block_dict
         elif proj.runtime_decision_reasoning:
             proj.latest_closure_reasoning = dict(proj.runtime_decision_reasoning)
     except Exception as exc:

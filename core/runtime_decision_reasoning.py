@@ -272,9 +272,15 @@ def overlay_runtime_decision_reasoning_block(
 
     truth_basis = _build_android_truth_basis(truth_block)
     mode_basis = dict(current.mode_basis)
+    resolved_mode_state = _coalesce(
+        mode_state,
+        mode_basis.get("mode_state"),
+        _truth_get(truth_block, "device_mode"),
+        "unknown",
+    )
     mode_basis.update(
         {
-            "mode_state": _coalesce(mode_state, mode_basis.get("mode_state"), _truth_get(truth_block, "device_mode"), "unknown"),
+            "mode_state": resolved_mode_state,
             "source_runtime_posture": _coalesce(
                 source_runtime_posture,
                 mode_basis.get("source_runtime_posture"),
