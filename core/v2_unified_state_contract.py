@@ -228,6 +228,11 @@ def build_control_plane_surface_contract(
 ) -> Dict[str, Any]:
     """Build a typed unified control-plane contract block for one surface."""
     layer = dict(CONTROL_PLANE_SURFACE_LAYERING.get(surface, {}))
+    if surface not in CONTROL_PLANE_SURFACE_LAYERING:
+        logger.warning(
+            "build_control_plane_surface_contract: unknown surface=%s, using unclassified defaults",
+            surface,
+        )
     if not shared_basis:
         shared_basis = build_shared_control_plane_basis(reasoning_block=derived_reasoning)
 

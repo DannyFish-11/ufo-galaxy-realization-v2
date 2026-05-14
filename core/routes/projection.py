@@ -4222,6 +4222,8 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "projection_surface_role": "runtime_truth_board_facing",
             "board_facing_default": True,
             "stale_or_cached_summary": {
+                # Keep this block strictly aligned with the control-plane
+                # stale_or_cached_summary typing contract.
                 "fallback": True,
                 "startup_readiness_available": False,
             },

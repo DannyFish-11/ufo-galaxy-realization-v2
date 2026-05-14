@@ -888,6 +888,11 @@ class UnifiedPanelAggregationService:
                 "existence_surface": dict(payload.existence_surface),
             }
             generated_at = payload.generated_at if isinstance(payload.generated_at, (int, float)) else time.time()
+            if not isinstance(payload.generated_at, (int, float)):
+                logger.warning(
+                    "build_payload: invalid generated_at for control-plane contract age calc: %r",
+                    payload.generated_at,
+                )
             stale_or_cached_summary = {
                 "has_last_operator_action": bool(payload.last_operator_action),
                 "has_last_execution_result": bool(payload.last_execution_result),

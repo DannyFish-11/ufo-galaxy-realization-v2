@@ -1586,6 +1586,12 @@ def build_pr4_operable_surface_snapshot(
         )
     except Exception as exc:
         logger.debug("build_pr4_operable_surface_snapshot: operator contract unavailable: %s", exc)
+        operator_control_plane_contract = {
+            "surface": "operator",
+            "unavailable": True,
+            "reason": str(exc),
+            "_source": "core.pr4_operator_action_governance.build_pr4_operable_surface_snapshot",
+        }
 
     return PR4OperableSurfaceSnapshot(
         board=board,
