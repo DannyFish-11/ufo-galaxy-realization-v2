@@ -284,6 +284,25 @@ class UnifiedPanelPayload:
     governance_state: Dict[str, Any] = field(default_factory=dict)
     mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Android participation verdict (PR-next-convergence) ───────────────
+    # Authoritative Android network participation tier verdict aggregated from
+    # core.android_device_state_store.get_android_participation_evidence() for
+    # the most recently active device, or an aggregate summary when multiple
+    # devices are connected.
+    #
+    # This field makes the Android participation tier directly readable on the
+    # unified panel surface so that operator boards and downstream consumers can
+    # reason about *which tier of Android node is participating* without needing
+    # to query the participation module separately.
+    #
+    # Keys: device_id (str | None), tier (str), blocking_reasons (list[str]),
+    #       tier_derivation_notes (list[str]), connected_device_count (int),
+    #       dispatch_eligible_count (int), distributed_participant_count (int),
+    #       _source (str).
+    # Empty dict when no Android device has an active session or the
+    # android_network_participation module is unavailable.
+    android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -329,6 +348,8 @@ class UnifiedPanelPayload:
             # unified governance semantics
             "governance_state": dict(self.governance_state),
             "mesh_runtime_state": dict(self.mesh_runtime_state),
+            # android participation verdict (PR-next-convergence)
+            "android_participation_verdict": dict(self.android_participation_verdict),
             # provenance
             "_source": self._source,
         }
@@ -440,6 +461,12 @@ class UnifiedPanelAggregationService:
             self._fill_from_unified_governance_semantics(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: governance semantics fill failed: %s", exc)
+
+        # 11. Android participation verdict (PR-next-convergence)
+        try:
+            self._fill_android_participation_verdict(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: android participation verdict fill failed: %s", exc)
 
         return payload
 
@@ -693,6 +720,94 @@ class UnifiedPanelAggregationService:
                 payload.mesh_runtime_state = dict(mesh_runtime_state)
         except Exception as exc:
             logger.debug("build_payload: unified governance semantics unavailable: %s", exc)
+
+    def _fill_android_participation_verdict(self, payload: UnifiedPanelPayload) -> None:
+        """Fill android_participation_verdict from android_network_participation.
+
+        Aggregates the participation tier for all connected Android devices into a
+        compact verdict dict so that operator boards and panel clients can directly
+        read *which tier of Android node is participating* without querying the
+        participation module separately.
+
+        This is the PR-next-convergence board-side complement to the routing-side
+        participation truth consumption added in PR 1142.
+        """
+        try:
+            from core.android_device_state_store import (
+                get_android_participation_evidence,
+                list_device_state_snapshots,
+            )
+
+            snapshots = list_device_state_snapshots()
+            if not snapshots:
+                payload.android_participation_verdict = {
+                    "device_id": None,
+                    "tier": "local_only",
+                    "blocking_reasons": ["no_connected_devices"],
+                    "tier_derivation_notes": [],
+                    "connected_device_count": 0,
+                    "dispatch_eligible_count": 0,
+                    "distributed_participant_count": 0,
+                    "_source": "core.unified_panel_aggregation",
+                }
+                return
+
+            connected_count = len(snapshots)
+            dispatch_eligible = 0
+            distributed_participant = 0
+            best_tier = "local_only"
+            best_device_id: Optional[str] = None
+            best_blocking: List[str] = []
+            best_notes: List[str] = []
+
+            # Tier ordering (higher index = higher participation)
+            _tier_order = [
+                "local_only",
+                "session_attached",
+                "capability_visible",
+                "dispatch_eligible",
+                "execution_active",
+                "result_accepted",
+                "distributed_participant",
+            ]
+
+            for snap in snapshots:
+                snap_device_id = getattr(snap, "device_id", None)
+                if not snap_device_id:
+                    continue
+                ev = get_android_participation_evidence(snap_device_id)
+                tier_val = ev.get("tier", "local_only")
+                if tier_val in ("dispatch_eligible", "execution_active", "result_accepted"):
+                    dispatch_eligible += 1
+                if tier_val == "distributed_participant":
+                    distributed_participant += 1
+
+                # Prefer the device with the highest participation tier
+                try:
+                    current_idx = _tier_order.index(best_tier)
+                    candidate_idx = _tier_order.index(tier_val)
+                except ValueError:
+                    candidate_idx = -1
+                    current_idx = 0
+
+                if candidate_idx > current_idx:
+                    best_tier = tier_val
+                    best_device_id = snap_device_id
+                    best_blocking = ev.get("blocking_reasons", [])
+                    best_notes = ev.get("tier_derivation_notes", [])
+
+            payload.android_participation_verdict = {
+                "device_id": best_device_id,
+                "tier": best_tier,
+                "blocking_reasons": best_blocking,
+                "tier_derivation_notes": best_notes,
+                "connected_device_count": connected_count,
+                "dispatch_eligible_count": dispatch_eligible,
+                "distributed_participant_count": distributed_participant,
+                "_source": "core.android_network_participation",
+            }
+        except Exception as exc:
+            logger.debug("build_payload: android participation verdict unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -52,10 +52,10 @@ logger = logging.getLogger(__name__)
 # Authority metadata
 # ---------------------------------------------------------------------------
 
-REVIEW_PR_TITLE = "基于 993P2 收敛双仓系统完整性认知、联动真值与关键缺口补强"
+REVIEW_PR_TITLE = "基于双仓真实代码收敛系统可用性审查、闭环真值治理与操作面同源解释"
 REVIEW_PR_TITLE_EN = (
-    "Anchor on 993P2 to converge dual-repo system integrity cognition, "
-    "runtime truth linkage, and key-gap reinforcement"
+    "Convergence of practical-operability audit, closure-truth governance, "
+    "and operator-surface co-source explanation based on dual-repo real code"
 )
 REVIEW_CONVERGENCE_ANCHOR = "993P2"
 REVIEW_AUTHORITY = (
@@ -642,6 +642,23 @@ def _collect_probes() -> Dict[str, bool]:
         "tests.test_pr03_mesh_runtime_center_closure"
     )
 
+    # --- PR-next-convergence (this PR) probes ---
+    p["next_convergence_audit"] = _module_exists(
+        "core.pr_next_convergence_closure_audit"
+    )
+    p["completion_ingress_has_android_context"] = _source_contains(
+        "core.canonical_completion_ingress", "notify_with_android_context"
+    )
+    p["panel_has_android_participation_verdict"] = _source_contains(
+        "core.unified_panel_aggregation", "android_participation_verdict"
+    )
+    p["dispatch_consumes_participation_evidence"] = _source_contains(
+        "core.runtime.source_dispatch_orchestrator", "get_android_participation_evidence"
+    )
+    p["device_selection_consumes_participation"] = _source_contains(
+        "galaxy_gateway.routing.device_selection", "get_android_participation_evidence"
+    )
+
     return p
 
 
@@ -770,8 +787,9 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             "Routing / orchestration actively consumes Android runtime-state truth for decisions.",
             PropositionVerdict.PARTIALLY_ESTABLISHED,
             EvidenceState.PARTIAL,
-            "_score_candidate 与 get_device_state_snapshot 均存在，编排已消费 Android truth，"
-            "但覆盖面不完整——并非所有治理分支均按 runtime-state 做出差异决策。",
+            "_score_candidate 与 get_device_state_snapshot 均存在，"
+            "get_android_participation_evidence 现已进入 source_dispatch_orchestrator 与 device_selection（PR 1142）；"
+            "编排已消费 Android participation truth，coverage 已提升但仍非所有分支均 runtime-level closed。",
             ["core/runtime/source_dispatch_orchestrator.py",
              "galaxy_gateway/routing/device_selection.py"],
             [ANDROID_ANCHOR_WS_CLIENT],
@@ -831,7 +849,8 @@ def _build_propositions(p: Dict[str, bool]) -> List[PropositionEntry]:
             PropositionVerdict.PARTIALLY_ESTABLISHED,
             EvidenceState.PARTIAL,
             "UnifiedPanelAggregationService、OperatorSnapshot、mesh_runtime_state 字段均存在；"
-            "panel 投影已绑定 governance_state，但[operator 看见的系统]与[runtime 真实世界]"
+            "panel 投影已绑定 governance_state；本次 PR 新增 android_participation_verdict 字段，"
+            "使 panel 直接可读 Android 参与层级。但[operator 看见的系统]与[runtime 真实世界]"
             "完全同构这一命题仍部分成立。",
             ["core/unified_panel_aggregation.py", "core/operator_surface.py",
              "core/routes/operator.py"],
@@ -1491,34 +1510,40 @@ def _build_cross_repo_mismatches() -> List[CrossRepoMismatch]:
 def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
     """Build the highest-value next-step V2-side integrity-linkage direction."""
     return V2ConvergencePriority(
-        title_zh="让 Android truth 成为 V2 编排、闭环与治理的正式输入，而不是仅停留在可见面",
+        title_zh=(
+            "从闭环真值同源解释推进到 board routing 完全消费 Android truth 并拉通 Android 侧 tier 上报"
+        ),
         why_now_zh=(
-            "当前双仓最关键的未闭合点，不再是 transport 是否存在，而是 Android 已上送的 "
-            "runtime-state / participation / readiness / continuity truth 是否真正进入 V2 的"
-            "路由、dispatch、result acceptance 与 operator 收口链。该方向直接覆盖 R1/R2/R3/R12，"
-            "能把系统从“能描述”推进到“能按真值决策”。"
+            "PR 1142 已完成编排选路消费 Android participation evidence；"
+            "本次 PR 完成了 closure 事件携带 Android context（notify_with_android_context）、"
+            "panel 新增 android_participation_verdict 字段，以及 board reasoning API。"
+            "当前最关键未闭合点：board 路由侧（/api/v1/operator/board/operable-truth）"
+            "尚未消费 android_participation_verdict，"
+            "Android 侧 delegated result 中 participation_tier 字段尚未稳定上送。"
+            "这两步完成后，V2 整个 Android truth 传播链才能从 partially_propagated 达到 fully_propagated。"
         ),
         target_outcome_zh=(
-            "目标不是新增抽象层，而是在现有 V2 canonical path 上补齐："
-            "(1) 编排分支完整消费 Android truth；"
-            "(2) result acceptance / closure 明确引用参与与连续性证据；"
-            "(3) operator / readiness / board 面与真实决策原因同源可追踪。"
+            "目标：\n"
+            "(1) board 路由侧消费 android_participation_verdict（V2 侧 operator route 跟进）；\n"
+            "(2) Android delegated result 稳定上送 participation_tier 字段（Android 侧 follow-up）；\n"
+            "(3) pr4_operator_action_governance.build_operator_board_projection() 把"
+            "    participation tier 纳入 board projection 输出；\n"
+            "(4) readiness tier degradation 门控与 Android participation tier 完全联动。"
         ),
-        linked_issue_ids=["R1", "R2", "R3", "R12"],
+        linked_issue_ids=["R1", "R5", "R3", "R12"],
         v2_anchors=[
-            "core/runtime/source_dispatch_orchestrator.py",
-            "galaxy_gateway/routing/device_selection.py",
-            "core/unified_result_ingress.py",
-            "core/operational_readiness_surface.py",
+            "core/routes/operator.py",
+            "core/pr4_operator_action_governance.py",
             "core/unified_panel_aggregation.py",
+            "core/canonical_completion_ingress.py",
+            "core/operational_readiness_surface.py",
         ],
         android_anchors=[
             ANDROID_ANCHOR_WS_CLIENT,
             ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
-            ANDROID_ANCHOR_CONTINUITY,
+            ANDROID_ANCHOR_MESH_CONTRACT,
         ],
     )
-
 
 def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
     """Build V2-side integrity repairs reinforced by this convergence baseline."""
@@ -1578,6 +1603,65 @@ def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
             android_dependency_zh=(
                 "需要 Android 侧持续稳定上送 local inference / fallback tier / execution pressure 信号，"
                 "并保持契约字段版本一致。"
+            ),
+        ),
+        IntegrityRepairAction(
+            action_id="IRA_ANDROID_CONTEXT_IN_CLOSURE",
+            title_zh="closure 事件携带 Android 参与层级上下文（notify_with_android_context）",
+            status_zh="本次 V2 已补强",
+            why_high_value_zh=(
+                "PR 1142 把 Android truth 接入编排选路，但 closure 时刻 operator/board 仍不知道"
+                "'是哪个 tier 的 Android 节点完成了任务'。"
+                "新增 notify_with_android_context() 使 closure 记录携带 participation_tier，"
+                "把双仓真值从路由延伸到闭环时刻的可解释性。"
+            ),
+            linked_issue_ids=["R5"],
+            v2_anchors=[
+                "core/canonical_completion_ingress.py",
+                "core/operator_execution_observability_surface.py",
+            ],
+            android_dependency_zh=(
+                "依赖 Android 侧在 delegated result 中稳定提供 participation_tier 字段；"
+                "V2 侧在字段缺失时退化为 'unknown'，保持兼容性。"
+            ),
+        ),
+        IntegrityRepairAction(
+            action_id="IRA_PANEL_PARTICIPATION_VERDICT",
+            title_zh="panel 新增 android_participation_verdict 字段，使 board 直接可读参与层级",
+            status_zh="本次 V2 已补强",
+            why_high_value_zh=(
+                "之前 panel 面板只有 android_ecosystem（计数摘要），没有 participation tier 层级信息。"
+                "新增 android_participation_verdict 字段后，operator board 可直接读取"
+                "'当前最高参与层级 Android 设备是哪个、参与了什么 tier'，"
+                "使 board reasoning 与实际路由决策更加同源。"
+            ),
+            linked_issue_ids=["R5"],
+            v2_anchors=[
+                "core/unified_panel_aggregation.py",
+                "core/android_network_participation.py",
+                "core/android_device_state_store.py",
+            ],
+            android_dependency_zh=(
+                "依赖 Android 已通过 GalaxyWebSocketClient 注册并上送状态；"
+                "在无连接设备时退化为 connected_device_count=0 状态，不抛异常。"
+            ),
+        ),
+        IntegrityRepairAction(
+            action_id="IRA_CONVERGENCE_AUDIT_MODULE",
+            title_zh="新增 pr_next_convergence_closure_audit.py 提供 board reasoning API 与完整可用性审计",
+            status_zh="本次 V2 已补强",
+            why_high_value_zh=(
+                "把可用性审查（clone-to-run）、三态真实性审查、闭环治理传播审查、operator board 因果解释"
+                "统一到可机读工件中，为 operator route 提供 get_board_reasoning_for_closure() API，"
+                "不再让各 route 各自推导 Android 参与因果。"
+            ),
+            linked_issue_ids=["R5", "R1"],
+            v2_anchors=[
+                "core/pr_next_convergence_closure_audit.py",
+            ],
+            android_dependency_zh=(
+                "Android 侧无直接依赖；V2 侧直接从 android_device_state_store 和"
+                "canonical_completion_ingress 读取数据。"
             ),
         ),
     ]
