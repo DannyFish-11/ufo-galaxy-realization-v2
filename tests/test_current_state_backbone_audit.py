@@ -6,7 +6,7 @@ Tests for core/current_state_backbone_audit.py
 Validates the current-state backbone audit module:
 - Authority sentinels and contract version
 - ClosureState / ChainId / ModeId enum correctness
-- ChainMap structure and all five chains present
+- ChainMap structure and all six chains present
 - ModeMap structure and all six modes present
 - BackboneSnapshot three-way separation (established/partial/open)
 - build_system_backbone_snapshot() operator/board API
@@ -82,10 +82,11 @@ class TestClosureStateEnum:
 
 
 class TestChainIdEnum:
-    def test_all_five_chains_present(self):
+    def test_all_six_chains_present(self):
         expected = {
             "request_chain",
             "execution_chain",
+            "android_truth_uplink_chain",
             "result_backflow_chain",
             "closure_acceptance_chain",
             "projection_chain",
@@ -149,7 +150,7 @@ class TestBuildChainMap:
     def test_returns_chain_map_instance(self):
         assert isinstance(self.chain_map, ChainMap)
 
-    def test_all_five_chains_present(self):
+    def test_all_six_chains_present(self):
         for chain_id in ChainId:
             assert chain_id.value in self.chain_map.chains, (
                 f"Missing chain: {chain_id.value}"
@@ -176,6 +177,11 @@ class TestBuildChainMap:
     def test_closure_acceptance_chain_is_established(self):
         """closure/acceptance 链应为已成立。"""
         state = self.chain_map.overall_closure_by_chain[ChainId.CLOSURE_ACCEPTANCE.value]
+        assert state == ClosureState.ESTABLISHED.value
+
+    def test_android_truth_uplink_chain_is_established(self):
+        """Android truth 上送链应为已成立。"""
+        state = self.chain_map.overall_closure_by_chain[ChainId.ANDROID_TRUTH_UPLINK.value]
         assert state == ClosureState.ESTABLISHED.value
 
     def test_execution_chain_has_partial_segment(self):

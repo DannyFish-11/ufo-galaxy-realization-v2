@@ -13,7 +13,8 @@ PR 定位
 核心目标
 --------
 1. **当前状态基线**：不做推测，只呈现双仓真实代码中已成立的骨架。
-2. **链路拆解**：以可机读结构清晰列出 5 条主链路的当前代码锚点与闭合状态。
+2. **链路拆解**：以可机读结构清晰列出 6 条主链路（含 Android truth 上送链）
+   的当前代码锚点与闭合状态。
 3. **模式地图**：区分本地模式、跨设备模式、多设备参与、delegated execution、
    takeover、distributed participant，并对每种模式的真实代码成立程度作诚实判断。
 4. **三态分离**：已成立 / 半闭合 / 未闭合，不混淆。
@@ -164,13 +165,16 @@ class ClosureState(str, Enum):
 
 
 class ChainId(str, Enum):
-    """五条主链路 ID。"""
+    """六条主链路 ID。"""
 
     REQUEST = "request_chain"
     """请求链：用户 → V2 API → 编排 → Android。"""
 
     EXECUTION = "execution_chain"
     """执行链：Android 本地执行 → 结果产生。"""
+
+    ANDROID_TRUTH_UPLINK = "android_truth_uplink_chain"
+    """Android truth 上送链：participation/mode/snapshot/event/result 上送到 V2。"""
 
     RESULT_BACKFLOW = "result_backflow_chain"
     """结果回流链：Android → V2 unified_result_ingress → truth chain。"""
@@ -266,7 +270,7 @@ class ChainSegment:
 
 @dataclass
 class ChainMap:
-    """五条主链路的当前状态地图。"""
+    """六条主链路的当前状态地图。"""
 
     chains: Dict[str, List[ChainSegment]] = field(default_factory=dict)
     overall_closure_by_chain: Dict[str, str] = field(default_factory=dict)
@@ -364,7 +368,7 @@ class BackboneSnapshot:
     android_audited_ref: str = ANDROID_AUDITED_REF
     generated_at: float = field(default_factory=time.time)
 
-    # 五条链路地图
+    # 六条链路地图
     chain_map: ChainMap = field(default_factory=ChainMap)
 
     # 运行模式地图
@@ -415,7 +419,7 @@ class BackboneSnapshot:
 
 
 def build_chain_map() -> ChainMap:
-    """构建五条主链路的当前状态地图。
+    """构建六条主链路的当前状态地图。
 
     所有链路环节的闭合状态基于真实 V2 代码探针。
     """
@@ -520,7 +524,46 @@ def build_chain_map() -> ChainMap:
     ]
 
     # ------------------------------------------------------------------
-    # 3. 结果回流链（result_backflow_chain）
+    # 3. Android truth 上送链（android_truth_uplink_chain）
+    # ------------------------------------------------------------------
+    android_truth_uplink_chain: List[ChainSegment] = [
+        ChainSegment(
+            name="Capability report 上送 participation_tier/runtime_* 语义",
+            v2_anchor="galaxy_gateway.android_bridge :: capability_report ingestion",
+            android_anchor=ANDROID_ANCHOR_WS_CLIENT,
+            closure_state=ClosureState.ESTABLISHED,
+            notes=(
+                "GalaxyWebSocketClient.kt 在 capability report metadata 中上送 "
+                "authoritative_participation_state、participation_tier、"
+                "runtime_constrained、runtime_deferred、local_mode_active。"
+            ),
+        ),
+        ChainSegment(
+            name="DeviceStateSnapshot / DeviceExecutionEvent 上送 participation_tier + execution_mode_state",
+            v2_anchor="core.android_device_state_store :: absorb_device_state_snapshot / absorb_execution_event",
+            android_anchor=ANDROID_ANCHOR_CONNECTION_SERVICE,
+            closure_state=ClosureState.ESTABLISHED,
+            notes=(
+                "GalaxyConnectionService.kt 发送 DeviceStateSnapshotPayload 与 "
+                "DeviceExecutionEventPayload 时携带 authoritative_participation_state、"
+                "participation_tier、execution_mode_state、cross_device_eligibility。"
+            ),
+        ),
+        ChainSegment(
+            name="GoalResult 上送自动补齐模式上下文字段",
+            v2_anchor="core.unified_result_ingress :: NormalizedResultEvent",
+            android_anchor=ANDROID_ANCHOR_CONNECTION_SERVICE,
+            closure_state=ClosureState.ESTABLISHED,
+            notes=(
+                "GalaxyConnectionService.sendGoalResult() 会在缺省时自动补齐 "
+                "participation_tier、execution_mode_state、cross_device_eligibility、"
+                "local_mode_gate_deferred、local_inference_available。"
+            ),
+        ),
+    ]
+
+    # ------------------------------------------------------------------
+    # 4. 结果回流链（result_backflow_chain）
     # ------------------------------------------------------------------
     result_backflow_chain: List[ChainSegment] = [
         ChainSegment(
@@ -557,20 +600,10 @@ def build_chain_map() -> ChainMap:
                 "DelegatedExecutionSignal.kt 定义 Android 侧上送结构。"
             ),
         ),
-        ChainSegment(
-            name="participation_tier 随结果稳定上送",
-            v2_anchor="core.unified_result_ingress :: NormalizedResultEvent.participation_tier",
-            android_anchor=ANDROID_ANCHOR_DELEGATED_SIGNAL,
-            closure_state=ClosureState.PARTIAL,
-            notes=(
-                "V2 侧 NormalizedResultEvent 有 participation_tier 字段，"
-                "但 Android 侧尚未保证在所有 delegated result 中稳定填充该字段。"
-            ),
-        ),
     ]
 
     # ------------------------------------------------------------------
-    # 4. closure/acceptance 链
+    # 5. closure/acceptance 链
     # ------------------------------------------------------------------
     closure_chain: List[ChainSegment] = [
         ChainSegment(
@@ -624,7 +657,7 @@ def build_chain_map() -> ChainMap:
     ]
 
     # ------------------------------------------------------------------
-    # 5. operator/panel/board/desktop/mobile 投影链
+    # 6. operator/panel/board/desktop/mobile 投影链
     # ------------------------------------------------------------------
     _board_consumes_verdict = _probe(
         "core.pr4_operator_action_governance", "android_participation_verdict"
@@ -708,6 +741,7 @@ def build_chain_map() -> ChainMap:
 
     cm.chains[ChainId.REQUEST.value] = request_chain
     cm.chains[ChainId.EXECUTION.value] = execution_chain
+    cm.chains[ChainId.ANDROID_TRUTH_UPLINK.value] = android_truth_uplink_chain
     cm.chains[ChainId.RESULT_BACKFLOW.value] = result_backflow_chain
     cm.chains[ChainId.CLOSURE_ACCEPTANCE.value] = closure_chain
     cm.chains[ChainId.PROJECTION.value] = projection_chain
@@ -971,6 +1005,26 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             ),
         ),
         BackboneItem(
+            label="Android authoritative participation truth + mode 语义上送",
+            closure_state=ClosureState.ESTABLISHED,
+            v2_anchor=(
+                "core.android_device_state_store :: "
+                "absorb_device_state_snapshot / absorb_execution_event / ingest_result"
+            ),
+            android_anchor=(
+                ANDROID_ANCHOR_WS_CLIENT
+                + " ; "
+                + ANDROID_ANCHOR_CONNECTION_SERVICE
+            ),
+            detail_zh=(
+                "GalaxyWebSocketClient.kt 上送 participation_tier/runtime_constrained/"
+                "runtime_deferred/local_mode_active；"
+                "GalaxyConnectionService.sendGoalResult() 自动补齐 execution_mode_state / "
+                "cross_device_eligibility / local_mode_gate_deferred / "
+                "local_inference_available。"
+            ),
+        ),
+        BackboneItem(
             label="evidence/acceptance/closure 真值链",
             closure_state=ClosureState.ESTABLISHED,
             v2_anchor=(
@@ -1085,14 +1139,18 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             ),
         ),
         BackboneItem(
-            label="participation_tier 随 delegated result 稳定上送",
+            label="Android runtime_constrained/runtime_deferred/local_mode_active 在 V2 下游全量消费",
             closure_state=ClosureState.PARTIAL,
-            v2_anchor="core.unified_result_ingress :: NormalizedResultEvent",
-            android_anchor=ANDROID_ANCHOR_DELEGATED_SIGNAL,
+            v2_anchor=(
+                "core.unified_panel_aggregation ; "
+                "core.pr4_operator_action_governance ; "
+                "core.operational_readiness_surface"
+            ),
+            android_anchor=ANDROID_ANCHOR_WS_CLIENT,
             detail_zh=(
-                "V2 侧 NormalizedResultEvent 已预留 participation_tier 字段；"
-                "Android 侧尚未保证在所有 delegated result 中稳定填充该字段，"
-                "notify_with_android_context() 在 tier 缺失时降级为 unknown。"
+                "Android 已稳定上送 runtime_constrained/runtime_deferred/local_mode_active，"
+                "但 V2 operator/panel/readiness 对这三字段仍以部分消费为主，"
+                "尚未形成统一强约束解释链。"
             ),
         ),
         BackboneItem(
@@ -1160,17 +1218,6 @@ def build_backbone_snapshot() -> BackboneSnapshot:
     # --- 未闭合 -----------------------------------------------------------
     snap.open_items = [
         BackboneItem(
-            label="Android 侧稳定提供 participation_tier 到所有 delegated result",
-            closure_state=ClosureState.OPEN,
-            v2_anchor="core.canonical_completion_ingress :: notify_with_android_context",
-            android_anchor=ANDROID_ANCHOR_DELEGATED_SIGNAL,
-            detail_zh=(
-                "V2 已准备好接收 participation_tier，"
-                "但 Android 侧尚未在所有 delegated result 信号中稳定提供该字段。"
-                "这是 notify_with_android_context() 发挥完整作用的前提。"
-            ),
-        ),
-        BackboneItem(
             label="Android 本地 LLM 权重默认可用",
             closure_state=ClosureState.OPEN,
             v2_anchor="（不适用）",
@@ -1234,7 +1281,7 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
     返回一个可序列化的 dict，包含：
     - system_identity_zh（系统身份）
     - overall_operability_zh（整体可用性）
-    - chain_closure_summary（五条链路闭合汇总）
+    - chain_closure_summary（六条链路闭合汇总）
     - mode_closure_summary（运行模式闭合汇总）
     - established_count / partial_count / open_count（三态计数）
     - top_open_items（最关键未闭合项）
