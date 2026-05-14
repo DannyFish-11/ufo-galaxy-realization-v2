@@ -524,6 +524,7 @@ class OperatorActionBoardProjection:
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     latest_closure_reasoning: Dict[str, Any] = field(default_factory=dict)
+    control_plane_contract: Dict[str, Any] = field(default_factory=dict)
 
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
 
@@ -550,6 +551,7 @@ class OperatorActionBoardProjection:
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "unified_mode_model": dict(self.unified_mode_model),
             "latest_closure_reasoning": dict(self.latest_closure_reasoning),
+            "control_plane_contract": dict(self.control_plane_contract),
             "authority": self.authority,
         }
 
@@ -571,6 +573,7 @@ class PR4OperableSurfaceSnapshot:
     board: OperatorActionBoardProjection = field(default_factory=OperatorActionBoardProjection)
     recent_audit_records: List[OperatorActionAuditRecord] = field(default_factory=list)
     pending_android_directed_count: int = 0
+    operator_control_plane_contract: Dict[str, Any] = field(default_factory=dict)
     contract_version: str = PR4_CONVERGENCE_CONTRACT_VERSION
     sentinel: str = PR4_CONVERGENCE_SENTINEL
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
@@ -581,6 +584,7 @@ class PR4OperableSurfaceSnapshot:
             "board": self.board.to_dict(),
             "recent_audit_records": [r.to_dict() for r in self.recent_audit_records],
             "pending_android_directed_count": self.pending_android_directed_count,
+            "operator_control_plane_contract": dict(self.operator_control_plane_contract),
             "contract_version": self.contract_version,
             "sentinel": self.sentinel,
             "authority": self.authority,
@@ -1487,6 +1491,42 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             exc,
         )
 
+    # --- Unified control-plane typed contract block (board surface) ---
+    try:
+        from core.v2_unified_state_contract import (
+            build_control_plane_surface_contract,
+            build_shared_control_plane_basis,
+        )
+
+        shared_basis = build_shared_control_plane_basis(
+            reasoning_block=proj.runtime_decision_reasoning,
+        )
+        proj.control_plane_contract = build_control_plane_surface_contract(
+            surface="board",
+            runtime_truth={
+                "hard_block_count": proj.hard_block_count,
+                "soft_degraded_count": proj.soft_degraded_count,
+                "manual_decision_count": proj.manual_decision_count,
+                "availability_state_basis": dict(proj.availability_state_basis),
+                "android_participation_verdict": dict(proj.android_participation_verdict),
+                "backbone_snapshot": shared_basis.get("backbone_snapshot"),
+            },
+            derived_reasoning=proj.runtime_decision_reasoning,
+            projection={
+                "system_health_summary": proj.system_health_summary,
+                "available_actions": list(proj.available_actions),
+                "unavailable_actions": list(proj.unavailable_actions),
+                "pending_android_directed_actions": list(proj.pending_android_directed_actions),
+            },
+            stale_or_cached_summary={
+                "has_recent_action_feedback": bool(proj.last_action_id),
+                "pending_android_directed_count": len(proj.pending_android_directed_actions),
+            },
+            shared_basis=shared_basis,
+        )
+    except Exception as exc:
+        logger.debug("build_operator_board_projection: control-plane contract unavailable: %s", exc)
+
     return proj
 
 
@@ -1512,9 +1552,66 @@ def build_pr4_operable_surface_snapshot(
     board = build_operator_board_projection()
     recent_audits = get_operator_action_audit_log(limit=recent_audit_limit)
     pending_android = get_pending_android_directed_actions()
+    operator_control_plane_contract: Dict[str, Any] = {}
+    try:
+        from core.v2_unified_state_contract import (
+            build_control_plane_surface_contract,
+            build_shared_control_plane_basis,
+        )
+
+        shared_basis = build_shared_control_plane_basis(
+            reasoning_block=board.runtime_decision_reasoning,
+        )
+        operator_control_plane_contract = build_control_plane_surface_contract(
+            surface="operator",
+            runtime_truth={
+                "board_system_health_summary": board.system_health_summary,
+                "hard_block_count": board.hard_block_count,
+                "soft_degraded_count": board.soft_degraded_count,
+                "manual_decision_count": board.manual_decision_count,
+                "backbone_snapshot": shared_basis.get("backbone_snapshot"),
+            },
+            derived_reasoning=board.runtime_decision_reasoning,
+            projection={
+                "available_actions": list(board.available_actions),
+                "unavailable_actions": list(board.unavailable_actions),
+                "audit_record_count": len(recent_audits),
+                "pending_android_directed_count": len(pending_android),
+            },
+            stale_or_cached_summary={
+                "last_action_id": board.last_action_id or None,
+                "latest_closure_reasoning_available": bool(board.latest_closure_reasoning),
+            },
+            shared_basis=shared_basis,
+        )
+    except Exception as exc:
+        logger.debug("build_pr4_operable_surface_snapshot: operator contract unavailable: %s", exc)
+        try:
+            from core.v2_unified_state_contract import build_control_plane_surface_contract
+
+            operator_control_plane_contract = build_control_plane_surface_contract(
+                surface="operator",
+                runtime_truth={},
+                derived_reasoning={},
+                projection={"audit_record_count": len(recent_audits)},
+                stale_or_cached_summary={"unavailable": True, "reason": str(exc)},
+            )
+        except Exception as fallback_exc:
+            logger.debug(
+                "build_pr4_operable_surface_snapshot: failed to build fallback control plane "
+                "contract for operator surface: %s",
+                fallback_exc,
+            )
+            operator_control_plane_contract = {
+                "surface": "operator",
+                "unavailable": True,
+                "reason": str(exc),
+                "_source": "core.pr4_operator_action_governance.build_pr4_operable_surface_snapshot",
+            }
 
     return PR4OperableSurfaceSnapshot(
         board=board,
         recent_audit_records=recent_audits,
         pending_android_directed_count=len(pending_android),
+        operator_control_plane_contract=operator_control_plane_contract,
     )

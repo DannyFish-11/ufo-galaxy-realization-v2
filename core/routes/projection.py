@@ -4152,6 +4152,43 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             payload.setdefault("startup_readiness", None)
             payload.setdefault("runtime_decision_reasoning", {})
 
+        try:
+            from core.v2_unified_state_contract import (
+                build_control_plane_surface_contract,
+                build_shared_control_plane_basis,
+            )
+
+            shared_basis = build_shared_control_plane_basis(
+                reasoning_block=payload.get("runtime_decision_reasoning"),
+            )
+            payload["stale_or_cached_summary"] = {
+                "fallback": bool(payload.get("_fallback", False)),
+                "startup_readiness_available": payload.get("startup_readiness") is not None,
+            }
+            payload["control_plane_contract"] = build_control_plane_surface_contract(
+                surface="board",
+                runtime_truth={
+                    "tri_state_phase": payload.get("tri_state_phase"),
+                    "primary_model_id": payload.get("primary_model_id"),
+                    "primary_provider_id": payload.get("primary_provider_id"),
+                    "device_presence": payload.get("device_presence"),
+                    "dispatch_semantics": payload.get("dispatch_semantics"),
+                    "backbone_snapshot": shared_basis.get("backbone_snapshot"),
+                },
+                derived_reasoning=payload.get("runtime_decision_reasoning"),
+                projection={
+                    "projection_surface_role": payload.get(
+                        "projection_surface_role",
+                        "runtime_truth_board_facing",
+                    ),
+                    "board_facing_default": bool(payload.get("board_facing_default", True)),
+                },
+                stale_or_cached_summary=payload.get("stale_or_cached_summary"),
+                shared_basis=shared_basis,
+            )
+        except Exception as exc:
+            logger.debug("_assemble_runtime_truth_payload: control-plane contract unavailable: %s", exc)
+
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)
         return payload
@@ -4159,7 +4196,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         logger.warning("_assemble_runtime_truth_payload: failed: %s", exc)
         from core.projection.runtime_truth_compiler import RUNTIME_TRUTH_COMPILER_AUTHORITY
 
-        return {
+        payload = {
             "compiled_at": time.time(),
             "compiler_authority": RUNTIME_TRUTH_COMPILER_AUTHORITY,
             "continuum": None,
@@ -4184,8 +4221,35 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "oneapi_is_lower_horizon_only": True,
             "projection_surface_role": "runtime_truth_board_facing",
             "board_facing_default": True,
+            "stale_or_cached_summary": {
+                # Keep this block strictly aligned with the control-plane
+                # stale_or_cached_summary typing contract.
+                "fallback": True,
+                "startup_readiness_available": False,
+            },
             "_fallback": True,
         }
+        try:
+            from core.v2_unified_state_contract import build_control_plane_surface_contract
+
+            payload["control_plane_contract"] = build_control_plane_surface_contract(
+                surface="board",
+                runtime_truth={
+                    "tri_state_phase": payload.get("tri_state_phase"),
+                    "primary_model_id": payload.get("primary_model_id"),
+                    "primary_provider_id": payload.get("primary_provider_id"),
+                    "device_presence": payload.get("device_presence"),
+                },
+                derived_reasoning={},
+                projection={
+                    "projection_surface_role": payload.get("projection_surface_role"),
+                    "board_facing_default": payload.get("board_facing_default"),
+                },
+                stale_or_cached_summary=dict(payload.get("stale_or_cached_summary") or {}),
+            )
+        except Exception as cp_exc:
+            logger.debug("_assemble_runtime_truth_payload fallback: control-plane contract unavailable: %s", cp_exc)
+        return payload
 
 
 def _minimal_outward_truth_payload() -> Dict[str, Any]:
@@ -5823,6 +5887,38 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         )
 
     result = _attach_operational_state_board(result, route_paths=route_paths)
+    try:
+        from core.v2_unified_state_contract import (
+            build_control_plane_surface_contract,
+            build_shared_control_plane_basis,
+        )
+
+        runtime_truth_for_contract = result.get("runtime_truth") or {}
+        derived_reasoning = runtime_truth_for_contract.get("runtime_decision_reasoning") or {}
+        shared_basis = build_shared_control_plane_basis(reasoning_block=derived_reasoning)
+        result["stale_or_cached_summary"] = {
+            "runtime_truth_fallback": bool(runtime_truth_for_contract.get("_fallback", False)),
+            "desktop_payload_fallback": bool(result.get("_fallback", False)),
+        }
+        result["control_plane_contract"] = build_control_plane_surface_contract(
+            surface="desktop_projection",
+            runtime_truth={
+                "runtime_truth_compiled_at": runtime_truth_for_contract.get("compiled_at"),
+                "runtime_truth_primary_model_id": runtime_truth_for_contract.get("primary_model_id"),
+                "operational_state_board": result.get("operational_state_board"),
+                "backbone_snapshot": shared_basis.get("backbone_snapshot"),
+            },
+            derived_reasoning=derived_reasoning,
+            projection={
+                "topology_projection": result.get("topology_projection"),
+                "model_routing_summary": result.get("model_routing_summary"),
+                "projection_surface_role": "desktop_status_board_truth",
+            },
+            stale_or_cached_summary=result.get("stale_or_cached_summary"),
+            shared_basis=shared_basis,
+        )
+    except Exception as exc:
+        logger.debug("_assemble_desktop_status_board_payload: control-plane contract unavailable: %s", exc)
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
     result.setdefault("board_facing_default", True)
     return result
@@ -5837,7 +5933,7 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         PROJECTION_CONTRACT_AUTHORITY,
     )
 
-    return {
+    payload = {
         "payload_id": f"dsbip_fallback_{int(time.time())}",
         "integrated_at": time.time(),
         "topology_projection": None,
@@ -5880,7 +5976,26 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         },
         "operational_state_board": _empty_operational_state_board(),
         "source_of_truth_boundaries": _source_of_truth_boundaries(),
+        "stale_or_cached_summary": {
+            "runtime_truth_fallback": True,
+            "desktop_payload_fallback": True,
+        },
         "projection_surface_role": "desktop_status_board_truth",
         "board_facing_default": True,
         "_assembled_at": time.time(),
     }
+    try:
+        from core.v2_unified_state_contract import build_control_plane_surface_contract
+
+        payload["control_plane_contract"] = build_control_plane_surface_contract(
+            surface="desktop_projection",
+            runtime_truth={"operational_state_board": payload.get("operational_state_board")},
+            derived_reasoning={},
+            projection={
+                "projection_surface_role": payload.get("projection_surface_role"),
+            },
+            stale_or_cached_summary=dict(payload.get("stale_or_cached_summary") or {}),
+        )
+    except Exception as exc:
+        logger.debug("_minimal_desktop_status_board_fallback: control-plane contract unavailable: %s", exc)
+    return payload

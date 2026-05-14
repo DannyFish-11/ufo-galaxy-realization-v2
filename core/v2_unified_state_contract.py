@@ -44,14 +44,54 @@ logger = logging.getLogger("Galaxy.V2UnifiedStateContract")
 __all__ = [
     "V2_UNIFIED_STATE_CONTRACT_AUTHORITY",
     "V2_UNIFIED_STATE_CONTRACT_VERSION",
+    "CONTROL_PLANE_SURFACE_CONTRACT_VERSION",
+    "CONTROL_PLANE_FIELD_TYPING_SCHEMA",
+    "CONTROL_PLANE_SURFACE_LAYERING",
     "ContractDecision",
     "V2UnifiedStateContract",
+    "build_shared_control_plane_basis",
+    "build_control_plane_surface_contract",
     "build_v2_unified_state_contract",
 ]
 
 
 V2_UNIFIED_STATE_CONTRACT_AUTHORITY: str = "core.v2_unified_state_contract::v2-side-executable-state-contract"
 V2_UNIFIED_STATE_CONTRACT_VERSION: str = "1.3.0"
+CONTROL_PLANE_SURFACE_CONTRACT_VERSION: str = "1.0.0"
+
+CONTROL_PLANE_FIELD_TYPING_SCHEMA: Dict[str, str] = {
+    "runtime_truth": "surface directly consumed runtime truth basis (read-only truth snapshot)",
+    "derived_reasoning": "reasoning/explanation derived from truth and policy layers",
+    "projection": "surface-specific projection optimized for audience and operability",
+    "stale_or_cached_summary": "explicit stale/cached/degraded hints; never promoted to raw truth",
+}
+
+CONTROL_PLANE_SURFACE_LAYERING: Dict[str, Dict[str, str]] = {
+    "operator": {
+        "role": "governance / audit / decision explanation / authority-aware control context",
+        "truth_basis": "shared backbone snapshot + board runtime truth + operator audit evidence",
+        "reasoning_basis": "shared runtime_decision_reasoning block and closure reasoning overlays",
+        "projection_boundary": "operator-only governance actions and audit context are projections, not raw truth",
+    },
+    "board": {
+        "role": "structured runtime truth + structured reasoning",
+        "truth_basis": "shared backbone snapshot + runtime truth + action availability state basis",
+        "reasoning_basis": "runtime_decision_reasoning / latest_closure_reasoning",
+        "projection_boundary": "board fields stay read-only and do not execute side effects directly",
+    },
+    "panel": {
+        "role": "unified aggregated state + concise cross-surface snapshot",
+        "truth_basis": "shared backbone snapshot + canonical panel aggregation sources",
+        "reasoning_basis": "runtime_decision_reasoning block from unified panel aggregation",
+        "projection_boundary": "concise panel snapshot does not replace deeper board/operator reasoning surfaces",
+    },
+    "desktop_projection": {
+        "role": "desktop state projection + operability-oriented projected state",
+        "truth_basis": "shared backbone snapshot + canonical runtime_truth payload",
+        "reasoning_basis": "runtime_decision_reasoning propagated from runtime truth compiler path",
+        "projection_boundary": "desktop output is projected/derived read model, not direct truth ownership",
+    },
+}
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -149,6 +189,75 @@ def _base_sources(*sources: str) -> List[str]:
             seen.add(source)
             result.append(source)
     return result
+
+
+def build_shared_control_plane_basis(
+    *,
+    reasoning_block: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build shared backbone + reasoning basis for control-plane surfaces."""
+    backbone_snapshot: Dict[str, Any]
+    try:
+        from core.current_state_backbone_audit import build_system_backbone_snapshot  # noqa: PLC0415
+
+        backbone_snapshot = build_system_backbone_snapshot()
+    except Exception as exc:  # pragma: no cover
+        logger.debug(
+            "build_shared_control_plane_basis: failed to build backbone snapshot, "
+            "using degraded contract basis (may lack layering metadata): %s",
+            exc,
+        )
+        backbone_snapshot = {
+            "authority": "core.current_state_backbone_audit::unavailable",
+            "contract_version": "unknown",
+            "unavailable": True,
+        }
+
+    return {
+        "backbone_snapshot": backbone_snapshot,
+        "reasoning_block": dict(reasoning_block or {}),
+        "field_typing_schema": dict(CONTROL_PLANE_FIELD_TYPING_SCHEMA),
+        "_source": "core.v2_unified_state_contract.build_shared_control_plane_basis",
+    }
+
+
+def build_control_plane_surface_contract(
+    *,
+    surface: str,
+    runtime_truth: Optional[Dict[str, Any]] = None,
+    derived_reasoning: Optional[Dict[str, Any]] = None,
+    projection: Optional[Dict[str, Any]] = None,
+    stale_or_cached_summary: Optional[Dict[str, Any]] = None,
+    shared_basis: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build a typed unified control-plane contract block for one surface."""
+    layer = dict(CONTROL_PLANE_SURFACE_LAYERING.get(surface, {}))
+    if surface not in CONTROL_PLANE_SURFACE_LAYERING:
+        logger.warning(
+            "build_control_plane_surface_contract: unknown surface=%s "
+            "(valid: operator, board, panel, desktop_projection), using unclassified defaults "
+            "(role/truth/reasoning/projection_boundary will be generic)",
+            surface,
+        )
+    if not shared_basis:
+        shared_basis = build_shared_control_plane_basis(reasoning_block=derived_reasoning)
+
+    return {
+        "contract_version": CONTROL_PLANE_SURFACE_CONTRACT_VERSION,
+        "surface": surface,
+        "role": layer.get("role", "unclassified surface role"),
+        "truth_basis": layer.get("truth_basis", "unclassified truth basis"),
+        "reasoning_basis": layer.get("reasoning_basis", "unclassified reasoning basis"),
+        "projection_boundary": layer.get("projection_boundary", "unclassified projection boundary"),
+        "field_typing": {
+            "runtime_truth": dict(runtime_truth or {}),
+            "derived_reasoning": dict(derived_reasoning or {}),
+            "projection": dict(projection or {}),
+            "stale_or_cached_summary": dict(stale_or_cached_summary or {}),
+        },
+        "shared_basis": dict(shared_basis or {}),
+        "_source": "core.v2_unified_state_contract.build_control_plane_surface_contract",
+    }
 
 
 def build_v2_unified_state_contract(

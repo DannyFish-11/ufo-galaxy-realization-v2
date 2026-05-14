@@ -284,6 +284,22 @@ class TestLayeredUnifiedModeModel:
         assert layered["execution_location_layer"][0] == "v2_local"
         assert "治理状态" in layered["owner_summary_zh"]
 
+    def test_system_backbone_snapshot_contains_control_plane_layering(self):
+        snap = build_system_backbone_snapshot()
+        layering = snap["control_plane_layering"]
+        assert "operator" in layering
+        assert "board" in layering
+        assert "panel" in layering
+        assert "desktop_projection" in layering
+
+    def test_system_backbone_snapshot_contains_field_typing_schema(self):
+        snap = build_system_backbone_snapshot()
+        typing_schema = snap["field_typing_schema"]
+        assert "runtime_truth" in typing_schema
+        assert "derived_reasoning" in typing_schema
+        assert "projection" in typing_schema
+        assert "stale_or_cached_summary" in typing_schema
+
 
 # ---------------------------------------------------------------------------
 # build_backbone_snapshot() tests

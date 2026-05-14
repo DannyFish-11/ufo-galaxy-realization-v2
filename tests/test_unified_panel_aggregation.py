@@ -130,6 +130,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
             # governance
             "governance_state",
             "mesh_runtime_state",
+            "control_plane_contract",
             # provenance
             "_source",
         }
@@ -300,6 +301,13 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         d = p.to_dict()
         self.assertIn("unified_mode_model", d)
 
+    def test_C02cb_control_plane_contract_is_present(self):
+        from core.unified_panel_aggregation import UnifiedPanelPayload
+
+        p = UnifiedPanelPayload()
+        d = p.to_dict()
+        self.assertIn("control_plane_contract", d)
+
     def test_C02d_mesh_runtime_state_always_mirrors_governance_state(self):
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
@@ -374,6 +382,23 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         self.assertEqual(payload.unified_mode_model.get("execution_location"), "android_delegated")
         self.assertEqual(payload.unified_mode_model.get("participation_layer"), "dispatch_eligible")
         self.assertEqual(payload.unified_mode_model.get("governance_state"), "delegated_execution")
+
+    def test_C02f_panel_payload_exposes_typed_control_plane_contract(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
+        payload = UnifiedPanelAggregationService().build_payload()
+        contract = payload.control_plane_contract
+        self.assertEqual(contract.get("surface"), "panel")
+        self.assertIn("field_typing", contract)
+        typing_block = contract.get("field_typing", {})
+        self.assertIn("runtime_truth", typing_block)
+        self.assertIn("derived_reasoning", typing_block)
+        self.assertIn("projection", typing_block)
+        self.assertIn("stale_or_cached_summary", typing_block)
+        self.assertIsInstance(typing_block["runtime_truth"], dict)
+        self.assertIsInstance(typing_block["derived_reasoning"], dict)
+        self.assertIsInstance(typing_block["projection"], dict)
+        self.assertIsInstance(typing_block["stale_or_cached_summary"], dict)
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
