@@ -265,6 +265,26 @@ class TestBuildModeMap:
             assert "description_zh" in entry
 
 
+class TestLayeredUnifiedModeModel:
+    def test_backbone_snapshot_contains_layered_mode_model(self):
+        snap = build_backbone_snapshot()
+        d = snap.to_dict()
+        layered = d["layered_mode_model"]
+        assert layered["execution_location_layer"] == [
+            "v2_local",
+            "android_local",
+            "android_delegated",
+        ]
+        assert "participation_layer" in layered
+        assert "governance_layer" in layered
+
+    def test_system_backbone_snapshot_contains_layered_mode_model(self):
+        snap = build_system_backbone_snapshot()
+        layered = snap["layered_mode_model"]
+        assert layered["execution_location_layer"][0] == "v2_local"
+        assert "治理状态" in layered["owner_summary_zh"]
+
+
 # ---------------------------------------------------------------------------
 # build_backbone_snapshot() tests
 # ---------------------------------------------------------------------------

@@ -303,6 +303,7 @@ class UnifiedPanelPayload:
     # android_network_participation module is unavailable.
     android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
+    unified_mode_model: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -352,6 +353,7 @@ class UnifiedPanelPayload:
             # android participation verdict (PR-next-convergence)
             "android_participation_verdict": dict(self.android_participation_verdict),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
+            "unified_mode_model": dict(self.unified_mode_model),
             # provenance
             "_source": self._source,
         }
@@ -772,6 +774,10 @@ class UnifiedPanelAggregationService:
                         UNIFIED_PANEL_AGGREGATION_AUTHORITY,
                         V2_ANDROID_TRUTH_SSOT_AUTHORITY,
                     ],
+                    governance_state=payload.governance_state,
+                )
+                payload.unified_mode_model = dict(
+                    payload.runtime_decision_reasoning.get("unified_mode_model") or {}
                 )
                 return
 
@@ -841,6 +847,10 @@ class UnifiedPanelAggregationService:
                     UNIFIED_PANEL_AGGREGATION_AUTHORITY,
                     V2_ANDROID_TRUTH_SSOT_AUTHORITY,
                 ],
+                governance_state=payload.governance_state,
+            )
+            payload.unified_mode_model = dict(
+                payload.runtime_decision_reasoning.get("unified_mode_model") or {}
             )
         except Exception as exc:
             logger.debug("build_payload: android participation verdict unavailable: %s", exc)

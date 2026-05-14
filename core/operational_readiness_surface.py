@@ -253,6 +253,7 @@ class OperationalReadinessReport:
     system_acceptance: Dict[str, Any]
     state_contract: Dict[str, Any]
     runtime_decision_reasoning: Dict[str, Any]
+    unified_mode_model: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -273,6 +274,7 @@ class OperationalReadinessReport:
             "system_acceptance": dict(self.system_acceptance),
             "state_contract": dict(self.state_contract),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
+            "unified_mode_model": dict(self.unified_mode_model),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -1250,6 +1252,7 @@ def build_operational_readiness_report(
     )
     participation_evidence: Dict[str, Any] = {}
     truth_block: Any = None
+    governance_evidence: Dict[str, Any] = {}
     try:
         from core.v2_android_truth_ssot import build_v2_android_truth_block
 
@@ -1265,6 +1268,15 @@ def build_operational_readiness_report(
             "OperationalReadinessSurface: participation evidence probe failed: %s",
             exc,
         )
+    try:
+        from core.unified_governance_semantics import build_unified_governance_state
+
+        governance_evidence = build_unified_governance_state()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "OperationalReadinessSurface: governance evidence probe failed: %s",
+            exc,
+        )
     state_contract = build_v2_unified_state_contract(
         path=path,
         validation=validation,
@@ -1276,6 +1288,7 @@ def build_operational_readiness_report(
         session_evidence=session_evidence,
         system_acceptance=system_acceptance,
         participation_evidence=participation_evidence,
+        governance_evidence=governance_evidence,
     ).to_dict()
     from core.runtime_decision_reasoning import build_runtime_decision_reasoning_block
 
@@ -1317,6 +1330,7 @@ def build_operational_readiness_report(
             OPERATIONAL_READINESS_SURFACE_AUTHORITY,
             "core.v2_unified_state_contract.build_v2_unified_state_contract",
         ],
+        governance_state=governance_evidence,
     )
     progress = _build_registration_progress(
         path,
@@ -1342,4 +1356,5 @@ def build_operational_readiness_report(
         system_acceptance=system_acceptance,
         state_contract=state_contract,
         runtime_decision_reasoning=runtime_decision_reasoning,
+        unified_mode_model=dict(runtime_decision_reasoning.get("unified_mode_model") or {}),
     )

@@ -373,6 +373,7 @@ class BackboneSnapshot:
 
     # 运行模式地图
     mode_map: ModeMap = field(default_factory=ModeMap)
+    layered_mode_model: Dict[str, Any] = field(default_factory=dict)
 
     # 三态分离汇总
     established: List[BackboneItem] = field(default_factory=list)
@@ -406,6 +407,7 @@ class BackboneSnapshot:
             "overall_operability_zh": self.overall_operability_zh,
             "chain_map": self.chain_map.to_dict(),
             "mode_map": self.mode_map.to_dict(),
+            "layered_mode_model": dict(self.layered_mode_model),
             "established": [i.to_dict() for i in self.established],
             "partial": [i.to_dict() for i in self.partial],
             "open_items": [i.to_dict() for i in self.open_items],
@@ -938,6 +940,12 @@ def build_backbone_snapshot() -> BackboneSnapshot:
     snap = BackboneSnapshot()
     snap.chain_map = build_chain_map()
     snap.mode_map = build_mode_map()
+    try:
+        from core.v2_unified_mode_model import build_unified_mode_model_catalog
+
+        snap.layered_mode_model = build_unified_mode_model_catalog()
+    except Exception:
+        snap.layered_mode_model = {}
 
     # --- 已成立 -----------------------------------------------------------
     snap.established = [
@@ -1316,6 +1324,7 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         "overall_operability_zh": d["overall_operability_zh"],
         "chain_closure_summary": chain_summary,
         "mode_closure_summary": mode_summary,
+        "layered_mode_model": dict(d.get("layered_mode_model") or {}),
         "established_count": len(d["established"]),
         "partial_count": len(d["partial"]),
         "open_count": len(d["open_items"]),

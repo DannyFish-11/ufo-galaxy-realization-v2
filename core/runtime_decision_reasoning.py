@@ -97,6 +97,7 @@ def _build_causal_explanation_zh(
     acceptance_verdict: str,
     closure_basis: Dict[str, Any],
     blocking_reasons: List[str],
+    unified_mode_model: Optional[Dict[str, Any]] = None,
 ) -> str:
     mode_state = str(mode_basis.get("mode_state") or "unknown")
     readiness_state = str(
@@ -105,10 +106,21 @@ def _build_causal_explanation_zh(
         or "unknown"
     )
     closed = closure_basis.get("is_fully_closed")
+    unified_mode_model = dict(unified_mode_model or {})
+    execution_location = str(
+        unified_mode_model.get("execution_location") or selected_runtime or "unknown"
+    )
+    participation_layer = str(
+        unified_mode_model.get("participation_layer") or participation_tier or "unknown"
+    )
+    governance_state = str(
+        unified_mode_model.get("governance_state") or "delegated_execution"
+    )
 
     if acceptance_verdict in {"quarantine", "reject"}:
         return (
-            f"系统当前选择 {selected_runtime} 路径，设备={selected_device or 'none'}，"
+            f"系统当前执行位置={execution_location}，设备={selected_device or 'none'}，"
+            f"参与层级={participation_layer}，治理状态={governance_state}。"
             f"Android participation tier={participation_tier}。"
             f"由于 acceptance_verdict={acceptance_verdict}，closure 未被确认；"
             f"is_fully_closed=False，readiness={readiness_state}，mode={mode_state}。"
@@ -116,20 +128,23 @@ def _build_causal_explanation_zh(
         )
     if acceptance_verdict == "accept_provisional":
         return (
-            f"系统当前选择 {selected_runtime} 路径，设备={selected_device or 'none'}，"
+            f"系统当前执行位置={execution_location}，设备={selected_device or 'none'}，"
+            f"参与层级={participation_layer}，治理状态={governance_state}。"
             f"Android participation tier={participation_tier}。"
             f"结果处于 accept_provisional，说明 readiness={readiness_state}、mode={mode_state} "
             "已允许传播到 operator/board，但 closure 仍需更强证据。"
         )
     if acceptance_verdict == "accept" and closed is True:
         return (
-            f"系统当前选择 {selected_runtime} 路径，设备={selected_device or 'none'}，"
+            f"系统当前执行位置={execution_location}，设备={selected_device or 'none'}，"
+            f"参与层级={participation_layer}，治理状态={governance_state}。"
             f"Android participation tier={participation_tier}。"
             f"mode={mode_state}、readiness={readiness_state}，acceptance_verdict=accept，"
             "因此该任务已经形成完整闭环。"
         )
     return (
-        f"系统当前选择 {selected_runtime} 路径，设备={selected_device or 'none'}，"
+        f"系统当前执行位置={execution_location}，设备={selected_device or 'none'}，"
+        f"参与层级={participation_layer}，治理状态={governance_state}。"
         f"Android participation tier={participation_tier}。"
         f"mode={mode_state}、readiness={readiness_state}、"
         f"acceptance_verdict={acceptance_verdict}、is_fully_closed={closed}。"
@@ -149,6 +164,7 @@ class RuntimeDecisionReasoningBlock:
     blocking_reasons: List[str] = field(default_factory=list)
     evidence_summary: Dict[str, Any] = field(default_factory=dict)
     source_of_truth_refs: List[str] = field(default_factory=list)
+    unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     generated_at: float = field(default_factory=time.time)
     authority: str = RUNTIME_DECISION_REASONING_BLOCK_AUTHORITY
     contract_version: str = RUNTIME_DECISION_REASONING_BLOCK_CONTRACT_VERSION
@@ -176,6 +192,7 @@ class RuntimeDecisionReasoningBlock:
             blocking_reasons=list(payload.get("blocking_reasons") or []),
             evidence_summary=dict(payload.get("evidence_summary") or {}),
             source_of_truth_refs=list(payload.get("source_of_truth_refs") or []),
+            unified_mode_model=dict(payload.get("unified_mode_model") or {}),
             generated_at=float(payload.get("generated_at") or time.time()),
             authority=str(payload.get("_source") or payload.get("authority") or cls.authority),
             contract_version=str(
@@ -193,6 +210,7 @@ class RuntimeDecisionReasoningBlock:
             acceptance_verdict=self.acceptance_verdict,
             closure_basis=self.closure_basis,
             blocking_reasons=self.blocking_reasons,
+            unified_mode_model=self.unified_mode_model,
         )
         return {
             "task_id": self.task_id,
@@ -210,6 +228,7 @@ class RuntimeDecisionReasoningBlock:
             "blocking_reasons": list(self.blocking_reasons),
             "evidence_summary": dict(self.evidence_summary),
             "source_of_truth_refs": list(self.source_of_truth_refs),
+            "unified_mode_model": dict(self.unified_mode_model),
             "causal_explanation_zh": causal_explanation_zh,
             "generated_at": self.generated_at,
             "contract_version": self.contract_version,
@@ -245,6 +264,7 @@ def overlay_runtime_decision_reasoning_block(
     blocking_reasons: Optional[List[str]] = None,
     evidence_summary: Optional[Dict[str, Any]] = None,
     source_of_truth_refs: Optional[List[str]] = None,
+    governance_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     current = RuntimeDecisionReasoningBlock.from_dict(base)
     selected_device_value = _coalesce(selected_device, current.selected_device)
@@ -377,6 +397,22 @@ def overlay_runtime_decision_reasoning_block(
         + [RUNTIME_DECISION_REASONING_BLOCK_AUTHORITY]
         + ([V2_ANDROID_TRUTH_BLOCK_REF] if truth_block is not None else [])
     )
+    from core.v2_unified_mode_model import build_unified_mode_model  # noqa: PLC0415
+
+    unified_mode_model = build_unified_mode_model(
+        selected_runtime=selected_runtime_value,
+        selected_device=selected_device_value,
+        participation_tier=participation_tier_value,
+        device_mode=resolved_mode_state,
+        mode_readiness_state=_truth_get(truth_block, "mode_readiness_state"),
+        android_truth_block=truth_block,
+        governance_state=governance_state,
+        blocking_reasons=merged_blocking_reasons,
+        source_of_truth_refs=merged_refs,
+    )
+    mode_basis["execution_location"] = unified_mode_model.get("execution_location")
+    mode_basis["participation_layer"] = unified_mode_model.get("participation_layer")
+    mode_basis["governance_state"] = unified_mode_model.get("governance_state")
 
     block = RuntimeDecisionReasoningBlock(
         task_id=str(_coalesce(task_id, current.task_id, "")),
@@ -390,6 +426,7 @@ def overlay_runtime_decision_reasoning_block(
         blocking_reasons=merged_blocking_reasons,
         evidence_summary=summary,
         source_of_truth_refs=merged_refs,
+        unified_mode_model=unified_mode_model,
     )
     return block.to_dict()
 

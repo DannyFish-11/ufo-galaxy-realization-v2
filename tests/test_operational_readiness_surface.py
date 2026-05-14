@@ -145,9 +145,15 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
     assert report.state_contract["closure_quality_state"]["result_closure"]["state"] == "complete"
     assert report.state_contract["closure_quality_state"]["verdict_quality"]["state"] == "canonical"
     assert report.runtime_decision_reasoning["participation_tier"] == "dispatch_eligible"
+    assert report.unified_mode_model["execution_location"] == "android_delegated"
+    assert report.unified_mode_model["participation_layer"] == "dispatch_eligible"
     assert (
         report.runtime_decision_reasoning["readiness_basis"]["android_truth_basis"]["source_of_truth_ref"]
         == "core.v2_android_truth_ssot.build_v2_android_truth_block"
+    )
+    assert (
+        report.state_contract["derived_state"]["unified_mode_model"]["evidence"]["execution_location"]
+        == "android_delegated"
     )
     android_candidates = [item for item in report.registration_kinds if item.kind == "device_android_admission"]
     assert android_candidates, "expected device_android_admission registration kind"

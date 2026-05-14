@@ -325,7 +325,10 @@ class V2AndroidTruthBlock:
             "tier": self.participation_tier,
             "blocking_reasons": list(self.participation_blocking_reasons),
             "tier_derivation_notes": list(self.participation_tier_notes),
-            "source": "core.v2_android_truth_ssot",
+            "source": (
+                "core.android_network_participation.get_participation_state_for_device"
+                " via core.v2_android_truth_ssot"
+            ),
             "transition_history": list(self.participation_transition_history),
             "last_signal": self.participation_last_signal,
             "prior_tier": self.participation_prior_tier,

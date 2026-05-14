@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 import unittest
+from types import SimpleNamespace
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
@@ -293,6 +294,12 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         d = p.to_dict()
         self.assertIn("mesh_runtime_state", d)
 
+    def test_C02ca_unified_mode_model_is_present(self):
+        from core.unified_panel_aggregation import UnifiedPanelPayload
+        p = UnifiedPanelPayload()
+        d = p.to_dict()
+        self.assertIn("unified_mode_model", d)
+
     def test_C02d_mesh_runtime_state_always_mirrors_governance_state(self):
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
@@ -323,6 +330,47 @@ class TestAndroidTruthParticipation(unittest.TestCase):
             payload = svc.build_payload()
 
         self.assertEqual(payload.mesh_runtime_state, canonical_governance["mesh_runtime_state"])
+
+    def test_C02e_runtime_decision_reasoning_exposes_unified_mode_model(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+        from core.v2_android_truth_ssot import V2AndroidTruthBlock
+
+        snapshot = SimpleNamespace(device_id="android-panel-1")
+        svc = UnifiedPanelAggregationService()
+        with patch(
+            "core.android_device_state_store.list_device_state_snapshots",
+            return_value=[snapshot],
+        ), patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=V2AndroidTruthBlock(
+                device_id="android-panel-1",
+                participation_tier="dispatch_eligible",
+                dispatch_eligible=True,
+                device_mode="cross_device",
+                mode_readiness_state="ready",
+            ),
+        ), patch(
+            "core.unified_governance_semantics.build_unified_governance_state",
+            return_value={
+                "devices": [
+                    {
+                        "device_id": "android-panel-1",
+                        "takeover_active": False,
+                        "governance_policy": {
+                            "operation_state": "admissible",
+                            "automatic_decision": "allow",
+                            "primary_path": "delegated_execution",
+                        },
+                    }
+                ],
+                "mesh_runtime_state": {},
+            },
+        ):
+            payload = svc.build_payload()
+
+        self.assertEqual(payload.unified_mode_model["execution_location"], "android_delegated")
+        self.assertEqual(payload.unified_mode_model["participation_layer"], "dispatch_eligible")
+        self.assertEqual(payload.unified_mode_model["governance_state"], "delegated_execution")
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""

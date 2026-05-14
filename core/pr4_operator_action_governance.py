@@ -522,6 +522,7 @@ class OperatorActionBoardProjection:
     pending_android_directed_actions: List[Dict[str, Any]] = field(default_factory=list)
     android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
+    unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     latest_closure_reasoning: Dict[str, Any] = field(default_factory=dict)
 
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
@@ -547,6 +548,7 @@ class OperatorActionBoardProjection:
             "pending_android_directed_actions": list(self.pending_android_directed_actions),
             "android_participation_verdict": dict(self.android_participation_verdict),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
+            "unified_mode_model": dict(self.unified_mode_model),
             "latest_closure_reasoning": dict(self.latest_closure_reasoning),
             "authority": self.authority,
         }
@@ -1400,6 +1402,9 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         proj.runtime_decision_reasoning = dict(
             getattr(panel_payload, "runtime_decision_reasoning", {}) or {}
         )
+        proj.unified_mode_model = dict(
+            getattr(panel_payload, "unified_mode_model", {}) or {}
+        )
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: panel android participation verdict unavailable: %s",
@@ -1467,8 +1472,14 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             )
             reasoning_block_dict = dict(reasoning_block)
             proj.runtime_decision_reasoning = reasoning_block_dict
+            proj.unified_mode_model = dict(
+                reasoning_block_dict.get("unified_mode_model") or {}
+            )
             proj.latest_closure_reasoning = reasoning_block_dict
         elif proj.runtime_decision_reasoning:
+            proj.unified_mode_model = dict(
+                proj.runtime_decision_reasoning.get("unified_mode_model") or {}
+            )
             proj.latest_closure_reasoning = dict(proj.runtime_decision_reasoning)
     except Exception as exc:
         logger.debug(
