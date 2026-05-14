@@ -304,6 +304,7 @@ class UnifiedPanelPayload:
     android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
+    control_plane_contract: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -354,6 +355,7 @@ class UnifiedPanelPayload:
             "android_participation_verdict": dict(self.android_participation_verdict),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "unified_mode_model": dict(self.unified_mode_model),
+            "control_plane_contract": dict(self.control_plane_contract),
             # provenance
             "_source": self._source,
         }
@@ -471,6 +473,12 @@ class UnifiedPanelAggregationService:
             self._fill_android_participation_verdict(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: android participation verdict fill failed: %s", exc)
+
+        # 12. Unified control-plane typed contract (PR6 convergence)
+        try:
+            self._fill_control_plane_contract(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: control-plane contract fill failed: %s", exc)
 
         return payload
 
@@ -854,6 +862,49 @@ class UnifiedPanelAggregationService:
             )
         except Exception as exc:
             logger.debug("build_payload: android participation verdict unavailable: %s", exc)
+
+    def _fill_control_plane_contract(self, payload: UnifiedPanelPayload) -> None:
+        """Attach typed control-plane contract semantics for panel surface."""
+        try:
+            from core.v2_unified_state_contract import (
+                build_control_plane_surface_contract,
+                build_shared_control_plane_basis,
+            )
+
+            runtime_truth = {
+                "active_task_count": payload.active_task_count,
+                "active_flow_count": payload.active_flow_count,
+                "online_device_count": payload.online_device_count,
+                "readiness_verdict": payload.readiness_verdict,
+                "blocked_dimensions": list(payload.blocked_dimensions),
+                "android_participation_verdict": dict(payload.android_participation_verdict),
+                "backbone_snapshot": build_shared_control_plane_basis(
+                    reasoning_block=payload.runtime_decision_reasoning,
+                ).get("backbone_snapshot"),
+            }
+            projection = {
+                "manifestation_summary": dict(payload.manifestation_summary),
+                "active_surface_spec": dict(payload.active_surface_spec),
+                "existence_surface": dict(payload.existence_surface),
+            }
+            stale_or_cached_summary = {
+                "has_last_operator_action": bool(payload.last_operator_action),
+                "has_last_execution_result": bool(payload.last_execution_result),
+                "payload_age_seconds": max(0.0, time.time() - float(payload.generated_at or 0.0)),
+            }
+            shared_basis = build_shared_control_plane_basis(
+                reasoning_block=payload.runtime_decision_reasoning,
+            )
+            payload.control_plane_contract = build_control_plane_surface_contract(
+                surface="panel",
+                runtime_truth=runtime_truth,
+                derived_reasoning=payload.runtime_decision_reasoning,
+                projection=projection,
+                stale_or_cached_summary=stale_or_cached_summary,
+                shared_basis=shared_basis,
+            )
+        except Exception as exc:
+            logger.debug("build_payload: control-plane contract unavailable: %s", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -592,6 +592,7 @@ class TestOperatorBoardProjection:
         assert "runtime_decision_reasoning" in d
         assert "unified_mode_model" in d
         assert "latest_closure_reasoning" in d
+        assert "control_plane_contract" in d
         assert "authority" in d
 
     def test_board_reflects_last_action(self):
@@ -693,6 +694,7 @@ class TestPR4OperableSurfaceSnapshot:
         assert "board" in d
         assert "recent_audit_records" in d
         assert "pending_android_directed_count" in d
+        assert "operator_control_plane_contract" in d
         assert "contract_version" in d
         assert d["contract_version"] == "4.0.0"
         assert "sentinel" in d

@@ -1291,6 +1291,8 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
     - overall_operability_zh（整体可用性）
     - chain_closure_summary（六条链路闭合汇总）
     - mode_closure_summary（运行模式闭合汇总）
+    - control_plane_layering（operator/board/panel/desktop 的责任分层）
+    - field_typing_schema（runtime_truth / derived_reasoning / projection / stale_or_cached_summary）
     - established_count / partial_count / open_count（三态计数）
     - top_open_items（最关键未闭合项）
     - authority / contract_version
@@ -1309,6 +1311,38 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         m["mode_id"]: m["closure_state"]
         for m in d["mode_map"]["modes"]
     }
+    control_plane_layering = {
+        "operator": {
+            "role": "governance / audit / decision explanation / authority-aware control context",
+            "truth_basis": "shared backbone snapshot + board runtime truth + operator audit evidence",
+            "reasoning_basis": "shared runtime_decision_reasoning + latest_closure_reasoning",
+            "projection_boundary": "operator action context is projection; runtime truth remains read-only",
+        },
+        "board": {
+            "role": "structured runtime truth + structured reasoning",
+            "truth_basis": "shared backbone snapshot + runtime truth + state basis",
+            "reasoning_basis": "runtime_decision_reasoning / closure reasoning",
+            "projection_boundary": "board projection is read-only and not direct execution authority",
+        },
+        "panel": {
+            "role": "unified aggregated state + concise cross-surface snapshot",
+            "truth_basis": "shared backbone snapshot + unified panel aggregation sources",
+            "reasoning_basis": "panel runtime_decision_reasoning",
+            "projection_boundary": "panel is concise projection, not deep governance reasoning replacement",
+        },
+        "desktop_projection": {
+            "role": "desktop state projection + operability projection",
+            "truth_basis": "shared backbone snapshot + runtime truth endpoint",
+            "reasoning_basis": "runtime_decision_reasoning projected to desktop-facing payloads",
+            "projection_boundary": "desktop surface is explicit projection/derived state",
+        },
+    }
+    field_typing_schema = {
+        "runtime_truth": "surface consumed read-only runtime truth basis",
+        "derived_reasoning": "surface consumed reasoning block derived from truth/policy",
+        "projection": "surface-specific projected/derived presentation fields",
+        "stale_or_cached_summary": "stale/cached/degraded hints, not raw truth",
+    }
 
     top_open = [
         {"label": item["label"], "detail_zh": item["detail_zh"]}
@@ -1325,6 +1359,8 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         "chain_closure_summary": chain_summary,
         "mode_closure_summary": mode_summary,
         "layered_mode_model": dict(d.get("layered_mode_model") or {}),
+        "control_plane_layering": control_plane_layering,
+        "field_typing_schema": field_typing_schema,
         "established_count": len(d["established"]),
         "partial_count": len(d["partial"]),
         "open_count": len(d["open_items"]),

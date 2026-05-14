@@ -13,6 +13,9 @@ def test_runtime_truth_payload_fallback_outward_truth_is_non_null(monkeypatch):
     assert payload["outward_truth"] is not None
     assert isinstance(payload["outward_truth"], dict)
     assert payload["outward_truth"]["operator_snapshot"]["active_task_count"] == 0
+    assert payload["stale_or_cached_summary"]["fallback"] is False
+    assert payload["control_plane_contract"]["surface"] == "board"
+    assert "field_typing" in payload["control_plane_contract"]
 
 
 def test_minimal_desktop_status_board_fallback_has_non_null_outward_truth():
@@ -23,3 +26,5 @@ def test_minimal_desktop_status_board_fallback_has_non_null_outward_truth():
     assert payload["outward_truth"] is not None
     assert isinstance(payload["outward_truth"], dict)
     assert payload["task_truth"]["source"] == "fallback"
+    assert payload["stale_or_cached_summary"]["desktop_payload_fallback"] is True
+    assert payload["control_plane_contract"]["surface"] == "desktop_projection"
