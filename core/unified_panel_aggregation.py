@@ -887,8 +887,9 @@ class UnifiedPanelAggregationService:
                 "active_surface_spec": dict(payload.active_surface_spec),
                 "existence_surface": dict(payload.existence_surface),
             }
-            generated_at = payload.generated_at if isinstance(payload.generated_at, (int, float)) else time.time()
-            if not isinstance(payload.generated_at, (int, float)):
+            generated_at_is_valid = isinstance(payload.generated_at, (int, float))
+            generated_at = payload.generated_at if generated_at_is_valid else time.time()
+            if not generated_at_is_valid:
                 logger.warning(
                     "build_payload: invalid generated_at for control-plane contract age calc: %r",
                     payload.generated_at,

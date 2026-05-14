@@ -202,7 +202,11 @@ def build_shared_control_plane_basis(
 
         backbone_snapshot = build_system_backbone_snapshot()
     except Exception as exc:  # pragma: no cover
-        logger.debug("build_shared_control_plane_basis: backbone snapshot unavailable: %s", exc)
+        logger.debug(
+            "build_shared_control_plane_basis: backbone snapshot unavailable, "
+            "using degraded contract basis: %s",
+            exc,
+        )
         backbone_snapshot = {
             "authority": "core.current_state_backbone_audit::unavailable",
             "contract_version": "unknown",
