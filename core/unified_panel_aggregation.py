@@ -772,10 +772,10 @@ class UnifiedPanelAggregationService:
             ]
 
             for snap in snapshots:
-                device_id = getattr(snap, "device_id", None)
-                if not device_id:
+                snap_device_id = getattr(snap, "device_id", None)
+                if not snap_device_id:
                     continue
-                ev = get_android_participation_evidence(device_id)
+                ev = get_android_participation_evidence(snap_device_id)
                 tier_val = ev.get("tier", "local_only")
                 if tier_val in ("dispatch_eligible", "execution_active", "result_accepted"):
                     dispatch_eligible += 1
@@ -792,7 +792,7 @@ class UnifiedPanelAggregationService:
 
                 if candidate_idx > current_idx:
                     best_tier = tier_val
-                    best_device_id = device_id
+                    best_device_id = snap_device_id
                     best_blocking = ev.get("blocking_reasons", [])
                     best_notes = ev.get("tier_derivation_notes", [])
 

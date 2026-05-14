@@ -98,7 +98,7 @@ class TestEnumerations:
 
 
 # ---------------------------------------------------------------------------
-# CloneToRunAudit テスト
+# CloneToRunAudit 测试
 # ---------------------------------------------------------------------------
 
 
@@ -177,7 +177,7 @@ class TestCloneToRunAudit:
 
 
 # ---------------------------------------------------------------------------
-# ThreeStateRuntimeAudit テスト
+# ThreeStateRuntimeAudit 测试
 # ---------------------------------------------------------------------------
 
 
@@ -243,7 +243,7 @@ class TestThreeStateRuntimeAudit:
 
 
 # ---------------------------------------------------------------------------
-# ClosureGovernancePropagationAudit テスト
+# ClosureGovernancePropagationAudit 测试
 # ---------------------------------------------------------------------------
 
 
@@ -311,7 +311,7 @@ class TestClosureGovernancePropagationAudit:
 
 
 # ---------------------------------------------------------------------------
-# AndroidTruthInOperatorBoardAudit テスト
+# AndroidTruthInOperatorBoardAudit 测试
 # ---------------------------------------------------------------------------
 
 
@@ -357,7 +357,7 @@ class TestAndroidTruthInOperatorBoardAudit:
 
 
 # ---------------------------------------------------------------------------
-# get_board_reasoning_for_closure テスト
+# get_board_reasoning_for_closure 测试
 # ---------------------------------------------------------------------------
 
 
@@ -452,7 +452,7 @@ class TestGetBoardReasoningForClosure:
 
 
 # ---------------------------------------------------------------------------
-# ConvergenceClosureAuditRecord テスト
+# ConvergenceClosureAuditRecord 测试
 # ---------------------------------------------------------------------------
 
 
