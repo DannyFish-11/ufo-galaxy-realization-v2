@@ -1415,21 +1415,24 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         )
         from core.pr_next_convergence_closure_audit import get_board_reasoning_for_closure
 
-        latest_entry = _evidence_ring[-1] if _evidence_ring else None
+        evidence_ring_snapshot = list(_evidence_ring)
+        latest_entry = evidence_ring_snapshot[-1] if evidence_ring_snapshot else None
 
         if latest_entry is not None:
+            tier_for_reasoning = latest_entry.android_proof_class
+            if tier_for_reasoning in (None, ""):
+                tier_for_reasoning = proj.android_participation_verdict.get("tier")
+
+            device_for_reasoning = latest_entry.device_id
+            if device_for_reasoning in (None, ""):
+                device_for_reasoning = proj.android_participation_verdict.get("device_id")
+
             proj.latest_closure_reasoning = get_board_reasoning_for_closure(
                 task_id=latest_entry.task_id,
-                android_participation_tier=(
-                    latest_entry.android_proof_class
-                    or proj.android_participation_verdict.get("tier")
-                ),
+                android_participation_tier=tier_for_reasoning,
                 acceptance_verdict=latest_entry.acceptance_verdict or None,
                 is_fully_closed=None,
-                device_id=(
-                    latest_entry.device_id
-                    or proj.android_participation_verdict.get("device_id")
-                ),
+                device_id=device_for_reasoning,
             )
     except Exception as exc:
         logger.debug(
