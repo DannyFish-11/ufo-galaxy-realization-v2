@@ -17,7 +17,7 @@
 
 **一句话系统现状**：
 
-> 这套系统是一个**以 V2 Python 服务为中心治理核、以 Android 设备为 delegated runtime 执行节点的中心控制型跨端任务执行与治理平台**。五条主链路的骨架已基本就位，Android truth 已从 transport → routing → closure → operator/panel 逐步接通；但本地模式、多设备并发实操、participation_tier 稳定上送、clone-to-run 开发者路径仍处于半闭合或未闭合状态。整体可用性判断：**`partially_operable`**。
+> 这套系统是一个**以 V2 Python 服务为中心治理核、以 Android 设备为 delegated runtime 执行节点的中心控制型跨端任务执行与治理平台**。六条主链路（含 Android truth 上送链）骨架已基本就位，Android truth 已从 transport → routing → closure → operator/panel 逐步接通；但本地模式、多设备并发实操、runtime_* 语义在 V2 下游全量同源消费、clone-to-run 开发者路径仍处于半闭合或未闭合状态。整体可用性判断：**`partially_operable`**。
 
 ---
 
@@ -63,7 +63,7 @@
 | **Acceptance 评估** | `DelegatedRuntimeAcceptanceEvaluator.kt` | ✅ 代码存在 |
 | **Governance 评估** | `DelegatedRuntimePostGraduationGovernanceEvaluator.kt` | ✅ 代码存在 |
 | **Continuity / Identity** | `DurableParticipantIdentity.kt` ; `AttachedRuntimeSession.kt` | ✅ 已成立，跨重启证明仍薄 |
-| **Participation Tier 上报** | `AndroidMeshParticipationContract.kt` ; `DelegatedExecutionSignal.kt` | ⚠️ 半闭合，`participation_tier` 在 delegated result 中未保证稳定填充 |
+| **Participation/Mode Truth 上报** | `GalaxyWebSocketClient.kt` ; `GalaxyConnectionService.kt` ; `AipModels.kt` | ✅ 已成立（`participation_tier` + `execution_mode_state` + `cross_device_eligibility` 等字段已进入 capability/snapshot/event/result） |
 | **Local NL 推理** | `LocalExecutionModeGate.kt` ; `AutonomousExecutionPipeline.kt` | ⚠️ 半闭合，依赖本地 LLM 权重 |
 | **Snapshot / Execution Event** | `CanonicalExecutionEvent.kt` ; `AndroidDelegatedRuntimeAuditSnapshot.kt` | ✅ 已成立 |
 
@@ -75,15 +75,18 @@
 
 ```
 请求链 ──────────────────────────────────────────────────────────▶ Android
-         用户NL → V2 chat route → NL spine → dispatch orchestrator
-                                                    │ device_selection
-                                                    ▼
+          用户NL → V2 chat route → NL spine → dispatch orchestrator
+                                                     │ device_selection
+                                                     ▼
 执行链  Android 接收 handoff_envelope_v2 → AutonomousExecutionPipeline
-                                              │ 本地执行 / local NL
-                                              ▼
+                                               │ 本地执行 / local NL
+                                               ▼
+Android truth上送链  capability/snapshot/event/result 上送 participation/mode truth
+                                                │ GalaxyWebSocketClient + GalaxyConnectionService
+                                                ▼
 结果回流链  Android → GalaxyWebSocketClient → V2 android_bridge
-                                              │ unified_result_ingress
-                                              ▼
+                                               │ unified_result_ingress
+                                               ▼
 closure/acceptance链  evidence_model → result_truth_acceptance_gate
                                               │ is_fully_closed
                                               ▼ canonical_completion_ingress
@@ -121,20 +124,30 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 
 ---
 
-### 2.3 结果回流链（Result Backflow Chain）
+### 2.3 Android Truth 上送链（Android Truth Uplink Chain）
+
+| # | 环节 | V2 代码锚点 | Android 代码锚点 | 闭合状态 |
+|---|------|------------|----------------|---------|
+| 1 | capability report 上送 participation/mode truth | `galaxy_gateway/android_bridge`（capability ingestion） | `GalaxyWebSocketClient.kt` | ✅ 已成立 |
+| 2 | snapshot / execution event 上送 participation_tier + execution_mode_state | `core/android_device_state_store.py` | `GalaxyConnectionService.kt` ; `AipModels.kt` | ✅ 已成立 |
+| 3 | goal result 自动补齐运行上下文再上送 | `core/unified_result_ingress.py :: NormalizedResultEvent` | `GalaxyConnectionService.kt :: sendGoalResult` ; `AipModels.kt` | ✅ 已成立 |
+
+**Android truth 上送链整体闭合状态：✅ 已成立**
+
+---
+
+### 2.4 结果回流链（Result Backflow Chain）
 
 | # | 环节 | V2 代码锚点 | Android 代码锚点 | 闭合状态 |
 |---|------|------------|----------------|---------|
 | 1 | Android → V2 WebSocket 结果上送 | `galaxy_gateway/android_bridge` | `GalaxyWebSocketClient.kt` | ✅ 已成立 |
 | 2 | 统一结果入站（5 路汇聚） | `core/unified_result_ingress.py :: ingest_result` | — | ✅ 已成立 |
 | 3 | 真值链四步处理 | `core/android_participant_truth_ingress.py` ; `core/android_execution_signal_reconciler.py` ; `core/android_delegated_runtime_lifecycle_coordinator.py` | `DelegatedExecutionSignal.kt` | ✅ 已成立 |
-| 4 | participation_tier 随结果稳定上送 | `core/unified_result_ingress.py :: NormalizedResultEvent.participation_tier` | `DelegatedExecutionSignal.kt` | ⚠️ 半闭合（Android 端未保证稳定填充） |
-
-**结果回流链整体闭合状态：⚠️ 半闭合**（participation_tier 稳定上送待 Android 跟进）
+**结果回流链整体闭合状态：✅ 已成立**
 
 ---
 
-### 2.4 Closure/Acceptance 链
+### 2.5 Closure/Acceptance 链
 
 | # | 环节 | V2 代码锚点 | Android 代码锚点 | 闭合状态 |
 |---|------|------------|----------------|---------|
@@ -147,7 +160,7 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 
 ---
 
-### 2.5 Operator/Panel/Board/Desktop/Mobile 投影链
+### 2.6 Operator/Panel/Board/Desktop/Mobile 投影链
 
 | # | 环节 | V2 代码锚点 | 字段性质 | 闭合状态 |
 |---|------|------------|---------|---------|
@@ -156,7 +169,7 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 | 3 | GET /api/v1/operator/board/operable-truth | `core/routes/operator.py` | **runtime truth 投影** | ✅ 已成立 |
 | 4 | GET /api/v1/projection/desktop-status-board | `core/routes/projection.py` | **runtime truth 投影** | ✅ 已成立 |
 | 5 | Desktop presence 三态（tri_state_phase） | `core/desktop_presence_runtime.py` ; `core/continuum` | **runtime truth（显化层）** | ⚠️ 半闭合（两条语义线未统一） |
-| 6 | Android participation tier 三态语义 | `core/android_network_participation.py` | **runtime truth（参与层）** | ⚠️ 半闭合（tier 稳定上送待 Android） |
+| 6 | Android participation tier 三态语义 | `core/android_network_participation.py` | **runtime truth（参与层）** | ⚠️ 半闭合（上送已成立，但下游统一强约束解释链未闭合） |
 | 7 | Mobile UI 投影（悬浮窗） | — | **projection（依赖 WS 连接）** | ⚠️ 半闭合（WS 中断时失同步） |
 
 **投影链整体闭合状态：⚠️ 半闭合**（三态统一 API 未完成）
@@ -203,7 +216,7 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 - **V2 代码锚点**：`core/android_handoff_v2_response_ingress.py` ; `core/android_delegated_runtime_lifecycle_coordinator.py`
 - **Android 代码锚点**：`DelegatedExecutionSignal.kt` ; `CanonicalDispatchChain.kt`
 - **当前闭合状态**：✅ **已成立**（协议双端对齐，execution signal 回流链完整）
-- **缺口**：`participation_tier` 随 delegated result 稳定上送待 Android 跟进。
+- **缺口**：`runtime_constrained/runtime_deferred/local_mode_active` 在 V2 下游仍未形成统一强约束解释链。
 
 ### 3.5 接管（Takeover）
 
@@ -329,14 +342,15 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 4. **AndroidNetworkParticipationTier 7 层级定义与评估** — `core/android_network_participation.py`
 5. **编排选路消费 Android participation truth（PR 1142）** — `source_dispatch_orchestrator` + `device_selection`
 6. **统一结果入站链（unified_result_ingress）** — 所有结果信号通过单一入站入口
-7. **Evidence/acceptance/closure 真值链** — `execution_evidence_model` + `result_truth_acceptance_gate` + `EVIDENCE_CLOSURE_BLOCKING_VERDICTS`
-8. **canonical_completion_ingress + notify_with_android_context（PR 1143）** — closure 携带 Android context
-9. **Panel android_participation_verdict 字段（PR 1143）** — operator/board 可读最高参与层级
-10. **Board projection 消费 verdict + board reasoning（PR4）** — `build_operator_board_projection` + `get_board_reasoning_for_closure`
-11. **Session continuity / DurableParticipantIdentity** — PR3 continuity 决策 + Android 持久身份
-12. **Handoff_envelope_v2 委托执行协议** — 双端对齐
-13. **Operator API 路由集（PR4）** — `/audit` / `/board/operable-truth` / `/pr4/snapshot` / `/android-directed`
-14. **跨设备模式（cross_device_enabled tier）** — 协议、门控、选路均就位
+7. **Android authoritative truth + mode 语义上送** — `GalaxyWebSocketClient.kt` + `GalaxyConnectionService.kt` + `AipModels.kt`
+8. **Evidence/acceptance/closure 真值链** — `execution_evidence_model` + `result_truth_acceptance_gate` + `EVIDENCE_CLOSURE_BLOCKING_VERDICTS`
+9. **canonical_completion_ingress + notify_with_android_context（PR 1143）** — closure 携带 Android context
+10. **Panel android_participation_verdict 字段（PR 1143）** — operator/board 可读最高参与层级
+11. **Board projection 消费 verdict + board reasoning（PR4）** — `build_operator_board_projection` + `get_board_reasoning_for_closure`
+12. **Session continuity / DurableParticipantIdentity** — PR3 continuity 决策 + Android 持久身份
+13. **Handoff_envelope_v2 委托执行协议** — 双端对齐
+14. **Operator API 路由集（PR4）** — `/audit` / `/board/operable-truth` / `/pr4/snapshot` / `/android-directed`
+15. **跨设备模式（cross_device_enabled tier）** — 协议、门控、选路均就位
 
 ### 6.2 半闭合（Partial）
 
@@ -344,7 +358,7 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 
 1. **三态统一系统 API** — 显化层 tri_state_phase + Android tier 两条线未统一
 2. **Android 本地 NL 模式** — 代码存在，依赖本地 LLM 配置 + accessibility 权限
-3. **participation_tier 随 delegated result 稳定上送** — V2 已就位，Android 端未保证
+3. **Android runtime_constrained/runtime_deferred/local_mode_active 在 V2 下游全量消费** — Android 已稳定上送，V2 下游仍以部分消费为主
 4. **readiness tier degradation ↔ participation tier 强联动** — 评估存在，联动机制不完整
 5. **多设备并发派遣实操** — 骨架真实，端到端多设备并发实操未验证
 6. **Takeover 完整端到端路径** — 门控存在，跨设备接管半闭合
@@ -355,11 +369,10 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 
 以下骨架点存在已知阻塞，或属于架构选择的诚实说明：
 
-1. **Android 侧稳定提供 participation_tier 到所有 delegated result** — V2 已准备好接收，Android 端跟进待做
-2. **Android 本地 LLM 权重默认可用** — 系统不提供默认权重，用户自行配置
-3. **distributed_participant tier 端到端实操验证** — 需所有三门满足 + 多任务并行分发场景
-4. **clone-to-run 开发者顺滑路径** — V2 + Android 一体化构建/连接文档或脚本未完成
-5. **真正 P2P / 自主对等 mesh runtime** — 架构选择为中心控制型，Android 间无直连（这是设计决定，非待修复的缺口）
+1. **Android 本地 LLM 权重默认可用** — 系统不提供默认权重，用户自行配置
+2. **distributed_participant tier 端到端实操验证** — 需所有三门满足 + 多任务并行分发场景
+3. **clone-to-run 开发者顺滑路径** — V2 + Android 一体化构建/连接文档或脚本未完成
+4. **真正 P2P / 自主对等 mesh runtime** — 架构选择为中心控制型，Android 间无直连（这是设计决定，非待修复的缺口）
 
 ---
 
@@ -370,7 +383,7 @@ operator/panel投影链  UnifiedPanelPayload → board projection → routes
 **目的**：提供可机读的当前系统骨架摘要，供 operator/board 消费。
 
 **公开 API**：
-- `build_chain_map() -> ChainMap` — 五条链路当前状态地图
+- `build_chain_map() -> ChainMap` — 六条链路当前状态地图（含 Android truth 上送链）
 - `build_mode_map() -> ModeMap` — 运行模式地图
 - `build_backbone_snapshot() -> BackboneSnapshot` — 完整骨架快照（三态分离）
 - `build_system_backbone_snapshot() -> dict` — operator/board 消费入口（最简洁摘要）
