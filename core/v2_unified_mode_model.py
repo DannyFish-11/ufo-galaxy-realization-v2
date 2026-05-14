@@ -44,6 +44,8 @@ GOVERNANCE_LAYER_VALUES: tuple[str, ...] = (
 
 _PARTICIPATION_LAYER_MAP: Dict[str, str] = {
     "local_only": "offline_local_only",
+    # control_only / cross_device_capable / fully_attached 仍然保留细粒度 tier，
+    # 但在 owner-facing 分层模型里都属于“已接入会话、尚未进入可派发层”的同一层。
     "control_only": "session_attached",
     "cross_device_capable": "session_attached",
     "fully_attached": "session_attached",
@@ -196,7 +198,10 @@ def derive_governance_state(
             "takeover_active": takeover_active,
             "reasons": reasons,
         }
-    if automatic_decision == "hold" or any("defer" in reason for reason in reasons):
+    if automatic_decision == "hold" or any(
+        "defer" in reason
+        for reason in reasons
+    ):
         return "deferred", {
             "operation_state": operation_state,
             "automatic_decision": automatic_decision,
@@ -204,12 +209,12 @@ def derive_governance_state(
             "takeover_active": takeover_active,
             "reasons": reasons,
         }
+    degraded_reason_tokens = ("constrained", "degraded", "stale", "blocked_no_proof")
     if (
         operation_state == "soft_degraded"
         or mode_readiness_state in {"degraded", "transitioning"}
         or any(
-            token in reason
-            for token in ("constrained", "degraded", "stale", "blocked_no_proof")
+            any(token in reason for token in degraded_reason_tokens)
             for reason in reasons
         )
     ):

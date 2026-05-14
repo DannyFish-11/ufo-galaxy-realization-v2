@@ -368,9 +368,12 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         ):
             payload = svc.build_payload()
 
-        self.assertEqual(payload.unified_mode_model["execution_location"], "android_delegated")
-        self.assertEqual(payload.unified_mode_model["participation_layer"], "dispatch_eligible")
-        self.assertEqual(payload.unified_mode_model["governance_state"], "delegated_execution")
+        self.assertIn("execution_location", payload.unified_mode_model)
+        self.assertIn("participation_layer", payload.unified_mode_model)
+        self.assertIn("governance_state", payload.unified_mode_model)
+        self.assertEqual(payload.unified_mode_model.get("execution_location"), "android_delegated")
+        self.assertEqual(payload.unified_mode_model.get("participation_layer"), "dispatch_eligible")
+        self.assertEqual(payload.unified_mode_model.get("governance_state"), "delegated_execution")
 
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
