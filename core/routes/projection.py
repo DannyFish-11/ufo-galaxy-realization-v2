@@ -4106,6 +4106,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
 
         try:
             from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
+            from core.runtime_decision_reasoning import overlay_runtime_decision_reasoning_block
 
             plan = build_source_dispatch_plan()
             payload["startup_readiness"] = {
@@ -4117,9 +4118,39 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 ),
                 "source_runtime_posture": getattr(plan, "source_runtime_posture", None),
             }
+            payload["runtime_decision_reasoning"] = overlay_runtime_decision_reasoning_block(
+                (getattr(plan, "metadata", {}) or {}).get("runtime_decision_reasoning"),
+                task_id=getattr(plan, "task_id", None),
+                selected_runtime=(
+                    "android_delegated"
+                    if getattr(plan, "selected_target", None) is not None
+                    and str(getattr(getattr(plan, "mode", None), "value", getattr(plan, "mode", "")))
+                    not in {"local", "fallback_local"}
+                    else "v2_local"
+                ),
+                selected_device=(
+                    getattr(getattr(plan, "selected_target", None), "target_device_id", None)
+                    if getattr(plan, "selected_target", None) is not None
+                    else None
+                ),
+                mode_state=(
+                    getattr(getattr(plan, "mode", None), "value", None)
+                    or str(getattr(plan, "mode", "unknown"))
+                ),
+                source_runtime_posture=getattr(plan, "source_runtime_posture", None),
+                ready_to_route=bool(getattr(plan, "ready", False)),
+                readiness_summary={
+                    "verdict": "ready" if bool(getattr(plan, "ready", False)) else "blocked",
+                },
+                readiness_notes=list(getattr(plan, "readiness_notes", []) or []),
+                source_of_truth_refs=[
+                    "core.routes.projection._assemble_runtime_truth_payload",
+                ],
+            )
         except Exception as exc:
             logger.debug("_assemble_runtime_truth_payload: startup readiness unavailable: %s", exc)
             payload.setdefault("startup_readiness", None)
+            payload.setdefault("runtime_decision_reasoning", {})
 
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)

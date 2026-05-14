@@ -252,6 +252,7 @@ class OperationalReadinessReport:
     runtime_readiness: Dict[str, Any]
     system_acceptance: Dict[str, Any]
     state_contract: Dict[str, Any]
+    runtime_decision_reasoning: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -271,6 +272,7 @@ class OperationalReadinessReport:
             "runtime_readiness": dict(self.runtime_readiness),
             "system_acceptance": dict(self.system_acceptance),
             "state_contract": dict(self.state_contract),
+            "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -1247,6 +1249,7 @@ def build_operational_readiness_report(
         chain_state=chain_state,
     )
     participation_evidence: Dict[str, Any] = {}
+    truth_block: Any = None
     try:
         from core.v2_android_truth_ssot import build_v2_android_truth_block
 
@@ -1274,6 +1277,47 @@ def build_operational_readiness_report(
         system_acceptance=system_acceptance,
         participation_evidence=participation_evidence,
     ).to_dict()
+    from core.runtime_decision_reasoning import build_runtime_decision_reasoning_block
+
+    runtime_decision_reasoning = build_runtime_decision_reasoning_block(
+        selected_runtime=(
+            "android_delegated"
+            if truth_block is not None and bool(getattr(truth_block, "dispatch_eligible", False))
+            else "v2_local"
+        ),
+        selected_device=(
+            str(getattr(truth_block, "device_id", "") or "") or None
+            if truth_block is not None
+            else None
+        ),
+        android_truth_block=truth_block,
+        participation_tier=(
+            getattr(truth_block, "participation_tier", None)
+            if truth_block is not None
+            else None
+        ),
+        mode_state=chain_state.active_path,
+        ready_to_route=not bool(runtime_readiness.get("blocking", False)),
+        readiness_summary={
+            "verdict": runtime_readiness.get("verdict"),
+            "summary": runtime_readiness.get("summary"),
+            "active_path": chain_state.active_path,
+            "success_quality": chain_state.success_quality,
+        },
+        blocking_reasons=list(chain_state.diagnosis),
+        evidence_summary={
+            "clone_to_use_ready": bool(system_acceptance.get("available")),
+            "registration_state": (
+                state_contract.get("derived_state", {})
+                .get("registration_state", {})
+                .get("state")
+            ),
+        },
+        source_of_truth_refs=[
+            OPERATIONAL_READINESS_SURFACE_AUTHORITY,
+            "core.v2_unified_state_contract.build_v2_unified_state_contract",
+        ],
+    )
     progress = _build_registration_progress(
         path,
         validation=validation,
@@ -1297,4 +1341,5 @@ def build_operational_readiness_report(
         runtime_readiness=runtime_readiness,
         system_acceptance=system_acceptance,
         state_contract=state_contract,
+        runtime_decision_reasoning=runtime_decision_reasoning,
     )

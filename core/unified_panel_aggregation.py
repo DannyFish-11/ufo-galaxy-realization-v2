@@ -302,6 +302,7 @@ class UnifiedPanelPayload:
     # Empty dict when no Android device has an active session or the
     # android_network_participation module is unavailable.
     android_participation_verdict: Dict[str, Any] = field(default_factory=dict)
+    runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -350,6 +351,7 @@ class UnifiedPanelPayload:
             "mesh_runtime_state": dict(self.mesh_runtime_state),
             # android participation verdict (PR-next-convergence)
             "android_participation_verdict": dict(self.android_participation_verdict),
+            "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             # provenance
             "_source": self._source,
         }
@@ -734,6 +736,9 @@ class UnifiedPanelAggregationService:
         """
         try:
             from core.android_device_state_store import list_device_state_snapshots
+            from core.runtime_decision_reasoning import (
+                build_runtime_decision_reasoning_block,
+            )
             from core.v2_android_truth_ssot import (
                 ANDROID_PARTICIPATION_TIER_ORDER,
                 V2_ANDROID_TRUTH_SSOT_AUTHORITY,
@@ -752,6 +757,22 @@ class UnifiedPanelAggregationService:
                     "distributed_participant_count": 0,
                     "_source": V2_ANDROID_TRUTH_SSOT_AUTHORITY,
                 }
+                payload.runtime_decision_reasoning = build_runtime_decision_reasoning_block(
+                    selected_runtime="v2_local",
+                    selected_device=None,
+                    participation_tier="local_only",
+                    mode_state=str(payload.runtime_domain or "local"),
+                    ready_to_route=str(payload.readiness_verdict or "").upper() == "READY",
+                    readiness_summary={
+                        "verdict": payload.readiness_verdict,
+                        "blocked_dimensions": list(payload.blocked_dimensions),
+                    },
+                    blocking_reasons=["no_connected_devices"],
+                    source_of_truth_refs=[
+                        UNIFIED_PANEL_AGGREGATION_AUTHORITY,
+                        V2_ANDROID_TRUTH_SSOT_AUTHORITY,
+                    ],
+                )
                 return
 
             connected_count = len(snapshots)
@@ -791,6 +812,36 @@ class UnifiedPanelAggregationService:
             verdict["dispatch_eligible_count"] = dispatch_eligible_count
             verdict["distributed_participant_count"] = distributed_participant_count
             payload.android_participation_verdict = verdict
+            payload.runtime_decision_reasoning = build_runtime_decision_reasoning_block(
+                selected_runtime=(
+                    "android_delegated"
+                    if best_block is not None and bool(best_block.dispatch_eligible)
+                    else "v2_local"
+                ),
+                selected_device=verdict.get("device_id"),
+                android_truth_block=best_block,
+                participation_tier=verdict.get("tier"),
+                mode_state=str(
+                    payload.runtime_domain
+                    or getattr(best_block, "device_mode", None)
+                    or "unknown"
+                ),
+                ready_to_route=str(payload.readiness_verdict or "").upper() == "READY",
+                readiness_summary={
+                    "verdict": payload.readiness_verdict,
+                    "blocked_dimensions": list(payload.blocked_dimensions),
+                },
+                blocking_reasons=list(verdict.get("blocking_reasons", []) or []),
+                evidence_summary={
+                    "connected_device_count": connected_count,
+                    "dispatch_eligible_count": dispatch_eligible_count,
+                    "distributed_participant_count": distributed_participant_count,
+                },
+                source_of_truth_refs=[
+                    UNIFIED_PANEL_AGGREGATION_AUTHORITY,
+                    V2_ANDROID_TRUTH_SSOT_AUTHORITY,
+                ],
+            )
         except Exception as exc:
             logger.debug("build_payload: android participation verdict unavailable: %s", exc)
 

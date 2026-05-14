@@ -437,7 +437,8 @@ class TestGetBoardReasoningForClosure:
     def test_has_source_authority(self):
         result = get_board_reasoning_for_closure(task_id="task-src")
         assert "_source" in result
-        assert "PR_NEXT_CONVERGENCE" in result["_source"]
+        assert "RUNTIME_DECISION_REASONING_BLOCK" in result["_source"]
+        assert PR_NEXT_CONVERGENCE_CLOSURE_AUDIT_AUTHORITY in result["source_of_truth_refs"]
 
     def test_has_generated_at(self):
         before = time.time()
@@ -454,6 +455,7 @@ class TestGetBoardReasoningForClosure:
             "is_fully_closed",
             "device_id",
             "causal_explanation_zh",
+            "source_of_truth_refs",
             "generated_at",
             "_source",
         ]

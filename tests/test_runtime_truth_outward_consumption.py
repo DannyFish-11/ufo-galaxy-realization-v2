@@ -58,6 +58,8 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert "outward_truth" in payload
     assert payload["task_truth"]["active_task_count"] == 2
     assert payload["startup_readiness"]["ready_to_route"] is True
+    assert payload["runtime_decision_reasoning"]["selected_runtime"] == "v2_local"
+    assert payload["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "local"
 
 
 def test_dispatch_semantics_exposes_planning_fields():

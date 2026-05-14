@@ -2012,6 +2012,9 @@ def _select_target_from_candidates(
         active sessions are found or all candidates are rejected.
     """
     from contracts.source_dispatch import SourceDispatchTarget
+    from core.runtime_decision_reasoning import (
+        build_runtime_decision_reasoning_block,
+    )
 
     # --- Step 1: Enumerate active sessions from the registry ---
     active_sessions: List[Any] = []
@@ -2296,6 +2299,38 @@ def _select_target_from_candidates(
                     "canonical_execution_gate_decision": _canonical_gate_decision,
                     "canonical_execution_gate_reasons": list(_canonical_gate_reasons),
                     "execution_runtime_state": execution_runtime_by_device.get(device_id),
+                    "runtime_decision_reasoning": build_runtime_decision_reasoning_block(
+                        selected_runtime="android_delegated",
+                        selected_device=device_id,
+                        participation_tier=_android_participation_tier,
+                        mode_state="remote_handoff",
+                        ready_to_route=bool(getattr(readiness, "ready", False)),
+                        readiness_summary={
+                            "verdict": (
+                                "ready"
+                                if bool(getattr(readiness, "ready", False))
+                                else "blocked"
+                            ),
+                            "registered": bool(getattr(readiness, "registered", False)),
+                            "orchestration_eligible": bool(
+                                getattr(participation, "orchestration_eligible", False)
+                            ),
+                        },
+                        readiness_notes=list(getattr(readiness, "reasons", []) or []),
+                        blocking_reasons=list(_canonical_gate_reasons),
+                        evidence_summary={
+                            "selection_reason": (
+                                f"registry:readiness:participation{reuse_tag}{android_tag}:score={score}"
+                            ),
+                            "score": score,
+                            "reuse_eligible": reuse_eligible,
+                            "execution_busy": _execution_busy,
+                        },
+                        source_of_truth_refs=[
+                            "core.runtime.source_dispatch_orchestrator.select_dispatch_target",
+                            "core.attached_runtime_session_registry.list_active_sessions",
+                        ],
+                    ),
                 },
             )
 
@@ -2371,6 +2406,9 @@ def select_dispatch_target(
         isolation.
     """
     from contracts.source_dispatch import SourceDispatchTarget
+    from core.runtime_decision_reasoning import (
+        build_runtime_decision_reasoning_block,
+    )
 
     if target_device_id:
         return SourceDispatchTarget(
@@ -2381,6 +2419,18 @@ def select_dispatch_target(
                 mesh_session.get("session_id") if (mesh_session and isinstance(mesh_session, dict)) else None
             ),
             selection_reason="explicit_target_device_id",
+            metadata={
+                "runtime_decision_reasoning": build_runtime_decision_reasoning_block(
+                    selected_runtime="android_delegated",
+                    selected_device=target_device_id,
+                    mode_state="remote_handoff",
+                    ready_to_route=True,
+                    readiness_summary={"verdict": "target_explicit"},
+                    source_of_truth_refs=[
+                        "core.runtime.source_dispatch_orchestrator.select_dispatch_target",
+                    ],
+                ),
+            },
         )
 
     # PR-24: consolidated truth-driven selection
@@ -2512,6 +2562,19 @@ def select_dispatch_target(
                         target_runtime_id=runtime_id,
                         mesh_session_id=_effective_mesh_session_id,
                         selection_reason="mesh_session:first_active_participant:fallback",
+                        metadata={
+                            "runtime_decision_reasoning": build_runtime_decision_reasoning_block(
+                                selected_runtime="android_delegated",
+                                selected_device=device_id,
+                                mode_state="staged_mesh",
+                                ready_to_route=True,
+                                readiness_summary={"verdict": "mesh_fallback"},
+                                blocking_reasons=["routing_fallback:mesh_session"],
+                                source_of_truth_refs=[
+                                    "core.runtime.source_dispatch_orchestrator.select_dispatch_target",
+                                ],
+                            ),
+                        },
                     )
 
     return None
@@ -2621,6 +2684,9 @@ def build_source_dispatch_plan(
         build_source_dispatch_plan as _contract_build_plan,
         build_source_dispatch_decision,
     )
+    from core.runtime_decision_reasoning import (
+        overlay_runtime_decision_reasoning_block,
+    )
 
     try:
         _metadata_with_boundary = _build_runtime_signal_boundary_metadata(
@@ -2716,6 +2782,38 @@ def build_source_dispatch_plan(
         elif mode == SourceDispatchMode.staged_mesh and mesh_session is None:
             ready = False
             readiness_notes.append("staged_mesh:no_mesh_session_available")
+
+        _metadata_with_boundary["runtime_decision_reasoning"] = overlay_runtime_decision_reasoning_block(
+            (
+                (selected_target.metadata or {}).get("runtime_decision_reasoning")
+                if selected_target is not None
+                else None
+            ),
+            task_id=task_id,
+            selected_runtime=(
+                "v2_local"
+                if mode in (SourceDispatchMode.local, SourceDispatchMode.fallback_local)
+                else "android_delegated"
+                if selected_target is not None
+                else "v2_local"
+            ),
+            selected_device=(
+                getattr(selected_target, "target_device_id", None)
+                if selected_target is not None
+                else None
+            ),
+            mode_state=getattr(mode, "value", str(mode)),
+            source_runtime_posture=source_runtime_posture,
+            ready_to_route=ready,
+            readiness_summary={
+                "verdict": "ready" if ready else "blocked",
+                "decision_reason": reason,
+            },
+            readiness_notes=readiness_notes,
+            source_of_truth_refs=[
+                "core.runtime.source_dispatch_orchestrator.build_source_dispatch_plan",
+            ],
+        )
 
         # Build the canonical decision record — pass posture through so it is
         # visible in the plan and any downstream audit surfaces.
