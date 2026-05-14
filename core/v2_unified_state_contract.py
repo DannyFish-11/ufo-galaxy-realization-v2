@@ -252,6 +252,7 @@ def build_v2_unified_state_contract(
     )
     _participation_last_signal = participation_evidence.get("last_signal")
     _participation_prior_tier = participation_evidence.get("prior_tier")
+    _participation_truth_block: Any = None
     try:
         if participation_evidence:
             # Caller supplied pre-computed participation evidence (already SSOT-normalised)
@@ -268,14 +269,21 @@ def build_v2_unified_state_contract(
                 from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
                 from core.v2_android_truth_ssot import ANDROID_PARTICIPATION_PROVENANCE  # noqa: PLC0415
 
-                truth_block = build_v2_android_truth_block(target_device_id, include_history_limit=10)
-                _participation_tier_str = truth_block.participation_tier
-                _participation_blocking = list(truth_block.participation_blocking_reasons)
-                _participation_notes = list(truth_block.participation_tier_notes)
+                _participation_truth_block = build_v2_android_truth_block(
+                    target_device_id,
+                    include_history_limit=10,
+                )
+                _participation_tier_str = _participation_truth_block.participation_tier
+                _participation_blocking = list(
+                    _participation_truth_block.participation_blocking_reasons
+                )
+                _participation_notes = list(_participation_truth_block.participation_tier_notes)
                 _participation_source = ANDROID_PARTICIPATION_PROVENANCE
-                _participation_transition_history = list(truth_block.participation_transition_history)
-                _participation_last_signal = truth_block.participation_last_signal
-                _participation_prior_tier = truth_block.participation_prior_tier
+                _participation_transition_history = list(
+                    _participation_truth_block.participation_transition_history
+                )
+                _participation_last_signal = _participation_truth_block.participation_last_signal
+                _participation_prior_tier = _participation_truth_block.participation_prior_tier
             else:
                 # Conservative fallback when no Android device identity is available.
                 from core.android_network_participation import (  # noqa: PLC0415
@@ -331,10 +339,10 @@ def build_v2_unified_state_contract(
 
     _unified_mode_model: Dict[str, Any] = {}
     try:
-        truth_block_for_mode: Any = None
         android_device_ids = list(device_evidence.get("android_device_ids") or [])
         target_device_id = str(android_device_ids[0]) if android_device_ids else ""
-        if target_device_id:
+        truth_block_for_mode: Any = _participation_truth_block
+        if target_device_id and truth_block_for_mode is None:
             from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
 
             truth_block_for_mode = build_v2_android_truth_block(
