@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.operational_readiness_surface import (
+    _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
     SurfaceStatus,
     build_operational_readiness_report,
 )
@@ -159,7 +160,7 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
         == "android_delegated"
     )
     minimal_contract = report.minimal_happy_path_contract
-    assert minimal_contract["contract_version"] == "pr8.1.0"
+    assert minimal_contract["contract_version"] == _MINIMAL_HAPPY_PATH_CONTRACT_VERSION
     assert len(minimal_contract["steps"]) == 10
     step_map = {item["step_id"]: item for item in minimal_contract["steps"]}
     assert step_map["7_operator_board_routes_work"]["status"] == SurfaceStatus.ready.value

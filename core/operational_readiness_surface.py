@@ -82,6 +82,10 @@ _REQUIRED_API_PATHS: tuple[str, ...] = (
 )
 
 _MINIMAL_HAPPY_PATH_CONTRACT_VERSION: str = "pr8.1.0"
+_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES: tuple[str, ...] = ("fastapi", "uvicorn", "pydantic")
+_MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE = "/api/v1/operator/board/operable-truth"
+_MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE = "/api/v1/operator/actions/android-directed"
+_MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
 
 _DYNAMIC_KIND_STATUS: frozenset[RegistrationKind] = frozenset(
     {
@@ -1232,7 +1236,7 @@ def _configured_llm_key_names() -> List[str]:
         "GROQ_API_KEY",
         "LLM_API_KEY",
     ]
-    return [name for name in key_names if str(os.environ.get(name, "")).strip()]
+    return [name for name in key_names if os.environ.get(name, "").strip()]
 
 
 def _build_minimal_happy_path_contract(
@@ -1244,30 +1248,39 @@ def _build_minimal_happy_path_contract(
     session_evidence: Dict[str, Any],
     runtime_decision_reasoning: Dict[str, Any],
 ) -> Dict[str, Any]:
-    dependencies_ok = all(
-        _module_available(module_name)
-        for module_name in ("fastapi", "uvicorn", "pydantic")
-    )
+    dependencies_ok = all(_module_available(module_name) for module_name in _MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES)
     configured_llm_keys = _configured_llm_key_names()
     has_llm_key = bool(configured_llm_keys)
     health_route_ok = _has_registered_prefix(route_paths, "/api/v1/health")
     chat_route_ok = _has_registered_route(route_paths, "/api/v1/chat")
     operator_board_route_ok = _has_registered_route(
         route_paths,
-        "/api/v1/operator/board/operable-truth",
+        _MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE,
     )
     operator_dispatch_route_ok = _has_registered_route(
         route_paths,
-        "/api/v1/operator/actions/android-directed",
+        _MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE,
     )
+    # Android visibility is satisfied by either device admission truth or
+    # participant-session truth; both are valid observability entry points.
     android_visible = (
         device_evidence.get("android_device_count", 0) > 0
         or session_evidence.get("participant_total_count", 0) > 0
     )
     task_initiated = bool(session_evidence.get("task_initiated", False))
     closure_observed = bool(session_evidence.get("result_closure_established", False))
-    readiness_verdict = str(runtime_readiness.get("verdict") or "")
+    readiness_verdict = runtime_readiness.get("verdict", "")
     service_started = bool(route_paths)
+
+    if operator_dispatch_route_ok and (android_visible or task_initiated):
+        delegated_task_status = SurfaceStatus.ready
+        delegated_task_diagnosis = "检测到 Android 定向委托路由，且已具备可见参与信号。"
+    elif operator_dispatch_route_ok:
+        delegated_task_status = SurfaceStatus.pending
+        delegated_task_diagnosis = "委托路由存在但 Android 参与信号不足。"
+    else:
+        delegated_task_status = SurfaceStatus.blocked
+        delegated_task_diagnosis = f"缺少 {_MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE} 路由。"
 
     steps = [
         {
@@ -1281,7 +1294,7 @@ def _build_minimal_happy_path_contract(
             "description_zh": "安装依赖",
             "status": (SurfaceStatus.ready if dependencies_ok else SurfaceStatus.blocked).value,
             "diagnosis": (
-                "核心依赖可导入（fastapi/uvicorn/pydantic）。"
+                f"核心依赖可导入（{'/'.join(_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES)}）。"
                 if dependencies_ok
                 else "核心依赖缺失，请先执行 pip install -r requirements.txt。"
             ),
@@ -1353,20 +1366,8 @@ def _build_minimal_happy_path_contract(
         {
             "step_id": "9_delegated_task_sendable",
             "description_zh": "可发送委托任务",
-            "status": (
-                SurfaceStatus.ready
-                if operator_dispatch_route_ok and (android_visible or task_initiated)
-                else SurfaceStatus.pending
-                if operator_dispatch_route_ok
-                else SurfaceStatus.blocked
-            ).value,
-            "diagnosis": (
-                "检测到 Android 定向委托路由，且已具备可见参与信号。"
-                if operator_dispatch_route_ok and (android_visible or task_initiated)
-                else "委托路由存在但 Android 参与信号不足。"
-                if operator_dispatch_route_ok
-                else "缺少 /api/v1/operator/actions/android-directed 路由。"
-            ),
+            "status": delegated_task_status.value,
+            "diagnosis": delegated_task_diagnosis,
         },
         {
             "step_id": "10_closure_reasoning_observable",
@@ -1403,17 +1404,17 @@ def _build_minimal_happy_path_contract(
             "env": {
                 "llm_api_key_configured": has_llm_key,
                 "configured_llm_key_names": configured_llm_keys,
-                "hint": "复制 .env.example 为 .env，并至少配置一个 API Key。",
+                "hint": f"复制 {_MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE} 为 .env，并至少配置一个 API Key。",
             },
             "dependency": {
                 "core_dependencies_ok": dependencies_ok,
-                "required_modules": ["fastapi", "uvicorn", "pydantic"],
+                "required_modules": list(_MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES),
                 "hint": "安装依赖: pip install -r requirements.txt",
             },
             "android_connection": {
                 "android_visible": android_visible,
-                "android_device_count": int(device_evidence.get("android_device_count", 0) or 0),
-                "participant_total_count": int(session_evidence.get("participant_total_count", 0) or 0),
+                "android_device_count": int(device_evidence.get("android_device_count", 0)),
+                "participant_total_count": int(session_evidence.get("participant_total_count", 0)),
                 "hint": "检查 Android 端 WS 连接与设备注册。",
             },
             "delegated_execution_observability": {
