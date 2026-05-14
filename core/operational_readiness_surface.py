@@ -1248,14 +1248,15 @@ def build_operational_readiness_report(
     )
     participation_evidence: Dict[str, Any] = {}
     try:
-        from core.android_device_state_store import get_android_participation_evidence
+        from core.v2_android_truth_ssot import build_v2_android_truth_block
 
         android_device_ids = list(device_evidence.get("android_device_ids") or [])
         if android_device_ids:
-            participation_evidence = get_android_participation_evidence(
+            truth_block = build_v2_android_truth_block(
                 str(android_device_ids[0]),
                 include_history_limit=10,
             )
+            participation_evidence = truth_block.as_participation_evidence()
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "OperationalReadinessSurface: participation evidence probe failed: %s",

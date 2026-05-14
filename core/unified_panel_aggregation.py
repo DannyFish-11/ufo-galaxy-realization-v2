@@ -722,20 +722,22 @@ class UnifiedPanelAggregationService:
             logger.debug("build_payload: unified governance semantics unavailable: %s", exc)
 
     def _fill_android_participation_verdict(self, payload: UnifiedPanelPayload) -> None:
-        """Fill android_participation_verdict from android_network_participation.
+        """Fill android_participation_verdict from the V2 Android truth SSOT block.
 
-        Aggregates the participation tier for all connected Android devices into a
-        compact verdict dict so that operator boards and panel clients can directly
-        read *which tier of Android node is participating* without querying the
-        participation module separately.
+        Delegates to :func:`~core.v2_android_truth_ssot.get_best_v2_android_truth_block`
+        so that the panel surface consumes the same unified truth basis as
+        routing, readiness, closure, board, and operator paths.
 
-        This is the PR-next-convergence board-side complement to the routing-side
-        participation truth consumption added in PR 1142.
+        This replaces the previous inline loop that called
+        ``get_android_participation_evidence`` per device, reducing duplication
+        and ensuring all panel consumers share the SSOT-derived tier value.
         """
         try:
-            from core.android_device_state_store import (
-                get_android_participation_evidence,
-                list_device_state_snapshots,
+            from core.android_device_state_store import list_device_state_snapshots
+            from core.v2_android_truth_ssot import (
+                ANDROID_PARTICIPATION_TIER_ORDER,
+                V2_ANDROID_TRUTH_SSOT_AUTHORITY,
+                build_v2_android_truth_block,
             )
 
             snapshots = list_device_state_snapshots()
@@ -748,64 +750,47 @@ class UnifiedPanelAggregationService:
                     "connected_device_count": 0,
                     "dispatch_eligible_count": 0,
                     "distributed_participant_count": 0,
-                    "_source": "core.unified_panel_aggregation",
+                    "_source": V2_ANDROID_TRUTH_SSOT_AUTHORITY,
                 }
                 return
 
             connected_count = len(snapshots)
-            dispatch_eligible = 0
-            distributed_participant = 0
-            best_tier = "local_only"
-            best_device_id: Optional[str] = None
-            best_blocking: List[str] = []
-            best_notes: List[str] = []
-
-            # Tier ordering (higher index = higher participation)
-            _tier_order = [
-                "local_only",
-                "session_attached",
-                "capability_visible",
-                "dispatch_eligible",
-                "execution_active",
-                "result_accepted",
-                "distributed_participant",
-            ]
+            dispatch_eligible_count = 0
+            distributed_participant_count = 0
+            best_block = None
+            best_ordinal = -1
 
             for snap in snapshots:
                 snap_device_id = getattr(snap, "device_id", None)
                 if not snap_device_id:
                     continue
-                ev = get_android_participation_evidence(snap_device_id)
-                tier_val = ev.get("tier", "local_only")
-                if tier_val in ("dispatch_eligible", "execution_active", "result_accepted"):
-                    dispatch_eligible += 1
-                if tier_val == "distributed_participant":
-                    distributed_participant += 1
-
-                # Prefer the device with the highest participation tier
+                blk = build_v2_android_truth_block(snap_device_id)
+                if blk.dispatch_eligible:
+                    dispatch_eligible_count += 1
+                if blk.distributed_participant:
+                    distributed_participant_count += 1
                 try:
-                    current_idx = _tier_order.index(best_tier)
-                    candidate_idx = _tier_order.index(tier_val)
+                    ordinal = ANDROID_PARTICIPATION_TIER_ORDER.index(blk.participation_tier)
                 except ValueError:
-                    candidate_idx = -1
-                    current_idx = 0
+                    ordinal = 0
+                if ordinal > best_ordinal:
+                    best_ordinal = ordinal
+                    best_block = blk
 
-                if candidate_idx > current_idx:
-                    best_tier = tier_val
-                    best_device_id = snap_device_id
-                    best_blocking = ev.get("blocking_reasons", [])
-                    best_notes = ev.get("tier_derivation_notes", [])
+            if best_block is not None:
+                verdict = best_block.as_participation_verdict()
+            else:
+                verdict = {
+                    "device_id": None,
+                    "tier": "local_only",
+                    "blocking_reasons": ["no_valid_device_block"],
+                    "tier_derivation_notes": [],
+                }
 
-            payload.android_participation_verdict = {
-                "device_id": best_device_id,
-                "tier": best_tier,
-                "blocking_reasons": best_blocking,
-                "tier_derivation_notes": best_notes,
-                "connected_device_count": connected_count,
-                "dispatch_eligible_count": dispatch_eligible,
-                "distributed_participant_count": distributed_participant,
-                "_source": "core.android_network_participation",
-            }
+            verdict["connected_device_count"] = connected_count
+            verdict["dispatch_eligible_count"] = dispatch_eligible_count
+            verdict["distributed_participant_count"] = distributed_participant_count
+            payload.android_participation_verdict = verdict
         except Exception as exc:
             logger.debug("build_payload: android participation verdict unavailable: %s", exc)
 
