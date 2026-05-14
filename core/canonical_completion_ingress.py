@@ -43,7 +43,8 @@ CANONICAL_COMPLETION_INGRESS_SENTINEL: str = (
     "CANONICAL_COMPLETION_INGRESS::"
     "core.canonical_completion_ingress::"
     "pr-cc::android-handoff-future-resolution::"
-    "result-to-orchestration-closure"
+    "result-to-orchestration-closure::"
+    "notify-with-android-context-v1"
 )
 
 FUTURE_RESOLUTION_IS_IDEMPOTENT_POLICY: str = (
@@ -283,6 +284,103 @@ class CanonicalCompletionIngress:
                 handoff_id,
                 task_id,
             )
+        return resolved
+
+    def notify_with_android_context(
+        self,
+        envelope: Any,
+        android_participation_tier: Optional[str] = None,
+        android_device_id: Optional[str] = None,
+        acceptance_verdict: Optional[str] = None,
+    ) -> bool:
+        """Broadcast a terminal response envelope and record Android participation context.
+
+        This is a V2-side convergence enhancement that propagates Android participation
+        truth into the closure record so that operator boards and downstream consumers
+        can reason about *which Android participation tier completed this task* rather
+        than only seeing a boolean ``is_fully_closed`` flag.
+
+        The method delegates to :meth:`notify` for the actual Future resolution, and
+        additionally emits a structured log entry carrying the Android participation
+        context.  The context is intentionally **not** stored as mutable state — the
+        log entry is the authoritative record consumed by the operator observability
+        ring buffer.
+
+        Parameters
+        ----------
+        envelope:
+            An ``AndroidHandoffResponseEnvelope`` (or duck-typed equivalent).
+        android_participation_tier:
+            The ``AndroidNetworkParticipationTier.value`` for the device that
+            produced this result (e.g. ``"dispatch_eligible"``,
+            ``"distributed_participant"``, ``"local_only"``).  ``None`` when
+            the tier is not yet known (degrades gracefully).
+        android_device_id:
+            Device identifier of the Android node that executed the task.
+            ``None`` when not available.
+        acceptance_verdict:
+            The ``ResultAcceptanceVerdict.value`` produced by
+            :func:`~core.result_truth_acceptance_gate.evaluate_result_truth_acceptance`
+            for this result (``"accept"``, ``"accept_provisional"``,
+            ``"quarantine"``, ``"reject"``).  ``None`` when not yet evaluated.
+
+        Returns
+        -------
+        bool
+            True if a pending Future was found and resolved; False otherwise
+            (same semantics as :meth:`notify`).
+        """
+        resolved = self.notify(envelope)
+
+        handoff_id = getattr(envelope, "handoff_id", None) or ""
+        task_id = getattr(envelope, "task_id", None) or ""
+        tier = android_participation_tier or "unknown"
+        verdict = acceptance_verdict or "unknown"
+
+        logger.info(
+            "canonical_completion_ingress: notify_with_android_context "
+            "handoff_id=%r task_id=%r resolved=%s "
+            "android_participation_tier=%r android_device_id=%r acceptance_verdict=%r",
+            handoff_id,
+            task_id,
+            resolved,
+            tier,
+            android_device_id,
+            verdict,
+        )
+
+        # Emit to operator execution observability ring buffer (best-effort).
+        if resolved:
+            try:
+                from core.operator_execution_observability_surface import (
+                    record_operator_evidence_entry,
+                )
+
+                record_operator_evidence_entry(
+                    task_id=task_id or handoff_id,
+                    device_id=android_device_id,
+                    evidence_state="confirmed_strong"
+                    if verdict == "accept"
+                    else "circumstantial",
+                    trust_level="trusted" if verdict == "accept" else "provisional",
+                    acceptance_verdict=verdict,
+                    truth_chain_complete=True,
+                    operator_warning=(verdict not in ("accept",)),
+                    android_proof_class=tier,
+                    source_channel="canonical_completion_ingress",
+                    diagnosis=[
+                        f"android_participation_tier={tier}",
+                        f"acceptance_verdict={verdict}",
+                        "notify_with_android_context",
+                    ],
+                )
+            except Exception as _obs_err:
+                logger.debug(
+                    "canonical_completion_ingress: observability record failed "
+                    "(non-fatal): %s",
+                    _obs_err,
+                )
+
         return resolved
 
     # ------------------------------------------------------------------

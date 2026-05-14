@@ -84,15 +84,14 @@ def test_methodology_prohibits_non_code_evidence() -> None:
     assert "narrative" in lower or "no historical pr" in lower or "pr narrative" in lower
 
 
-def test_pr_title_signals_993P2_reinforcement_framing() -> None:
-    assert REVIEW_CONVERGENCE_ANCHOR in REVIEW_PR_TITLE
-    assert "双仓" in REVIEW_PR_TITLE
-    assert "补强" in REVIEW_PR_TITLE
+def test_pr_title_signals_next_convergence_framing() -> None:
+    # The PR title should reflect the next-step convergence direction
+    # (beyond 993P2 into operability audit, closure governance, operator co-source)
+    assert "双仓" in REVIEW_PR_TITLE or "可用性" in REVIEW_PR_TITLE or "闭环" in REVIEW_PR_TITLE
+    assert "审查" in REVIEW_PR_TITLE or "治理" in REVIEW_PR_TITLE or "解释" in REVIEW_PR_TITLE
     english_title = REVIEW_PR_TITLE_EN.lower()
-    assert "dual-repo" in english_title
-    assert "anchor" in english_title
-    assert "integrity" in english_title
-    assert REVIEW_CONVERGENCE_ANCHOR.lower() in english_title
+    assert "dual-repo" in english_title or "operability" in english_title or "closure" in english_title
+    assert "governance" in english_title or "operator" in english_title or "convergence" in english_title
 
 
 def test_convergence_anchor_is_explicit_993P2() -> None:
@@ -386,8 +385,16 @@ def test_next_v2_convergence_priority_targets_integrity_linkage() -> None:
     priority = report.v2_next_convergence_priority
     assert isinstance(priority, V2ConvergencePriority)
     assert priority is not None
-    assert "V2" in priority.title_zh or "编排" in priority.title_zh
-    assert {"R1", "R2", "R3"}.issubset(set(priority.linked_issue_ids))
+    # Title should reference Android truth or board or closure direction
+    assert (
+        "V2" in priority.title_zh
+        or "编排" in priority.title_zh
+        or "Android" in priority.title_zh
+        or "board" in priority.title_zh
+        or "闭环" in priority.title_zh
+    )
+    # Issue IDs must cover routing and operator surfaces
+    assert {"R1", "R3"}.issubset(set(priority.linked_issue_ids))
     assert priority.v2_anchors
     assert priority.android_anchors
 

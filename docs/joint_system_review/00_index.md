@@ -11,6 +11,7 @@
 
 | 文件 | 日期 | 内容 |
 |------|------|------|
+| [DUAL_REPO_CLOSURE_GOVERNANCE_OPERABILITY_AUDIT_2026-05.md](./DUAL_REPO_CLOSURE_GOVERNANCE_OPERABILITY_AUDIT_2026-05.md) | 2026-05-14 | **🆕 本次 PR 基线（推荐优先阅读）**：系统可用性审查、三态真实性审查、闭环治理传播审查、operator board 同源解释，基于真实代码探针，诚实分离已完成/本次补强/仍需 Android 跟进 |
 | [V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md](./V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md) | 2026-05-13 | **基于 993P2 的 V2 双仓完整性联动与关键缺口补强基线**：用真实代码回答系统身份、双仓职责、主链路、完成度、跨仓矛盾，并给出已落地的 V2 侧完整性修复 |
 | [ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md](./ANDROID_LOCAL_TO_DISTRIBUTED_PARTICIPATION_AUDIT_2026-05.md) | 2026-05-12 | **Follow-up 审计基线**：回答 Android 从 local-only 到跨设备/分布式参与的真实代码条件与缺口 |
 | [PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md](./PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md) | 2026-05-12 | **预实施基线文档**：严格区分真实运行路径、推断关系与契约/审计层 |
@@ -23,7 +24,7 @@
 
 ---
 
-> 推荐阅读顺序：先读 `V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md`（当前这张 V2 侧收敛 PR 的直接基线），再读 `DEEP_JOINT_REVIEW_2026.md` 与 `PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md` 追补细节。
+> **推荐阅读顺序**：先读 `DUAL_REPO_CLOSURE_GOVERNANCE_OPERABILITY_AUDIT_2026-05.md`（本次 PR 的可用性与闭环治理审查基线），再读 `V2_DUAL_REPO_INTEGRITY_LINKAGE_BASELINE_2026-05.md` 了解 993P2 缺口补强背景，再读 `DEEP_JOINT_REVIEW_2026.md` 与 `PRE_IMPLEMENTATION_DUAL_REPO_EXECUTION_BASELINE_2026-05.md` 追补细节。
 
 ---
 
