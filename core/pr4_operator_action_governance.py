@@ -1596,7 +1596,11 @@ def build_pr4_operable_surface_snapshot(
                 projection={"audit_record_count": len(recent_audits)},
                 stale_or_cached_summary={"unavailable": True, "reason": str(exc)},
             )
-        except Exception:
+        except Exception as fallback_exc:
+            logger.debug(
+                "build_pr4_operable_surface_snapshot: standardized operator fallback failed: %s",
+                fallback_exc,
+            )
             operator_control_plane_contract = {
                 "surface": "operator",
                 "unavailable": True,

@@ -871,6 +871,9 @@ class UnifiedPanelAggregationService:
                 build_shared_control_plane_basis,
             )
 
+            shared_basis = build_shared_control_plane_basis(
+                reasoning_block=payload.runtime_decision_reasoning,
+            )
             runtime_truth = {
                 "active_task_count": payload.active_task_count,
                 "active_flow_count": payload.active_flow_count,
@@ -878,9 +881,7 @@ class UnifiedPanelAggregationService:
                 "readiness_verdict": payload.readiness_verdict,
                 "blocked_dimensions": list(payload.blocked_dimensions),
                 "android_participation_verdict": dict(payload.android_participation_verdict),
-                "backbone_snapshot": build_shared_control_plane_basis(
-                    reasoning_block=payload.runtime_decision_reasoning,
-                ).get("backbone_snapshot"),
+                "backbone_snapshot": shared_basis.get("backbone_snapshot"),
             }
             projection = {
                 "manifestation_summary": dict(payload.manifestation_summary),
@@ -899,9 +900,6 @@ class UnifiedPanelAggregationService:
                 "has_last_execution_result": bool(payload.last_execution_result),
                 "payload_age_seconds": max(0.0, time.time() - float(generated_at)),
             }
-            shared_basis = build_shared_control_plane_basis(
-                reasoning_block=payload.runtime_decision_reasoning,
-            )
             payload.control_plane_contract = build_control_plane_surface_contract(
                 surface="panel",
                 runtime_truth=runtime_truth,
