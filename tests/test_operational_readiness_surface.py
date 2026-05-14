@@ -46,6 +46,9 @@ def _required_route_paths() -> set[str]:
         "/api/v1/projection/runtime",
         "/api/v1/projection/operational-readiness",
         "/api/v1/projection/clone-to-use-acceptance",
+        "/api/v1/projection/operability-contract",
+        "/api/v1/operator/board/operable-truth",
+        "/api/v1/operator/actions/android-directed",
     }
 
 
@@ -155,6 +158,12 @@ def test_build_operational_readiness_report_canonical_cross_device_success_quali
         report.state_contract["derived_state"]["unified_mode_model"]["evidence"]["execution_location"]
         == "android_delegated"
     )
+    minimal_contract = report.minimal_happy_path_contract
+    assert minimal_contract["contract_version"] == "pr8.1.0"
+    assert len(minimal_contract["steps"]) == 10
+    step_map = {item["step_id"]: item for item in minimal_contract["steps"]}
+    assert step_map["7_operator_board_routes_work"]["status"] == SurfaceStatus.ready.value
+    assert step_map["9_delegated_task_sendable"]["status"] == SurfaceStatus.ready.value
     android_candidates = [item for item in report.registration_kinds if item.kind == "device_android_admission"]
     assert android_candidates, "expected device_android_admission registration kind"
     android_admission = android_candidates[0]
@@ -335,6 +344,7 @@ def test_operational_readiness_routes_expose_expected_paths():
     paths = {route.path for route in router.routes}
     assert "/api/v1/projection/operational-readiness" in paths
     assert "/api/v1/projection/clone-to-use-acceptance" in paths
+    assert "/api/v1/projection/operability-contract" in paths
 
 
 def test_build_operational_readiness_report_exposes_compat_blocked_contract():
@@ -436,6 +446,7 @@ def test_operational_readiness_endpoint_returns_report_and_route_context():
             "runtime_readiness": {},
             "system_acceptance": {},
             "state_contract": {"authority": "test-state-contract"},
+            "minimal_happy_path_contract": {"overall_ready": True},
         },
         contract_version="test-contract",
         validation={},
@@ -443,6 +454,7 @@ def test_operational_readiness_endpoint_returns_report_and_route_context():
         clone_to_use_acceptance={},
         android_v2_minimum_standard={},
         state_contract={"authority": "test-state-contract"},
+        minimal_happy_path_contract={"overall_ready": True},
     )
     with patch(
         "core.routes.operational_readiness.build_operational_readiness_report",
@@ -471,6 +483,7 @@ def test_clone_to_use_acceptance_endpoint_returns_acceptance_subset():
         clone_to_use_acceptance={"ready_for_use": True},
         android_v2_minimum_standard={"minimum_viable_chain_ready": True},
         state_contract={"authority": "test-state-contract"},
+        minimal_happy_path_contract={"overall_ready": True},
     )
     with patch(
         "core.routes.operational_readiness.build_operational_readiness_report",
@@ -483,3 +496,28 @@ def test_clone_to_use_acceptance_endpoint_returns_acceptance_subset():
     assert payload["clone_to_use_acceptance"]["ready_for_use"] is True
     assert payload["android_v2_minimum_standard"]["minimum_viable_chain_ready"] is True
     assert payload["state_contract"]["authority"] == "test-state-contract"
+    assert payload["minimal_happy_path_contract"]["overall_ready"] is True
+
+
+def test_operability_contract_endpoint_returns_minimal_happy_path_contract():
+    app = FastAPI()
+    app.include_router(create_router())
+    client = TestClient(app, raise_server_exceptions=False)
+    fake_report = SimpleNamespace(
+        contract_version="test-contract",
+        minimal_happy_path_contract={"overall_ready": False, "blocking_steps": ["x"]},
+        chain_state=SimpleNamespace(to_dict=lambda: {"active_path": "compat"}),
+        runtime_decision_reasoning={"selected_runtime": "v2_local"},
+        state_contract={"authority": "test-state-contract"},
+    )
+    with patch(
+        "core.routes.operational_readiness.build_operational_readiness_report",
+        return_value=fake_report,
+    ):
+        response = client.get("/api/v1/projection/operability-contract")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["minimal_happy_path_contract"]["overall_ready"] is False
+    assert payload["minimal_happy_path_contract"]["blocking_steps"] == ["x"]
+    assert payload["state_contract_authority"] == "test-state-contract"
