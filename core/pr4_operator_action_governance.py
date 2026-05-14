@@ -616,16 +616,9 @@ def _capture_pre_state() -> OperatorActionPreState:
         logger.debug("_capture_pre_state: operator snapshot unavailable: %s", exc)
 
     try:
-        from core.android_network_participation import get_participation_state_for_device
-        # Use the first available device as representative
-        try:
-            from core.android_device_state_store import list_device_ids
-            device_ids = list_device_ids()
-        except (ImportError, AttributeError):
-            device_ids = []
-        if device_ids:
-            p_state = get_participation_state_for_device(device_ids[0])
-            pre.participation_tier = str(p_state.tier.value) if p_state else ""
+        from core.v2_android_truth_ssot import get_best_v2_android_truth_block
+        best_block = get_best_v2_android_truth_block()
+        pre.participation_tier = best_block.participation_tier
     except Exception as exc:
         logger.debug("_capture_pre_state: participation tier unavailable: %s", exc)
 

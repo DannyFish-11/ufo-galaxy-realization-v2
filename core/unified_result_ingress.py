@@ -258,6 +258,11 @@ class UnifiedResultIngressOutcome:
     execution_evidence_record: Optional[Dict[str, Any]] = field(default=None)
     """Serialised :class:`~core.execution_evidence_model.ExecutionEvidenceRecord`
     dict for operator/audit consumers (None when evidence classification was skipped)."""
+    # SSOT: Android truth context stamped at closure time
+    android_truth_context: Dict[str, Any] = field(default_factory=dict)
+    """V2AndroidTruthBlock dict for the originating device, stamped at closure time.
+    Provides a stable Android truth snapshot co-sourced with this result closure.
+    Empty when no device_id is available or the SSOT module is unavailable."""
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +408,23 @@ class UnifiedResultIngress:
         outcome.problem_solved_via = str(
             outcome.problem_execution_closure.get("problem_solved_via") or ""
         )
+
+        # Step 7: Stamp Android truth SSOT context at closure time.
+        # Co-sources the closure record with the device's current truth block
+        # so operator/board consumers can read Android truth alongside closure state.
+        if event.device_id:
+            try:
+                from core.v2_android_truth_ssot import build_v2_android_truth_block
+                outcome.android_truth_context = build_v2_android_truth_block(
+                    event.device_id
+                ).to_dict()
+            except Exception as _ssot_err:
+                logger.debug(
+                    "unified_result_ingress: android truth SSOT stamp skipped "
+                    "(non-fatal) task_id=%r err=%s",
+                    event.task_id,
+                    _ssot_err,
+                )
 
         return outcome
 
