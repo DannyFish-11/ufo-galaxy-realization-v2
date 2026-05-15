@@ -404,6 +404,18 @@ class ChainExecutionRecord:
     dispatched_at: float = dataclasses.field(default_factory=time.time)
     completed_at: Optional[float] = None
     extra: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    # 跨设备链路验收追踪字段 — 由 handle_goal_execution_result 通过
+    # UnifiedResultIngress 处理后填充，反映真实系统闭环状态。
+    # Cross-device chain closure acceptance tracking.
+    # Populated by handle_goal_execution_result after processing through
+    # UnifiedResultIngress.  Empty string means ingress was not run.
+    acceptance_state: str = ""
+    """跨设备链路验收状态（acceptance verdict from UnifiedResultIngress）。
+    取值：'accepted'、'accepted_provisional'、'quarantine'、'reject'、
+    'truth_chain_incomplete'、'ingress_skipped'、'ingress_error' 或空字符串。"""
+    acceptance_closed: bool = False
+    """True iff the cross-device result was fully processed by UnifiedResultIngress
+    with is_fully_closed=True.  Reflects real system closure, not only chain traversal."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -423,6 +435,9 @@ class ChainExecutionRecord:
             "dispatched_at": self.dispatched_at,
             "completed_at": self.completed_at,
             "extra": self.extra,
+            # 跨设备链路验收追踪字段
+            "acceptance_state": self.acceptance_state,
+            "acceptance_closed": self.acceptance_closed,
         }
 
     @classmethod
@@ -449,6 +464,8 @@ class ChainExecutionRecord:
             dispatched_at=float(data.get("dispatched_at", time.time())),
             completed_at=data.get("completed_at"),
             extra=dict(data.get("extra") or {}),
+            acceptance_state=str(data.get("acceptance_state") or ""),
+            acceptance_closed=bool(data.get("acceptance_closed", False)),
         )
 
 
