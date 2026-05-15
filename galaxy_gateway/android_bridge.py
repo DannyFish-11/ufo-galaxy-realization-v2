@@ -488,6 +488,23 @@ class AndroidBridge:
                 device_id, _harn_exc,
             )
 
+        # 统一设备生命周期状态：WebSocket 断开时将设备生命周期重置为 unregistered。
+        try:
+            from core.device_lifecycle_state import (  # noqa: PLC0415
+                transition_device_lifecycle,
+                DeviceLifecycleTransitionEvent,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.websocket_disconnected,
+            )
+        except Exception as _lc_disc_exc:
+            logger.debug(
+                "android_bridge: device_lifecycle disconnect transition non-fatal: "
+                "device_id=%s error=%s",
+                device_id, _lc_disc_exc,
+            )
+
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
         """Mark device as ONLINE in UDM on reconnect (no duplicate identity created)."""
         self._patch_runtime_state_to_udm(
