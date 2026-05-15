@@ -115,7 +115,7 @@ _ANDROID_COUNTERPART_MODEL_INPUTS: tuple[str, ...] = (
     "app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt",
 )
-_V2_DUAL_REPO_COGNITION_ANCHORS: tuple[str, ...] = (
+_V2_COUNTERPART_CODE_ANCHORS: tuple[str, ...] = (
     "core/current_state_backbone_audit.py",
     "core/operational_readiness_surface.py",
     "core/routes/operational_readiness.py",
@@ -1843,6 +1843,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         "android_repo_real_code_scope": {
             "repo": "DannyFish-11/ufo-galaxy-android",
             "android_audited_ref": str(backbone_snapshot.get("android_audited_ref") or ""),
+            "android_audited_ref_note_zh": "来自 current_state_backbone_audit 的 Android 侧审计提交锚点；为空表示当前快照未提供。",
             "investigated_counterpart_files": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
             "cross_repo_focus_dimensions": [
                 "build_and_install_path",
@@ -1857,12 +1858,15 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "real_code_investigation_scope": {
                 "v2_repo": "DannyFish-11/ufo-galaxy-realization-v2",
                 "android_repo": "DannyFish-11/ufo-galaxy-android",
-                "v2_real_code_anchors": list(_V2_DUAL_REPO_COGNITION_ANCHORS),
+                "v2_real_code_anchors": list(_V2_COUNTERPART_CODE_ANCHORS),
                 "android_real_code_anchors": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
             },
             "local_chain_path_across_dual_repo": {
                 "status": local_chain_status,
-                "conclusion_zh": "本地链路由 Android 本地执行与 V2 侧 closure/acceptance 语义共同表征，但当前仍以证据闭合度判断。",
+                "conclusion_zh": (
+                    "本地链路状态由 execution_chain 与 closure_acceptance_chain 的闭合状态联合判定，"
+                    "未同时 established 则保持 partial。"
+                ),
                 "evidence": {
                     "execution_chain": chain_closure_summary.get("execution_chain"),
                     "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
@@ -1871,7 +1875,10 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             },
             "cross_device_chain_path_across_dual_repo": {
                 "status": cross_device_chain_status,
-                "conclusion_zh": "跨设备链路已具备 request→uplink→backflow 的联合路径表达，但未默认视为完全闭合。",
+                "conclusion_zh": (
+                    "跨设备链路状态由 request_chain、android_truth_uplink_chain、result_backflow_chain 联合判定，"
+                    "任一未 established 即保持 partial。"
+                ),
                 "evidence": {
                     "request_chain": chain_closure_summary.get("request_chain"),
                     "android_truth_uplink_chain": chain_closure_summary.get("android_truth_uplink_chain"),
@@ -1909,7 +1916,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             },
             "mode_execution_truth_acceptance_semantics": {
                 "status": mode_execution_truth_acceptance_status,
-                "conclusion_zh": "mode→执行→真值→验收语义已被统一建模，但接管与 closure 的全闭合仍需继续收敛。",
+                "conclusion_zh": "mode→执行→真值→验收语义已被统一建模，但接管与闭合验收链的全闭合仍需继续收敛。",
                 "evidence": {
                     "mode_closure_summary": mode_closure_summary,
                     "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
@@ -1951,7 +1958,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "conclusion_zh": "下一阶段优先级来自双仓真实代码证据，不做超前成熟度宣称。",
                 "items": next_phase_key_work_zh,
             },
-            "honesty_guardrail_zh": "该认知层用于帮助判断是否一体化，不用于粉饰为已 fully integrated。",
+            "honesty_guardrail_zh": "该认知层用于帮助判断是否一体化，不用于粉饰为已完全集成。",
         },
         "completion_and_maturity_assessment": {
             "completion_posture": completion_posture,

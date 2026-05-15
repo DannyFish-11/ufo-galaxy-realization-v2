@@ -583,6 +583,8 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert payload["minimal_operability_path"]["overall_ready"] is True
     assert payload["contract_version"] == "1.3.0"
     assert payload["android_repo_real_code_scope"]["repo"] == "DannyFish-11/ufo-galaxy-android"
+    assert payload["android_repo_real_code_scope"]["android_audited_ref"] == ""
+    assert "审计提交锚点" in payload["android_repo_real_code_scope"]["android_audited_ref_note_zh"]
     assert payload["completion_and_maturity_assessment"]["operability_ready_for_non_author"] is True
     assert payload["completion_and_maturity_assessment"]["completion_posture"] == "partially_integrated_transitional"
     assert payload["integrated_judgement_zh"]["complete_verdict"]["status"] == "partial"
@@ -593,12 +595,20 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert "不得用于宣称不存在的成熟度" in payload["integrated_judgement_zh"]["honesty_guardrail_zh"]
     dual_repo_cognition = payload["dual_repo_ecosystem_cognition_zh"]
     assert dual_repo_cognition["real_code_investigation_scope"]["android_repo"] == "DannyFish-11/ufo-galaxy-android"
+    assert (
+        "core/operational_readiness_surface.py"
+        in dual_repo_cognition["real_code_investigation_scope"]["v2_real_code_anchors"]
+    )
+    assert (
+        "app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt"
+        in dual_repo_cognition["real_code_investigation_scope"]["android_real_code_anchors"]
+    )
     assert dual_repo_cognition["local_chain_path_across_dual_repo"]["status"] == "partial"
     assert dual_repo_cognition["cross_device_chain_path_across_dual_repo"]["status"] == "partial"
     assert dual_repo_cognition["shared_state_ecosystem_judgement"]["status"] == "partial"
     assert dual_repo_cognition["remaining_gaps_to_full_maturity"]["status"] == "open"
     assert len(dual_repo_cognition["next_stage_priorities_zh"]["items"]) >= 3
-    assert "不用于粉饰为已 fully integrated" in dual_repo_cognition["honesty_guardrail_zh"]
+    assert "不用于粉饰为已完全集成" in dual_repo_cognition["honesty_guardrail_zh"]
     assert len(payload["core_questions_assessment_zh"]) == 12
     question_ids = [entry["question_id"] for entry in payload["core_questions_assessment_zh"]]
     duplicates = sorted([qid for qid, count in Counter(question_ids).items() if count > 1])
