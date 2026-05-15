@@ -1532,7 +1532,12 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     def _normalize_readiness_signal_status(value: Any) -> str:
         if value in {"ready", "established", True}:
             return "established"
+        if value in {"not_ready", "unavailable", False, None}:
+            return "partial"
         return "partial"
+
+    def _build_trace_status_node(trace_id: str, raw_status: Any) -> Dict[str, str]:
+        return {"trace_id": trace_id, "status": _normalize_assessment_status(raw_status)}
 
     truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
 
@@ -2003,11 +2008,11 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "local_chain_trace": {
                     "status": local_chain_status,
                     "trace_chain": [
-                        {"trace_id": "execution_chain", "status": _normalize_assessment_status(chain_closure_summary.get("execution_chain"))},
-                        {
-                            "trace_id": "closure_acceptance_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("closure_acceptance_chain")),
-                        },
+                        _build_trace_status_node("execution_chain", chain_closure_summary.get("execution_chain")),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
                     ],
                     "evidence": {
                         "active_path": report.chain_state.active_path,
@@ -2017,15 +2022,15 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "cross_device_chain_trace": {
                     "status": cross_device_chain_status,
                     "trace_chain": [
-                        {"trace_id": "request_chain", "status": _normalize_assessment_status(chain_closure_summary.get("request_chain"))},
-                        {
-                            "trace_id": "android_truth_uplink_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain")),
-                        },
-                        {
-                            "trace_id": "result_backflow_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("result_backflow_chain")),
-                        },
+                        _build_trace_status_node("request_chain", chain_closure_summary.get("request_chain")),
+                        _build_trace_status_node(
+                            "android_truth_uplink_chain",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "result_backflow_chain",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
                     ],
                     "evidence": {
                         "cross_device_mode": mode_closure_summary.get("cross_device_mode"),
@@ -2046,12 +2051,15 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "mode_execution_truth_acceptance_trace": {
                     "status": mode_execution_truth_acceptance_status,
                     "trace_chain": [
-                        {"trace_id": "delegated_execution", "status": _normalize_assessment_status(mode_closure_summary.get("delegated_execution"))},
-                        {"trace_id": "takeover", "status": _normalize_assessment_status(mode_closure_summary.get("takeover"))},
-                        {
-                            "trace_id": "closure_acceptance_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("closure_acceptance_chain")),
-                        },
+                        _build_trace_status_node(
+                            "delegated_execution",
+                            mode_closure_summary.get("delegated_execution"),
+                        ),
+                        _build_trace_status_node("takeover", mode_closure_summary.get("takeover")),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
                     ],
                     "evidence": {
                         "mode_closure_summary": mode_closure_summary,
@@ -2061,15 +2069,18 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "result_uplink_and_closure_acceptance_trace": {
                     "status": result_uplink_closure_acceptance_status,
                     "trace_chain": [
-                        {
-                            "trace_id": "android_truth_uplink_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain")),
-                        },
-                        {"trace_id": "result_backflow_chain", "status": _normalize_assessment_status(chain_closure_summary.get("result_backflow_chain"))},
-                        {
-                            "trace_id": "closure_acceptance_chain",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("closure_acceptance_chain")),
-                        },
+                        _build_trace_status_node(
+                            "android_truth_uplink_chain",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "result_backflow_chain",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
                     ],
                     "evidence": {
                         "completion_posture": completion_posture,
@@ -2079,14 +2090,14 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "shared_protocol_and_state_semantics_trace": {
                     "status": shared_protocol_state_status,
                     "trace_chain": [
-                        {
-                            "trace_id": "shared_android_truth_uplink",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain")),
-                        },
-                        {
-                            "trace_id": "shared_result_backflow",
-                            "status": _normalize_assessment_status(chain_closure_summary.get("result_backflow_chain")),
-                        },
+                        _build_trace_status_node(
+                            "shared_android_truth_uplink",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "shared_result_backflow",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
                     ],
                     "evidence": {
                         "state_contract_authority": state_contract.get("authority"),
