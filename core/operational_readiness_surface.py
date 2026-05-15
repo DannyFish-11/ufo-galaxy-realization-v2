@@ -57,6 +57,7 @@ __all__ = [
     "OPERATIONAL_READINESS_SURFACE_AUTHORITY",
     "OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION",
     "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION",
+    "OPERABILITY_CONTRACT_ROUTE",
     "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE",
     "SurfaceStatus",
     "RegistrationKindState",
@@ -1460,7 +1461,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     else:
         try:
             backbone_snapshot = build_system_backbone_snapshot()
-        except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
+        except (RuntimeError, ValueError, TypeError) as exc:
             logger.warning("OperationalReadinessSurface: backbone snapshot build failed: %s", exc)
             backbone_snapshot = {
                 "authority": "core.current_state_backbone_audit::unavailable",
