@@ -76,7 +76,7 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
-DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.0.0"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.1.0"
 OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
 DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
@@ -97,11 +97,17 @@ _MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
 # currently integrated distributed execution runtime in ufo-galaxy-android.
 # Update this list when Android runtime responsibility files are renamed/moved.
 _ANDROID_COUNTERPART_MODEL_INPUTS: tuple[str, ...] = (
+    "build_apk.sh",
+    "app/build.gradle",
+    "config.properties",
     "app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt",
     "app/src/main/java/com/ufo/galaxy/service/GalaxyConnectionService.kt",
+    "app/src/main/java/com/ufo/galaxy/service/EnhancedFloatingService.kt",
     "app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt",
     "app/src/main/java/com/ufo/galaxy/agent/AutonomousExecutionPipeline.kt",
+    "app/src/main/java/com/ufo/galaxy/runtime/DelegatedRuntimeReadinessEvaluator.kt",
+    "app/src/main/java/com/ufo/galaxy/runtime/DelegatedRuntimeAcceptanceEvaluator.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt",
 )
@@ -1283,8 +1289,7 @@ def _build_minimal_happy_path_contract(
     # Android visibility is satisfied by either device admission truth or
     # participant-session truth; both are valid observability entry points.
     android_visible = (
-        device_evidence.get("android_device_count", 0) > 0
-        or session_evidence.get("participant_total_count", 0) > 0
+        device_evidence.get("android_device_count", 0) > 0 or session_evidence.get("participant_total_count", 0) > 0
     )
     task_initiated = bool(session_evidence.get("task_initiated", False))
     closure_observed = bool(session_evidence.get("result_closure_established", False))
@@ -1342,9 +1347,7 @@ def _build_minimal_happy_path_contract(
             "step_id": "5_health_passes",
             "description_zh": "健康检查通过",
             "status": (
-                SurfaceStatus.ready
-                if health_route_ok and readiness_verdict != "blocked"
-                else SurfaceStatus.blocked
+                SurfaceStatus.ready if health_route_ok and readiness_verdict != "blocked" else SurfaceStatus.blocked
             ).value,
             "diagnosis": (
                 f"健康路由可见，readiness={readiness_verdict or 'unknown'}。"
@@ -1371,11 +1374,7 @@ def _build_minimal_happy_path_contract(
         {
             "step_id": "8_android_connection_visible",
             "description_zh": "Android 连接可见",
-            "status": (
-                SurfaceStatus.ready
-                if android_visible
-                else SurfaceStatus.pending
-            ).value,
+            "status": (SurfaceStatus.ready if android_visible else SurfaceStatus.pending).value,
             "diagnosis": (
                 "已观察到 Android 设备/参与者信号。"
                 if android_visible
@@ -1394,24 +1393,20 @@ def _build_minimal_happy_path_contract(
             "status": (
                 SurfaceStatus.ready
                 if operator_board_route_ok and closure_observed
-                else SurfaceStatus.degraded
-                if operator_board_route_ok
-                else SurfaceStatus.blocked
+                else SurfaceStatus.degraded if operator_board_route_ok else SurfaceStatus.blocked
             ).value,
             "diagnosis": (
                 "board reasoning 路由可见且已观察到 closure。"
                 if operator_board_route_ok and closure_observed
-                else "board reasoning 路由可见，但当前尚未形成 closure。"
-                if operator_board_route_ok
-                else "缺少 board reasoning 路由，无法观察 closure。"
+                else (
+                    "board reasoning 路由可见，但当前尚未形成 closure。"
+                    if operator_board_route_ok
+                    else "缺少 board reasoning 路由，无法观察 closure。"
+                )
             ),
         },
     ]
-    blocking_steps = [
-        step["step_id"]
-        for step in steps
-        if step["status"] == SurfaceStatus.blocked.value
-    ]
+    blocking_steps = [step["step_id"] for step in steps if step["status"] == SurfaceStatus.blocked.value]
     return {
         "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
         "contract_version": _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
@@ -1474,14 +1469,177 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     control_plane_layering = dict(backbone_snapshot.get("control_plane_layering") or {})
     field_typing_schema = dict(backbone_snapshot.get("field_typing_schema") or {})
     unified_mode_model = dict(report.unified_mode_model or {})
+    chain_closure_summary = dict(backbone_snapshot.get("chain_closure_summary") or {})
+    mode_closure_summary = dict(backbone_snapshot.get("mode_closure_summary") or {})
+    established_count = int(backbone_snapshot.get("established_count", 0))
+    partial_count = int(backbone_snapshot.get("partial_count", 0))
+    open_count = int(backbone_snapshot.get("open_count", 0))
+    top_open_items = list(backbone_snapshot.get("top_open_items") or [])
+    minimal_operability_path = dict(report.minimal_happy_path_contract or {})
+    clone_to_use_acceptance = dict(report.clone_to_use_acceptance or {})
+    readiness_state = state_contract.get("derived_state", {}).get("registration_state", {})
+
+    android_connection_diagnostics = minimal_operability_path.get("diagnostics", {}).get("android_connection", {})
+    delegated_observability_diagnostics = minimal_operability_path.get("diagnostics", {}).get(
+        "delegated_execution_observability", {}
+    )
+    ecosystem_surfaces = {
+        "mobile_android_surface": "app/src/main/java/com/ufo/galaxy/service/EnhancedFloatingService.kt",
+        "desktop_surface": "windows_client/status_board_v2/projection_reader.py",
+        "central_projection_routes": [
+            "/api/v1/projection/runtime-truth",
+            "/api/v1/projection/desktop-status-board",
+            DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
+        ],
+    }
+
+    core_questions = [
+        {
+            "question_id": 1,
+            "question_zh": "完整中心—分布式 AI 系统的当前架构是什么？",
+            "status": "established",
+            "answer_zh": "当前是 V2 中心治理编排 + Android 分布式执行参与者的中心控制型架构，而非 P2P 对等 mesh。",
+            "evidence": {
+                "active_path": report.chain_state.active_path,
+                "chain_closure_summary": chain_closure_summary,
+                "android_counterpart_files": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
+            },
+        },
+        {
+            "question_id": 2,
+            "question_zh": "两个仓库如何作为一个系统协同？",
+            "status": "partial" if open_count > 0 else "established",
+            "answer_zh": "V2 提供编排/治理/真值与投影面，Android 提供连接、执行、结果与状态上送；已形成可观察主链，但仍有未闭合项。",
+            "evidence": {
+                "request_chain": chain_closure_summary.get("request_chain"),
+                "execution_chain": chain_closure_summary.get("execution_chain"),
+                "result_backflow_chain": chain_closure_summary.get("result_backflow_chain"),
+            },
+        },
+        {
+            "question_id": 3,
+            "question_zh": "哪些部分已真正集成，哪些仍是部分连接？",
+            "status": "partial" if partial_count > 0 or open_count > 0 else "established",
+            "answer_zh": "主链路已有 established 组件，但 mode/operability 等仍有 partial/open 条目，尚未全闭合。",
+            "evidence": {
+                "established_count": established_count,
+                "partial_count": partial_count,
+                "open_count": open_count,
+            },
+        },
+        {
+            "question_id": 4,
+            "question_zh": "全系统 truth flow 完成度如何？",
+            "status": chain_closure_summary.get("android_truth_uplink_chain", "partial"),
+            "answer_zh": "truth 上送与回流链已具备明确路径，但仍以当前证据闭合度为准，不能等同于终态完备。",
+            "evidence": {
+                "android_truth_uplink_chain": chain_closure_summary.get("android_truth_uplink_chain"),
+                "result_backflow_chain": chain_closure_summary.get("result_backflow_chain"),
+                "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
+            },
+        },
+        {
+            "question_id": 5,
+            "question_zh": "全系统 reasoning flow 完成度如何？",
+            "status": "established" if report.runtime_decision_reasoning else "partial",
+            "answer_zh": "runtime_decision_reasoning 已形成统一推理块并进入多个控制面，但闭环质量仍受未闭合项影响。",
+            "evidence": {
+                "runtime_decision_reasoning_present": bool(report.runtime_decision_reasoning),
+                "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
+                "reasoning_surfaces": list(control_plane_layering.keys()),
+            },
+        },
+        {
+            "question_id": 6,
+            "question_zh": "中心侧与 Android 侧 mode model 完成度如何？",
+            "status": (
+                "partial" if mode_closure_summary.get("distributed_participant") != "established" else "established"
+            ),
+            "answer_zh": "mode 模型已统一建模并可投影，但 distributed_participant 等高阶态仍有未完全实操闭合风险。",
+            "evidence": {
+                "mode_closure_summary": mode_closure_summary,
+                "unified_mode_model": unified_mode_model,
+            },
+        },
+        {
+            "question_id": 7,
+            "question_zh": "operator / board / panel / projection / device-side 控制面完成度如何？",
+            "status": "partial" if open_count > 0 else "established",
+            "answer_zh": "中心控制面分层清晰，Android device-side 也有状态与执行面；但整体验证强度仍取决于开放缺口是否关闭。",
+            "evidence": {
+                "control_plane_surfaces": list(control_plane_layering.keys()),
+                "device_side_surface": ecosystem_surfaces["mobile_android_surface"],
+            },
+        },
+        {
+            "question_id": 8,
+            "question_zh": "从 clone 到可操作使用的路径完成度如何？",
+            "status": "established" if minimal_operability_path.get("overall_ready") else "partial",
+            "answer_zh": "V2 已提供 10-step operability contract；若存在 blocking_steps 则仍非无障碍可用。",
+            "evidence": {
+                "overall_ready": bool(minimal_operability_path.get("overall_ready")),
+                "blocking_steps": list(minimal_operability_path.get("blocking_steps") or []),
+            },
+        },
+        {
+            "question_id": 9,
+            "question_zh": "是否已达到“非作者也可用”的可操作水平？",
+            "status": "established" if clone_to_use_acceptance.get("ready_for_use") else "partial",
+            "answer_zh": "已具备面向他人的入口与诊断结构，但是否真正无作者记忆依赖仍由 acceptance 与 open 项共同决定。",
+            "evidence": {
+                "ready_for_use": bool(clone_to_use_acceptance.get("ready_for_use")),
+                "registration_state": readiness_state.get("state"),
+                "android_visible": bool(android_connection_diagnostics.get("android_visible")),
+            },
+        },
+        {
+            "question_id": 10,
+            "question_zh": "Android 执行、委托执行、结果上送、本地/跨设备/接管行为是否已足够一致？",
+            "status": "partial" if mode_closure_summary.get("takeover") != "established" else "established",
+            "answer_zh": "委托执行与结果上送路径已存在并可观测，接管与跨模式一致性已进入治理语义，但仍有过渡性约束。",
+            "evidence": {
+                "delegated_execution_mode": mode_closure_summary.get("delegated_execution"),
+                "takeover_mode": mode_closure_summary.get("takeover"),
+                "delegated_observability": delegated_observability_diagnostics,
+            },
+        },
+        {
+            "question_id": 11,
+            "question_zh": "手机端、桌面端、中心端是否已足够对齐为同一生态？",
+            "status": "partial" if chain_closure_summary.get("projection_chain") != "established" else "established",
+            "answer_zh": "三端已通过统一 truth/reasoning 投影框架连接，但生态成熟度仍受 projection/open 缺口影响。",
+            "evidence": {
+                "projection_chain": chain_closure_summary.get("projection_chain"),
+                "ecosystem_surfaces": ecosystem_surfaces,
+            },
+        },
+        {
+            "question_id": 12,
+            "question_zh": "哪些关键缺口阻止其被视为完整、成熟、可生产使用系统？",
+            "status": "open" if open_count > 0 else "established",
+            "answer_zh": "关键阻塞点以 top_open_items 为准；这些项必须关闭后，才可宣称全系统成熟完备。",
+            "evidence": {
+                "top_open_items": top_open_items,
+                "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
+            },
+        },
+    ]
+
+    completion_posture = "partially_integrated_transitional"
+    if open_count == 0 and partial_count == 0 and minimal_operability_path.get("overall_ready"):
+        completion_posture = "fully_integrated_operational"
+    elif established_count == 0:
+        completion_posture = "early_stage_fragile"
+
+    maturity_verdict_zh = (
+        "当前系统已具备真实双仓主链路和统一契约面，但仍有过渡项与开放缺口，" "应认定为“可运行但未完全成熟封顶”的阶段。"
+    )
 
     return {
         "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
         "contract_version": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION,
         "contract_type": "dual_repo_current_state_integrated_system_contract",
-        "system_identity_zh": (
-            "UFO Galaxy 现阶段双仓一体化 AI 系统：V2 中心编排治理 + Android 分布式执行参与者"
-        ),
+        "system_identity_zh": ("UFO Galaxy 现阶段双仓一体化 AI 系统：V2 中心编排治理 + Android 分布式执行参与者"),
         "entrypoint_model": {
             "central_entrypoint": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
             "operability_entrypoint": OPERABILITY_CONTRACT_ROUTE,
@@ -1515,20 +1673,40 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "android_v2_minimum_standard": dict(report.android_v2_minimum_standard or {}),
         },
         "control_plane_surfaces": control_plane_layering,
-        "minimal_operability_path": dict(report.minimal_happy_path_contract or {}),
+        "minimal_operability_path": minimal_operability_path,
         "current_unification_status": {
             "already_unified": {
-                "chain_closure_summary": dict(backbone_snapshot.get("chain_closure_summary") or {}),
-                "mode_closure_summary": dict(backbone_snapshot.get("mode_closure_summary") or {}),
-                "established_count": int(backbone_snapshot.get("established_count", 0)),
+                "chain_closure_summary": chain_closure_summary,
+                "mode_closure_summary": mode_closure_summary,
+                "established_count": established_count,
             },
             "transitional_or_open": {
-                "partial_count": int(backbone_snapshot.get("partial_count", 0)),
-                "open_count": int(backbone_snapshot.get("open_count", 0)),
-                "top_open_items": list(backbone_snapshot.get("top_open_items") or []),
+                "partial_count": partial_count,
+                "open_count": open_count,
+                "top_open_items": top_open_items,
                 "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
             },
         },
+        "android_repo_real_code_scope": {
+            "repo": "DannyFish-11/ufo-galaxy-android",
+            "investigated_counterpart_files": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
+            "cross_repo_focus_dimensions": [
+                "build_and_install_path",
+                "websocket_connection_and_registration",
+                "delegated_execution_and_result_uplink",
+                "local_vs_cross_device_mode_gate",
+                "runtime_readiness_acceptance_and_takeover_coherence",
+                "mobile_surface_status_feedback",
+            ],
+        },
+        "completion_and_maturity_assessment": {
+            "completion_posture": completion_posture,
+            "maturity_verdict_zh": maturity_verdict_zh,
+            "operability_ready_for_non_author": bool(clone_to_use_acceptance.get("ready_for_use")),
+            "clone_to_use_ready": bool(minimal_operability_path.get("overall_ready")),
+            "blocking_steps": list(minimal_operability_path.get("blocking_steps") or []),
+        },
+        "core_questions_assessment_zh": core_questions,
         "source_contracts": {
             "backbone_snapshot": backbone_snapshot,
             "state_contract": state_contract,
@@ -1630,17 +1808,9 @@ def build_operational_readiness_report(
             if truth_block is not None and bool(getattr(truth_block, "dispatch_eligible", False))
             else "v2_local"
         ),
-        selected_device=(
-            str(getattr(truth_block, "device_id", "") or "") or None
-            if truth_block is not None
-            else None
-        ),
+        selected_device=(str(getattr(truth_block, "device_id", "") or "") or None if truth_block is not None else None),
         android_truth_block=truth_block,
-        participation_tier=(
-            getattr(truth_block, "participation_tier", None)
-            if truth_block is not None
-            else None
-        ),
+        participation_tier=(getattr(truth_block, "participation_tier", None) if truth_block is not None else None),
         mode_state=chain_state.active_path,
         ready_to_route=not bool(runtime_readiness.get("blocking", False)),
         readiness_summary={
@@ -1652,11 +1822,7 @@ def build_operational_readiness_report(
         blocking_reasons=list(chain_state.diagnosis),
         evidence_summary={
             "clone_to_use_ready": bool(system_acceptance.get("available")),
-            "registration_state": (
-                state_contract.get("derived_state", {})
-                .get("registration_state", {})
-                .get("state")
-            ),
+            "registration_state": (state_contract.get("derived_state", {}).get("registration_state", {}).get("state")),
         },
         source_of_truth_refs=[
             OPERATIONAL_READINESS_SURFACE_AUTHORITY,

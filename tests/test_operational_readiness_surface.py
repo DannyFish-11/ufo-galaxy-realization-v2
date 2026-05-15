@@ -535,12 +535,14 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
         state_contract={
             "authority": "test-state-contract",
             "raw_signals": {"runtime_readiness_verdict": "ready"},
+            "derived_state": {"registration_state": {"state": "ready"}},
         },
         runtime_decision_reasoning={"selected_runtime": "android_delegated"},
         unified_mode_model={"execution_location": "android_delegated"},
         chain_state=SimpleNamespace(active_path="cross_device", success_quality="canonical_cross_device"),
         android_v2_minimum_standard={"minimum_viable_chain_ready": True},
         minimal_happy_path_contract={"overall_ready": True},
+        clone_to_use_acceptance={"ready_for_use": True},
     )
     with (
         patch(
@@ -553,7 +555,12 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
                 "authority": "backbone-authority",
                 "contract_version": "1.0.0",
                 "chain_closure_summary": {"request_chain": "established"},
-                "mode_closure_summary": {"local_mode": "established"},
+                "mode_closure_summary": {
+                    "local_mode": "established",
+                    "distributed_participant": "partial",
+                    "delegated_execution": "established",
+                    "takeover": "partial",
+                },
                 "control_plane_layering": {"operator": {"role": "governance"}},
                 "field_typing_schema": {"runtime_truth": "truth"},
                 "established_count": 9,
@@ -569,10 +576,11 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert response.status_code == 200
     payload = response.json()
     assert payload["contract_type"] == "dual_repo_current_state_integrated_system_contract"
-    assert (
-        payload["entrypoint_model"]["central_entrypoint"]
-        == endpoint
-    )
+    assert payload["entrypoint_model"]["central_entrypoint"] == endpoint
     assert payload["responsibility_layering"]["distributed_android_side"]["first_class_execution_participant"] is True
     assert payload["mode_participation_governance_layering"]["active_path"] == "cross_device"
     assert payload["minimal_operability_path"]["overall_ready"] is True
+    assert payload["contract_version"] == "1.1.0"
+    assert payload["android_repo_real_code_scope"]["repo"] == "DannyFish-11/ufo-galaxy-android"
+    assert payload["completion_and_maturity_assessment"]["operability_ready_for_non_author"] is True
+    assert len(payload["core_questions_assessment_zh"]) == 12
