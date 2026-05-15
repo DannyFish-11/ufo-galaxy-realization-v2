@@ -1527,9 +1527,11 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         return _normalize_assessment_status(value) == "established"
 
     def _all_keys_established(summary: Dict[str, Any], keys: Sequence[str]) -> bool:
+        """Return True when all specified keys in summary are normalized as established."""
         return all(_is_established(summary.get(key)) for key in keys)
 
     def _normalize_readiness_signal_status(value: Any) -> str:
+        """Normalize readiness signal values into established/partial status labels."""
         if value in {"ready", "established", True}:
             return "established"
         if value in {"not_ready", "unavailable", False, None}:
@@ -1537,6 +1539,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         return "partial"
 
     def _build_trace_status_node(trace_id: str, raw_status: Any) -> Dict[str, str]:
+        """Build one trace node with stable trace_id + normalized status."""
         return {"trace_id": trace_id, "status": _normalize_assessment_status(raw_status)}
 
     truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
