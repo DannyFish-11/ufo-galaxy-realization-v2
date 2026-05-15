@@ -42,6 +42,29 @@ def _dedupe_strings(values: Iterable[Any]) -> List[str]:
     return deduped
 
 
+def _normalize_mode_state(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _derive_selected_runtime_default(
+    *,
+    current_selected_runtime: str,
+    resolved_mode_state: Any,
+    selected_device: Optional[str],
+) -> str:
+    if current_selected_runtime not in ("", "unknown"):
+        return current_selected_runtime
+
+    mode = _normalize_mode_state(resolved_mode_state)
+    if mode in {"local", "local_only"}:
+        return "android_local" if selected_device else "v2_local"
+    if mode in {"remote_handoff", "staged_mesh", "cross_device", "android_delegated"}:
+        return "android_delegated"
+    if selected_device:
+        return "android_delegated"
+    return "v2_local"
+
+
 def _truth_get(block: Any, key: str, default: Any = None) -> Any:
     if block is None:
         return default
@@ -277,20 +300,6 @@ def overlay_runtime_decision_reasoning_block(
             "unknown",
         )
     )
-
-    if selected_runtime is None:
-        if current.selected_runtime not in ("", "unknown"):
-            selected_runtime_value = current.selected_runtime
-        elif mode_state in {"remote_handoff", "staged_mesh", "cross_device", "android_delegated"}:
-            selected_runtime_value = "android_delegated"
-        elif selected_device_value:
-            selected_runtime_value = "android_delegated"
-        else:
-            selected_runtime_value = "v2_local"
-    else:
-        selected_runtime_value = selected_runtime
-
-    truth_basis = _build_android_truth_basis(truth_block)
     mode_basis = dict(current.mode_basis)
     resolved_mode_state = _coalesce(
         mode_state,
@@ -298,6 +307,17 @@ def overlay_runtime_decision_reasoning_block(
         _truth_get(truth_block, "device_mode"),
         "unknown",
     )
+
+    if selected_runtime is None:
+        selected_runtime_value = _derive_selected_runtime_default(
+            current_selected_runtime=current.selected_runtime,
+            resolved_mode_state=resolved_mode_state,
+            selected_device=selected_device_value,
+        )
+    else:
+        selected_runtime_value = selected_runtime
+
+    truth_basis = _build_android_truth_basis(truth_block)
     mode_basis.update(
         {
             "mode_state": resolved_mode_state,
