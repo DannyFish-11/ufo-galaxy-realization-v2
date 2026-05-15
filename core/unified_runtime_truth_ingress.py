@@ -191,6 +191,7 @@ _EXECUTION_SIGNAL_TYPES = frozenset({
     "error",
     "timeout",
     "cancelled",
+    "delegated_execution_signal",
     "execution_ack",
     "execution_progress",
     "execution_result",
@@ -241,6 +242,17 @@ class RuntimeTruthIngressOutcome:
     continuity_legality_verdict: str = ""
     """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
     value string (empty when not evaluated)."""
+    result_produced: bool = False
+    """True when this ingress observed a terminal execution result signal."""
+    truth_ingested_or_accepted: bool = False
+    """True when the terminal result was ingested by unified result/truth chain."""
+    closure_accepted: bool = False
+    """True when the terminal result reached accepted closure (fully closed)."""
+    final_completion_state: str = ""
+    """Coherent completion state for surfaces:
+    ``in_progress`` / ``closed`` / ``result_returned_but_not_closed`` /
+    ``result_returned_not_reconciled`` / ``terminal_result_without_task_id`` /
+    ``result_returned_unified_ingress_unavailable``."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -251,6 +263,10 @@ class RuntimeTruthIngressOutcome:
             "message_type": self.message_type,
             "continuity_rejected": self.continuity_rejected,
             "continuity_legality_verdict": self.continuity_legality_verdict,
+            "result_produced": self.result_produced,
+            "truth_ingested_or_accepted": self.truth_ingested_or_accepted,
+            "closure_accepted": self.closure_accepted,
+            "final_completion_state": self.final_completion_state,
         }
 
 
@@ -305,6 +321,68 @@ def _check_runtime_ingress_continuity(
             _e,
         )
         return "allow", False
+
+
+def _resolve_execution_signal_reconciled(sub_outcome: Any) -> bool:
+    """Return a canonical reconciled verdict across sub-outcome shapes."""
+    if sub_outcome is None:
+        return False
+
+    accepted = getattr(sub_outcome, "is_accepted", None)
+    if callable(accepted):
+        try:
+            return bool(accepted())
+        except Exception:
+            pass
+
+    if hasattr(sub_outcome, "was_reconciled"):
+        return bool(getattr(sub_outcome, "was_reconciled", False))
+
+    was_updated = bool(getattr(sub_outcome, "was_updated", False))
+    reject_reason = str(getattr(sub_outcome, "reject_reason", "") or "").strip()
+    return was_updated and not reject_reason
+
+
+def _extract_terminal_result_status(
+    message: Dict[str, Any],
+    msg_type: str,
+) -> Optional[str]:
+    """Map an execution signal message to canonical result status when terminal."""
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+    raw_signal_kind = str(
+        payload.get("signal_kind")
+        or message.get("signal_kind")
+        or msg_type
+        or ""
+    ).lower().strip()
+
+    if raw_signal_kind in ("ack", "progress", "execution_ack", "execution_progress"):
+        return None
+
+    if raw_signal_kind in ("cancelled", "execution_cancelled"):
+        return "cancelled"
+    if raw_signal_kind in ("timeout", "execution_timeout"):
+        return "degraded"
+    if raw_signal_kind in ("error", "execution_error"):
+        return "failed"
+
+    if raw_signal_kind in ("result", "execution_result", "delegated_execution_signal"):
+        raw_status = str(
+            payload.get("status")
+            or message.get("status")
+            or payload.get("result_kind")
+            or message.get("result_kind")
+            or "success"
+        ).lower().strip()
+        if raw_status in ("failure", "failed", "error"):
+            return "failed"
+        if raw_status in ("cancelled", "canceled"):
+            return "cancelled"
+        if raw_status in ("timeout", "timed_out", "degraded"):
+            return "degraded"
+        return "completed"
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -451,17 +529,79 @@ def ingest_android_runtime_state_update(
             if registry is not None:
                 kwargs["registry"] = registry
             sub_outcome = ingest_delegated_execution_signal(message, **kwargs)
-            was_reconciled = getattr(sub_outcome, "was_reconciled", False)
+            was_reconciled = _resolve_execution_signal_reconciled(sub_outcome)
             reject_reason = "" if was_reconciled else getattr(
                 sub_outcome, "reject_reason", "signal_not_reconciled"
             )
-            return RuntimeTruthIngressOutcome(
+
+            outcome = RuntimeTruthIngressOutcome(
                 routed_path="execution_signal",
                 was_reconciled=was_reconciled,
                 reject_reason=reject_reason,
                 sub_outcome=sub_outcome,
                 message_type=msg_type,
             )
+
+            terminal_status = _extract_terminal_result_status(message, msg_type)
+            if terminal_status is None:
+                outcome.final_completion_state = "in_progress"
+                return outcome
+
+            outcome.result_produced = True
+            if not was_reconciled:
+                outcome.final_completion_state = "result_returned_not_reconciled"
+                return outcome
+
+            payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+            task_id = str(message.get("task_id") or payload.get("task_id") or "").strip()
+            device_id = str(message.get("device_id") or payload.get("device_id") or "").strip()
+            trace_id = str(message.get("trace_id") or payload.get("trace_id") or "").strip()
+            if not task_id:
+                outcome.final_completion_state = "terminal_result_without_task_id"
+                return outcome
+
+            try:
+                from core.unified_result_ingress import (
+                    NormalizedResultEvent,
+                    ResultSourceChannel,
+                    ingest_result,
+                    normalize_status,
+                )
+
+                status = normalize_status(terminal_status)
+                normalized_event = NormalizedResultEvent(
+                    task_id=task_id,
+                    device_id=device_id,
+                    raw_message_type=msg_type,
+                    normalized_result_kind=msg_type or "delegated_execution_signal",
+                    normalized_status=status,
+                    source_channel=ResultSourceChannel.DELEGATED,
+                    payload=payload if payload else dict(message),
+                    trace_id=trace_id,
+                    raw_message=dict(message),
+                    runtime_session_id=str(
+                        message.get("runtime_session_id")
+                        or payload.get("runtime_session_id")
+                        or message.get("session_id")
+                        or payload.get("session_id")
+                        or ""
+                    ),
+                )
+                result_outcome = ingest_result(normalized_event)
+                outcome.truth_ingested_or_accepted = bool(result_outcome.truth_chain_complete)
+                outcome.closure_accepted = bool(result_outcome.is_fully_closed)
+                outcome.final_completion_state = (
+                    "closed"
+                    if outcome.closure_accepted
+                    else "result_returned_but_not_closed"
+                )
+            except Exception as exc:
+                logger.warning(
+                    "unified_runtime_truth_ingress: unified result ingress linkage error: %s",
+                    exc,
+                )
+                outcome.final_completion_state = "result_returned_unified_ingress_unavailable"
+            return outcome
         except Exception as exc:
             logger.warning(
                 "unified_runtime_truth_ingress: execution_signal sub-ingress error: %s",
