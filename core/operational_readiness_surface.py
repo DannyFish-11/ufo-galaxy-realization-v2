@@ -76,7 +76,7 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
-DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.1.0"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.2.0"
 OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
 DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
@@ -1659,6 +1659,34 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     maturity_verdict_zh = (
         "当前系统已具备真实双仓主链路和统一契约面，但仍有过渡项与开放缺口，应认定为“可运行但未完全成熟封顶”的阶段。"
     )
+    complete_status = "established" if (open_count == 0 and partial_count == 0 and minimal_operability_path.get("overall_ready")) else "partial"
+    mature_status = (
+        "established"
+        if (
+            complete_status == "established"
+            and mode_closure_summary.get("takeover") == "established"
+            and chain_closure_summary.get("projection_chain") == "established"
+        )
+        else "partial"
+    )
+    end_to_end_usable_status = (
+        "established"
+        if (
+            bool(minimal_operability_path.get("overall_ready"))
+            and bool(clone_to_use_acceptance.get("ready_for_use"))
+            and len(list(minimal_operability_path.get("blocking_steps") or [])) == 0
+        )
+        else "partial"
+    )
+    ecosystem_coherence_status = (
+        "established"
+        if (
+            mode_closure_summary.get("takeover") == "established"
+            and chain_closure_summary.get("projection_chain") == "established"
+            and mode_closure_summary.get("distributed_participant") == "established"
+        )
+        else "partial"
+    )
 
     return {
         "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
@@ -1730,6 +1758,58 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "operability_ready_for_non_author": bool(clone_to_use_acceptance.get("ready_for_use")),
             "clone_to_use_ready": bool(minimal_operability_path.get("overall_ready")),
             "blocking_steps": list(minimal_operability_path.get("blocking_steps") or []),
+        },
+        "integrated_judgement_zh": {
+            "complete_verdict": {
+                "status": complete_status,
+                "verdict_zh": "当前不能宣称系统已完整封顶。" if complete_status != "established" else "当前可判定系统已达到完整封顶。",
+                "evidence": {
+                    "established_count": established_count,
+                    "partial_count": partial_count,
+                    "open_count": open_count,
+                },
+            },
+            "maturity_verdict": {
+                "status": mature_status,
+                "verdict_zh": "当前不能宣称系统已成熟封顶。" if mature_status != "established" else "当前可判定系统已成熟封顶。",
+                "evidence": {
+                    "completion_posture": completion_posture,
+                    "takeover_mode": mode_closure_summary.get("takeover"),
+                    "projection_chain": chain_closure_summary.get("projection_chain"),
+                },
+            },
+            "end_to_end_usability_verdict": {
+                "status": end_to_end_usable_status,
+                "verdict_zh": (
+                    "当前已具备从 clone 到可用的最小端到端路径。"
+                    if end_to_end_usable_status == "established"
+                    else "当前端到端可用链路仍有阻塞或依赖项。"
+                ),
+                "evidence": {
+                    "clone_to_use_ready": bool(minimal_operability_path.get("overall_ready")),
+                    "ready_for_use": bool(clone_to_use_acceptance.get("ready_for_use")),
+                    "blocking_steps": list(minimal_operability_path.get("blocking_steps") or []),
+                },
+            },
+            "ecosystem_coherence_verdict": {
+                "status": ecosystem_coherence_status,
+                "verdict_zh": (
+                    "手机端、桌面端、中心端已达到较高一致性。"
+                    if ecosystem_coherence_status == "established"
+                    else "手机端、桌面端、中心端已形成统一生态主链，但一致性仍未完全封顶。"
+                ),
+                "evidence": {
+                    "distributed_participant": mode_closure_summary.get("distributed_participant"),
+                    "takeover_mode": mode_closure_summary.get("takeover"),
+                    "projection_chain": chain_closure_summary.get("projection_chain"),
+                },
+            },
+            "next_phase_key_work_zh": [
+                "按 top_open_items 逐项关闭开放缺口，并补齐可复验的证据链。",
+                "继续收敛 Android 本地/跨设备/接管语义一致性，降低模式切换歧义。",
+                "把 clone-to-use 阻塞步骤转为可自动验证的验收条款，降低作者经验依赖。",
+            ],
+            "honesty_guardrail_zh": "该判定层仅基于当前双仓真实代码与现有契约输出，不得用于宣称不存在的成熟度。",
         },
         "core_questions_assessment_zh": core_questions,
         "source_contracts": {
