@@ -341,8 +341,12 @@ def _resolve_execution_signal_reconciled(sub_outcome: Any) -> bool:
     if callable(accepted):
         try:
             return bool(accepted())
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "unified_runtime_truth_ingress: is_accepted() unavailable, "
+                "falling back to was_reconciled/was_updated: %s",
+                exc,
+            )
 
     if hasattr(sub_outcome, "was_reconciled"):
         return bool(getattr(sub_outcome, "was_reconciled", False))
@@ -633,7 +637,10 @@ def ingest_android_runtime_state_update(
                 )
             except Exception as exc:
                 logger.warning(
-                    "unified_runtime_truth_ingress: unified result ingress linkage error: %s",
+                    "unified_runtime_truth_ingress: unified result ingress linkage error "
+                    "task_id=%r msg_type=%r err=%s",
+                    task_id,
+                    msg_type,
                     exc,
                 )
                 outcome.final_completion_state = "result_returned_unified_ingress_unavailable"
