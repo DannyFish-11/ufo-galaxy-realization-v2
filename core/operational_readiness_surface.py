@@ -93,6 +93,10 @@ _MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES: tuple[str, ...] = ("fastapi", "uvicorn",
 _MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE = "/api/v1/operator/board/operable-truth"
 _MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE = "/api/v1/operator/actions/android-directed"
 _MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
+
+COMPLETION_POSTURE_FULLY_INTEGRATED_OPERATIONAL = "fully_integrated_operational"
+COMPLETION_POSTURE_PARTIALLY_INTEGRATED_TRANSITIONAL = "partially_integrated_transitional"
+COMPLETION_POSTURE_EARLY_STAGE_FRAGILE = "early_stage_fragile"
 # Android-side counterpart model inputs that anchor this V2 contract to the
 # currently integrated distributed execution runtime in ufo-galaxy-android.
 # Update this list when Android runtime responsibility files are renamed/moved.
@@ -1492,7 +1496,22 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
         ],
     }
+    valid_assessment_states = {"established", "partial", "open"}
 
+    def _normalize_assessment_status(raw_value: Any, *, default: str = "partial") -> str:
+        if isinstance(raw_value, str) and raw_value in valid_assessment_states:
+            return raw_value
+        return default
+
+    def _derive_status_from_counts() -> str:
+        return "partial" if open_count > 0 or partial_count > 0 else "established"
+
+    truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
+
+    # 12-question cognition matrix:
+    # - provides one machine-readable answer per required question
+    # - status uses established / partial / open to avoid overstating maturity
+    # - each answer includes direct evidence fields from live contracts/snapshots
     core_questions = [
         {
             "question_id": 1,
@@ -1508,7 +1527,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         {
             "question_id": 2,
             "question_zh": "两个仓库如何作为一个系统协同？",
-            "status": "partial" if open_count > 0 else "established",
+            "status": _derive_status_from_counts(),
             "answer_zh": "V2 提供编排/治理/真值与投影面，Android 提供连接、执行、结果与状态上送；已形成可观察主链，但仍有未闭合项。",
             "evidence": {
                 "request_chain": chain_closure_summary.get("request_chain"),
@@ -1519,7 +1538,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         {
             "question_id": 3,
             "question_zh": "哪些部分已真正集成，哪些仍是部分连接？",
-            "status": "partial" if partial_count > 0 or open_count > 0 else "established",
+            "status": _derive_status_from_counts(),
             "answer_zh": "主链路已有 established 组件，但 mode/operability 等仍有 partial/open 条目，尚未全闭合。",
             "evidence": {
                 "established_count": established_count,
@@ -1530,7 +1549,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         {
             "question_id": 4,
             "question_zh": "全系统 truth flow 完成度如何？",
-            "status": chain_closure_summary.get("android_truth_uplink_chain", "partial"),
+            "status": truth_flow_status,
             "answer_zh": "truth 上送与回流链已具备明确路径，但仍以当前证据闭合度为准，不能等同于终态完备。",
             "evidence": {
                 "android_truth_uplink_chain": chain_closure_summary.get("android_truth_uplink_chain"),
@@ -1564,7 +1583,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         {
             "question_id": 7,
             "question_zh": "operator / board / panel / projection / device-side 控制面完成度如何？",
-            "status": "partial" if open_count > 0 else "established",
+            "status": _derive_status_from_counts(),
             "answer_zh": "中心控制面分层清晰，Android device-side 也有状态与执行面；但整体验证强度仍取决于开放缺口是否关闭。",
             "evidence": {
                 "control_plane_surfaces": list(control_plane_layering.keys()),
@@ -1625,14 +1644,20 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         },
     ]
 
-    completion_posture = "partially_integrated_transitional"
+    # completion_posture semantic:
+    # - fully_integrated_operational: no open/partial items and operability happy path ready
+    # - partially_integrated_transitional: integrated core exists but still has partial/open items
+    # - early_stage_fragile: no established backbone evidence yet
+    # Default posture is transitional: some backbone capabilities are established,
+    # but partial/open items still exist so maturity cannot be overstated.
+    completion_posture = COMPLETION_POSTURE_PARTIALLY_INTEGRATED_TRANSITIONAL
     if open_count == 0 and partial_count == 0 and minimal_operability_path.get("overall_ready"):
-        completion_posture = "fully_integrated_operational"
+        completion_posture = COMPLETION_POSTURE_FULLY_INTEGRATED_OPERATIONAL
     elif established_count == 0:
-        completion_posture = "early_stage_fragile"
+        completion_posture = COMPLETION_POSTURE_EARLY_STAGE_FRAGILE
 
     maturity_verdict_zh = (
-        "当前系统已具备真实双仓主链路和统一契约面，但仍有过渡项与开放缺口，" "应认定为“可运行但未完全成熟封顶”的阶段。"
+        "当前系统已具备真实双仓主链路和统一契约面，但仍有过渡项与开放缺口，应认定为“可运行但未完全成熟封顶”的阶段。"
     )
 
     return {
@@ -1808,7 +1833,9 @@ def build_operational_readiness_report(
             if truth_block is not None and bool(getattr(truth_block, "dispatch_eligible", False))
             else "v2_local"
         ),
-        selected_device=(str(getattr(truth_block, "device_id", "") or "") or None if truth_block is not None else None),
+        selected_device=(
+            (str(getattr(truth_block, "device_id", "") or "") or None) if truth_block is not None else None
+        ),
         android_truth_block=truth_block,
         participation_tier=(getattr(truth_block, "participation_tier", None) if truth_block is not None else None),
         mode_state=chain_state.active_path,

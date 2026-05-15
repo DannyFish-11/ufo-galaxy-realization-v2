@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -583,4 +584,25 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert payload["contract_version"] == "1.1.0"
     assert payload["android_repo_real_code_scope"]["repo"] == "DannyFish-11/ufo-galaxy-android"
     assert payload["completion_and_maturity_assessment"]["operability_ready_for_non_author"] is True
+    assert payload["completion_and_maturity_assessment"]["completion_posture"] == "partially_integrated_transitional"
     assert len(payload["core_questions_assessment_zh"]) == 12
+    question_ids = [entry["question_id"] for entry in payload["core_questions_assessment_zh"]]
+    duplicates = sorted([qid for qid, count in Counter(question_ids).items() if count > 1])
+    assert len(question_ids) == len(set(question_ids)), f"Duplicate question IDs found: {duplicates}"
+    assert all(
+        entry["status"] in {"established", "partial", "open"} for entry in payload["core_questions_assessment_zh"]
+    )
+    question_by_id = {entry["question_id"]: entry for entry in payload["core_questions_assessment_zh"]}
+    assert sorted(question_by_id.keys()) == list(range(1, 13))
+    assert question_by_id[1]["status"] == "established"
+    assert question_by_id[2]["status"] == "partial"
+    assert question_by_id[3]["status"] == "partial"
+    assert question_by_id[4]["status"] == "partial"
+    assert question_by_id[5]["status"] == "established"
+    assert question_by_id[6]["status"] == "partial"
+    assert question_by_id[7]["status"] == "partial"
+    assert question_by_id[8]["status"] == "established"
+    assert question_by_id[9]["status"] == "established"
+    assert question_by_id[10]["status"] == "partial"
+    assert question_by_id[11]["status"] == "partial"
+    assert question_by_id[12]["status"] == "open"
