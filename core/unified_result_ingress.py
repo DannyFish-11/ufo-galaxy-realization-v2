@@ -633,11 +633,16 @@ class UnifiedResultIngress:
                 event.payload.get("_android_device_id_for_completion_ingress")
             )
 
+            # These fields are best-effort hints populated by
+            # _stamp_android_truth_context(). If SSOT stamping is unavailable,
+            # they remain None and completion ingress still degrades gracefully.
             notify_with_context = None
             try:
-                inspect.getattr_static(ingress, "notify_with_android_context")
+                static_candidate = inspect.getattr_static(
+                    ingress, "notify_with_android_context"
+                )
                 candidate = getattr(ingress, "notify_with_android_context", None)
-                if callable(candidate):
+                if static_candidate is not None and callable(candidate):
                     notify_with_context = candidate
             except AttributeError:
                 notify_with_context = None
@@ -745,7 +750,7 @@ class UnifiedResultIngress:
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:
-        text = str(value or "").strip()
+        text = str(value).strip() if value is not None else ""
         return text or None
 
     def _classify_and_apply_evidence_gate(
