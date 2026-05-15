@@ -123,6 +123,7 @@ __all__ = [
     "build_local_chain_snapshot",
     "get_local_execution_chain",
     "reset_local_execution_chain",
+    "submit_local_result_to_ingress",
 ]
 
 
@@ -368,6 +369,17 @@ class LocalExecutionRecord:
     dispatched_at: float = dataclasses.field(default_factory=time.time)
     completed_at: Optional[float] = None
     extra: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    # 验收追踪字段 — 本地链路结果进入统一入口后的闭环状态
+    # Acceptance tracking: populated by record_local_execution() after
+    # submit_local_result_to_ingress() processes the result through
+    # UnifiedResultIngress.  Empty string means ingress was not run.
+    acceptance_state: str = ""
+    """本地链路验收状态（acceptance verdict from UnifiedResultIngress）。
+    取值：'accepted'、'accepted_provisional'、'quarantine'、'reject'、
+    'truth_chain_incomplete'、'ingress_skipped'、'ingress_error' 或空字符串。"""
+    acceptance_closed: bool = False
+    """True iff the local execution result was fully processed by UnifiedResultIngress
+    with is_fully_closed=True.  Reflects real system completion, not only UI wording."""
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict representation."""
@@ -383,6 +395,9 @@ class LocalExecutionRecord:
             "dispatched_at": self.dispatched_at,
             "completed_at": self.completed_at,
             "extra": self.extra,
+            # 验收追踪字段
+            "acceptance_state": self.acceptance_state,
+            "acceptance_closed": self.acceptance_closed,
         }
 
     @classmethod
@@ -413,6 +428,8 @@ class LocalExecutionRecord:
             dispatched_at=float(data.get("dispatched_at", time.time())),
             completed_at=data.get("completed_at"),
             extra=data.get("extra") or {},
+            acceptance_state=str(data.get("acceptance_state") or ""),
+            acceptance_closed=bool(data.get("acceptance_closed", False)),
         )
 
 
@@ -746,7 +763,132 @@ def record_local_execution(
             legacy_path_used,
         )
 
+    # 本地链路验收步骤：将结果提交到统一入口，获取闭环验收状态。
+    # Local chain acceptance step: submit result to UnifiedResultIngress to get
+    # evidence classification and acceptance verdict (is_fully_closed reflects
+    # real system completion, not only a flag).
+    if record.result is not None:
+        ingress_outcome = submit_local_result_to_ingress(
+            result=record.result,
+            task_id=task_id,
+            session_id=session_id,
+        )
+        if ingress_outcome is not None:
+            record.acceptance_state = (
+                ingress_outcome.get("evidence_acceptance_verdict")
+                or ("accepted" if ingress_outcome.get("is_fully_closed") else "incomplete")
+            )
+            record.acceptance_closed = bool(ingress_outcome.get("is_fully_closed"))
+        else:
+            record.acceptance_state = "ingress_skipped"
+
+        # 写入双链路闭环注册表（execution_chain_closure）。
+        try:
+            from core.execution_chain_closure import record_local_chain_closure as _record_lcc
+            _record_lcc(
+                task_id=task_id,
+                ingress_outcome=ingress_outcome,
+                normalized_status=record.result.status,
+                executor_module=executor_module,
+            )
+        except Exception as _lcc_err:
+            logger.debug(
+                "record_local_execution: execution_chain_closure 写入失败（非致命）"
+                "task_id=%s err=%s",
+                task_id,
+                _lcc_err,
+            )
+
     return record
+
+
+def submit_local_result_to_ingress(
+    result: "LocalExecutionResult",
+    *,
+    task_id: str = "",
+    session_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """将本地执行结果提交到统一结果入口（UnifiedResultIngress），完成本地链路验收步骤。
+
+    本函数是本地链路的验收闭环桥接：将 :class:`LocalExecutionResult` 规范化为
+    :class:`~core.unified_result_ingress.NormalizedResultEvent` 并通过
+    :func:`~core.unified_result_ingress.ingest_result` 送入统一处理链。
+    处理链包含：幂等性保护、真值链（truth chain）、证据质量分级、验收判定。
+
+    Submit a local execution result to UnifiedResultIngress to close the local
+    chain's acceptance loop.
+
+    Parameters
+    ----------
+    result:
+        The :class:`LocalExecutionResult` from the local executor.
+    task_id:
+        Override task_id (falls back to ``result.task_id``).
+    session_id:
+        Optional runtime session ID for continuity context.
+
+    Returns
+    -------
+    dict or None
+        A plain dict summary of the :class:`~core.unified_result_ingress.UnifiedResultIngressOutcome`,
+        or ``None`` if UnifiedResultIngress is unavailable (graceful degradation).
+    """
+    effective_task_id = task_id or result.task_id
+    try:
+        from core.unified_result_ingress import (
+            NormalizedResultEvent,
+            ResultSourceChannel,
+            ingest_result,
+            normalize_status,
+        )
+        # Normalise local executor status to V2 canonical status.
+        normalized_status = normalize_status(result.status) if not result.success else "completed"
+        if not result.success and result.status in ("failed", "error"):
+            normalized_status = "failed"
+        elif not result.success and result.status == "cancelled":
+            normalized_status = "cancelled"
+
+        event = NormalizedResultEvent(
+            task_id=effective_task_id,
+            device_id="",  # local execution has no device_id
+            raw_message_type="local_execution_result",
+            normalized_result_kind="local_execution_result",
+            normalized_status=normalized_status,
+            source_channel=ResultSourceChannel.LOCAL,
+            payload=result.to_dict(),
+            # 使用前缀防止与跨设备路径的幂等性 key 冲突
+            idempotency_key=f"local_execution_result:{effective_task_id}",
+            trace_id="",
+            runtime_session_id=session_id or "",
+        )
+        outcome = ingest_result(event)
+        logger.debug(
+            "submit_local_result_to_ingress: task_id=%s is_fully_closed=%s "
+            "acceptance_verdict=%s truth_chain=%s",
+            effective_task_id,
+            outcome.is_fully_closed,
+            outcome.evidence_acceptance_verdict or "n/a",
+            outcome.truth_chain_complete,
+        )
+        return {
+            "is_fully_closed": outcome.is_fully_closed,
+            "was_deduplicated": outcome.was_deduplicated,
+            "truth_chain_complete": outcome.truth_chain_complete,
+            "completion_notified": outcome.completion_notified,
+            "evidence_acceptance_verdict": outcome.evidence_acceptance_verdict,
+            "evidence_trust_level": outcome.evidence_trust_level,
+            "incomplete_reason": outcome.incomplete_reason,
+            "task_completed": outcome.task_completed,
+            "problem_solved": outcome.problem_solved,
+        }
+    except Exception as _ingress_err:
+        logger.warning(
+            "submit_local_result_to_ingress: UnifiedResultIngress 不可用（非致命）"
+            "task_id=%s error=%s",
+            effective_task_id,
+            _ingress_err,
+        )
+        return None
 
 
 def build_local_chain_snapshot(

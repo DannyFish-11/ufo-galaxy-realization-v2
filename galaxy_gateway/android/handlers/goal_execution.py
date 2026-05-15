@@ -933,14 +933,14 @@ async def handle_goal_execution_result(
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on
     # reconnect.  A V2 restart + Android reconnect can replay the same result
-    # multiple times.  Check the durable store before any side-effecting work
-    # so that memory backflow, reconcile, and completion linkage each run at
-    # most once per task_id.
+    # multiple times.  Pre-check the durable store before any side-effecting work.
+    # NOTE: We no longer call _record_ger_idem here; UnifiedResultIngress records
+    # the same idempotency key internally so that the outer pre-check catches
+    # replays on subsequent calls after the first successful ingestion.
     _ger_idem_key = f"goal_execution_result:{task_id}"
     try:
         from core.durable_result_idempotency import (
             check_result_idempotency as _check_ger_idem,
-            record_result_idempotency as _record_ger_idem,
         )
         if _check_ger_idem(_ger_idem_key):
             logger.debug(
@@ -949,7 +949,6 @@ async def handle_goal_execution_result(
                 task_id, device_id,
             )
             return
-        _record_ger_idem(_ger_idem_key)
     except Exception as _ger_idem_err:
         logger.debug(
             "GOAL_EXECUTION_RESULT: idempotency check skipped (non-fatal): %s",
@@ -1016,88 +1015,189 @@ async def handle_goal_execution_result(
             task_id, feedback_err,
         )
 
-    # PR-UNIFY: Run the canonical must-run truth chain for goal_execution_result.
-    # This replaces the previous separate _reconcile_goal_result +
-    # _try_ingest_goal_result_truth + direct CanonicalCompletionIngress.notify()
-    # calls with a single entry point (mirroring task_lifecycle.py PR-TTC):
-    #   (1) truth_ingress   — ingest Android participant truth into V2 state
-    #   (2) reconcile       — reconcile against host-side execution tracker
-    #   (3) authority_update — advance CanonicalTaskRuntime lifecycle
-    #   (4) completion_linkage — notify CanonicalCompletionIngress
-    # All four steps must run as a single chain so that goal_execution_result
-    # and task_result share the same canonical completion authority path.
-    if _run_task_result_truth_chain is not None:
-        _ger_ttc_outcome = _run_task_result_truth_chain(
-            message,
-            task_id=task_id,
-            result_status=status,
+    # PR-CLOSURE: 通过统一结果入口（UnifiedResultIngress）处理跨设备执行结果，
+    # 实现跨设备链路的验收闭环（closure acceptance）。
+    #
+    # 本路径取代原先直接调用 run_task_result_truth_chain 的方式，统一通过
+    # UnifiedResultIngress 处理以获得：
+    #   (1) 幂等性保护（与外层使用同一 key，内部记录，防止重复处理）
+    #   (2) 真值链（truth chain: truth_ingress / reconcile / lifecycle / completion）
+    #   (3) 证据质量分级（execution evidence classification）
+    #   (4) 验收判定（acceptance gate: accept / accept_provisional / quarantine / reject）
+    #   (5) bridge pending_responses 解析（解除等待该任务结果的 Future）
+    #
+    # 如果 UnifiedResultIngress 不可用，回退到直接调用 run_task_result_truth_chain，
+    # 以保留现有行为。
+    _ger_ingress_closed = False
+    _ger_ingress_outcome = None  # type: ignore[assignment]
+    try:
+        from core.unified_result_ingress import (
+            NormalizedResultEvent as _NREV2,
+            ResultSourceChannel as _RSCv2,
+            ingest_result_async as _ingest_ger_async,
         )
-        if not _ger_ttc_outcome.is_truth_chain_complete:
-            result_lineage["reconciliation_lineage"] = "truth_chain_incomplete"
-            result_lineage["closure_lineage"] = "truth_chain_incomplete"
-            result_lineage["audit_lineage"] = "truth_chain_incomplete"
+        _ger_event = _NREV2(
+            task_id=task_id,
+            device_id=device_id,
+            raw_message_type="goal_execution_result",
+            normalized_result_kind="goal_execution_result",
+            normalized_status=status,
+            source_channel=_RSCv2.CANONICAL_WS,
+            payload=payload,
+            trace_id=trace_id,
+            raw_message=message,
+            runtime_session_id=payload.get("session_id") or message.get("session_id") or "",
+            # 使用与外层幂等性保护相同的 key；UnifiedResultIngress 在此处记录该
+            # key，外层的 pre-check 在下一次重放时会提前拦截重复消息。
+            idempotency_key=_ger_idem_key,
+        )
+        _ger_ingress_outcome = await _ingest_ger_async(_ger_event, bridge=bridge)
+        if _ger_ingress_outcome.was_deduplicated:
+            # 已由 UnifiedResultIngress 幂等性保护拦截
+            result_lineage["closure_lineage"] = "unified_ingress_deduplicated"
+            logger.debug(
+                "handle_goal_execution_result: unified ingress deduplicated task_id=%r",
+                task_id,
+            )
+        elif _ger_ingress_outcome.is_fully_closed:
+            _ger_ingress_closed = True
+            result_lineage["reconciliation_lineage"] = "unified_ingress_closed"
+            result_lineage["closure_lineage"] = "unified_ingress_accepted"
+            result_lineage["audit_lineage"] = "unified_ingress_complete"
+            result_lineage["acceptance_verdict"] = (
+                _ger_ingress_outcome.evidence_acceptance_verdict or "accepted"
+            )
+            if result_lineage.get("lineage_quality") in (
+                _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
+                _LINEAGE_QUALITY_CANONICAL_SUCCESS,
+            ):
+                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_CANONICAL_SUCCESS
+            logger.debug(
+                "handle_goal_execution_result: unified ingress fully closed task_id=%r "
+                "acceptance=%s truth_chain=%s",
+                task_id,
+                _ger_ingress_outcome.evidence_acceptance_verdict,
+                _ger_ingress_outcome.truth_chain_complete,
+            )
+        else:
+            # 部分闭环：UnifiedResultIngress 运行了但未完全关闭
+            result_lineage["reconciliation_lineage"] = "unified_ingress_partial"
+            result_lineage["closure_lineage"] = (
+                f"unified_ingress_incomplete:{_ger_ingress_outcome.incomplete_reason}"
+            )
+            result_lineage["audit_lineage"] = "unified_ingress_partial"
             if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
                 result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
             logger.warning(
-                "handle_goal_execution_result: truth chain incomplete for task_id=%r: %s",
+                "handle_goal_execution_result: unified ingress partial for task_id=%r "
+                "reason=%s truth_chain=%s",
                 task_id,
-                _ger_ttc_outcome.incomplete_reason,
+                _ger_ingress_outcome.incomplete_reason,
+                _ger_ingress_outcome.truth_chain_complete,
             )
-        else:
-            result_lineage["reconciliation_lineage"] = "canonical_truth_chain_reconciled"
-            result_lineage["closure_lineage"] = "canonical_completion_linked"
-            result_lineage["audit_lineage"] = "canonical_truth_chain_complete"
-            logger.debug(
-                "handle_goal_execution_result: truth chain complete for task_id=%r",
-                task_id,
-            )
-    else:
-        # Fallback: canonical truth chain module unavailable — run legacy
-        # best-effort helpers so existing behaviour is preserved.
+    except Exception as _ingest_ger_err:
+        # 回退路径：UnifiedResultIngress 不可用，保持旧行为。
         logger.warning(
-            "handle_goal_execution_result: canonical truth chain module unavailable "
-            "(task_result_canonical_truth_chain); falling back to legacy "
-            "best-effort helpers for task_id=%r",
+            "handle_goal_execution_result: unified ingress unavailable "
+            "(falling back to truth chain) task_id=%r err=%s",
             task_id,
+            _ingest_ger_err,
         )
-        if _reconcile_goal_result is not None:
-            try:
-                _rec_outcome = _reconcile_goal_result(message)
-                if _rec_outcome.was_updated:
-                    logger.debug(
-                        "goal_execution_result fallback reconcile: "
-                        "signal=%s contract_id=%r → phase=%s",
-                        _rec_outcome.envelope.signal_kind.value if _rec_outcome.envelope else "?",
-                        _rec_outcome.envelope.contract_id if _rec_outcome.envelope else "",
-                        _rec_outcome.record.phase.value if _rec_outcome.record else "?",
-                    )
-            except Exception as rec_err:
-                logger.debug(
-                    "goal_execution_result fallback reconcile failed (non-fatal): %s", rec_err
-                )
-        _try_ingest_goal_result_truth(message)
-        result_lineage["reconciliation_lineage"] = "fallback_reconcile"
-        result_lineage["closure_lineage"] = "fallback_completion_linkage"
-        result_lineage["audit_lineage"] = "fallback_truth_chain"
-        if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
-            result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
-        # Fallback completion linkage — only reached when truth chain is unavailable.
-        try:
-            from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
-
-            _get_cci_fb().notify(_make_completion_envelope(
+        if _run_task_result_truth_chain is not None:
+            _ger_ttc_outcome = _run_task_result_truth_chain(
+                message,
                 task_id=task_id,
-                handoff_id=payload.get("handoff_id") or "",
-            ))
-            logger.debug(
-                "GOAL_EXECUTION_RESULT: fallback CanonicalCompletionIngress notified task_id=%s",
+                result_status=status,
+            )
+            if not _ger_ttc_outcome.is_truth_chain_complete:
+                result_lineage["reconciliation_lineage"] = "truth_chain_fallback_incomplete"
+                result_lineage["closure_lineage"] = "truth_chain_fallback_incomplete"
+                result_lineage["audit_lineage"] = "truth_chain_fallback_incomplete"
+                if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+                    result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+                logger.warning(
+                    "handle_goal_execution_result: truth chain fallback incomplete "
+                    "for task_id=%r: %s",
+                    task_id,
+                    _ger_ttc_outcome.incomplete_reason,
+                )
+            else:
+                result_lineage["reconciliation_lineage"] = "truth_chain_fallback_reconciled"
+                result_lineage["closure_lineage"] = "truth_chain_fallback_complete"
+                result_lineage["audit_lineage"] = "truth_chain_fallback_complete"
+        else:
+            # 第二层回退：遗留助手（truth chain 模块亦不可用）
+            logger.warning(
+                "handle_goal_execution_result: task_result_canonical_truth_chain "
+                "unavailable, using legacy fallback for task_id=%r",
                 task_id,
             )
-        except Exception as _cci_fb_err:
-            logger.debug(
-                "GOAL_EXECUTION_RESULT: fallback completion ingress notify failed (non-fatal): %s",
-                _cci_fb_err,
-            )
+            if _reconcile_goal_result is not None:
+                try:
+                    _rec_outcome = _reconcile_goal_result(message)
+                    if _rec_outcome.was_updated:
+                        logger.debug(
+                            "goal_execution_result legacy reconcile: "
+                            "signal=%s contract_id=%r → phase=%s",
+                            _rec_outcome.envelope.signal_kind.value if _rec_outcome.envelope else "?",
+                            _rec_outcome.envelope.contract_id if _rec_outcome.envelope else "",
+                            _rec_outcome.record.phase.value if _rec_outcome.record else "?",
+                        )
+                except Exception as rec_err:
+                    logger.debug(
+                        "goal_execution_result legacy reconcile failed (non-fatal): %s", rec_err
+                    )
+            _try_ingest_goal_result_truth(message)
+            result_lineage["reconciliation_lineage"] = "legacy_fallback_reconcile"
+            result_lineage["closure_lineage"] = "legacy_fallback_completion"
+            result_lineage["audit_lineage"] = "legacy_fallback_truth_chain"
+            if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
+            # 遗留完成通知
+            try:
+                from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
+                _get_cci_fb().notify(_make_completion_envelope(
+                    task_id=task_id,
+                    handoff_id=payload.get("handoff_id") or "",
+                ))
+                logger.debug(
+                    "GOAL_EXECUTION_RESULT: legacy fallback CanonicalCompletionIngress "
+                    "notified task_id=%s",
+                    task_id,
+                )
+            except Exception as _cci_fb_err:
+                logger.debug(
+                    "GOAL_EXECUTION_RESULT: legacy fallback completion ingress notify "
+                    "failed (non-fatal): %s",
+                    _cci_fb_err,
+                )
+
+    # 写入双链路闭环注册表（execution_chain_closure）。
+    # 将跨设备链路验收状态记录到全局闭环注册表，供操作员面板和审计消费。
+    try:
+        from core.execution_chain_closure import record_cross_device_chain_closure as _record_cdcc
+        _ingress_outcome_for_closure: Optional[Dict[str, Any]] = None
+        if _ger_ingress_outcome is not None:
+            _ingress_outcome_for_closure = {
+                "is_fully_closed": getattr(_ger_ingress_outcome, "is_fully_closed", False),
+                "was_deduplicated": getattr(_ger_ingress_outcome, "was_deduplicated", False),
+                "truth_chain_complete": getattr(_ger_ingress_outcome, "truth_chain_complete", False),
+                "evidence_acceptance_verdict": getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", ""),
+                "incomplete_reason": getattr(_ger_ingress_outcome, "incomplete_reason", ""),
+            }
+        _record_cdcc(
+            task_id=task_id,
+            ingress_outcome=_ingress_outcome_for_closure,
+            normalized_status=status,
+            device_id=device_id,
+        )
+    except Exception as _cdcc_err:
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: execution_chain_closure 写入失败（非致命）"
+            "task_id=%s err=%s",
+            task_id,
+            _cdcc_err,
+        )
 
     # PR-D: parallel/group subtask aggregation
     # If this result carries a group_id, feed it into the canonical aggregator.
@@ -1154,28 +1254,31 @@ async def handle_goal_execution_result(
             )
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
-
-    # Resolve bridge._pending_responses future keyed by task_id (if present).
-    # This is an enrichment step separate from the canonical truth chain.
-    try:
-        _pending = getattr(bridge, "_pending_responses", None)
-        if _pending is not None and task_id in _pending:
-            _future = _pending.pop(task_id, None)
-            if _future is not None and not _future.done():
-                _future.set_result({
-                    "status": status,
-                    "task_id": task_id,
-                    "result": result_text,
-                    "source": "canonical_ws",
-                })
-                logger.debug(
-                    "GOAL_EXECUTION_RESULT: _pending_responses future resolved task_id=%s",
-                    task_id,
-                )
-    except Exception as _pr_err:
-        logger.debug(
-            "GOAL_EXECUTION_RESULT: _pending_responses resolution failed (non-fatal): %s",
-            _pr_err,
-        )
+    # NOTE: bridge._pending_responses 由 ingest_result_async(bridge=bridge) 在
+    # UnifiedResultIngress 内部解析，无需在此重复处理。如果 UnifiedResultIngress
+    # 不可用（回退路径），作为保险措施仍在此处解析。
+    if not _ger_ingress_closed:
+        try:
+            _pending = getattr(bridge, "_pending_responses", None)
+            if _pending is not None and task_id in _pending:
+                _future = _pending.pop(task_id, None)
+                if _future is not None and not _future.done():
+                    _future.set_result({
+                        "status": status,
+                        "task_id": task_id,
+                        "result": result_text,
+                        "source": "canonical_ws",
+                    })
+                    logger.debug(
+                        "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution "
+                        "task_id=%s",
+                        task_id,
+                    )
+        except Exception as _pr_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution failed "
+                "(non-fatal): %s",
+                _pr_err,
+            )
 
     return None
