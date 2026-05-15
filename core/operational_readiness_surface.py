@@ -57,6 +57,7 @@ __all__ = [
     "OPERATIONAL_READINESS_SURFACE_AUTHORITY",
     "OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION",
     "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION",
+    "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE",
     "SurfaceStatus",
     "RegistrationKindState",
     "RegistrationDomainState",
@@ -75,6 +76,8 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
 DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.0.0"
+OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -1457,7 +1460,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     else:
         try:
             backbone_snapshot = build_system_backbone_snapshot()
-        except Exception as exc:  # noqa: BLE001
+        except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
             logger.warning("OperationalReadinessSurface: backbone snapshot build failed: %s", exc)
             backbone_snapshot = {
                 "authority": "core.current_state_backbone_audit::unavailable",
@@ -1479,8 +1482,8 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "UFO Galaxy 现阶段双仓一体化 AI 系统：V2 中心编排治理 + Android 分布式执行参与者"
         ),
         "entrypoint_model": {
-            "central_entrypoint": "/api/v1/projection/dual-repo-integrated-system-contract",
-            "operability_entrypoint": "/api/v1/projection/operability-contract",
+            "central_entrypoint": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
+            "operability_entrypoint": OPERABILITY_CONTRACT_ROUTE,
             "v2_main_entry_files": ["main.py", "unified_launcher.py"],
         },
         "responsibility_layering": {

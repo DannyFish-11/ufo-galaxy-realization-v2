@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.operational_readiness_surface import (
+    DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
     _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
     SurfaceStatus,
     build_operational_readiness_report,
@@ -346,7 +347,7 @@ def test_operational_readiness_routes_expose_expected_paths():
     assert "/api/v1/projection/operational-readiness" in paths
     assert "/api/v1/projection/clone-to-use-acceptance" in paths
     assert "/api/v1/projection/operability-contract" in paths
-    assert "/api/v1/projection/dual-repo-integrated-system-contract" in paths
+    assert DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE in paths
 
 
 def test_build_operational_readiness_report_exposes_compat_blocked_contract():
@@ -529,7 +530,7 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     app = FastAPI()
     app.include_router(create_router())
     client = TestClient(app, raise_server_exceptions=False)
-    endpoint = "/api/v1/projection/dual-repo-integrated-system-contract"
+    endpoint = DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE
     fake_report = SimpleNamespace(
         state_contract={
             "authority": "test-state-contract",
