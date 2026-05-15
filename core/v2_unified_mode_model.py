@@ -34,6 +34,7 @@ PARTICIPATION_LAYER_VALUES: tuple[str, ...] = (
     "distributed_participant",
 )
 GOVERNANCE_LAYER_VALUES: tuple[str, ...] = (
+    "local_autonomy",
     "delegated_execution",
     "takeover_pending",
     "takeover_active",
@@ -130,13 +131,16 @@ def derive_execution_location(
     selected_device: Optional[str],
     device_mode: Optional[str],
 ) -> str:
-    runtime = str(selected_runtime or "").strip()
-    mode = str(device_mode or "").strip()
+    runtime = str(selected_runtime or "").strip().lower()
+    mode = str(device_mode or "").strip().lower()
+    if mode in {"local", "local_only"}:
+        return "android_local" if selected_device else "v2_local"
+    if mode in {"cross_device", "remote_handoff", "staged_mesh", "android_delegated"}:
+        if selected_device or runtime == "android_delegated":
+            return "android_delegated"
     if runtime == "android_delegated":
         return "android_delegated"
     if runtime == "android_local":
-        return "android_local"
-    if mode == "local" and selected_device:
         return "android_local"
     return "v2_local"
 
@@ -149,6 +153,7 @@ def derive_governance_state(
     android_truth_block: Any = None,
     governance_state: Optional[Dict[str, Any]] = None,
     governance_policy: Optional[Dict[str, Any]] = None,
+    device_mode: Optional[str] = None,
 ) -> tuple[str, Dict[str, Any]]:
     device_entry = _select_governance_device_entry(governance_state, selected_device)
     policy = dict(
@@ -174,6 +179,9 @@ def derive_governance_state(
     mode_readiness_state = str(
         _truth_get(android_truth_block, "mode_readiness_state", "") or ""
     ).strip().lower()
+    resolved_device_mode = str(
+        _coalesce(device_mode, _truth_get(android_truth_block, "device_mode"), "")
+    ).strip().lower()
     if operation_state == "hard_block":
         return "governance_blocked", {
             "operation_state": operation_state,
@@ -197,6 +205,15 @@ def derive_governance_state(
             "primary_path": primary_path,
             "takeover_active": takeover_active,
             "reasons": reasons,
+        }
+    if resolved_device_mode in {"local", "local_only"} or selected_runtime == "android_local":
+        return "local_autonomy", {
+            "operation_state": operation_state,
+            "automatic_decision": automatic_decision,
+            "primary_path": "local_execution",
+            "takeover_active": takeover_active,
+            "reasons": reasons,
+            "resolved_device_mode": resolved_device_mode,
         }
     if automatic_decision == "hold" or any(
         "defer" in reason
@@ -317,6 +334,7 @@ def build_unified_mode_model(
         android_truth_block=android_truth_block,
         governance_state=governance_state,
         governance_policy=governance_policy,
+        device_mode=resolved_device_mode,
     )
     model = UnifiedModeModel(
         execution_location=execution_location,
