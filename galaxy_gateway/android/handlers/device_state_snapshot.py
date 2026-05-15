@@ -127,6 +127,34 @@ async def handle_device_state_snapshot(
                 device_id,
                 participation_exc,
             )
+
+        # 统一设备生命周期状态：就绪信号更新生命周期阶段（ready 或回退到 connected）。
+        try:
+            from core.device_lifecycle_state import (  # noqa: PLC0415
+                transition_device_lifecycle,
+                DeviceLifecycleTransitionEvent,
+            )
+            _all_ready = (
+                bool(snap.model_ready)
+                and bool(snap.accessibility_ready)
+                and bool(snap.local_loop_ready)
+            )
+            _lc_snapshot_event = (
+                DeviceLifecycleTransitionEvent.readiness_satisfied
+                if _all_ready
+                else DeviceLifecycleTransitionEvent.readiness_lost
+            )
+            transition_device_lifecycle(
+                device_id,
+                _lc_snapshot_event,
+                readiness_satisfied=_all_ready,
+            )
+        except Exception as _lc_snap_exc:
+            logger.debug(
+                "device_state_snapshot: device_lifecycle transition non-fatal: "
+                "device_id=%s error=%s",
+                device_id, _lc_snap_exc,
+            )
     except ImportError:
         logger.error(
             "device_state_snapshot: core.android_device_state_store not available; snapshot from %s discarded",

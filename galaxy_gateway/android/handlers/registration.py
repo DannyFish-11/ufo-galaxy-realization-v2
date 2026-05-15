@@ -690,6 +690,35 @@ async def handle_device_register(
                 device_id, _npe,
             )
 
+        # 统一设备生命周期状态：在注册 ack 成功时更新生命周期阶段。
+        # 这是设备从 unregistered → registered（或更高）的权威转换点。
+        try:
+            from core.device_lifecycle_state import (  # noqa: PLC0415
+                transition_device_lifecycle,
+                DeviceLifecycleTransitionEvent,
+            )
+            _lc_is_fully_attached = len(_gaps) == 0
+            _lc_event = (
+                DeviceLifecycleTransitionEvent.registration_fully_attached
+                if _lc_is_fully_attached
+                else DeviceLifecycleTransitionEvent.register_ack_sent
+            )
+            _lc_record = transition_device_lifecycle(
+                device_id,
+                _lc_event,
+                websocket_connected=True,
+                registration_ack_success=True,
+                registration_fully_attached=_lc_is_fully_attached,
+                registration_gaps=_gaps,
+            )
+            ack["device_lifecycle_stage"] = _lc_record.stage.value
+        except Exception as _lce:
+            logger.debug(
+                "registration: device_lifecycle_stage derivation non-fatal: "
+                "device_id=%s error=%s",
+                device_id, _lce,
+            )
+
         return ack
 
     except Exception as exc:

@@ -616,7 +616,7 @@ class AndroidNetworkParticipationState:
     tier_derivation_notes: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result: Dict[str, Any] = {
             "device_id": self.device_id,
             "tier": self.tier.value,
             "last_signal": self.last_signal.value if self.last_signal else None,
@@ -639,6 +639,13 @@ class AndroidNetworkParticipationState:
             "_authority": ANDROID_NETWORK_PARTICIPATION_AUTHORITY,
             "_contract_version": ANDROID_NETWORK_PARTICIPATION_CONTRACT_VERSION,
         }
+        # 附加统一生命周期阶段，与参与层对齐
+        try:
+            from core.device_lifecycle_state import stage_for_participation_tier  # noqa: PLC0415
+            result["lifecycle_stage"] = stage_for_participation_tier(self.tier.value).value
+        except Exception:
+            pass
+        return result
 
 
 # ---------------------------------------------------------------------------

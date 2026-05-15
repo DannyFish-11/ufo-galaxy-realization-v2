@@ -191,6 +191,17 @@ def _base_sources(*sources: str) -> List[str]:
     return result
 
 
+def _get_device_lifecycle_stage_for_contract(device_id: Optional[str]) -> str:
+    """安全获取设备生命周期阶段字符串（供状态合约使用，永不抛出异常）。"""
+    if not device_id:
+        return "unregistered"
+    try:
+        from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
+        return get_lifecycle_record(device_id).stage.value
+    except Exception:
+        return "unregistered"
+
+
 def build_shared_control_plane_basis(
     *,
     reasoning_block: Optional[Dict[str, Any]] = None,
@@ -491,6 +502,18 @@ def build_v2_unified_state_contract(
             _umm_exc,
         )
         _unified_mode_model = {}
+
+    # 统一设备生命周期阶段：从 device_lifecycle_state 获取，基于真实运行时条件推导
+    _lifecycle_stage_str = "unregistered"
+    try:
+        _lc_device_ids = list(device_evidence.get("android_device_ids") or [])
+        _lc_target = str(_lc_device_ids[0]) if _lc_device_ids else ""
+        _lifecycle_stage_str = _get_device_lifecycle_stage_for_contract(_lc_target)
+    except Exception as _lc_build_exc:
+        logger.debug(
+            "build_v2_unified_state_contract: lifecycle stage derivation failed: %s",
+            _lc_build_exc,
+        )
 
     raw_signals: Dict[str, Any] = {
         "validation_status": validation.overall_status.value,
@@ -1084,6 +1107,55 @@ def build_v2_unified_state_contract(
                 "distributed_participant",
             },
             active=_unified_mode_model.get("execution_location") == "android_delegated",
+            lifecycle_stage="readiness",
+        ),
+        "device_lifecycle_stage": ContractDecision(
+            decision_id="device_lifecycle_stage",
+            label="统一设备生命周期阶段（DeviceLifecycleStage）",
+            state=_lifecycle_stage_str,
+            summary=(
+                "设备已在中心—分布式运行时中主动执行任务。"
+                if _lifecycle_stage_str == "participating"
+                else (
+                    "设备满足接管条件，可接收接管请求。"
+                    if _lifecycle_stage_str == "takeover_eligible"
+                    else (
+                        "设备已就绪，可立即被选为调度目标。"
+                        if _lifecycle_stage_str == "ready"
+                        else (
+                            "设备已连接并能力可见，等待就绪验证。"
+                            if _lifecycle_stage_str == "connected"
+                            else (
+                                "设备已注册，WebSocket 连接活跃。"
+                                if _lifecycle_stage_str == "registered"
+                                else "设备未注册或 WebSocket 连接未建立。"
+                            )
+                        )
+                    )
+                )
+            ),
+            sources=_base_sources(
+                "core.device_lifecycle_state",
+                "core.android_network_participation",
+                "core.attached_runtime_session_registry",
+                "core.android_mode_gate_policy",
+            ),
+            reasons=[],
+            evidence={
+                "lifecycle_stage": _lifecycle_stage_str,
+                "participation_tier": _participation_tier_str,
+                "android_attached": android_attached,
+            },
+            observable=True,
+            acceptable=_lifecycle_stage_str in {
+                "connected", "ready", "participating", "takeover_eligible"
+            },
+            eligible=_lifecycle_stage_str in {
+                "ready", "participating", "takeover_eligible"
+            },
+            active=_lifecycle_stage_str in {
+                "participating", "takeover_eligible"
+            },
             lifecycle_stage="readiness",
         ),
     }
