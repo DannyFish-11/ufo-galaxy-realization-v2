@@ -416,8 +416,10 @@ class TestCompletionIngressNotify:
 
         notified = []
 
-        mock_ingress = MagicMock()
-        mock_ingress.notify.side_effect = lambda env: notified.append(env.task_id) or True
+        class _NotifyOnlyIngress:
+            def notify(self, env):
+                notified.append(env.task_id)
+                return True
 
         ingress = UnifiedResultIngress()
         ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
@@ -429,7 +431,7 @@ class TestCompletionIngressNotify:
         tid = _make_task_id()
         with patch(
             "core.canonical_completion_ingress.get_canonical_completion_ingress",
-            return_value=mock_ingress,
+            return_value=_NotifyOnlyIngress(),
         ):
             ingress.process(_make_event(tid))
 
@@ -458,8 +460,9 @@ class TestCompletionIngressNotify:
         """notify() returns False must not be treated as full closure success."""
         from core.unified_result_ingress import UnifiedResultIngress
 
-        mock_ingress = MagicMock()
-        mock_ingress.notify.return_value = False
+        class _NotifyOnlyIngress:
+            def notify(self, _env):
+                return False
 
         ingress = UnifiedResultIngress()
         ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
@@ -470,7 +473,7 @@ class TestCompletionIngressNotify:
 
         with patch(
             "core.canonical_completion_ingress.get_canonical_completion_ingress",
-            return_value=mock_ingress,
+            return_value=_NotifyOnlyIngress(),
         ):
             outcome = ingress.process(_make_event(_make_task_id()))
 
@@ -605,6 +608,33 @@ class TestCompletionIngressNotify:
         assert call["tier"] == "dispatch_eligible"
         assert call["device_id"] == "test-device"
         assert call["acceptance_verdict"] == "accept_provisional"
+
+    def test_E08_fallback_to_notify_when_notify_with_android_context_missing(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        fallback_calls = []
+
+        class _NotifyOnlyIngress:
+            def notify(self, env):
+                fallback_calls.append(env.task_id)
+                return True
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        tid = _make_task_id()
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=_NotifyOnlyIngress(),
+        ):
+            outcome = ingress.process(_make_event(tid))
+
+        assert outcome.completion_notified is True
+        assert fallback_calls == [tid]
 
 
 # ===========================================================================

@@ -66,7 +66,6 @@ Public API
 from __future__ import annotations
 
 import logging
-import inspect
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -636,18 +635,9 @@ class UnifiedResultIngress:
             # These fields are best-effort hints populated by
             # _stamp_android_truth_context(). If SSOT stamping is unavailable,
             # they remain None and completion ingress still degrades gracefully.
-            notify_with_context = None
-            try:
-                static_candidate = inspect.getattr_static(
-                    ingress, "notify_with_android_context"
-                )
-                candidate = getattr(ingress, "notify_with_android_context", None)
-                if static_candidate is not None and callable(candidate):
-                    notify_with_context = candidate
-            except AttributeError:
-                notify_with_context = None
+            notify_with_context = getattr(ingress, "notify_with_android_context", None)
 
-            if notify_with_context is not None:
+            if callable(notify_with_context):
                 notified = bool(
                     notify_with_context(
                         env,
@@ -750,7 +740,9 @@ class UnifiedResultIngress:
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:
-        text = str(value).strip() if value is not None else ""
+        if value is None or isinstance(value, bool):
+            return None
+        text = str(value).strip()
         return text or None
 
     def _classify_and_apply_evidence_gate(
