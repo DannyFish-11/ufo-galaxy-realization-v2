@@ -106,6 +106,7 @@ G. Cross-module consistency
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 
 # ===========================================================================
@@ -267,6 +268,91 @@ class TestIngestRouting(unittest.TestCase):
         except Exception as exc:
             self.fail(f"Should not raise on non-dict: {exc}")
         self.assertEqual(outcome.routed_path, "rejected")
+
+
+class TestExecutionSignalCompletionUnification(unittest.TestCase):
+    """Execution-signal path should align result/truth/closure semantics."""
+
+    def test_result_signal_uses_was_updated_as_reconciled_fallback(self):
+        from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
+        class _SubOutcome:
+            was_updated = True
+            reject_reason = ""
+
+        with patch(
+            "core.android_delegated_signal_ingress.ingest_delegated_execution_signal",
+            return_value=_SubOutcome(),
+        ):
+            outcome = ingest_android_runtime_state_update(
+                {"type": "result", "task_id": "t-fallback"}
+            )
+
+        self.assertEqual(outcome.routed_path, "execution_signal")
+        self.assertTrue(outcome.was_reconciled)
+
+    def test_terminal_result_flows_into_unified_result_ingress(self):
+        from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
+        class _SignalOutcome:
+            was_updated = True
+            reject_reason = ""
+
+        class _IngressOutcome:
+            truth_chain_complete = True
+            is_fully_closed = True
+
+        with patch(
+            "core.android_delegated_signal_ingress.ingest_delegated_execution_signal",
+            return_value=_SignalOutcome(),
+        ), patch(
+            "core.unified_result_ingress.ingest_result",
+            return_value=_IngressOutcome(),
+        ):
+            outcome = ingest_android_runtime_state_update(
+                {
+                    "type": "delegated_execution_signal",
+                    "task_id": "t-closed",
+                    "device_id": "dev-1",
+                    "payload": {"signal_kind": "result", "result_kind": "success"},
+                }
+            )
+
+        self.assertTrue(outcome.result_produced)
+        self.assertTrue(outcome.truth_ingested_or_accepted)
+        self.assertTrue(outcome.closure_accepted)
+        self.assertEqual(outcome.final_completion_state, "closed")
+
+    def test_terminal_result_can_surface_not_closed_state(self):
+        from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
+        class _SignalOutcome:
+            was_updated = True
+            reject_reason = ""
+
+        class _IngressOutcome:
+            truth_chain_complete = True
+            is_fully_closed = False
+
+        with patch(
+            "core.android_delegated_signal_ingress.ingest_delegated_execution_signal",
+            return_value=_SignalOutcome(),
+        ), patch(
+            "core.unified_result_ingress.ingest_result",
+            return_value=_IngressOutcome(),
+        ):
+            outcome = ingest_android_runtime_state_update(
+                {
+                    "type": "delegated_execution_signal",
+                    "task_id": "t-open",
+                    "payload": {"signal_kind": "result", "result_kind": "failure"},
+                }
+            )
+
+        self.assertTrue(outcome.result_produced)
+        self.assertTrue(outcome.truth_ingested_or_accepted)
+        self.assertFalse(outcome.closure_accepted)
+        self.assertEqual(outcome.final_completion_state, "result_returned_but_not_closed")
 
 
 # ===========================================================================
