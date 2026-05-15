@@ -66,6 +66,7 @@ Public API
 from __future__ import annotations
 
 import logging
+import inspect
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -622,26 +623,24 @@ class UnifiedResultIngress:
             env.final_answer_ready = bool(event.payload.get("final_answer_ready"))
             env.final_user_response = str(event.payload.get("final_user_response") or "")
             env.problem_solved = bool(event.payload.get("problem_solved"))
-            acceptance_verdict = str(
-                event.payload.get("_acceptance_verdict_for_completion_ingress") or ""
-            ).strip() or None
-            android_participation_tier = str(
-                event.payload.get("_android_participation_tier_for_completion_ingress") or ""
-            ).strip() or None
-            android_device_id = str(
-                event.payload.get("_android_device_id_for_completion_ingress") or ""
-            ).strip() or None
+            acceptance_verdict = self._normalize_optional_context_value(
+                event.payload.get("_acceptance_verdict_for_completion_ingress")
+            )
+            android_participation_tier = self._normalize_optional_context_value(
+                event.payload.get("_android_participation_tier_for_completion_ingress")
+            )
+            android_device_id = self._normalize_optional_context_value(
+                event.payload.get("_android_device_id_for_completion_ingress")
+            )
 
             notify_with_context = None
-            ingress_type = type(ingress)
-            ingress_dict = getattr(ingress, "__dict__", {})
-            if (
-                hasattr(ingress_type, "notify_with_android_context")
-                or "notify_with_android_context" in ingress_dict
-            ):
+            try:
+                inspect.getattr_static(ingress, "notify_with_android_context")
                 candidate = getattr(ingress, "notify_with_android_context", None)
                 if callable(candidate):
                     notify_with_context = candidate
+            except AttributeError:
+                notify_with_context = None
 
             if notify_with_context is not None:
                 notified = bool(
@@ -721,13 +720,19 @@ class UnifiedResultIngress:
             truth_dict = build_v2_android_truth_block(event.device_id).to_dict()
             outcome.android_truth_context = truth_dict
             if isinstance(event.payload, dict):
-                tier = str(truth_dict.get("participation_tier") or "").strip()
+                tier = self._normalize_optional_context_value(
+                    truth_dict.get("participation_tier")
+                )
                 if tier:
                     event.payload["_android_participation_tier_for_completion_ingress"] = tier
-                event.payload["_android_device_id_for_completion_ingress"] = str(
+                device_id_value = self._normalize_optional_context_value(
                     event.device_id
                 )
-                verdict = str(outcome.evidence_acceptance_verdict or "").strip()
+                if device_id_value:
+                    event.payload["_android_device_id_for_completion_ingress"] = device_id_value
+                verdict = self._normalize_optional_context_value(
+                    outcome.evidence_acceptance_verdict
+                )
                 if verdict:
                     event.payload["_acceptance_verdict_for_completion_ingress"] = verdict
         except Exception as _ssot_err:
@@ -737,6 +742,11 @@ class UnifiedResultIngress:
                 event.task_id,
                 _ssot_err,
             )
+
+    @staticmethod
+    def _normalize_optional_context_value(value: Any) -> Optional[str]:
+        text = str(value or "").strip()
+        return text or None
 
     def _classify_and_apply_evidence_gate(
         self,
