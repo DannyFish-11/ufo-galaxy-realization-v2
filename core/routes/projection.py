@@ -5830,7 +5830,7 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         completion_state = "closed"
     elif task_initiated:
         completion_state = "in_progress"
-    if blocked:
+    if blocked and completion_state != "closed":
         completion_state = "blocked"
     elif incomplete and completion_state != "closed":
         completion_state = "incomplete"
@@ -5871,6 +5871,17 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
             "runtime_decision_reasoning.closure_basis",
         ],
     }
+
+
+def _apply_shared_visibility_field(
+    payload: Dict[str, Any],
+    *,
+    target_field: str,
+    visibility_field: str,
+) -> None:
+    """Fill a payload field from shared_execution_visibility when missing."""
+    if payload.get(target_field) in (None, ""):
+        payload[target_field] = (payload.get("shared_execution_visibility") or {}).get(visibility_field)
 
 
 def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str, Any]:
@@ -5977,15 +5988,32 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
     if not isinstance(result.get("source_of_truth_boundaries"), dict):
         result["source_of_truth_boundaries"] = _source_of_truth_boundaries()
     try:
-        visibility_source = result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else result
+        if isinstance(result.get("runtime_truth"), dict):
+            visibility_source = result.get("runtime_truth")
+        else:
+            has_canonical_state = isinstance(result.get("operational_state_board"), dict) or isinstance(
+                result.get("runtime_decision_reasoning"), dict
+            )
+            if has_canonical_state:
+                # Fallback for degraded assemblies where runtime_truth attachment failed
+                # but the desktop payload already contains partial canonical state blocks.
+                visibility_source = result
+            else:
+                visibility_source = {}
         result["shared_execution_visibility"] = _derive_shared_execution_visibility(visibility_source)
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: shared execution visibility unavailable: %s", exc)
         result.setdefault("shared_execution_visibility", _derive_shared_execution_visibility({}))
-    if result.get("execution_stage") in (None, ""):
-        result["execution_stage"] = (result.get("shared_execution_visibility") or {}).get("surface_execution_stage")
-    if result.get("current_task_summary") in (None, ""):
-        result["current_task_summary"] = (result.get("shared_execution_visibility") or {}).get("surface_summary")
+    _apply_shared_visibility_field(
+        result,
+        target_field="execution_stage",
+        visibility_field="surface_execution_stage",
+    )
+    _apply_shared_visibility_field(
+        result,
+        target_field="current_task_summary",
+        visibility_field="surface_summary",
+    )
     try:
         from core.v2_unified_state_contract import (
             build_control_plane_surface_contract,

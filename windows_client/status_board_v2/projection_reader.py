@@ -40,6 +40,21 @@ DEFAULT_HTTP_PROJECTION_ENDPOINTS = (
     PROJECTION_ENDPOINT,
 )
 DEFAULT_TRI_STATE_PHASE = "silent"
+_RUNTIME_TRUTH_PASSTHROUGH_KEYS = frozenset(
+    {
+        "outward_truth",
+        "task_truth",
+        "startup_readiness",
+        "runtime_decision_reasoning",
+        "operational_state_board",
+        "source_of_truth_boundaries",
+        "shared_execution_visibility",
+        "control_plane_contract",
+        "stale_or_cached_summary",
+        "projection_surface_role",
+        "board_facing_default",
+    }
+)
 
 # Fields required in every valid projection dict.
 _REQUIRED_FIELDS = frozenset(
@@ -266,7 +281,7 @@ def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str,
         "timestamp": _coerce_timestamp(payload.get("compiled_at")),
     }
     for key, value in payload.items():
-        if key not in projection:
+        if key in _RUNTIME_TRUTH_PASSTHROUGH_KEYS and key not in projection:
             projection[key] = value
     return projection
 
