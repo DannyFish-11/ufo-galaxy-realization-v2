@@ -76,7 +76,7 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
-DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.2.0"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.3.0"
 OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
 DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
@@ -114,6 +114,14 @@ _ANDROID_COUNTERPART_MODEL_INPUTS: tuple[str, ...] = (
     "app/src/main/java/com/ufo/galaxy/runtime/DelegatedRuntimeAcceptanceEvaluator.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt",
+)
+_V2_COUNTERPART_CODE_ANCHORS: tuple[str, ...] = (
+    "core/current_state_backbone_audit.py",
+    "core/operational_readiness_surface.py",
+    "core/routes/operational_readiness.py",
+    "core/v2_unified_state_contract.py",
+    "core/android_device_state_store.py",
+    "core/unified_result_ingress.py",
 )
 
 _DYNAMIC_KIND_STATUS: frozenset[RegistrationKind] = frozenset(
@@ -1480,6 +1488,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     open_count = int(backbone_snapshot.get("open_count", 0))
     top_open_items = list(backbone_snapshot.get("top_open_items") or [])
     minimal_operability_path = dict(report.minimal_happy_path_contract or {})
+
     def _normalize_blocking_step_text(step: Any) -> str:
         return str(step).strip().rstrip("。.;；")
 
@@ -1513,6 +1522,9 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
 
     def _derive_status_from_counts() -> str:
         return "partial" if open_count > 0 or partial_count > 0 else "established"
+
+    def _is_established(value: Any) -> bool:
+        return _normalize_assessment_status(value) == "established"
 
     truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
 
@@ -1732,6 +1744,49 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     end_to_end_usable_status = _calculate_end_to_end_usable_status()
     ecosystem_coherence_status = _calculate_ecosystem_coherence_status()
     next_phase_key_work_zh = _build_next_phase_key_work()
+    local_chain_status = (
+        "established"
+        if _is_established(chain_closure_summary.get("execution_chain"))
+        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
+        else "partial"
+    )
+    cross_device_chain_status = (
+        "established"
+        if _is_established(chain_closure_summary.get("request_chain"))
+        and _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
+        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        else "partial"
+    )
+    local_vs_cross_device_unification_status = (
+        "established"
+        if _is_established(mode_closure_summary.get("local_mode"))
+        and _is_established(mode_closure_summary.get("cross_device_mode"))
+        and _is_established(mode_closure_summary.get("delegated_execution"))
+        else "partial"
+    )
+    shared_protocol_state_status = (
+        "established"
+        if _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
+        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        else "partial"
+    )
+    registration_connection_participation_status = (
+        "established"
+        if readiness_state.get("state") == "ready" and bool(android_connection_diagnostics.get("android_visible"))
+        else "partial"
+    )
+    mode_execution_truth_acceptance_status = (
+        "established"
+        if _is_established(mode_closure_summary.get("delegated_execution"))
+        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
+        and _is_established(mode_closure_summary.get("takeover"))
+        else "partial"
+    )
+    multi_surface_alignment_status = (
+        "established"
+        if _is_established(chain_closure_summary.get("projection_chain")) and bool(control_plane_layering)
+        else "partial"
+    )
 
     return {
         "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
@@ -1787,6 +1842,8 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         },
         "android_repo_real_code_scope": {
             "repo": "DannyFish-11/ufo-galaxy-android",
+            "android_audited_ref": str(backbone_snapshot.get("android_audited_ref") or ""),
+            "android_audited_ref_note_zh": "来自 current_state_backbone_audit 的 Android 侧审计提交锚点；为空表示当前快照未提供。",
             "investigated_counterpart_files": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
             "cross_repo_focus_dimensions": [
                 "build_and_install_path",
@@ -1796,6 +1853,112 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "runtime_readiness_acceptance_and_takeover_coherence",
                 "mobile_surface_status_feedback",
             ],
+        },
+        "dual_repo_ecosystem_cognition_zh": {
+            "real_code_investigation_scope": {
+                "v2_repo": "DannyFish-11/ufo-galaxy-realization-v2",
+                "android_repo": "DannyFish-11/ufo-galaxy-android",
+                "v2_real_code_anchors": list(_V2_COUNTERPART_CODE_ANCHORS),
+                "android_real_code_anchors": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
+            },
+            "local_chain_path_across_dual_repo": {
+                "status": local_chain_status,
+                "conclusion_zh": (
+                    "本地链路状态由 execution_chain 与 closure_acceptance_chain 的闭合状态联合判定，"
+                    "未同时 established 则保持 partial。"
+                ),
+                "evidence": {
+                    "execution_chain": chain_closure_summary.get("execution_chain"),
+                    "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
+                    "local_mode": mode_closure_summary.get("local_mode"),
+                },
+            },
+            "cross_device_chain_path_across_dual_repo": {
+                "status": cross_device_chain_status,
+                "conclusion_zh": (
+                    "跨设备链路状态由 request_chain、android_truth_uplink_chain、result_backflow_chain 联合判定，"
+                    "任一未 established 即保持 partial。"
+                ),
+                "evidence": {
+                    "request_chain": chain_closure_summary.get("request_chain"),
+                    "android_truth_uplink_chain": chain_closure_summary.get("android_truth_uplink_chain"),
+                    "result_backflow_chain": chain_closure_summary.get("result_backflow_chain"),
+                },
+            },
+            "local_vs_cross_device_semantic_unification": {
+                "status": local_vs_cross_device_unification_status,
+                "conclusion_zh": "本地链与跨设备链语义已进入统一 mode 模型，但仍可能处于部分分裂/过渡状态。",
+                "evidence": {
+                    "local_mode": mode_closure_summary.get("local_mode"),
+                    "cross_device_mode": mode_closure_summary.get("cross_device_mode"),
+                    "delegated_execution": mode_closure_summary.get("delegated_execution"),
+                    "takeover": mode_closure_summary.get("takeover"),
+                },
+            },
+            "shared_protocol_and_state_semantics": {
+                "status": shared_protocol_state_status,
+                "conclusion_zh": "共享协议/状态面由 truth uplink、result backflow、统一 state contract 与字段类型边界共同支撑。",
+                "evidence": {
+                    "android_truth_uplink_chain": chain_closure_summary.get("android_truth_uplink_chain"),
+                    "result_backflow_chain": chain_closure_summary.get("result_backflow_chain"),
+                    "state_contract_authority": state_contract.get("authority"),
+                    "field_typing_schema": field_typing_schema,
+                },
+            },
+            "registration_connection_participation_state_sharing": {
+                "status": registration_connection_participation_status,
+                "conclusion_zh": "注册/连接/参与状态可在中心契约中镜像，但是否稳定共享仍取决于实时可见性与 readiness 状态。",
+                "evidence": {
+                    "registration_state": readiness_state.get("state"),
+                    "android_visible": bool(android_connection_diagnostics.get("android_visible")),
+                    "android_connection_diagnostics": android_connection_diagnostics,
+                },
+            },
+            "mode_execution_truth_acceptance_semantics": {
+                "status": mode_execution_truth_acceptance_status,
+                "conclusion_zh": "mode→执行→真值→验收语义已被统一建模，但接管与闭合验收链的全闭合仍需继续收敛。",
+                "evidence": {
+                    "mode_closure_summary": mode_closure_summary,
+                    "closure_acceptance_chain": chain_closure_summary.get("closure_acceptance_chain"),
+                    "delegated_observability": delegated_observability_diagnostics,
+                },
+            },
+            "multi_surface_state_projection_alignment": {
+                "status": multi_surface_alignment_status,
+                "conclusion_zh": "Android/桌面/中心/operator/projection 已映射到同一状态投影框架，但一致性仍非默认成熟封顶。",
+                "evidence": {
+                    "projection_chain": chain_closure_summary.get("projection_chain"),
+                    "control_plane_surfaces": list(control_plane_layering.keys()),
+                    "ecosystem_surfaces": ecosystem_surfaces,
+                },
+            },
+            "shared_state_ecosystem_judgement": {
+                "status": ecosystem_coherence_status,
+                "conclusion_zh": (
+                    "双仓已不只是松散中心-客户端关系，已形成共享状态生态主链；但当存在 partial/open 时仍应按过渡态对待。"
+                ),
+                "evidence": {
+                    "completion_posture": completion_posture,
+                    "established_count": established_count,
+                    "partial_count": partial_count,
+                    "open_count": open_count,
+                },
+            },
+            "remaining_gaps_to_full_maturity": {
+                "status": "open" if open_count > 0 else "established",
+                "conclusion_zh": "仍阻碍系统成为完整成熟生态的事项以 top_open_items 与阻塞步骤为准。",
+                "evidence": {
+                    "top_open_items": top_open_items,
+                    "blocking_steps": list(minimal_operability_path.get("blocking_steps") or []),
+                    "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
+                },
+            },
+            "next_stage_priorities_zh": {
+                "status": "established",
+                "conclusion_zh": "下一阶段优先级来自双仓真实代码证据，不做超前成熟度宣称。",
+                "items": next_phase_key_work_zh,
+            },
+            "honesty_guardrail_zh": "该认知层用于帮助判断是否一体化，不用于粉饰为已完全集成。",
         },
         "completion_and_maturity_assessment": {
             "completion_posture": completion_posture,
