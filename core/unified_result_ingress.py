@@ -632,7 +632,8 @@ class UnifiedResultIngress:
                 event.payload.get("_android_device_id_for_completion_ingress")
             )
 
-            # These fields are best-effort hints populated by
+            # These best-effort hints (acceptance_verdict,
+            # android_participation_tier, android_device_id) are populated by
             # _stamp_android_truth_context(). If SSOT stamping is unavailable,
             # they remain None and completion ingress still degrades gracefully.
             notify_with_context = getattr(ingress, "notify_with_android_context", None)
@@ -740,6 +741,12 @@ class UnifiedResultIngress:
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:
+        """Normalize completion-ingress context values to Optional[str].
+
+        Returns ``None`` for missing values, blank strings, and booleans.
+        Booleans are intentionally filtered out to avoid ambiguous implicit
+        stringification (``"True"``/``"False"``) in completion context fields.
+        """
         if value is None or isinstance(value, bool):
             return None
         text = str(value).strip()
