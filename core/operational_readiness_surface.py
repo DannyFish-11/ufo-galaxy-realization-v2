@@ -1446,9 +1446,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     """Build current-state integrated contract for V2+Android dual-repo system."""
     try:
         from core.current_state_backbone_audit import build_system_backbone_snapshot
-
-        backbone_snapshot = build_system_backbone_snapshot()
-    except (ImportError, AttributeError, TypeError, ValueError) as exc:
+    except ImportError as exc:
         logger.warning("OperationalReadinessSurface: backbone snapshot probe failed: %s", exc)
         backbone_snapshot = {
             "authority": "core.current_state_backbone_audit::unavailable",
@@ -1456,6 +1454,17 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "unavailable": True,
             "error": str(exc),
         }
+    else:
+        try:
+            backbone_snapshot = build_system_backbone_snapshot()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OperationalReadinessSurface: backbone snapshot build failed: %s", exc)
+            backbone_snapshot = {
+                "authority": "core.current_state_backbone_audit::unavailable",
+                "contract_version": "unknown",
+                "unavailable": True,
+                "error": str(exc),
+            }
 
     state_contract = dict(report.state_contract or {})
     control_plane_layering = dict(backbone_snapshot.get("control_plane_layering") or {})
@@ -1507,11 +1516,11 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "already_unified": {
                 "chain_closure_summary": dict(backbone_snapshot.get("chain_closure_summary") or {}),
                 "mode_closure_summary": dict(backbone_snapshot.get("mode_closure_summary") or {}),
-                "established_count": int(backbone_snapshot.get("established_count") or 0),
+                "established_count": int(backbone_snapshot.get("established_count", 0)),
             },
             "transitional_or_open": {
-                "partial_count": int(backbone_snapshot.get("partial_count") or 0),
-                "open_count": int(backbone_snapshot.get("open_count") or 0),
+                "partial_count": int(backbone_snapshot.get("partial_count", 0)),
+                "open_count": int(backbone_snapshot.get("open_count", 0)),
                 "top_open_items": list(backbone_snapshot.get("top_open_items") or []),
                 "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
             },

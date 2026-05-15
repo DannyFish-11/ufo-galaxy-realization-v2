@@ -529,6 +529,7 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     app = FastAPI()
     app.include_router(create_router())
     client = TestClient(app, raise_server_exceptions=False)
+    endpoint = "/api/v1/projection/dual-repo-integrated-system-contract"
     fake_report = SimpleNamespace(
         state_contract={
             "authority": "test-state-contract",
@@ -562,14 +563,14 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
             },
         ),
     ):
-        response = client.get("/api/v1/projection/dual-repo-integrated-system-contract")
+        response = client.get(endpoint)
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["contract_type"] == "dual_repo_current_state_integrated_system_contract"
     assert (
         payload["entrypoint_model"]["central_entrypoint"]
-        == "/api/v1/projection/dual-repo-integrated-system-contract"
+        == endpoint
     )
     assert payload["responsibility_layering"]["distributed_android_side"]["first_class_execution_participant"] is True
     assert payload["mode_participation_governance_layering"]["active_path"] == "cross_device"
