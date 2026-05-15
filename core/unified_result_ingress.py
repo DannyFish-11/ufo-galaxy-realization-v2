@@ -721,9 +721,10 @@ class UnifiedResultIngress:
                 )
                 if tier:
                     event.payload["_android_participation_tier_for_completion_ingress"] = tier
-                device_id_value = self._normalize_optional_context_value(
-                    event.device_id
-                )
+                # event.device_id is already non-empty at this point, but we
+                # still normalize to trim whitespace and keep completion
+                # context formatting consistent across all fields.
+                device_id_value = self._normalize_optional_context_value(event.device_id)
                 if device_id_value:
                     event.payload["_android_device_id_for_completion_ingress"] = device_id_value
                 verdict = self._normalize_optional_context_value(
@@ -748,6 +749,8 @@ class UnifiedResultIngress:
         stringification (``"True"``/``"False"``) in completion context fields.
         """
         if value is None or isinstance(value, bool):
+            # Keep booleans out of completion context to avoid downstream
+            # treating textual "True"/"False" as semantic verdict/tier values.
             return None
         text = str(value).strip()
         return text or None
