@@ -98,6 +98,14 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
         "active_weights": {"gpt-4.1": 0.95},
         "route_reason": "canonical-route",
     },
+    "shared_execution_visibility": {
+        "completion_state": "in_progress",
+        "surface_execution_stage": "executing",
+        "surface_summary": "completion=in_progress | task_initiated=True | result_closed=False",
+    },
+    "operational_state_board": {
+        "categories": [{"category_id": "task_execution_visibility"}],
+    },
 }
 
 _DESKTOP_STATUS_BOARD_PAYLOAD: Dict[str, Any] = {
@@ -176,6 +184,8 @@ class TestProjectionReaderFile:
         assert result["runtime_domain"] == "cross_device"
         assert result["primary_model_id"] == "gpt-4.1"
         assert result["support_model_ids"] == ["claude-3-5-sonnet"]
+        assert result["execution_stage"] == "executing"
+        assert "operational_state_board" in result
 
     def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
         from windows_client.status_board_v2.projection_reader import (

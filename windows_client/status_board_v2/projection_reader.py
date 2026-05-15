@@ -233,8 +233,9 @@ def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str,
     """Convert ``/projection/runtime-truth`` payload to RuntimeProjection fields."""
     continuum = _coerce_dict(payload.get("continuum"))
     topology = _coerce_dict(payload.get("topology"))
+    shared_execution_visibility = _coerce_dict(payload.get("shared_execution_visibility"))
 
-    return {
+    projection = {
         "tri_state_phase": _first_not_none(
             payload.get("tri_state_phase"),
             continuum.get("tri_state_phase"),
@@ -252,12 +253,22 @@ def _runtime_projection_from_runtime_truth(payload: Dict[str, Any]) -> Dict[str,
         "support_model_ids": _coerce_list(topology.get("support_models")),
         "active_weights": _coerce_dict(topology.get("active_weights")),
         "route_reason": topology.get("route_reason"),
-        # runtime-truth does not currently expose per-device IDs or execution stage text.
+        # runtime-truth does not currently expose per-device IDs.
         "active_device_ids": [],
-        "execution_stage": None,
-        "current_task_summary": None,
+        "execution_stage": _first_not_none(
+            payload.get("execution_stage"),
+            shared_execution_visibility.get("surface_execution_stage"),
+        ),
+        "current_task_summary": _first_not_none(
+            payload.get("current_task_summary"),
+            shared_execution_visibility.get("surface_summary"),
+        ),
         "timestamp": _coerce_timestamp(payload.get("compiled_at")),
     }
+    for key, value in payload.items():
+        if key not in projection:
+            projection[key] = value
+    return projection
 
 
 def _runtime_projection_from_desktop_status_board(payload: Dict[str, Any]) -> Dict[str, Any]:

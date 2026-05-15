@@ -4152,6 +4152,12 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             payload.setdefault("startup_readiness", None)
             payload.setdefault("runtime_decision_reasoning", {})
 
+        payload = _attach_operational_state_board(payload, route_paths=None)
+        payload.setdefault("source_of_truth_boundaries", _source_of_truth_boundaries())
+        payload["shared_execution_visibility"] = _derive_shared_execution_visibility(payload)
+        payload["execution_stage"] = payload["shared_execution_visibility"].get("surface_execution_stage")
+        payload["current_task_summary"] = payload["shared_execution_visibility"].get("surface_summary")
+
         try:
             from core.v2_unified_state_contract import (
                 build_control_plane_surface_contract,
@@ -4219,6 +4225,11 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "primary_model_id": None,
             "primary_provider_id": None,
             "oneapi_is_lower_horizon_only": True,
+            "operational_state_board": _empty_operational_state_board(),
+            "source_of_truth_boundaries": _source_of_truth_boundaries(),
+            "shared_execution_visibility": _derive_shared_execution_visibility({}),
+            "execution_stage": None,
+            "current_task_summary": None,
             "projection_surface_role": "runtime_truth_board_facing",
             "board_facing_default": True,
             "stale_or_cached_summary": {
@@ -5793,6 +5804,75 @@ def _attach_operational_state_board(result: Dict[str, Any], route_paths: Any = N
     return result
 
 
+def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Derive a shared execution/completion visibility block from canonical truth."""
+    board = truth_payload.get("operational_state_board") or {}
+    task_visibility = board.get("task_execution_visibility") or {}
+    blockers = board.get("dependencies_and_blockers") or {}
+    reasoning = truth_payload.get("runtime_decision_reasoning") or {}
+    closure_basis = reasoning.get("closure_basis") or {}
+
+    task_initiated = bool(
+        task_visibility.get("task_initiated")
+        or closure_basis.get("task_completed")
+        or closure_basis.get("problem_solved")
+    )
+    result_closure_established = bool(
+        task_visibility.get("result_closure_established")
+        or closure_basis.get("is_fully_closed")
+    )
+    blocked = bool(blockers.get("blocked"))
+    incomplete = bool(blockers.get("incomplete"))
+    waiting_dependencies = list(blockers.get("waiting_dependencies") or [])
+
+    completion_state = "not_started"
+    if result_closure_established:
+        completion_state = "closed"
+    elif task_initiated:
+        completion_state = "in_progress"
+    if blocked:
+        completion_state = "blocked"
+    elif incomplete and completion_state != "closed":
+        completion_state = "incomplete"
+
+    if completion_state == "closed":
+        surface_execution_stage = "closed"
+    elif completion_state in {"in_progress", "incomplete"}:
+        surface_execution_stage = "executing"
+    elif completion_state == "blocked":
+        surface_execution_stage = "blocked"
+    else:
+        surface_execution_stage = None
+
+    summary_parts = [
+        f"completion={completion_state}",
+        f"task_initiated={task_initiated}",
+        f"result_closed={result_closure_established}",
+    ]
+    acceptance_verdict = closure_basis.get("acceptance_verdict")
+    if acceptance_verdict not in (None, ""):
+        summary_parts.append(f"acceptance={acceptance_verdict}")
+    if waiting_dependencies:
+        summary_parts.append(f"waiting={len(waiting_dependencies)}")
+
+    return {
+        "task_initiated": task_initiated,
+        "result_closure_established": result_closure_established,
+        "blocked": blocked,
+        "incomplete": incomplete,
+        "waiting_dependencies": waiting_dependencies,
+        "acceptance_verdict": acceptance_verdict,
+        "is_fully_closed": bool(closure_basis.get("is_fully_closed")),
+        "completion_state": completion_state,
+        "surface_execution_stage": surface_execution_stage,
+        "surface_summary": " | ".join(summary_parts),
+        "source_of_truth_refs": [
+            "operational_state_board.task_execution_visibility",
+            "runtime_decision_reasoning.closure_basis",
+        ],
+    }
+
+
 def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str, Any]:
     """PR-8: Assemble the final integrated desktop status board payload.
 
@@ -5880,13 +5960,32 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         runtime_truth = _assemble_runtime_truth_payload()
         result["runtime_truth"] = runtime_truth
         result["startup_readiness"] = runtime_truth.get("startup_readiness")
+        if isinstance(runtime_truth.get("operational_state_board"), dict):
+            result["operational_state_board"] = runtime_truth.get("operational_state_board")
+        if isinstance(runtime_truth.get("source_of_truth_boundaries"), dict):
+            result["source_of_truth_boundaries"] = runtime_truth.get("source_of_truth_boundaries")
+        if isinstance(runtime_truth.get("shared_execution_visibility"), dict):
+            result["shared_execution_visibility"] = runtime_truth.get("shared_execution_visibility")
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
             exc,
         )
 
-    result = _attach_operational_state_board(result, route_paths=route_paths)
+    if not isinstance(result.get("operational_state_board"), dict):
+        result = _attach_operational_state_board(result, route_paths=route_paths)
+    if not isinstance(result.get("source_of_truth_boundaries"), dict):
+        result["source_of_truth_boundaries"] = _source_of_truth_boundaries()
+    try:
+        visibility_source = result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else result
+        result["shared_execution_visibility"] = _derive_shared_execution_visibility(visibility_source)
+    except Exception as exc:
+        logger.debug("_assemble_desktop_status_board_payload: shared execution visibility unavailable: %s", exc)
+        result.setdefault("shared_execution_visibility", _derive_shared_execution_visibility({}))
+    if result.get("execution_stage") in (None, ""):
+        result["execution_stage"] = (result.get("shared_execution_visibility") or {}).get("surface_execution_stage")
+    if result.get("current_task_summary") in (None, ""):
+        result["current_task_summary"] = (result.get("shared_execution_visibility") or {}).get("surface_summary")
     try:
         from core.v2_unified_state_contract import (
             build_control_plane_surface_contract,
@@ -5976,6 +6075,9 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         },
         "operational_state_board": _empty_operational_state_board(),
         "source_of_truth_boundaries": _source_of_truth_boundaries(),
+        "shared_execution_visibility": _derive_shared_execution_visibility({}),
+        "execution_stage": None,
+        "current_task_summary": None,
         "stale_or_cached_summary": {
             "runtime_truth_fallback": True,
             "desktop_payload_fallback": True,

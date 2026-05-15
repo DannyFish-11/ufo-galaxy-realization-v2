@@ -46,6 +46,11 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
         source_runtime_posture = "control_only"
 
     monkeypatch.setattr(projection_routes, "_compile_outward_truth", lambda: _FakeOutwardSnapshot())
+    monkeypatch.setattr(
+        projection_routes,
+        "_attach_operational_state_board",
+        lambda payload, route_paths=None: payload,
+    )
     monkeypatch.setattr(orchestrator, "build_source_dispatch_plan", lambda: _FakePlan())
     fake_rtc = types.SimpleNamespace(
         compile_runtime_truth=lambda: _FakeRuntimeTruth(),
@@ -60,6 +65,8 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert payload["startup_readiness"]["ready_to_route"] is True
     assert payload["runtime_decision_reasoning"]["selected_runtime"] == "v2_local"
     assert payload["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "local"
+    assert payload["shared_execution_visibility"]["completion_state"] == "not_started"
+    assert payload["execution_stage"] is None
 
 
 def test_dispatch_semantics_exposes_planning_fields():

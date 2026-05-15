@@ -655,6 +655,7 @@ def test_50b_minimal_fallback_payload_includes_operational_state_keys():
     payload = fallback_fn()
     assert "operational_state_board" in payload
     assert "source_of_truth_boundaries" in payload
+    assert "shared_execution_visibility" in payload
 
 
 def test_50c_desktop_status_board_assembly_includes_unified_operational_state_board():
@@ -669,6 +670,7 @@ def test_50c_desktop_status_board_assembly_includes_unified_operational_state_bo
     assert "registration_state" in category_ids
     assert "result_closure_state" in category_ids
     assert "minimum_access_admission_verdict" in category_ids
+    assert "shared_execution_visibility" in payload
 
 
 # ===========================================================================
