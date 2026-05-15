@@ -76,7 +76,7 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
-DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.3.0"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.4.0"
 OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
 DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
@@ -1526,6 +1526,22 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     def _is_established(value: Any) -> bool:
         return _normalize_assessment_status(value) == "established"
 
+    def _all_keys_established(summary: Dict[str, Any], keys: Sequence[str]) -> bool:
+        """Return True when all specified keys in summary are normalized as established."""
+        return all(_is_established(summary.get(key)) for key in keys)
+
+    def _normalize_readiness_signal_status(value: Any) -> str:
+        """Normalize readiness signal values into established/partial status labels."""
+        if value in {"ready", "established", True}:
+            return "established"
+        if value in {"not_ready", "unavailable", False, None}:
+            return "partial"
+        return "partial"
+
+    def _build_trace_status_node(trace_id: str, raw_status: Any) -> Dict[str, str]:
+        """Build one trace node with stable trace_id + normalized status."""
+        return {"trace_id": trace_id, "status": _normalize_assessment_status(raw_status)}
+
     truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
 
     # 12-question cognition matrix:
@@ -1746,28 +1762,25 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     next_phase_key_work_zh = _build_next_phase_key_work()
     local_chain_status = (
         "established"
-        if _is_established(chain_closure_summary.get("execution_chain"))
-        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
+        if _all_keys_established(chain_closure_summary, ("execution_chain", "closure_acceptance_chain"))
         else "partial"
     )
     cross_device_chain_status = (
         "established"
-        if _is_established(chain_closure_summary.get("request_chain"))
-        and _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
-        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        if _all_keys_established(
+            chain_closure_summary,
+            ("request_chain", "android_truth_uplink_chain", "result_backflow_chain"),
+        )
         else "partial"
     )
     local_vs_cross_device_unification_status = (
         "established"
-        if _is_established(mode_closure_summary.get("local_mode"))
-        and _is_established(mode_closure_summary.get("cross_device_mode"))
-        and _is_established(mode_closure_summary.get("delegated_execution"))
+        if _all_keys_established(mode_closure_summary, ("local_mode", "cross_device_mode", "delegated_execution"))
         else "partial"
     )
     shared_protocol_state_status = (
         "established"
-        if _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
-        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        if _all_keys_established(chain_closure_summary, ("android_truth_uplink_chain", "result_backflow_chain"))
         else "partial"
     )
     registration_connection_participation_status = (
@@ -1777,9 +1790,16 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     )
     mode_execution_truth_acceptance_status = (
         "established"
-        if _is_established(mode_closure_summary.get("delegated_execution"))
-        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
-        and _is_established(mode_closure_summary.get("takeover"))
+        if _all_keys_established(mode_closure_summary, ("delegated_execution", "takeover"))
+        and _all_keys_established(chain_closure_summary, ("closure_acceptance_chain",))
+        else "partial"
+    )
+    result_uplink_closure_acceptance_status = (
+        "established"
+        if _all_keys_established(
+            chain_closure_summary,
+            ("android_truth_uplink_chain", "result_backflow_chain", "closure_acceptance_chain"),
+        )
         else "partial"
     )
     multi_surface_alignment_status = (
@@ -1787,6 +1807,24 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         if _is_established(chain_closure_summary.get("projection_chain")) and bool(control_plane_layering)
         else "partial"
     )
+    source_of_truth_vs_projection_status = (
+        "established" if bool(state_contract.get("raw_signals")) and bool(control_plane_layering) else "partial"
+    )
+    registration_state_trace_status = _normalize_readiness_signal_status(readiness_state.get("state"))
+    android_visibility_trace_status = _normalize_readiness_signal_status(
+        bool(android_connection_diagnostics.get("android_visible"))
+    )
+    trace_gap_status = "open" if open_count > 0 or partial_count > 0 else "established"
+    non_established_chain_nodes = [
+        {"trace_id": trace_id, "status": _normalize_assessment_status(status)}
+        for trace_id, status in chain_closure_summary.items()
+        if not _is_established(status)
+    ]
+    non_established_mode_nodes = [
+        {"trace_id": trace_id, "status": _normalize_assessment_status(status)}
+        for trace_id, status in mode_closure_summary.items()
+        if not _is_established(status)
+    ]
 
     return {
         "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
@@ -1959,6 +1997,175 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "items": next_phase_key_work_zh,
             },
             "honesty_guardrail_zh": "该认知层用于帮助判断是否一体化，不用于粉饰为已完全集成。",
+        },
+        "dual_repo_trace_evidence_layer_zh": {
+            "status": "established",
+            "purpose_zh": "在现有认知判断层之上，补充可追踪、可复验、可回查的双仓真实代码证据链。",
+            "real_code_trace_scope": {
+                "v2_repo": "DannyFish-11/ufo-galaxy-realization-v2",
+                "android_repo": "DannyFish-11/ufo-galaxy-android",
+                "v2_trace_anchors": list(_V2_COUNTERPART_CODE_ANCHORS),
+                "android_trace_anchors": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
+            },
+            "trace_nodes": {
+                "local_chain_trace": {
+                    "status": local_chain_status,
+                    "trace_chain": [
+                        _build_trace_status_node("execution_chain", chain_closure_summary.get("execution_chain")),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
+                    ],
+                    "evidence": {
+                        "active_path": report.chain_state.active_path,
+                        "local_mode": mode_closure_summary.get("local_mode"),
+                    },
+                },
+                "cross_device_chain_trace": {
+                    "status": cross_device_chain_status,
+                    "trace_chain": [
+                        _build_trace_status_node("request_chain", chain_closure_summary.get("request_chain")),
+                        _build_trace_status_node(
+                            "android_truth_uplink_chain",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "result_backflow_chain",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
+                    ],
+                    "evidence": {
+                        "cross_device_mode": mode_closure_summary.get("cross_device_mode"),
+                        "delegated_execution": mode_closure_summary.get("delegated_execution"),
+                    },
+                },
+                "registration_connection_participation_trace": {
+                    "status": registration_connection_participation_status,
+                    "trace_chain": [
+                        {"trace_id": "registration_state", "status": registration_state_trace_status},
+                        {"trace_id": "android_visible", "status": android_visibility_trace_status},
+                    ],
+                    "evidence": {
+                        "android_connection_diagnostics": android_connection_diagnostics,
+                        "state_contract_authority": state_contract.get("authority"),
+                    },
+                },
+                "mode_execution_truth_acceptance_trace": {
+                    "status": mode_execution_truth_acceptance_status,
+                    "trace_chain": [
+                        _build_trace_status_node(
+                            "delegated_execution",
+                            mode_closure_summary.get("delegated_execution"),
+                        ),
+                        _build_trace_status_node("takeover", mode_closure_summary.get("takeover")),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
+                    ],
+                    "evidence": {
+                        "mode_closure_summary": mode_closure_summary,
+                        "delegated_observability": delegated_observability_diagnostics,
+                    },
+                },
+                "result_uplink_and_closure_acceptance_trace": {
+                    "status": result_uplink_closure_acceptance_status,
+                    "trace_chain": [
+                        _build_trace_status_node(
+                            "android_truth_uplink_chain",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "result_backflow_chain",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "closure_acceptance_chain",
+                            chain_closure_summary.get("closure_acceptance_chain"),
+                        ),
+                    ],
+                    "evidence": {
+                        "completion_posture": completion_posture,
+                        "ready_for_use": bool(clone_to_use_acceptance.get("ready_for_use")),
+                    },
+                },
+                "shared_protocol_and_state_semantics_trace": {
+                    "status": shared_protocol_state_status,
+                    "trace_chain": [
+                        _build_trace_status_node(
+                            "shared_android_truth_uplink",
+                            chain_closure_summary.get("android_truth_uplink_chain"),
+                        ),
+                        _build_trace_status_node(
+                            "shared_result_backflow",
+                            chain_closure_summary.get("result_backflow_chain"),
+                        ),
+                    ],
+                    "evidence": {
+                        "state_contract_authority": state_contract.get("authority"),
+                        "field_typing_schema": field_typing_schema,
+                    },
+                },
+            },
+            "surface_truth_mapping": {
+                "mobile_surface": {
+                    "surface_kind": "execution_participant_surface",
+                    "mapping_type": "direct_truth_participant",
+                    "source_anchor": ecosystem_surfaces["mobile_android_surface"],
+                },
+                "desktop_surface": {
+                    "surface_kind": "projection_reader_surface",
+                    "mapping_type": "derived_projection_surface",
+                    "source_anchor": ecosystem_surfaces["desktop_surface"],
+                },
+                "central_surface": {
+                    "surface_kind": "central_truth_and_governance_surface",
+                    "mapping_type": "direct_truth_authority",
+                    "source_anchor": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
+                },
+                "operator_surface": {
+                    "surface_kind": "governance_observability_surface",
+                    "mapping_type": "derived_governance_projection",
+                    "source_anchor": "/api/v1/operator/board/operable-truth",
+                },
+                "projection_surface": {
+                    "surface_kind": "state_projection_surface",
+                    "mapping_type": "derived_projection_surface",
+                    "source_anchor": ecosystem_surfaces["central_projection_routes"],
+                },
+            },
+            "source_of_truth_vs_projection_surfaces": {
+                "status": source_of_truth_vs_projection_status,
+                "direct_source_of_truth_surfaces": [
+                    "state_contract.raw_signals",
+                    "minimal_operability_path",
+                    "mode_participation_governance_layering.unified_mode_model",
+                ],
+                "derived_projection_surfaces": [
+                    "control_plane_surfaces",
+                    "integrated_judgement_zh",
+                    "dual_repo_ecosystem_cognition_zh",
+                ],
+                "evidence": {
+                    "raw_signals_present": bool(state_contract.get("raw_signals")),
+                    "projection_surfaces": list(control_plane_layering.keys()),
+                },
+            },
+            "trace_gaps_to_maturity": {
+                "status": trace_gap_status,
+                "conclusion_zh": "所有未建立闭合的链路保持可见，不得被重写为成熟封顶。",
+                "evidence": {
+                    "non_established_chain_nodes": non_established_chain_nodes,
+                    "non_established_mode_nodes": non_established_mode_nodes,
+                    "top_open_items": top_open_items,
+                },
+            },
+            "next_trace_closing_priorities_zh": {
+                "status": "established",
+                "items": next_phase_key_work_zh,
+            },
+            "honesty_guardrail_zh": "该证据层必须保持对 partial/open 的真实暴露，不得伪造全链路闭合。",
         },
         "completion_and_maturity_assessment": {
             "completion_posture": completion_posture,
