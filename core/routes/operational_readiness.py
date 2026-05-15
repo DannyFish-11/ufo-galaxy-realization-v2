@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from core.operational_readiness_surface import (
     OPERATIONAL_READINESS_SURFACE_AUTHORITY,
+    build_dual_repo_integrated_system_contract,
     build_operational_readiness_report,
     collect_app_route_paths,
 )
@@ -65,6 +66,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             "runtime_decision_reasoning": report.runtime_decision_reasoning,
             "state_contract_authority": report.state_contract.get("authority"),
         }
+        return JSONResponse(content=payload)
+
+    @router.get("/api/v1/projection/dual-repo-integrated-system-contract")
+    async def get_dual_repo_integrated_system_contract(request: Request) -> JSONResponse:
+        route_paths = collect_app_route_paths(request.app)
+        report = build_operational_readiness_report(route_paths=route_paths)
+        payload = build_dual_repo_integrated_system_contract(report)
+        payload["route_surface_authority"] = OPERATIONAL_READINESS_SURFACE_AUTHORITY
         return JSONResponse(content=payload)
 
     return router
