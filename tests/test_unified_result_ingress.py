@@ -540,6 +540,72 @@ class TestCompletionIngressNotify:
         assert outcome.is_fully_closed is False
         assert outcome.incomplete_reason == "evidence_gate:quarantine"
 
+    def test_E07_notify_with_android_context_receives_acceptance_and_tier(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        class _FakeCompletionIngress:
+            def __init__(self):
+                self.calls = []
+
+            def notify_with_android_context(
+                self,
+                env,
+                *,
+                android_participation_tier=None,
+                android_device_id=None,
+                acceptance_verdict=None,
+            ):
+                self.calls.append(
+                    {
+                        "task_id": env.task_id,
+                        "tier": android_participation_tier,
+                        "device_id": android_device_id,
+                        "acceptance_verdict": acceptance_verdict,
+                    }
+                )
+                return True
+
+            def notify(self, _env):
+                raise AssertionError(
+                    "notify() should not be called when notify_with_android_context is available"
+                )
+
+        class _FakeTruthBlock:
+            def to_dict(self):
+                return {"participation_tier": "dispatch_eligible"}
+
+        fake_completion_ingress = _FakeCompletionIngress()
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        def _force_accept_provisional(_event: Any, outcome: Any) -> None:
+            outcome.evidence_acceptance_verdict = "accept_provisional"
+
+        ingress._classify_and_apply_evidence_gate = _force_accept_provisional  # type: ignore[method-assign]
+
+        tid = _make_task_id()
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=fake_completion_ingress,
+        ), patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=_FakeTruthBlock(),
+        ):
+            outcome = ingress.process(_make_event(tid))
+
+        assert outcome.completion_notified is True
+        assert fake_completion_ingress.calls, "notify_with_android_context should be called"
+        call = fake_completion_ingress.calls[0]
+        assert call["task_id"] == tid
+        assert call["tier"] == "dispatch_eligible"
+        assert call["device_id"] == "test-device"
+        assert call["acceptance_verdict"] == "accept_provisional"
+
 
 # ===========================================================================
 # Group F — Bridge _pending_responses resolution
