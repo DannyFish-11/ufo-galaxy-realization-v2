@@ -178,6 +178,8 @@ CONTINUITY_GATE_PRECEDES_ROUTING_POLICY: str = (
 # Sub-path routing constants
 # ---------------------------------------------------------------------------
 
+_DELEGATED_EXECUTION_SIGNAL_TYPE = "delegated_execution_signal"
+
 _HANDOFF_TYPES = frozenset({
     "handoff_ack",
     "handoff_result",
@@ -191,7 +193,7 @@ _EXECUTION_SIGNAL_TYPES = frozenset({
     "error",
     "timeout",
     "cancelled",
-    "delegated_execution_signal",
+    _DELEGATED_EXECUTION_SIGNAL_TYPE,
     "execution_ack",
     "execution_progress",
     "execution_result",
@@ -366,7 +368,7 @@ def _extract_terminal_result_status(
     if raw_signal_kind in ("error", "execution_error"):
         return "failed"
 
-    if raw_signal_kind in ("result", "execution_result", "delegated_execution_signal"):
+    if raw_signal_kind in ("result", "execution_result", _DELEGATED_EXECUTION_SIGNAL_TYPE):
         raw_status = str(
             payload.get("status")
             or message.get("status")
@@ -573,10 +575,19 @@ def ingest_android_runtime_state_update(
                     task_id=task_id,
                     device_id=device_id,
                     raw_message_type=msg_type,
-                    normalized_result_kind=msg_type or "delegated_execution_signal",
+                    normalized_result_kind=(
+                        str(payload.get("signal_kind") or "").lower().strip()
+                        or msg_type
+                        or _DELEGATED_EXECUTION_SIGNAL_TYPE
+                    ),
                     normalized_status=status,
                     source_channel=ResultSourceChannel.DELEGATED,
-                    payload=payload if payload else dict(message),
+                    payload={
+                        **dict(payload),
+                        "task_id": task_id,
+                        "device_id": device_id,
+                        "status": status,
+                    },
                     trace_id=trace_id,
                     raw_message=dict(message),
                     runtime_session_id=str(
