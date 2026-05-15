@@ -1526,6 +1526,14 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     def _is_established(value: Any) -> bool:
         return _normalize_assessment_status(value) == "established"
 
+    def _all_keys_established(summary: Dict[str, Any], keys: Sequence[str]) -> bool:
+        return all(_is_established(summary.get(key)) for key in keys)
+
+    def _normalize_readiness_signal_status(value: Any) -> str:
+        if value in {"ready", "established", True}:
+            return "established"
+        return "partial"
+
     truth_flow_status = _normalize_assessment_status(chain_closure_summary.get("android_truth_uplink_chain"))
 
     # 12-question cognition matrix:
@@ -1746,28 +1754,25 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     next_phase_key_work_zh = _build_next_phase_key_work()
     local_chain_status = (
         "established"
-        if _is_established(chain_closure_summary.get("execution_chain"))
-        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
+        if _all_keys_established(chain_closure_summary, ("execution_chain", "closure_acceptance_chain"))
         else "partial"
     )
     cross_device_chain_status = (
         "established"
-        if _is_established(chain_closure_summary.get("request_chain"))
-        and _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
-        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        if _all_keys_established(
+            chain_closure_summary,
+            ("request_chain", "android_truth_uplink_chain", "result_backflow_chain"),
+        )
         else "partial"
     )
     local_vs_cross_device_unification_status = (
         "established"
-        if _is_established(mode_closure_summary.get("local_mode"))
-        and _is_established(mode_closure_summary.get("cross_device_mode"))
-        and _is_established(mode_closure_summary.get("delegated_execution"))
+        if _all_keys_established(mode_closure_summary, ("local_mode", "cross_device_mode", "delegated_execution"))
         else "partial"
     )
     shared_protocol_state_status = (
         "established"
-        if _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
-        and _is_established(chain_closure_summary.get("result_backflow_chain"))
+        if _all_keys_established(chain_closure_summary, ("android_truth_uplink_chain", "result_backflow_chain"))
         else "partial"
     )
     registration_connection_participation_status = (
@@ -1777,16 +1782,16 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     )
     mode_execution_truth_acceptance_status = (
         "established"
-        if _is_established(mode_closure_summary.get("delegated_execution"))
-        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
-        and _is_established(mode_closure_summary.get("takeover"))
+        if _all_keys_established(mode_closure_summary, ("delegated_execution", "takeover"))
+        and _all_keys_established(chain_closure_summary, ("closure_acceptance_chain",))
         else "partial"
     )
     result_uplink_closure_acceptance_status = (
         "established"
-        if _is_established(chain_closure_summary.get("android_truth_uplink_chain"))
-        and _is_established(chain_closure_summary.get("result_backflow_chain"))
-        and _is_established(chain_closure_summary.get("closure_acceptance_chain"))
+        if _all_keys_established(
+            chain_closure_summary,
+            ("android_truth_uplink_chain", "result_backflow_chain", "closure_acceptance_chain"),
+        )
         else "partial"
     )
     multi_surface_alignment_status = (
@@ -1796,6 +1801,10 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
     )
     source_of_truth_vs_projection_status = (
         "established" if bool(state_contract.get("raw_signals")) and bool(control_plane_layering) else "partial"
+    )
+    registration_state_trace_status = _normalize_readiness_signal_status(readiness_state.get("state"))
+    android_visibility_trace_status = _normalize_readiness_signal_status(
+        bool(android_connection_diagnostics.get("android_visible"))
     )
     trace_gap_status = "open" if open_count > 0 or partial_count > 0 else "established"
     non_established_chain_nodes = [
@@ -2026,8 +2035,8 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
                 "registration_connection_participation_trace": {
                     "status": registration_connection_participation_status,
                     "trace_chain": [
-                        {"trace_id": "registration_state", "status": str(readiness_state.get("state") or "unknown")},
-                        {"trace_id": "android_visible", "status": "established" if bool(android_connection_diagnostics.get("android_visible")) else "partial"},
+                        {"trace_id": "registration_state", "status": registration_state_trace_status},
+                        {"trace_id": "android_visible", "status": android_visibility_trace_status},
                     ],
                     "evidence": {
                         "android_connection_diagnostics": android_connection_diagnostics,
