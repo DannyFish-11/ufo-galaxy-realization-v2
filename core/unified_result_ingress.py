@@ -285,10 +285,11 @@ class UnifiedResultIngress:
     1. idempotency check / record
     2. run_task_result_truth_chain (four-step truth chain)
     3. CanonicalTaskRuntime lifecycle update  (if not already done by step 2)
-    4. CanonicalCompletionIngress.notify()    (unblock awaiters)
-    5. Evidence quality classification (PR-4: execution evidence model + acceptance gate)
-    6. store_task_result / memory backflow    (async, best-effort)
-    7. structured logging
+    4. Evidence quality classification (PR-4: execution evidence model + acceptance gate)
+    5. Stamp Android truth SSOT context (participation tier / readiness basis)
+    6. CanonicalCompletionIngress notify_with_android_context() / notify()
+    7. store_task_result / memory backflow    (async, best-effort)
+    8. structured logging
     """
 
     def __init__(self) -> None:
@@ -364,10 +365,7 @@ class UnifiedResultIngress:
         # by truth chain's authority_state_update step)
         self._sync_lifecycle(event)
 
-        # Step 4: CanonicalCompletionIngress notify
-        outcome.completion_notified = self._notify_completion(event)
-
-        # Step 5: PR-4 execution evidence classification + acceptance gate
+        # Step 4: PR-4 execution evidence classification + acceptance gate
         try:
             self._classify_and_apply_evidence_gate(event, outcome)
         except Exception as _ev_err:
@@ -378,7 +376,14 @@ class UnifiedResultIngress:
                 _ev_err,
             )
 
-        # Step 6: structured logging
+        # Step 5: Stamp Android truth SSOT context at closure time so completion
+        # ingress and downstream projections consume the same participation truth.
+        self._stamp_android_truth_context(event, outcome)
+
+        # Step 6: CanonicalCompletionIngress notify / notify_with_android_context
+        outcome.completion_notified = self._notify_completion(event)
+
+        # Step 7: structured logging
         self._log_outcome(event, outcome)
 
         # Determine overall closure
@@ -412,23 +417,6 @@ class UnifiedResultIngress:
         outcome.problem_solved_via = str(
             outcome.problem_execution_closure.get("problem_solved_via") or ""
         )
-
-        # Step 7: Stamp Android truth SSOT context at closure time.
-        # Co-sources the closure record with the device's current truth block
-        # so operator/board consumers can read Android truth alongside closure state.
-        if event.device_id:
-            try:
-                from core.v2_android_truth_ssot import build_v2_android_truth_block
-                outcome.android_truth_context = build_v2_android_truth_block(
-                    event.device_id
-                ).to_dict()
-            except Exception as _ssot_err:
-                logger.debug(
-                    "unified_result_ingress: android truth SSOT stamp skipped "
-                    "(non-fatal) task_id=%r err=%s",
-                    event.task_id,
-                    _ssot_err,
-                )
 
         return outcome
 
@@ -634,8 +622,33 @@ class UnifiedResultIngress:
             env.final_answer_ready = bool(event.payload.get("final_answer_ready"))
             env.final_user_response = str(event.payload.get("final_user_response") or "")
             env.problem_solved = bool(event.payload.get("problem_solved"))
+            acceptance_verdict = self._normalize_optional_context_value(
+                event.payload.get("_acceptance_verdict_for_completion_ingress")
+            )
+            android_participation_tier = self._normalize_optional_context_value(
+                event.payload.get("_android_participation_tier_for_completion_ingress")
+            )
+            android_device_id = self._normalize_optional_context_value(
+                event.payload.get("_android_device_id_for_completion_ingress")
+            )
 
-            notified = ingress.notify(env)
+            # These best-effort hints (acceptance_verdict,
+            # android_participation_tier, android_device_id) are populated by
+            # _stamp_android_truth_context(). If SSOT stamping is unavailable,
+            # they remain None and completion ingress still degrades gracefully.
+            notify_with_context = getattr(ingress, "notify_with_android_context", None)
+
+            if callable(notify_with_context):
+                notified = bool(
+                    notify_with_context(
+                        env,
+                        android_participation_tier=android_participation_tier,
+                        android_device_id=android_device_id,
+                        acceptance_verdict=acceptance_verdict,
+                    )
+                )
+            else:
+                notified = ingress.notify(env)
             if not notified:
                 logger.warning(
                     "unified_result_ingress: completion ingress returned non-notified "
@@ -688,6 +701,59 @@ class UnifiedResultIngress:
                 _e,
             )
             return False
+
+    def _stamp_android_truth_context(
+        self,
+        event: NormalizedResultEvent,
+        outcome: UnifiedResultIngressOutcome,
+    ) -> None:
+        """Stamp Android truth SSOT context and propagate it to completion payload hints."""
+        if not event.device_id:
+            return
+        try:
+            from core.v2_android_truth_ssot import build_v2_android_truth_block
+
+            truth_dict = build_v2_android_truth_block(event.device_id).to_dict()
+            outcome.android_truth_context = truth_dict
+            if isinstance(event.payload, dict):
+                tier = self._normalize_optional_context_value(
+                    truth_dict.get("participation_tier")
+                )
+                if tier:
+                    event.payload["_android_participation_tier_for_completion_ingress"] = tier
+                # event.device_id is already non-empty at this point, but we
+                # still normalize to trim whitespace and keep completion
+                # context formatting consistent across all fields.
+                device_id_value = self._normalize_optional_context_value(event.device_id)
+                if device_id_value:
+                    event.payload["_android_device_id_for_completion_ingress"] = device_id_value
+                verdict = self._normalize_optional_context_value(
+                    outcome.evidence_acceptance_verdict
+                )
+                if verdict:
+                    event.payload["_acceptance_verdict_for_completion_ingress"] = verdict
+        except Exception as _ssot_err:
+            logger.debug(
+                "unified_result_ingress: android truth SSOT stamp skipped "
+                "(non-fatal) task_id=%r err=%s",
+                event.task_id,
+                _ssot_err,
+            )
+
+    @staticmethod
+    def _normalize_optional_context_value(value: Any) -> Optional[str]:
+        """Normalize completion-ingress context values to Optional[str].
+
+        Returns ``None`` for missing values, blank strings, and booleans.
+        Booleans are intentionally filtered out to avoid ambiguous implicit
+        stringification (``"True"``/``"False"``) in completion context fields.
+        """
+        if value is None or isinstance(value, bool):
+            # Keep booleans out of completion context to avoid downstream
+            # treating textual "True"/"False" as semantic verdict/tier values.
+            return None
+        text = str(value).strip()
+        return text or None
 
     def _classify_and_apply_evidence_gate(
         self,
