@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.operational_readiness_surface import (
+    DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
     _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
     SurfaceStatus,
     build_operational_readiness_report,
@@ -346,6 +347,7 @@ def test_operational_readiness_routes_expose_expected_paths():
     assert "/api/v1/projection/operational-readiness" in paths
     assert "/api/v1/projection/clone-to-use-acceptance" in paths
     assert "/api/v1/projection/operability-contract" in paths
+    assert DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE in paths
 
 
 def test_build_operational_readiness_report_exposes_compat_blocked_contract():
@@ -522,3 +524,55 @@ def test_operability_contract_endpoint_returns_minimal_happy_path_contract():
     assert payload["minimal_happy_path_contract"]["overall_ready"] is False
     assert payload["minimal_happy_path_contract"]["blocking_steps"] == ["x"]
     assert payload["state_contract_authority"] == "test-state-contract"
+
+
+def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contract():
+    app = FastAPI()
+    app.include_router(create_router())
+    client = TestClient(app, raise_server_exceptions=False)
+    endpoint = DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE
+    fake_report = SimpleNamespace(
+        state_contract={
+            "authority": "test-state-contract",
+            "raw_signals": {"runtime_readiness_verdict": "ready"},
+        },
+        runtime_decision_reasoning={"selected_runtime": "android_delegated"},
+        unified_mode_model={"execution_location": "android_delegated"},
+        chain_state=SimpleNamespace(active_path="cross_device", success_quality="canonical_cross_device"),
+        android_v2_minimum_standard={"minimum_viable_chain_ready": True},
+        minimal_happy_path_contract={"overall_ready": True},
+    )
+    with (
+        patch(
+            "core.routes.operational_readiness.build_operational_readiness_report",
+            return_value=fake_report,
+        ),
+        patch(
+            "core.current_state_backbone_audit.build_system_backbone_snapshot",
+            return_value={
+                "authority": "backbone-authority",
+                "contract_version": "1.0.0",
+                "chain_closure_summary": {"request_chain": "established"},
+                "mode_closure_summary": {"local_mode": "established"},
+                "control_plane_layering": {"operator": {"role": "governance"}},
+                "field_typing_schema": {"runtime_truth": "truth"},
+                "established_count": 9,
+                "partial_count": 2,
+                "open_count": 1,
+                "top_open_items": [{"label": "x", "detail_zh": "y"}],
+                "honesty_note_zh": "note",
+            },
+        ),
+    ):
+        response = client.get(endpoint)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["contract_type"] == "dual_repo_current_state_integrated_system_contract"
+    assert (
+        payload["entrypoint_model"]["central_entrypoint"]
+        == endpoint
+    )
+    assert payload["responsibility_layering"]["distributed_android_side"]["first_class_execution_participant"] is True
+    assert payload["mode_participation_governance_layering"]["active_path"] == "cross_device"
+    assert payload["minimal_operability_path"]["overall_ready"] is True

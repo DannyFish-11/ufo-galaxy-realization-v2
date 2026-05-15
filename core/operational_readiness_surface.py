@@ -56,12 +56,16 @@ logger = logging.getLogger("Galaxy.OperationalReadinessSurface")
 __all__ = [
     "OPERATIONAL_READINESS_SURFACE_AUTHORITY",
     "OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION",
+    "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION",
+    "OPERABILITY_CONTRACT_ROUTE",
+    "DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE",
     "SurfaceStatus",
     "RegistrationKindState",
     "RegistrationDomainState",
     "AcceptanceCheckpoint",
     "OperationalChainState",
     "OperationalReadinessReport",
+    "build_dual_repo_integrated_system_contract",
     "build_operational_readiness_report",
     "collect_app_route_paths",
 ]
@@ -72,6 +76,9 @@ OPERATIONAL_READINESS_SURFACE_AUTHORITY: str = (
 )
 
 OPERATIONAL_READINESS_SURFACE_CONTRACT_VERSION: str = "pr1114_followup.3.0.0"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION: str = "1.0.0"
+OPERABILITY_CONTRACT_ROUTE: str = "/api/v1/projection/operability-contract"
+DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE: str = "/api/v1/projection/dual-repo-integrated-system-contract"
 
 _REQUIRED_API_PATHS: tuple[str, ...] = (
     "/api/v1/health",
@@ -86,6 +93,18 @@ _MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES: tuple[str, ...] = ("fastapi", "uvicorn",
 _MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE = "/api/v1/operator/board/operable-truth"
 _MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE = "/api/v1/operator/actions/android-directed"
 _MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
+# Android-side counterpart model inputs that anchor this V2 contract to the
+# currently integrated distributed execution runtime in ufo-galaxy-android.
+# Update this list when Android runtime responsibility files are renamed/moved.
+_ANDROID_COUNTERPART_MODEL_INPUTS: tuple[str, ...] = (
+    "app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt",
+    "app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt",
+    "app/src/main/java/com/ufo/galaxy/service/GalaxyConnectionService.kt",
+    "app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt",
+    "app/src/main/java/com/ufo/galaxy/agent/AutonomousExecutionPipeline.kt",
+    "app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt",
+    "app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt",
+)
 
 _DYNAMIC_KIND_STATUS: frozenset[RegistrationKind] = frozenset(
     {
@@ -1423,6 +1442,96 @@ def _build_minimal_happy_path_contract(
                 "closure_observed": closure_observed,
                 "runtime_decision_reasoning_present": bool(runtime_decision_reasoning),
             },
+        },
+    }
+
+
+def build_dual_repo_integrated_system_contract(report: OperationalReadinessReport) -> Dict[str, Any]:
+    """Build current-state integrated contract for V2+Android dual-repo system."""
+    try:
+        from core.current_state_backbone_audit import build_system_backbone_snapshot
+    except ImportError as exc:
+        logger.warning("OperationalReadinessSurface: backbone snapshot probe failed: %s", exc)
+        backbone_snapshot = {
+            "authority": "core.current_state_backbone_audit::unavailable",
+            "contract_version": "unknown",
+            "unavailable": True,
+            "error": str(exc),
+        }
+    else:
+        try:
+            backbone_snapshot = build_system_backbone_snapshot()
+        except (RuntimeError, ValueError, TypeError) as exc:
+            logger.warning("OperationalReadinessSurface: backbone snapshot build failed: %s", exc)
+            backbone_snapshot = {
+                "authority": "core.current_state_backbone_audit::unavailable",
+                "contract_version": "unknown",
+                "unavailable": True,
+                "error": str(exc),
+            }
+
+    state_contract = dict(report.state_contract or {})
+    control_plane_layering = dict(backbone_snapshot.get("control_plane_layering") or {})
+    field_typing_schema = dict(backbone_snapshot.get("field_typing_schema") or {})
+    unified_mode_model = dict(report.unified_mode_model or {})
+
+    return {
+        "authority": OPERATIONAL_READINESS_SURFACE_AUTHORITY,
+        "contract_version": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_VERSION,
+        "contract_type": "dual_repo_current_state_integrated_system_contract",
+        "system_identity_zh": (
+            "UFO Galaxy 现阶段双仓一体化 AI 系统：V2 中心编排治理 + Android 分布式执行参与者"
+        ),
+        "entrypoint_model": {
+            "central_entrypoint": DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
+            "operability_entrypoint": OPERABILITY_CONTRACT_ROUTE,
+            "v2_main_entry_files": ["main.py", "unified_launcher.py"],
+        },
+        "responsibility_layering": {
+            "central_side_v2": {
+                "orchestration_and_governance": True,
+                "truth_convergence": True,
+                "reasoning_convergence": True,
+                "acceptance_authority": True,
+                "observability_surfaces": ["operator", "board", "panel", "desktop_projection"],
+            },
+            "distributed_android_side": {
+                "first_class_execution_participant": True,
+                "delegated_execution": True,
+                "result_uplink": True,
+                "counterpart_model_inputs": list(_ANDROID_COUNTERPART_MODEL_INPUTS),
+            },
+            "truth_vs_projection_boundary": {
+                "runtime_truth": state_contract.get("raw_signals", {}),
+                "derived_reasoning": dict(report.runtime_decision_reasoning or {}),
+                "projection_surfaces": control_plane_layering,
+                "field_typing_schema": field_typing_schema,
+            },
+        },
+        "mode_participation_governance_layering": {
+            "active_path": report.chain_state.active_path,
+            "success_quality": report.chain_state.success_quality,
+            "unified_mode_model": unified_mode_model,
+            "android_v2_minimum_standard": dict(report.android_v2_minimum_standard or {}),
+        },
+        "control_plane_surfaces": control_plane_layering,
+        "minimal_operability_path": dict(report.minimal_happy_path_contract or {}),
+        "current_unification_status": {
+            "already_unified": {
+                "chain_closure_summary": dict(backbone_snapshot.get("chain_closure_summary") or {}),
+                "mode_closure_summary": dict(backbone_snapshot.get("mode_closure_summary") or {}),
+                "established_count": int(backbone_snapshot.get("established_count", 0)),
+            },
+            "transitional_or_open": {
+                "partial_count": int(backbone_snapshot.get("partial_count", 0)),
+                "open_count": int(backbone_snapshot.get("open_count", 0)),
+                "top_open_items": list(backbone_snapshot.get("top_open_items") or []),
+                "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
+            },
+        },
+        "source_contracts": {
+            "backbone_snapshot": backbone_snapshot,
+            "state_contract": state_contract,
         },
     }
 
