@@ -89,6 +89,9 @@ _MINIMAL_HAPPY_PATH_DEPENDENCY_MODULES: tuple[str, ...] = ("fastapi", "uvicorn",
 _MINIMAL_HAPPY_PATH_OPERATOR_BOARD_ROUTE = "/api/v1/operator/board/operable-truth"
 _MINIMAL_HAPPY_PATH_OPERATOR_DISPATCH_ROUTE = "/api/v1/operator/actions/android-directed"
 _MINIMAL_HAPPY_PATH_ENV_EXAMPLE_FILE = ".env.example"
+# Android-side counterpart model inputs that anchor this V2 contract to the
+# currently integrated distributed execution runtime in ufo-galaxy-android.
+# Update this list when Android runtime responsibility files are renamed/moved.
 _ANDROID_COUNTERPART_MODEL_INPUTS: tuple[str, ...] = (
     "app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt",
     "app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt",
@@ -1445,7 +1448,7 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
         from core.current_state_backbone_audit import build_system_backbone_snapshot
 
         backbone_snapshot = build_system_backbone_snapshot()
-    except Exception as exc:  # noqa: BLE001
+    except (ImportError, AttributeError, TypeError, ValueError) as exc:
         logger.warning("OperationalReadinessSurface: backbone snapshot probe failed: %s", exc)
         backbone_snapshot = {
             "authority": "core.current_state_backbone_audit::unavailable",
@@ -1504,11 +1507,11 @@ def build_dual_repo_integrated_system_contract(report: OperationalReadinessRepor
             "already_unified": {
                 "chain_closure_summary": dict(backbone_snapshot.get("chain_closure_summary") or {}),
                 "mode_closure_summary": dict(backbone_snapshot.get("mode_closure_summary") or {}),
-                "established_count": int(backbone_snapshot.get("established_count", 0) or 0),
+                "established_count": int(backbone_snapshot.get("established_count") or 0),
             },
             "transitional_or_open": {
-                "partial_count": int(backbone_snapshot.get("partial_count", 0) or 0),
-                "open_count": int(backbone_snapshot.get("open_count", 0) or 0),
+                "partial_count": int(backbone_snapshot.get("partial_count") or 0),
+                "open_count": int(backbone_snapshot.get("open_count") or 0),
                 "top_open_items": list(backbone_snapshot.get("top_open_items") or []),
                 "honesty_note_zh": str(backbone_snapshot.get("honesty_note_zh") or ""),
             },
