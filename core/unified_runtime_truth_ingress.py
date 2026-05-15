@@ -254,7 +254,14 @@ class RuntimeTruthIngressOutcome:
     """Coherent completion state for surfaces:
     ``in_progress`` / ``closed`` / ``result_returned_but_not_closed`` /
     ``result_returned_not_reconciled`` / ``terminal_result_without_task_id`` /
-    ``result_returned_unified_ingress_unavailable``."""
+    ``result_returned_unified_ingress_unavailable``.
+    Meanings:
+    - in_progress: non-terminal signal observed.
+    - closed: terminal result is reconciled, truth-ingested, and closure-accepted.
+    - result_returned_but_not_closed: terminal result arrived but acceptance did not fully close.
+    - result_returned_not_reconciled: terminal result rejected or not reconciled.
+    - terminal_result_without_task_id: terminal result lacks task identity for closure linkage.
+    - result_returned_unified_ingress_unavailable: unified result ingress linkage failed."""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -385,6 +392,34 @@ def _extract_terminal_result_status(
         return "completed"
 
     return None
+
+
+def _first_non_empty_string(*values: Any) -> str:
+    """Return first non-empty stringified value, or empty string."""
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _resolve_normalized_result_kind(msg_type: str, payload: Dict[str, Any]) -> str:
+    """Resolve canonical result-kind with explicit fallback order."""
+    return (
+        _first_non_empty_string(payload.get("signal_kind")).lower()
+        or _first_non_empty_string(msg_type).lower()
+        or _DELEGATED_EXECUTION_SIGNAL_TYPE
+    )
+
+
+def _resolve_runtime_session_id(message: Dict[str, Any], payload: Dict[str, Any]) -> str:
+    """Resolve runtime session identity with unified fallback order."""
+    return _first_non_empty_string(
+        message.get("runtime_session_id"),
+        payload.get("runtime_session_id"),
+        message.get("session_id"),
+        payload.get("session_id"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -575,11 +610,7 @@ def ingest_android_runtime_state_update(
                     task_id=task_id,
                     device_id=device_id,
                     raw_message_type=msg_type,
-                    normalized_result_kind=(
-                        str(payload.get("signal_kind") or "").lower().strip()
-                        or msg_type
-                        or _DELEGATED_EXECUTION_SIGNAL_TYPE
-                    ),
+                    normalized_result_kind=_resolve_normalized_result_kind(msg_type, payload),
                     normalized_status=status,
                     source_channel=ResultSourceChannel.DELEGATED,
                     payload={
@@ -590,13 +621,7 @@ def ingest_android_runtime_state_update(
                     },
                     trace_id=trace_id,
                     raw_message=dict(message),
-                    runtime_session_id=str(
-                        message.get("runtime_session_id")
-                        or payload.get("runtime_session_id")
-                        or message.get("session_id")
-                        or payload.get("session_id")
-                        or ""
-                    ),
+                    runtime_session_id=_resolve_runtime_session_id(message, payload),
                 )
                 result_outcome = ingest_result(normalized_event)
                 outcome.truth_ingested_or_accepted = bool(result_outcome.truth_chain_complete)
