@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -535,12 +536,14 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
         state_contract={
             "authority": "test-state-contract",
             "raw_signals": {"runtime_readiness_verdict": "ready"},
+            "derived_state": {"registration_state": {"state": "ready"}},
         },
         runtime_decision_reasoning={"selected_runtime": "android_delegated"},
         unified_mode_model={"execution_location": "android_delegated"},
         chain_state=SimpleNamespace(active_path="cross_device", success_quality="canonical_cross_device"),
         android_v2_minimum_standard={"minimum_viable_chain_ready": True},
         minimal_happy_path_contract={"overall_ready": True},
+        clone_to_use_acceptance={"ready_for_use": True},
     )
     with (
         patch(
@@ -553,7 +556,12 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
                 "authority": "backbone-authority",
                 "contract_version": "1.0.0",
                 "chain_closure_summary": {"request_chain": "established"},
-                "mode_closure_summary": {"local_mode": "established"},
+                "mode_closure_summary": {
+                    "local_mode": "established",
+                    "distributed_participant": "partial",
+                    "delegated_execution": "established",
+                    "takeover": "partial",
+                },
                 "control_plane_layering": {"operator": {"role": "governance"}},
                 "field_typing_schema": {"runtime_truth": "truth"},
                 "established_count": 9,
@@ -569,10 +577,32 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert response.status_code == 200
     payload = response.json()
     assert payload["contract_type"] == "dual_repo_current_state_integrated_system_contract"
-    assert (
-        payload["entrypoint_model"]["central_entrypoint"]
-        == endpoint
-    )
+    assert payload["entrypoint_model"]["central_entrypoint"] == endpoint
     assert payload["responsibility_layering"]["distributed_android_side"]["first_class_execution_participant"] is True
     assert payload["mode_participation_governance_layering"]["active_path"] == "cross_device"
     assert payload["minimal_operability_path"]["overall_ready"] is True
+    assert payload["contract_version"] == "1.1.0"
+    assert payload["android_repo_real_code_scope"]["repo"] == "DannyFish-11/ufo-galaxy-android"
+    assert payload["completion_and_maturity_assessment"]["operability_ready_for_non_author"] is True
+    assert payload["completion_and_maturity_assessment"]["completion_posture"] == "partially_integrated_transitional"
+    assert len(payload["core_questions_assessment_zh"]) == 12
+    question_ids = [entry["question_id"] for entry in payload["core_questions_assessment_zh"]]
+    duplicates = sorted([qid for qid, count in Counter(question_ids).items() if count > 1])
+    assert len(question_ids) == len(set(question_ids)), f"Duplicate question IDs found: {duplicates}"
+    assert all(
+        entry["status"] in {"established", "partial", "open"} for entry in payload["core_questions_assessment_zh"]
+    )
+    question_by_id = {entry["question_id"]: entry for entry in payload["core_questions_assessment_zh"]}
+    assert sorted(question_by_id.keys()) == list(range(1, 13))
+    assert question_by_id[1]["status"] == "established"
+    assert question_by_id[2]["status"] == "partial"
+    assert question_by_id[3]["status"] == "partial"
+    assert question_by_id[4]["status"] == "partial"
+    assert question_by_id[5]["status"] == "established"
+    assert question_by_id[6]["status"] == "partial"
+    assert question_by_id[7]["status"] == "partial"
+    assert question_by_id[8]["status"] == "established"
+    assert question_by_id[9]["status"] == "established"
+    assert question_by_id[10]["status"] == "partial"
+    assert question_by_id[11]["status"] == "partial"
+    assert question_by_id[12]["status"] == "open"
