@@ -581,7 +581,7 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert payload["responsibility_layering"]["distributed_android_side"]["first_class_execution_participant"] is True
     assert payload["mode_participation_governance_layering"]["active_path"] == "cross_device"
     assert payload["minimal_operability_path"]["overall_ready"] is True
-    assert payload["contract_version"] == "1.3.0"
+    assert payload["contract_version"] == "1.4.0"
     assert payload["android_repo_real_code_scope"]["repo"] == "DannyFish-11/ufo-galaxy-android"
     assert payload["android_repo_real_code_scope"]["android_audited_ref"] == ""
     assert "审计提交锚点" in payload["android_repo_real_code_scope"]["android_audited_ref_note_zh"]
@@ -609,6 +609,24 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert dual_repo_cognition["remaining_gaps_to_full_maturity"]["status"] == "open"
     assert len(dual_repo_cognition["next_stage_priorities_zh"]["items"]) >= 3
     assert "不用于粉饰为已完全集成" in dual_repo_cognition["honesty_guardrail_zh"]
+    trace_evidence = payload["dual_repo_trace_evidence_layer_zh"]
+    assert trace_evidence["status"] == "established"
+    assert trace_evidence["trace_nodes"]["local_chain_trace"]["status"] == "partial"
+    assert trace_evidence["trace_nodes"]["cross_device_chain_trace"]["status"] == "partial"
+    assert trace_evidence["trace_nodes"]["registration_connection_participation_trace"]["status"] == "partial"
+    assert trace_evidence["trace_nodes"]["mode_execution_truth_acceptance_trace"]["status"] == "partial"
+    assert trace_evidence["trace_nodes"]["result_uplink_and_closure_acceptance_trace"]["status"] == "partial"
+    assert trace_evidence["trace_nodes"]["shared_protocol_and_state_semantics_trace"]["status"] == "partial"
+    assert (
+        trace_evidence["surface_truth_mapping"]["mobile_surface"]["mapping_type"] == "direct_truth_participant"
+    )
+    assert (
+        trace_evidence["surface_truth_mapping"]["desktop_surface"]["mapping_type"] == "derived_projection_surface"
+    )
+    assert trace_evidence["source_of_truth_vs_projection_surfaces"]["status"] == "established"
+    assert trace_evidence["trace_gaps_to_maturity"]["status"] == "open"
+    assert len(trace_evidence["next_trace_closing_priorities_zh"]["items"]) >= 3
+    assert "不得伪造全链路闭合" in trace_evidence["honesty_guardrail_zh"]
     assert len(payload["core_questions_assessment_zh"]) == 12
     question_ids = [entry["question_id"] for entry in payload["core_questions_assessment_zh"]]
     duplicates = sorted([qid for qid, count in Counter(question_ids).items() if count > 1])
