@@ -19,7 +19,7 @@ UNIFIED_MODE_MODEL_AUTHORITY = (
     "V2-side layered mode model for execution location, participation layer, "
     "and governance state."
 )
-UNIFIED_MODE_MODEL_CONTRACT_VERSION = "1.0.0"
+UNIFIED_MODE_MODEL_CONTRACT_VERSION = "1.1.0"
 
 EXECUTION_LOCATION_VALUES: tuple[str, ...] = (
     "v2_local",
@@ -365,7 +365,15 @@ def _build_participation_semantics(
         "distributed_participant",
     }
     execution_participating = exec_loc in {"android_local", "android_delegated"}
-    operability_participating = layer in {"dispatch_eligible", "distributed_participant"}
+    # fully_attached 是首个"结构上可被派发选择"的层级，因此视为 operability_participating=True。
+    # dispatch_gate_passed 进一步区分：fully_attached 仅满足结构条件（可被派发选中），
+    # 而 dispatch_eligible / distributed_participant 则表示所有模式门控均已通过。
+    operability_participating = tier in {
+        "fully_attached",
+        "dispatch_eligible",
+        "distributed_participant",
+    }
+    dispatch_gate_passed = tier in {"dispatch_eligible", "distributed_participant"}
     distributed_participating = layer == "distributed_participant"
     takeover_visible = gov_state in {"takeover_pending", "takeover_active"}
 
@@ -383,6 +391,7 @@ def _build_participation_semantics(
         "tier_participating": tier_participating,
         "execution_participating": execution_participating,
         "operability_participating": operability_participating,
+        "dispatch_gate_passed": dispatch_gate_passed,
         "distributed_participating": distributed_participating,
         "takeover_visible": takeover_visible,
         "mode_semantics": mode_semantics,
@@ -391,6 +400,7 @@ def _build_participation_semantics(
             f"分层参与={tier_participating}；"
             f"执行参与={execution_participating}；"
             f"可操作参与={operability_participating}；"
+            f"派发门控通过={dispatch_gate_passed}；"
             f"治理态={gov_state or 'unknown'}。"
         ),
         "participating_summary_en": (
@@ -398,9 +408,10 @@ def _build_participation_semantics(
             f"tier_participating={tier_participating}; "
             f"execution_participating={execution_participating}; "
             f"operability_participating={operability_participating}; "
+            f"dispatch_gate_passed={dispatch_gate_passed}; "
             f"governance_state={gov_state or 'unknown'}."
         ),
-        "semantic_version": "1.0.0",
+        "semantic_version": "1.1.0",
     }
 
 
