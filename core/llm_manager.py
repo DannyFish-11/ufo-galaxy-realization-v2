@@ -148,11 +148,13 @@ class LLMManager:
         backend = self._backend
         if backend is not None and hasattr(backend, "refresh_providers"):
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
+                try:
+                    loop = asyncio.get_running_loop()
+                    # There is a running event loop — schedule as a task.
                     loop.create_task(backend.refresh_providers())
-                else:
-                    loop.run_until_complete(backend.refresh_providers())
+                except RuntimeError:
+                    # No running event loop — create a new one for this call.
+                    asyncio.run(backend.refresh_providers())
             except Exception as exc:
                 logger.warning(
                     "LLMManager reload failed",

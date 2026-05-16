@@ -144,7 +144,7 @@ def start_ingest_bus(
 
     # ── Start bus tick loop ───────────────────────────────────────────────
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         _ingest_task = loop.create_task(bus.run())
     except RuntimeError:
         # No running event loop — bus will be started on next loop iteration.
@@ -206,7 +206,7 @@ def stop_ingest_bus() -> None:
 def _schedule_pipeline(pipeline, name: str) -> None:
     """Schedule a pipeline's ``run()`` coroutine as a background asyncio task."""
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.create_task(pipeline.run())
         logger.debug("Scheduled %s pipeline as background task", name)
     except RuntimeError:

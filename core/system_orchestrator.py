@@ -39,6 +39,7 @@ governance.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, Optional
@@ -52,6 +53,27 @@ logger = logging.getLogger("Galaxy.Orchestrator")
 SYSTEM_ORCHESTRATOR_AUTHORITY: str = (
     "main.py:SYSTEM_ORCHESTRATOR — canonical staged bring-up contract (PR-2)"
 )
+
+# ---------------------------------------------------------------------------
+# Strict-preflight sentinel — used by CI and validate_runtime.py
+# ---------------------------------------------------------------------------
+
+STRICT_PREFLIGHT_ENV_VAR: str = "GALAXY_STRICT_PREFLIGHT"
+"""Environment variable that enables the strict preflight failure mode.
+
+When set to ``1`` / ``true`` / ``yes``, CRITICAL preflight failures and
+unhandled Phase-3 exceptions abort startup rather than degrading silently.
+This sentinel allows CI tooling to confirm the strict-mode guard is present.
+"""
+
+STRICT_AUTHORITY_CHECK_ENV_VAR: str = "GALAXY_STRICT_AUTHORITY_CHECK"
+"""Environment variable that enables the strict authority boundary failure mode.
+
+When set to ``1`` / ``true`` / ``yes``, Phase-7 center authority boundary
+degradation causes startup to FAIL rather than continue in DEGRADED mode.
+This sentinel allows CI tooling to confirm authority boundary enforcement is
+present in the startup sequence.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +200,15 @@ class SystemOrchestrator:
     def __init__(
         self,
         continue_on_failure: bool = False,
+        strict_preflight: Optional[bool] = None,
     ) -> None:
         self.continue_on_failure = continue_on_failure
+        # Resolve strict mode: explicit argument takes precedence over env var.
+        if strict_preflight is None:
+            strict_preflight = os.environ.get(STRICT_PREFLIGHT_ENV_VAR, "").lower() in (
+                "1", "true", "yes"
+            )
+        self.strict_preflight: bool = strict_preflight
         self._extra_hooks: Dict[StartupPhase, List[PhaseHook]] = {}
 
     # ------------------------------------------------------------------
@@ -246,17 +275,44 @@ class SystemOrchestrator:
         )
 
     def _run_phase_3_env_checks(self) -> PhaseResult:
-        """Phase 3 — Environment / bootstrap checks."""
+        """Phase 3 — Environment / bootstrap checks.
+
+        In strict mode (``strict_preflight=True`` or
+        ``GALAXY_STRICT_PREFLIGHT=1``), a CRITICAL preflight finding causes
+        this phase to return ``PhaseStatus.FAILED`` rather than ``DEGRADED``,
+        which will abort the startup sequence when ``continue_on_failure`` is
+        ``False`` (the default).
+        """
         logger.info("[Phase 3] Running environment / bootstrap checks …")
         issues: List[str] = []
+        has_critical_failure = False
         try:
-            from core.config_preflight import run_preflight
-            run_preflight()
+            from core.config_preflight import run_preflight, ConfigPreflightError
+            report = run_preflight(dry_run=True)  # collect findings without raising
+            if not report.ok:
+                issues.append(
+                    f"preflight: {len(report.critical_findings)} CRITICAL finding(s)"
+                )
+                if self.strict_preflight:
+                    has_critical_failure = True
+                    logger.error(
+                        "[Phase 3] STRICT preflight: %d CRITICAL finding(s) — "
+                        "aborting startup (GALAXY_STRICT_PREFLIGHT=1)",
+                        len(report.critical_findings),
+                    )
         except ImportError:
             pass  # preflight module optional at this phase
         except Exception as exc:
             issues.append(f"preflight: {exc}")
+            if self.strict_preflight:
+                has_critical_failure = True
 
+        if has_critical_failure:
+            return PhaseResult(
+                phase=StartupPhase.ENV_CHECKS,
+                status=PhaseStatus.FAILED,
+                detail="; ".join(issues),
+            )
         if issues:
             return PhaseResult(
                 phase=StartupPhase.ENV_CHECKS,
@@ -502,6 +558,9 @@ class SystemOrchestrator:
         authority_boundary_status: str = "not_checked"
         authority_boundary_data: Dict[str, Any] = {}
         phase_status = PhaseStatus.OK
+        strict_authority = os.environ.get("GALAXY_STRICT_AUTHORITY_CHECK", "").lower() in (
+            "1", "true", "yes"
+        )
         try:
             from core.center_authority_boundary import (
                 evaluate_center_authority_boundary,
@@ -521,14 +580,22 @@ class SystemOrchestrator:
                 )
             else:
                 authority_boundary_status = "degraded"
-                phase_status = PhaseStatus.DEGRADED
+                if strict_authority:
+                    phase_status = PhaseStatus.FAILED
+                    logger.error(
+                        "[Phase 7] V6 center authority boundary FAILED "
+                        "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
+                        boundary_report.degraded_domains,
+                    )
+                else:
+                    phase_status = PhaseStatus.DEGRADED
+                    logger.warning(
+                        "[Phase 7] V6 center authority boundary DEGRADED: %s",
+                        boundary_report.degraded_domains,
+                    )
                 detail = (
-                    f"{detail} | authority_boundary=DEGRADED "
+                    f"{detail} | authority_boundary={'FAILED' if strict_authority else 'DEGRADED'} "
                     f"degraded_domains={boundary_report.degraded_domains}"
-                )
-                logger.warning(
-                    "[Phase 7] V6 center authority boundary DEGRADED: %s",
-                    boundary_report.degraded_domains,
                 )
         except Exception as exc:
             authority_boundary_status = "error"

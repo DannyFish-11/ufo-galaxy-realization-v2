@@ -39,6 +39,7 @@ All startup options are forwarded to ``unified_launcher.py`` (subordinate
 component) after the orchestrator completes its staged pre-flight sequence.
 """
 
+import os
 import sys
 import subprocess
 import logging
@@ -75,6 +76,17 @@ SYSTEM_ORCHESTRATOR_AUTHORITY: str = (
 # Orchestrator bring-up sequence
 # ---------------------------------------------------------------------------
 
+def _is_strict_preflight() -> bool:
+    """Return True when GALAXY_STRICT_PREFLIGHT is set to a truthy value.
+
+    Set ``GALAXY_STRICT_PREFLIGHT=1`` (or ``true``) to make **any** preflight
+    exception or Phase-3 CRITICAL failure abort startup rather than proceeding
+    in degraded mode.  Useful for production deployments and CI pipelines
+    where silent-success startup is unacceptable.
+    """
+    return os.environ.get("GALAXY_STRICT_PREFLIGHT", "").lower() in ("1", "true", "yes")
+
+
 def _run_orchestrator_preflight() -> bool:
     """Execute the staged pre-flight bring-up sequence (Phases 1–7).
 
@@ -82,14 +94,29 @@ def _run_orchestrator_preflight() -> bool:
     bring-up via ``unified_launcher``, ``False`` on hard failure.
 
     Logs one line per phase so startup logs reflect clear staged bring-up.
+
+    Strict mode
+    ~~~~~~~~~~~
+    When ``GALAXY_STRICT_PREFLIGHT=1`` any exception raised by the orchestrator
+    itself is treated as a hard failure (returns ``False``) rather than being
+    silently swallowed.  This prevents critically broken environments from
+    appearing healthy at startup.
     """
+    strict = _is_strict_preflight()
     try:
         from core.system_orchestrator import SystemOrchestrator
-        orch = SystemOrchestrator(continue_on_failure=False)
+        orch = SystemOrchestrator(continue_on_failure=False, strict_preflight=strict)
         summary = orch.run_startup_sequence()
         logger.info("Orchestrator bring-up complete:\n%s", summary)
         return summary.is_ready()
     except Exception as exc:
+        if strict:
+            logger.error(
+                "Orchestrator pre-flight raised an exception "
+                "(GALAXY_STRICT_PREFLIGHT=1 — treating as hard failure): %s",
+                exc,
+            )
+            return False
         logger.warning(
             "Orchestrator pre-flight raised an exception (non-fatal): %s", exc
         )

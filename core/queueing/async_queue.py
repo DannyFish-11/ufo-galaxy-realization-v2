@@ -254,7 +254,7 @@ class AsyncTaskQueue:
         if not self._started:
             raise RuntimeError("AsyncTaskQueue.start() must be called before submit()")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
 
         async with self._lock:

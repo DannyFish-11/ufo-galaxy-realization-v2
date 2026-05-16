@@ -77,6 +77,10 @@ class TestPhase2DeviceSubsystem:
         assert "AsyncClient" in content or "httpx.AsyncClient" in content
 
     def test_device_router_uses_asyncio_event(self):
+        pytest.importorskip(
+            "fastapi",
+            reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
+        )
         import inspect
         from galaxy_gateway.device_router import DeviceRouter
         source = inspect.getsource(DeviceRouter.dispatch_task)
@@ -122,6 +126,10 @@ class TestPhase4CrossDevice:
     """Private method renamed; hardcoded URL replaced."""
 
     def test_dispatch_task_is_public(self):
+        pytest.importorskip(
+            "fastapi",
+            reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
+        )
         from galaxy_gateway.device_router import DeviceRouter
         assert hasattr(DeviceRouter, "dispatch_task")
         assert not hasattr(DeviceRouter, "_dispatch_single_device_task")
@@ -229,6 +237,10 @@ class TestPhase7Architecture:
     """Result aggregation; A/B experiment dataclass."""
 
     def test_aggregate_results(self):
+        pytest.importorskip(
+            "fastapi",
+            reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
+        )
         from galaxy_gateway.device_router import DeviceRouter
         results = [
             {"success": True, "device_id": "dev1"},
