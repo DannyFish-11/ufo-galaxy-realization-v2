@@ -68,6 +68,7 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
@@ -745,7 +746,8 @@ class UnifiedResultIngress:
         merged_truth: Dict[str, Any] = dict(ssot_truth)
         payload = event.payload if isinstance(event.payload, dict) else {}
         truth_source_by_field: Dict[str, str] = {}
-        ssot_fallback_allowed = bool(ssot_truth.get("sources"))
+        ssot_sources = ssot_truth.get("sources")
+        ssot_fallback_allowed = self._is_valid_ssot_sources_collection(ssot_sources)
         truth_fields = (
             "participation_tier",
             "dispatch_eligible",
@@ -782,6 +784,15 @@ class UnifiedResultIngress:
         if isinstance(value, str):
             return bool(value.strip())
         return True
+
+    @staticmethod
+    def _is_valid_ssot_sources_collection(value: Any) -> bool:
+        """Return True when SSOT sources indicate a usable snapshot basis."""
+        return (
+            isinstance(value, Collection)
+            and not isinstance(value, (str, bytes, bytearray, dict))
+            and len(value) > 0
+        )
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:

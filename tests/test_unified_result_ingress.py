@@ -741,6 +741,8 @@ class TestCompletionIngressNotify:
                     "dispatch_eligible": True,
                     "runtime_constrained": True,
                     "local_mode_active": False,
+                    "local_loop_ready": False,
+                    "sources": ["ssot"],
                 }
 
         fake_completion_ingress = _FakeCompletionIngress()
@@ -759,6 +761,7 @@ class TestCompletionIngressNotify:
                 "dispatch_eligible": False,
                 "runtime_constrained": False,
                 "local_mode_active": True,
+                "local_loop_ready": True,
             }
         )
 
@@ -780,8 +783,10 @@ class TestCompletionIngressNotify:
         assert outcome.android_truth_context["dispatch_eligible"] is False
         assert outcome.android_truth_context["runtime_constrained"] is False
         assert outcome.android_truth_context["local_mode_active"] is True
+        assert outcome.android_truth_context["local_loop_ready"] is True
         assert outcome.android_truth_context["android_truth_source_by_field"]["participation_tier"] == "result_payload"
         assert outcome.android_truth_context["android_truth_source_by_field"]["dispatch_eligible"] == "result_payload"
+        assert outcome.android_truth_context["android_truth_source_by_field"]["local_loop_ready"] == "result_payload"
 
     def test_E11_android_truth_stamp_falls_back_to_ssot_when_payload_truth_absent(self):
         from core.unified_result_ingress import UnifiedResultIngress
@@ -815,6 +820,7 @@ class TestCompletionIngressNotify:
                     "dispatch_eligible": True,
                     "runtime_constrained": False,
                     "local_mode_active": False,
+                    "local_loop_ready": True,
                     "sources": ["ssot"],
                 }
 
@@ -843,6 +849,11 @@ class TestCompletionIngressNotify:
         assert call["tier"] == "dispatch_eligible"
         assert outcome.android_truth_context["participation_tier"] == "dispatch_eligible"
         assert outcome.android_truth_context["android_truth_source_by_field"]["participation_tier"] == "ssot_snapshot"
+        assert outcome.android_truth_context["dispatch_eligible"] is True
+        assert outcome.android_truth_context["runtime_constrained"] is False
+        assert outcome.android_truth_context["local_mode_active"] is False
+        assert outcome.android_truth_context["local_loop_ready"] is True
+        assert outcome.android_truth_context["android_truth_source_by_field"]["local_loop_ready"] == "ssot_snapshot"
 
     def test_E12_delayed_result_keeps_payload_truth_when_ssot_snapshot_is_empty(self):
         from core.unified_result_ingress import UnifiedResultIngress
@@ -855,6 +866,7 @@ class TestCompletionIngressNotify:
                     "runtime_constrained": None,
                     "local_mode_active": None,
                     "local_loop_ready": None,
+                    "sources": [],
                 }
 
         ingress = UnifiedResultIngress()
@@ -887,6 +899,72 @@ class TestCompletionIngressNotify:
         assert outcome.evidence_acceptance_verdict == "accept"
         assert outcome.android_evidence_runtime_context["participation_tier"] == "dispatch_eligible"
         assert "payload:participation_tier" in outcome.android_evidence_runtime_context.get("context_sources", [])
+
+    def test_E13_delayed_result_keeps_payload_truth_when_ssot_read_fails(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        class _FakeCompletionIngress:
+            def __init__(self):
+                self.calls = []
+
+            def notify_with_android_context(
+                self,
+                env,
+                *,
+                android_participation_tier=None,
+                android_device_id=None,
+                acceptance_verdict=None,
+            ):
+                self.calls.append(
+                    {
+                        "task_id": env.task_id,
+                        "tier": android_participation_tier,
+                        "device_id": android_device_id,
+                        "acceptance_verdict": acceptance_verdict,
+                    }
+                )
+                return True
+
+        fake_completion_ingress = _FakeCompletionIngress()
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        event = _make_event(_make_task_id())
+        event.payload.update(
+            {
+                "participation_tier": "distributed_participant",
+                "dispatch_eligible": False,
+                "runtime_constrained": False,
+                "local_mode_active": False,
+                "local_loop_ready": True,
+            }
+        )
+
+        with (
+            patch(
+                "core.canonical_completion_ingress.get_canonical_completion_ingress",
+                return_value=fake_completion_ingress,
+            ),
+            patch(
+                "core.v2_android_truth_ssot.build_v2_android_truth_block",
+                side_effect=Exception("ssot_unavailable"),
+            ),
+        ):
+            outcome = ingress.process(event)
+
+        call = fake_completion_ingress.calls[0]
+        assert call["tier"] == "distributed_participant"
+        assert outcome.android_truth_context["participation_tier"] == "distributed_participant"
+        assert outcome.android_truth_context["dispatch_eligible"] is False
+        assert outcome.android_truth_context["runtime_constrained"] is False
+        assert outcome.android_truth_context["local_mode_active"] is False
+        assert outcome.android_truth_context["local_loop_ready"] is True
+        assert outcome.android_truth_context["android_truth_source_by_field"]["participation_tier"] == "result_payload"
 
 
 # ===========================================================================
