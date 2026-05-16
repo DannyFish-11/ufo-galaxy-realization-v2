@@ -128,12 +128,12 @@ class AudioIngestPipeline:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            # capture() must be called from a running async context; the
-            # RuntimeError here would manifest as a broken callback, so we
-            # surface a clear warning rather than silently misbehaving.
+            # capture() must be called from within a running asyncio event loop.
+            # Without one, the sounddevice callback cannot enqueue audio chunks
+            # safely, so we exit early rather than silently misbehaving.
             logger.warning(
                 "AudioIngestPipeline.capture() called with no running event loop — "
-                "audio frames will be dropped.  Call capture() from an async context."
+                "audio capture cannot start.  Call capture() from an async context."
             )
             self._quality = SignalQuality.device_unavailable()
             return

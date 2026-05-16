@@ -107,9 +107,21 @@ def _deployment_dep_error(exc: Exception) -> bool:
     """
     if not isinstance(exc, ModuleNotFoundError):
         return False
-    missing = (exc.name or str(exc)).lower()
-    _deployment_deps = ("fastapi", "pydantic", "starlette", "uvicorn")
-    return any(dep in missing for dep in _deployment_deps)
+    # Use the structured `.name` attribute (set by Python's import machinery)
+    # to match the top-level package name exactly, falling back to a
+    # case-insensitive prefix match on the exception message for packages that
+    # do not set `.name`.
+    _deployment_deps = frozenset(("fastapi", "pydantic", "starlette", "uvicorn"))
+    exc_name: str = (exc.name or "").lower().split(".")[0]
+    if exc_name and exc_name in _deployment_deps:
+        return True
+    # Fallback: check the first token of the message.  e.g. "No module named 'fastapi'"
+    msg_lower = str(exc).lower()
+    for dep in _deployment_deps:
+        # Match "no module named 'fastapi'" or "no module named 'fastapi.something'"
+        if f"'{dep}" in msg_lower or f"\"{dep}" in msg_lower:
+            return True
+    return False
 
 # ---------------------------------------------------------------------------
 # Methodology statement

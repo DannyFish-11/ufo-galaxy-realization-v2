@@ -182,14 +182,28 @@ class TestAsyncIoBoundaryHardening:
 
     def test_llm_manager_does_not_use_deprecated_get_event_loop_in_reload(self):
         """``core/llm_manager.py`` 的 ``reload()`` 方法不应使用已弃用的 ``asyncio.get_event_loop()``。"""
-        source = self._read_source("core/llm_manager.py")
-        # Check specifically inside the reload method for the deprecated pattern
-        reload_start = source.find("def reload(self)")
-        if reload_start == -1:
+        import ast
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        full_path = os.path.join(repo_root, "core/llm_manager.py")
+        with open(full_path) as f:
+            source = f.read()
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            pytest.skip("Could not parse llm_manager.py as AST")
+        # Find the reload method and collect all attribute accesses within it
+        reload_node = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "reload":
+                reload_node = node
+                break
+        if reload_node is None:
             pytest.skip("reload() method not found in llm_manager.py")
-        # Get the reload method block (up to the next def at same indentation)
-        reload_block = source[reload_start:reload_start + 800]
-        assert "asyncio.get_event_loop()" not in reload_block, (
+        deprecated_calls = [
+            node for node in ast.walk(reload_node)
+            if isinstance(node, ast.Attribute) and node.attr == "get_event_loop"
+        ]
+        assert not deprecated_calls, (
             "llm_manager.py reload() must not use deprecated asyncio.get_event_loop()"
         )
 
