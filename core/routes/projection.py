@@ -4155,6 +4155,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         payload = _attach_operational_state_board(payload, route_paths=None)
         payload.setdefault("source_of_truth_boundaries", _source_of_truth_boundaries())
         payload["shared_execution_visibility"] = _derive_shared_execution_visibility(payload)
+        payload["participation_truth_consumption"] = _build_participation_truth_consumption(payload)
         payload["execution_stage"] = payload["shared_execution_visibility"].get("surface_execution_stage")
         payload["current_task_summary"] = payload["shared_execution_visibility"].get("surface_summary")
 
@@ -4228,6 +4229,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "operational_state_board": _empty_operational_state_board(),
             "source_of_truth_boundaries": _source_of_truth_boundaries(),
             "shared_execution_visibility": _derive_shared_execution_visibility({}),
+            "participation_truth_consumption": _build_participation_truth_consumption({}),
             "execution_stage": None,
             "current_task_summary": None,
             "projection_surface_role": "runtime_truth_board_facing",
@@ -5873,6 +5875,32 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     }
 
 
+def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Build one normalized participation/mode truth block for board-facing consumers."""
+    reasoning = dict(truth_payload.get("runtime_decision_reasoning") or {})
+    unified_mode_model = dict(reasoning.get("unified_mode_model") or {})
+    semantics = dict(unified_mode_model.get("participation_semantics") or {})
+    shared_visibility = dict(truth_payload.get("shared_execution_visibility") or {})
+
+    return {
+        "tri_state_phase": truth_payload.get("tri_state_phase"),
+        "runtime_domain": (truth_payload.get("continuum") or {}).get("runtime_domain"),
+        "participation_tier": reasoning.get("participation_tier"),
+        "participation_layer": unified_mode_model.get("participation_layer"),
+        "execution_location": unified_mode_model.get("execution_location"),
+        "governance_state": unified_mode_model.get("governance_state"),
+        "participation_semantics": semantics,
+        "completion_state": shared_visibility.get("completion_state"),
+        "surface_execution_stage": shared_visibility.get("surface_execution_stage"),
+        "source_of_truth_refs": [
+            "runtime_decision_reasoning.unified_mode_model",
+            "shared_execution_visibility",
+            "runtime_truth.tri_state_phase",
+        ],
+        "_source": "core.routes.projection._build_participation_truth_consumption",
+    }
+
+
 def _apply_shared_visibility_field(
     payload: Dict[str, Any],
     *,
@@ -5977,6 +6005,10 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             result["source_of_truth_boundaries"] = runtime_truth.get("source_of_truth_boundaries")
         if isinstance(runtime_truth.get("shared_execution_visibility"), dict):
             result["shared_execution_visibility"] = runtime_truth.get("shared_execution_visibility")
+        if isinstance(runtime_truth.get("participation_truth_consumption"), dict):
+            result["participation_truth_consumption"] = runtime_truth.get(
+                "participation_truth_consumption"
+            )
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
@@ -6001,9 +6033,16 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             else:
                 visibility_source = {}
         result["shared_execution_visibility"] = _derive_shared_execution_visibility(visibility_source)
+        result["participation_truth_consumption"] = _build_participation_truth_consumption(
+            visibility_source if isinstance(visibility_source, dict) else {}
+        )
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: shared execution visibility unavailable: %s", exc)
         result.setdefault("shared_execution_visibility", _derive_shared_execution_visibility({}))
+        result.setdefault(
+            "participation_truth_consumption",
+            _build_participation_truth_consumption({}),
+        )
     _apply_shared_visibility_field(
         result,
         target_field="execution_stage",

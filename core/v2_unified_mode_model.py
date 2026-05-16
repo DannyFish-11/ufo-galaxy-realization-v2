@@ -133,10 +133,10 @@ def derive_execution_location(
 ) -> str:
     runtime = str(selected_runtime or "").strip().lower()
     mode = str(device_mode or "").strip().lower()
-    if runtime == "android_delegated":
-        return "android_delegated"
     if mode in {"local", "local_only"}:
         return "android_local" if selected_device else "v2_local"
+    if runtime == "android_delegated":
+        return "android_delegated"
     if mode in {"cross_device", "remote_handoff", "staged_mesh", "android_delegated"}:
         if selected_device or runtime == "android_delegated":
             return "android_delegated"
@@ -308,6 +308,7 @@ class UnifiedModeModel:
     participation_tier: str = "unknown"
     device_mode: str = "unknown"
     mode_readiness_state: Optional[str] = None
+    participation_semantics: Dict[str, Any] = field(default_factory=dict)
     governance_basis: Dict[str, Any] = field(default_factory=dict)
     blocking_reasons: List[str] = field(default_factory=list)
     source_of_truth_refs: List[str] = field(default_factory=list)
@@ -322,6 +323,7 @@ class UnifiedModeModel:
             "participation_tier": self.participation_tier,
             "device_mode": self.device_mode,
             "mode_readiness_state": self.mode_readiness_state,
+            "participation_semantics": dict(self.participation_semantics),
             "governance_basis": dict(self.governance_basis),
             "blocking_reasons": list(self.blocking_reasons),
             "source_of_truth_refs": list(self.source_of_truth_refs),
@@ -334,6 +336,62 @@ class UnifiedModeModel:
             "contract_version": UNIFIED_MODE_MODEL_CONTRACT_VERSION,
             "_source": UNIFIED_MODE_MODEL_AUTHORITY,
         }
+
+
+def _build_participation_semantics(
+    *,
+    participation_tier: str,
+    participation_layer: str,
+    execution_location: str,
+    governance_state: str,
+    device_mode: str,
+    mode_readiness_state: Optional[str],
+) -> Dict[str, Any]:
+    tier = str(participation_tier or "").strip()
+    layer = str(participation_layer or "").strip()
+    exec_loc = str(execution_location or "").strip()
+    gov_state = str(governance_state or "").strip()
+    mode = str(device_mode or "").strip().lower()
+    readiness = str(mode_readiness_state or "").strip().lower() or None
+
+    lifecycle_participating = layer != "offline_local_only"
+    tier_participating = tier in {
+        "cross_device_enabled",
+        "fully_attached",
+        "dispatch_eligible",
+        "distributed_participant",
+    }
+    execution_participating = exec_loc in {"android_local", "android_delegated"}
+    operability_participating = layer in {"dispatch_eligible", "distributed_participant"}
+    distributed_participating = layer == "distributed_participant"
+    takeover_visible = gov_state in {"takeover_pending", "takeover_active"}
+
+    mode_semantics = {
+        "local_mode_active": mode in {"local", "local_only"} or exec_loc == "android_local",
+        "cross_device_active": mode in {"cross_device", "remote_handoff", "staged_mesh"},
+        "delegated_execution_active": exec_loc == "android_delegated",
+        "takeover_pending": gov_state == "takeover_pending",
+        "takeover_active": gov_state == "takeover_active",
+        "deferred": gov_state == "deferred",
+        "constrained": gov_state == "constrained" or readiness in {"degraded", "transitioning"},
+    }
+    return {
+        "lifecycle_participating": lifecycle_participating,
+        "tier_participating": tier_participating,
+        "execution_participating": execution_participating,
+        "operability_participating": operability_participating,
+        "distributed_participating": distributed_participating,
+        "takeover_visible": takeover_visible,
+        "mode_semantics": mode_semantics,
+        "participating_summary_zh": (
+            f"生命周期参与={lifecycle_participating}；"
+            f"分层参与={tier_participating}；"
+            f"执行参与={execution_participating}；"
+            f"可操作参与={operability_participating}；"
+            f"治理态={gov_state or 'unknown'}。"
+        ),
+        "semantic_version": "1.0.0",
+    }
 
 
 def build_unified_mode_model(
@@ -385,6 +443,16 @@ def build_unified_mode_model(
         device_mode=resolved_device_mode,
         mode_readiness_state=(
             str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None
+        ),
+        participation_semantics=_build_participation_semantics(
+            participation_tier=resolved_participation_tier,
+            participation_layer=participation_layer,
+            execution_location=execution_location,
+            governance_state=governance_value,
+            device_mode=resolved_device_mode,
+            mode_readiness_state=(
+                str(resolved_mode_readiness) if resolved_mode_readiness not in (None, "") else None
+            ),
         ),
         governance_basis=governance_basis,
         blocking_reasons=_dedupe(
