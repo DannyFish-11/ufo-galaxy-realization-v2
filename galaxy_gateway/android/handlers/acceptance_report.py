@@ -14,10 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 async def handle_device_acceptance_report(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+    _bridge: "AndroidBridge", _websocket: Any, message: Dict[str, Any]
 ) -> Dict[str, Any]:
     """摄取 Android acceptance 证据并返回结构化 ACK。"""
-    _ = bridge, websocket
     msg_type = message.get("type")
     device_id = str(message.get("device_id") or "")
     payload = message.get("payload")
