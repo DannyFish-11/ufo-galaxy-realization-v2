@@ -966,6 +966,118 @@ class TestCompletionIngressNotify:
         assert outcome.android_truth_context["local_loop_ready"] is True
         assert outcome.android_truth_context["android_truth_source_by_field"]["participation_tier"] == "result_payload"
 
+    def test_E14_android_closure_class_backfills_completion_env_without_truth_chain(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        notify_calls = []
+
+        class _NotifyOnlyIngress:
+            def notify(self, env):
+                notify_calls.append(
+                    {
+                        "problem_solved": env.problem_solved,
+                        "problem_closed": env.problem_closed,
+                    }
+                )
+                return True
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: False  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        event = _make_event(_make_task_id())
+        event.payload["problem_solving_closure_class"] = "problem_solved_completed"
+
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=_NotifyOnlyIngress(),
+        ):
+            outcome = ingress.process(event)
+
+        assert outcome.completion_notified is True
+        assert notify_calls == [{"problem_solved": True, "problem_closed": True}]
+        assert event.payload["problem_solved"] is True
+        assert event.payload["problem_closed"] is True
+
+    def test_E15_android_closure_class_unsolved_closed_keeps_problem_unsolved(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        notify_calls = []
+
+        class _NotifyOnlyIngress:
+            def notify(self, env):
+                notify_calls.append(
+                    {
+                        "problem_solved": env.problem_solved,
+                        "problem_closed": env.problem_closed,
+                    }
+                )
+                return True
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: False  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        event = _make_event(_make_task_id())
+        event.payload["problem_solving_closure_class"] = "problem_unsolved_closed"
+
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=_NotifyOnlyIngress(),
+        ):
+            ingress.process(event)
+
+        assert notify_calls == [{"problem_solved": False, "problem_closed": True}]
+        assert event.payload.get("problem_solved") is not True
+        assert event.payload["problem_closed"] is True
+
+    def test_E16_android_closure_class_fallback_does_not_downgrade_true_problem_solved(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        notify_calls = []
+
+        class _NotifyOnlyIngress:
+            def notify(self, env):
+                notify_calls.append(
+                    {
+                        "problem_solved": env.problem_solved,
+                        "problem_closed": env.problem_closed,
+                    }
+                )
+                return True
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: False  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        event = _make_event(_make_task_id())
+        event.payload.update(
+            {
+                "problem_solved": True,
+                "problem_closed": True,
+                "problem_solving_closure_class": "problem_unsolved_closed",
+            }
+        )
+
+        with patch(
+            "core.canonical_completion_ingress.get_canonical_completion_ingress",
+            return_value=_NotifyOnlyIngress(),
+        ):
+            ingress.process(event)
+
+        assert notify_calls == [{"problem_solved": True, "problem_closed": True}]
+        assert event.payload["problem_solved"] is True
+        assert event.payload["problem_closed"] is True
+
 
 # ===========================================================================
 # Group F — Bridge _pending_responses resolution

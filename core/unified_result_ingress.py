@@ -68,6 +68,7 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
@@ -366,6 +367,12 @@ class UnifiedResultIngress:
             event.trace_id or "",
         )
 
+        # Step 1.5: wire-level closure fallback normalization.
+        # Android may report structured closure semantics via
+        # `problem_solving_closure_class`; completion ingress and closure builders
+        # consume `problem_solved` / `problem_closed`.
+        self._apply_problem_solving_closure_fallback(event)
+
         # Step 2: four-step truth chain
         outcome.truth_chain_complete = self._run_truth_chain(event)
 
@@ -658,6 +665,65 @@ class UnifiedResultIngress:
         except Exception as _e:
             logger.debug("unified_result_ingress: completion ingress skipped (non-fatal): %s", _e)
             return False
+
+    def _apply_problem_solving_closure_fallback(self, event: NormalizedResultEvent) -> None:
+        """Backfill closure booleans from Android wire closure class.
+
+        This is a boundary fallback and intentionally monotonic:
+        it only upgrades missing/false booleans to ``True`` when the Android
+        structured closure class indicates solved/closed.
+        """
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        if not payload:
+            return
+
+        closure_class_raw = payload.get("problem_solving_closure_class")
+        closure_class = self._normalize_optional_context_value(closure_class_raw)
+        if not closure_class:
+            return
+
+        derived = self._derive_problem_closure_booleans_from_class(closure_class)
+        if not derived:
+            return
+
+        derived_problem_solved = bool(derived.get("problem_solved"))
+        derived_problem_closed = bool(derived.get("problem_closed"))
+
+        if derived_problem_solved and not bool(payload.get("problem_solved")):
+            payload["problem_solved"] = True
+        if derived_problem_closed and not bool(payload.get("problem_closed")):
+            payload["problem_closed"] = True
+
+    def _derive_problem_closure_booleans_from_class(
+        self,
+        closure_class: str,
+    ) -> Optional[Dict[str, bool]]:
+        """Translate Android ``problem_solving_closure_class`` into booleans."""
+        normalized = str(closure_class).strip().lower()
+        if not normalized:
+            return None
+
+        tokens = {tok for tok in re.split(r"[^a-z0-9]+", normalized) if tok}
+        if not tokens:
+            return None
+
+        unsolved = "unsolved" in tokens or ("not" in tokens and "solved" in tokens)
+        solved = "solved" in tokens and not unsolved
+        closed = (
+            solved
+            or "closed" in tokens
+            or "closure" in tokens
+            or "completed" in tokens
+            or "done" in tokens
+            or "terminal" in tokens
+        )
+
+        if not solved and not closed:
+            return None
+        return {
+            "problem_solved": solved,
+            "problem_closed": closed,
+        }
 
     def _resolve_bridge_pending(self, bridge: Any, event: NormalizedResultEvent) -> bool:
         """Resolve any _pending_responses future keyed by task_id in bridge."""
