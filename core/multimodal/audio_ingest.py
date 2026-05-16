@@ -125,7 +125,18 @@ class AudioIngestPipeline:
             1,
             int(self.config.sample_rate * self.config.chunk_duration_ms / 1000),
         )
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # capture() must be called from a running async context; the
+            # RuntimeError here would manifest as a broken callback, so we
+            # surface a clear warning rather than silently misbehaving.
+            logger.warning(
+                "AudioIngestPipeline.capture() called with no running event loop — "
+                "audio frames will be dropped.  Call capture() from an async context."
+            )
+            self._quality = SignalQuality.device_unavailable()
+            return
         queue: asyncio.Queue = asyncio.Queue(maxsize=30)
 
         def _sd_callback(indata: np.ndarray, frames: int, time_info, status) -> None:
