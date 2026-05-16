@@ -952,6 +952,9 @@ class UnifiedResultIngress:
                 acceptance_evidence_hint.get("mapped_android_proof_class") or ""
             ).strip()
             if not android_proof_class and mapped_acceptance_proof_class:
+                # 当 result payload 未携带 proof_class 时，使用最近一次
+                # DEVICE_ACCEPTANCE_REPORT 映射出的 proof_class 作为权威兜底，
+                # 让 acceptance evidence 真正进入 V2 evidence gate。
                 android_proof_class = mapped_acceptance_proof_class
                 android_runtime_truth_context["proof_class_source"] = (
                     "device_acceptance_report"

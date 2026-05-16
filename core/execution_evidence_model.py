@@ -859,6 +859,8 @@ def _resolve_android_evidence_resolution(
     )
     if android_proof_class:
         if merged_context.get("proof_class_source") == "device_acceptance_report":
+            # acceptance report 已给出结构化接受结论并被映射为 proof_class，
+            # 因此这里不再叠加 runtime inference strength，避免双重语义。
             return {
                 "effective_android_proof_class": android_proof_class,
                 "android_evidence_resolution": "acceptance_report_mapped_proof_class",

@@ -288,3 +288,7 @@ class TestAndroidReportTypesNowHandled:
         assert stored.get("mapped_android_proof_class") == "confirmed_strong"
         assert stored.get("mapped_evidence_trust_level") == "trusted"
         assert stored.get("snapshot_id") == "accept-snap-001"
+        assert stored.get("dimension_states") == {
+            "governance": "pass",
+            "readiness": "pass",
+        }

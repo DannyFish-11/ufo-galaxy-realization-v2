@@ -33,8 +33,13 @@ async def handle_device_acceptance_report(
         record.acceptance_tag,
         record.mapped_android_proof_class,
     )
+    ack_type = (
+        f"{msg_type}_ack"
+        if isinstance(msg_type, str) and msg_type.strip()
+        else "device_acceptance_report_ack"
+    )
     return {
-        "type": f"{msg_type}_ack" if msg_type else "ack",
+        "type": ack_type,
         "device_id": device_id,
         "status": "received",
         "message_id": message.get("message_id"),
