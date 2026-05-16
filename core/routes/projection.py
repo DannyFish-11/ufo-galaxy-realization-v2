@@ -5877,6 +5877,8 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
 
 def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Build one normalized participation/mode truth block for board-facing consumers."""
+    if not isinstance(truth_payload, dict):
+        truth_payload = {}
     reasoning = dict(truth_payload.get("runtime_decision_reasoning") or {})
     unified_mode_model = dict(reasoning.get("unified_mode_model") or {})
     semantics = dict(unified_mode_model.get("participation_semantics") or {})

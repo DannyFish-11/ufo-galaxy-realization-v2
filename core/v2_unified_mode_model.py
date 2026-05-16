@@ -133,6 +133,9 @@ def derive_execution_location(
 ) -> str:
     runtime = str(selected_runtime or "").strip().lower()
     mode = str(device_mode or "").strip().lower()
+    # local mode is an explicit runtime-governance constraint:
+    # even when the selected runtime was previously delegated, local mode means
+    # execution must collapse to local semantics for this device.
     if mode in {"local", "local_only"}:
         return "android_local" if selected_device else "v2_local"
     if runtime == "android_delegated":
@@ -389,6 +392,13 @@ def _build_participation_semantics(
             f"执行参与={execution_participating}；"
             f"可操作参与={operability_participating}；"
             f"治理态={gov_state or 'unknown'}。"
+        ),
+        "participating_summary_en": (
+            f"lifecycle_participating={lifecycle_participating}; "
+            f"tier_participating={tier_participating}; "
+            f"execution_participating={execution_participating}; "
+            f"operability_participating={operability_participating}; "
+            f"governance_state={gov_state or 'unknown'}."
         ),
         "semantic_version": "1.0.0",
     }
