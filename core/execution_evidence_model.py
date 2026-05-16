@@ -181,6 +181,7 @@ STALE_RESULT_THRESHOLD_SECONDS: float = 300.0
 # ExecutionEvidenceState
 # ---------------------------------------------------------------------------
 
+
 class ExecutionEvidenceState(str, Enum):
     """Canonical execution evidence states for center-distributed task outcomes.
 
@@ -246,6 +247,7 @@ class ExecutionEvidenceState(str, Enum):
 # EvidenceTrustLevel
 # ---------------------------------------------------------------------------
 
+
 class EvidenceTrustLevel(str, Enum):
     """Downstream trust classification derived from :class:`ExecutionEvidenceState`.
 
@@ -278,6 +280,7 @@ class EvidenceTrustLevel(str, Enum):
 # ---------------------------------------------------------------------------
 # ExecutionEvidenceRecord
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ExecutionEvidenceRecord:
@@ -318,6 +321,10 @@ class ExecutionEvidenceRecord:
     trust_level: EvidenceTrustLevel
     source_channel: str = ""
     android_proof_class: str = ""
+    effective_android_proof_class: str = ""
+    android_evidence_resolution: str = ""
+    android_inferred_evidence_strength: str = ""
+    android_evidence_runtime_context: Dict[str, Any] = field(default_factory=dict)
     is_duplicate: bool = False
     is_stale: bool = False
     is_superseded: bool = False
@@ -334,6 +341,10 @@ class ExecutionEvidenceRecord:
             "trust_level": self.trust_level.value,
             "source_channel": self.source_channel,
             "android_proof_class": self.android_proof_class,
+            "effective_android_proof_class": self.effective_android_proof_class,
+            "android_evidence_resolution": self.android_evidence_resolution,
+            "android_inferred_evidence_strength": self.android_inferred_evidence_strength,
+            "android_evidence_runtime_context": dict(self.android_evidence_runtime_context),
             "is_duplicate": self.is_duplicate,
             "is_stale": self.is_stale,
             "is_superseded": self.is_superseded,
@@ -357,10 +368,12 @@ class ExecutionEvidenceRecord:
 # classify_execution_evidence
 # ---------------------------------------------------------------------------
 
+
 def classify_execution_evidence(
     state: ExecutionEvidenceState,
     *,
     proof_class: str = "",
+    android_inferred_evidence_strength: str = "",
     is_duplicate: bool = False,
     is_stale: bool = False,
     is_superseded: bool = False,
@@ -423,7 +436,9 @@ def classify_execution_evidence(
 
         # Rule 4: completed_strong with full confirmation → trusted
         if state == ExecutionEvidenceState.completed_strong:
-            if truth_chain_complete and proof_class == "confirmed_strong":
+            if truth_chain_complete and (
+                proof_class in {"confirmed_strong", "inferred_strong"} or android_inferred_evidence_strength == "strong"
+            ):
                 return EvidenceTrustLevel.trusted
             # Rule 5: completed_strong but missing proof confirmation → provisional
             return EvidenceTrustLevel.provisional
@@ -460,8 +475,7 @@ def classify_execution_evidence(
 
     except Exception as exc:
         logger.warning(
-            "execution_evidence_model: classify_execution_evidence failed "
-            "(returning quarantine): state=%r exc=%s",
+            "execution_evidence_model: classify_execution_evidence failed " "(returning quarantine): state=%r exc=%s",
             state,
             exc,
         )
@@ -472,12 +486,14 @@ def classify_execution_evidence(
 # infer_execution_evidence_state
 # ---------------------------------------------------------------------------
 
+
 def infer_execution_evidence_state(
     normalized_status: str,
     *,
     source_channel: str = "",
     truth_chain_complete: bool = False,
     android_proof_class: str = "",
+    android_inferred_evidence_strength: str = "",
     is_duplicate: bool = False,
     is_stale: bool = False,
     is_superseded: bool = False,
@@ -559,8 +575,13 @@ def infer_execution_evidence_state(
             )
 
             if is_android_path:
-                if android_proof_class == "confirmed_strong" and truth_chain_complete:
+                if truth_chain_complete and (
+                    android_proof_class in {"confirmed_strong", "inferred_strong"}
+                    or android_inferred_evidence_strength == "strong"
+                ):
                     return ExecutionEvidenceState.completed_strong
+                if android_inferred_evidence_strength == "weak":
+                    return ExecutionEvidenceState.completed_degraded
                 return ExecutionEvidenceState.android_delegated
 
             # Local execution path
@@ -589,6 +610,7 @@ def infer_execution_evidence_state(
 # build_execution_evidence_record
 # ---------------------------------------------------------------------------
 
+
 def build_execution_evidence_record(
     task_id: str,
     device_id: str,
@@ -597,6 +619,7 @@ def build_execution_evidence_record(
     source_channel: str = "",
     truth_chain_complete: bool = False,
     android_proof_class: str = "",
+    android_runtime_truth_context: Optional[Dict[str, Any]] = None,
     is_duplicate: bool = False,
     is_stale: bool = False,
     is_superseded: bool = False,
@@ -640,12 +663,25 @@ def build_execution_evidence_record(
     """
     try:
         payload = payload or {}
+        android_resolution = _resolve_android_evidence_resolution(
+            device_id=device_id,
+            source_channel=source_channel,
+            payload=payload,
+            android_proof_class=android_proof_class,
+            android_runtime_truth_context=android_runtime_truth_context,
+            truth_chain_complete=truth_chain_complete,
+        )
+        effective_android_proof_class = android_resolution["effective_android_proof_class"]
+        android_evidence_resolution = android_resolution["android_evidence_resolution"]
+        android_inferred_evidence_strength = android_resolution["android_inferred_evidence_strength"]
+        android_evidence_runtime_context = android_resolution["android_evidence_runtime_context"]
 
         state = infer_execution_evidence_state(
             normalized_status,
             source_channel=source_channel,
             truth_chain_complete=truth_chain_complete,
-            android_proof_class=android_proof_class,
+            android_proof_class=effective_android_proof_class,
+            android_inferred_evidence_strength=android_inferred_evidence_strength,
             is_duplicate=is_duplicate,
             is_stale=is_stale,
             is_superseded=is_superseded,
@@ -654,7 +690,8 @@ def build_execution_evidence_record(
 
         trust_level = classify_execution_evidence(
             state,
-            proof_class=android_proof_class,
+            proof_class=effective_android_proof_class,
+            android_inferred_evidence_strength=android_inferred_evidence_strength,
             is_duplicate=is_duplicate,
             is_stale=is_stale,
             is_superseded=is_superseded,
@@ -665,6 +702,10 @@ def build_execution_evidence_record(
             state=state,
             trust_level=trust_level,
             android_proof_class=android_proof_class,
+            effective_android_proof_class=effective_android_proof_class,
+            android_evidence_resolution=android_evidence_resolution,
+            android_inferred_evidence_strength=android_inferred_evidence_strength,
+            android_evidence_runtime_context=android_evidence_runtime_context,
             truth_chain_complete=truth_chain_complete,
             is_duplicate=is_duplicate,
             is_stale=is_stale,
@@ -679,6 +720,10 @@ def build_execution_evidence_record(
             trust_level=trust_level,
             source_channel=source_channel,
             android_proof_class=android_proof_class,
+            effective_android_proof_class=effective_android_proof_class,
+            android_evidence_resolution=android_evidence_resolution,
+            android_inferred_evidence_strength=android_inferred_evidence_strength,
+            android_evidence_runtime_context=android_evidence_runtime_context,
             is_duplicate=is_duplicate,
             is_stale=is_stale,
             is_superseded=is_superseded,
@@ -710,11 +755,16 @@ def build_execution_evidence_record(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_diagnosis(
     *,
     state: ExecutionEvidenceState,
     trust_level: EvidenceTrustLevel,
     android_proof_class: str,
+    effective_android_proof_class: str,
+    android_evidence_resolution: str,
+    android_inferred_evidence_strength: str,
+    android_evidence_runtime_context: Dict[str, Any],
     truth_chain_complete: bool,
     is_duplicate: bool,
     is_stale: bool,
@@ -730,6 +780,13 @@ def _build_diagnosis(
     if not truth_chain_complete:
         tokens.append("truth_chain_incomplete")
 
+    if android_evidence_resolution:
+        tokens.append(f"android_evidence_resolution:{android_evidence_resolution}")
+    if android_inferred_evidence_strength:
+        tokens.append(f"android_inferred_evidence_strength:{android_inferred_evidence_strength}")
+    if effective_android_proof_class:
+        tokens.append(f"effective_android_proof_class:{effective_android_proof_class}")
+
     if not android_proof_class:
         _android_channels = {"canonical_ws", "compat_ws", "delegated", "replay"}
         if source_channel in _android_channels:
@@ -744,12 +801,194 @@ def _build_diagnosis(
     if is_superseded:
         tokens.append("is_superseded_result")
 
+    context_sources = android_evidence_runtime_context.get("context_sources", [])
+    for source in context_sources:
+        tokens.append(f"android_runtime_context_source:{source}")
+    if source_channel in {"canonical_ws", "compat_ws", "delegated", "replay"} and not android_evidence_runtime_context:
+        tokens.append("android_runtime_truth_context_absent")
+
     if trust_level == EvidenceTrustLevel.quarantine:
         tokens.append("requires_operator_review")
     elif trust_level == EvidenceTrustLevel.provisional:
         tokens.append("operator_warning_flagged")
 
     return tokens
+
+
+_ANDROID_RESULT_CHANNELS = frozenset({"canonical_ws", "compat_ws", "delegated", "replay"})
+_ANDROID_PARTICIPATION_TIER_ORDER = (
+    "local_only",
+    "control_only",
+    "cross_device_capable",
+    "cross_device_enabled",
+    "fully_attached",
+    "dispatch_eligible",
+    "distributed_participant",
+)
+
+
+def _resolve_android_evidence_resolution(
+    *,
+    device_id: str,
+    source_channel: str,
+    payload: Dict[str, Any],
+    android_proof_class: str,
+    android_runtime_truth_context: Optional[Dict[str, Any]],
+    truth_chain_complete: bool,
+) -> Dict[str, Any]:
+    runtime_truth_context = android_runtime_truth_context or {}
+    is_android_path = (
+        source_channel in _ANDROID_RESULT_CHANNELS
+        or str(payload.get("execution_source", "")).strip() in {"android_delegated", "hybrid"}
+        or bool(device_id or payload.get("device_id"))
+    )
+    if not is_android_path:
+        return {
+            "effective_android_proof_class": android_proof_class or "",
+            "android_evidence_resolution": "non_android_path",
+            "android_inferred_evidence_strength": "",
+            "android_evidence_runtime_context": {},
+        }
+
+    merged_context = _build_android_evidence_runtime_context(
+        payload=payload,
+        runtime_truth_context=runtime_truth_context,
+    )
+    if android_proof_class:
+        return {
+            "effective_android_proof_class": android_proof_class,
+            "android_evidence_resolution": "explicit_proof_class",
+            "android_inferred_evidence_strength": "",
+            "android_evidence_runtime_context": merged_context,
+        }
+
+    tier = _coerce_optional_str(merged_context.get("participation_tier"))
+    dispatch_eligible = _coerce_optional_bool(merged_context.get("dispatch_eligible"))
+    runtime_constrained = _coerce_optional_bool(merged_context.get("runtime_constrained"))
+    local_mode_active = _coerce_optional_bool(merged_context.get("local_mode_active"))
+    local_loop_ready = _coerce_optional_bool(merged_context.get("local_loop_ready"))
+
+    tier_is_strong = _participation_tier_rank(tier) >= _participation_tier_rank("dispatch_eligible")
+    inferred_strong = (
+        truth_chain_complete
+        and tier_is_strong
+        and dispatch_eligible is not False
+        and runtime_constrained is False
+        and local_mode_active is not True
+        and (local_loop_ready is True or dispatch_eligible is True)
+    )
+    inferred_weak = (
+        runtime_constrained is True
+        or local_mode_active is True
+        or dispatch_eligible is False
+        or (tier is not None and not tier_is_strong)
+        or local_loop_ready is False
+    )
+
+    if inferred_strong:
+        return {
+            "effective_android_proof_class": "inferred_strong",
+            "android_evidence_resolution": "inferred_runtime_context",
+            "android_inferred_evidence_strength": "strong",
+            "android_evidence_runtime_context": merged_context,
+        }
+    if inferred_weak:
+        return {
+            "effective_android_proof_class": "inferred_weak",
+            "android_evidence_resolution": "inferred_runtime_context",
+            "android_inferred_evidence_strength": "weak",
+            "android_evidence_runtime_context": merged_context,
+        }
+    if merged_context:
+        return {
+            "effective_android_proof_class": "inferred_indeterminate",
+            "android_evidence_resolution": "inferred_runtime_context",
+            "android_inferred_evidence_strength": "indeterminate",
+            "android_evidence_runtime_context": merged_context,
+        }
+    return {
+        "effective_android_proof_class": "",
+        "android_evidence_resolution": "android_proof_missing",
+        "android_inferred_evidence_strength": "",
+        "android_evidence_runtime_context": {},
+    }
+
+
+def _build_android_evidence_runtime_context(
+    *,
+    payload: Dict[str, Any],
+    runtime_truth_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    context_sources: List[str] = []
+    context: Dict[str, Any] = {}
+    for field in (
+        "participation_tier",
+        "dispatch_eligible",
+        "runtime_constrained",
+        "local_mode_active",
+        "local_loop_ready",
+    ):
+        value = _pick_context_value(
+            field,
+            payload=payload,
+            runtime_truth_context=runtime_truth_context,
+            context_sources=context_sources,
+        )
+        if value is not None:
+            context[field] = value
+    if context_sources:
+        context["context_sources"] = list(context_sources)
+    return context
+
+
+def _pick_context_value(
+    field: str,
+    *,
+    payload: Dict[str, Any],
+    runtime_truth_context: Dict[str, Any],
+    context_sources: List[str],
+) -> Any:
+    payload_value = payload.get(field)
+    if payload_value not in (None, ""):
+        context_sources.append(f"payload:{field}")
+        return payload_value
+
+    runtime_truth_value = runtime_truth_context.get(field)
+    if runtime_truth_value not in (None, ""):
+        context_sources.append(f"runtime_truth:{field}")
+        return runtime_truth_value
+    return None
+
+
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def _coerce_optional_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _participation_tier_rank(value: Optional[str]) -> int:
+    if value is None:
+        return -1
+    try:
+        return _ANDROID_PARTICIPATION_TIER_ORDER.index(str(value).strip())
+    except ValueError:
+        return -1
 
 
 # ---------------------------------------------------------------------------

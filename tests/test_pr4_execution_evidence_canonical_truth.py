@@ -158,6 +158,7 @@ try:
         DUPLICATE_EVIDENCE_REJECTION_POLICY,
         STALE_RESULT_THRESHOLD_SECONDS,
     )
+
     _EEM_OK = True
 except ImportError:
     _EEM_OK = False
@@ -172,6 +173,7 @@ try:
         QUARANTINE_BLOCKS_USER_CLOSURE_POLICY,
         ACCEPTANCE_REQUIRES_TRUSTED_EVIDENCE_POLICY,
     )
+
     _RTAG_OK = True
 except ImportError:
     _RTAG_OK = False
@@ -184,6 +186,7 @@ try:
         ingest_result,
         get_unified_result_ingress,
     )
+
     _URI_OK = True
 except ImportError:
     _URI_OK = False
@@ -198,6 +201,7 @@ try:
         OPERATOR_EXECUTION_OBSERVABILITY_SENTINEL,
         OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION,
     )
+
     _OEOS_OK = True
 except ImportError:
     _OEOS_OK = False
@@ -211,6 +215,7 @@ _SKIP_OEOS = pytest.mark.skipif(not _OEOS_OK, reason="operator_execution_observa
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_evidence_record(
     task_id: str = "t-test",
@@ -247,15 +252,24 @@ def _make_ingress_outcome(**kwargs: Any) -> Any:
 # Group A — ExecutionEvidenceState enum
 # ===========================================================================
 
+
 @_SKIP_EEM
 class TestGroupA_ExecutionEvidenceStateEnum:
     def test_a01_all_13_states_present(self) -> None:
         expected = {
-            "planned_not_started", "started", "locally_executed",
-            "android_delegated", "partially_completed",
-            "completed_strong", "completed_degraded",
-            "stale_result", "duplicate_result", "superseded_result",
-            "failed", "aborted", "interrupted",
+            "planned_not_started",
+            "started",
+            "locally_executed",
+            "android_delegated",
+            "partially_completed",
+            "completed_strong",
+            "completed_degraded",
+            "stale_result",
+            "duplicate_result",
+            "superseded_result",
+            "failed",
+            "aborted",
+            "interrupted",
         }
         actual = {s.value for s in ExecutionEvidenceState}
         assert expected == actual, f"Missing states: {expected - actual}"
@@ -268,6 +282,7 @@ class TestGroupA_ExecutionEvidenceStateEnum:
 # ===========================================================================
 # Group B — EvidenceTrustLevel enum
 # ===========================================================================
+
 
 @_SKIP_EEM
 class TestGroupB_EvidenceTrustLevelEnum:
@@ -284,6 +299,7 @@ class TestGroupB_EvidenceTrustLevelEnum:
 # ===========================================================================
 # Group C — classify_execution_evidence() rules
 # ===========================================================================
+
 
 @_SKIP_EEM
 class TestGroupC_ClassifyExecutionEvidence:
@@ -400,6 +416,7 @@ class TestGroupC_ClassifyExecutionEvidence:
 # Group D — infer_execution_evidence_state()
 # ===========================================================================
 
+
 @_SKIP_EEM
 class TestGroupD_InferExecutionEvidenceState:
     def test_d01_is_duplicate_flag(self) -> None:
@@ -477,11 +494,14 @@ class TestGroupD_InferExecutionEvidenceState:
 # Group E — build_execution_evidence_record()
 # ===========================================================================
 
+
 @_SKIP_EEM
 class TestGroupE_BuildExecutionEvidenceRecord:
     def test_e01_correct_evidence_state(self) -> None:
         rec = build_execution_evidence_record(
-            "t1", "dev1", "completed",
+            "t1",
+            "dev1",
+            "completed",
             source_channel="canonical_ws",
             truth_chain_complete=True,
             android_proof_class="confirmed_strong",
@@ -490,7 +510,9 @@ class TestGroupE_BuildExecutionEvidenceRecord:
 
     def test_e02_correct_trust_level(self) -> None:
         rec = build_execution_evidence_record(
-            "t1", "dev1", "completed",
+            "t1",
+            "dev1",
+            "completed",
             source_channel="canonical_ws",
             truth_chain_complete=True,
             android_proof_class="confirmed_strong",
@@ -503,6 +525,7 @@ class TestGroupE_BuildExecutionEvidenceRecord:
 
     def test_e04_to_dict_json_serialisable(self) -> None:
         import json
+
         rec = build_execution_evidence_record("t1", "dev1", "failed")
         d = rec.to_dict()
         # Should not raise
@@ -533,10 +556,52 @@ class TestGroupE_BuildExecutionEvidenceRecord:
         assert rec.evidence_state == ExecutionEvidenceState.completed_degraded
         assert rec.trust_level == EvidenceTrustLevel.quarantine
 
+    def test_e08_android_missing_proof_can_infer_strong_evidence(self) -> None:
+        rec = build_execution_evidence_record(
+            "t1",
+            "dev1",
+            "completed",
+            source_channel="canonical_ws",
+            truth_chain_complete=True,
+            payload={
+                "participation_tier": "dispatch_eligible",
+                "dispatch_eligible": True,
+                "runtime_constrained": False,
+                "local_mode_active": False,
+                "local_loop_ready": True,
+            },
+        )
+        assert rec.evidence_state == ExecutionEvidenceState.completed_strong
+        assert rec.trust_level == EvidenceTrustLevel.trusted
+        assert rec.android_evidence_resolution == "inferred_runtime_context"
+        assert rec.android_inferred_evidence_strength == "strong"
+        assert rec.effective_android_proof_class == "inferred_strong"
+
+    def test_e09_android_missing_proof_can_infer_weak_evidence(self) -> None:
+        rec = build_execution_evidence_record(
+            "t1",
+            "dev1",
+            "completed",
+            source_channel="canonical_ws",
+            truth_chain_complete=True,
+            payload={
+                "participation_tier": "fully_attached",
+                "dispatch_eligible": False,
+                "runtime_constrained": True,
+                "local_mode_active": False,
+            },
+        )
+        assert rec.evidence_state == ExecutionEvidenceState.completed_degraded
+        assert rec.trust_level == EvidenceTrustLevel.quarantine
+        assert rec.android_evidence_resolution == "inferred_runtime_context"
+        assert rec.android_inferred_evidence_strength == "weak"
+        assert rec.effective_android_proof_class == "inferred_weak"
+
 
 # ===========================================================================
 # Group F — ResultAcceptanceVerdict enum
 # ===========================================================================
+
 
 @_SKIP_RTAG
 class TestGroupF_ResultAcceptanceVerdictEnum:
@@ -554,29 +619,20 @@ class TestGroupF_ResultAcceptanceVerdictEnum:
 # Group G — ResultTrustAcceptanceRecord
 # ===========================================================================
 
+
 @_SKIP_RTAG
 class TestGroupG_ResultTrustAcceptanceRecord:
     def test_g01_is_accepted_true_for_accept_and_provisional(self) -> None:
-        a = ResultTrustAcceptanceRecord(
-            task_id="t1", verdict=ResultAcceptanceVerdict.accept
-        )
-        b = ResultTrustAcceptanceRecord(
-            task_id="t1", verdict=ResultAcceptanceVerdict.accept_provisional
-        )
-        c = ResultTrustAcceptanceRecord(
-            task_id="t1", verdict=ResultAcceptanceVerdict.quarantine
-        )
+        a = ResultTrustAcceptanceRecord(task_id="t1", verdict=ResultAcceptanceVerdict.accept)
+        b = ResultTrustAcceptanceRecord(task_id="t1", verdict=ResultAcceptanceVerdict.accept_provisional)
+        c = ResultTrustAcceptanceRecord(task_id="t1", verdict=ResultAcceptanceVerdict.quarantine)
         assert a.is_accepted is True
         assert b.is_accepted is True
         assert c.is_accepted is False
 
     def test_g02_is_canonical_only_for_accept(self) -> None:
-        a = ResultTrustAcceptanceRecord(
-            task_id="t1", verdict=ResultAcceptanceVerdict.accept
-        )
-        b = ResultTrustAcceptanceRecord(
-            task_id="t1", verdict=ResultAcceptanceVerdict.accept_provisional
-        )
+        a = ResultTrustAcceptanceRecord(task_id="t1", verdict=ResultAcceptanceVerdict.accept)
+        b = ResultTrustAcceptanceRecord(task_id="t1", verdict=ResultAcceptanceVerdict.accept_provisional)
         assert a.is_canonical is True
         assert b.is_canonical is False
 
@@ -584,6 +640,7 @@ class TestGroupG_ResultTrustAcceptanceRecord:
 # ===========================================================================
 # Group H — evaluate_result_truth_acceptance()
 # ===========================================================================
+
 
 @pytest.mark.skipif(not (_EEM_OK and _RTAG_OK), reason="modules unavailable")
 class TestGroupH_EvaluateResultTruthAcceptance:
@@ -652,6 +709,7 @@ class TestGroupH_EvaluateResultTruthAcceptance:
 # Group I — apply_acceptance_gate()
 # ===========================================================================
 
+
 @pytest.mark.skipif(not (_EEM_OK and _RTAG_OK and _URI_OK), reason="modules unavailable")
 class TestGroupI_ApplyAcceptanceGate:
     def _make_rec(self, trust: str) -> Any:
@@ -709,6 +767,7 @@ class TestGroupI_ApplyAcceptanceGate:
 # Group J — UnifiedResultIngress integration
 # ===========================================================================
 
+
 @pytest.mark.skipif(not (_EEM_OK and _RTAG_OK and _URI_OK), reason="modules unavailable")
 class TestGroupJ_UnifiedResultIngressIntegration:
     def _make_event(self, **kwargs: Any) -> Any:
@@ -735,18 +794,14 @@ class TestGroupJ_UnifiedResultIngressIntegration:
         event = self._make_event()
         outcome = ingress.process(event)
         assert hasattr(outcome, "evidence_trust_level")
-        assert outcome.evidence_trust_level in (
-            "trusted", "provisional", "quarantine", "rejected", ""
-        )
+        assert outcome.evidence_trust_level in ("trusted", "provisional", "quarantine", "rejected", "")
 
     def test_j03_process_stamps_evidence_acceptance_verdict(self) -> None:
         ingress = get_unified_result_ingress()
         event = self._make_event()
         outcome = ingress.process(event)
         assert hasattr(outcome, "evidence_acceptance_verdict")
-        assert outcome.evidence_acceptance_verdict in (
-            "accept", "accept_provisional", "quarantine", "reject", ""
-        )
+        assert outcome.evidence_acceptance_verdict in ("accept", "accept_provisional", "quarantine", "reject", "")
 
     def test_j04_process_stamps_execution_evidence_record_dict(self) -> None:
         ingress = get_unified_result_ingress()
@@ -799,6 +854,7 @@ class TestGroupJ_UnifiedResultIngressIntegration:
 # Group K — OperatorExecutionEvidenceEntry
 # ===========================================================================
 
+
 @_SKIP_OEOS
 class TestGroupK_OperatorExecutionEvidenceEntry:
     def _make_entry(self, verdict: str = "accept", warning: bool = False) -> OperatorExecutionEvidenceEntry:
@@ -819,9 +875,17 @@ class TestGroupK_OperatorExecutionEvidenceEntry:
         entry = self._make_entry()
         d = entry.to_dict()
         expected_keys = {
-            "task_id", "device_id", "evidence_state", "trust_level",
-            "acceptance_verdict", "truth_chain_complete", "operator_warning",
-            "android_proof_class", "source_channel", "diagnosis", "classified_at",
+            "task_id",
+            "device_id",
+            "evidence_state",
+            "trust_level",
+            "acceptance_verdict",
+            "truth_chain_complete",
+            "operator_warning",
+            "android_proof_class",
+            "source_channel",
+            "diagnosis",
+            "classified_at",
         }
         assert expected_keys <= set(d.keys())
 
@@ -844,14 +908,19 @@ class TestGroupK_OperatorExecutionEvidenceEntry:
 # Group L — OperatorExecutionObservabilitySnapshot
 # ===========================================================================
 
+
 @_SKIP_OEOS
 class TestGroupL_OperatorExecutionObservabilitySnapshot:
     def test_l01_to_dict_returns_expected_keys(self) -> None:
         snap = OperatorExecutionObservabilitySnapshot()
         d = snap.to_dict()
         expected_keys = {
-            "assembled_at", "entries", "acceptance_summary",
-            "incomplete_result_count", "cross_repo_integration", "schema_version",
+            "assembled_at",
+            "entries",
+            "acceptance_summary",
+            "incomplete_result_count",
+            "cross_repo_integration",
+            "schema_version",
         }
         assert expected_keys <= set(d.keys())
 
@@ -859,6 +928,7 @@ class TestGroupL_OperatorExecutionObservabilitySnapshot:
         from core.operator_execution_observability_surface import (
             OperatorExecutionEvidenceEntry,
         )
+
         entries = [
             OperatorExecutionEvidenceEntry(task_id="t1", acceptance_verdict="accept"),
             OperatorExecutionEvidenceEntry(task_id="t2", acceptance_verdict="accept"),
@@ -877,6 +947,7 @@ class TestGroupL_OperatorExecutionObservabilitySnapshot:
 # ===========================================================================
 # Group M — build_operator_execution_observability_snapshot()
 # ===========================================================================
+
 
 @_SKIP_OEOS
 class TestGroupM_BuildOperatorExecutionObservabilitySnapshot:
@@ -913,6 +984,7 @@ class TestGroupM_BuildOperatorExecutionObservabilitySnapshot:
 # Group N — record_operator_evidence_entry() and ring buffer
 # ===========================================================================
 
+
 @_SKIP_OEOS
 class TestGroupN_RecordOperatorEvidenceEntry:
     def test_n01_record_adds_to_ring(self) -> None:
@@ -940,7 +1012,32 @@ class TestGroupN_RecordOperatorEvidenceEntry:
         assert entry is not None
         assert entry.task_id == task_id
 
-    def test_n03_get_latest_returns_none_if_not_found(self) -> None:
+    def test_n03_record_preserves_inferred_android_evidence_fields(self) -> None:
+        task_id = f"t-n-infer-{uuid.uuid4().hex[:8]}"
+        record_operator_evidence_entry(
+            task_id=task_id,
+            device_id="dev-n",
+            evidence_state="completed_strong",
+            trust_level="trusted",
+            acceptance_verdict="accept",
+            android_proof_class="",
+            effective_android_proof_class="inferred_strong",
+            android_evidence_resolution="inferred_runtime_context",
+            android_inferred_evidence_strength="strong",
+            android_evidence_runtime_context={
+                "participation_tier": "dispatch_eligible",
+                "dispatch_eligible": True,
+                "context_sources": ["payload:participation_tier"],
+            },
+        )
+        entry = get_latest_operator_evidence_entry_for_task(task_id)
+        assert entry is not None
+        assert entry.effective_android_proof_class == "inferred_strong"
+        assert entry.android_evidence_resolution == "inferred_runtime_context"
+        assert entry.android_inferred_evidence_strength == "strong"
+        assert entry.android_evidence_runtime_context["participation_tier"] == "dispatch_eligible"
+
+    def test_n04_get_latest_returns_none_if_not_found(self) -> None:
         entry = get_latest_operator_evidence_entry_for_task("nonexistent-task-xyz-000")
         assert entry is None
 
@@ -948,6 +1045,7 @@ class TestGroupN_RecordOperatorEvidenceEntry:
 # ===========================================================================
 # Group O — Policy and sentinel constants
 # ===========================================================================
+
 
 @_SKIP_EEM
 class TestGroupO_PolicySentinels:
@@ -985,11 +1083,13 @@ class TestGroupO_PolicySentinels:
 # Group P — Observability route endpoints
 # ===========================================================================
 
+
 @pytest.mark.skipif(not _OEOS_OK, reason="operator_execution_observability_surface unavailable")
 class TestGroupP_ObservabilityRouteEndpoints:
     def _make_router(self) -> Any:
         try:
             from core.routes.observability import create_router
+
             return create_router()
         except ImportError:
             pytest.skip("observability route unavailable")

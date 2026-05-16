@@ -111,6 +111,7 @@ OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION: str = "4.0.0"
 # OperatorExecutionEvidenceEntry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class OperatorExecutionEvidenceEntry:
     """Per-task execution evidence snapshot for operator consumption.
@@ -151,6 +152,10 @@ class OperatorExecutionEvidenceEntry:
     truth_chain_complete: bool = False
     operator_warning: bool = False
     android_proof_class: str = ""
+    effective_android_proof_class: str = ""
+    android_evidence_resolution: str = ""
+    android_inferred_evidence_strength: str = ""
+    android_evidence_runtime_context: Dict[str, Any] = field(default_factory=dict)
     source_channel: str = ""
     diagnosis: List[str] = field(default_factory=list)
     classified_at: float = field(default_factory=time.time)
@@ -165,6 +170,10 @@ class OperatorExecutionEvidenceEntry:
             "truth_chain_complete": self.truth_chain_complete,
             "operator_warning": self.operator_warning,
             "android_proof_class": self.android_proof_class,
+            "effective_android_proof_class": self.effective_android_proof_class,
+            "android_evidence_resolution": self.android_evidence_resolution,
+            "android_inferred_evidence_strength": self.android_inferred_evidence_strength,
+            "android_evidence_runtime_context": dict(self.android_evidence_runtime_context),
             "source_channel": self.source_channel,
             "diagnosis": list(self.diagnosis),
             "classified_at": self.classified_at,
@@ -178,14 +187,13 @@ class OperatorExecutionEvidenceEntry:
     @property
     def requires_operator_attention(self) -> bool:
         """True iff operator intervention or review is indicated."""
-        return self.operator_warning or self.acceptance_verdict in (
-            "quarantine", "reject"
-        )
+        return self.operator_warning or self.acceptance_verdict in ("quarantine", "reject")
 
 
 # ---------------------------------------------------------------------------
 # OperatorExecutionObservabilitySnapshot
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class OperatorExecutionObservabilitySnapshot:
@@ -258,6 +266,10 @@ def record_operator_evidence_entry(
     truth_chain_complete: bool = False,
     operator_warning: bool = False,
     android_proof_class: str = "",
+    effective_android_proof_class: str = "",
+    android_evidence_resolution: str = "",
+    android_inferred_evidence_strength: str = "",
+    android_evidence_runtime_context: Optional[Dict[str, Any]] = None,
     source_channel: str = "",
     diagnosis: Optional[List[str]] = None,
 ) -> OperatorExecutionEvidenceEntry:
@@ -277,6 +289,10 @@ def record_operator_evidence_entry(
         truth_chain_complete=truth_chain_complete,
         operator_warning=operator_warning,
         android_proof_class=android_proof_class,
+        effective_android_proof_class=effective_android_proof_class,
+        android_evidence_resolution=android_evidence_resolution,
+        android_inferred_evidence_strength=android_inferred_evidence_strength,
+        android_evidence_runtime_context=dict(android_evidence_runtime_context or {}),
         source_channel=source_channel,
         diagnosis=list(diagnosis or []),
         classified_at=time.time(),
@@ -288,6 +304,7 @@ def record_operator_evidence_entry(
 # ---------------------------------------------------------------------------
 # build_operator_execution_observability_snapshot
 # ---------------------------------------------------------------------------
+
 
 def build_operator_execution_observability_snapshot(
     *,
@@ -356,9 +373,7 @@ def build_operator_execution_observability_snapshot(
         )
 
     except Exception as exc:
-        logger.warning(
-            "operator_execution_observability: build_snapshot failed: %s", exc
-        )
+        logger.warning("operator_execution_observability: build_snapshot failed: %s", exc)
         return OperatorExecutionObservabilitySnapshot(
             assembled_at=time.time(),
             cross_repo_integration={"error": str(exc)},
@@ -368,6 +383,7 @@ def build_operator_execution_observability_snapshot(
 # ---------------------------------------------------------------------------
 # get_latest_operator_evidence_entry_for_task
 # ---------------------------------------------------------------------------
+
 
 def get_latest_operator_evidence_entry_for_task(
     task_id: str,
@@ -383,10 +399,12 @@ def get_latest_operator_evidence_entry_for_task(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_incomplete_result_count() -> int:
     """Return the count of incomplete results from the truth-chain ledger."""
     try:
         from core.task_result_canonical_truth_chain import get_incomplete_result_ledger
+
         ledger = get_incomplete_result_ledger()
         return len(ledger.snapshot())
     except Exception as exc:
@@ -406,15 +424,15 @@ def _build_cross_repo_integration_status(
     populated (indicating DelegatedRuntimeUnit.kt has been updated to include
     the proof_class field in result messages).
     """
-    android_entries = [
-        e for e in entries
-        if e.source_channel in ("canonical_ws", "compat_ws", "delegated", "replay")
-    ]
+    android_entries = [e for e in entries if e.source_channel in ("canonical_ws", "compat_ws", "delegated", "replay")]
 
-    proof_class_present_count = sum(
-        1 for e in android_entries if e.android_proof_class
-    )
+    proof_class_present_count = sum(1 for e in android_entries if e.android_proof_class)
     proof_class_absent_count = len(android_entries) - proof_class_present_count
+    inferred_runtime_context_count = sum(
+        1 for e in android_entries if e.android_evidence_resolution == "inferred_runtime_context"
+    )
+    inferred_strong_count = sum(1 for e in android_entries if e.android_inferred_evidence_strength == "strong")
+    inferred_weak_count = sum(1 for e in android_entries if e.android_inferred_evidence_strength == "weak")
 
     # Check takeover tracking integration
     takeover_integration = _check_takeover_tracking_integration()
@@ -424,6 +442,8 @@ def _build_cross_repo_integration_status(
         android_integration_status = "no_android_results_observed"
     elif proof_class_absent_count == 0:
         android_integration_status = "proof_class_present_all"
+    elif inferred_runtime_context_count > 0 and proof_class_present_count == 0:
+        android_integration_status = "proof_class_absent_runtime_inference_active"
     elif proof_class_present_count == 0:
         android_integration_status = "proof_class_absent_all"
     else:
@@ -433,11 +453,16 @@ def _build_cross_repo_integration_status(
         "android_result_entries_in_snapshot": len(android_entries),
         "proof_class_present_count": proof_class_present_count,
         "proof_class_absent_count": proof_class_absent_count,
+        "inferred_runtime_context_count": inferred_runtime_context_count,
+        "inferred_strong_count": inferred_strong_count,
+        "inferred_weak_count": inferred_weak_count,
         "android_integration_status": android_integration_status,
         "android_integration_note": (
             "DelegatedRuntimeUnit.kt must include 'proof_class' field in result "
             "messages for full evidence quality classification.  "
-            "See DELEGATED_RESULT_PROOF_CLASS_POLICY in "
+            "V2 currently falls back to runtime-context inference when proof_class "
+            "is absent, and exposes inferred strong/weak counts for operator "
+            "inspection.  See DELEGATED_RESULT_PROOF_CLASS_POLICY in "
             "core/execution_evidence_model.py."
             if proof_class_absent_count > 0
             else "Android proof class fields received correctly."
@@ -455,6 +480,7 @@ def _check_takeover_tracking_integration() -> Dict[str, Any]:
     """Check whether takeover tracking is functional and has recent records."""
     try:
         from core.takeover_tracking import get_takeover_tracking_runtime
+
         runtime = get_takeover_tracking_runtime()
         records = runtime.snapshot()
         return {
