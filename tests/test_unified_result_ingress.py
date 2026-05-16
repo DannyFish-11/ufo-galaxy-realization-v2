@@ -709,6 +709,60 @@ class TestCompletionIngressNotify:
         assert outcome.android_inferred_evidence_strength == "strong"
         assert outcome.android_evidence_runtime_context["participation_tier"] == "dispatch_eligible"
 
+    def test_E09b_android_acceptance_report_maps_to_evidence_gate(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        class _FakeTruthBlock:
+            def to_dict(self):
+                return {
+                    "participation_tier": "cross_device_enabled",
+                    "dispatch_eligible": False,
+                    "runtime_constrained": True,
+                    "local_mode_active": False,
+                    "local_loop_ready": False,
+                    "sources": ["test-runtime-truth"],
+                }
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        with patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=_FakeTruthBlock(),
+        ), patch(
+            "core.android_acceptance_evidence_store.get_latest_device_acceptance_evidence_dict",
+            return_value={
+                "acceptance_tag": "device_accepted_for_graduation",
+                "mapped_android_proof_class": "confirmed_strong",
+                "mapped_evidence_trust_level": "trusted",
+                "snapshot_id": "accept-snap-02",
+                "dimension_states": {"governance": "pass"},
+                "missing_dimensions": [],
+                "mapping_reason": "acceptance_tag indicates graduation-level acceptance",
+            },
+        ):
+            outcome = ingress.process(_make_event(_make_task_id(), channel="canonical_ws"))
+
+        assert outcome.evidence_acceptance_verdict == "accept"
+        assert outcome.effective_android_proof_class == "confirmed_strong"
+        assert (
+            outcome.android_evidence_resolution
+            == "acceptance_report_mapped_proof_class"
+        )
+        assert (
+            outcome.android_evidence_runtime_context["acceptance_tag"]
+            == "device_accepted_for_graduation"
+        )
+        assert (
+            "runtime_truth:acceptance_tag"
+            in outcome.android_evidence_runtime_context.get("context_sources", [])
+        )
+
     def test_E10_android_truth_stamp_prefers_result_payload_over_ssot(self):
         from core.unified_result_ingress import UnifiedResultIngress
 

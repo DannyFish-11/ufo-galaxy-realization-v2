@@ -905,6 +905,7 @@ class UnifiedResultIngress:
                 event.payload.get("proof_class", "") or event.payload.get("android_proof_class", "") or ""
             )
             android_runtime_truth_context: Dict[str, Any] = {}
+            acceptance_evidence_hint: Dict[str, Any] = {}
             if event.device_id:
                 try:
                     from core.v2_android_truth_ssot import build_v2_android_truth_block
@@ -932,6 +933,48 @@ class UnifiedResultIngress:
                         event.task_id,
                         _truth_err,
                     )
+                try:
+                    from core.android_acceptance_evidence_store import (
+                        get_latest_device_acceptance_evidence_dict,
+                    )
+
+                    acceptance_evidence_hint = get_latest_device_acceptance_evidence_dict(
+                        event.device_id
+                    )
+                except Exception as _acceptance_err:
+                    logger.debug(
+                        "unified_result_ingress: android acceptance evidence lookup skipped "
+                        "(non-fatal) task_id=%r err=%s",
+                        event.task_id,
+                        _acceptance_err,
+                    )
+            mapped_acceptance_proof_class = str(
+                acceptance_evidence_hint.get("mapped_android_proof_class") or ""
+            ).strip()
+            if not android_proof_class and mapped_acceptance_proof_class:
+                # 当 result payload 未携带 proof_class 时，使用最近一次
+                # DEVICE_ACCEPTANCE_REPORT 映射出的 proof_class 作为权威兜底，
+                # 让 acceptance evidence 真正进入 V2 evidence gate。
+                android_proof_class = mapped_acceptance_proof_class
+                android_runtime_truth_context["proof_class_source"] = (
+                    "device_acceptance_report"
+                )
+            if acceptance_evidence_hint:
+                android_runtime_truth_context["acceptance_tag"] = (
+                    acceptance_evidence_hint.get("acceptance_tag") or ""
+                )
+                android_runtime_truth_context["acceptance_snapshot_id"] = (
+                    acceptance_evidence_hint.get("snapshot_id") or ""
+                )
+                android_runtime_truth_context["acceptance_missing_dimensions"] = list(
+                    acceptance_evidence_hint.get("missing_dimensions") or []
+                )
+                android_runtime_truth_context["acceptance_dimension_states"] = dict(
+                    acceptance_evidence_hint.get("dimension_states") or {}
+                )
+                android_runtime_truth_context["acceptance_mapping_reason"] = (
+                    acceptance_evidence_hint.get("mapping_reason") or ""
+                )
 
             evidence_record = build_execution_evidence_record(
                 task_id=event.task_id,
