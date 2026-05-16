@@ -39,6 +39,7 @@ from galaxy_gateway.android.handlers.capability_report import handle_capability_
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.vision import handle_vision_request
 from galaxy_gateway.android.handlers.generic import handle_generic_forward
+from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
@@ -73,6 +74,7 @@ __all__ = [
     "handle_diagnostics_payload",
     "handle_vision_request",
     "handle_generic_forward",
+    "handle_device_acceptance_report",
     "handle_delegated_execution_signal",
     "handle_handoff_v2_result",
     "handle_reconciliation_signal",

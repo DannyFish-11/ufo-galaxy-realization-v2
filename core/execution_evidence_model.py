@@ -858,6 +858,13 @@ def _resolve_android_evidence_resolution(
         runtime_truth_context=runtime_truth_context,
     )
     if android_proof_class:
+        if merged_context.get("proof_class_source") == "device_acceptance_report":
+            return {
+                "effective_android_proof_class": android_proof_class,
+                "android_evidence_resolution": "acceptance_report_mapped_proof_class",
+                "android_inferred_evidence_strength": "",
+                "android_evidence_runtime_context": merged_context,
+            }
         return {
             "effective_android_proof_class": android_proof_class,
             "android_evidence_resolution": "explicit_proof_class",
@@ -938,6 +945,22 @@ def _build_android_evidence_runtime_context(
         )
         if value is not None:
             context[field] = value
+    for supplemental_field in (
+        "proof_class_source",
+        "acceptance_tag",
+        "acceptance_snapshot_id",
+        "acceptance_missing_dimensions",
+        "acceptance_dimension_states",
+        "acceptance_mapping_reason",
+    ):
+        supplemental_value = _pick_context_value(
+            supplemental_field,
+            payload=payload,
+            runtime_truth_context=runtime_truth_context,
+            context_sources=context_sources,
+        )
+        if supplemental_value not in (None, "", [], {}):
+            context[supplemental_field] = supplemental_value
     if context_sources:
         context["context_sources"] = list(context_sources)
     return context

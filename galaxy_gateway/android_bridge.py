@@ -98,6 +98,7 @@ from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
+from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
 from galaxy_gateway.android.handlers.device_state_snapshot import (
     handle_device_state_snapshot,
     handle_device_execution_event,
@@ -866,10 +867,12 @@ class AndroidBridge:
             MessageType.CANCEL_RESULT,
             MessageType.DEVICE_READINESS_REPORT,
             MessageType.DEVICE_GOVERNANCE_REPORT,
-            MessageType.DEVICE_ACCEPTANCE_REPORT,
             MessageType.DEVICE_STRATEGY_REPORT,
         ):
             self._message_handlers[_android_report_type] = _wrap(handle_generic_forward)
+        self._message_handlers[MessageType.DEVICE_ACCEPTANCE_REPORT] = _wrap(
+            handle_device_acceptance_report
+        )
 
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:

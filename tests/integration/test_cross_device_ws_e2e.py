@@ -246,3 +246,45 @@ class TestAndroidReportTypesNowHandled:
             f"got {rpt_ack.get('type')!r}"
         )
         assert rpt_ack.get("status") == "received"
+
+    @pytest.mark.asyncio
+    async def test_device_acceptance_report_ingested_into_v2_evidence_store(
+        self, bridge: Any
+    ) -> None:
+        from core.android_acceptance_evidence_store import (
+            clear_device_acceptance_evidence,
+            get_latest_device_acceptance_evidence_dict,
+        )
+
+        did = _did("accept-ingest")
+        ws = _make_ws()
+        clear_device_acceptance_evidence(did)
+        await bridge.handle_message(ws, _v3("device_register", did))
+
+        rpt_ack = await bridge.handle_message(
+            ws,
+            _v3(
+                "device_acceptance_report",
+                did,
+                payload={
+                    "acceptance_tag": "device_accepted_for_graduation",
+                    "dimension_states": {
+                        "governance": "pass",
+                        "readiness": "pass",
+                    },
+                    "missing_dimensions": [],
+                    "snapshot_id": "accept-snap-001",
+                },
+            ),
+        )
+
+        assert rpt_ack is not None
+        assert rpt_ack.get("type") == "device_acceptance_report_ack"
+        assert rpt_ack.get("acceptance_evidence_ingested") is True
+        assert rpt_ack.get("mapped_android_proof_class") == "confirmed_strong"
+
+        stored = get_latest_device_acceptance_evidence_dict(did)
+        assert stored.get("acceptance_tag") == "device_accepted_for_graduation"
+        assert stored.get("mapped_android_proof_class") == "confirmed_strong"
+        assert stored.get("mapped_evidence_trust_level") == "trusted"
+        assert stored.get("snapshot_id") == "accept-snap-001"
