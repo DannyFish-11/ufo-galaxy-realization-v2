@@ -816,6 +816,9 @@ def _build_diagnosis(
 
 
 _ANDROID_RESULT_CHANNELS = frozenset({"canonical_ws", "compat_ws", "delegated", "replay"})
+# Ordered from weakest attachment posture to strongest execution posture so V2
+# can distinguish "connected but not ready" Android results from dispatch-ready
+# or already-participating runtime contexts when proof_class is absent.
 _ANDROID_PARTICIPATION_TIER_ORDER = (
     "local_only",
     "control_only",
@@ -868,21 +871,20 @@ def _resolve_android_evidence_resolution(
     local_mode_active = _coerce_optional_bool(merged_context.get("local_mode_active"))
     local_loop_ready = _coerce_optional_bool(merged_context.get("local_loop_ready"))
 
-    tier_is_strong = _participation_tier_rank(tier) >= _participation_tier_rank("dispatch_eligible")
-    inferred_strong = (
-        truth_chain_complete
-        and tier_is_strong
-        and dispatch_eligible is not False
-        and runtime_constrained is False
-        and local_mode_active is not True
-        and (local_loop_ready is True or dispatch_eligible is True)
+    inferred_strong = _is_strong_inferred_android_evidence(
+        truth_chain_complete=truth_chain_complete,
+        tier=tier,
+        dispatch_eligible=dispatch_eligible,
+        runtime_constrained=runtime_constrained,
+        local_mode_active=local_mode_active,
+        local_loop_ready=local_loop_ready,
     )
-    inferred_weak = (
-        runtime_constrained is True
-        or local_mode_active is True
-        or dispatch_eligible is False
-        or (tier is not None and not tier_is_strong)
-        or local_loop_ready is False
+    inferred_weak = _is_weak_inferred_android_evidence(
+        tier=tier,
+        dispatch_eligible=dispatch_eligible,
+        runtime_constrained=runtime_constrained,
+        local_mode_active=local_mode_active,
+        local_loop_ready=local_loop_ready,
     )
 
     if inferred_strong:
@@ -989,6 +991,58 @@ def _participation_tier_rank(value: Optional[str]) -> int:
         return _ANDROID_PARTICIPATION_TIER_ORDER.index(str(value).strip())
     except ValueError:
         return -1
+
+
+def _is_strong_inferred_android_evidence(
+    *,
+    truth_chain_complete: bool,
+    tier: Optional[str],
+    dispatch_eligible: Optional[bool],
+    runtime_constrained: Optional[bool],
+    local_mode_active: Optional[bool],
+    local_loop_ready: Optional[bool],
+) -> bool:
+    """Return True when runtime context is strong enough to stand in for proof_class.
+
+    This path is intentionally conservative: V2 only upgrades missing Android
+    proof data when the truth chain is complete, the device posture is already
+    dispatch-ready, runtime constraints are explicitly absent, and no local-mode
+    signal contradicts delegated execution.
+    """
+    tier_is_strong = _participation_tier_rank(tier) >= _participation_tier_rank("dispatch_eligible")
+    return (
+        truth_chain_complete
+        and tier_is_strong
+        and dispatch_eligible is not False
+        and runtime_constrained is False
+        and local_mode_active is not True
+        and (local_loop_ready is True or dispatch_eligible is True)
+    )
+
+
+def _is_weak_inferred_android_evidence(
+    *,
+    tier: Optional[str],
+    dispatch_eligible: Optional[bool],
+    runtime_constrained: Optional[bool],
+    local_mode_active: Optional[bool],
+    local_loop_ready: Optional[bool],
+) -> bool:
+    """Return True when runtime context explicitly contradicts strong evidence.
+
+    ``weak`` is reserved for positive downgrade signals such as low
+    participation tier, explicit runtime constraints, or a local-only mode
+    override.  Missing signals stay ``indeterminate`` instead of being
+    over-downgraded.
+    """
+    tier_is_strong = _participation_tier_rank(tier) >= _participation_tier_rank("dispatch_eligible")
+    return (
+        runtime_constrained is True
+        or local_mode_active is True
+        or dispatch_eligible is False
+        or (tier is not None and not tier_is_strong)
+        or local_loop_ready is False
+    )
 
 
 # ---------------------------------------------------------------------------
