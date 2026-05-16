@@ -48,6 +48,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -98,6 +99,9 @@ SNAPSHOT_RECONCILIATION_OUT_OF_ORDER_REJECTED: str = "out_of_order_rejected"
 SNAPSHOT_RECONCILIATION_RECONNECT_DELAYED_REJECTED: str = "reconnect_delayed_rejected"
 SNAPSHOT_RECONCILIATION_CONFLICT_CENTER_TRUTH_RETAINED: str = "conflict_center_truth_retained"
 SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
+ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS: float = float(
+    os.getenv("ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS", "90")
+)
 
 # PR-4: Terminal Android execution phases that trigger roundtrip notification.
 # When an absorbed DeviceExecutionEvent carries one of these phases, the
@@ -511,6 +515,14 @@ class _AndroidDeviceStateStore:
             self._capability_report_semantics[device_id] = dict(semantics)
         return dict(semantics)
 
+    def invalidate_snapshot(self, device_id: str) -> None:
+        """Invalidate a device snapshot on explicit disconnect/degradation events."""
+        if not device_id:
+            return
+        with self._lock:
+            self._snapshots.pop(device_id, None)
+            self._capability_report_semantics.pop(device_id, None)
+
     # ------------------------------------------------------------------
     # Ingress: absorb DEVICE_EXECUTION_EVENT payloads
     # ------------------------------------------------------------------
@@ -574,7 +586,8 @@ class _AndroidDeviceStateStore:
     def get_snapshot(self, device_id: str) -> Optional[DeviceStateSnapshot]:
         """Return the latest snapshot for *device_id*, or None."""
         with self._lock:
-            return self._snapshots.get(device_id)
+            snapshot = self._snapshots.get(device_id)
+        return _snapshot_if_truth_usable(device_id, snapshot)
 
     def get_capability_report_semantics(self, device_id: str) -> Dict[str, Any]:
         """Return the latest normalized capability_report semantics for *device_id*."""
@@ -585,7 +598,13 @@ class _AndroidDeviceStateStore:
     def list_snapshots(self) -> List[DeviceStateSnapshot]:
         """Return all current device snapshots (one per device_id)."""
         with self._lock:
-            return list(self._snapshots.values())
+            snapshots = list(self._snapshots.values())
+        result: List[DeviceStateSnapshot] = []
+        for snap in snapshots:
+            usable = _snapshot_if_truth_usable(snap.device_id, snap)
+            if usable is not None:
+                result.append(usable)
+        return result
 
     def list_recent_execution_events(
         self,
@@ -604,8 +623,7 @@ class _AndroidDeviceStateStore:
 
     def get_ecosystem_summary(self) -> Dict[str, Any]:
         """Return a structured multi-device ecosystem summary for operator views."""
-        with self._lock:
-            snapshots = list(self._snapshots.values())
+        snapshots = self.list_snapshots()
 
         total = len(snapshots)
         local_ai_ready = sum(1 for s in snapshots if s.is_local_ai_ready())
@@ -1116,6 +1134,27 @@ def _normalize_capability_report_semantics(
     }
 
 
+def _is_snapshot_within_ttl(snapshot: Optional[DeviceStateSnapshot]) -> bool:
+    if snapshot is None:
+        return False
+    absorbed_at = float(getattr(snapshot, "absorbed_at", 0.0) or 0.0)
+    if absorbed_at <= 0:
+        return False
+    return (time.time() - absorbed_at) <= ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS
+
+
+def _snapshot_if_truth_usable(
+    device_id: str,
+    snapshot: Optional[DeviceStateSnapshot],
+) -> Optional[DeviceStateSnapshot]:
+    _ = device_id
+    if snapshot is None:
+        return None
+    if not _is_snapshot_within_ttl(snapshot):
+        return None
+    return snapshot
+
+
 def _parse_ordering_timestamp(snapshot: Optional[DeviceStateSnapshot]) -> Optional[float]:
     if snapshot is None:
         return None
@@ -1498,6 +1537,11 @@ def get_device_snapshot_reconciliation(device_id: str) -> Dict[str, Any]:
     return get_android_device_state_store().get_snapshot_reconciliation(device_id)
 
 
+def invalidate_device_state_snapshot(device_id: str) -> None:
+    """Invalidate a device snapshot and capability semantics (disconnect degradation)."""
+    get_android_device_state_store().invalidate_snapshot(device_id)
+
+
 def get_android_participation_evidence(
     device_id: str,
     *,
@@ -1509,6 +1553,23 @@ def get_android_participation_evidence(
     ``core.android_network_participation`` so V2 callers consume one
     authoritative participation truth path.
     """
+    snapshot = get_device_state_snapshot(device_id)
+    if snapshot is None:
+        return {
+            "device_id": device_id,
+            "tier": "local_only",
+            "blocking_reasons": ["android_snapshot_not_fresh_or_disconnected"],
+            "tier_derivation_notes": [
+                (
+                    "Android participation truth downgraded because no fresh connected "
+                    "DeviceStateSnapshot is available."
+                )
+            ],
+            "source": "core.android_device_state_store",
+            "transition_history": [],
+            "last_signal": None,
+            "prior_tier": None,
+        }
     try:
         from core.android_network_participation import (
             get_participation_state_for_device,

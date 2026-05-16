@@ -129,6 +129,7 @@ def build_problem_execution_closure(
     truth_chain_complete: bool,
     completion_notified: bool,
     payload: Optional[Dict[str, Any]],
+    evidence_acceptance_verdict: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build additive closure snapshot separating task/delegation/problem closure."""
     _payload = payload or {}
@@ -144,7 +145,11 @@ def build_problem_execution_closure(
         or _payload.get("final_user_response")
         or _payload.get("problem_solved")
     )
-    _closure_requirements_met = bool(truth_chain_complete and completion_notified)
+    _acceptance_verdict = str(evidence_acceptance_verdict or "").strip().lower()
+    _evidence_gate_blocked = _acceptance_verdict in {"quarantine", "reject"}
+    _closure_requirements_met = bool(
+        truth_chain_complete and completion_notified and (not _evidence_gate_blocked)
+    )
     _task_closed = bool(_is_terminal_status and _closure_requirements_met)
     _problem_closed = bool(_problem_closed_signal and _closure_requirements_met)
     _execution_path = str(_payload.get("execution_path") or "")
@@ -178,6 +183,8 @@ def build_problem_execution_closure(
             "terminal_status": _is_terminal_status,
             "truth_chain_complete": truth_chain_complete,
             "completion_notified": completion_notified,
+            "evidence_acceptance_verdict": _acceptance_verdict or "unknown",
+            "closure_blocked_by_evidence_gate": _evidence_gate_blocked,
             "normalized_status": normalized_status,
         },
         "problem_completion_semantics": {

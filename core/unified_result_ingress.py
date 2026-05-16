@@ -868,6 +868,7 @@ class UnifiedResultIngress:
                 truth_chain_complete=outcome.truth_chain_complete,
                 completion_notified=outcome.completion_notified,
                 payload=event.payload,
+                evidence_acceptance_verdict=outcome.evidence_acceptance_verdict,
             )
         except Exception as _err:
             logger.warning(

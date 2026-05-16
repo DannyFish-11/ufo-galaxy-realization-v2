@@ -427,3 +427,45 @@ class TestGroupH_GracefulDegradation:
         with self._patch_none():
             result = _run(_tl.handle_task_status(bridge, None, msg))
         assert result.get("type") == "task_status_response"
+
+
+@_SKIP
+class TestGroupI_LocalModeUnifiedClosure:
+    def test_i1_local_mode_result_uses_unified_result_ingress(self) -> None:
+        bridge = _make_bridge()
+        msg = {
+            "task_id": "t-i1",
+            "device_id": "dev-i1",
+            "status": "completed",
+            "route_mode": "android_local",
+            "type": "task_result",
+        }
+
+        _fake_outcome = SimpleNamespace(
+            completion_notified=True,
+            is_fully_closed=False,
+            evidence_acceptance_verdict="quarantine",
+            incomplete_reason="evidence_gate:quarantine",
+        )
+        _ingest_async = AsyncMock(return_value=_fake_outcome)
+
+        with patch(
+            "core.durable_result_idempotency.check_result_idempotency",
+            return_value=False,
+        ), patch(
+            "core.durable_result_idempotency.record_result_idempotency",
+            return_value=None,
+        ), patch(
+            "core.unified_result_ingress.ingest_result_async",
+            _ingest_async,
+        ), patch.object(
+            _tl,
+            "_run_task_result_truth_chain",
+            side_effect=AssertionError("legacy truth chain should not run for local mode"),
+        ):
+            _run(_tl.handle_task_result(bridge, None, msg))
+
+        assert _ingest_async.call_count == 1
+        assert msg["completion_notified"] is True
+        assert msg["is_fully_closed"] is False
+        assert msg["evidence_acceptance_verdict"] == "quarantine"

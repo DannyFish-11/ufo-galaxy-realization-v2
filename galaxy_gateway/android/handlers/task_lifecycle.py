@@ -547,6 +547,14 @@ async def handle_task_result(
     device_id = message.get("device_id")
     result_status = message.get("status", "unknown")
     route_mode = message.get("route_mode", "cross_device")
+    _payload_route_mode = (
+        message.get("payload", {}).get("route_mode")
+        if isinstance(message.get("payload"), dict)
+        else None
+    )
+    if _payload_route_mode:
+        route_mode = _payload_route_mode
+    _normalized_route_mode = str(route_mode or "").strip().lower()
 
     logger.info(
         "Task result received: task_id=%s device_id=%s status=%s",
@@ -601,47 +609,95 @@ async def handle_task_result(
                 _idem_exc,
             )
 
-    # PR-TTC: Run the canonical must-run truth chain.  This replaces the
-    # previous separate _try_reconcile + _try_ingest_participant_truth calls
-    # with a single entry point that:
-    #   (1) truth_ingress   — ingest Android participant truth into V2 state
-    #   (2) reconcile       — reconcile against host-side execution tracker
-    #   (3) authority_update — advance CanonicalTaskRuntime lifecycle
-    #   (4) completion_linkage — notify CanonicalCompletionIngress
-    # The TruthChainOutcome records whether the chain was fully closed so
-    # acceptance / audit layers can distinguish "result arrived" from
-    # "truth chain complete".
-    if _run_task_result_truth_chain is not None:
-        _truth_chain_outcome = _run_task_result_truth_chain(
-            message,
-            task_id=task_id,
-            result_status=result_status,
-        )
-        if not _truth_chain_outcome.is_truth_chain_complete:
+    _unified_local_mode_ingress_ran = False
+    if _normalized_route_mode in {"local", "android_local", "v2_local"}:
+        try:
+            from core.unified_result_ingress import (
+                NormalizedResultEvent,
+                ResultSourceChannel,
+                ingest_result_async,
+                normalize_status as _normalize_status,
+            )
+
+            _event = NormalizedResultEvent(
+                task_id=str(task_id or ""),
+                device_id=str(device_id or ""),
+                raw_message_type=str(message.get("type") or "task_result"),
+                normalized_result_kind="task_result",
+                normalized_status=_normalize_status(result_status),
+                source_channel=ResultSourceChannel.LOCAL,
+                payload=dict(message),
+                runtime_session_id=str(message.get("session_id") or ""),
+                runtime_attachment_session_id=str(
+                    message.get("runtime_attachment_session_id") or ""
+                ),
+                durable_session_id=str(message.get("durable_session_id") or ""),
+                trace_id=str(message.get("trace_id") or ""),
+                raw_message=dict(message),
+            )
+            _local_outcome = await ingest_result_async(
+                _event,
+                store_fn=store_task_result,
+                bridge=bridge,
+            )
+            _unified_local_mode_ingress_ran = True
+            message["completion_notified"] = bool(_local_outcome.completion_notified)
+            message["is_fully_closed"] = bool(_local_outcome.is_fully_closed)
+            message["evidence_acceptance_verdict"] = str(
+                _local_outcome.evidence_acceptance_verdict or ""
+            )
+            if _local_outcome.incomplete_reason:
+                message["incomplete_reason"] = _local_outcome.incomplete_reason
+            logger.info(
+                "handle_task_result: local-mode unified ingress outcome "
+                "task_id=%s completion_notified=%s fully_closed=%s evidence=%s",
+                task_id,
+                _local_outcome.completion_notified,
+                _local_outcome.is_fully_closed,
+                _local_outcome.evidence_acceptance_verdict,
+            )
+        except Exception as _local_ingress_err:
             logger.warning(
-                "handle_task_result: truth chain incomplete for task_id=%r: %s",
+                "handle_task_result: local-mode unified ingress unavailable, "
+                "falling back to legacy truth chain task_id=%s err=%s",
                 task_id,
-                _truth_chain_outcome.incomplete_reason,
+                _local_ingress_err,
             )
+
+    # PR-TTC: Run the canonical must-run truth chain when local-mode unified
+    # ingress did not handle this result path.
+    if not _unified_local_mode_ingress_ran:
+        if _run_task_result_truth_chain is not None:
+            _truth_chain_outcome = _run_task_result_truth_chain(
+                message,
+                task_id=task_id,
+                result_status=result_status,
+            )
+            if not _truth_chain_outcome.is_truth_chain_complete:
+                logger.warning(
+                    "handle_task_result: truth chain incomplete for task_id=%r: %s",
+                    task_id,
+                    _truth_chain_outcome.incomplete_reason,
+                )
+            else:
+                logger.debug(
+                    "handle_task_result: truth chain complete for task_id=%r",
+                    task_id,
+                )
         else:
-            logger.debug(
-                "handle_task_result: truth chain complete for task_id=%r",
+            # Fallback: canonical truth chain module unavailable — run legacy
+            # best-effort helpers so existing behaviour is preserved.
+            logger.warning(
+                "handle_task_result: canonical truth chain module unavailable "
+                "(task_result_canonical_truth_chain); falling back to legacy "
+                "best-effort helpers for task_id=%r",
                 task_id,
             )
-    else:
-        # Fallback: canonical truth chain module unavailable — run legacy
-        # best-effort helpers so existing behaviour is preserved.
-        logger.warning(
-            "handle_task_result: canonical truth chain module unavailable "
-            "(task_result_canonical_truth_chain); falling back to legacy "
-            "best-effort helpers for task_id=%r",
-            task_id,
-        )
-        _try_reconcile(message)
-        _try_ingest_participant_truth(message, "result")
+            _try_reconcile(message)
+            _try_ingest_participant_truth(message, "result")
 
     # 完成等待的 Future
-    if task_id in bridge._pending_responses:
+    if (not _unified_local_mode_ingress_ran) and task_id in bridge._pending_responses:
         future = bridge._pending_responses.pop(task_id)
         if not future.done():
             future.set_result(message)
@@ -680,7 +736,12 @@ async def handle_task_result(
             )
 
     # OpenClawd 记忆回流
-    if task_id and device_id and store_task_result is not None:
+    if (
+        (not _unified_local_mode_ingress_ran)
+        and task_id
+        and device_id
+        and store_task_result is not None
+    ):
         try:
             await store_task_result(
                 task_id=task_id,

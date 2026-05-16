@@ -488,6 +488,19 @@ class AndroidBridge:
                 device_id, _harn_exc,
             )
 
+        # Invalidate V2-side Android snapshot truth immediately on disconnect so
+        # stale readiness does not continue affecting routing/participation.
+        try:
+            from core.android_device_state_store import invalidate_device_state_snapshot
+
+            invalidate_device_state_snapshot(device_id)
+        except Exception as _snapshot_exc:
+            logger.debug(
+                "android_bridge: snapshot invalidation on disconnect failed (non-fatal): "
+                "device_id=%s error=%s",
+                device_id, _snapshot_exc,
+            )
+
         # 统一设备生命周期状态：WebSocket 断开时将设备生命周期重置为 unregistered。
         try:
             from core.device_lifecycle_state import (  # noqa: PLC0415
