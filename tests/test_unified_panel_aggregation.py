@@ -400,6 +400,38 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         self.assertIsInstance(typing_block["projection"], dict)
         self.assertIsInstance(typing_block["stale_or_cached_summary"], dict)
 
+    def test_C02g_runtime_decision_reasoning_includes_android_runtime_constraint_flags(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+        from core.v2_android_truth_ssot import V2AndroidTruthBlock
+
+        snapshot = SimpleNamespace(device_id="android-panel-constraint-1")
+        svc = UnifiedPanelAggregationService()
+        with patch(
+            "core.android_device_state_store.list_device_state_snapshots",
+            return_value=[snapshot],
+        ), patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=V2AndroidTruthBlock(
+                device_id="android-panel-constraint-1",
+                participation_tier="dispatch_eligible",
+                dispatch_eligible=True,
+                device_mode="cross_device",
+                mode_readiness_state="degraded",
+                execution_mode_state="delegated",
+                runtime_constrained=True,
+                runtime_deferred=True,
+                local_mode_active=False,
+                local_mode_gate_deferred=True,
+            ),
+        ):
+            payload = svc.build_payload()
+
+        mode_basis = dict(payload.runtime_decision_reasoning.get("mode_basis") or {})
+        self.assertTrue(mode_basis.get("android_runtime_constrained"))
+        self.assertTrue(mode_basis.get("android_runtime_deferred"))
+        self.assertTrue(mode_basis.get("android_local_mode_gate_deferred"))
+        self.assertEqual(mode_basis.get("android_execution_mode_state"), "delegated")
+
     def test_C03_android_ecosystem_whitelisted_keys(self):
         """android_ecosystem in payload must respect the ANDROID_ECOSYSTEM_SNAPSHOT_KEYS whitelist."""
         from core.unified_panel_aggregation import UnifiedPanelAggregationService

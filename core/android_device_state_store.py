@@ -1554,22 +1554,6 @@ def get_android_participation_evidence(
     authoritative participation truth path.
     """
     snapshot = get_device_state_snapshot(device_id)
-    if snapshot is None:
-        return {
-            "device_id": device_id,
-            "tier": "local_only",
-            "blocking_reasons": ["android_snapshot_not_fresh_or_disconnected"],
-            "tier_derivation_notes": [
-                (
-                    "Android participation truth downgraded because no fresh connected "
-                    "DeviceStateSnapshot is available."
-                )
-            ],
-            "source": "core.android_device_state_store",
-            "transition_history": [],
-            "last_signal": None,
-            "prior_tier": None,
-        }
     try:
         from core.android_network_participation import (
             get_participation_state_for_device,
@@ -1581,7 +1565,7 @@ def get_android_participation_evidence(
             device_id,
             limit=include_history_limit,
         )
-        return {
+        evidence = {
             "device_id": device_id,
             "tier": state.tier.value,
             "blocking_reasons": list(state.blocking_reasons),
@@ -1591,6 +1575,19 @@ def get_android_participation_evidence(
             "last_signal": state.last_signal.value if state.last_signal is not None else None,
             "prior_tier": state.prior_tier.value if state.prior_tier is not None else None,
         }
+        if snapshot is None:
+            blocking = list(evidence.get("blocking_reasons", []) or [])
+            if "android_snapshot_not_fresh_or_disconnected" not in blocking:
+                blocking.append("android_snapshot_not_fresh_or_disconnected")
+            notes = list(evidence.get("tier_derivation_notes", []) or [])
+            notes.append(
+                "No fresh connected DeviceStateSnapshot is available yet; "
+                "participation evidence remains sourced from "
+                "core.android_network_participation."
+            )
+            evidence["blocking_reasons"] = blocking
+            evidence["tier_derivation_notes"] = notes
+        return evidence
     except Exception as exc:  # noqa: BLE001
         logger.debug(
             "get_android_participation_evidence failed for device_id=%s: %s",

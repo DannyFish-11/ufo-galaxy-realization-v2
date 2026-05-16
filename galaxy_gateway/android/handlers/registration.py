@@ -363,6 +363,14 @@ async def handle_device_register(
         # PR-C: extract Android durable continuity identity fields so reconnect
         # and session-resume decisions can validate cross-restart stable identity.
         inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(message)
+        _raw_runtime_posture = (
+            message.get("source_runtime_posture")
+            or (message.get("payload") or {}).get("source_runtime_posture")
+            or ""
+        )
+        _inbound_runtime_posture = str(_raw_runtime_posture or "").strip().lower()
+        if _inbound_runtime_posture not in {"join_runtime", "control_only"}:
+            _inbound_runtime_posture = "join_runtime"
         if inbound_durable_session_id:
             logger.debug(
                 "handle_device_register: durable continuity fields present: "
@@ -421,7 +429,7 @@ async def handle_device_register(
             from core.attached_runtime_session import attach_runtime_session
             _attach_record = attach_runtime_session(
                 device_id,
-                source_runtime_posture="join_runtime",
+                source_runtime_posture=_inbound_runtime_posture,
                 runtime_attachment_session_id=inbound_attachment_id,
                 attach_reason="android_device_register",
                 metadata={"registration_trigger": "android_device_register"},
@@ -484,6 +492,7 @@ async def handle_device_register(
                     metadata={"reconnect_trigger": "device_register_continuity"},
                     durable_session_id=inbound_durable_session_id,
                     continuity_epoch=inbound_continuity_epoch,
+                    new_posture=_inbound_runtime_posture,
                 )
                 logger.info(
                     "attached_runtime_session_registry: continuity_resume via device_register: "
@@ -496,7 +505,7 @@ async def handle_device_register(
             else:
                 _reg_entry = register_session(
                     device_id,
-                    posture="join_runtime",
+                    posture=_inbound_runtime_posture,
                     runtime_attachment_session_id=inbound_attachment_id,
                     metadata={"registration_trigger": "android_device_register"},
                     durable_session_id=inbound_durable_session_id,
@@ -631,6 +640,7 @@ async def handle_device_register(
         # new attachment ("new_attachment").  This is the server-side canonical
         # answer to "is this a reconnect or a brand-new connection?".
         ack["continuity_outcome"] = _reconnect_outcome
+        ack["source_runtime_posture"] = _inbound_runtime_posture
         # ``_reg_entry`` is produced by guarded registry calls above; keep this
         # defensive lookup so ack construction still degrades safely if a
         # partial/mock entry without runtime_session_id reaches this path.
@@ -658,6 +668,8 @@ async def handle_device_register(
             _reg_posture = ""
             if _reg_entry is not None:
                 _reg_posture = getattr(_reg_entry, "posture", "") or ""
+            if not _reg_posture:
+                _reg_posture = _inbound_runtime_posture
             _is_fully_attached = len(_gaps) == 0
             _signal = (
                 AndroidParticipationTransitionSignal.registration_fully_attached

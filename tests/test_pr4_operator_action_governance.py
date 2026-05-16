@@ -483,8 +483,12 @@ class TestAndroidDirectedActionSpec:
 
     def setup_method(self):
         # Clear pending actions before each test
-        from core.pr4_operator_action_governance import _PENDING_ANDROID_ACTIONS
+        from core.pr4_operator_action_governance import (
+            _PENDING_ANDROID_ACTIONS,
+            _TERMINAL_ANDROID_ACTIONS,
+        )
         _PENDING_ANDROID_ACTIONS.clear()
+        _TERMINAL_ANDROID_ACTIONS.clear()
 
     def test_build_spec_populates_required_fields(self):
         from core.pr4_operator_action_governance import (
@@ -539,6 +543,26 @@ class TestAndroidDirectedActionSpec:
     def test_ack_unknown_dispatch_id_returns_false(self):
         from core.pr4_operator_action_governance import acknowledge_android_directed_action
         assert acknowledge_android_directed_action("nonexistent_dispatch_id") is False
+
+    def test_timeout_removes_pending_and_records_terminal_state(self):
+        from core.pr4_operator_action_governance import (
+            build_android_directed_action_spec,
+            get_pending_android_directed_actions,
+            get_android_directed_action_terminal_state,
+            AndroidDirectedActionKind,
+        )
+
+        spec = build_android_directed_action_spec(
+            action_kind=AndroidDirectedActionKind.force_reattach.value,
+            device_id="device_timeout_01",
+            operator_action_id="opact_timeout_01",
+        )
+        spec.expires_at = spec.dispatched_at - 1.0
+        pending = get_pending_android_directed_actions()
+        assert not any(p.android_dispatch_id == spec.android_dispatch_id for p in pending)
+        terminal = get_android_directed_action_terminal_state(spec.android_dispatch_id)
+        assert terminal.get("state") == "timed_out"
+        assert terminal.get("reason") == "ack_timeout"
 
     def test_spec_to_dict_has_all_keys(self):
         from core.pr4_operator_action_governance import (
@@ -1004,6 +1028,28 @@ class TestPR4Routes:
             "/api/v1/operator/actions/android-directed/nonexistent_id_xyz/ack"
         )
         assert resp.status_code == 404
+
+    def test_android_directed_ack_timeout_returns_409(self, client):
+        from core.pr4_operator_action_governance import (
+            build_android_directed_action_spec,
+            get_pending_android_directed_actions,
+            AndroidDirectedActionKind,
+        )
+
+        spec = build_android_directed_action_spec(
+            action_kind=AndroidDirectedActionKind.force_reattach.value,
+            device_id="device_ack_timeout_01",
+            operator_action_id="opact_ack_timeout",
+        )
+        spec.expires_at = spec.dispatched_at - 1.0
+        # Trigger lifecycle sweep so timeout state is materialized.
+        get_pending_android_directed_actions()
+        resp = client.post(
+            f"/api/v1/operator/actions/android-directed/{spec.android_dispatch_id}/ack"
+        )
+        assert resp.status_code == 409
+        data = resp.json()
+        assert data.get("dispatch_state") == "timed_out"
 
     def test_android_directed_ack_existing_returns_200(self, client):
         from core.pr4_operator_action_governance import (

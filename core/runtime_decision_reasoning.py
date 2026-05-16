@@ -100,6 +100,11 @@ def _build_android_truth_basis(block: Any) -> Dict[str, Any]:
         "local_inference_ready": _truth_get(block, "local_inference_ready"),
         "local_inference_available": _truth_get(block, "local_inference_available"),
         "current_fallback_tier": _truth_get(block, "current_fallback_tier"),
+        "execution_mode_state": _truth_get(block, "execution_mode_state"),
+        "runtime_constrained": _truth_get(block, "runtime_constrained"),
+        "runtime_deferred": _truth_get(block, "runtime_deferred"),
+        "local_mode_active": _truth_get(block, "local_mode_active"),
+        "local_mode_gate_deferred": _truth_get(block, "local_mode_gate_deferred"),
         "pending_first_download": _truth_get(block, "pending_first_download"),
         "degraded_reasons": list(_truth_get(block, "degraded_reasons", []) or []),
         "participation_blocking_reasons": list(
@@ -331,6 +336,26 @@ def overlay_runtime_decision_reasoning_block(
     if truth_basis:
         mode_basis.setdefault("android_device_mode", truth_basis.get("device_mode"))
         mode_basis.setdefault("android_mode_readiness_state", truth_basis.get("mode_readiness_state"))
+        mode_basis.setdefault(
+            "android_execution_mode_state",
+            truth_basis.get("execution_mode_state"),
+        )
+        mode_basis.setdefault(
+            "android_runtime_constrained",
+            truth_basis.get("runtime_constrained"),
+        )
+        mode_basis.setdefault(
+            "android_runtime_deferred",
+            truth_basis.get("runtime_deferred"),
+        )
+        mode_basis.setdefault(
+            "android_local_mode_active",
+            truth_basis.get("local_mode_active"),
+        )
+        mode_basis.setdefault(
+            "android_local_mode_gate_deferred",
+            truth_basis.get("local_mode_gate_deferred"),
+        )
 
     readiness_summary = dict(readiness_summary or {})
     readiness_basis = dict(current.readiness_basis)

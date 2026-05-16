@@ -386,24 +386,39 @@ def build_v2_unified_state_contract(
             # time (primary-first) for this contract projection.
             target_device_id = str(android_device_ids[0]) if android_device_ids else ""
             if target_device_id:
-                from core.v2_android_truth_ssot import build_v2_android_truth_block  # noqa: PLC0415
-                from core.v2_android_truth_ssot import ANDROID_PARTICIPATION_PROVENANCE  # noqa: PLC0415
+                from core.android_network_participation import (  # noqa: PLC0415
+                    get_participation_state_for_device,
+                    list_participation_transition_history,
+                )
+                from core.v2_android_truth_ssot import (  # noqa: PLC0415
+                    build_v2_android_truth_block,
+                )
 
+                _participation_state = get_participation_state_for_device(target_device_id)
+                _participation_tier_str = _participation_state.tier.value
+                _participation_blocking = list(_participation_state.blocking_reasons)
+                _participation_notes = list(_participation_state.tier_derivation_notes)
+                _participation_source = (
+                    "core.android_network_participation.get_participation_state_for_device"
+                    " via core.v2_unified_state_contract"
+                )
+                _participation_transition_history = list(
+                    list_participation_transition_history(target_device_id, limit=10)
+                )
+                _participation_last_signal = (
+                    _participation_state.last_signal.value
+                    if _participation_state.last_signal is not None
+                    else None
+                )
+                _participation_prior_tier = (
+                    _participation_state.prior_tier.value
+                    if _participation_state.prior_tier is not None
+                    else None
+                )
                 _participation_truth_block = build_v2_android_truth_block(
                     target_device_id,
                     include_history_limit=10,
                 )
-                _participation_tier_str = _participation_truth_block.participation_tier
-                _participation_blocking = list(
-                    _participation_truth_block.participation_blocking_reasons
-                )
-                _participation_notes = list(_participation_truth_block.participation_tier_notes)
-                _participation_source = ANDROID_PARTICIPATION_PROVENANCE
-                _participation_transition_history = list(
-                    _participation_truth_block.participation_transition_history
-                )
-                _participation_last_signal = _participation_truth_block.participation_last_signal
-                _participation_prior_tier = _participation_truth_block.participation_prior_tier
             else:
                 # Conservative fallback when no Android device identity is available.
                 from core.android_network_participation import (  # noqa: PLC0415

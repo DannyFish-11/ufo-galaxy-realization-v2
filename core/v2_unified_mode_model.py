@@ -133,13 +133,13 @@ def derive_execution_location(
 ) -> str:
     runtime = str(selected_runtime or "").strip().lower()
     mode = str(device_mode or "").strip().lower()
+    if runtime == "android_delegated":
+        return "android_delegated"
     if mode in {"local", "local_only"}:
         return "android_local" if selected_device else "v2_local"
     if mode in {"cross_device", "remote_handoff", "staged_mesh", "android_delegated"}:
         if selected_device or runtime == "android_delegated":
             return "android_delegated"
-    if runtime == "android_delegated":
-        return "android_delegated"
     if runtime == "android_local":
         return "android_local"
     return "v2_local"
@@ -179,6 +179,25 @@ def derive_governance_state(
     mode_readiness_state = str(
         _truth_get(android_truth_block, "mode_readiness_state", "") or ""
     ).strip().lower()
+    runtime_constrained = bool(
+        _coalesce(
+            _truth_get(android_truth_block, "runtime_constrained"),
+            False,
+        )
+    )
+    runtime_deferred = bool(
+        _coalesce(
+            _truth_get(android_truth_block, "runtime_deferred"),
+            _truth_get(android_truth_block, "local_mode_gate_deferred"),
+            False,
+        )
+    )
+    local_mode_active = bool(
+        _coalesce(
+            _truth_get(android_truth_block, "local_mode_active"),
+            False,
+        )
+    )
     resolved_device_mode = str(
         _coalesce(device_mode, _truth_get(android_truth_block, "device_mode"), "")
     ).strip().lower()
@@ -215,6 +234,25 @@ def derive_governance_state(
             "reasons": reasons,
             "resolved_device_mode": resolved_device_mode,
         }
+    if local_mode_active:
+        return "local_autonomy", {
+            "operation_state": operation_state,
+            "automatic_decision": automatic_decision,
+            "primary_path": "local_execution",
+            "takeover_active": takeover_active,
+            "reasons": reasons,
+            "resolved_device_mode": resolved_device_mode,
+            "runtime_local_mode_active": True,
+        }
+    if runtime_deferred:
+        return "deferred", {
+            "operation_state": operation_state,
+            "automatic_decision": automatic_decision,
+            "primary_path": primary_path,
+            "takeover_active": takeover_active,
+            "reasons": reasons,
+            "runtime_deferred": True,
+        }
     if automatic_decision == "hold" or any(
         "defer" in reason
         for reason in reasons
@@ -229,6 +267,7 @@ def derive_governance_state(
     degraded_reason_tokens = ("constrained", "degraded", "stale", "blocked_no_proof")
     if (
         operation_state == "soft_degraded"
+        or runtime_constrained
         or mode_readiness_state in {"degraded", "transitioning"}
         or any(
             any(token in reason for token in degraded_reason_tokens)
@@ -352,6 +391,27 @@ def build_unified_mode_model(
             list(blocking_reasons or [])
             + list(_truth_get(android_truth_block, "participation_blocking_reasons", []) or [])
             + list(_truth_get(android_truth_block, "degraded_reasons", []) or [])
+            + (
+                ["runtime_constrained"]
+                if bool(_truth_get(android_truth_block, "runtime_constrained", False))
+                else []
+            )
+            + (
+                ["runtime_deferred"]
+                if bool(
+                    _coalesce(
+                        _truth_get(android_truth_block, "runtime_deferred"),
+                        _truth_get(android_truth_block, "local_mode_gate_deferred"),
+                        False,
+                    )
+                )
+                else []
+            )
+            + (
+                ["local_mode_active"]
+                if bool(_truth_get(android_truth_block, "local_mode_active", False))
+                else []
+            )
         ),
         source_of_truth_refs=_dedupe(
             list(source_of_truth_refs or []) + [UNIFIED_MODE_MODEL_AUTHORITY]
