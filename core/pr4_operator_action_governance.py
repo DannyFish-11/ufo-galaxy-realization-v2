@@ -461,10 +461,16 @@ class AndroidDirectedActionSpec:
     payload: Dict[str, Any] = field(default_factory=dict)
     dispatched_at: float = field(default_factory=time.time)
     expected_ack_within_seconds: int = 30
+    expires_at: float = 0.0
+    lifecycle_state: str = "pending"
+    lifecycle_failure_reason: str = ""
     rollback_on_timeout: bool = True
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
 
     def to_dict(self) -> Dict[str, Any]:
+        expires_at = self.expires_at
+        if expires_at <= 0:
+            expires_at = self.dispatched_at + max(1, int(self.expected_ack_within_seconds))
         return {
             "android_dispatch_id": self.android_dispatch_id,
             "action_kind": self.action_kind,
@@ -477,6 +483,9 @@ class AndroidDirectedActionSpec:
             "payload": dict(self.payload),
             "dispatched_at": self.dispatched_at,
             "expected_ack_within_seconds": self.expected_ack_within_seconds,
+            "expires_at": expires_at,
+            "lifecycle_state": self.lifecycle_state,
+            "lifecycle_failure_reason": self.lifecycle_failure_reason,
             "rollback_on_timeout": self.rollback_on_timeout,
             "authority": self.authority,
         }
@@ -596,6 +605,7 @@ class PR4OperableSurfaceSnapshot:
 # ---------------------------------------------------------------------------
 
 _PENDING_ANDROID_ACTIONS: Dict[str, AndroidDirectedActionSpec] = {}
+_TERMINAL_ANDROID_ACTIONS: Dict[str, Dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -686,7 +696,7 @@ def record_operator_action_audit(record: OperatorActionAuditRecord) -> None:
     """
     global _AUDIT_LOG
     if len(_AUDIT_LOG) >= _AUDIT_LOG_MAX_RECORDS:
-        _AUDIT_LOG = _AUDIT_LOG[-(  _AUDIT_LOG_MAX_RECORDS - 1):]
+        _AUDIT_LOG = _AUDIT_LOG[-(_AUDIT_LOG_MAX_RECORDS - 1):]
     _AUDIT_LOG.append(record)
     logger.debug(
         "operator_action_audit: recorded %s (action_id=%s outcome=%s)",
@@ -770,7 +780,11 @@ def build_android_directed_action_spec(
         target_session_id=target_session_id,
         payload=dict(payload or {}),
     )
+    spec.expires_at = spec.dispatched_at + max(1, int(spec.expected_ack_within_seconds))
+    spec.lifecycle_state = "pending"
+    spec.lifecycle_failure_reason = ""
     _PENDING_ANDROID_ACTIONS[spec.android_dispatch_id] = spec
+    _TERMINAL_ANDROID_ACTIONS.pop(spec.android_dispatch_id, None)
     logger.info(
         "android_directed_action_spec: built %s for device=%s dispatch_id=%s",
         action_kind,
@@ -778,6 +792,50 @@ def build_android_directed_action_spec(
         spec.android_dispatch_id,
     )
     return spec
+
+
+def _expire_pending_android_directed_actions(now: Optional[float] = None) -> List[str]:
+    """Expire pending Android-directed actions that exceeded ACK timeout."""
+    current = float(now if now is not None else time.time())
+    expired_dispatch_ids: List[str] = []
+    for dispatch_id, spec in list(_PENDING_ANDROID_ACTIONS.items()):
+        expires_at = float(spec.expires_at or 0.0)
+        if expires_at <= 0:
+            expires_at = spec.dispatched_at + max(1, int(spec.expected_ack_within_seconds))
+            spec.expires_at = expires_at
+        if current < expires_at:
+            continue
+        _PENDING_ANDROID_ACTIONS.pop(dispatch_id, None)
+        spec.lifecycle_state = "timed_out"
+        spec.lifecycle_failure_reason = "ack_timeout"
+        _TERMINAL_ANDROID_ACTIONS[dispatch_id] = {
+            "state": "timed_out",
+            "reason": "ack_timeout",
+            "timed_out_at": current,
+            "spec": spec.to_dict(),
+        }
+        expired_dispatch_ids.append(dispatch_id)
+        record_operator_action_audit(
+            OperatorActionAuditRecord(
+                action_id=spec.operator_action_id,
+                action_kind=spec.action_kind,
+                operator_user_id=spec.operator_user_id,
+                outcome=OperatorActionOrchestrationOutcome.failed.value,
+                affected_entity_ids=[spec.device_id] if spec.device_id else [],
+                downstream_effects=[
+                    f"android_directed_action_timeout:dispatch_id={dispatch_id}"
+                ],
+                error=(
+                    "android_directed_action_ack_timeout:"
+                    f"dispatch_id={dispatch_id}:expected_ack_within_seconds={spec.expected_ack_within_seconds}"
+                ),
+                rollback_needed=bool(spec.rollback_on_timeout),
+                android_dispatch_id=dispatch_id,
+                android_dispatched_at=spec.dispatched_at,
+                android_ack_received=False,
+            )
+        )
+    return expired_dispatch_ids
 
 
 def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
@@ -792,8 +850,16 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
     Returns:
         True when the dispatch ID was found and marked as ACKed; False otherwise.
     """
+    _expire_pending_android_directed_actions()
     spec = _PENDING_ANDROID_ACTIONS.get(android_dispatch_id)
     if spec is None:
+        terminal = _TERMINAL_ANDROID_ACTIONS.get(android_dispatch_id)
+        if terminal and terminal.get("state") == "timed_out":
+            logger.warning(
+                "acknowledge_android_directed_action: dispatch_id=%s already timed out",
+                android_dispatch_id,
+            )
+            return False
         logger.warning(
             "acknowledge_android_directed_action: unknown dispatch_id=%s",
             android_dispatch_id,
@@ -801,6 +867,14 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
         return False
     # Mark ACKed by removing from pending — audit records carry the full trail
     _PENDING_ANDROID_ACTIONS.pop(android_dispatch_id, None)
+    spec.lifecycle_state = "acked"
+    spec.lifecycle_failure_reason = ""
+    _TERMINAL_ANDROID_ACTIONS[android_dispatch_id] = {
+        "state": "acked",
+        "reason": "",
+        "acked_at": time.time(),
+        "spec": spec.to_dict(),
+    }
     logger.info(
         "acknowledge_android_directed_action: ACK received for dispatch_id=%s action_kind=%s device=%s",
         android_dispatch_id,
@@ -812,7 +886,13 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
 
 def get_pending_android_directed_actions() -> List[AndroidDirectedActionSpec]:
     """Return all pending (un-ACKed) Android-directed actions."""
+    _expire_pending_android_directed_actions()
     return list(_PENDING_ANDROID_ACTIONS.values())
+
+
+def get_android_directed_action_terminal_state(android_dispatch_id: str) -> Dict[str, Any]:
+    """Return terminal lifecycle state for a dispatch id, if already closed."""
+    return dict(_TERMINAL_ANDROID_ACTIONS.get(android_dispatch_id) or {})
 
 
 # ---------------------------------------------------------------------------

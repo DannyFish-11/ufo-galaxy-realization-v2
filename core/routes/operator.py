@@ -1455,7 +1455,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.pr4_operator_action_governance import (
                 build_android_directed_action_spec,
-                AndroidDirectedActionKind,
             )
 
             action_kind = body.get("action_kind", "")
@@ -1523,9 +1522,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         Returns HTTP 404 when the dispatch_id is not found in the pending store.
         """
         try:
-            from core.pr4_operator_action_governance import acknowledge_android_directed_action
+            from core.pr4_operator_action_governance import (
+                acknowledge_android_directed_action,
+                get_android_directed_action_terminal_state,
+            )
             acked = acknowledge_android_directed_action(dispatch_id)
             if not acked:
+                terminal_state = get_android_directed_action_terminal_state(dispatch_id)
+                if terminal_state.get("state") == "timed_out":
+                    return JSONResponse(
+                        content={
+                            "detail": (
+                                f"pending android action '{dispatch_id}' timed out "
+                                "before ack"
+                            ),
+                            "dispatch_state": "timed_out",
+                            "authority": "OPERATOR_ROUTES_V1",
+                        },
+                        status_code=409,
+                    )
                 return JSONResponse(
                     content={
                         "detail": f"pending android action '{dispatch_id}' not found",

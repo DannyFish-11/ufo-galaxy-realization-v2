@@ -258,6 +258,11 @@ class V2AndroidTruthBlock:
     # ── 队列/降级 ─────────────────────────────────────────────────────────────
     offline_queue_depth: Optional[int] = None
     current_fallback_tier: Optional[str] = None
+    execution_mode_state: Optional[str] = None
+    runtime_constrained: Optional[bool] = None
+    runtime_deferred: Optional[bool] = None
+    local_mode_active: Optional[bool] = None
+    local_mode_gate_deferred: Optional[bool] = None
 
     # ── 模式门控 ─────────────────────────────────────────────────────────────
     device_mode: str = "unknown"
@@ -305,6 +310,11 @@ class V2AndroidTruthBlock:
             # 队列/降级
             "offline_queue_depth": self.offline_queue_depth,
             "current_fallback_tier": self.current_fallback_tier,
+            "execution_mode_state": self.execution_mode_state,
+            "runtime_constrained": self.runtime_constrained,
+            "runtime_deferred": self.runtime_deferred,
+            "local_mode_active": self.local_mode_active,
+            "local_mode_gate_deferred": self.local_mode_gate_deferred,
             # 模式门控
             "device_mode": self.device_mode,
             "cross_device_eligibility": self.cross_device_eligibility,
@@ -439,9 +449,34 @@ def build_v2_android_truth_block(
             block.active_runtime_type = snap.active_runtime_type
             block.offline_queue_depth = snap.offline_queue_depth
             block.current_fallback_tier = snap.current_fallback_tier
+            raw_payload = getattr(snap, "raw_payload", {}) or {}
+            block.execution_mode_state = _coerce_optional_str(
+                raw_payload.get("execution_mode_state")
+                or raw_payload.get("executionModeState")
+            )
+            block.runtime_constrained = _coerce_optional_bool(
+                raw_payload.get("runtime_constrained")
+                if raw_payload.get("runtime_constrained") is not None
+                else raw_payload.get("runtimeConstrained")
+            )
+            block.runtime_deferred = _coerce_optional_bool(
+                raw_payload.get("runtime_deferred")
+                if raw_payload.get("runtime_deferred") is not None
+                else raw_payload.get("runtimeDeferred")
+            )
+            block.local_mode_active = _coerce_optional_bool(
+                raw_payload.get("local_mode_active")
+                if raw_payload.get("local_mode_active") is not None
+                else raw_payload.get("localModeActive")
+            )
+            block.local_mode_gate_deferred = _coerce_optional_bool(
+                raw_payload.get("local_mode_gate_deferred")
+                if raw_payload.get("local_mode_gate_deferred") is not None
+                else raw_payload.get("localModeGateDeferred")
+            )
 
             # 从 capability_report 元数据中提取本地推理能力字段
-            cap_meta = getattr(snap, "raw_payload", {}) or {}
+            cap_meta = raw_payload
             cap_report = cap_meta.get("capability_report", {}) or {}
             if cap_report:
                 cap_normalized = normalize_android_field_aliases(cap_report)
@@ -466,14 +501,12 @@ def build_v2_android_truth_block(
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)
     if not snapshot_truth_available:
-        block.participation_tier = "local_only"
-        block.dispatch_eligible = False
-        block.distributed_participant = False
         block.participation_blocking_reasons.append(
             "android_snapshot_not_fresh_or_disconnected"
         )
         block.participation_tier_notes.append(
-            "No fresh connected snapshot; participation truth downgraded to local_only."
+            "No fresh connected snapshot is available yet; retaining participation "
+            "tier from registration/session truth when present."
         )
 
     # ── 3. 模式门控（android_mode_gate_policy）──────────────────────────────
@@ -506,6 +539,20 @@ def build_v2_android_truth_block(
                 block.mode_readiness_state = (
                     _mrs.value if hasattr(_mrs, "value") else str(_mrs)
                 )
+            if block.runtime_constrained is None:
+                _degraded_mode = getattr(mode_state, "degraded_mode", None)
+                if _degraded_mode is not None:
+                    block.runtime_constrained = bool(_degraded_mode)
+            if block.runtime_deferred is None:
+                _mode_readiness = (
+                    block.mode_readiness_state or ""
+                ).strip().lower()
+                if _mode_readiness in {"transitioning", "blocked", "degraded"}:
+                    block.runtime_deferred = True
+            if block.local_mode_active is None:
+                _mode = str(block.device_mode or "").strip().lower()
+                if _mode in {"local", "local_only"}:
+                    block.local_mode_active = True
             block.sources.append("core.android_mode_gate_policy")
     except Exception as exc:  # noqa: BLE001
         note = f"android_mode_gate_policy unavailable: {exc}"
@@ -636,3 +683,11 @@ def _coerce_optional_bool(value: Any) -> Optional[bool]:
     if value is None:
         return None
     return bool(value)
+
+
+def _coerce_optional_str(value: Any) -> Optional[str]:
+    """将 value 规范为 Optional[str]。"""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

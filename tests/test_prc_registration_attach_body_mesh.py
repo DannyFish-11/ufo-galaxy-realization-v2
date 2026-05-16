@@ -166,6 +166,26 @@ class TestRegistrationAttachRuntimeSession:
         assert record is not None
         assert record.source_runtime_posture == "join_runtime"
 
+    @pytest.mark.asyncio
+    async def test_registration_honors_android_reported_source_runtime_posture(self):
+        """When Android reports control_only posture, attached session should keep it."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from core.attached_runtime_session import get_attached_runtime_session
+
+        bridge = AndroidBridge()
+        ws = _make_websocket()
+        await bridge._handle_device_register(
+            ws,
+            _make_registration_message(
+                "a_dev_04",
+                source_runtime_posture="control_only",
+            ),
+        )
+
+        record = get_attached_runtime_session("a_dev_04")
+        assert record is not None
+        assert record.source_runtime_posture == "control_only"
+
 
 # ---------------------------------------------------------------------------
 # Group B — Registration → attached_runtime_session_registry queryable
@@ -207,6 +227,26 @@ class TestRegistrationSessionRegistry:
         assert entry.attachment_state == RegistryEntryState.active, (
             f"Expected active, got {entry.attachment_state}"
         )
+
+    @pytest.mark.asyncio
+    async def test_registration_registry_entry_honors_android_reported_posture(self):
+        """Registry posture should follow Android source_runtime_posture when supplied."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+        from core.attached_runtime_session_registry import lookup_session_by_device
+
+        bridge = AndroidBridge()
+        ws = _make_websocket()
+        await bridge._handle_device_register(
+            ws,
+            _make_registration_message(
+                "b_dev_03",
+                source_runtime_posture="control_only",
+            ),
+        )
+
+        entry = lookup_session_by_device("b_dev_03")
+        assert entry is not None
+        assert entry.posture == "control_only"
 
 
 # ---------------------------------------------------------------------------

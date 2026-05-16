@@ -3686,6 +3686,7 @@ class SourceDispatchOrchestrator:
         _trace_id: Optional[str] = trace_id
         reject_reason: str = ""
         terminal_signal_recorded: bool = False
+        delegated_runtime_context: Dict[str, Any] = {}
 
         try:
             was_updated = bool(getattr(reconcile_outcome, "was_updated", False))
@@ -3700,6 +3701,16 @@ class SourceDispatchOrchestrator:
                 _session_id = str(getattr(_envelope, "session_id", "") or session_id or "")
                 _task_id = str(getattr(_envelope, "task_id", "") or task_id or "")
                 _trace_id = str(getattr(_envelope, "trace_id", "") or trace_id or "")
+                _payload = getattr(_envelope, "payload", {}) or {}
+                delegated_runtime_context = {
+                    "participation_tier": _payload.get("participation_tier"),
+                    "execution_mode_state": _payload.get("execution_mode_state"),
+                    "cross_device_eligibility": _payload.get("cross_device_eligibility"),
+                    "local_mode_gate_deferred": _payload.get("local_mode_gate_deferred"),
+                    "runtime_constrained": _payload.get("runtime_constrained"),
+                    "runtime_deferred": _payload.get("runtime_deferred"),
+                    "local_mode_active": _payload.get("local_mode_active"),
+                }
 
             if was_updated:
                 consumed = True
@@ -3737,6 +3748,9 @@ class SourceDispatchOrchestrator:
                         decision_reason=(
                             f"android_behavioral_result:signal_kind={signal_kind}"
                             f":result_kind={result_kind}"
+                            f":runtime_constrained={delegated_runtime_context.get('runtime_constrained')}"
+                            f":runtime_deferred={delegated_runtime_context.get('runtime_deferred')}"
+                            f":local_mode_active={delegated_runtime_context.get('local_mode_active')}"
                         ),
                         success=(result_kind == "success"),
                     )
@@ -3783,6 +3797,7 @@ class SourceDispatchOrchestrator:
                                 "task_id": _task_id,
                                 "trace_id": _trace_id,
                                 "source": source,
+                                "delegated_runtime_context": dict(delegated_runtime_context),
                                 "policy": ANDROID_TERMINAL_SIGNAL_RECORDED_TO_CANONICAL_TRUTH_SENTINEL,
                             },
                         )
