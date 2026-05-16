@@ -81,3 +81,91 @@ def test_runtime_decision_reasoning_takeover_updates_governance_state() -> None:
     semantics = payload["unified_mode_model"]["participation_semantics"]
     assert semantics["takeover_visible"] is True
     assert semantics["mode_semantics"]["takeover_active"] is True
+
+
+# ---------------------------------------------------------------------------
+# PR-9：fully_attached 语义对齐 —— operability_participating 修复
+# ---------------------------------------------------------------------------
+
+
+def test_fully_attached_is_operability_participating() -> None:
+    """fully_attached 层级应视为可操作参与（dispatch 逻辑可选中该设备）。"""
+    model = build_unified_mode_model(
+        selected_runtime="android_delegated",
+        selected_device="android-fa-1",
+        participation_tier="fully_attached",
+        device_mode="cross_device",
+    )
+
+    semantics = model["participation_semantics"]
+    # fully_attached 在结构上已可被 dispatch 选中 → operability_participating 必须为 True
+    assert semantics["operability_participating"] is True
+    # 但模式门控尚未全部通过 → dispatch_gate_passed 必须为 False
+    assert semantics["dispatch_gate_passed"] is False
+    # tier_participating 也应为 True
+    assert semantics["tier_participating"] is True
+
+
+def test_dispatch_eligible_has_both_operability_and_gate_passed() -> None:
+    """dispatch_eligible 层级应同时满足 operability_participating 与 dispatch_gate_passed。"""
+    model = build_unified_mode_model(
+        selected_runtime="android_delegated",
+        selected_device="android-de-1",
+        participation_tier="dispatch_eligible",
+        device_mode="cross_device",
+    )
+
+    semantics = model["participation_semantics"]
+    assert semantics["operability_participating"] is True
+    assert semantics["dispatch_gate_passed"] is True
+
+
+def test_distributed_participant_has_both_operability_and_gate_passed() -> None:
+    """distributed_participant 层级应同时满足 operability_participating 与 dispatch_gate_passed。"""
+    model = build_unified_mode_model(
+        selected_runtime="android_delegated",
+        selected_device="android-dp-1",
+        participation_tier="distributed_participant",
+        device_mode="cross_device",
+    )
+
+    semantics = model["participation_semantics"]
+    assert semantics["operability_participating"] is True
+    assert semantics["dispatch_gate_passed"] is True
+    assert semantics["distributed_participating"] is True
+
+
+def test_session_attached_tiers_are_not_operability_participating() -> None:
+    """control_only / cross_device_capable 层级均不应视为可操作参与。"""
+    for tier in ("control_only", "cross_device_capable"):
+        model = build_unified_mode_model(
+            selected_runtime="android_delegated",
+            selected_device="android-sa-1",
+            participation_tier=tier,
+            device_mode="cross_device",
+        )
+        semantics = model["participation_semantics"]
+        assert semantics["operability_participating"] is False, (
+            f"tier={tier!r} 不应为 operability_participating=True"
+        )
+        assert semantics["dispatch_gate_passed"] is False, (
+            f"tier={tier!r} 不应为 dispatch_gate_passed=True"
+        )
+
+
+def test_fully_attached_dispatch_gap_is_explicit_in_summary() -> None:
+    """participation_semantics 摘要应明确暴露 dispatch_gate_passed 字段。"""
+    model = build_unified_mode_model(
+        selected_runtime="android_delegated",
+        selected_device="android-fa-2",
+        participation_tier="fully_attached",
+        device_mode="cross_device",
+    )
+
+    semantics = model["participation_semantics"]
+    assert "dispatch_gate_passed" in semantics
+    summary_zh: str = semantics["participating_summary_zh"]
+    summary_en: str = semantics["participating_summary_en"]
+    assert "dispatch_gate_passed" in summary_en
+    assert "派发门控通过" in summary_zh
+
