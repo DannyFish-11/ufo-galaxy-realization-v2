@@ -66,6 +66,10 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert payload["runtime_decision_reasoning"]["selected_runtime"] == "v2_local"
     assert payload["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "local"
     assert payload["shared_execution_visibility"]["completion_state"] == "not_started"
+    assert "participation_truth_consumption" in payload
+    assert payload["participation_truth_consumption"]["participation_tier"] == payload[
+        "runtime_decision_reasoning"
+    ]["participation_tier"]
     assert payload["execution_stage"] is None
 
 

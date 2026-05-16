@@ -379,6 +379,7 @@ class TestAndroidTruthParticipation(unittest.TestCase):
         self.assertIn("execution_location", payload.unified_mode_model)
         self.assertIn("participation_layer", payload.unified_mode_model)
         self.assertIn("governance_state", payload.unified_mode_model)
+        self.assertIn("participation_semantics", payload.unified_mode_model)
         self.assertEqual(payload.unified_mode_model.get("execution_location"), "android_delegated")
         self.assertEqual(payload.unified_mode_model.get("participation_layer"), "dispatch_eligible")
         self.assertEqual(payload.unified_mode_model.get("governance_state"), "delegated_execution")

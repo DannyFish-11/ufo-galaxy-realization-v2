@@ -14,6 +14,10 @@ def test_unified_mode_model_local_mode_overrides_delegated_runtime_to_android_lo
 
     assert model["execution_location"] == "android_local"
     assert model["governance_state"] == "local_autonomy"
+    semantics = model["participation_semantics"]
+    assert semantics["execution_participating"] is True
+    assert semantics["operability_participating"] is False
+    assert semantics["mode_semantics"]["local_mode_active"] is True
 
 
 def test_unified_mode_model_cross_device_keeps_delegated_execution() -> None:
@@ -26,6 +30,9 @@ def test_unified_mode_model_cross_device_keeps_delegated_execution() -> None:
 
     assert model["execution_location"] == "android_delegated"
     assert model["governance_state"] == "delegated_execution"
+    semantics = model["participation_semantics"]
+    assert semantics["operability_participating"] is True
+    assert semantics["mode_semantics"]["delegated_execution_active"] is True
 
 
 def test_runtime_decision_reasoning_local_mode_uses_android_local_runtime() -> None:
@@ -44,6 +51,8 @@ def test_runtime_decision_reasoning_local_mode_uses_android_local_runtime() -> N
     assert payload["selected_runtime"] == "android_local"
     assert payload["unified_mode_model"]["execution_location"] == "android_local"
     assert payload["unified_mode_model"]["governance_state"] == "local_autonomy"
+    semantics = payload["unified_mode_model"]["participation_semantics"]
+    assert semantics["mode_semantics"]["local_mode_active"] is True
 
 
 def test_runtime_decision_reasoning_takeover_updates_governance_state() -> None:
@@ -69,3 +78,6 @@ def test_runtime_decision_reasoning_takeover_updates_governance_state() -> None:
 
     assert payload["selected_runtime"] == "android_delegated"
     assert payload["unified_mode_model"]["governance_state"] == "takeover_active"
+    semantics = payload["unified_mode_model"]["participation_semantics"]
+    assert semantics["takeover_visible"] is True
+    assert semantics["mode_semantics"]["takeover_active"] is True

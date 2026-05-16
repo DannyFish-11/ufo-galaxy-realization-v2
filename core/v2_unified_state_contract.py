@@ -386,44 +386,28 @@ def build_v2_unified_state_contract(
             # time (primary-first) for this contract projection.
             target_device_id = str(android_device_ids[0]) if android_device_ids else ""
             if target_device_id:
-                from core.android_network_participation import (  # noqa: PLC0415
-                    get_participation_state_for_device,
-                    list_participation_transition_history,
-                )
                 from core.v2_android_truth_ssot import (  # noqa: PLC0415
                     build_v2_android_truth_block,
                 )
 
-                _participation_state = get_participation_state_for_device(target_device_id)
-                _participation_tier_str = _participation_state.tier.value
-                _participation_blocking = list(_participation_state.blocking_reasons)
-                _participation_notes = list(_participation_state.tier_derivation_notes)
-                _participation_source = (
-                    "core.android_network_participation.get_participation_state_for_device"
-                    " via core.v2_unified_state_contract"
-                )
-                _participation_transition_history = list(
-                    list_participation_transition_history(target_device_id, limit=10)
-                )
-                _participation_last_signal = (
-                    _participation_state.last_signal.value
-                    if _participation_state.last_signal is not None
-                    else None
-                )
-                _participation_prior_tier = (
-                    _participation_state.prior_tier.value
-                    if _participation_state.prior_tier is not None
-                    else None
-                )
                 _participation_truth_block = build_v2_android_truth_block(
                     target_device_id,
                     include_history_limit=10,
                 )
+                _participation_evidence = _participation_truth_block.as_participation_evidence()
+                _participation_tier_str = str(_participation_evidence.get("tier") or "local_only")
+                _participation_blocking = list(_participation_evidence.get("blocking_reasons") or [])
+                _participation_notes = list(_participation_evidence.get("tier_derivation_notes") or [])
+                _participation_source = str(_participation_evidence.get("source") or "core.v2_android_truth_ssot")
+                _participation_transition_history = list(
+                    _participation_evidence.get("transition_history") or []
+                )
+                _participation_last_signal = _participation_evidence.get("last_signal")
+                _participation_prior_tier = _participation_evidence.get("prior_tier")
             else:
                 # Conservative fallback when no Android device identity is available.
                 from core.android_network_participation import (  # noqa: PLC0415
                     derive_android_network_participation_tier,
-                    get_participation_state_for_device,
                 )
                 _pe_websocket = android_attached
                 _pe_reg_ack = android_attached

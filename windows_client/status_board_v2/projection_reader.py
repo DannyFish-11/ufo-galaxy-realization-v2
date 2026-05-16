@@ -50,6 +50,7 @@ _RUNTIME_TRUTH_PASSTHROUGH_KEYS = frozenset(
         "source_of_truth_boundaries",
         "shared_execution_visibility",
         "control_plane_contract",
+        "participation_truth_consumption",
         "stale_or_cached_summary",
         "projection_surface_role",
         "board_facing_default",

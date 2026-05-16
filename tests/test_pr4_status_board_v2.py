@@ -103,6 +103,13 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
         "surface_execution_stage": "executing",
         "surface_summary": "completion=in_progress | task_initiated=True | result_closed=False",
     },
+    "participation_truth_consumption": {
+        "tri_state_phase": "manifest",
+        "participation_tier": "dispatch_eligible",
+        "participation_layer": "dispatch_eligible",
+        "execution_location": "android_delegated",
+        "governance_state": "delegated_execution",
+    },
     "operational_state_board": {
         "categories": [{"category_id": "task_execution_visibility"}],
     },
@@ -186,6 +193,8 @@ class TestProjectionReaderFile:
         assert result["support_model_ids"] == ["claude-3-5-sonnet"]
         assert result["execution_stage"] == "executing"
         assert "operational_state_board" in result
+        assert "participation_truth_consumption" in result
+        assert result["participation_truth_consumption"]["participation_tier"] == "dispatch_eligible"
 
     def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
         from windows_client.status_board_v2.projection_reader import (
