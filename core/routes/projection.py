@@ -5882,6 +5882,7 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
     reasoning = dict(truth_payload.get("runtime_decision_reasoning") or {})
     unified_mode_model = dict(reasoning.get("unified_mode_model") or {})
     semantics = dict(unified_mode_model.get("participation_semantics") or {})
+    mode_semantics = dict(semantics.get("mode_semantics") or {})
     shared_visibility = dict(truth_payload.get("shared_execution_visibility") or {})
     # 优先级：selected_device（当前 contract 规范字段）→ selected_device_id（兼容字段）→
     # device_id（老字段/弱兼容），确保不同来源的 reasoning 都能映射到同一设备身份。
@@ -5909,16 +5910,37 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
             )
             device_lifecycle_stage = None
 
+    participation_tier = reasoning.get("participation_tier")
+    if "dispatch_gate_passed" in semantics:
+        dispatch_eligible = bool(semantics.get("dispatch_gate_passed"))
+    else:
+        dispatch_eligible = participation_tier in {"dispatch_eligible", "distributed_participant"}
+    local_mode_active = bool(mode_semantics.get("local_mode_active"))
+    runtime_constrained = bool(mode_semantics.get("constrained"))
+    fully_attached = participation_tier == "fully_attached"
+
     return {
         "tri_state_phase": truth_payload.get("tri_state_phase"),
         "runtime_domain": (truth_payload.get("continuum") or {}).get("runtime_domain"),
         "selected_device_id": selected_device_id or None,
         "device_lifecycle_stage": device_lifecycle_stage,
-        "participation_tier": reasoning.get("participation_tier"),
+        "participation_tier": participation_tier,
         "participation_layer": unified_mode_model.get("participation_layer"),
         "execution_location": unified_mode_model.get("execution_location"),
         "governance_state": unified_mode_model.get("governance_state"),
         "participation_semantics": semantics,
+        "dispatch_eligible": dispatch_eligible,
+        "local_mode_active": local_mode_active,
+        "runtime_constrained": runtime_constrained,
+        "fully_attached": fully_attached,
+        "attachment_semantics": {
+            "fully_attached": fully_attached,
+            "device_lifecycle_stage": device_lifecycle_stage,
+            "attachment_visible": bool(
+                fully_attached
+                or str(device_lifecycle_stage or "") in {"participating", "takeover_eligible"}
+            ),
+        },
         "completion_state": shared_visibility.get("completion_state"),
         "surface_execution_stage": shared_visibility.get("surface_execution_stage"),
         "source_of_truth_refs": [

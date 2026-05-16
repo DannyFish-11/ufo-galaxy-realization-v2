@@ -105,10 +105,28 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
     },
     "participation_truth_consumption": {
         "tri_state_phase": "manifest",
+        "selected_device_id": "android-prod-1",
+        "device_lifecycle_stage": "participating",
         "participation_tier": "dispatch_eligible",
         "participation_layer": "dispatch_eligible",
         "execution_location": "android_delegated",
         "governance_state": "delegated_execution",
+        "dispatch_eligible": True,
+        "local_mode_active": False,
+        "runtime_constrained": False,
+        "fully_attached": False,
+        "attachment_semantics": {
+            "fully_attached": False,
+            "device_lifecycle_stage": "participating",
+            "attachment_visible": True,
+        },
+        "participation_semantics": {
+            "dispatch_gate_passed": True,
+            "mode_semantics": {
+                "local_mode_active": False,
+                "constrained": False,
+            },
+        },
     },
     "operational_state_board": {
         "categories": [{"category_id": "task_execution_visibility"}],
@@ -304,6 +322,45 @@ class TestProjectionReaderAllFail:
 
 
 # ---------------------------------------------------------------------------
+# Participation truth consumption visibility tests
+# ---------------------------------------------------------------------------
+
+
+class TestParticipationTruthConsumption:
+    def test_build_consumption_derives_board_visibility_indicators(self):
+        from core.routes.projection import _build_participation_truth_consumption
+
+        truth_payload = {
+            "tri_state_phase": "manifest",
+            "continuum": {"runtime_domain": "cross_device"},
+            "runtime_decision_reasoning": {
+                "participation_tier": "fully_attached",
+                "unified_mode_model": {
+                    "participation_layer": "dispatch_eligible",
+                    "execution_location": "android_delegated",
+                    "governance_state": "delegated_execution",
+                    "participation_semantics": {
+                        "dispatch_gate_passed": False,
+                        "mode_semantics": {
+                            "local_mode_active": False,
+                            "constrained": True,
+                        },
+                    },
+                },
+            },
+        }
+
+        result = _build_participation_truth_consumption(truth_payload)
+        assert result["participation_tier"] == "fully_attached"
+        assert result["dispatch_eligible"] is False
+        assert result["runtime_constrained"] is True
+        assert result["local_mode_active"] is False
+        assert result["fully_attached"] is True
+        assert result["attachment_semantics"]["fully_attached"] is True
+        assert result["attachment_semantics"]["attachment_visible"] is True
+
+
+# ---------------------------------------------------------------------------
 # 2. Surface rendering tests
 # ---------------------------------------------------------------------------
 
@@ -463,6 +520,20 @@ class TestDeviceSurface:
         out = DeviceSurface().render(proj)
         assert "..." in out
 
+    def test_render_participation_truth_fields(self):
+        from windows_client.status_board_v2.device_surface import DeviceSurface
+        proj = dict(
+            _SAMPLE_PROJECTION,
+            participation_truth_consumption=dict(_RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]),
+        )
+        out = DeviceSurface().render(proj)
+        assert "android-prod-1" in out
+        assert "dispatch_eligible" in out
+        assert "dispatch=True" in out
+        assert "local=False" in out
+        assert "constrained=False" in out
+        assert "participating" in out
+
 
 class TestMetricsSurface:
     """MetricsSurface snapshot text formatting."""
@@ -553,6 +624,19 @@ class TestStatusBoardV2App:
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "desktop-win" in out
+
+    def test_render_once_exposes_participation_truth_fields(self):
+        from windows_client.status_board_v2.app import StatusBoardV2App
+        app = StatusBoardV2App(no_color=True)
+        projection = dict(_SAMPLE_PROJECTION)
+        projection["participation_truth_consumption"] = dict(
+            _RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]
+        )
+        out = app.render_once(projection)
+        assert "android-prod-1" in out
+        assert "dispatch_eligible" in out
+        assert "dispatch=True" in out
+        assert "constrained=False" in out
 
     def test_render_once_contains_metrics(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
