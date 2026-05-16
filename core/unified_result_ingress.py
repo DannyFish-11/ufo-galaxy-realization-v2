@@ -693,13 +693,16 @@ class UnifiedResultIngress:
         event: NormalizedResultEvent,
         outcome: UnifiedResultIngressOutcome,
     ) -> None:
-        """Stamp Android truth SSOT context and propagate it to completion payload hints."""
+        """Stamp Android truth context and propagate completion payload hints.
+
+        Priority:
+        1) Android result-time payload truth (authoritative for delayed results)
+        2) Processing-time SSOT snapshot truth (fallback only when payload absent)
+        """
         if not event.device_id:
             return
         try:
-            from core.v2_android_truth_ssot import build_v2_android_truth_block
-
-            truth_dict = build_v2_android_truth_block(event.device_id).to_dict()
+            truth_dict = self._resolve_android_truth_context_with_fallback(event)
             outcome.android_truth_context = truth_dict
             if isinstance(event.payload, dict):
                 tier = self._normalize_optional_context_value(truth_dict.get("participation_tier"))
@@ -720,6 +723,65 @@ class UnifiedResultIngress:
                 event.task_id,
                 _ssot_err,
             )
+
+    def _resolve_android_truth_context_with_fallback(
+        self,
+        event: NormalizedResultEvent,
+    ) -> Dict[str, Any]:
+        """Resolve Android truth with payload-first fallback hierarchy."""
+        ssot_truth: Dict[str, Any] = {}
+        try:
+            from core.v2_android_truth_ssot import build_v2_android_truth_block
+
+            ssot_truth = build_v2_android_truth_block(event.device_id).to_dict()
+        except Exception as _ssot_err:
+            logger.debug(
+                "unified_result_ingress: android truth SSOT read skipped "
+                "(non-fatal) task_id=%r err=%s",
+                event.task_id,
+                _ssot_err,
+            )
+
+        merged_truth: Dict[str, Any] = dict(ssot_truth)
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        truth_source_by_field: Dict[str, str] = {}
+        ssot_fallback_allowed = bool(ssot_truth.get("sources"))
+        truth_fields = (
+            "participation_tier",
+            "dispatch_eligible",
+            "runtime_constrained",
+            "local_mode_active",
+            "local_loop_ready",
+        )
+
+        for truth_field in truth_fields:
+            payload_value = payload.get(truth_field)
+            if self._has_meaningful_truth_value(payload_value):
+                merged_truth[truth_field] = payload_value
+                truth_source_by_field[truth_field] = "result_payload"
+                continue
+
+            if ssot_fallback_allowed:
+                ssot_value = ssot_truth.get(truth_field)
+                if self._has_meaningful_truth_value(ssot_value):
+                    merged_truth[truth_field] = ssot_value
+                    truth_source_by_field[truth_field] = "ssot_snapshot"
+
+        if truth_source_by_field:
+            merged_truth["android_truth_source_by_field"] = truth_source_by_field
+        return merged_truth
+
+    @staticmethod
+    def _has_meaningful_truth_value(value: Any) -> bool:
+        """Return True when truth value should be considered present.
+
+        ``False`` is meaningful for runtime flags and must not be treated as missing.
+        """
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        return True
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:
