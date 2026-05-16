@@ -5883,10 +5883,26 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
     unified_mode_model = dict(reasoning.get("unified_mode_model") or {})
     semantics = dict(unified_mode_model.get("participation_semantics") or {})
     shared_visibility = dict(truth_payload.get("shared_execution_visibility") or {})
+    selected_device_id = (
+        reasoning.get("selected_device")
+        or reasoning.get("selected_device_id")
+        or reasoning.get("device_id")
+        or ""
+    )
+    device_lifecycle_stage = None
+    if selected_device_id:
+        try:
+            from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
+            _lifecycle_record = get_lifecycle_record(str(selected_device_id))
+            device_lifecycle_stage = _lifecycle_record.stage.value
+        except Exception:
+            device_lifecycle_stage = None
 
     return {
         "tri_state_phase": truth_payload.get("tri_state_phase"),
         "runtime_domain": (truth_payload.get("continuum") or {}).get("runtime_domain"),
+        "selected_device_id": selected_device_id or None,
+        "device_lifecycle_stage": device_lifecycle_stage,
         "participation_tier": reasoning.get("participation_tier"),
         "participation_layer": unified_mode_model.get("participation_layer"),
         "execution_location": unified_mode_model.get("execution_location"),
@@ -5898,6 +5914,7 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
             "runtime_decision_reasoning.unified_mode_model",
             "shared_execution_visibility",
             "runtime_truth.tri_state_phase",
+            "core.device_lifecycle_state.get_lifecycle_record",
         ],
         "_source": "core.routes.projection._build_participation_truth_consumption",
     }
