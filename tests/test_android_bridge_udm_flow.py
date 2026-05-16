@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -690,6 +690,17 @@ class TestUDMHelpers:
 
         bridge = AndroidBridge()
         bridge._patch_disconnect_to_udm("nonexistent_device")
+
+    def test_patch_disconnect_to_udm_invalidates_android_snapshot_truth(self):
+        """Disconnect patch must invalidate stale Android snapshot truth on V2 side."""
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        bridge = AndroidBridge()
+        with patch(
+            "core.android_device_state_store.invalidate_device_state_snapshot"
+        ) as invalidate_mock:
+            bridge._patch_disconnect_to_udm("snapshot_dc_01")
+        invalidate_mock.assert_called_once_with("snapshot_dc_01")
 
     def test_patch_reconnect_to_udm_does_not_raise_for_unknown_device(self):
         """_patch_reconnect_to_udm is non-fatal for a device not in UDM."""

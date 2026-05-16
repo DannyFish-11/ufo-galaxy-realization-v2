@@ -24,6 +24,7 @@ import time
 import pytest
 
 from core.android_device_state_store import (
+    ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS,
     ANDROID_DEVICE_STATE_STORE_AUTHORITY,
     DEVICE_EXECUTION_EVENT_MSG_TYPE,
     DEVICE_STATE_SNAPSHOT_MSG_TYPE,
@@ -32,12 +33,17 @@ from core.android_device_state_store import (
     absorb_capability_report_semantics,
     absorb_device_execution_event,
     absorb_device_state_snapshot,
+    get_android_participation_evidence,
     get_android_device_state_store,
     get_device_capability_report_semantics,
     get_device_ecosystem_summary,
     get_device_state_snapshot,
+    invalidate_device_state_snapshot,
     list_device_state_snapshots,
     reset_android_device_state_store,
+)
+from core.device_lifecycle_state import (
+    reset_lifecycle_store,
 )
 
 
@@ -50,8 +56,10 @@ from core.android_device_state_store import (
 def _reset_store():
     """Reset the store singleton before each test."""
     reset_android_device_state_store()
+    reset_lifecycle_store()
     yield
     reset_android_device_state_store()
+    reset_lifecycle_store()
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +454,34 @@ def test_get_device_state_snapshot_after_absorb():
     assert snap is not None
     assert snap.device_id == "q_dev"
     assert snap.model_ready is True
+
+
+def test_get_device_state_snapshot_filters_stale_truth_by_ttl():
+    absorb_device_state_snapshot("stale_dev", {"model_ready": True})
+    store = get_android_device_state_store()
+    with store._lock:  # noqa: SLF001 - test-only control of absorbed timestamp
+        store._snapshots["stale_dev"].absorbed_at = (
+            time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
+        )
+    assert get_device_state_snapshot("stale_dev") is None
+
+
+def test_get_device_state_snapshot_filters_disconnected_lifecycle_truth():
+    absorb_device_state_snapshot("disc_dev", {"model_ready": True})
+    invalidate_device_state_snapshot("disc_dev")
+    assert get_device_state_snapshot("disc_dev") is None
+
+
+def test_participation_evidence_degrades_when_snapshot_truth_not_fresh():
+    absorb_device_state_snapshot("ev_dev", {"model_ready": True})
+    store = get_android_device_state_store()
+    with store._lock:  # noqa: SLF001 - test-only control of absorbed timestamp
+        store._snapshots["ev_dev"].absorbed_at = (
+            time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 5
+        )
+    evidence = get_android_participation_evidence("ev_dev")
+    assert evidence["tier"] == "local_only"
+    assert "android_snapshot_not_fresh_or_disconnected" in evidence["blocking_reasons"]
 
 
 def test_get_device_state_snapshot_missing():

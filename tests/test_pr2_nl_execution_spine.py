@@ -66,6 +66,22 @@ def test_build_problem_execution_closure_allows_degraded_but_solved():
     assert closure["degraded_but_problem_solved"] is True
 
 
+def test_build_problem_execution_closure_blocks_closed_when_evidence_rejected():
+    closure = build_problem_execution_closure(
+        source_channel="delegated",
+        normalized_status="completed",
+        truth_chain_complete=True,
+        completion_notified=True,
+        evidence_acceptance_verdict="reject",
+        payload={"task_id": "t-3", "problem_closed": True},
+    )
+    assert closure["task_completed"] is False
+    assert closure["problem_solved"] is False
+    assert (
+        closure["task_completion_semantics"]["closure_blocked_by_evidence_gate"] is True
+    )
+
+
 def test_spine_goal_truncation_handles_multibyte_chars():
     long_message = "你好" * 200
     snap = build_problem_execution_spine(

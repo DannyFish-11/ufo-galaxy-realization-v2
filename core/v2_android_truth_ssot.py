@@ -420,11 +420,13 @@ def build_v2_android_truth_block(
         block.participation_blocking_reasons.append("participation_evidence_unavailable")
 
     # ── 2. 设备快照（android_device_state_store）────────────────────────────
+    snapshot_truth_available = False
     try:
         from core.android_device_state_store import get_device_state_snapshot
 
         snap = get_device_state_snapshot(device_id)
         if snap is not None:
+            snapshot_truth_available = True
             block.model_ready = snap.model_ready
             block.accessibility_ready = snap.accessibility_ready
             block.local_loop_ready = snap.local_loop_ready
@@ -463,6 +465,16 @@ def build_v2_android_truth_block(
         note = f"android_device_state_store unavailable: {exc}"
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)
+    if not snapshot_truth_available:
+        block.participation_tier = "local_only"
+        block.dispatch_eligible = False
+        block.distributed_participant = False
+        block.participation_blocking_reasons.append(
+            "android_snapshot_not_fresh_or_disconnected"
+        )
+        block.participation_tier_notes.append(
+            "No fresh connected snapshot; participation truth downgraded to local_only."
+        )
 
     # ── 3. 模式门控（android_mode_gate_policy）──────────────────────────────
     try:

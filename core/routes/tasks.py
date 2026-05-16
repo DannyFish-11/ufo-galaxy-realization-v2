@@ -331,12 +331,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # lifecycle, completion ingress, memory backflow.
         # This replaces the previous CanonicalTaskRuntime-only sync so that
         # the REST path is a real ingress into the full closure chain.
+        _ingress_outcome = None
         try:
             from core.unified_result_ingress import (
                 NormalizedResultEvent,
                 ResultSourceChannel,
                 ingest_result_async,
-                normalize_status as _normalize,
             )
             _raw_msg: Dict[str, Any] = {
                 "task_id": task_id,
@@ -403,7 +403,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     task_id, _sync_err,
                 )
 
-        return {"success": True, "status": canonical_status}
+        return {
+            "success": True,
+            "status": canonical_status,
+            "completion_notified": bool(
+                getattr(_ingress_outcome, "completion_notified", False)
+            ),
+            "fully_closed": bool(getattr(_ingress_outcome, "is_fully_closed", False)),
+            "evidence_acceptance_verdict": str(
+                getattr(_ingress_outcome, "evidence_acceptance_verdict", "") or ""
+            ),
+            "closure_pending_reason": str(
+                getattr(_ingress_outcome, "incomplete_reason", "") or ""
+            ),
+        }
 
     @router.delete("/api/v1/tasks/{task_id}/cancel")
     @router.post("/api/v1/tasks/{task_id}/cancel")
