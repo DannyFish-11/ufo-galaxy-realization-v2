@@ -97,6 +97,7 @@ class DeviceSurface:
 
         participation_tier = participation.get("participation_tier")
         if participation_tier not in (None, ""):
+            # 首选 projection 层已归一化的字段；仅在旧 payload 缺失时回退到语义子块。
             dispatch_eligible = bool(
                 participation.get("dispatch_eligible")
                 if participation.get("dispatch_eligible") is not None
@@ -121,6 +122,7 @@ class DeviceSurface:
         runtime_constrained = bool(
             participation.get("runtime_constrained")
             if participation.get("runtime_constrained") is not None
+            # mode_semantics 使用 constrained 命名；投影归一化后统一为 runtime_constrained。
             else mode_semantics.get("constrained")
         )
         if participation_tier not in (None, "") or mode_semantics:

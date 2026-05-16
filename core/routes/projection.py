@@ -5911,10 +5911,10 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
             device_lifecycle_stage = None
 
     participation_tier = reasoning.get("participation_tier")
-    dispatch_eligible = bool(
-        semantics.get("dispatch_gate_passed")
-        or participation_tier in {"dispatch_eligible", "distributed_participant"}
-    )
+    if "dispatch_gate_passed" in semantics:
+        dispatch_eligible = bool(semantics.get("dispatch_gate_passed"))
+    else:
+        dispatch_eligible = participation_tier in {"dispatch_eligible", "distributed_participant"}
     local_mode_active = bool(mode_semantics.get("local_mode_active"))
     runtime_constrained = bool(mode_semantics.get("constrained"))
     fully_attached = participation_tier == "fully_attached"
