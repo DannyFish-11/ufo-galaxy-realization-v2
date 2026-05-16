@@ -221,6 +221,63 @@ class TestHandleDeviceStateSnapshot:
         finally:
             reset_android_device_state_store()
 
+    def test_G03_ready_snapshot_with_takeover_gate_advances_lifecycle_to_takeover_eligible(self):
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_state_snapshot,
+        )
+        from core.android_device_state_store import reset_android_device_state_store
+        from core.device_lifecycle_state import (
+            reset_lifecycle_store,
+            get_lifecycle_record,
+            transition_device_lifecycle,
+            DeviceLifecycleTransitionEvent,
+            DeviceLifecycleStage,
+        )
+
+        reset_android_device_state_store()
+        reset_lifecycle_store()
+        try:
+            device_id = "test_device_rt_takeover_eligible"
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.register_ack_sent,
+                websocket_connected=True,
+                registration_ack_success=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.registration_fully_attached,
+                registration_fully_attached=True,
+                capability_visible=True,
+            )
+            message = {
+                "type": "device_state_snapshot",
+                "device_id": device_id,
+                "message_id": "msg_snap_takeover",
+                "payload": {
+                    "model_ready": True,
+                    "accessibility_ready": True,
+                    "local_loop_ready": True,
+                    "local_loop_config": {"cross_device_enabled": True},
+                },
+            }
+            bridge = MagicMock()
+            websocket = MagicMock()
+            with patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness"
+            ) as mock_mode_gate:
+                mock_mode_gate.return_value = MagicMock(
+                    is_dispatch_eligible=True,
+                    is_takeover_eligible=True,
+                )
+                _ = asyncio.run(handle_device_state_snapshot(bridge, websocket, message))
+            record = get_lifecycle_record(device_id)
+            assert record.stage == DeviceLifecycleStage.takeover_eligible
+            assert record.takeover_eligible is True
+        finally:
+            reset_android_device_state_store()
+            reset_lifecycle_store()
+
 
 # ---------------------------------------------------------------------------
 # H. handle_device_execution_event handler
@@ -268,6 +325,140 @@ class TestHandleDeviceExecutionEvent:
             assert events[0].step_index == 3
         finally:
             reset_android_device_state_store()
+
+    def test_H02_execution_event_phases_drive_lifecycle_participating_and_back_to_ready(self):
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_execution_event,
+        )
+        from core.android_device_state_store import reset_android_device_state_store
+        from core.device_lifecycle_state import (
+            reset_lifecycle_store,
+            get_lifecycle_record,
+            transition_device_lifecycle,
+            DeviceLifecycleTransitionEvent,
+            DeviceLifecycleStage,
+        )
+
+        reset_android_device_state_store()
+        reset_lifecycle_store()
+        try:
+            device_id = "test_device_rt_execution_lifecycle"
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.register_ack_sent,
+                websocket_connected=True,
+                registration_ack_success=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.registration_fully_attached,
+                registration_fully_attached=True,
+                capability_visible=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.readiness_satisfied,
+                readiness_satisfied=True,
+                dispatch_gate_passed=True,
+            )
+
+            bridge = MagicMock()
+            websocket = MagicMock()
+            start_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_start",
+                "payload": {
+                    "flow_id": "flow_exec_start",
+                    "phase": "grounding",
+                },
+            }
+            _ = asyncio.run(handle_device_execution_event(bridge, websocket, start_message))
+            start_record = get_lifecycle_record(device_id)
+            assert start_record.stage == DeviceLifecycleStage.participating
+            assert start_record.execution_active is True
+
+            end_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_end",
+                "payload": {
+                    "flow_id": "flow_exec_start",
+                    "phase": "completed",
+                },
+            }
+            _ = asyncio.run(handle_device_execution_event(bridge, websocket, end_message))
+            end_record = get_lifecycle_record(device_id)
+            assert end_record.stage == DeviceLifecycleStage.ready
+            assert end_record.execution_active is False
+        finally:
+            reset_android_device_state_store()
+            reset_lifecycle_store()
+
+    def test_H03_unknown_or_empty_phase_does_not_force_execution_end_transition(self):
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_execution_event,
+        )
+        from core.android_device_state_store import reset_android_device_state_store
+        from core.device_lifecycle_state import (
+            reset_lifecycle_store,
+            get_lifecycle_record,
+            transition_device_lifecycle,
+            DeviceLifecycleTransitionEvent,
+            DeviceLifecycleStage,
+        )
+
+        reset_android_device_state_store()
+        reset_lifecycle_store()
+        try:
+            device_id = "test_device_rt_execution_unknown_phase"
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.register_ack_sent,
+                websocket_connected=True,
+                registration_ack_success=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.registration_fully_attached,
+                registration_fully_attached=True,
+                capability_visible=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.readiness_satisfied,
+                readiness_satisfied=True,
+                dispatch_gate_passed=True,
+            )
+
+            bridge = MagicMock()
+            websocket = MagicMock()
+            unknown_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_unknown",
+                "payload": {"phase": None},
+            }
+            _ = asyncio.run(handle_device_execution_event(bridge, websocket, unknown_message))
+            record_after_unknown = get_lifecycle_record(device_id)
+            assert record_after_unknown.stage == DeviceLifecycleStage.ready
+            assert record_after_unknown.execution_active is False
+
+            whitespace_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_whitespace",
+                "payload": {"phase": "   "},
+            }
+            _ = asyncio.run(
+                handle_device_execution_event(bridge, websocket, whitespace_message)
+            )
+            record_after_whitespace = get_lifecycle_record(device_id)
+            assert record_after_whitespace.stage == DeviceLifecycleStage.ready
+            assert record_after_whitespace.execution_active is False
+        finally:
+            reset_android_device_state_store()
+            reset_lifecycle_store()
 
 
 # ---------------------------------------------------------------------------
