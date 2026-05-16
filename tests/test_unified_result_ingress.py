@@ -83,12 +83,14 @@ import pytest
 
 try:
     import fastapi  # noqa: F401
+
     _FASTAPI_AVAILABLE = True
 except ImportError:
     _FASTAPI_AVAILABLE = False
 
 try:
     import pydantic  # noqa: F401
+
     _PYDANTIC_AVAILABLE = True
 except ImportError:
     _PYDANTIC_AVAILABLE = False
@@ -97,6 +99,7 @@ except ImportError:
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_task_id() -> str:
     return f"task-{uuid.uuid4().hex[:12]}"
@@ -128,6 +131,7 @@ def _make_event(
 # Group A — Module and API surface
 # ===========================================================================
 
+
 class TestModuleSurface:
 
     def test_A01_module_importable(self):
@@ -135,10 +139,12 @@ class TestModuleSurface:
 
     def test_A02_policy_sentinel_present(self):
         from core.unified_result_ingress import UNIFIED_RESULT_INGRESS_POLICY
+
         assert "UNIFIED_RESULT_INGRESS_V1" in UNIFIED_RESULT_INGRESS_POLICY
 
     def test_A03_result_source_channel_values(self):
         from core.unified_result_ingress import ResultSourceChannel
+
         assert hasattr(ResultSourceChannel, "CANONICAL_WS")
         assert hasattr(ResultSourceChannel, "COMPAT_WS")
         assert hasattr(ResultSourceChannel, "REST_CALLBACK")
@@ -148,6 +154,7 @@ class TestModuleSurface:
 
     def test_A04_normalized_result_event_constructable(self):
         from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel
+
         evt = NormalizedResultEvent(
             task_id="t1",
             device_id="d1",
@@ -162,6 +169,7 @@ class TestModuleSurface:
 
     def test_A05_idempotency_key_auto_generated(self):
         from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel
+
         evt = NormalizedResultEvent(
             task_id="auto-key-test",
             normalized_result_kind="goal_execution_result",
@@ -172,28 +180,34 @@ class TestModuleSurface:
 
     def test_A06_unified_result_ingress_class_importable(self):
         from core.unified_result_ingress import UnifiedResultIngress
+
         assert callable(UnifiedResultIngress)
 
     def test_A07_get_unified_result_ingress_singleton(self):
         from core.unified_result_ingress import get_unified_result_ingress
+
         a = get_unified_result_ingress()
         b = get_unified_result_ingress()
         assert a is b
 
     def test_A08_ingest_result_importable(self):
         from core.unified_result_ingress import ingest_result
+
         assert callable(ingest_result)
 
     def test_A09_ingest_result_async_importable(self):
         from core.unified_result_ingress import ingest_result_async
+
         assert callable(ingest_result_async)
 
     def test_A10_normalize_status_importable(self):
         from core.unified_result_ingress import normalize_status
+
         assert callable(normalize_status)
 
     def test_A11_outcome_exposes_problem_execution_closure(self):
         from core.unified_result_ingress import UnifiedResultIngressOutcome
+
         outcome = UnifiedResultIngressOutcome()
         assert isinstance(outcome.problem_execution_closure, dict)
         assert outcome.task_completed is False
@@ -204,12 +218,14 @@ class TestModuleSurface:
 # Group B — Idempotency
 # ===========================================================================
 
+
 class TestIdempotency:
     """Ingest idempotency uses durable_result_idempotency store."""
 
     def _make_ingress_with_fresh_store(self):
         """Return an ingress backed by a fresh in-memory idempotency store."""
         from core.unified_result_ingress import UnifiedResultIngress
+
         store: set = set()
 
         ingress = UnifiedResultIngress()
@@ -269,39 +285,48 @@ class TestIdempotency:
 # Group C — Status mapping (normalize_status)
 # ===========================================================================
 
+
 class TestNormalizeStatus:
 
     def test_C01_failed_maps_to_failed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("failed") == "failed"
 
     def test_C02_error_maps_to_failed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("error") == "failed"
 
     def test_C03_cancelled_maps_to_cancelled(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("cancelled") == "cancelled"
 
     def test_C04_degraded_maps_to_degraded(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("degraded") == "degraded"
 
     def test_C05_success_maps_to_completed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("success") == "completed"
 
     def test_C06_completed_maps_to_completed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("completed") == "completed"
 
     def test_C07_none_maps_to_completed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status(None) == "completed"
         assert normalize_status("") == "completed"
 
     def test_C08_upper_case_failed_maps_to_failed(self):
         from core.unified_result_ingress import normalize_status
+
         assert normalize_status("FAILED") == "failed"
 
 
@@ -309,11 +334,13 @@ class TestNormalizeStatus:
 # Group D — Truth chain integration
 # ===========================================================================
 
+
 class TestTruthChainIntegration:
 
     def test_D01_ingest_result_calls_truth_chain(self):
         """ingest_result must invoke run_task_result_truth_chain when available."""
         from core.unified_result_ingress import UnifiedResultIngress, NormalizedResultEvent, ResultSourceChannel
+
         called = []
 
         class _FakeOutcome:
@@ -407,6 +434,7 @@ class TestTruthChainIntegration:
 # ===========================================================================
 # Group E — CanonicalCompletionIngress notify
 # ===========================================================================
+
 
 class TestCompletionIngressNotify:
 
@@ -569,9 +597,7 @@ class TestCompletionIngressNotify:
                 return True
 
             def notify(self, _env):
-                raise AssertionError(
-                    "notify() should not be called when notify_with_android_context is available"
-                )
+                raise AssertionError("notify() should not be called when notify_with_android_context is available")
 
         class _FakeTruthBlock:
             def to_dict(self):
@@ -592,12 +618,15 @@ class TestCompletionIngressNotify:
         ingress._classify_and_apply_evidence_gate = _force_accept_provisional  # type: ignore[method-assign]
 
         tid = _make_task_id()
-        with patch(
-            "core.canonical_completion_ingress.get_canonical_completion_ingress",
-            return_value=fake_completion_ingress,
-        ), patch(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block",
-            return_value=_FakeTruthBlock(),
+        with (
+            patch(
+                "core.canonical_completion_ingress.get_canonical_completion_ingress",
+                return_value=fake_completion_ingress,
+            ),
+            patch(
+                "core.v2_android_truth_ssot.build_v2_android_truth_block",
+                return_value=_FakeTruthBlock(),
+            ),
         ):
             outcome = ingress.process(_make_event(tid))
 
@@ -636,10 +665,55 @@ class TestCompletionIngressNotify:
         assert outcome.completion_notified is True
         assert fallback_calls == [tid]
 
+    def test_E09_android_missing_proof_surfaces_inferred_strong_evidence(self):
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        class _FakeTruthBlock:
+            def to_dict(self):
+                return {
+                    "participation_tier": "dispatch_eligible",
+                    "dispatch_eligible": True,
+                    "runtime_constrained": False,
+                    "local_mode_active": False,
+                    "local_loop_ready": True,
+                    "sources": ["test-runtime-truth"],
+                }
+
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+
+        with patch(
+            "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            return_value=_FakeTruthBlock(),
+        ):
+            event = _make_event(
+                _make_task_id(),
+                channel="canonical_ws",
+            )
+            event.payload.update(
+                {
+                    "runtime_constrained": False,
+                    "local_mode_active": False,
+                }
+            )
+            outcome = ingress.process(event)
+
+        assert outcome.evidence_acceptance_verdict == "accept"
+        assert outcome.effective_android_proof_class == "inferred_strong"
+        assert outcome.android_evidence_resolution == "inferred_runtime_context"
+        assert outcome.android_inferred_evidence_strength == "strong"
+        assert outcome.android_evidence_runtime_context["participation_tier"] == "dispatch_eligible"
+
 
 # ===========================================================================
 # Group F — Bridge _pending_responses resolution
 # ===========================================================================
+
 
 class TestBridgePendingResolution:
 
@@ -723,16 +797,20 @@ class TestBridgePendingResolution:
 # Group G — Source channel coverage
 # ===========================================================================
 
+
 class TestSourceChannelCoverage:
     """All source channels must produce a processable NormalizedResultEvent."""
 
-    @pytest.mark.parametrize("channel", [
-        "canonical_ws",
-        "compat_ws",
-        "rest_callback",
-        "replay",
-        "delegated",
-    ])
+    @pytest.mark.parametrize(
+        "channel",
+        [
+            "canonical_ws",
+            "compat_ws",
+            "rest_callback",
+            "replay",
+            "delegated",
+        ],
+    )
     def test_G_channel_produces_closure_attempt(self, channel: str):
         from core.unified_result_ingress import UnifiedResultIngress, ResultSourceChannel
 
@@ -756,6 +834,7 @@ class TestSourceChannelCoverage:
 # ===========================================================================
 # Group H — REST endpoint integration
 # ===========================================================================
+
 
 @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
 class TestRestEndpointIntegration:
@@ -799,9 +878,7 @@ class TestRestEndpointIntegration:
 
         assert resp.status_code == 200
         assert resp.json()["success"] is True
-        assert tid in truth_chain_called, (
-            "submit_task_result did not invoke run_task_result_truth_chain"
-        )
+        assert tid in truth_chain_called, "submit_task_result did not invoke run_task_result_truth_chain"
 
         # Cleanup
         task_queue.pop(tid, None)
@@ -838,9 +915,7 @@ class TestRestEndpointIntegration:
             )
 
         assert resp.status_code == 200
-        assert tid in notified, (
-            "submit_task_result did not notify CanonicalCompletionIngress"
-        )
+        assert tid in notified, "submit_task_result did not notify CanonicalCompletionIngress"
 
         # Cleanup
         task_queue.pop(tid, None)
@@ -849,6 +924,7 @@ class TestRestEndpointIntegration:
 # ===========================================================================
 # Group I — compat WS goal_execution_result handler
 # ===========================================================================
+
 
 class TestCompatWsGoalExecutionResult:
 
@@ -869,9 +945,7 @@ class TestCompatWsGoalExecutionResult:
             return {"deduplicated": True}
         durable_store.add(idem_key)
 
-        raw_status = str(
-            (message.get("payload") or {}).get("status") or message.get("status", "")
-        ).lower().strip()
+        raw_status = str((message.get("payload") or {}).get("status") or message.get("status", "")).lower().strip()
         if raw_status in ("failed", "error"):
             mapped = "failed"
         elif raw_status == "cancelled":
@@ -892,9 +966,7 @@ class TestCompatWsGoalExecutionResult:
         import ast
         import pathlib
 
-        src = pathlib.Path(
-            "core/api_routes.py"
-        ).read_text(encoding="utf-8")
+        src = pathlib.Path("core/api_routes.py").read_text(encoding="utf-8")
         assert "goal_execution_result" in src, (
             "core/api_routes.py does not contain a goal_execution_result handler "
             "on the compat WS path — silent discard is still possible"
@@ -929,6 +1001,7 @@ class TestCompatWsGoalExecutionResult:
 # ===========================================================================
 # Group J — canonical handle_goal_execution_result completion authority
 # ===========================================================================
+
 
 @pytest.mark.skipif(not _PYDANTIC_AVAILABLE, reason="pydantic not installed")
 class TestCanonicalGoalExecutionResultCompletion:
@@ -995,12 +1068,9 @@ class TestCanonicalGoalExecutionResultCompletion:
             "handle_goal_execution_result must call ingest_result_async exactly once "
             f"(got {len(ingress_calls)} calls)"
         )
-        assert ingress_calls[0][0] == tid, (
-            "ingest_result_async must receive the correct task_id"
-        )
+        assert ingress_calls[0][0] == tid, "ingest_result_async must receive the correct task_id"
         assert ingress_calls[0][1] == "completed", (
-            "ingest_result_async must receive the normalized canonical status "
-            "(not the raw Android 'success')"
+            "ingest_result_async must receive the normalized canonical status " "(not the raw Android 'success')"
         )
 
     @pytest.mark.asyncio
@@ -1038,8 +1108,7 @@ class TestCanonicalGoalExecutionResultCompletion:
             await handle_goal_execution_result(bridge, ws, msg)
 
         assert future.done(), (
-            "handle_goal_execution_result did not resolve bridge._pending_responses "
-            "future for task_id"
+            "handle_goal_execution_result did not resolve bridge._pending_responses " "future for task_id"
         )
         result = future.result()
         assert result["task_id"] == tid

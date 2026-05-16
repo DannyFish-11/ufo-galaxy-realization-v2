@@ -95,6 +95,7 @@ UNIFIED_RESULT_INGRESS_POLICY: str = (
 # ResultSourceChannel
 # ---------------------------------------------------------------------------
 
+
 class ResultSourceChannel(str, Enum):
     """All known result source channels."""
 
@@ -124,6 +125,7 @@ class ResultSourceChannel(str, Enum):
 # ---------------------------------------------------------------------------
 # NormalizedResultEvent
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class NormalizedResultEvent:
@@ -200,6 +202,7 @@ class NormalizedResultEvent:
 # UnifiedResultIngressOutcome
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class UnifiedResultIngressOutcome:
     """Result of one :func:`ingest_result` call.
@@ -262,6 +265,14 @@ class UnifiedResultIngressOutcome:
     execution_evidence_record: Optional[Dict[str, Any]] = field(default=None)
     """Serialised :class:`~core.execution_evidence_model.ExecutionEvidenceRecord`
     dict for operator/audit consumers (None when evidence classification was skipped)."""
+    effective_android_proof_class: str = ""
+    """Explicit or inferred Android proof class that actually drove evidence classification."""
+    android_evidence_resolution: str = ""
+    """How Android evidence classification was resolved (explicit / inferred / missing)."""
+    android_inferred_evidence_strength: str = ""
+    """Inferred Android evidence strength when no explicit proof class is available."""
+    android_evidence_runtime_context: Dict[str, Any] = field(default_factory=dict)
+    """Merged Android runtime truth fields used to infer evidence strength."""
     # SSOT: Android truth context stamped at closure time
     android_truth_context: Dict[str, Any] = field(default_factory=dict)
     """V2AndroidTruthBlock dict for the originating device, stamped at closure time.
@@ -272,6 +283,7 @@ class UnifiedResultIngressOutcome:
 # ---------------------------------------------------------------------------
 # UnifiedResultIngress
 # ---------------------------------------------------------------------------
+
 
 class UnifiedResultIngress:
     """Single canonical result processing chain.
@@ -321,12 +333,9 @@ class UnifiedResultIngress:
         outcome.continuity_legality_verdict = continuity_verdict
         if continuity_verdict in ("reject", "require_review"):
             outcome.continuity_rejected = True
-            outcome.incomplete_reason = (
-                f"continuity_rejected:{continuity_verdict}"
-            )
+            outcome.incomplete_reason = f"continuity_rejected:{continuity_verdict}"
             logger.warning(
-                "unified_result_ingress: continuity gate rejected result "
-                "task_id=%r verdict=%r source=%s",
+                "unified_result_ingress: continuity gate rejected result " "task_id=%r verdict=%r source=%s",
                 event.task_id,
                 continuity_verdict,
                 event.source_channel.value,
@@ -338,8 +347,7 @@ class UnifiedResultIngress:
             outcome.was_deduplicated = True
             outcome.incomplete_reason = "deduplicated"
             logger.debug(
-                "unified_result_ingress: duplicate suppressed "
-                "task_id=%r idempotency_key=%r source=%s",
+                "unified_result_ingress: duplicate suppressed " "task_id=%r idempotency_key=%r source=%s",
                 event.task_id,
                 event.idempotency_key,
                 event.source_channel.value,
@@ -349,8 +357,7 @@ class UnifiedResultIngress:
         self._record_idempotency(event)
 
         logger.info(
-            "unified_result_ingress: processing result "
-            "task_id=%r status=%r kind=%r source=%s channel=%s",
+            "unified_result_ingress: processing result " "task_id=%r status=%r kind=%r source=%s channel=%s",
             event.task_id,
             event.normalized_status,
             event.normalized_result_kind,
@@ -370,8 +377,7 @@ class UnifiedResultIngress:
             self._classify_and_apply_evidence_gate(event, outcome)
         except Exception as _ev_err:
             logger.warning(
-                "unified_result_ingress: evidence gate step raised (non-fatal) "
-                "task_id=%r err=%s",
+                "unified_result_ingress: evidence gate step raised (non-fatal) " "task_id=%r err=%s",
                 event.task_id,
                 _ev_err,
             )
@@ -408,15 +414,9 @@ class UnifiedResultIngress:
             event=event,
             outcome=outcome,
         )
-        outcome.task_completed = bool(
-            outcome.problem_execution_closure.get("task_completed")
-        )
-        outcome.problem_solved = bool(
-            outcome.problem_execution_closure.get("problem_solved")
-        )
-        outcome.problem_solved_via = str(
-            outcome.problem_execution_closure.get("problem_solved_via") or ""
-        )
+        outcome.task_completed = bool(outcome.problem_execution_closure.get("task_completed"))
+        outcome.problem_solved = bool(outcome.problem_execution_closure.get("problem_solved"))
+        outcome.problem_solved_via = str(outcome.problem_execution_closure.get("problem_solved_via") or "")
 
         return outcome
 
@@ -470,8 +470,7 @@ class UnifiedResultIngress:
                 outcome.store_task_result_ran = True
             except Exception as _store_err:
                 logger.warning(
-                    "unified_result_ingress: store_task_result failed (non-fatal) "
-                    "task_id=%r error=%s",
+                    "unified_result_ingress: store_task_result failed (non-fatal) " "task_id=%r error=%s",
                     event.task_id,
                     _store_err,
                 )
@@ -496,20 +495,18 @@ class UnifiedResultIngress:
                 ContinuityLegalityPath,
                 evaluate_continuity_legality,
             )
+
             ctx = ContinuityLegalityContext(
                 device_id=event.device_id or "",
                 runtime_session_id=event.runtime_session_id or "",
                 runtime_attachment_session_id=event.runtime_attachment_session_id or "",
                 durable_session_id=event.durable_session_id or "",
             )
-            report = evaluate_continuity_legality(
-                ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx
-            )
+            report = evaluate_continuity_legality(ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx)
             return report.verdict.value
         except Exception as _e:
             logger.debug(
-                "unified_result_ingress: continuity legality gate unavailable "
-                "(non-fatal, passing through): %s",
+                "unified_result_ingress: continuity legality gate unavailable " "(non-fatal, passing through): %s",
                 _e,
             )
             return "allow"
@@ -520,11 +517,10 @@ class UnifiedResultIngress:
             return False
         try:
             from core.durable_result_idempotency import check_result_idempotency
+
             return check_result_idempotency(event.idempotency_key)
         except Exception as _e:
-            logger.debug(
-                "unified_result_ingress: idempotency check skipped (non-fatal): %s", _e
-            )
+            logger.debug("unified_result_ingress: idempotency check skipped (non-fatal): %s", _e)
             return False
 
     def _record_idempotency(self, event: NormalizedResultEvent) -> None:
@@ -533,24 +529,23 @@ class UnifiedResultIngress:
             return
         try:
             from core.durable_result_idempotency import record_result_idempotency
+
             record_result_idempotency(event.idempotency_key)
         except Exception as _e:
-            logger.debug(
-                "unified_result_ingress: idempotency record skipped (non-fatal): %s", _e
-            )
+            logger.debug("unified_result_ingress: idempotency record skipped (non-fatal): %s", _e)
 
     def _run_truth_chain(self, event: NormalizedResultEvent) -> bool:
         """Run the four-step canonical truth chain and return True iff complete."""
         if not event.task_id:
             logger.debug(
-                "unified_result_ingress: truth chain skipped — no task_id "
-                "source=%s kind=%r",
+                "unified_result_ingress: truth chain skipped — no task_id " "source=%s kind=%r",
                 event.source_channel.value,
                 event.normalized_result_kind,
             )
             return False
         try:
             from core.task_result_canonical_truth_chain import run_task_result_truth_chain
+
             ttc_outcome = run_task_result_truth_chain(
                 event.raw_message or event.payload,
                 task_id=event.task_id,
@@ -558,8 +553,7 @@ class UnifiedResultIngress:
             )
             if not ttc_outcome.is_truth_chain_complete:
                 logger.warning(
-                    "unified_result_ingress: truth chain incomplete "
-                    "task_id=%r source=%s reason=%r",
+                    "unified_result_ingress: truth chain incomplete " "task_id=%r source=%s reason=%r",
                     event.task_id,
                     event.source_channel.value,
                     ttc_outcome.incomplete_reason,
@@ -567,8 +561,7 @@ class UnifiedResultIngress:
             return ttc_outcome.is_truth_chain_complete
         except Exception as _e:
             logger.warning(
-                "unified_result_ingress: truth chain exception (non-fatal) "
-                "task_id=%r error=%s",
+                "unified_result_ingress: truth chain exception (non-fatal) " "task_id=%r error=%s",
                 event.task_id,
                 _e,
             )
@@ -580,6 +573,7 @@ class UnifiedResultIngress:
             return
         try:
             from core.canonical_task import get_canonical_task_runtime, TaskLifecycle
+
             _runtime = get_canonical_task_runtime()
             s = event.normalized_status.lower()
             if s == "failed":
@@ -592,9 +586,7 @@ class UnifiedResultIngress:
                 _target = TaskLifecycle.COMPLETED
             _runtime.update_lifecycle(event.task_id, _target)
         except Exception as _e:
-            logger.debug(
-                "unified_result_ingress: lifecycle sync skipped (non-fatal): %s", _e
-            )
+            logger.debug("unified_result_ingress: lifecycle sync skipped (non-fatal): %s", _e)
 
     def _notify_completion(self, event: NormalizedResultEvent) -> bool:
         """Notify CanonicalCompletionIngress so awaiters are unblocked."""
@@ -651,23 +643,19 @@ class UnifiedResultIngress:
                 notified = ingress.notify(env)
             if not notified:
                 logger.warning(
-                    "unified_result_ingress: completion ingress returned non-notified "
-                    "task_id=%r source=%s",
+                    "unified_result_ingress: completion ingress returned non-notified " "task_id=%r source=%s",
                     event.task_id,
                     event.source_channel.value,
                 )
                 return False
             logger.debug(
-                "unified_result_ingress: completion ingress notified "
-                "task_id=%r source=%s",
+                "unified_result_ingress: completion ingress notified " "task_id=%r source=%s",
                 event.task_id,
                 event.source_channel.value,
             )
             return True
         except Exception as _e:
-            logger.debug(
-                "unified_result_ingress: completion ingress skipped (non-fatal): %s", _e
-            )
+            logger.debug("unified_result_ingress: completion ingress skipped (non-fatal): %s", _e)
             return False
 
     def _resolve_bridge_pending(self, bridge: Any, event: NormalizedResultEvent) -> bool:
@@ -688,16 +676,14 @@ class UnifiedResultIngress:
                 }
                 future.set_result(result_payload)
                 logger.debug(
-                    "unified_result_ingress: _pending_responses future resolved "
-                    "task_id=%r",
+                    "unified_result_ingress: _pending_responses future resolved " "task_id=%r",
                     event.task_id,
                 )
                 return True
             return False
         except Exception as _e:
             logger.debug(
-                "unified_result_ingress: _pending_responses resolution skipped "
-                "(non-fatal): %s",
+                "unified_result_ingress: _pending_responses resolution skipped " "(non-fatal): %s",
                 _e,
             )
             return False
@@ -716,9 +702,7 @@ class UnifiedResultIngress:
             truth_dict = build_v2_android_truth_block(event.device_id).to_dict()
             outcome.android_truth_context = truth_dict
             if isinstance(event.payload, dict):
-                tier = self._normalize_optional_context_value(
-                    truth_dict.get("participation_tier")
-                )
+                tier = self._normalize_optional_context_value(truth_dict.get("participation_tier"))
                 if tier:
                     event.payload["_android_participation_tier_for_completion_ingress"] = tier
                 # event.device_id is already non-empty at this point, but we
@@ -727,15 +711,12 @@ class UnifiedResultIngress:
                 device_id_value = self._normalize_optional_context_value(event.device_id)
                 if device_id_value:
                     event.payload["_android_device_id_for_completion_ingress"] = device_id_value
-                verdict = self._normalize_optional_context_value(
-                    outcome.evidence_acceptance_verdict
-                )
+                verdict = self._normalize_optional_context_value(outcome.evidence_acceptance_verdict)
                 if verdict:
                     event.payload["_acceptance_verdict_for_completion_ingress"] = verdict
         except Exception as _ssot_err:
             logger.debug(
-                "unified_result_ingress: android truth SSOT stamp skipped "
-                "(non-fatal) task_id=%r err=%s",
+                "unified_result_ingress: android truth SSOT stamp skipped " "(non-fatal) task_id=%r err=%s",
                 event.task_id,
                 _ssot_err,
             )
@@ -782,10 +763,36 @@ class UnifiedResultIngress:
 
             # Extract Android proof class from payload if present
             android_proof_class = (
-                event.payload.get("proof_class", "")
-                or event.payload.get("android_proof_class", "")
-                or ""
+                event.payload.get("proof_class", "") or event.payload.get("android_proof_class", "") or ""
             )
+            android_runtime_truth_context: Dict[str, Any] = {}
+            if event.device_id:
+                try:
+                    from core.v2_android_truth_ssot import build_v2_android_truth_block
+
+                    truth_dict = build_v2_android_truth_block(event.device_id).to_dict()
+                    if truth_dict.get("sources"):
+                        participation_tier = str(truth_dict.get("participation_tier") or "").strip()
+                        if participation_tier in {
+                            "dispatch_eligible",
+                            "distributed_participant",
+                        }:
+                            android_runtime_truth_context["participation_tier"] = participation_tier
+                        if truth_dict.get("dispatch_eligible") is True:
+                            android_runtime_truth_context["dispatch_eligible"] = True
+                        if truth_dict.get("runtime_constrained") is True:
+                            android_runtime_truth_context["runtime_constrained"] = True
+                        if truth_dict.get("local_mode_active") is True:
+                            android_runtime_truth_context["local_mode_active"] = True
+                        if truth_dict.get("local_loop_ready") is True:
+                            android_runtime_truth_context["local_loop_ready"] = True
+                except Exception as _truth_err:
+                    logger.debug(
+                        "unified_result_ingress: android evidence truth context skipped "
+                        "(non-fatal) task_id=%r err=%s",
+                        event.task_id,
+                        _truth_err,
+                    )
 
             evidence_record = build_execution_evidence_record(
                 task_id=event.task_id,
@@ -794,12 +801,25 @@ class UnifiedResultIngress:
                 source_channel=event.source_channel.value,
                 truth_chain_complete=outcome.truth_chain_complete,
                 android_proof_class=android_proof_class,
+                android_runtime_truth_context=android_runtime_truth_context,
                 is_duplicate=outcome.was_deduplicated,
                 payload=event.payload,
             )
 
             # Stamp evidence record onto outcome for operator/audit consumers
             outcome.execution_evidence_record = evidence_record.to_dict()
+            outcome.effective_android_proof_class = (
+                outcome.execution_evidence_record.get("effective_android_proof_class", "") or ""
+            )
+            outcome.android_evidence_resolution = (
+                outcome.execution_evidence_record.get("android_evidence_resolution", "") or ""
+            )
+            outcome.android_inferred_evidence_strength = (
+                outcome.execution_evidence_record.get("android_inferred_evidence_strength", "") or ""
+            )
+            outcome.android_evidence_runtime_context = dict(
+                outcome.execution_evidence_record.get("android_evidence_runtime_context", {}) or {}
+            )
 
             # Apply acceptance gate — may clear is_fully_closed for quarantine/reject
             acceptance = apply_acceptance_gate(evidence_record, outcome)
@@ -809,6 +829,7 @@ class UnifiedResultIngress:
                 from core.operator_execution_observability_surface import (
                     record_operator_evidence_entry,
                 )
+
                 record_operator_evidence_entry(
                     task_id=event.task_id,
                     device_id=event.device_id,
@@ -818,29 +839,29 @@ class UnifiedResultIngress:
                     truth_chain_complete=outcome.truth_chain_complete,
                     operator_warning=acceptance.operator_warning,
                     android_proof_class=android_proof_class,
+                    effective_android_proof_class=outcome.effective_android_proof_class,
+                    android_evidence_resolution=outcome.android_evidence_resolution,
+                    android_inferred_evidence_strength=outcome.android_inferred_evidence_strength,
+                    android_evidence_runtime_context=outcome.android_evidence_runtime_context,
                     source_channel=event.source_channel.value,
                     diagnosis=list(acceptance.diagnosis),
                 )
             except Exception as _obs_err:
                 logger.debug(
-                    "unified_result_ingress: operator observability record skipped "
-                    "(non-fatal) task_id=%r err=%s",
+                    "unified_result_ingress: operator observability record skipped " "(non-fatal) task_id=%r err=%s",
                     event.task_id,
                     _obs_err,
                 )
 
         except Exception as _e:
             logger.warning(
-                "unified_result_ingress: evidence gate skipped (non-fatal) "
-                "task_id=%r source=%s err=%s",
+                "unified_result_ingress: evidence gate skipped (non-fatal) " "task_id=%r source=%s err=%s",
                 event.task_id,
                 event.source_channel.value,
                 _e,
             )
 
-    def _log_outcome(
-        self, event: NormalizedResultEvent, outcome: UnifiedResultIngressOutcome
-    ) -> None:
+    def _log_outcome(self, event: NormalizedResultEvent, outcome: UnifiedResultIngressOutcome) -> None:
         logger.info(
             "unified_result_ingress: result processed "
             "task_id=%r status=%r source=%s "
@@ -905,6 +926,7 @@ def get_unified_result_ingress() -> UnifiedResultIngress:
 # Module-level convenience
 # ---------------------------------------------------------------------------
 
+
 def ingest_result(event: NormalizedResultEvent) -> UnifiedResultIngressOutcome:
     """Synchronous convenience wrapper: ``get_unified_result_ingress().process(event)``."""
     return get_unified_result_ingress().process(event)
@@ -917,9 +939,7 @@ async def ingest_result_async(
     bridge: Any = None,
 ) -> UnifiedResultIngressOutcome:
     """Async convenience wrapper with optional memory backflow and bridge resolution."""
-    return await get_unified_result_ingress().process_async(
-        event, store_fn=store_fn, bridge=bridge
-    )
+    return await get_unified_result_ingress().process_async(event, store_fn=store_fn, bridge=bridge)
 
 
 def normalize_status(raw_status: Optional[str]) -> str:
