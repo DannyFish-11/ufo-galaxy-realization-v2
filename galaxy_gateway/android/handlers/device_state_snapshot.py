@@ -61,6 +61,15 @@ _EXECUTION_TERMINAL_PHASES = frozenset(
         "terminal_cancelled",
     }
 )
+_EXECUTION_ACTIVE_PHASES = frozenset(
+    {
+        "planning",
+        "grounding",
+        "execution",
+        "replan",
+        "in_progress",
+    }
+)
 
 
 def _normalize_phase(value: Any) -> str:
@@ -256,25 +265,33 @@ async def handle_device_execution_event(
         )
         evt = absorb_device_execution_event(device_id, payload)
         _phase = _normalize_phase(getattr(evt, "phase", ""))
-        _is_terminal = _phase in _EXECUTION_TERMINAL_PHASES
-        _execution_active = bool(_phase) and not _is_terminal
-        transition_device_lifecycle(
-            device_id,
-            (
-                DeviceLifecycleTransitionEvent.execution_session_started
-                if _execution_active
-                else DeviceLifecycleTransitionEvent.execution_session_ended
-            ),
-            execution_active=_execution_active,
-        )
-        refresh_participation_state_from_runtime(
-            device_id,
-            signal=(
-                AndroidParticipationTransitionSignal.execution_session_started
-                if _execution_active
-                else AndroidParticipationTransitionSignal.execution_session_ended
-            ),
-        )
+        if _phase in _EXECUTION_ACTIVE_PHASES:
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.execution_session_started,
+                execution_active=True,
+            )
+            refresh_participation_state_from_runtime(
+                device_id,
+                signal=AndroidParticipationTransitionSignal.execution_session_started,
+            )
+        elif _phase in _EXECUTION_TERMINAL_PHASES:
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.execution_session_ended,
+                execution_active=False,
+            )
+            refresh_participation_state_from_runtime(
+                device_id,
+                signal=AndroidParticipationTransitionSignal.execution_session_ended,
+            )
+        else:
+            logger.debug(
+                "device_execution_event phase ignored for lifecycle transition: "
+                "device_id=%s phase=%r",
+                device_id,
+                _phase,
+            )
         logger.debug(
             "device_execution_event absorbed: device_id=%s flow=%s phase=%s step=%d",
             device_id,

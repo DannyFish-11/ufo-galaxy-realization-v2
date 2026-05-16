@@ -395,6 +395,71 @@ class TestHandleDeviceExecutionEvent:
             reset_android_device_state_store()
             reset_lifecycle_store()
 
+    def test_H03_unknown_or_empty_phase_does_not_force_execution_end_transition(self):
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_execution_event,
+        )
+        from core.android_device_state_store import reset_android_device_state_store
+        from core.device_lifecycle_state import (
+            reset_lifecycle_store,
+            get_lifecycle_record,
+            transition_device_lifecycle,
+            DeviceLifecycleTransitionEvent,
+            DeviceLifecycleStage,
+        )
+
+        reset_android_device_state_store()
+        reset_lifecycle_store()
+        try:
+            device_id = "test_device_rt_execution_unknown_phase"
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.register_ack_sent,
+                websocket_connected=True,
+                registration_ack_success=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.registration_fully_attached,
+                registration_fully_attached=True,
+                capability_visible=True,
+            )
+            transition_device_lifecycle(
+                device_id,
+                DeviceLifecycleTransitionEvent.readiness_satisfied,
+                readiness_satisfied=True,
+                dispatch_gate_passed=True,
+            )
+
+            bridge = MagicMock()
+            websocket = MagicMock()
+            unknown_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_unknown",
+                "payload": {"phase": None},
+            }
+            _ = asyncio.run(handle_device_execution_event(bridge, websocket, unknown_message))
+            record_after_unknown = get_lifecycle_record(device_id)
+            assert record_after_unknown.stage == DeviceLifecycleStage.ready
+            assert record_after_unknown.execution_active is False
+
+            whitespace_message = {
+                "type": "device_execution_event",
+                "device_id": device_id,
+                "message_id": "msg_exec_whitespace",
+                "payload": {"phase": "   "},
+            }
+            _ = asyncio.run(
+                handle_device_execution_event(bridge, websocket, whitespace_message)
+            )
+            record_after_whitespace = get_lifecycle_record(device_id)
+            assert record_after_whitespace.stage == DeviceLifecycleStage.ready
+            assert record_after_whitespace.execution_active is False
+        finally:
+            reset_android_device_state_store()
+            reset_lifecycle_store()
+
 
 # ---------------------------------------------------------------------------
 # I. OperatorSnapshot android_ecosystem field

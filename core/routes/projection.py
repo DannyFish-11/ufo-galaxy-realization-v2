@@ -5883,6 +5883,8 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
     unified_mode_model = dict(reasoning.get("unified_mode_model") or {})
     semantics = dict(unified_mode_model.get("participation_semantics") or {})
     shared_visibility = dict(truth_payload.get("shared_execution_visibility") or {})
+    # 优先级：selected_device（当前 contract 规范字段）→ selected_device_id（兼容字段）→
+    # device_id（老字段/弱兼容），确保不同来源的 reasoning 都能映射到同一设备身份。
     selected_device_id = (
         reasoning.get("selected_device")
         or reasoning.get("selected_device_id")
@@ -5894,8 +5896,17 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
         try:
             from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
             _lifecycle_record = get_lifecycle_record(str(selected_device_id))
-            device_lifecycle_stage = _lifecycle_record.stage.value
-        except Exception:
+            _stage = getattr(_lifecycle_record, "stage", None)
+            device_lifecycle_stage = getattr(_stage, "value", None) or (
+                str(_stage) if _stage not in (None, "") else None
+            )
+        except Exception as exc:
+            logger.debug(
+                "_build_participation_truth_consumption: lifecycle lookup skipped "
+                "device_id=%r error=%s",
+                selected_device_id,
+                exc,
+            )
             device_lifecycle_stage = None
 
     return {
