@@ -71,6 +71,8 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
         "runtime_decision_reasoning"
     ]["participation_tier"]
     assert "device_lifecycle_stage" in payload["participation_truth_consumption"]
+    assert "all_device_participation_matrix" in payload["participation_truth_consumption"]
+    assert "devices" in payload["participation_truth_consumption"]["all_device_participation_matrix"]
     assert payload["execution_stage"] is None
 
 

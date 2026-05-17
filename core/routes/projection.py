@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover
     from core.continuum.types import ContinuumState
@@ -5951,6 +5951,180 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     }
 
 
+def _lookup_device_lifecycle_stage(device_id: Optional[str]) -> Optional[str]:
+    if not device_id:
+        return None
+    try:
+        from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
+
+        _lifecycle_record = get_lifecycle_record(str(device_id))
+        _stage = getattr(_lifecycle_record, "stage", None)
+        return getattr(_stage, "value", None) or (str(_stage) if _stage not in (None, "") else None)
+    except Exception as exc:
+        logger.debug(
+            "_lookup_device_lifecycle_stage: lifecycle lookup skipped "
+            "device_id=%r error=%s",
+            device_id,
+            exc,
+        )
+        return None
+
+
+def _get_udm_for_participation_matrix() -> Any:
+    try:
+        from core.unified.device_manager import get_unified_device_manager  # noqa: PLC0415
+
+        return get_unified_device_manager()
+    except Exception as exc:
+        logger.debug("_get_udm_for_participation_matrix unavailable: %s", exc)
+        return None
+
+
+def _assess_device_participation_status(device: Any) -> Dict[str, Any]:
+    try:
+        from core.device_selection import assess_device_participation  # noqa: PLC0415
+
+        status = assess_device_participation(device)
+        return status.to_dict() if hasattr(status, "to_dict") else dict(status)
+    except Exception as exc:
+        logger.debug("_assess_device_participation_status unavailable: %s", exc)
+        return {
+            "registered": False,
+            "runtime_present": False,
+            "routable": False,
+            "cross_device_eligible": False,
+            "orchestration_eligible": False,
+            "participation_reason": f"assessment_unavailable:{exc}",
+        }
+
+
+def _build_all_device_participation_matrix(
+    *,
+    selected_device_id: Optional[str],
+    participation_tier: Optional[str],
+    dispatch_eligible_selected: bool,
+    local_mode_active_selected: bool,
+    runtime_constrained_selected: bool,
+    fully_attached_selected: bool,
+) -> Dict[str, Any]:
+    """Project participation truth into an all-device structured matrix."""
+    matrix_rows: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    udm = _get_udm_for_participation_matrix()
+    try:
+        devices = (
+            udm.list_devices()
+            if udm is not None and hasattr(udm, "list_devices")
+            else []
+        )
+    except Exception as exc:
+        logger.debug("_build_all_device_participation_matrix: list_devices failed: %s", exc)
+        devices = []
+
+    for device in devices or []:
+        device_id = str(getattr(device, "device_id", "") or "")
+        if not device_id:
+            continue
+        seen_ids.add(device_id)
+        status = dict(_assess_device_participation_status(device) or {})
+        is_selected = bool(selected_device_id and device_id == str(selected_device_id))
+        lifecycle_stage = _lookup_device_lifecycle_stage(device_id)
+
+        row_participation_tier = (
+            participation_tier
+            if is_selected and participation_tier not in (None, "")
+            else (
+                "dispatch_eligible"
+                if bool(status.get("cross_device_eligible"))
+                else ("runtime_present" if bool(status.get("runtime_present")) else "registered")
+            )
+        )
+        row_dispatch_eligible = (
+            dispatch_eligible_selected if is_selected else bool(status.get("cross_device_eligible"))
+        )
+        row_local_mode_active = local_mode_active_selected if is_selected else False
+        row_runtime_constrained = runtime_constrained_selected if is_selected else False
+        row_fully_attached = fully_attached_selected if is_selected else False
+
+        matrix_rows.append(
+            {
+                "device_id": device_id,
+                "selected": is_selected,
+                "participation_tier": row_participation_tier,
+                "dispatch_eligible": row_dispatch_eligible,
+                "local_mode_active": row_local_mode_active,
+                "runtime_constrained": row_runtime_constrained,
+                "fully_attached": row_fully_attached,
+                "device_lifecycle_stage": lifecycle_stage,
+                "registered": bool(status.get("registered")),
+                "runtime_present": bool(status.get("runtime_present")),
+                "routable": bool(status.get("routable")),
+                "cross_device_eligible": bool(status.get("cross_device_eligible")),
+                "orchestration_eligible": bool(status.get("orchestration_eligible")),
+                "participation_reason": status.get("participation_reason"),
+                "attachment_semantics": {
+                    "fully_attached": row_fully_attached,
+                    "device_lifecycle_stage": lifecycle_stage,
+                    "attachment_visible": bool(
+                        row_fully_attached
+                        or str(lifecycle_stage or "") in {"participating", "takeover_eligible"}
+                    ),
+                },
+                "truth_scope": "selected_device_truth" if is_selected else "cross_device_projection",
+            }
+        )
+
+    if selected_device_id and str(selected_device_id) not in seen_ids:
+        lifecycle_stage = _lookup_device_lifecycle_stage(str(selected_device_id))
+        matrix_rows.append(
+            {
+                "device_id": str(selected_device_id),
+                "selected": True,
+                "participation_tier": participation_tier,
+                "dispatch_eligible": dispatch_eligible_selected,
+                "local_mode_active": local_mode_active_selected,
+                "runtime_constrained": runtime_constrained_selected,
+                "fully_attached": fully_attached_selected,
+                "device_lifecycle_stage": lifecycle_stage,
+                "registered": False,
+                "runtime_present": False,
+                "routable": False,
+                "cross_device_eligible": dispatch_eligible_selected,
+                "orchestration_eligible": dispatch_eligible_selected,
+                "participation_reason": "selected_device_not_in_udm",
+                "attachment_semantics": {
+                    "fully_attached": fully_attached_selected,
+                    "device_lifecycle_stage": lifecycle_stage,
+                    "attachment_visible": bool(
+                        fully_attached_selected
+                        or str(lifecycle_stage or "") in {"participating", "takeover_eligible"}
+                    ),
+                },
+                "truth_scope": "selected_device_truth",
+            }
+        )
+
+    matrix_rows.sort(key=lambda row: (not bool(row.get("selected")), str(row.get("device_id") or "")))
+    return {
+        "devices": matrix_rows,
+        "device_count": len(matrix_rows),
+        "selected_device_id": selected_device_id or None,
+        "dispatch_eligible_count": sum(1 for row in matrix_rows if bool(row.get("dispatch_eligible"))),
+        "fully_attached_count": sum(1 for row in matrix_rows if bool(row.get("fully_attached"))),
+        "runtime_constrained_count": sum(1 for row in matrix_rows if bool(row.get("runtime_constrained"))),
+        "source_of_truth_refs": [
+            "runtime_decision_reasoning.selected_device",
+            "runtime_decision_reasoning.participation_tier",
+            "runtime_decision_reasoning.unified_mode_model.participation_semantics",
+            "core.unified.device_manager.get_unified_device_manager",
+            "core.device_selection.assess_device_participation",
+            "core.device_lifecycle_state.get_lifecycle_record",
+        ],
+        "_source": "core.routes.projection._build_all_device_participation_matrix",
+    }
+
+
 def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Build one normalized participation/mode truth block for board-facing consumers."""
     if not isinstance(truth_payload, dict):
@@ -5968,23 +6142,7 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
         or reasoning.get("device_id")
         or ""
     )
-    device_lifecycle_stage = None
-    if selected_device_id:
-        try:
-            from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
-            _lifecycle_record = get_lifecycle_record(str(selected_device_id))
-            _stage = getattr(_lifecycle_record, "stage", None)
-            device_lifecycle_stage = getattr(_stage, "value", None) or (
-                str(_stage) if _stage not in (None, "") else None
-            )
-        except Exception as exc:
-            logger.debug(
-                "_build_participation_truth_consumption: lifecycle lookup skipped "
-                "device_id=%r error=%s",
-                selected_device_id,
-                exc,
-            )
-            device_lifecycle_stage = None
+    device_lifecycle_stage = _lookup_device_lifecycle_stage(str(selected_device_id) if selected_device_id else None)
 
     participation_tier = reasoning.get("participation_tier")
     if "dispatch_gate_passed" in semantics:
@@ -5994,6 +6152,14 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
     local_mode_active = bool(mode_semantics.get("local_mode_active"))
     runtime_constrained = bool(mode_semantics.get("constrained"))
     fully_attached = participation_tier == "fully_attached"
+    all_device_participation_matrix = _build_all_device_participation_matrix(
+        selected_device_id=str(selected_device_id) if selected_device_id else None,
+        participation_tier=participation_tier,
+        dispatch_eligible_selected=dispatch_eligible,
+        local_mode_active_selected=local_mode_active,
+        runtime_constrained_selected=runtime_constrained,
+        fully_attached_selected=fully_attached,
+    )
 
     return {
         "tri_state_phase": truth_payload.get("tri_state_phase"),
@@ -6009,6 +6175,7 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
         "local_mode_active": local_mode_active,
         "runtime_constrained": runtime_constrained,
         "fully_attached": fully_attached,
+        "all_device_participation_matrix": all_device_participation_matrix,
         "attachment_semantics": {
             "fully_attached": fully_attached,
             "device_lifecycle_stage": device_lifecycle_stage,
@@ -6021,6 +6188,7 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
         "surface_execution_stage": shared_visibility.get("surface_execution_stage"),
         "source_of_truth_refs": [
             "runtime_decision_reasoning.unified_mode_model",
+            "all_device_participation_matrix.devices",
             "shared_execution_visibility",
             "runtime_truth.tri_state_phase",
             "core.device_lifecycle_state.get_lifecycle_record",

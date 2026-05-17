@@ -132,6 +132,32 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
                 "constrained": False,
             },
         },
+        "all_device_participation_matrix": {
+            "device_count": 2,
+            "selected_device_id": "android-prod-1",
+            "devices": [
+                {
+                    "device_id": "android-prod-1",
+                    "selected": True,
+                    "participation_tier": "dispatch_eligible",
+                    "dispatch_eligible": True,
+                    "local_mode_active": False,
+                    "runtime_constrained": False,
+                    "fully_attached": False,
+                    "device_lifecycle_stage": "participating",
+                },
+                {
+                    "device_id": "android-lab-2",
+                    "selected": False,
+                    "participation_tier": "registered",
+                    "dispatch_eligible": False,
+                    "local_mode_active": False,
+                    "runtime_constrained": False,
+                    "fully_attached": False,
+                    "device_lifecycle_stage": "registered",
+                },
+            ],
+        },
     },
     "operational_state_board": {
         "categories": [{"category_id": "task_execution_visibility"}],
@@ -371,6 +397,73 @@ class TestParticipationTruthConsumption:
         assert result["attachment_semantics"]["fully_attached"] is True
         assert result["attachment_semantics"]["attachment_visible"] is True
 
+    def test_build_consumption_projects_all_device_participation_matrix(self, monkeypatch):
+        from core.routes import projection as projection_routes
+
+        class _FakeDevice:
+            def __init__(self, device_id: str) -> None:
+                self.device_id = device_id
+
+        class _FakeUdm:
+            def list_devices(self):
+                return [_FakeDevice("android-prod-1"), _FakeDevice("android-lab-2")]
+
+        def _fake_assess(device):
+            if device.device_id == "android-prod-1":
+                return {
+                    "registered": True,
+                    "runtime_present": True,
+                    "routable": True,
+                    "cross_device_eligible": True,
+                    "orchestration_eligible": True,
+                    "participation_reason": "all-eligible",
+                }
+            return {
+                "registered": True,
+                "runtime_present": False,
+                "routable": False,
+                "cross_device_eligible": False,
+                "orchestration_eligible": False,
+                "participation_reason": "not-runtime-present; not-routable(canonical-connection)",
+            }
+
+        monkeypatch.setattr(projection_routes, "_get_udm_for_participation_matrix", lambda: _FakeUdm())
+        monkeypatch.setattr(projection_routes, "_assess_device_participation_status", _fake_assess)
+        monkeypatch.setattr(
+            projection_routes,
+            "_lookup_device_lifecycle_stage",
+            lambda device_id: "participating" if device_id == "android-prod-1" else "registered",
+        )
+
+        truth_payload = {
+            "tri_state_phase": "manifest",
+            "continuum": {"runtime_domain": "cross_device"},
+            "runtime_decision_reasoning": {
+                "selected_device": "android-prod-1",
+                "participation_tier": "dispatch_eligible",
+                "unified_mode_model": {
+                    "participation_layer": "dispatch_eligible",
+                    "execution_location": "android_delegated",
+                    "governance_state": "delegated_execution",
+                    "participation_semantics": {
+                        "dispatch_gate_passed": True,
+                        "mode_semantics": {
+                            "local_mode_active": False,
+                            "constrained": False,
+                        },
+                    },
+                },
+            },
+        }
+        result = projection_routes._build_participation_truth_consumption(truth_payload)
+        matrix = result["all_device_participation_matrix"]
+        assert matrix["device_count"] == 2
+        assert matrix["selected_device_id"] == "android-prod-1"
+        assert matrix["devices"][0]["selected"] is True
+        assert matrix["devices"][0]["dispatch_eligible"] is True
+        assert matrix["devices"][1]["selected"] is False
+        assert matrix["devices"][1]["dispatch_eligible"] is False
+
 
 # ---------------------------------------------------------------------------
 # 2. Surface rendering tests
@@ -546,6 +639,8 @@ class TestDeviceSurface:
         assert "local=False" in out
         assert "constrained=False" in out
         assert "participating" in out
+        assert "Matrix" in out
+        assert "android-lab-2" in out
         assert "E2E" in out
         assert "passed" in out
 
@@ -655,6 +750,8 @@ class TestStatusBoardV2App:
         assert "dispatch_eligible" in out
         assert "dispatch=True" in out
         assert "constrained=False" in out
+        assert "Matrix" in out
+        assert "android-lab-2" in out
         assert "E2E" in out
 
     def test_render_once_contains_metrics(self):
