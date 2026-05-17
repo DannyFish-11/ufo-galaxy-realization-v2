@@ -104,7 +104,7 @@ def _build_android_entry_stage(
 ) -> Dict[str, Any]:
     passed = bool(device_id)
     summary = (
-        f"已解析 Android 参与入口 device_id={device_id!s} session_id={session_id!s}"
+        f"已解析 Android 参与入口 device_id={device_id} session_id={session_id}"
         if passed
         else "未解析到 Android 参与入口设备，链路尚未进入可归因状态"
     )
