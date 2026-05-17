@@ -159,6 +159,16 @@ class StageGate(str, Enum):
     P2_ENHANCEMENT = "P2-enhancement"
 
 
+class RuntimeMaturity(str, Enum):
+    """Maturity label for clone-to-complete-use chain stages."""
+
+    FULLY_WIRED = "fully_wired"
+    PARTIALLY_WIRED = "partially_wired"
+    NOMINAL_ONLY = "nominal_only"
+    WEAK_EVIDENCE = "weak_evidence"
+    MISSING = "missing"
+
+
 # ---------------------------------------------------------------------------
 # Core data types
 # ---------------------------------------------------------------------------
@@ -294,7 +304,10 @@ class RuntimeFlowStage:
 
     stage_id: str
     title_zh: str
+    chain_axis: str
+    maturity: RuntimeMaturity
     runtime_truth_zh: str
+    blocking_issue_ids: List[str] = field(default_factory=list)
     v2_anchors: List[str] = field(default_factory=list)
     android_anchors: List[str] = field(default_factory=list)
 
@@ -302,7 +315,10 @@ class RuntimeFlowStage:
         return {
             "stage_id": self.stage_id,
             "title_zh": self.title_zh,
+            "chain_axis": self.chain_axis,
+            "maturity": self.maturity.value,
             "runtime_truth_zh": self.runtime_truth_zh,
+            "blocking_issue_ids": list(self.blocking_issue_ids),
             "v2_anchors": list(self.v2_anchors),
             "android_anchors": list(self.android_anchors),
         }
@@ -1345,14 +1361,53 @@ def _build_closure_map(
 
 
 def _build_runtime_flow() -> List[RuntimeFlowStage]:
-    """Build the code-grounded end-to-end execution flow baseline."""
+    """Build clone-to-complete-use chain with explicit maturity labeling."""
     return [
         RuntimeFlowStage(
-            "F1",
-            "问题入口进入 V2 统一首跳",
+            "C1",
+            "克隆后基础启动认知入口",
+            "clone_setup",
+            RuntimeMaturity.PARTIALLY_WIRED,
+            "V2 仓已有 clone-to-use 文档与最小启动命令，但双仓（含 Android）"
+            "从克隆到联调的统一一步式脚本仍缺失。",
+            ["R6", "R13"],
+            [
+                "README.md",
+                "docs/CLONE_TO_USE_REALITY.md",
+                "QUICKSTART.md",
+            ],
+            [
+                "ufo-galaxy-android/README.md",
+                "ufo-galaxy-android/app/build.gradle.kts",
+            ],
+        ),
+        RuntimeFlowStage(
+            "C2",
+            "服务启动与运行承载建立",
+            "startup",
+            RuntimeMaturity.PARTIALLY_WIRED,
+            "V2 主入口（main.py/unified_launcher）可启动，Android 侧可通过 "
+            "GalaxyWebSocketClient 接入；但双仓活体启动编排与恢复演练仍缺回归厚度。",
+            ["R6", "R9", "R13"],
+            [
+                "main.py",
+                "unified_launcher.py",
+                "core/system_integration.py",
+            ],
+            [
+                ANDROID_ANCHOR_WS_CLIENT,
+                ANDROID_ANCHOR_CONTINUITY,
+            ],
+        ),
+        RuntimeFlowStage(
+            "C3",
+            "请求 ingress 统一收敛到 canonical 首跳",
+            "ingress",
+            RuntimeMaturity.PARTIALLY_WIRED,
             "用户问题并不是直接进入某个单点聊天处理器，而是先经过 "
             "EntrypointRouter / chat compatibility adapter，随后交给 "
             "DesktopPresenceRuntime 与 OpenClawd 的 canonical 链。",
+            ["R7"],
             [
                 "core/unified/entrypoint_router.py",
                 "core/routes/chat.py",
@@ -1362,11 +1417,44 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             [],
         ),
         RuntimeFlowStage(
-            "F2",
-            "V2 判定执行路径与是否跨设备分发",
-            "进入 V2 后，请求先形成统一路由与执行上下文，再由 command_router / "
+            "C4",
+            "Android ingress boundary（连接/鉴权/身份）",
+            "auth",
+            RuntimeMaturity.PARTIALLY_WIRED,
+            "registration handler 已引入 ingress_boundary（connection/authentication/"
+            "identity/registration/participation）并在鉴权或身份不匹配时拒绝注册；"
+            "但跨仓运行态冲突裁决证据仍偏薄。",
+            ["R2", "R7"],
+            [
+                "galaxy_gateway/android/handlers/registration.py",
+                "galaxy_gateway/android_bridge.py",
+            ],
+            [ANDROID_ANCHOR_WS_CLIENT],
+        ),
+        RuntimeFlowStage(
+            "C5",
+            "设备注册与会话附着",
+            "registration",
+            RuntimeMaturity.PARTIALLY_WIRED,
+            "注册阶段会把 source_runtime_posture 传入会话附着并回写 ack，"
+            "参与资格语义已进入 V2 路由面；但会话重建跨仓闭环证明仍不足。",
+            ["R2", "R9"],
+            [
+                "galaxy_gateway/android/handlers/registration.py",
+                "core/attached_runtime_session_registry.py",
+                "core/android_participant_session_state.py",
+            ],
+            [ANDROID_ANCHOR_CONTINUITY],
+        ),
+        RuntimeFlowStage(
+            "C6",
+            "V2 判定执行路径与跨设备分发",
+            "dispatch",
+            RuntimeMaturity.PARTIALLY_WIRED,
+            "请求进入统一路由与执行上下文，再由 command_router / "
             "source_dispatch_orchestrator / device_selection 结合 readiness、"
             "session、participation truth 判定本地执行、远端 handoff 或分阶段协作。",
+            ["R1", "R3", "R12"],
             [
                 "core/command_router.py",
                 "core/runtime/source_dispatch_orchestrator.py",
@@ -1376,12 +1464,15 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             [ANDROID_ANCHOR_WS_CLIENT],
         ),
         RuntimeFlowStage(
-            "F3",
-            "Android 作为参与节点接收并落地执行",
+            "C7",
+            "参与链：Android 作为执行参与节点",
+            "participation",
+            RuntimeMaturity.PARTIALLY_WIRED,
             "当 V2 选择 Android 参与时，Android 不是被动客户端，而是通过 "
             "GalaxyWebSocketClient 接入、通过 AutonomousExecutionPipeline 与 "
             "delegated/takeover 路径在本地执行，并受 mesh participation contract "
             "与 continuity identity 约束。",
+            ["R3", "R10"],
             [
                 "core/android_runtime_dispatch_binding.py",
                 "core/android_delegated_runtime_lifecycle_coordinator.py",
@@ -1395,11 +1486,29 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             ],
         ),
         RuntimeFlowStage(
-            "F4",
+            "C8",
+            "mesh/hybrid 协同链",
+            "mesh",
+            RuntimeMaturity.NOMINAL_ONLY,
+            "mesh 参与 contract 与中心态投影已存在，但 full mesh runtime + barrier "
+            "协同仍受约束，当前更多是“参与就绪”而非“全链运行闭合”。",
+            ["R4", "R13"],
+            [
+                "core/mesh/live_mesh_runtime_engine.py",
+                "core/mesh/mesh_runtime_center_state.py",
+                "core/mesh/mesh_session_coordinator.py",
+            ],
+            [ANDROID_ANCHOR_MESH_CONTRACT, ANDROID_ANCHOR_MESH_TEST],
+        ),
+        RuntimeFlowStage(
+            "C9",
             "执行信号与结果从 Android 回流到 V2",
+            "result_return",
+            RuntimeMaturity.PARTIALLY_WIRED,
             "Android 的 runtime-state、delegated execution 信号与结果不会在外围停留，"
             "而是被 V2 吸收进 android_device_state_store、signal reconciler 与 "
             "unified_result_ingress 的 canonical 链。",
+            ["R2", "R6"],
             [
                 "core/android_device_state_store.py",
                 "core/android_execution_signal_reconciler.py",
@@ -1411,10 +1520,13 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             ],
         ),
         RuntimeFlowStage(
-            "F5",
-            "V2 完成结果真值、接受门与闭环判定",
+            "C10",
+            "结果真值 / acceptance / completion 链",
+            "truth_return",
+            RuntimeMaturity.PARTIALLY_WIRED,
             "结果进入 V2 后要经过 execution evidence、result truth acceptance、"
             "completion ingress 与 memory backflow，而不是只更新某个任务状态位。",
+            ["R6", "R13"],
             [
                 "core/execution_evidence_model.py",
                 "core/result_truth_acceptance_gate.py",
@@ -1424,10 +1536,13 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             [],
         ),
         RuntimeFlowStage(
-            "F6",
-            "操作面、观测面与系统收口面读取同一批 runtime truth",
+            "C11",
+            "truth surface / panel / operator 同源呈现",
+            "truth_surface",
+            RuntimeMaturity.PARTIALLY_WIRED,
             "operator / panel / readiness / state contract 这些面板不是独立叙事层，"
             "而是读取统一治理语义、参与证据与 mesh/runtime 投影来形成当前系统可见面。",
+            ["R5"],
             [
                 "core/unified_governance_semantics.py",
                 "core/unified_panel_aggregation.py",
@@ -1436,6 +1551,35 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
                 "core/v2_unified_state_contract.py",
             ],
             [ANDROID_ANCHOR_MESH_CONTRACT],
+        ),
+        RuntimeFlowStage(
+            "C12",
+            "回归验证链（单仓→跨仓→真实设备）",
+            "validation",
+            RuntimeMaturity.WEAK_EVIDENCE,
+            "当前已有大量单仓/模拟跨仓测试，但双仓真实设备活体回归仍薄，"
+            "断连/回放/降级/接管组合链尚未形成稳定自动化证明。",
+            ["R6", "R13"],
+            [
+                "tests/test_complete_joint_system_review.py",
+                "tests/integration/test_android_runtime_state_snapshot_e2e.py",
+                "tests/integration/test_nl_e2e_canonical_path.py",
+            ],
+            [ANDROID_ANCHOR_MESH_TEST],
+        ),
+        RuntimeFlowStage(
+            "C13",
+            "从 clone 到完整可用成熟度判定",
+            "full_practical_use",
+            RuntimeMaturity.WEAK_EVIDENCE,
+            "系统已非 PoC，但从 clone 到真实多设备可持续可验证使用仍未 fully close；"
+            "当前更接近 mid-stage consolidation，需要按 P0→P1→P2 顺序收口。",
+            ["R1", "R2", "R3", "R4", "R5", "R6", "R13"],
+            [
+                "core/complete_joint_system_review.py",
+                "core/dual_repo_system_completeness_review.py",
+            ],
+            [ANDROID_ANCHOR_WS_CLIENT, ANDROID_ANCHOR_MESH_CONTRACT],
         ),
     ]
 

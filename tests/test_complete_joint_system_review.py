@@ -33,6 +33,7 @@ from core.complete_joint_system_review import (
     PropositionVerdict,
     RemainingIssue,
     RuntimeFlowStage,
+    RuntimeMaturity,
     StageGate,
     StageVerdict,
     V2ConvergencePriority,
@@ -354,15 +355,28 @@ def test_partially_established_propositions_have_blocking_issues() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_runtime_flow_has_six_stages_covering_end_to_end_chain() -> None:
+def test_runtime_flow_covers_clone_to_full_practical_use_chain() -> None:
     report = build_complete_joint_system_review()
-    assert len(report.runtime_flow) == 6
+    assert len(report.runtime_flow) == 13
     assert all(isinstance(stage, RuntimeFlowStage) for stage in report.runtime_flow)
-    titles = {stage.title_zh for stage in report.runtime_flow}
-    assert any("入口" in title for title in titles)
-    assert any("分发" in title or "执行路径" in title for title in titles)
-    assert any("回流" in title for title in titles)
-    assert any("闭环" in title or "收口" in title for title in titles)
+    stage_ids = {stage.stage_id for stage in report.runtime_flow}
+    assert stage_ids == {f"C{i}" for i in range(1, 14)}
+    axes = {stage.chain_axis for stage in report.runtime_flow}
+    assert {
+        "clone_setup",
+        "startup",
+        "ingress",
+        "auth",
+        "registration",
+        "dispatch",
+        "participation",
+        "mesh",
+        "result_return",
+        "truth_return",
+        "truth_surface",
+        "validation",
+        "full_practical_use",
+    }.issubset(axes)
 
 
 def test_runtime_flow_stages_have_v2_anchors_and_truth_text() -> None:
@@ -370,6 +384,15 @@ def test_runtime_flow_stages_have_v2_anchors_and_truth_text() -> None:
     for stage in report.runtime_flow:
         assert stage.runtime_truth_zh
         assert stage.v2_anchors
+        assert isinstance(stage.maturity, RuntimeMaturity)
+
+
+def test_runtime_flow_maturity_honestly_contains_non_fully_wired_stages() -> None:
+    report = build_complete_joint_system_review()
+    maturities = {stage.maturity for stage in report.runtime_flow}
+    assert RuntimeMaturity.PARTIALLY_WIRED in maturities
+    assert RuntimeMaturity.WEAK_EVIDENCE in maturities
+    assert RuntimeMaturity.FULLY_WIRED not in maturities
 
 
 def test_cross_repo_mismatches_are_explicit_and_linked_to_issues() -> None:
@@ -537,7 +560,10 @@ def test_to_dict_runtime_flow_entries_have_required_fields() -> None:
     for stage in payload["runtime_flow"]:
         assert "stage_id" in stage
         assert "title_zh" in stage
+        assert "chain_axis" in stage
+        assert "maturity" in stage
         assert "runtime_truth_zh" in stage
+        assert "blocking_issue_ids" in stage
         assert "v2_anchors" in stage
 
 
