@@ -22,11 +22,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = (
     "ENTRYPOINT_ROLE_CONTRACT_SENTINEL::PR01::single-main-entrypoint-contract-v1"
 )
+
+MAIN_ENTRY_ID: str = "main.py:main"
+UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
 
 
 class EntrypointRole(str, Enum):
@@ -48,15 +51,15 @@ class EntrypointRecord:
 
 
 ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
-    "main.py:main": EntrypointRecord(
-        entry_id="main.py:main",
+    MAIN_ENTRY_ID: EntrypointRecord(
+        entry_id=MAIN_ENTRY_ID,
         role=EntrypointRole.UNIQUE_MAIN,
         module_path="main.py",
         trigger_boundary="process startup entrypoint",
         next_hop="unified_launcher.py:main",
     ),
-    "unified_launcher.py:main": EntrypointRecord(
-        entry_id="unified_launcher.py:main",
+    UNIFIED_LAUNCHER_ENTRY_ID: EntrypointRecord(
+        entry_id=UNIFIED_LAUNCHER_ENTRY_ID,
         role=EntrypointRole.SUB_ENTRY,
         module_path="unified_launcher.py",
         trigger_boundary="phase delegate (Phase 4-6) / direct advanced invocation",
@@ -113,8 +116,8 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
 
 
 PRIMARY_STARTUP_CHAIN: Tuple[str, ...] = (
-    "main.py:main",
-    "unified_launcher.py:main",
+    MAIN_ENTRY_ID,
+    UNIFIED_LAUNCHER_ENTRY_ID,
     "core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request",
     "core.openclawd:OpenClawd.process",
     "core.command_router:CommandRouter.route_envelope",
@@ -153,10 +156,10 @@ def assert_single_unique_main_entrypoint() -> bool:
         for record in ENTRYPOINT_ROLE_REGISTRY.values()
         if record.role == EntrypointRole.UNIQUE_MAIN
     ]
-    return main_entries == ["main.py:main"]
+    return main_entries == [MAIN_ENTRY_ID]
 
 
-def build_entrypoint_role_snapshot() -> Dict[str, object]:
+def build_entrypoint_role_snapshot() -> Dict[str, Any]:
     role_counts: Dict[str, int] = {}
     for record in ENTRYPOINT_ROLE_REGISTRY.values():
         role_counts[record.role.value] = role_counts.get(record.role.value, 0) + 1
@@ -176,4 +179,3 @@ def list_non_main_entries() -> List[str]:
         for record in ENTRYPOINT_ROLE_REGISTRY.values()
         if record.role != EntrypointRole.UNIQUE_MAIN
     ]
-

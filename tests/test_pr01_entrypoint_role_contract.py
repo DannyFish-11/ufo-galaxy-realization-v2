@@ -13,7 +13,9 @@ from entrypoint_role_contract import (
     ENTRYPOINT_ROLE_CONTRACT_SENTINEL,
     ENTRYPOINT_ROLE_REGISTRY,
     EntrypointRole,
+    MAIN_ENTRY_ID,
     PRIMARY_STARTUP_CHAIN,
+    UNIFIED_LAUNCHER_ENTRY_ID,
     assert_single_unique_main_entrypoint,
     build_entrypoint_role_snapshot,
     ensure_entrypoint_role,
@@ -34,13 +36,13 @@ def test_contract_sentinel_present():
 
 def test_single_unique_main_entrypoint_is_main_py():
     assert assert_single_unique_main_entrypoint()
-    assert ensure_entrypoint_role("main.py:main", EntrypointRole.UNIQUE_MAIN)
+    assert ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN)
 
 
 def test_primary_startup_chain_is_stable():
     assert PRIMARY_STARTUP_CHAIN == (
-        "main.py:main",
-        "unified_launcher.py:main",
+        MAIN_ENTRY_ID,
+        UNIFIED_LAUNCHER_ENTRY_ID,
         "core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request",
         "core.openclawd:OpenClawd.process",
         "core.command_router:CommandRouter.route_envelope",
@@ -49,7 +51,7 @@ def test_primary_startup_chain_is_stable():
 
 def test_required_modules_have_expected_roles():
     assert ensure_entrypoint_role(
-        "unified_launcher.py:main", EntrypointRole.SUB_ENTRY
+        UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY
     )
     assert ensure_entrypoint_role(
         "core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request",
@@ -94,14 +96,16 @@ def test_android_v2_mainline_bridge_anchors_are_present():
 def test_main_py_enforces_main_entry_role_contract():
     src = _read("main.py")
     assert "assert_single_unique_main_entrypoint()" in src
-    assert 'ensure_entrypoint_role("main.py:main", EntrypointRole.UNIQUE_MAIN)' in src
+    assert "ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN)" in src
     assert 'launcher_path = PROJECT_ROOT / "unified_launcher.py"' in src
 
 
 def test_unified_launcher_enforces_sub_entry_role_contract():
     src = _read("unified_launcher.py")
-    assert 'ensure_entrypoint_role("unified_launcher.py:main", EntrypointRole.SUB_ENTRY)' in src
-    assert "从属组件" in src
+    assert (
+        "ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY)"
+        in src
+    )
 
 
 def test_stage_internal_role_constants_are_declared():
@@ -127,4 +131,3 @@ def test_snapshot_reports_single_main_and_android_anchor():
     assert snap["single_unique_main_entrypoint"] is True
     assert "android_v2_mainline_bridge_anchors" in snap
     assert snap["role_counts"]["unique_main"] == 1
-

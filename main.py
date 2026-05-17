@@ -47,6 +47,7 @@ from pathlib import Path
 
 from entrypoint_role_contract import (
     EntrypointRole,
+    MAIN_ENTRY_ID,
     assert_single_unique_main_entrypoint,
     ensure_entrypoint_role,
 )
@@ -150,7 +151,7 @@ def main() -> int:
     if not assert_single_unique_main_entrypoint():
         logger.error("Entrypoint role contract violation: unique main entrypoint is not stable.")
         return 1
-    if not ensure_entrypoint_role("main.py:main", EntrypointRole.UNIQUE_MAIN):
+    if not ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN):
         logger.error("Entrypoint role contract violation: main.py lost UNIQUE_MAIN role.")
         return 1
 
