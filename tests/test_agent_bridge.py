@@ -448,6 +448,8 @@ class TestDeviceRouterBridgeIntegration:
         assert result["success"] is True
         assert result["bridge_source"] == "runtime"
         mock_bridge.handoff.assert_awaited_once()
+        contract = mock_bridge.handoff.await_args.kwargs["contract"]
+        assert contract.route_mode == "cross_device"
 
     @pytest.mark.asyncio
     async def test_route_task_blocked_when_cross_device_off(self, monkeypatch):
@@ -479,6 +481,49 @@ class TestDeviceRouterBridgeIntegration:
         assert result["success"] is False
         assert result["error"] == "cross_device_disabled"
         mock_bridge.handoff.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_route_task_marks_controlled_coordinator_fallback(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+
+        mock_bridge = MagicMock()
+        mock_bridge._config = MagicMock()
+        mock_bridge._config.enabled = True
+        mock_bridge.handoff = AsyncMock(side_effect=RuntimeError("bridge unavailable"))
+
+        mock_coordinator = MagicMock()
+        mock_coordinator.execute_cross_device_task = AsyncMock(return_value={"success": True})
+
+        with patch("galaxy_gateway.agent_bridge.get_agent_bridge", return_value=mock_bridge), patch(
+            "galaxy_gateway.device_router.get_cross_device_coordinator",
+            return_value=mock_coordinator,
+        ):
+            from galaxy_gateway.device_router import DeviceRouter
+
+            router = DeviceRouter()
+
+            async def _mock_analyze(command, context=None):
+                return {
+                    "task_type": "cross_device",
+                    "requires_cross_device": True,
+                    "exec_mode": "remote",
+                    "actions": [],
+                    "target_devices": [],
+                    "priority": 2,
+                    "context_required": [],
+                }
+
+            router._analyze_command = _mock_analyze
+
+            result = await router.route_task("sync clipboard", context={"trace_id": "trace-fallback"})
+
+        assert result["success"] is True
+        mock_coordinator.execute_cross_device_task.assert_awaited_once()
+        command, context = mock_coordinator.execute_cross_device_task.await_args.args
+        assert command == "sync clipboard"
+        assert context["route_mode"] == "cross_device"
+        assert context["dispatch_path"] == "canonical_fallback"
+        assert context["fallback_reason"] == "agent_bridge_import_error"
 
 
 # ===========================================================================

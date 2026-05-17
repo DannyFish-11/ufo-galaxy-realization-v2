@@ -65,6 +65,9 @@ async def test_builtin_cross_device_keeps_compatibility_fallback_explicit():
     legacy_args, legacy_kwargs = mock_legacy.await_args
     assert legacy_args[0] == "sync"
     assert legacy_args[1]["route_mode"] == "cross_device_compat_fallback"
+    assert legacy_args[1]["dispatch_path"] == "compat_fallback"
+    assert legacy_args[1]["compat_path_used"] == "cross_device_coordinator"
+    assert legacy_args[1]["fallback_reason"] == "device_router_exception"
     assert legacy_args[1]["_compat_legacy_bypass"] == "capability_orchestrator.builtin_cross_device"
     assert legacy_kwargs["_substrate_caller"] == "capability_orchestrator.compat_fallback"
     assert result["success"] is True

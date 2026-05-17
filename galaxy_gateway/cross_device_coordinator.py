@@ -318,10 +318,33 @@ class CrossDeviceCoordinator:
         4. 跨设备剪贴板共享
         """
         # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
-        _ctx = context or {}
+        _ctx = dict(context or {})
         _caller = _substrate_caller or _ctx.get(_SUBSTRATE_CALLER_CTX_KEY, "")
-        _is_canonical = bool(_caller)
-        if not _is_canonical:
+        _route_mode = str(_ctx.get("route_mode") or "cross_device")
+        _fallback_reason = str(_ctx.get("fallback_reason") or "")
+        _compat_legacy_bypass = str(_ctx.get("_compat_legacy_bypass") or "")
+        _compat_path_used = str(_ctx.get("compat_path_used") or "")
+        _dispatch_path = str(_ctx.get("dispatch_path") or "")
+        _is_canonical = _caller == "device_router.route_task"
+        if not _dispatch_path:
+            if _is_canonical:
+                _dispatch_path = "canonical_fallback" if _fallback_reason else "canonical_dispatch"
+            elif _caller:
+                _dispatch_path = "compat_fallback"
+            else:
+                _dispatch_path = "legacy_bypass"
+        _is_legacy_bypass = _dispatch_path == "legacy_bypass"
+        _legacy_path_used = None
+        if _dispatch_path == "compat_fallback":
+            _legacy_path_used = (
+                _compat_legacy_bypass
+                or _compat_path_used
+                or _caller
+                or "cross_device_coordinator.compat_fallback"
+            )
+        elif _is_legacy_bypass:
+            _legacy_path_used = "cross_device_coordinator.execute_cross_device_task"
+        if _is_legacy_bypass:
             get_gateway_metrics().inc("legacy_dispatch_total")
             logger.warning(
                 "LEGACY_DISPATCH | CrossDeviceCoordinator.execute_cross_device_task "
@@ -468,20 +491,45 @@ class CrossDeviceCoordinator:
             else:
                 result = await self._execute_generic_cross_device_task(command, context)
 
+            if isinstance(result, dict):
+                result = result.copy()
+            else:
+                result = {"success": False, "error": str(result)}
+            result.setdefault("route_mode", _route_mode)
+            result.setdefault("dispatch_path", _dispatch_path)
+            if _fallback_reason:
+                result.setdefault("fallback_reason", _fallback_reason)
+            if _compat_path_used:
+                result.setdefault("compat_path_used", _compat_path_used)
+            if _compat_legacy_bypass:
+                result.setdefault("compat_legacy_bypass", _compat_legacy_bypass)
+            if _dispatch_path == "legacy_bypass":
+                result.setdefault("legacy_bypass", True)
+
             # PR-519 / GAP-517-007: normalise result into canonical surfaces
             # before returning so that outcomes are visible through
             # TaskGraphRuntime, ReplayFoundation, and CrossDeviceChainSingleton.
-            _ctx = context or {}
             surface_cross_device_result(
                 result,
                 task_id=_ctx.get("task_id", ""),
                 device_id=_ctx.get("device_id", ""),
                 trace_id=_ctx.get("trace_id"),
                 session_id=_ctx.get("session_id"),
-                route_mode=_ctx.get("route_mode", "cross_device"),
+                route_mode=_route_mode,
                 source_device_id=_ctx.get("source_device_id", ""),
                 target_device_ids=_ctx.get("target_device_ids"),
-                legacy_path_used=(None if _is_canonical else "cross_device_coordinator.execute_cross_device_task"),
+                legacy_path_used=_legacy_path_used,
+                extra={
+                    key: value
+                    for key, value in {
+                        "dispatch_path": _dispatch_path,
+                        "fallback_reason": _fallback_reason,
+                        "compat_path_used": _compat_path_used,
+                        "compat_legacy_bypass": _compat_legacy_bypass,
+                        "substrate_caller": _caller,
+                    }.items()
+                    if value
+                },
             )
 
             # PR-520 / GAP-517-004: attach the canonical formation descriptor
@@ -493,16 +541,39 @@ class CrossDeviceCoordinator:
 
         except Exception as e:
             logger.error(f"❌ 跨设备任务执行失败: {e}")
-            _err_result = {"success": False, "error": f"跨设备任务执行失败: {str(e)}"}
+            _err_result = {
+                "success": False,
+                "error": f"跨设备任务执行失败: {str(e)}",
+                "route_mode": _route_mode,
+                "dispatch_path": _dispatch_path,
+            }
+            if _fallback_reason:
+                _err_result["fallback_reason"] = _fallback_reason
+            if _compat_path_used:
+                _err_result["compat_path_used"] = _compat_path_used
+            if _compat_legacy_bypass:
+                _err_result["compat_legacy_bypass"] = _compat_legacy_bypass
+            if _dispatch_path == "legacy_bypass":
+                _err_result["legacy_bypass"] = True
             # PR-519: surface even failure results so they appear in audit logs
-            _ctx = context or {}
             surface_cross_device_result(
                 _err_result,
                 task_id=_ctx.get("task_id", ""),
                 device_id=_ctx.get("device_id", ""),
                 trace_id=_ctx.get("trace_id"),
-                route_mode=_ctx.get("route_mode", "cross_device"),
-                legacy_path_used=(None if _is_canonical else "cross_device_coordinator.execute_cross_device_task"),
+                route_mode=_route_mode,
+                legacy_path_used=_legacy_path_used,
+                extra={
+                    key: value
+                    for key, value in {
+                        "dispatch_path": _dispatch_path,
+                        "fallback_reason": _fallback_reason,
+                        "compat_path_used": _compat_path_used,
+                        "compat_legacy_bypass": _compat_legacy_bypass,
+                        "substrate_caller": _caller,
+                    }.items()
+                    if value
+                },
             )
             # PR-A: Mark the source device as degraded so the harness and formation
             # rebalance engine are aware that this cross-device task failed.

@@ -1067,6 +1067,11 @@ class DeviceRouter:
 
             # 2. 判断是否需要跨设备协同
             if analysis.get("requires_cross_device", False):
+                route_mode = str(route_mode or "cross_device")
+                ctx = dict(ctx)
+                ctx["route_mode"] = route_mode
+                ctx.setdefault("dispatch_path", "canonical_dispatch")
+
                 # --- Round 4: hard constraint — check cross-device switch ---
                 if not is_cross_device_enabled():
                     emit_gateway_log(
@@ -1147,7 +1152,7 @@ class DeviceRouter:
                             },
                             capability=capability,
                             exec_mode=exec_mode,
-                            route_mode=route_mode or "direct",
+                            route_mode=route_mode,
                             session=ctx.get("session", {}),
                             callback_channel=ctx.get("callback_channel", "ws"),
                             source_runtime_posture=_bridge_posture,
@@ -1165,9 +1170,13 @@ class DeviceRouter:
 
                         async def _local_coordinator_fallback(task: dict) -> dict:
                             coordinator = get_cross_device_coordinator()
+                            fallback_ctx = dict(task.get("context", ctx) or {})
+                            fallback_ctx["route_mode"] = route_mode
+                            fallback_ctx["dispatch_path"] = "canonical_fallback"
+                            fallback_ctx["fallback_reason"] = "agent_bridge_local_fallback"
                             return await coordinator.execute_cross_device_task(
                                 task.get("command", command),
-                                task.get("context", ctx),
+                                fallback_ctx,
                                 _substrate_caller="device_router.route_task",
                             )
 
@@ -1188,9 +1197,13 @@ class DeviceRouter:
 
                 # Use cross-device coordinator (fallback when bridge import failed)
                 coordinator = get_cross_device_coordinator()
+                fallback_ctx = dict(ctx)
+                fallback_ctx["route_mode"] = route_mode
+                fallback_ctx["dispatch_path"] = "canonical_fallback"
+                fallback_ctx["fallback_reason"] = "agent_bridge_import_error"
                 result = await coordinator.execute_cross_device_task(
                     command,
-                    ctx,
+                    fallback_ctx,
                     _substrate_caller="device_router.route_task",
                 )
                 _elapsed_ms = (_time.monotonic() - _route_start) * 1000
