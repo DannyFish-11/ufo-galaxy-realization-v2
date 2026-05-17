@@ -1398,6 +1398,375 @@ def _build_local_cross_multi_foundation_audit(
     }
 
 
+def _build_native_three_state_closeout(
+    *,
+    mode_summary: Dict[str, str],
+    layered_mode_model: Dict[str, Any],
+) -> Dict[str, Any]:
+    """1189 新增：原生三态收口推进——显式映射 静态/阈限态/呈现态 ↔ SILENT/LIMINAL/MANIFEST。
+
+    目标：把原生三态问题推进到仓库允许的最远处，区分：
+    - 代码已经反映的部分
+    - 代码只是暗示的部分
+    - 仍然缺失的部分
+    - 被工程近似遮蔽的部分
+    """
+    tristate_enum_exists = _probe("core.desktop_presence_runtime", "TriState")
+    continuum_phase_exists = _probe("core.continuum", "tri_state_phase")
+
+    # --- 直接映射：DesktopPresenceRuntime.TriState 是工程表达 ---------------
+    direct_code_reflection: List[Dict[str, str]] = []
+    if tristate_enum_exists:
+        direct_code_reflection.append(
+            {
+                "zh_term": "静态",
+                "code_value": "TriState.SILENT = 'silent'",
+                "code_source": "core.desktop_presence_runtime.TriState",
+                "meaning_zh": "主体静息；原生多模态感知在后台持续运行；无活跃认知请求。",
+                "coverage": "code_reflects",
+            }
+        )
+        direct_code_reflection.append(
+            {
+                "zh_term": "阈限态",
+                "code_value": "TriState.LIMINAL = 'liminal'",
+                "code_source": "core.desktop_presence_runtime.TriState",
+                "meaning_zh": "请求已收到；OpenClawd 认知/执行正在进行；本地和跨设备执行链均在候选中。",
+                "coverage": "code_reflects",
+            }
+        )
+        direct_code_reflection.append(
+            {
+                "zh_term": "呈现态",
+                "code_value": "TriState.MANIFEST = 'manifest'",
+                "code_source": "core.desktop_presence_runtime.TriState",
+                "meaning_zh": "主体主动呈现输出、控制设备或运行跨设备执行循环。执行完成后回到静态。",
+                "coverage": "code_reflects",
+            }
+        )
+
+    # --- 仅暗示的部分 --------------------------------------------------------
+    hints_only: List[Dict[str, str]] = []
+    if continuum_phase_exists:
+        hints_only.append(
+            {
+                "source": "core.continuum.tri_state_phase",
+                "reason_zh": (
+                    "continuum 内部 tri_state_phase 使用相同的 silent/liminal/manifest 术语，"
+                    "但其语义是内部状态协议，而非系统级原生三态主体生命周期。"
+                    "两者在术语上吻合，但在语义层级上不等价，属于暗示而非直接反映。"
+                ),
+            }
+        )
+
+    # --- 仍然缺失的部分 ------------------------------------------------------
+    still_absent: List[str] = [
+        "尚未形成跨仓统一可机读的'原生三态'规范性 API——目前 TriState 枚举存在于 V2，Android 侧无等价物。",
+        "静态/阈限态/呈现态 三个术语在代码注释或规范文档中尚无唯一权威的中文对应说明入口。",
+        "多源三态（TriState / tri_state_phase / ClosureState）之间的语义边界仍未被单一机读文档固化。",
+    ]
+
+    # --- 被工程近似遮蔽的部分 ------------------------------------------------
+    masked_by_approximation: List[str] = [
+        (
+            "core.current_state_backbone_audit.ClosureState (established/partial/open) "
+            "是工程闭合状态，表示链路完备度，与 静态/阈限态/呈现态 的主体生命周期语义完全不同。"
+            "不能把这三个工程闭合态当成原生主体三态。"
+        ),
+    ]
+
+    # --- 仓库侧可推进的结论 --------------------------------------------------
+    closure_push_zh = (
+        "DesktopPresenceRuntime.TriState (SILENT/LIMINAL/MANIFEST) "
+        "是 静态/阈限态/呈现态 意图模型的唯一直接工程实现。"
+        "continuum 内部 tri_state_phase 是同名但语义不同的内部协议态。"
+        "工程闭合三态 (ClosureState) 与主体生命周期三态完全不同。"
+        "当前最接近原生三态的单一收敛点是 core.desktop_presence_runtime.TriState。"
+    )
+
+    convergence_assessment = "partial_convergence" if tristate_enum_exists else "no_canonical_source"
+
+    return {
+        "closure_push_zh": closure_push_zh,
+        "convergence_assessment": convergence_assessment,
+        "canonical_source": "core.desktop_presence_runtime.TriState" if tristate_enum_exists else None,
+        "zh_to_code_mapping": direct_code_reflection,
+        "hints_only": hints_only,
+        "still_absent": still_absent,
+        "masked_by_engineering_approximation": masked_by_approximation,
+        "hard_boundary_zh": (
+            "不要把 ClosureState(established/partial/open) 当作 静态/阈限态/呈现态 的等价物。"
+            "不要把 continuum tri_state_phase 当作系统级主体生命周期三态。"
+        ),
+        "_source": "core.current_state_backbone_audit._build_native_three_state_closeout",
+    }
+
+
+def _build_central_agent_body_classification() -> Dict[str, Any]:
+    """1189 新增：中心智能体本体分类——区分已有/仅是基础设施/缺失/归属层。"""
+    # 探测已有的中心侧模块
+    has_command_router = _module_exists("core.command_router")
+    has_capability_orchestrator = _module_exists("core.capability_orchestrator")
+    has_agent_factory = _module_exists("core.agent_factory")
+    has_source_dispatch = _module_exists("core.runtime.source_dispatch_orchestrator")
+    has_mesh_coordinator = _module_exists("core.mesh_coordinator")
+    has_nats_bus = _module_exists("core.nats_bus")
+    has_result_ingress = _module_exists("core.unified_result_ingress")
+    has_projection = _module_exists("core.routes.projection")
+    has_rag_memory = _module_exists("core.rag_memory")
+    has_device_router = _module_exists("galaxy_gateway.device_router")
+
+    existing_center_intelligence: List[Dict[str, str]] = []
+    if has_command_router:
+        existing_center_intelligence.append(
+            {
+                "component": "core.command_router.CommandRouter",
+                "role_zh": "跨设备执行路由——将阈限态执行路径路由到远端设备。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_capability_orchestrator:
+        existing_center_intelligence.append(
+            {
+                "component": "core.capability_orchestrator",
+                "role_zh": "能力调度——决定走本地还是跨设备执行。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_source_dispatch:
+        existing_center_intelligence.append(
+            {
+                "component": "core.runtime.source_dispatch_orchestrator",
+                "role_zh": "请求分发编排——任务起源与分发的工程编排层。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_agent_factory:
+        existing_center_intelligence.append(
+            {
+                "component": "core.agent_factory",
+                "role_zh": "Agent 工厂——支持模板/LLM生成/分裂三种 Agent 创建模式。",
+                "classification": "center_intelligence_partial",
+                "note_zh": "具备 Agent 创建能力，但不等于完整中心智能体——缺少统一任务理解和规划层。",
+            }
+        )
+    if has_mesh_coordinator or has_nats_bus:
+        existing_center_intelligence.append(
+            {
+                "component": "core.mesh_coordinator / core.nats_bus",
+                "role_zh": "Mesh/NATS 协作通信基础——多设备协作消息骨架。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_result_ingress:
+        existing_center_intelligence.append(
+            {
+                "component": "core.unified_result_ingress",
+                "role_zh": "结果入口聚合——汇聚多路结果并写入真值链。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_projection:
+        existing_center_intelligence.append(
+            {
+                "component": "core.routes.projection",
+                "role_zh": "真值投影层——向 operator/board/panel/desktop 暴露系统状态。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_device_router:
+        existing_center_intelligence.append(
+            {
+                "component": "galaxy_gateway.device_router",
+                "role_zh": "设备路由——管理到远端设备的路由选择。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    existing_center_intelligence.append(
+        {
+            "component": "core.rag_memory",
+            "role_zh": "RAG 记忆层——具备向量检索增强记忆能力。",
+            "classification": "center_intelligence_partial" if has_rag_memory else "absent",
+        }
+    )
+
+    # 仅是基础设施的部分
+    only_coordination_infra: List[str] = [
+        "core.command_router——路由基础设施，不做任务理解。",
+        "core.capability_orchestrator——能力调度，不做意图解析。",
+        "core.runtime.source_dispatch_orchestrator——分发编排，不做多设备任务拆分。",
+        "galaxy_gateway.device_router——设备路由，不做设备能力匹配决策。",
+        "core.mesh_coordinator / core.nats_bus——通信骨架，不做执行策略决策。",
+        "core.unified_result_ingress——结果汇聚管道，不做结果语义解析。",
+        "core.routes.projection——状态投影，不做运行时决策。",
+    ]
+
+    # 中心智能体仍缺失的能力
+    still_missing: List[Dict[str, str]] = [
+        {
+            "missing_capability_zh": "任务理解层",
+            "detail_zh": "没有统一的自然语言任务理解入口，任务语义解析分散在各模块。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "意图解析层",
+            "detail_zh": "intent parsing 没有形成显式独立模块，依赖下游分支选择推断。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "统一计划层",
+            "detail_zh": "任务规划没有单一规划器，以工程链路拼接代替统一计划。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "设备能力匹配层",
+            "detail_zh": "设备能力模型（类型/能力/限制/能力协商）尚未形成完整可查询结构。",
+            "belongs_to": "V2 + Android",
+        },
+        {
+            "missing_capability_zh": "多设备任务拆分层",
+            "detail_zh": "没有把一个任务结构化拆分分配到多个设备并行执行的机制。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "统一失败恢复策略",
+            "detail_zh": "各模块有局部 fallback，但没有统一的失败恢复和重派策略层。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "长短期记忆持续化",
+            "detail_zh": "rag_memory 有向量记忆，但跨会话长期上下文持续化机制不完整。",
+            "belongs_to": "V2",
+        },
+        {
+            "missing_capability_zh": "面向用户的可解释输出层",
+            "detail_zh": "系统为什么这么决策，为什么选这台设备，没有可解释输出到用户层。",
+            "belongs_to": "V2 + panel-fullstack",
+        },
+        {
+            "missing_capability_zh": "面板可消费的智能体状态层",
+            "detail_zh": "panel 缺少结构化的智能体决策状态流，无法向面板实时投影智能体在做什么。",
+            "belongs_to": "panel-fullstack",
+        },
+        {
+            "missing_capability_zh": "多模态输入到执行计划转换",
+            "detail_zh": "语音/视觉/屏幕内容到执行计划的统一转换管道尚未完整闭合。",
+            "belongs_to": "V2 + multimodal",
+        },
+        {
+            "missing_capability_zh": "外部工具/服务调用编排",
+            "detail_zh": "MCP 工具调用有基础，但统一编排层（调用顺序/依赖/回滚）尚未完整。",
+            "belongs_to": "V2 + external-deps",
+        },
+    ]
+
+    return {
+        "verdict_zh": (
+            "V2 当前具备中心协调基础设施，但尚未形成完整中心智能体。"
+            "已有的是：路由/调度/聚合/投影的工程管道。"
+            "缺失的是：任务理解/统一规划/设备能力匹配/多设备任务拆分/统一恢复/可解释输出。"
+        ),
+        "existing_center_components": existing_center_intelligence,
+        "only_coordination_infrastructure": only_coordination_infra,
+        "still_missing_capabilities": still_missing,
+        "classification_summary": {
+            "center_coordination_infra_present": True,
+            "center_intelligence_partial_present": True,
+            "full_central_agent_present": False,
+            "missing_count": len(still_missing),
+        },
+        "_source": "core.current_state_backbone_audit._build_central_agent_body_classification",
+    }
+
+
+def _build_remaining_work_split() -> Dict[str, Any]:
+    """1189 新增：剩余工作最终分层——按 V2/Android/panel-fullstack/desktop-shell/multimodal/external-deps 分类。"""
+    return {
+        "V2": {
+            "label_zh": "V2 中心侧",
+            "remaining": [
+                "统一中心智能体任务理解/意图解析/规划层（当前以工程链路拼接为主）",
+                "设备能力模型——设备类型/能力/限制/协商机制",
+                "多设备任务拆分与并行分发机制",
+                "统一失败恢复与重派策略层",
+                "跨会话长短期记忆持续化",
+                "面向用户的可解释决策输出层",
+                "原生三态单一规范性 API（静态/阈限态/呈现态）跨仓统一",
+                "统一执行策略引擎（本地 vs 跨设备 vs mesh/relay fallback）",
+            ],
+        },
+        "Android": {
+            "label_zh": "Android 设备侧",
+            "remaining": [
+                "Android 主动发起任务能力的完整闭合",
+                "Android 局部自治决策机制（不只等待中心下发）",
+                "Android 设备能力完整上报与协商接口",
+                "Android 作为多设备协作节点（而非仅执行端）的角色模型",
+                "Android 侧原生三态（SILENT/LIMINAL/MANIFEST）对等实现",
+                "Android 本地任务失败恢复与中心回报机制",
+                "Mesh MESH_JOIN/MESH_RESULT/MESH_LEAVE 事件与 V2 侧规范对齐",
+            ],
+        },
+        "panel_fullstack": {
+            "label_zh": "Panel / 全栈 TypeScript",
+            "remaining": [
+                "当前任务视图（任务树/阶段/分解/执行设备）",
+                "设备总览视图（设备列表/状态/能力/角色）",
+                "智能体决策状态视图（当前计划/决策原因/fallback 原因）",
+                "执行流路径视图（走哪条链路/在哪个节点/卡在哪）",
+                "结果回流视图（已完成/部分/失败原因）",
+                "mesh/NATS/WS/relay 诊断视图",
+                "operator 操作能力（手动指派/禁用设备/强制路径/中止/重试/接管）",
+                "真实 TypeScript operator 控制台（替代当前原生 JS 静态页）",
+                "runtime truth 状态实时订阅接口",
+            ],
+        },
+        "desktop_shell": {
+            "label_zh": "Desktop Shell / 三态助手",
+            "remaining": [
+                "Tauri/Electron/原生桌面壳（透明窗/悬浮窗/常驻进程）",
+                "三态切换原生桌面行为（SILENT→LIMINAL→MANIFEST 的视觉/交互对应）",
+                "贴边助手/岛形助手/全屏工作台三种呈现模式",
+                "全局热键唤起",
+                "麦克风/摄像头/屏幕录制权限管理",
+                "系统通知与悬浮通知",
+                "与 V2 runtime truth 的桌面侧实时对接",
+            ],
+        },
+        "multimodal_io": {
+            "label_zh": "多模态输入输出",
+            "remaining": [
+                "语音输入完整闭合（ASR → 任务起源）",
+                "语音输出完整闭合（TTS → 呈现态输出）",
+                "屏幕内容理解（截图/OCR/视觉分析）到任务起源",
+                "图片/摄像头输入到执行计划转换",
+                "系统状态感知作为背景上下文",
+                "多设备上下文聚合（哪台设备有哪些感知信息）",
+                "跨设备多模态输出协调（在哪台设备播放声音/显示弹层）",
+            ],
+        },
+        "external_deps": {
+            "label_zh": "外部依赖 / 系统边界",
+            "remaining": [
+                "LLM/模型服务——生产级稳定接入与 fallback 策略",
+                "NATS 基础设施——生产部署、认证、监控",
+                "Mesh 网络——P2P 直连 vs relay fallback 稳定切换",
+                "语音服务（ASR/TTS）——外部服务接线完整",
+                "视觉/屏幕理解服务接入",
+                "身份认证系统——跨设备身份的生产级方案",
+                "设备发现/心跳/健康检查基础设施",
+                "MCP 工具服务编排",
+            ],
+        },
+        "meta": {
+            "split_basis_zh": (
+                "按仓库/层分类剩余工作，以便后续 PR 明确各层施工范围，不再让'还缺很多'这类判断停留在整体层面。"
+            ),
+            "_source": "core.current_state_backbone_audit._build_remaining_work_split",
+        },
+    }
+
+
 def _build_task_system_body_final_audit(
     *,
     chain_summary: Dict[str, str],
@@ -1534,6 +1903,13 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         chain_summary=chain_summary,
         mode_summary=mode_summary,
     )
+    # 1189 新增三大收口块
+    native_three_state_closeout = _build_native_three_state_closeout(
+        mode_summary=mode_summary,
+        layered_mode_model=dict(d.get("layered_mode_model") or {}),
+    )
+    central_agent_body_classification = _build_central_agent_body_classification()
+    remaining_work_split = _build_remaining_work_split()
 
     return {
         "authority": CURRENT_STATE_BACKBONE_AUDIT_AUTHORITY,
@@ -1554,5 +1930,9 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         "native_three_state_final_audit": native_three_state_final_audit,
         "local_cross_multi_foundation_audit": local_cross_multi_foundation_audit,
         "task_system_body_final_audit": task_system_body_final_audit,
+        # 1189 新增
+        "native_three_state_closeout": native_three_state_closeout,
+        "central_agent_body_classification": central_agent_body_classification,
+        "remaining_work_split": remaining_work_split,
         "honesty_note_zh": d["honesty_note_zh"],
     }

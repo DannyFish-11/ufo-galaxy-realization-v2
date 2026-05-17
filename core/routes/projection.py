@@ -6019,6 +6019,12 @@ def _build_foundational_system_truth(truth_payload: Dict[str, Any]) -> Dict[str,
             "delegated_execution_mode": mode_summary.get("delegated_execution"),
         },
         "task_system_body_final_audit": dict(snapshot.get("task_system_body_final_audit") or {}),
+        # 1189 新增三大收口块
+        "native_three_state_closeout": dict(snapshot.get("native_three_state_closeout") or {}),
+        "central_agent_body_classification": dict(
+            snapshot.get("central_agent_body_classification") or {}
+        ),
+        "remaining_work_split": dict(snapshot.get("remaining_work_split") or {}),
         "source_of_truth_refs": [
             "core.current_state_backbone_audit.build_system_backbone_snapshot",
             "core.current_state_backbone_audit.ClosureState",
