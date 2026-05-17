@@ -89,6 +89,11 @@ class MeshSendResult:
     target_device: str = ""
     latency_ms: float = 0
     error: str = ""
+    direct_attempted: bool = False
+    direct_health_checked: bool = False
+    fallback_used: bool = False
+    fallback_reason: str = ""
+    route_decision: str = ""
 
     def to_dict(self) -> Dict:
         return {
@@ -97,6 +102,11 @@ class MeshSendResult:
             "target_device": self.target_device,
             "latency_ms": self.latency_ms,
             "error": self.error,
+            "direct_attempted": self.direct_attempted,
+            "direct_health_checked": self.direct_health_checked,
+            "fallback_used": self.fallback_used,
+            "fallback_reason": self.fallback_reason,
+            "route_decision": self.route_decision,
         }
 
 
@@ -142,6 +152,10 @@ class MeshCoordinator:
             "total_sent": 0,
             "via_direct": 0,
             "via_relay": 0,
+            "direct_attempted": 0,
+            "direct_unavailable": 0,
+            "fallback_relay": 0,
+            "fallback_ws": 0,
             "probe_success": 0,
             "probe_fail": 0,
         }
@@ -205,6 +219,35 @@ class MeshCoordinator:
     # 核心选路 + 发送
     # ================================================================
 
+    async def _check_direct_viability(self, target_device: str, peer: Optional[PeerEntry]) -> tuple[bool, bool, str]:
+        """检查 direct path 是否可用，并在需要时执行健康探测。
+
+        Returns:
+            (is_viable, health_checked, reason)
+            - is_viable: True 表示可以尝试 direct send。
+            - health_checked: True 表示本次执行了 probe 健康探测；未探测时为 False。
+            - reason: 仅在 is_viable=False 时给出失败原因；成功时为空字符串。
+        """
+        if not peer:
+            return False, False, "peer_not_registered"
+        if not peer.reachable_direct:
+            return False, False, "peer_marked_relay_only"
+        if not self._p2p_send:
+            return False, False, "p2p_sender_unconfigured"
+        if not peer.local_ip:
+            return False, False, "peer_local_ip_missing"
+
+        now = time.time()
+        should_probe = peer.last_probe <= 0 or (now - peer.last_probe) > self.PROBE_INTERVAL
+        if should_probe:
+            probe_ok = await self.probe_peer(target_device)
+            if not probe_ok:
+                peer.reachable_direct = False
+                peer.connection_type = ConnectionType.RELAY
+                return False, True, "direct_probe_failed"
+            return True, True, ""
+        return True, False, ""
+
     async def send(
         self,
         target_device: str,
@@ -231,9 +274,15 @@ class MeshCoordinator:
         source = source_device or self._local_id
 
         peer = self._peers.get(target_device)
+        direct_attempted = False
+        direct_health_checked = False
+        fallback_reason = ""
 
         # 策略 1: P2P 直连
-        if peer and peer.reachable_direct and self._p2p_send:
+        direct_ok, direct_health_checked, direct_reason = await self._check_direct_viability(target_device, peer)
+        if direct_ok:
+            self._stats["direct_attempted"] += 1
+            direct_attempted = True
             try:
                 msg_bytes = json.dumps({
                     "type": "mesh_message",
@@ -250,15 +299,25 @@ class MeshCoordinator:
                         via=ConnectionType.DIRECT,
                         target_device=target_device,
                         latency_ms=(time.time() - start) * 1000,
+                        direct_attempted=True,
+                        direct_health_checked=direct_health_checked,
+                        route_decision="direct_p2p",
                     )
                 # P2P 失败 → 标记
                 peer.reachable_direct = False
                 peer.probe_failures += 1
+                fallback_reason = "direct_send_failed"
                 logger.warning(f"P2P send failed to {target_device}, falling back to relay")
             except Exception as e:
                 logger.warning(f"P2P send error: {e}")
                 if peer:
                     peer.reachable_direct = False
+                    peer.probe_failures += 1
+                fallback_reason = "direct_send_error"
+        else:
+            fallback_reason = direct_reason
+            if direct_reason:
+                self._stats["direct_unavailable"] += 1
 
         # 策略 2: 服务端 Relay
         if self._relay_send:
@@ -266,12 +325,18 @@ class MeshCoordinator:
                 result = await self._relay_send(source, target_device, payload_type, payload)
                 success = result.get("status") != "failed"
                 self._stats["via_relay"] += 1
+                self._stats["fallback_relay"] += 1
                 return MeshSendResult(
                     success=success,
                     via=ConnectionType.RELAY,
                     target_device=target_device,
                     latency_ms=(time.time() - start) * 1000,
                     error=result.get("error", ""),
+                    direct_attempted=direct_attempted,
+                    direct_health_checked=direct_health_checked,
+                    fallback_used=True,
+                    fallback_reason=fallback_reason or "relay_path_selected",
+                    route_decision="relay_fallback",
                 )
             except Exception as e:
                 return MeshSendResult(
@@ -280,6 +345,11 @@ class MeshCoordinator:
                     target_device=target_device,
                     error=f"Relay failed: {e}",
                     latency_ms=(time.time() - start) * 1000,
+                    direct_attempted=direct_attempted,
+                    direct_health_checked=direct_health_checked,
+                    fallback_used=True,
+                    fallback_reason=fallback_reason or "relay_send_error",
+                    route_decision="relay_fallback_failed",
                 )
 
         # 策略 3: WS fallback (服务端直接推送)
@@ -296,6 +366,11 @@ class MeshCoordinator:
                     via=ConnectionType.RELAY,
                     target_device=target_device,
                     latency_ms=(time.time() - start) * 1000,
+                    direct_attempted=direct_attempted,
+                    direct_health_checked=direct_health_checked,
+                    fallback_used=True,
+                    fallback_reason=fallback_reason or "ws_path_selected",
+                    route_decision="ws_fallback",
                 )
             except Exception as e:
                 return MeshSendResult(
@@ -304,6 +379,11 @@ class MeshCoordinator:
                     target_device=target_device,
                     error=str(e),
                     latency_ms=(time.time() - start) * 1000,
+                    direct_attempted=direct_attempted,
+                    direct_health_checked=direct_health_checked,
+                    fallback_used=True,
+                    fallback_reason=fallback_reason or "ws_send_error",
+                    route_decision="ws_fallback_failed",
                 )
 
         return MeshSendResult(
@@ -311,6 +391,11 @@ class MeshCoordinator:
             via=ConnectionType.UNKNOWN,
             target_device=target_device,
             error="No sender available (P2P/Relay/WS all unconfigured)",
+            direct_attempted=direct_attempted,
+            direct_health_checked=direct_health_checked,
+            fallback_used=bool(fallback_reason),
+            fallback_reason=fallback_reason,
+            route_decision="no_sender_available",
         )
 
     # ================================================================
