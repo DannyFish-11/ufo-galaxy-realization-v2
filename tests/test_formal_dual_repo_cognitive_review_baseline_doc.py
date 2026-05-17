@@ -11,7 +11,7 @@ def _read_doc() -> str:
     return DOC_PATH.read_text(encoding="utf-8")
 
 
-def test_doc_establishes_center_distributed_ai_system_not_multi_client() -> None:
+def test_system_identity() -> None:
     content = _read_doc()
     assert "中心分布式 AI 系统" in content
     assert "普通多客户端产品" in content
@@ -19,7 +19,7 @@ def test_doc_establishes_center_distributed_ai_system_not_multi_client() -> None
     assert "不能把它退回成“PC + Android 客户端”的普通多客户端产品认知" in content
 
 
-def test_doc_covers_center_authority_capabilities() -> None:
+def test_center_authority() -> None:
     content = _read_doc()
     required = [
         "调度",
@@ -45,7 +45,7 @@ def test_doc_covers_center_authority_capabilities() -> None:
         assert item in content, f"missing center authority item: {item}"
 
 
-def test_doc_positions_android_and_desktop_as_body_network_surfaces() -> None:
+def test_device_positioning() -> None:
     content = _read_doc()
     assert "Android 是强运行时节点" in content
     assert "不是被动终端" in content
@@ -65,7 +65,7 @@ def test_doc_positions_android_and_desktop_as_body_network_surfaces() -> None:
         assert anchor in content, f"missing device-positioning anchor: {anchor}"
 
 
-def test_doc_covers_local_and_cross_device_main_chains() -> None:
+def test_execution_chains() -> None:
     content = _read_doc()
     assert "本地链路主链" in content
     assert "跨设备链路主链" in content
@@ -76,14 +76,13 @@ def test_doc_covers_local_and_cross_device_main_chains() -> None:
     assert "galaxy_gateway/android/handlers/registration.py" in content
 
 
-def test_doc_converges_tri_state_to_static_liminal_manifest_only() -> None:
+def test_tri_state_convergence() -> None:
     content = _read_doc()
     assert "静态" in content
     assert "阈限态" in content
     assert "显现态" in content
-    assert "TriState.SILENT" in content or "SILENT" in content
-    assert "TriState.LIMINAL" in content or "LIMINAL" in content
-    assert "TriState.MANIFEST" in content or "MANIFEST" in content
+    for state in ["SILENT", "LIMINAL", "MANIFEST"]:
+        assert f"TriState.{state}" in content or state in content
     assert "唯一权威实现" in content
     assert "core/desktop_presence_runtime.py" in content
     assert "工程闭合态" in content
@@ -93,7 +92,7 @@ def test_doc_converges_tri_state_to_static_liminal_manifest_only() -> None:
     assert "core.continuum.tri_state_phase" in content
 
 
-def test_doc_defines_ws_mesh_nats_layering() -> None:
+def test_transport_layering() -> None:
     content = _read_doc()
     assert "WS = 当前双仓主链" in content
     assert "Mesh = 建立在当前主链之上的协作 overlay" in content
@@ -106,7 +105,7 @@ def test_doc_defines_ws_mesh_nats_layering() -> None:
     assert "core/nats_bus.py" in content
 
 
-def test_doc_confirms_android_local_execution_and_delegation_relationship() -> None:
+def test_android_runtime_role() -> None:
     content = _read_doc()
     assert "Android 具备真实本地执行链路" in content
     assert "可自治、也可被中心委托的强运行时节点" in content
@@ -117,7 +116,7 @@ def test_doc_confirms_android_local_execution_and_delegation_relationship() -> N
     assert "AutonomousExecutionPipeline.kt" in content
 
 
-def test_doc_covers_maturity_buckets_and_system_problem_domains() -> None:
+def test_maturity_and_problem_domains() -> None:
     content = _read_doc()
     maturity_items = [
         "已形成真实主链的部分",
@@ -143,7 +142,7 @@ def test_doc_covers_maturity_buckets_and_system_problem_domains() -> None:
         assert item in content, f"missing problem domain: {item}"
 
 
-def test_doc_lists_non_regression_constraints() -> None:
+def test_non_regression_constraints() -> None:
     content = _read_doc()
     assert "本 PR 合并后" in content
     assert "不回退约束" in content
