@@ -100,7 +100,7 @@ def _build_truth_payload(device_id: str) -> Dict[str, Any]:
 
 class TestCrossRepoAcceptanceChain:
     @pytest.mark.asyncio
-    async def test_representative_chain_is_stage_attributable_and_regression_ready(self):
+    async def test_full_chain_passes_with_all_stages(self):
         from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain
         from core.device_lifecycle_state import (
             DeviceLifecycleTransitionEvent,
