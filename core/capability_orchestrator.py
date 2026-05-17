@@ -647,14 +647,43 @@ class CapabilityOrchestrator:
             }
 
         elif cap.id == "builtin_cross_device":
-            # 跨设备协同
-            from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+            # 跨设备协同：优先走 canonical DeviceRouter 路径，
+            # 仅在 router 异常时才显式退回 compatibility fallback。
+            from galaxy_gateway.device_router import device_router as canonical_device_router
             command = params.get("message", params.get("command", ""))
             context = {k: v for k, v in params.items() if k not in ("message", "command")}
-            result = await cross_device_coordinator.execute_cross_device_task(command, context)
+            context = dict(context)
+            context.setdefault("route_mode", "cross_device")
+            if not context.get("source_device_id") and context.get("device_id"):
+                context["source_device_id"] = context.get("device_id")
+            try:
+                result = await canonical_device_router.route_task(command, context)
+            except Exception as route_err:
+                logger.warning(
+                    "builtin_cross_device canonical route failed; "
+                    "falling back to compatibility coordinator path: %s",
+                    route_err,
+                )
+                from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
+
+                fallback_context = dict(context)
+                fallback_context["route_mode"] = "cross_device_compat_fallback"
+                fallback_context["_compat_legacy_bypass"] = (
+                    "capability_orchestrator.builtin_cross_device"
+                )
+                result = await cross_device_coordinator.execute_cross_device_task(
+                    command,
+                    fallback_context,
+                    _substrate_caller="capability_orchestrator.compat_fallback",
+                )
+            _reply = (
+                result.get("message")
+                if ("message" in result and result.get("message") is not None)
+                else result.get("error", str(result))
+            )
             return {
                 "success": result.get("success", False),
-                "reply": result.get("message", str(result)),
+                "reply": _reply,
                 "data": result,
             }
 
