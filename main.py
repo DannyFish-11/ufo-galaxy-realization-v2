@@ -45,6 +45,13 @@ import subprocess
 import logging
 from pathlib import Path
 
+from entrypoint_role_contract import (
+    EntrypointRole,
+    MAIN_ENTRY_ID,
+    assert_single_unique_main_entrypoint,
+    ensure_entrypoint_role,
+)
+
 # ---------------------------------------------------------------------------
 # Bootstrap: project root + sys.path
 # ---------------------------------------------------------------------------
@@ -140,6 +147,15 @@ def main() -> int:
        which performs the full async bring-up of all services and the runtime
        subject.
     """
+
+    single_main_ok = assert_single_unique_main_entrypoint()
+    main_role_ok = ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN)
+    if not single_main_ok:
+        logger.error("Entrypoint role contract violation: single unique main entrypoint is broken.")
+        return 1
+    if not main_role_ok:
+        logger.error("Entrypoint role contract violation: main.py does not have UNIQUE_MAIN role.")
+        return 1
 
     # --setup: shortcut to configuration wizard (bypasses bring-up)
     if "--setup" in sys.argv:

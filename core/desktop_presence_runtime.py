@@ -100,6 +100,9 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Runtime")
 
+DESKTOP_PRESENCE_RUNTIME_ENTRYPOINT_ROLE: str = "stage_entry"
+"""Entrypoint role contract (PR-01): runtime shell stage entry, not main startup entry."""
+
 
 # ---------------------------------------------------------------------------
 # Tri-state definition
