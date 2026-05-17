@@ -250,6 +250,35 @@ class AndroidMeshLifecycleStore:
         self._device_sessions: Dict[str, List[str]] = {}
 
     # ------------------------------------------------------------------
+    # 内部辅助（私有）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_session_id(
+        explicit_id: Optional[str],
+        device_id: str,
+        payload: Dict[str, Any],
+    ) -> str:
+        """从显式参数或 payload 字段中解析 session_id，无法提取时自动生成。
+
+        优先级：explicit_id > payload.session_id > payload.mesh_session_id > 自动生成。
+        """
+        return str(
+            explicit_id
+            or payload.get("session_id")
+            or payload.get("mesh_session_id")
+            or f"amesh_{device_id}_{int(time.time() * 1000)}"
+        )
+
+    def _register_device_session(self, device_id: str, session_id: str) -> None:
+        """（需在持有锁的情况下调用）将 session_id 追加到设备索引，并按容量上限清理最旧记录。"""
+        slist = self._device_sessions.setdefault(device_id, [])
+        slist.append(session_id)
+        if len(slist) > _MAX_SESSIONS_PER_DEVICE:
+            oldest = slist.pop(0)
+            self._sessions.pop(oldest, None)
+
+    # ------------------------------------------------------------------
     # 核心写入方法
     # ------------------------------------------------------------------
 
@@ -280,12 +309,7 @@ class AndroidMeshLifecycleStore:
             记录的事件对象。
         """
         payload = payload or {}
-        if not session_id:
-            # 尝试从 payload 中提取 session_id，否则自动生成
-            session_id = str(
-                payload.get("session_id") or payload.get("mesh_session_id") or
-                f"amesh_{device_id}_{int(time.time() * 1000)}"
-            )
+        session_id = self._resolve_session_id(session_id, device_id, payload)
 
         event = AndroidMeshLifecycleEvent(
             event_id=str(uuid.uuid4()),
@@ -306,13 +330,7 @@ class AndroidMeshLifecycleStore:
                     join_event=event,
                 )
                 self._sessions[session_id] = record
-                # 维护设备→session 索引并限制容量
-                slist = self._device_sessions.setdefault(device_id, [])
-                slist.append(session_id)
-                if len(slist) > _MAX_SESSIONS_PER_DEVICE:
-                    # 移除最旧的 session（从 _sessions 字典中也一并清理）
-                    oldest = slist.pop(0)
-                    self._sessions.pop(oldest, None)
+                self._register_device_session(device_id, session_id)
             else:
                 record = self._sessions[session_id]
                 record.join_event = event
@@ -354,11 +372,7 @@ class AndroidMeshLifecycleStore:
         AndroidMeshLifecycleEvent
         """
         payload = payload or {}
-        if not session_id:
-            session_id = str(
-                payload.get("session_id") or payload.get("mesh_session_id") or
-                f"amesh_{device_id}_{int(time.time() * 1000)}"
-            )
+        session_id = self._resolve_session_id(session_id, device_id, payload)
 
         event = AndroidMeshLifecycleEvent(
             event_id=str(uuid.uuid4()),
@@ -379,11 +393,7 @@ class AndroidMeshLifecycleStore:
                     status=AndroidMeshSessionStatus.ACTIVE,
                 )
                 self._sessions[session_id] = record
-                slist = self._device_sessions.setdefault(device_id, [])
-                slist.append(session_id)
-                if len(slist) > _MAX_SESSIONS_PER_DEVICE:
-                    oldest = slist.pop(0)
-                    self._sessions.pop(oldest, None)
+                self._register_device_session(device_id, session_id)
             else:
                 record = self._sessions[session_id]
 
@@ -429,10 +439,7 @@ class AndroidMeshLifecycleStore:
             with self._lock:
                 session_id = self._find_latest_active_session_for_device(device_id)
             if not session_id:
-                session_id = str(
-                    payload.get("session_id") or payload.get("mesh_session_id") or
-                    f"amesh_{device_id}_{int(time.time() * 1000)}"
-                )
+                session_id = self._resolve_session_id(None, device_id, payload)
 
         event = AndroidMeshLifecycleEvent(
             event_id=str(uuid.uuid4()),
@@ -453,11 +460,7 @@ class AndroidMeshLifecycleStore:
                     leave_event=event,
                 )
                 self._sessions[session_id] = record
-                slist = self._device_sessions.setdefault(device_id, [])
-                slist.append(session_id)
-                if len(slist) > _MAX_SESSIONS_PER_DEVICE:
-                    oldest = slist.pop(0)
-                    self._sessions.pop(oldest, None)
+                self._register_device_session(device_id, session_id)
             else:
                 record = self._sessions[session_id]
                 record.leave_event = event

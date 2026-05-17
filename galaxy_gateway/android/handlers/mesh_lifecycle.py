@@ -100,6 +100,11 @@ def _extract_session_id(message: Dict[str, Any]) -> Optional[str]:
     )
 
 
+def _generate_session_id(device_id: str) -> str:
+    """生成一个包含 device_id 标记的唯一 mesh session 标识符。"""
+    return f"amesh_{device_id}_{int(time.time() * 1000)}"
+
+
 # ---------------------------------------------------------------------------
 # 处理器
 # ---------------------------------------------------------------------------
@@ -167,7 +172,7 @@ async def handle_mesh_join(
         )
         store_status = "store_error"
 
-    session_id = stored_session_id or raw_session_id or f"amesh_{device_id}_{int(time.time() * 1000)}"
+    session_id = stored_session_id or raw_session_id or _generate_session_id(device_id)
 
     # 2. 向 MeshSessionLifecycleCoordinator 传递信号
     lifecycle_record = None
@@ -279,7 +284,7 @@ async def handle_mesh_result(
         )
         store_status = "store_error"
 
-    session_id = stored_session_id or raw_session_id or f"amesh_{device_id}_{int(time.time() * 1000)}"
+    session_id = stored_session_id or raw_session_id or _generate_session_id(device_id)
 
     # 2. 向 MeshSessionLifecycleCoordinator 传递激活信号
     coordinator_available = False
@@ -367,7 +372,7 @@ async def handle_mesh_leave(
         )
         store_status = "store_error"
 
-    session_id = stored_session_id or raw_session_id or f"amesh_{device_id}_{int(time.time() * 1000)}"
+    session_id = stored_session_id or raw_session_id or _generate_session_id(device_id)
 
     # 2. 向 MeshSessionLifecycleCoordinator 传递终止信号
     coordinator_available = False
