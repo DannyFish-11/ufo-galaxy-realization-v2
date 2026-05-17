@@ -3,6 +3,8 @@
 from pathlib import Path
 
 
+# The repository already versions many audit baselines with a `_CN_2026` suffix;
+# this test intentionally follows that established naming scheme.
 DOC_PATH = Path("audit/FORMAL_DUAL_REPO_MAINLINE_UNINTEGRATED_RISK_BASELINE_CN_2026.md")
 UNINTEGRATED_APPENDIX = Path("audit/FORMAL_DUAL_REPO_UNINTEGRATED_CAPABILITIES_APPENDIX_CN_2026.md")
 DUPLICATE_APPENDIX = Path("audit/FORMAL_DUAL_REPO_DUPLICATE_WHEEL_RISK_APPENDIX_CN_2026.md")
@@ -116,8 +118,8 @@ def test_appendices_exist_and_are_referenced_by_main_doc() -> None:
     unintegrated_content = _read(UNINTEGRATED_APPENDIX)
     duplicate_content = _read(DUPLICATE_APPENDIX)
 
-    assert str(UNINTEGRATED_APPENDIX) in main_content
-    assert str(DUPLICATE_APPENDIX) in main_content
+    assert UNINTEGRATED_APPENDIX.as_posix() in main_content
+    assert DUPLICATE_APPENDIX.as_posix() in main_content
 
     unintegrated_required = [
         "core/unified_orchestration_spine.py",
