@@ -13,6 +13,8 @@ from entrypoint_role_contract import (
     ENTRYPOINT_ROLE_CONTRACT_SENTINEL,
     ENTRYPOINT_ROLE_REGISTRY,
     EntrypointRole,
+    LEGACY_DOCKER_LAUNCHER_ENTRY_ID,
+    LEGACY_WINDOWS_RUN_UI_ENTRY_ID,
     MAIN_ENTRY_ID,
     PRIMARY_STARTUP_CHAIN,
     UNIFIED_LAUNCHER_ENTRY_ID,
@@ -74,10 +76,21 @@ def test_compat_fallback_legacy_entries_are_not_main():
     ]
     assert compat_entries
     assert all(record.non_main_reason for record in compat_entries)
+    assert ensure_entrypoint_role(
+        LEGACY_DOCKER_LAUNCHER_ENTRY_ID, EntrypointRole.COMPAT_FALLBACK_LEGACY
+    )
+    assert ensure_entrypoint_role(
+        LEGACY_WINDOWS_RUN_UI_ENTRY_ID, EntrypointRole.COMPAT_FALLBACK_LEGACY
+    )
 
 
 def test_android_v2_mainline_bridge_anchors_are_present():
     assert "InputRouter.kt" in ANDROID_V2_MAINLINE_BRIDGE_ANCHORS["android_source_uplink"]
+    assert ANDROID_V2_MAINLINE_BRIDGE_ANCHORS["v2_startup_authority"] == MAIN_ENTRY_ID
+    assert (
+        ANDROID_V2_MAINLINE_BRIDGE_ANCHORS["v2_subordinate_launcher"]
+        == UNIFIED_LAUNCHER_ENTRY_ID
+    )
     assert (
         ANDROID_V2_MAINLINE_BRIDGE_ANCHORS["v2_gateway_ingress"]
         == "galaxy_gateway.routes.chat:chat_endpoint"
@@ -135,3 +148,30 @@ def test_snapshot_reports_single_main_and_android_anchor():
     assert snap["single_unique_main_entrypoint"] is True
     assert "android_v2_mainline_bridge_anchors" in snap
     assert snap["role_counts"]["unique_main"] == 1
+
+
+def test_legacy_launchers_point_to_main_py_first():
+    run_ui_src = _read("enhancements/clients/windows_client/run_ui.py")
+    assert "Authoritative startup path: python main.py" in run_ui_src
+    assert "Direct advanced invocation: python unified_launcher.py" in run_ui_src
+
+    launcher_v2_src = _read("scripts/launcher_v2.py")
+    assert "**Canonical startup authority**: ``main.py``" in launcher_v2_src
+    assert "**Canonical subordinate launcher**: ``unified_launcher.py``" in launcher_v2_src
+
+
+def test_legacy_registry_recommendations_demote_non_main_launchers():
+    from core.legacy_purge_registry import get_purge_entry
+    from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
+    run_ui_entry = LEGACY_PATH_REGISTRY["enhancements.clients.windows_client.run_ui"]
+    assert "python main.py" in run_ui_entry.recommendation
+    assert "python unified_launcher.py" in run_ui_entry.recommendation
+
+    run_ui_purge_entry = get_purge_entry("enhancements/clients/windows_client/run_ui.py")
+    assert run_ui_purge_entry is not None
+    assert run_ui_purge_entry.canonical_replacement.startswith("python main.py")
+
+    start_galaxy_entry = get_purge_entry("start_galaxy.py")
+    assert start_galaxy_entry is not None
+    assert start_galaxy_entry.canonical_replacement.startswith("python main.py")

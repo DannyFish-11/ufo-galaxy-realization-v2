@@ -12,8 +12,8 @@
 #     — canonical read-only desktop status surface, projection-driven
 #
 # Authoritative startup path:
-#   python unified_launcher.py
-#   (or on Windows: start.bat)
+#   python main.py
+#   (or on Windows: start.bat; direct advanced invocation: python unified_launcher.py)
 #
 # See docs/WINDOWS_EXECUTION_PIPELINE.md.
 
@@ -23,7 +23,8 @@ warnings.warn(
     "enhancements/clients/windows_client/run_ui.py is hard-disabled.  "
     "It targeted the retired legacy chat/sidebar client.  "
     "Active Windows direction: DesktopPresenceRuntime + status_board_v2.  "
-    "Authoritative startup path: python unified_launcher.py  "
+    "Authoritative startup path: python main.py  "
+    "(direct advanced invocation: python unified_launcher.py)  "
     "See docs/WINDOWS_EXECUTION_PIPELINE.md.",
     DeprecationWarning,
     stacklevel=1,
@@ -36,6 +37,7 @@ raise RuntimeError(
     "Active Windows direction:\n"
     "  core/desktop_presence_runtime.py  (DesktopPresenceRuntime tri-state shell)\n"
     "  windows_client/status_board_v2/   (projection-driven desktop status surface)\n"
-    "Authoritative startup path: python unified_launcher.py\n"
+    "Authoritative startup path: python main.py\n"
+    "Direct advanced invocation: python unified_launcher.py\n"
     "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
 )

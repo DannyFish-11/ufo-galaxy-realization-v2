@@ -557,7 +557,8 @@ _register(
             "enhancements/clients/windows_client/run_ui.py is HARD-DISABLED (PR-3).  "
             "It targeted the retired legacy chat/sidebar client.  "
             "Active Windows direction: DesktopPresenceRuntime + status_board_v2/.  "
-            "Authoritative startup path: python unified_launcher.py"
+            "Authoritative startup path: python main.py "
+            "(direct advanced invocation: python unified_launcher.py)"
         ),
         pr_guardrail_added="PR-8-layout",
         notes=(
@@ -1430,7 +1431,8 @@ _register(
         recommendation=(
             "START_CLIENT.bat was fully deleted in PR-8.  "
             "Use ``start.bat`` (Windows bootstrap launcher) or "
-            "``python unified_launcher.py`` as the canonical startup path.  "
+            "``python main.py`` as the canonical startup path.  "
+            "Use ``python unified_launcher.py`` only for direct subordinate invocation.  "
             "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
         ),
         pr_guardrail_added="PR-8",
@@ -1445,7 +1447,8 @@ _register(
         status=LegacyPathStatus.DELETED,
         recommendation=(
             "start_galaxy_client.bat was fully deleted in PR-8.  "
-            "Use ``python unified_launcher.py`` as the canonical startup path.  "
+            "Use ``python main.py`` as the canonical startup path.  "
+            "Use ``python unified_launcher.py`` only for direct subordinate invocation.  "
             "Configure GALAXY_GATEWAY_URL via .env or environment variable.  "
             "See docs/WINDOWS_EXECUTION_PIPELINE.md for the current architecture."
         ),
