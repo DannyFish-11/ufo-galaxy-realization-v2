@@ -164,6 +164,18 @@ Routes
       Record that an Android device has ACKed a directed action.  Removes
       the action from the pending store.
 
+  --- PR-X：设备 Dispatch 就绪控制面端点 ---
+
+  GET /api/v1/operator/devices/{device_id}/dispatch-readiness
+      单台设备的 dispatch 就绪状态：包含结构化 status 枚举、注册 gap 列表、
+      阻断说明、附接状态等，而不仅是布尔标志。数据源：
+      :mod:`core.device_dispatch_readiness_surface`。
+
+  GET /api/v1/operator/devices/dispatch-readiness
+      全设备 dispatch 就绪面板：枚举所有已知设备，汇总各 status 类别数量，
+      每台设备携带完整结构化拦截原因。提供操作员和下游消费者一站式
+      control-plane 视图。
+
 Design constraints
 ------------------
 - **Read endpoints: Read-only** — no writes, no side-effects.
@@ -1559,6 +1571,149 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 dispatch_id,
                 exc,
             )
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ==================================================================
+    # PR-X: 设备 Dispatch 就绪控制面端点
+    # ==================================================================
+    #
+    # 以下两个端点将 unified_dispatch_readiness_gate 的评估结果暴露为
+    # 真正的 operator 可见面，终结"注册 gap / dispatch 拦截原因仅内部可知"
+    # 的隐控平面问题。
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/devices/{device_id}/dispatch-readiness
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/devices/{device_id}/dispatch-readiness")
+    async def device_dispatch_readiness(device_id: str) -> JSONResponse:
+        """返回单台设备的 dispatch 就绪状态（结构化拦截原因）。
+
+        数据源：:func:`~core.device_dispatch_readiness_surface.get_device_dispatch_readiness`
+        → :func:`~core.unified_dispatch_readiness_gate.evaluate_dispatch_readiness`
+
+        与 ``/api/v1/operator/devices/ecosystem/{device_id}`` 的区别
+        --------------------------------------------------------------
+        ecosystem 端点暴露设备的 AI/模型/无障碍就绪快照（来自
+        DEVICE_STATE_SNAPSHOT 上报）。本端点暴露的是 **dispatch 门控评估**：
+        注册是否完整、transport 是否在线、附接会话是否有效、能力是否满足、
+        以及任何一条门控失败的具体原因。
+
+        Returns::
+
+            {
+              "device_id": str,
+              "dispatch_ready": bool,
+              "registered": bool,
+              "status": str,         # DispatchReadinessStatus 枚举值
+              "reason": str,         # 人类可读解释
+              "registration_gaps": [str, ...],   # 注册失败步骤（仅 BLOCKED_REGISTRATION_GAP 时非空）
+              "attachment_state": str,
+              "runtime_session_id": str | null,
+              "runtime_attachment_session_id": str | null,
+              "transport_alive": bool,
+              "blocking_notes": [str, ...],      # 附加阻断上下文
+              "surface_authority": str,
+              "evaluated_at": float,
+              "authority": str
+            }
+        """
+        try:
+            from core.device_dispatch_readiness_surface import get_device_dispatch_readiness
+            result = get_device_dispatch_readiness(device_id)
+            return JSONResponse(content={
+                **result,
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error(
+                "device_dispatch_readiness(%s) endpoint error: %s", device_id, exc
+            )
+            return JSONResponse(
+                content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
+                status_code=500,
+            )
+
+    # ------------------------------------------------------------------
+    # GET /api/v1/operator/devices/dispatch-readiness
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/operator/devices/dispatch-readiness")
+    async def devices_dispatch_readiness_panel(
+        device_ids: Optional[str] = Query(
+            None,
+            description="逗号分隔的设备 ID 列表（留空则枚举所有已知设备）",
+        ),
+    ) -> JSONResponse:
+        """返回全设备 dispatch 就绪面板。
+
+        枚举所有已知设备（来自 UDM、注册 gap 存储和状态快照存储），对每台
+        设备运行 dispatch 就绪评估，返回汇总统计 + 每台设备的完整结构化
+        拦截原因。
+
+        这是注册 gap 与 dispatch gate 结果在 operator 控制面上的统一可视化
+        端点。运维人员或下游监控消费者无需查阅内部日志即可得知：
+        * 哪些设备因注册 gap 被拦截，gap 发生在哪个下游步骤？
+        * 哪些设备因 transport 断线、附接失效、能力缺失等被拦截？
+        * 哪些设备完全就绪可派发？
+
+        Query parameters
+        ----------------
+        ``device_ids``
+            可选，逗号分隔的设备 ID 列表。若不提供则自动枚举所有已知设备。
+
+        Returns::
+
+            {
+              "devices": [
+                {
+                  "device_id": str,
+                  "dispatch_ready": bool,
+                  "registered": bool,
+                  "status": str,
+                  "reason": str,
+                  "registration_gaps": [str, ...],
+                  "attachment_state": str,
+                  "runtime_session_id": str | null,
+                  "transport_alive": bool,
+                  "blocking_notes": [str, ...],
+                  "evaluated_at": float
+                },
+                ...
+              ],
+              "summary": {
+                "total": int,
+                "dispatch_ready": int,
+                "blocked_registration_gap": int,
+                "blocked_stale_attachment": int,
+                "blocked_transport": int,
+                "blocked_capability": int,
+                "blocked_session_validity": int,
+                "blocked_cross_device_eligibility": int,
+                "blocked_other": int,
+                "not_registered": int,
+                "gate_error": int,
+                "total_blocked": int
+              },
+              "compiled_at": float,
+              "authority": str
+            }
+        """
+        try:
+            from core.device_dispatch_readiness_surface import get_dispatch_readiness_panel
+            explicit_ids: Optional[list] = None
+            if device_ids:
+                explicit_ids = [d.strip() for d in device_ids.split(",") if d.strip()]
+            panel = get_dispatch_readiness_panel(device_ids=explicit_ids)
+            return JSONResponse(content={
+                **panel,
+                "authority": "OPERATOR_ROUTES_V1",
+            })
+        except Exception as exc:
+            logger.error("devices_dispatch_readiness_panel endpoint error: %s", exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,
