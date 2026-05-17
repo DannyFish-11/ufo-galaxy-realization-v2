@@ -162,6 +162,16 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
     "operational_state_board": {
         "categories": [{"category_id": "task_execution_visibility"}],
     },
+    "foundational_system_truth": {
+        "cross_device_foundation": {"closure_state": "established"},
+        "multi_device_foundation": {"closure_state": "established"},
+        "real_three_state_model": {
+            "states": ["established", "partial", "open"],
+            "established_count": 6,
+            "partial_count": 2,
+            "open_count": 3,
+        },
+    },
 }
 
 _DESKTOP_STATUS_BOARD_PAYLOAD: Dict[str, Any] = {
@@ -248,8 +258,10 @@ class TestProjectionReaderFile:
         assert result["execution_stage"] == "executing"
         assert "operational_state_board" in result
         assert "participation_truth_consumption" in result
+        assert "foundational_system_truth" in result
         assert "cross_repo_acceptance_chain" in result
         assert result["participation_truth_consumption"]["participation_tier"] == "dispatch_eligible"
+        assert result["foundational_system_truth"]["cross_device_foundation"]["closure_state"] == "established"
 
     def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
         from windows_client.status_board_v2.projection_reader import (
@@ -775,6 +787,7 @@ class TestStatusBoardV2App:
         projection["participation_truth_consumption"] = dict(
             _RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]
         )
+        projection["foundational_system_truth"] = dict(_RUNTIME_TRUTH_PAYLOAD["foundational_system_truth"])
         projection["cross_repo_acceptance_chain"] = dict(
             _RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"]
         )
@@ -783,6 +796,9 @@ class TestStatusBoardV2App:
         assert "dispatch_eligible" in out
         assert "dispatch=True" in out
         assert "constrained=False" in out
+        assert "cross_device=established" in out
+        assert "multi_device=established" in out
+        assert "est=6 par=2 open=3" in out
         assert "Matrix" in out
         assert "android-lab-2" in out
         assert "E2E" in out

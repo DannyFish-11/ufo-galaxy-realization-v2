@@ -73,6 +73,9 @@ class DeviceSurface:
         acceptance_chain = projection.get("cross_repo_acceptance_chain")
         if not isinstance(acceptance_chain, dict):
             acceptance_chain = {}
+        foundational_truth = projection.get("foundational_system_truth")
+        if not isinstance(foundational_truth, dict):
+            foundational_truth = {}
 
         lines = [
             c("  ┌─ Device & Execution Context ────────────────────┐", BOLD),
@@ -158,6 +161,33 @@ class DeviceSurface:
             lines.append(
                 f"  │  {c('Attach  :', BOLD)} {c(str(lifecycle_stage), _COLOUR_NONE)}"
             )
+
+        cross_device_foundation = foundational_truth.get("cross_device_foundation") or {}
+        multi_device_foundation = foundational_truth.get("multi_device_foundation") or {}
+        cross_state = cross_device_foundation.get("closure_state")
+        multi_state = multi_device_foundation.get("closure_state")
+        if cross_state not in (None, "") or multi_state not in (None, ""):
+            cross_text = f"cross_device={cross_state or 'unknown'}"
+            multi_text = f"multi_device={multi_state or 'unknown'}"
+            lines.append(
+                "  │  "
+                f"{c('Layer   :', BOLD)} "
+                f"{c(cross_text, _COLOUR_NONE)} "
+                f"{c('|', _COLOUR_NONE)} "
+                f"{c(multi_text, _COLOUR_NONE)}"
+            )
+
+        real_three_state = foundational_truth.get("real_three_state_model") or {}
+        if isinstance(real_three_state, dict):
+            established_count = int(real_three_state.get("established_count") or 0)
+            partial_count = int(real_three_state.get("partial_count") or 0)
+            open_count = int(real_three_state.get("open_count") or 0)
+            if established_count or partial_count or open_count:
+                lines.append(
+                    "  │  "
+                    f"{c('3-State :', BOLD)} "
+                    f"{c(f'est={established_count} par={partial_count} open={open_count}', _COLOUR_NONE)}"
+                )
 
         matrix = participation.get("all_device_participation_matrix")
         if isinstance(matrix, dict):

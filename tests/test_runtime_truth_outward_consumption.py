@@ -73,6 +73,22 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert "device_lifecycle_stage" in payload["participation_truth_consumption"]
     assert "all_device_participation_matrix" in payload["participation_truth_consumption"]
     assert "devices" in payload["participation_truth_consumption"]["all_device_participation_matrix"]
+    assert "foundational_system_truth" in payload
+    foundational = payload["foundational_system_truth"]
+    assert foundational["cross_device_foundation"]["closure_state"] in {
+        "established",
+        "partial",
+        "open",
+        None,
+    }
+    assert foundational["multi_device_foundation"]["closure_state"] in {
+        "established",
+        "partial",
+        "open",
+        None,
+    }
+    assert foundational["real_three_state_model"]["states"] == ["established", "partial", "open"]
+    assert "task_system_layered_status" in foundational
     assert payload["execution_stage"] is None
 
 

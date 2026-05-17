@@ -4233,6 +4233,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         payload.setdefault("source_of_truth_boundaries", _source_of_truth_boundaries())
         payload["shared_execution_visibility"] = _derive_shared_execution_visibility(payload)
         payload["participation_truth_consumption"] = _build_participation_truth_consumption(payload)
+        payload["foundational_system_truth"] = _build_foundational_system_truth(payload)
         payload["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
             truth_payload=payload,
         )
@@ -4313,6 +4314,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "source_of_truth_boundaries": _source_of_truth_boundaries(),
             "shared_execution_visibility": _derive_shared_execution_visibility({}),
             "participation_truth_consumption": _build_participation_truth_consumption({}),
+            "foundational_system_truth": _build_foundational_system_truth({}),
             "cross_repo_acceptance_chain": _build_cross_repo_acceptance_chain_projection(),
             "dual_repo_completeness_baseline": _build_dual_repo_completeness_baseline_projection(),
             "execution_stage": None,
@@ -5960,6 +5962,64 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     }
 
 
+def _build_foundational_system_truth(truth_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Build board-facing foundational truth from current real-code backbone audit."""
+    if not isinstance(truth_payload, dict):
+        truth_payload = {}
+
+    try:
+        from core.current_state_backbone_audit import build_system_backbone_snapshot  # noqa: PLC0415
+
+        snapshot = dict(build_system_backbone_snapshot() or {})
+    except Exception as exc:
+        logger.debug("_build_foundational_system_truth unavailable: %s", exc)
+        snapshot = {}
+
+    mode_summary = dict(snapshot.get("mode_closure_summary") or {})
+    chain_summary = dict(snapshot.get("chain_closure_summary") or {})
+    layered_mode_model = dict(snapshot.get("layered_mode_model") or {})
+
+    return {
+        "cross_device_foundation": {
+            "closure_state": mode_summary.get("cross_device_mode"),
+            "definition_zh": "中心把任务路由到其他设备执行，属于跨设备能力。",
+        },
+        "multi_device_foundation": {
+            "closure_state": mode_summary.get("multi_device_participation"),
+            "definition_zh": "多个设备同时接入并参与同一系统，属于多设备能力。",
+        },
+        "local_cross_multi_relation": {
+            "local_layer": dict(layered_mode_model.get("local_layer") or {}),
+            "cross_device_layer": dict(layered_mode_model.get("cross_device_layer") or {}),
+            "multi_device_layer": dict(layered_mode_model.get("multi_device_layer") or {}),
+            "layering_zh": "本地层是基础，跨设备层在其上，最后形成多设备协同层。",
+        },
+        "real_three_state_model": {
+            "model_name_zh": "工程闭合三态（非通用助手UI三态）",
+            "states": ["established", "partial", "open"],
+            "established_count": int(snapshot.get("established_count") or 0),
+            "partial_count": int(snapshot.get("partial_count") or 0),
+            "open_count": int(snapshot.get("open_count") or 0),
+            "state_source": "core.current_state_backbone_audit.ClosureState",
+        },
+        "task_system_layered_status": {
+            "request_dispatch_chain": chain_summary.get("request_chain"),
+            "execution_chain": chain_summary.get("execution_chain"),
+            "result_backflow_chain": chain_summary.get("result_backflow_chain"),
+            "closure_acceptance_chain": chain_summary.get("closure_acceptance_chain"),
+            "projection_chain": chain_summary.get("projection_chain"),
+            "delegated_execution_mode": mode_summary.get("delegated_execution"),
+        },
+        "source_of_truth_refs": [
+            "core.current_state_backbone_audit.build_system_backbone_snapshot",
+            "core.current_state_backbone_audit.ClosureState",
+            "core.current_state_backbone_audit.ModeId",
+            "core.current_state_backbone_audit.ChainId",
+        ],
+        "_source": "core.routes.projection._build_foundational_system_truth",
+    }
+
+
 def _lookup_device_lifecycle_record(device_id: Optional[str]) -> Dict[str, Any]:
     if not device_id:
         return {}
@@ -6556,6 +6616,8 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             result["participation_truth_consumption"] = runtime_truth.get(
                 "participation_truth_consumption"
             )
+        if isinstance(runtime_truth.get("foundational_system_truth"), dict):
+            result["foundational_system_truth"] = runtime_truth.get("foundational_system_truth")
         if isinstance(runtime_truth.get("cross_repo_acceptance_chain"), dict):
             result["cross_repo_acceptance_chain"] = runtime_truth.get("cross_repo_acceptance_chain")
         if isinstance(runtime_truth.get("dual_repo_completeness_baseline"), dict):
@@ -6587,6 +6649,9 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         result["participation_truth_consumption"] = _build_participation_truth_consumption(
             visibility_source if isinstance(visibility_source, dict) else {}
         )
+        result["foundational_system_truth"] = _build_foundational_system_truth(
+            visibility_source if isinstance(visibility_source, dict) else {}
+        )
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: shared execution visibility unavailable: %s", exc)
         result.setdefault("shared_execution_visibility", _derive_shared_execution_visibility({}))
@@ -6594,6 +6659,7 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "participation_truth_consumption",
             _build_participation_truth_consumption({}),
         )
+        result.setdefault("foundational_system_truth", _build_foundational_system_truth({}))
     runtime_truth_payload = result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}
     result["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
         truth_payload=runtime_truth_payload,
