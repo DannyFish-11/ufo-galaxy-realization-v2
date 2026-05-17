@@ -3661,6 +3661,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 }
             )
 
+    @router.get("/api/v1/acceptance/cross-repo-chain")
+    async def get_cross_repo_acceptance_chain() -> JSONResponse:
+        """返回 Android→V2 代表性跨仓验收链的阶段化快照。"""
+        return JSONResponse(content=_build_cross_repo_acceptance_chain_projection())
+
     @router.get("/api/v1/projection/runtime/session-snapshot")
     async def get_runtime_session_snapshot() -> JSONResponse:
         """Return a durable runtime session snapshot summary.
@@ -4223,6 +4228,9 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         payload.setdefault("source_of_truth_boundaries", _source_of_truth_boundaries())
         payload["shared_execution_visibility"] = _derive_shared_execution_visibility(payload)
         payload["participation_truth_consumption"] = _build_participation_truth_consumption(payload)
+        payload["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
+            truth_payload=payload,
+        )
         payload["execution_stage"] = payload["shared_execution_visibility"].get("surface_execution_stage")
         payload["current_task_summary"] = payload["shared_execution_visibility"].get("surface_summary")
 
@@ -4297,6 +4305,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "source_of_truth_boundaries": _source_of_truth_boundaries(),
             "shared_execution_visibility": _derive_shared_execution_visibility({}),
             "participation_truth_consumption": _build_participation_truth_consumption({}),
+            "cross_repo_acceptance_chain": _build_cross_repo_acceptance_chain_projection(),
             "execution_stage": None,
             "current_task_summary": None,
             "projection_surface_role": "runtime_truth_board_facing",
@@ -6020,6 +6029,48 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
     }
 
 
+def _build_cross_repo_acceptance_chain_projection(
+    *,
+    truth_payload: Optional[Dict[str, Any]] = None,
+    board_payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构建跨仓 Android→V2 验收链的阶段化快照。"""
+    try:
+        from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain  # noqa: PLC0415
+
+        truth_payload = dict(truth_payload or {})
+        board_payload = dict(board_payload or {})
+        truth_participation = dict(truth_payload.get("participation_truth_consumption") or {})
+        board_participation = dict(board_payload.get("participation_truth_consumption") or {})
+        reasoning = dict(truth_payload.get("runtime_decision_reasoning") or {})
+        device_id = (
+            truth_participation.get("selected_device_id")
+            or board_participation.get("selected_device_id")
+            or reasoning.get("selected_device")
+            or reasoning.get("selected_device_id")
+        )
+        return build_cross_repo_acceptance_chain(
+            device_id=device_id,
+            truth_payload=truth_payload,
+            board_payload=board_payload,
+        )
+    except Exception as exc:
+        logger.debug("_build_cross_repo_acceptance_chain_projection unavailable: %s", exc)
+        return {
+            "overall_status": "failed",
+            "summary": f"cross-repo acceptance chain unavailable: {exc}",
+            "failure_boundaries": [
+                {
+                    "stage": "surface_visibility",
+                    "boundary": "cross_repo_acceptance_chain_unavailable",
+                    "summary": str(exc),
+                }
+            ],
+            "stages": [],
+            "_source": "core.routes.projection._build_cross_repo_acceptance_chain_projection",
+        }
+
+
 def _apply_shared_visibility_field(
     payload: Dict[str, Any],
     *,
@@ -6128,6 +6179,8 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             result["participation_truth_consumption"] = runtime_truth.get(
                 "participation_truth_consumption"
             )
+        if isinstance(runtime_truth.get("cross_repo_acceptance_chain"), dict):
+            result["cross_repo_acceptance_chain"] = runtime_truth.get("cross_repo_acceptance_chain")
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
@@ -6162,6 +6215,10 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "participation_truth_consumption",
             _build_participation_truth_consumption({}),
         )
+    result["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
+        truth_payload=(result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}),
+        board_payload=result,
+    )
     _apply_shared_visibility_field(
         result,
         target_field="execution_stage",

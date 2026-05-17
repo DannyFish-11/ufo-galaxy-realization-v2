@@ -103,6 +103,11 @@ _RUNTIME_TRUTH_PAYLOAD: Dict[str, Any] = {
         "surface_execution_stage": "executing",
         "surface_summary": "completion=in_progress | task_initiated=True | result_closed=False",
     },
+    "cross_repo_acceptance_chain": {
+        "overall_status": "passed",
+        "summary": "overall=passed; device_id=android-prod-1; session_id=sess-pr20; stages=[android_entry=passed]",
+        "failing_stage": None,
+    },
     "participation_truth_consumption": {
         "tri_state_phase": "manifest",
         "selected_device_id": "android-prod-1",
@@ -140,6 +145,11 @@ _DESKTOP_STATUS_BOARD_PAYLOAD: Dict[str, Any] = {
         "support_model_ids": ["deepseek-chat"],
         "active_weights": {"qwen-vl": 0.77},
         "route_reason": "desktop-topology-route",
+    },
+    "cross_repo_acceptance_chain": {
+        "overall_status": "passed",
+        "summary": "overall=passed; device_id=android-prod-1; session_id=sess-pr20; stages=[surface_visibility=passed]",
+        "failing_stage": None,
     },
     "operational_state_board": {
         "authority": "core.v2_unified_state_contract::v2-side-executable-state-contract",
@@ -212,6 +222,7 @@ class TestProjectionReaderFile:
         assert result["execution_stage"] == "executing"
         assert "operational_state_board" in result
         assert "participation_truth_consumption" in result
+        assert "cross_repo_acceptance_chain" in result
         assert result["participation_truth_consumption"]["participation_tier"] == "dispatch_eligible"
 
     def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
@@ -227,6 +238,7 @@ class TestProjectionReaderFile:
         assert result["primary_model_id"] == "qwen-vl"
         assert result["support_model_ids"] == ["deepseek-chat"]
         assert "operational_state_board" in result
+        assert "cross_repo_acceptance_chain" in result
         assert result["operational_state_board"]["categories"][0]["category_id"] == "registration_state"
 
     def test_missing_required_field_raises(self, tmp_path):
@@ -525,6 +537,7 @@ class TestDeviceSurface:
         proj = dict(
             _SAMPLE_PROJECTION,
             participation_truth_consumption=dict(_RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]),
+            cross_repo_acceptance_chain=dict(_RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"]),
         )
         out = DeviceSurface().render(proj)
         assert "android-prod-1" in out
@@ -533,6 +546,8 @@ class TestDeviceSurface:
         assert "local=False" in out
         assert "constrained=False" in out
         assert "participating" in out
+        assert "E2E" in out
+        assert "passed" in out
 
 
 class TestMetricsSurface:
@@ -632,11 +647,15 @@ class TestStatusBoardV2App:
         projection["participation_truth_consumption"] = dict(
             _RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]
         )
+        projection["cross_repo_acceptance_chain"] = dict(
+            _RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"]
+        )
         out = app.render_once(projection)
         assert "android-prod-1" in out
         assert "dispatch_eligible" in out
         assert "dispatch=True" in out
         assert "constrained=False" in out
+        assert "E2E" in out
 
     def test_render_once_contains_metrics(self):
         from windows_client.status_board_v2.app import StatusBoardV2App

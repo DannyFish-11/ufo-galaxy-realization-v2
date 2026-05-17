@@ -70,6 +70,9 @@ class DeviceSurface:
         dispatch_readiness = projection.get("device_dispatch_readiness")
         if not isinstance(dispatch_readiness, dict):
             dispatch_readiness = {}
+        acceptance_chain = projection.get("cross_repo_acceptance_chain")
+        if not isinstance(acceptance_chain, dict):
+            acceptance_chain = {}
 
         lines = [
             c("  ┌─ Device & Execution Context ────────────────────┐", BOLD),
@@ -201,6 +204,22 @@ class DeviceSurface:
                 lines.append(
                     f"  │    {c('→ note:', BOLD)} "
                     f"{c(truncated_note, _COLOUR_NONE)}"
+                )
+
+        if acceptance_chain:
+            e2e_status = str(acceptance_chain.get("overall_status") or "(unknown)")
+            e2e_colour = _COLOUR_OK if e2e_status == "passed" else _COLOUR_ERROR
+            lines.append(f"  │  {c('E2E     :', BOLD)} {c(e2e_status, e2e_colour)}")
+            summary = str(acceptance_chain.get("summary") or "")
+            if summary:
+                truncated_summary = summary if len(summary) <= 56 else summary[:53] + "..."
+                lines.append(
+                    f"  │    {c('→ chain:', BOLD)} {c(truncated_summary, _COLOUR_NONE)}"
+                )
+            failing_stage = acceptance_chain.get("failing_stage")
+            if failing_stage not in (None, ""):
+                lines.append(
+                    f"  │    {c('→ stop_at:', BOLD)} {c(str(failing_stage), _COLOUR_WARN)}"
                 )
 
         lines.append(c("  └─────────────────────────────────────────────────┘", BOLD))
