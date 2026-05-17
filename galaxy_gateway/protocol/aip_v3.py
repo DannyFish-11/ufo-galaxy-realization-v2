@@ -263,6 +263,17 @@ class MessageType(str, Enum):
     PEER_EXCHANGE = "peer_exchange"
     MESH_TOPOLOGY = "mesh_topology"
 
+    # === Android Mesh 生命周期上行（PR-13）===
+    # 这三类消息由 Android GalaxyConnectionService.kt 在 parallel_subtask 路径中发出
+    # （sendMeshJoin / sendMeshResult / sendMeshLeave），对应 AipModels.kt MsgType 定义。
+    # V2 侧将它们作为一级运行时生命周期信号接入，经专用处理器落盘至
+    # core.mesh.android_mesh_lifecycle_store，并通过
+    # /api/v1/mesh/android-lifecycle 真值端点暴露。
+    # 兼容性：不要求 Android 重写协议；wire-value 与 Android 当前 emit 保持对齐。
+    MESH_JOIN = "mesh_join"
+    MESH_RESULT = "mesh_result"
+    MESH_LEAVE = "mesh_leave"
+
     # === Android Delegated Execution Signals (PR-16) ===
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 

@@ -169,6 +169,10 @@ class LongTailPathKind(str, Enum):
     MESH_TOPOLOGY = "mesh_topology"
     """Mesh topology query and broadcast flow."""
 
+    MESH_LIFECYCLE = "mesh_lifecycle"
+    """Android-originated mesh session lifecycle events (join/result/leave).
+    PR-13: These are first-class lifecycle signals, not generic-forward paths."""
+
     REMOTE_CONTROL = "remote_control"
     """Server-initiated GUI / action execution on a device."""
 
@@ -468,6 +472,58 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
             " generic-forward is acceptable as a lower-priority placeholder."
         ),
         is_closed_loop=False,
+    ),
+    # ── PR-13: Android Mesh 生命周期上行（CANONICAL）────────────────────────
+    LongTailPathRecord(
+        message_type="mesh_join",
+        kind=LongTailPathKind.MESH_LIFECYCLE,
+        value_tier=LongTailValueTier.HIGHEST,
+        transition_status=LongTailTransitionStatus.CANONICAL,
+        canonical_handler=(
+            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_join"
+        ),
+        compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
+        notes=(
+            "PR-13: 专用有状态处理器已创建。将 mesh_join 事件落盘至"
+            " core.mesh.android_mesh_lifecycle_store，并通过"
+            " MeshSessionLifecycleCoordinator 创建/激活 durable session。"
+            " 此前 mesh_join 不在 MessageType 枚举中，导致 gateway 向 Android 返回"
+            " UNKNOWN_MESSAGE_TYPE 错误，mesh 参与语义在 V2 侧完全丢失。"
+        ),
+        is_closed_loop=True,
+    ),
+    LongTailPathRecord(
+        message_type="mesh_result",
+        kind=LongTailPathKind.MESH_LIFECYCLE,
+        value_tier=LongTailValueTier.HIGHEST,
+        transition_status=LongTailTransitionStatus.CANONICAL,
+        canonical_handler=(
+            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_result"
+        ),
+        compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
+        notes=(
+            "PR-13: 专用有状态处理器已创建。将 mesh_result 事件（含结果 payload）落盘至"
+            " core.mesh.android_mesh_lifecycle_store，并将对应 session 推进到 ACTIVE 状态。"
+            " 此前 mesh_result 不在 MessageType 枚举中，导致结果数据在 V2 侧完全丢失。"
+        ),
+        is_closed_loop=True,
+    ),
+    LongTailPathRecord(
+        message_type="mesh_leave",
+        kind=LongTailPathKind.MESH_LIFECYCLE,
+        value_tier=LongTailValueTier.HIGHEST,
+        transition_status=LongTailTransitionStatus.CANONICAL,
+        canonical_handler=(
+            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_leave"
+        ),
+        compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
+        notes=(
+            "PR-13: 专用有状态处理器已创建。将 mesh_leave 事件落盘至"
+            " core.mesh.android_mesh_lifecycle_store，并通过"
+            " MeshSessionLifecycleCoordinator 终止对应 durable session（outcome=completed）。"
+            " 此前 mesh_leave 不在 MessageType 枚举中，导致 session 终止语义在 V2 侧不可见。"
+        ),
+        is_closed_loop=True,
     ),
 ]
 

@@ -3273,6 +3273,73 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     }
                 )
 
+    # ------------------------------------------------------------------
+    # GET /api/v1/mesh/android-lifecycle  (PR-13)
+    # ------------------------------------------------------------------
+
+    @router.get("/api/v1/mesh/android-lifecycle")
+    async def get_android_mesh_lifecycle() -> JSONResponse:
+        """返回 Android 发起的 mesh 生命周期真值快照（PR-13）。
+
+        此端点是 Android-to-V2 mesh 生命周期链路的**规范真值面**，
+        由 PR-13 引入。它暴露所有经由 ``mesh_join`` / ``mesh_result`` /
+        ``mesh_leave`` 消息到达 V2 的 Android mesh session 生命周期状态。
+
+        数据来源：:mod:`core.mesh.android_mesh_lifecycle_store`。
+
+        此端点为**只读**（GET），依赖不可用时降级返回空快照。
+
+        响应示例::
+
+            {
+              "active_session_count": 1,
+              "total_session_count": 3,
+              "active_sessions": [
+                {
+                  "session_id": "amesh_device_01_...",
+                  "device_id": "device_01",
+                  "status": "active",
+                  "join_event": { ... },
+                  "result_events": [ ... ],
+                  "leave_event": null,
+                  "result_count": 2,
+                  "created_at": 1700000000.0,
+                  "updated_at": 1700000010.0
+                }
+              ],
+              "_source": "core.mesh.android_mesh_lifecycle_store...",
+              "_timestamp": 1700000020.0
+            }
+        """
+        import time as _time
+
+        try:
+            from core.mesh.android_mesh_lifecycle_store import build_android_lifecycle_truth
+            payload = build_android_lifecycle_truth()
+        except ImportError:
+            logger.warning(
+                "get_android_mesh_lifecycle: android_mesh_lifecycle_store 不可用"
+            )
+            payload = {
+                "active_session_count": 0,
+                "total_session_count": 0,
+                "active_sessions": [],
+                "_source": "core.routes.projection.get_android_mesh_lifecycle",
+                "_error": "android_mesh_lifecycle_store not available",
+                "_timestamp": _time.time(),
+            }
+        except Exception as exc:
+            logger.warning("get_android_mesh_lifecycle: 构建真值快照失败：%s", exc)
+            payload = {
+                "active_session_count": 0,
+                "total_session_count": 0,
+                "active_sessions": [],
+                "_source": "core.routes.projection.get_android_mesh_lifecycle",
+                "_error": str(exc),
+                "_timestamp": _time.time(),
+            }
+        return JSONResponse(content=payload)
+
     @router.get("/api/v1/projection/runtime/multi-device")
     async def get_multi_device_runtime_projection() -> JSONResponse:
         """Return the unified multi-device runtime projection.
