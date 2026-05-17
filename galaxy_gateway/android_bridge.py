@@ -97,6 +97,11 @@ from galaxy_gateway.android.handlers.takeover_response import handle_takeover_re
 from galaxy_gateway.android.handlers.file_transfer import handle_file_transfer
 from galaxy_gateway.android.handlers.peer_exchange import handle_peer_announce, handle_peer_exchange
 from galaxy_gateway.android.handlers.mesh_topology import handle_mesh_topology
+from galaxy_gateway.android.handlers.mesh_lifecycle import (
+    handle_mesh_join,
+    handle_mesh_result,
+    handle_mesh_leave,
+)
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
 from galaxy_gateway.android.handlers.device_state_snapshot import (
@@ -808,6 +813,13 @@ class AndroidBridge:
         self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_peer_announce)
         self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_peer_exchange)
         self._message_handlers[MessageType.MESH_TOPOLOGY] = _wrap(handle_mesh_topology)
+
+        # PR-13: Android Mesh 生命周期上行处理器
+        # mesh_join / mesh_result / mesh_leave 均由专用处理器接收，落盘至
+        # core.mesh.android_mesh_lifecycle_store，并更新 MeshSessionLifecycleCoordinator。
+        self._message_handlers[MessageType.MESH_JOIN] = _wrap(handle_mesh_join)
+        self._message_handlers[MessageType.MESH_RESULT] = _wrap(handle_mesh_result)
+        self._message_handlers[MessageType.MESH_LEAVE] = _wrap(handle_mesh_leave)
 
         # 设备状态上报
         self._message_handlers[MessageType.DEVICE_STATUS] = _wrap(handle_device_status)

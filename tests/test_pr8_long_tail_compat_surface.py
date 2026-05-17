@@ -216,7 +216,8 @@ class TestCatalogSummary:
             LongTailValueTier,
         )
         summary = build_catalog_summary()
-        assert summary.by_tier.get(LongTailValueTier.HIGHEST.value, 0) == 4
+        # PR-8：原始 4 个 + PR-13 新增 3 个（mesh_join/mesh_result/mesh_leave）= 7
+        assert summary.by_tier.get(LongTailValueTier.HIGHEST.value, 0) == 7
 
     def test_summary_canonical_types_include_highest_value(self):
         from core.long_tail_compat_surface import build_catalog_summary
@@ -645,7 +646,12 @@ class TestQueryHelpers:
         )
         highest = get_paths_by_tier(LongTailValueTier.HIGHEST)
         types = {r.message_type for r in highest}
-        assert types == {"file_transfer", "peer_announce", "peer_exchange", "mesh_topology"}
+        # PR-8 原始四个高价值类型
+        for mt in ("file_transfer", "peer_announce", "peer_exchange", "mesh_topology"):
+            assert mt in types, f"{mt} 应在 HIGHEST 类型中"
+        # PR-13 新增三个 mesh 生命周期类型
+        for mt in ("mesh_join", "mesh_result", "mesh_leave"):
+            assert mt in types, f"{mt} 应在 HIGHEST 类型中（PR-13）"
 
     def test_get_generic_forward_paths(self):
         from core.long_tail_compat_surface import get_generic_forward_paths
