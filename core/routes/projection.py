@@ -5951,22 +5951,116 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     }
 
 
-def _lookup_device_lifecycle_stage(device_id: Optional[str]) -> Optional[str]:
+def _lookup_device_lifecycle_record(device_id: Optional[str]) -> Dict[str, Any]:
     if not device_id:
-        return None
+        return {}
     try:
         from core.device_lifecycle_state import get_lifecycle_record  # noqa: PLC0415
 
-        _lifecycle_record = get_lifecycle_record(str(device_id))
-        _stage = getattr(_lifecycle_record, "stage", None)
-        return getattr(_stage, "value", None) or (str(_stage) if _stage not in (None, "") else None)
+        record = get_lifecycle_record(str(device_id))
+        if record is None:
+            return {}
+        if hasattr(record, "to_dict"):
+            return dict(record.to_dict() or {})
+        if isinstance(record, dict):
+            return dict(record)
+        stage = getattr(record, "stage", None)
+        return {
+            "device_id": str(device_id),
+            "stage": getattr(stage, "value", None)
+            or (str(stage) if stage not in (None, "") else None),
+        }
     except Exception as exc:
         logger.debug(
-            "_lookup_device_lifecycle_stage: lifecycle lookup skipped "
+            "_lookup_device_lifecycle_record: lifecycle lookup skipped "
             "device_id=%r error=%s",
             device_id,
             exc,
         )
+        return {}
+
+
+def _lookup_device_lifecycle_stage(device_id: Optional[str]) -> Optional[str]:
+    if not device_id:
+        return None
+    lifecycle_record = _lookup_device_lifecycle_record(device_id)
+    stage = lifecycle_record.get("stage")
+    return str(stage) if stage not in (None, "") else None
+
+
+def _build_runtime_lifecycle_truth(
+    *,
+    lifecycle_record: Optional[Dict[str, Any]],
+    participation_status: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    record = dict(lifecycle_record or {})
+    status = dict(participation_status or {})
+    stage = str(record.get("stage") or "")
+    connected_or_higher = stage in {
+        "connected",
+        "ready",
+        "participating",
+        "takeover_eligible",
+    }
+    ready_or_higher = stage in {"ready", "participating", "takeover_eligible"}
+    participating_stage = stage == "participating"
+
+    registered = bool(
+        stage in {"registered", "connected", "ready", "participating", "takeover_eligible"}
+        or record.get("registration_ack_success")
+    )
+    connected = bool(connected_or_higher or record.get("websocket_connected"))
+    attached = bool(record.get("registration_fully_attached") or connected_or_higher)
+    alive = bool(record.get("websocket_connected") and not record.get("operator_suspended"))
+    active = bool(record.get("execution_active") or participating_stage)
+    dispatchable = bool(
+        ready_or_higher
+        or (
+            record.get("dispatch_gate_passed")
+            and record.get("readiness_satisfied")
+            and connected
+        )
+    )
+    participating = bool(active or stage in {"participating", "takeover_eligible"})
+    runtime_present = bool(status.get("runtime_present") if "runtime_present" in status else connected)
+    routable = bool(status.get("routable")) if "routable" in status else connected
+
+    return {
+        "stage": stage or None,
+        "registered": registered,
+        "connected": connected,
+        "attached": attached,
+        "alive": alive,
+        "active": active,
+        "dispatchable": dispatchable,
+        "participating": participating,
+        "runtime_present": runtime_present,
+        "routable": routable,
+        "registration_gaps": list(record.get("registration_gaps") or []),
+        "dispatch_gate_passed": bool(record.get("dispatch_gate_passed")),
+        "readiness_satisfied": bool(record.get("readiness_satisfied")),
+        "operator_suspended": bool(record.get("operator_suspended")),
+        "takeover_eligible": bool(record.get("takeover_eligible")),
+        "source": (
+            "core.device_lifecycle_state.get_lifecycle_record"
+            if record
+            else "core.device_selection.assess_device_participation (compat_fallback)"
+        ),
+    }
+
+
+def _participation_tier_from_lifecycle_stage(stage: Optional[str]) -> Optional[str]:
+    if stage in (None, ""):
+        return None
+    try:
+        from core.device_lifecycle_state import (  # noqa: PLC0415
+            DeviceLifecycleStage,
+            participation_tier_for_stage,
+        )
+
+        return participation_tier_for_stage(DeviceLifecycleStage.from_string(str(stage)))
+    except Exception as exc:
+        logger.debug("_participation_tier_from_lifecycle_stage unavailable: %s", exc)
         return None
 
 
@@ -6029,23 +6123,41 @@ def _build_all_device_participation_matrix(
         seen_ids.add(device_id)
         status = dict(_assess_device_participation_status(device) or {})
         is_selected = bool(selected_device_id and device_id == str(selected_device_id))
-        lifecycle_stage = _lookup_device_lifecycle_stage(device_id)
+        lifecycle_record = _lookup_device_lifecycle_record(device_id)
+        lifecycle_stage = (
+            str(lifecycle_record.get("stage"))
+            if lifecycle_record.get("stage") not in (None, "")
+            else None
+        )
+        runtime_lifecycle_truth = _build_runtime_lifecycle_truth(
+            lifecycle_record=lifecycle_record,
+            participation_status=status,
+        )
 
+        lifecycle_tier = _participation_tier_from_lifecycle_stage(lifecycle_stage)
         row_participation_tier = (
             participation_tier
             if is_selected and participation_tier not in (None, "")
             else (
-                "dispatch_eligible"
-                if bool(status.get("cross_device_eligible"))
-                else ("runtime_present" if bool(status.get("runtime_present")) else "registered")
+                lifecycle_tier
+                if lifecycle_tier not in (None, "")
+                else (
+                    "dispatch_eligible"
+                    if bool(status.get("cross_device_eligible"))
+                    else ("runtime_present" if bool(status.get("runtime_present")) else "registered")
+                )
             )
         )
         row_dispatch_eligible = (
-            dispatch_eligible_selected if is_selected else bool(status.get("cross_device_eligible"))
+            dispatch_eligible_selected if is_selected else bool(runtime_lifecycle_truth.get("dispatchable"))
         )
         row_local_mode_active = local_mode_active_selected if is_selected else False
         row_runtime_constrained = runtime_constrained_selected if is_selected else False
-        row_fully_attached = fully_attached_selected if is_selected else False
+        row_fully_attached = (
+            fully_attached_selected
+            if is_selected
+            else bool(runtime_lifecycle_truth.get("attached"))
+        )
 
         matrix_rows.append(
             {
@@ -6063,6 +6175,7 @@ def _build_all_device_participation_matrix(
                 "cross_device_eligible": bool(status.get("cross_device_eligible")),
                 "orchestration_eligible": bool(status.get("orchestration_eligible")),
                 "participation_reason": status.get("participation_reason"),
+                "runtime_lifecycle_truth": runtime_lifecycle_truth,
                 "attachment_semantics": {
                     "fully_attached": row_fully_attached,
                     "device_lifecycle_stage": lifecycle_stage,
@@ -6076,7 +6189,16 @@ def _build_all_device_participation_matrix(
         )
 
     if selected_device_id and str(selected_device_id) not in seen_ids:
-        lifecycle_stage = _lookup_device_lifecycle_stage(str(selected_device_id))
+        lifecycle_record = _lookup_device_lifecycle_record(str(selected_device_id))
+        lifecycle_stage = (
+            str(lifecycle_record.get("stage"))
+            if lifecycle_record.get("stage") not in (None, "")
+            else None
+        )
+        runtime_lifecycle_truth = _build_runtime_lifecycle_truth(
+            lifecycle_record=lifecycle_record,
+            participation_status={},
+        )
         matrix_rows.append(
             {
                 "device_id": str(selected_device_id),
@@ -6087,12 +6209,17 @@ def _build_all_device_participation_matrix(
                 "runtime_constrained": runtime_constrained_selected,
                 "fully_attached": fully_attached_selected,
                 "device_lifecycle_stage": lifecycle_stage,
-                "registered": False,
-                "runtime_present": False,
-                "routable": False,
-                "cross_device_eligible": dispatch_eligible_selected,
-                "orchestration_eligible": dispatch_eligible_selected,
-                "participation_reason": "selected_device_not_in_udm",
+                "registered": bool(runtime_lifecycle_truth.get("registered")),
+                "runtime_present": bool(runtime_lifecycle_truth.get("runtime_present")),
+                "routable": bool(runtime_lifecycle_truth.get("routable")),
+                "cross_device_eligible": bool(runtime_lifecycle_truth.get("dispatchable")),
+                "orchestration_eligible": bool(runtime_lifecycle_truth.get("dispatchable")),
+                "participation_reason": (
+                    "selected_device_not_in_udm;lifecycle_truth_available"
+                    if lifecycle_record
+                    else "selected_device_not_in_udm"
+                ),
+                "runtime_lifecycle_truth": runtime_lifecycle_truth,
                 "attachment_semantics": {
                     "fully_attached": fully_attached_selected,
                     "device_lifecycle_stage": lifecycle_stage,
@@ -6142,7 +6269,14 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
         or reasoning.get("device_id")
         or ""
     )
-    device_lifecycle_stage = _lookup_device_lifecycle_stage(str(selected_device_id) if selected_device_id else None)
+    selected_lifecycle_record = _lookup_device_lifecycle_record(
+        str(selected_device_id) if selected_device_id else None
+    )
+    device_lifecycle_stage = (
+        str(selected_lifecycle_record.get("stage"))
+        if selected_lifecycle_record.get("stage") not in (None, "")
+        else None
+    )
 
     participation_tier = reasoning.get("participation_tier")
     if "dispatch_gate_passed" in semantics:
@@ -6184,6 +6318,10 @@ def _build_participation_truth_consumption(truth_payload: Dict[str, Any]) -> Dic
                 or str(device_lifecycle_stage or "") in {"participating", "takeover_eligible"}
             ),
         },
+        "selected_device_runtime_truth": _build_runtime_lifecycle_truth(
+            lifecycle_record=selected_lifecycle_record,
+            participation_status={},
+        ),
         "completion_state": shared_visibility.get("completion_state"),
         "surface_execution_stage": shared_visibility.get("surface_execution_stage"),
         "source_of_truth_refs": [
