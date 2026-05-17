@@ -1,4 +1,4 @@
-# 认知型 PR 启动基线（基于当前 problem statement）
+# 认知型 PR 启动基线 (基于当前 problem statement)
 
 ## 1. 问题背景与当前理解
 
@@ -108,7 +108,7 @@
 
 ---
 
-## 7. 本 PR 实际改动（最小必要）
+## 7. 本 PR 实际改动 (最小必要)
 
 - 新增本认知基线文档：`audit/COGNITIVE_PR_PROBLEM_STATEMENT_BOOTSTRAP_CN_2026.md`；
 - 新增文档约束测试：`tests/test_cognitive_pr_problem_statement_bootstrap_doc.py`；
