@@ -69,3 +69,33 @@ async def test_builtin_cross_device_keeps_compatibility_fallback_explicit():
     assert legacy_kwargs["_substrate_caller"] == "capability_orchestrator.compat_fallback"
     assert result["success"] is True
     assert result["reply"] == "compat"
+    assert result["data"]["message"] == "compat"
+
+
+@pytest.mark.asyncio
+async def test_builtin_cross_device_propagates_canonical_failure_without_fallback():
+    from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
+
+    orch = CapabilityOrchestrator()
+    cap = Capability(
+        id="builtin_cross_device",
+        name="跨设备协同",
+        description="跨设备任务",
+        type=CapabilityType.BUILTIN,
+    )
+
+    with patch(
+        "galaxy_gateway.device_router.device_router.route_task",
+        new_callable=AsyncMock,
+    ) as mock_route, patch(
+        "galaxy_gateway.cross_device_coordinator.cross_device_coordinator.execute_cross_device_task",
+        new_callable=AsyncMock,
+    ) as mock_legacy:
+        mock_route.return_value = {"success": False, "error": "no_available_device"}
+        result = await orch._execute_builtin(cap, {"command": "sync"})
+
+    mock_route.assert_awaited_once()
+    mock_legacy.assert_not_awaited()
+    assert result["success"] is False
+    assert result["reply"] == "no_available_device"
+    assert result["data"]["error"] == "no_available_device"

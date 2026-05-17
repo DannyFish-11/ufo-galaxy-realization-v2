@@ -676,9 +676,14 @@ class CapabilityOrchestrator:
                     fallback_context,
                     _substrate_caller="capability_orchestrator.compat_fallback",
                 )
+            _reply = (
+                result.get("message")
+                if ("message" in result and result.get("message") is not None)
+                else result.get("error", str(result))
+            )
             return {
                 "success": result.get("success", False),
-                "reply": result.get("message") or result.get("error", str(result)),
+                "reply": _reply,
                 "data": result,
             }
 
