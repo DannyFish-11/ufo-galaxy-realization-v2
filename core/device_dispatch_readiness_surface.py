@@ -270,7 +270,10 @@ def get_dispatch_readiness_panel(
         else:
             summary["blocked_other"] += 1
 
-    # 将拦截总数方便提取
+    # total_blocked：排除 dispatch_ready（正常就绪）和 gate_error（评估异常，
+    # 无法判断是否真的被拦截，独立统计）后的所有拦截设备数。
+    # 每台设备的 status 值是互斥的（来自 DispatchReadinessStatus 枚举），
+    # 因此分类计数之和 == summary["total"]，不会重复计入。
     total_blocked = (
         summary["total"]
         - summary["dispatch_ready"]
