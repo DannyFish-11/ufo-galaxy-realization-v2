@@ -158,12 +158,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def _mesh_p2p_send(target_device: str, msg_bytes: bytes) -> bool:
         """Use device-scoped point-to-point delivery as runtime direct-send surface."""
         try:
-            msg = json.loads(msg_bytes.decode("utf-8"))
+            decoded = msg_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            logger.warning("mesh direct p2p-equivalent send failed: payload is not valid UTF-8 (%s)", exc)
+            return False
+
+        try:
+            msg = json.loads(decoded)
             if not isinstance(msg, dict):
+                logger.warning("mesh direct p2p-equivalent send failed: payload is not a JSON object")
                 return False
             msg.setdefault("transport", "mesh_direct_point_to_point")
             msg.setdefault("transport_via", "gateway_device_channel")
             return await connection_manager.send_to_device(target_device, msg)
+        except json.JSONDecodeError as exc:
+            logger.warning("mesh direct p2p-equivalent send failed: payload JSON decode failed (%s)", exc)
+            return False
         except Exception as exc:
             logger.warning("mesh direct p2p-equivalent send failed: %s", exc)
             return False

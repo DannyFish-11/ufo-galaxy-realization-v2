@@ -220,7 +220,14 @@ class MeshCoordinator:
     # ================================================================
 
     async def _check_direct_viability(self, target_device: str, peer: Optional[PeerEntry]) -> tuple[bool, bool, str]:
-        """检查 direct path 是否可用，并在需要时执行健康探测。"""
+        """检查 direct path 是否可用，并在需要时执行健康探测。
+
+        Returns:
+            (is_viable, health_checked, reason)
+            - is_viable: True 表示可以尝试 direct send。
+            - health_checked: True 表示本次执行了 probe 健康探测；未探测时为 False。
+            - reason: 仅在 is_viable=False 时给出失败原因；成功时为空字符串。
+        """
         if not peer:
             return False, False, "peer_not_registered"
         if not peer.reachable_direct:
@@ -231,7 +238,7 @@ class MeshCoordinator:
             return False, False, "peer_local_ip_missing"
 
         now = time.time()
-        should_probe = peer.last_probe > 0 and (now - peer.last_probe) > self.PROBE_INTERVAL
+        should_probe = peer.last_probe <= 0 or (now - peer.last_probe) > self.PROBE_INTERVAL
         if should_probe:
             probe_ok = await self.probe_peer(target_device)
             if not probe_ok:

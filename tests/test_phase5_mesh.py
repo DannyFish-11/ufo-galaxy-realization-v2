@@ -95,6 +95,7 @@ async def test_2_mesh_auto_routing():
     # 注册 peer A (direct reachable)
     pa = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
     pa.reachable_direct = True
+    pa.last_probe = time.time()
 
     # 注册 peer B (不可直连)
     mesh.register_peer("phone_b", local_ip="10.0.0.5", local_port=19720)
@@ -151,6 +152,7 @@ async def test_3_mesh_p2p_fallback_relay():
 
     pa = mesh.register_peer("phone_a", local_ip="192.168.1.10")
     pa.reachable_direct = True  # 标记为可直连
+    pa.last_probe = time.time()
 
     result = await mesh.send(
         target_device="phone_a",
@@ -193,7 +195,7 @@ async def test_3b_mesh_direct_health_check_before_send():
 
     peer = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
     peer.reachable_direct = True
-    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 1)  # 强制触发健康检查
+    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 10)  # 强制触发健康检查
 
     async def mock_probe(device_id: str) -> bool:
         probe_log.append(device_id)
@@ -240,7 +242,7 @@ async def test_3c_mesh_probe_failure_forces_explicit_fallback():
 
     peer = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
     peer.reachable_direct = True
-    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 1)
+    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 10)
 
     async def failing_probe(device_id: str) -> bool:
         return False
@@ -435,6 +437,7 @@ async def test_8_proxy_relay_mesh_aware():
     mc._mesh_instance = mc.MeshCoordinator(p2p_sender=mock_p2p)
     pa = mc._mesh_instance.register_peer("phone_a", local_ip="192.168.1.10")
     pa.reachable_direct = True
+    pa.last_probe = time.time()
 
     ws_log = []
 
