@@ -21,6 +21,7 @@ Routes:
 """
 
 import logging
+import json
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
@@ -153,6 +154,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     proxy_relay = get_proxy_relay()
 
     mesh_coordinator._ws_send = connection_manager.send_to_device
+
+    async def _mesh_p2p_send(target_device: str, msg_bytes: bytes) -> bool:
+        """Use device-scoped point-to-point delivery as runtime direct-send surface."""
+        try:
+            msg = json.loads(msg_bytes.decode("utf-8"))
+            if not isinstance(msg, dict):
+                return False
+            msg.setdefault("transport", "mesh_direct_point_to_point")
+            msg.setdefault("transport_via", "gateway_device_channel")
+            return await connection_manager.send_to_device(target_device, msg)
+        except Exception as exc:
+            logger.warning("mesh direct p2p-equivalent send failed: %s", exc)
+            return False
+
+    mesh_coordinator._p2p_send = _mesh_p2p_send
 
     async def _mesh_relay_send(source, target, payload_type, payload):
         result = await proxy_relay.relay(ProxyRelayRequest(

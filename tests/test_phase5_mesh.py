@@ -163,6 +163,126 @@ async def test_3_mesh_p2p_fallback_relay():
     assert len(relay_log) == 1
     # peer 应被标记为不可直连
     assert not pa.reachable_direct
+    assert result.fallback_used
+    assert result.fallback_reason == "direct_send_failed"
+    assert result.route_decision == "relay_fallback"
+
+
+@pytest.mark.asyncio
+async def test_3b_mesh_direct_health_check_before_send():
+    """直连发送前应执行健康检查（需要重探测时）"""
+    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+
+    p2p_log = []
+    relay_log = []
+    probe_log = []
+
+    async def mock_p2p_send(device_id: str, msg: bytes) -> bool:
+        p2p_log.append(device_id)
+        return True
+
+    async def mock_relay_send(source, target, payload_type, payload):
+        relay_log.append(target)
+        return {"status": "forwarded"}
+
+    mesh = MeshCoordinator(
+        local_device_id="server",
+        p2p_sender=mock_p2p_send,
+        relay_sender=mock_relay_send,
+    )
+
+    peer = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
+    peer.reachable_direct = True
+    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 1)  # 强制触发健康检查
+
+    async def mock_probe(device_id: str) -> bool:
+        probe_log.append(device_id)
+        peer.last_probe = time.time()
+        peer.reachable_direct = True
+        return True
+
+    mesh.probe_peer = mock_probe
+
+    result = await mesh.send(target_device="phone_a", payload={"task": "ping"})
+
+    assert result.success
+    assert result.via == ConnectionType.DIRECT
+    assert result.direct_health_checked
+    assert result.direct_attempted
+    assert result.route_decision == "direct_p2p"
+    assert probe_log == ["phone_a"]
+    assert p2p_log == ["phone_a"]
+    assert len(relay_log) == 0
+
+
+@pytest.mark.asyncio
+async def test_3c_mesh_probe_failure_forces_explicit_fallback():
+    """健康检查失败时应显式回退到 relay 并携带回退原因"""
+    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+
+    p2p_called = False
+    relay_log = []
+
+    async def mock_p2p_send(device_id: str, msg: bytes) -> bool:
+        nonlocal p2p_called
+        p2p_called = True
+        return True
+
+    async def mock_relay_send(source, target, payload_type, payload):
+        relay_log.append(target)
+        return {"status": "forwarded"}
+
+    mesh = MeshCoordinator(
+        local_device_id="server",
+        p2p_sender=mock_p2p_send,
+        relay_sender=mock_relay_send,
+    )
+
+    peer = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
+    peer.reachable_direct = True
+    peer.last_probe = time.time() - (mesh.PROBE_INTERVAL + 1)
+
+    async def failing_probe(device_id: str) -> bool:
+        return False
+
+    mesh.probe_peer = failing_probe
+
+    result = await mesh.send(target_device="phone_a", payload={"task": "ping"})
+
+    assert result.success
+    assert result.via == ConnectionType.RELAY
+    assert result.fallback_used
+    assert result.fallback_reason == "direct_probe_failed"
+    assert result.route_decision == "relay_fallback"
+    assert result.direct_health_checked
+    assert not result.direct_attempted
+    assert not p2p_called
+    assert len(relay_log) == 1
+
+
+@pytest.mark.asyncio
+async def test_3d_mesh_unconfigured_direct_sender_fallback_is_explicit():
+    """直连 sender 未配置时必须给出明确 fallback 语义"""
+    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+
+    relay_log = []
+
+    async def mock_relay_send(source, target, payload_type, payload):
+        relay_log.append(target)
+        return {"status": "forwarded"}
+
+    mesh = MeshCoordinator(local_device_id="server", relay_sender=mock_relay_send)
+    peer = mesh.register_peer("phone_a", local_ip="192.168.1.10", local_port=19720)
+    peer.reachable_direct = True
+
+    result = await mesh.send(target_device="phone_a", payload={"task": "ping"})
+
+    assert result.success
+    assert result.via == ConnectionType.RELAY
+    assert result.fallback_used
+    assert result.fallback_reason == "p2p_sender_unconfigured"
+    assert result.route_decision == "relay_fallback"
+    assert len(relay_log) == 1
 
 
 # ============================================================================
