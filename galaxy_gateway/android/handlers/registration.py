@@ -94,6 +94,24 @@ def clear_registration_gaps(device_id: Optional[str] = None) -> None:
         _device_registration_gaps.pop(device_id, None)
 
 
+def get_all_devices_with_registration_gaps() -> Dict[str, List[str]]:
+    """Return a snapshot of all device IDs that have recorded registration gaps.
+
+    Returns a dict mapping ``device_id → list[step_name]`` for every device
+    that has at least one failed downstream registration step.  Devices with
+    no gaps are excluded.
+
+    This is the canonical read-path for control-plane surfaces that need to
+    enumerate *all* partially-registered devices without knowing their IDs
+    upfront.
+    """
+    return {
+        device_id: list(gaps)
+        for device_id, gaps in _device_registration_gaps.items()
+        if gaps
+    }
+
+
 def _schedule_pending_delivery_replay_on_canonical_reconnect(
     *,
     device_id: str,

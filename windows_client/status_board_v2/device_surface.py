@@ -8,9 +8,15 @@ READ-ONLY surface: displays information only, never sends commands.
 
 Displayed fields
 ----------------
-- ``active_device_ids``  : IDs of currently active devices
-- ``execution_stage``    : current execution stage tag (e.g. "planning")
-- ``current_task_summary``: short task description (if present)
+- ``active_device_ids``        : IDs of currently active devices
+- ``execution_stage``          : current execution stage tag (e.g. "planning")
+- ``current_task_summary``     : short task description (if present)
+- ``participation_truth_consumption`` : participation tier, dispatch status,
+                                  fully-attached flag, lifecycle stage
+- ``device_dispatch_readiness``: structured dispatch readiness blocker reasons
+                                  (status, registration_gaps, blocking_notes)
+                                  so operators can see *why* a device is not
+                                  dispatchable, not just that it isn't.
 """
 
 from __future__ import annotations
@@ -23,6 +29,9 @@ _COLOUR_DEVICE = "\033[36m"    # cyan
 _COLOUR_STAGE = "\033[33m"     # yellow
 _COLOUR_TASK = "\033[37m"      # white
 _COLOUR_NONE = "\033[90m"      # grey
+_COLOUR_WARN = "\033[33m"      # yellow (same as stage, for warnings)
+_COLOUR_ERROR = "\033[31m"     # red (for blocked/not-ready)
+_COLOUR_OK = "\033[32m"        # green (for ready)
 
 
 class DeviceSurface:
@@ -56,6 +65,11 @@ class DeviceSurface:
         mode_semantics = semantics.get("mode_semantics")
         if not isinstance(mode_semantics, dict):
             mode_semantics = {}
+
+        # dispatch_readiness 字段可由 projection 直接携带（服务端注入）或为 None
+        dispatch_readiness = projection.get("device_dispatch_readiness")
+        if not isinstance(dispatch_readiness, dict):
+            dispatch_readiness = {}
 
         lines = [
             c("  ┌─ Device & Execution Context ────────────────────┐", BOLD),
@@ -108,10 +122,14 @@ class DeviceSurface:
                 if participation.get("fully_attached") is not None
                 else str(participation_tier) == "fully_attached"
             )
+            dispatch_colour = _COLOUR_OK if dispatch_eligible else _COLOUR_ERROR
+            attach_colour = _COLOUR_OK if fully_attached else _COLOUR_WARN
             lines.append(
                 "  │  "
                 f"{c('Tier    :', BOLD)} {c(str(participation_tier), _COLOUR_DEVICE)} "
-                f"{c(f'[dispatch={dispatch_eligible} | fully_attached={fully_attached}]', _COLOUR_NONE)}"
+                f"{c(f'dispatch={dispatch_eligible}', dispatch_colour)} "
+                f"{c('|', _COLOUR_NONE)} "
+                f"{c(f'fully_attached={fully_attached}', attach_colour)}"
             )
 
         local_mode_active = bool(
@@ -137,6 +155,53 @@ class DeviceSurface:
             lines.append(
                 f"  │  {c('Attach  :', BOLD)} {c(str(lifecycle_stage), _COLOUR_NONE)}"
             )
+
+        # ------------------------------------------------------------------
+        # Dispatch readiness blocker section
+        # 当 device_dispatch_readiness 存在时，显示结构化拦截原因，
+        # 而不仅仅是布尔标志。这是 control-plane 可见性的关键改进。
+        # ------------------------------------------------------------------
+        if dispatch_readiness:
+            dr_status = dispatch_readiness.get("status") or ""
+            dr_reason = dispatch_readiness.get("reason") or ""
+            dr_gaps: List[str] = dispatch_readiness.get("registration_gaps") or []
+            dr_notes: List[str] = dispatch_readiness.get("blocking_notes") or []
+            dr_ready = bool(dispatch_readiness.get("dispatch_ready"))
+
+            status_colour = _COLOUR_OK if dr_ready else _COLOUR_ERROR
+            lines.append(
+                f"  │  {c('Dispatch:', BOLD)} "
+                f"{c(dr_status or '(unknown)', status_colour)}"
+            )
+
+            if not dr_ready and dr_reason:
+                # 截断过长的原因说明以适应终端宽度
+                truncated_reason = (
+                    dr_reason if len(dr_reason) <= 56 else dr_reason[:53] + "..."
+                )
+                lines.append(
+                    f"  │    {c('→ reason:', BOLD)} "
+                    f"{c(truncated_reason, _COLOUR_WARN)}"
+                )
+
+            # 注册 gap 列表（每个失败步骤单独一行）
+            if dr_gaps:
+                gaps_str = ", ".join(dr_gaps)
+                truncated_gaps = (
+                    gaps_str if len(gaps_str) <= 54 else gaps_str[:51] + "..."
+                )
+                lines.append(
+                    f"  │    {c('→ reg_gaps:', BOLD)} "
+                    f"{c(truncated_gaps, _COLOUR_ERROR)}"
+                )
+
+            # 附加阻断说明（最多显示 2 条）
+            for note in dr_notes[:2]:
+                truncated_note = note if len(note) <= 54 else note[:51] + "..."
+                lines.append(
+                    f"  │    {c('→ note:', BOLD)} "
+                    f"{c(truncated_note, _COLOUR_NONE)}"
+                )
 
         lines.append(c("  └─────────────────────────────────────────────────┘", BOLD))
         return "\n".join(lines)
