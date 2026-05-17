@@ -301,6 +301,163 @@ def _enum_or_string(value: Any) -> Optional[str]:
     text = str(value).strip()
     return text or None
 
+
+def _extract_ingress_token(message: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """Extract device-ingress auth token from canonical and compat fields."""
+    token_fields = (
+        "_ingress_transport_token",
+        "token",
+        "auth_token",
+        "api_token",
+        "authorization",
+    )
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+
+    for field in token_fields:
+        raw = message.get(field)
+        if raw is None:
+            raw = payload.get(field)
+        if raw is None:
+            continue
+        value = str(raw).strip()
+        if not value:
+            continue
+        if value.lower().startswith("bearer "):
+            value = value[7:].strip()
+        return value or None, field
+    return None, None
+
+
+def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate token/auth boundary for device ingress registration."""
+    auth_enforced = False
+    active_token_count = 0
+    token: Optional[str] = None
+    token_source: Optional[str] = None
+    token_present = False
+    token_valid = False
+
+    try:
+        from core.auth import is_auth_enabled, get_active_tokens, verify_api_token
+
+        auth_enforced = bool(is_auth_enabled())
+        active_token_count = len(get_active_tokens())
+        token, token_source = _extract_ingress_token(message)
+        token_present = bool(token)
+        token_valid = bool(token and verify_api_token(token))
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return {
+            "enforced": False,
+            "token_present": False,
+            "token_source": None,
+            "token_valid": False,
+            "active_token_count": 0,
+            "state": "auth_check_unavailable",
+            "reason": str(exc),
+        }
+
+    state = "not_enforced_no_token"
+    reason = ""
+    if auth_enforced:
+        if active_token_count <= 0:
+            state = "rejected_auth_misconfigured"
+            reason = "GALAXY_AUTH_ENABLED=true but no active gateway tokens are configured"
+        elif not token_present:
+            state = "rejected_token_missing"
+            reason = "Authentication is enforced; token is required"
+        elif not token_valid:
+            state = "rejected_token_invalid"
+            reason = "Token is present but invalid"
+        else:
+            state = "verified"
+            reason = "Token verified under enforced auth"
+    else:
+        if token_present and token_valid:
+            state = "verified_optional"
+            reason = "Token verified in compatibility mode (auth not enforced)"
+        elif token_present and not token_valid and active_token_count > 0:
+            state = "token_invalid_compat"
+            reason = "Invalid token provided in compatibility mode"
+
+    return {
+        "enforced": auth_enforced,
+        "token_present": token_present,
+        "token_source": token_source,
+        "token_valid": token_valid,
+        "active_token_count": active_token_count,
+        "state": state,
+        "reason": reason,
+    }
+
+
+def _evaluate_ingress_identity(
+    *,
+    message_device_id: str,
+    websocket_device_id: Optional[str],
+) -> Dict[str, Any]:
+    """Evaluate whether ingress path identity matches registration identity."""
+    if websocket_device_id and message_device_id and websocket_device_id != message_device_id:
+        return {
+            "matched": False,
+            "reason": (
+                "device_id mismatch between WebSocket ingress path and "
+                "device_register payload"
+            ),
+        }
+    return {"matched": True, "reason": ""}
+
+
+def _decorate_registration_boundary(
+    *,
+    ack: Dict[str, Any],
+    websocket_device_id: Optional[str],
+    auth_outcome: Dict[str, Any],
+    identity_outcome: Dict[str, Any],
+    registration_success: bool,
+    registration_fully_attached: bool,
+    registration_gaps: List[str],
+    network_participation_tier: str,
+) -> None:
+    participation_eligible = network_participation_tier in {
+        "dispatch_eligible",
+        "distributed_participant",
+    }
+    ack["connection_accepted"] = True
+    ack["authentication_enforced"] = bool(auth_outcome.get("enforced"))
+    ack["authentication_success"] = bool(auth_outcome.get("token_valid"))
+    ack["identity_match_success"] = bool(identity_outcome.get("matched"))
+    ack["registration_success"] = bool(registration_success)
+    ack["participation_eligible"] = participation_eligible
+    ack["ingress_boundary"] = {
+        "connection": {
+            "accepted": True,
+            "websocket_device_id": websocket_device_id,
+            "message_device_id": ack.get("device_id"),
+        },
+        "authentication": {
+            "enforced": bool(auth_outcome.get("enforced")),
+            "token_present": bool(auth_outcome.get("token_present")),
+            "token_valid": bool(auth_outcome.get("token_valid")),
+            "token_source": auth_outcome.get("token_source"),
+            "state": auth_outcome.get("state"),
+            "reason": auth_outcome.get("reason") or "",
+            "active_token_count": int(auth_outcome.get("active_token_count") or 0),
+        },
+        "identity": {
+            "matched": bool(identity_outcome.get("matched")),
+            "reason": identity_outcome.get("reason") or "",
+        },
+        "registration": {
+            "success": bool(registration_success),
+            "fully_attached": bool(registration_fully_attached),
+            "gaps": list(registration_gaps or []),
+        },
+        "participation": {
+            "eligible": participation_eligible,
+            "network_participation_tier": network_participation_tier,
+        },
+    }
+
 # ---------------------------------------------------------------------------
 # Role derivation helpers
 # ---------------------------------------------------------------------------
@@ -354,6 +511,50 @@ async def handle_device_register(
     compatibility with older clients).
     """
     device_id = message.get("device_id")
+    websocket_device_id = str(message.get("_ingress_connection_device_id") or "").strip() or None
+    auth_outcome = _evaluate_ingress_authentication(message)
+    identity_outcome = _evaluate_ingress_identity(
+        message_device_id=str(device_id or ""),
+        websocket_device_id=websocket_device_id,
+    )
+
+    if not identity_outcome.get("matched", False):
+        ack = MessageBuilder.device_register_ack(
+            device_id=device_id or "unknown",
+            success=False,
+            message="Registration rejected: ingress identity mismatch",
+        )
+        ack["error_code"] = "INGRESS_IDENTITY_MISMATCH"
+        _decorate_registration_boundary(
+            ack=ack,
+            websocket_device_id=websocket_device_id,
+            auth_outcome=auth_outcome,
+            identity_outcome=identity_outcome,
+            registration_success=False,
+            registration_fully_attached=False,
+            registration_gaps=["identity_boundary"],
+            network_participation_tier="connected",
+        )
+        return ack
+
+    if auth_outcome.get("enforced") and not auth_outcome.get("token_valid"):
+        ack = MessageBuilder.device_register_ack(
+            device_id=device_id or "unknown",
+            success=False,
+            message="Registration rejected: ingress authentication failed",
+        )
+        ack["error_code"] = "INGRESS_AUTHENTICATION_FAILED"
+        _decorate_registration_boundary(
+            ack=ack,
+            websocket_device_id=websocket_device_id,
+            auth_outcome=auth_outcome,
+            identity_outcome=identity_outcome,
+            registration_success=False,
+            registration_fully_attached=False,
+            registration_gaps=["authentication_boundary"],
+            network_participation_tier="connected",
+        )
+        return ack
 
     try:
         # Step 1 — canonical write to UDM (SSOT); must happen before local cache update.
@@ -671,6 +872,8 @@ async def handle_device_register(
         if _gaps:
             ack["registration_gaps"] = _gaps
 
+        _network_participation_tier = "connected"
+
         # PR-1: Derive and surface the authoritative Android network participation
         # tier at the point of registration.  This is the first moment at which V2
         # can compute a meaningful tier: the device has a WebSocket connection and
@@ -710,6 +913,7 @@ async def handle_device_register(
             )
             record_participation_state(_participation_state)
             ack["network_participation_tier"] = _participation_state.tier.value
+            _network_participation_tier = _participation_state.tier.value
             ack["network_participation_transition_history"] = (
                 list_participation_transition_history(device_id, limit=5)
             )
@@ -748,6 +952,17 @@ async def handle_device_register(
                 "device_id=%s error=%s",
                 device_id, _lce,
             )
+
+        _decorate_registration_boundary(
+            ack=ack,
+            websocket_device_id=websocket_device_id,
+            auth_outcome=auth_outcome,
+            identity_outcome=identity_outcome,
+            registration_success=True,
+            registration_fully_attached=len(_gaps) == 0,
+            registration_gaps=_gaps,
+            network_participation_tier=_network_participation_tier,
+        )
 
         return ack
 

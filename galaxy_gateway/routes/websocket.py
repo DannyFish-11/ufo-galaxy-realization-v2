@@ -96,6 +96,17 @@ async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
                 )
                 continue
 
+            # Ingress boundary context:
+            # - _ingress_connection_device_id: canonical WS path identity
+            # - _ingress_transport_token: optional token from WS query (?token=...)
+            # Registration handlers can validate identity/auth without conflating
+            # mere socket connectivity with effective authenticated participation.
+            message["_ingress_connection_device_id"] = device_id
+            if "_ingress_transport_token" not in message:
+                _ws_query_token = websocket.query_params.get("token")
+                if _ws_query_token:
+                    message["_ingress_transport_token"] = _ws_query_token
+
             response = await _android_bridge.handle_message(websocket, message)
             if response:
                 await websocket.send_json(response)
