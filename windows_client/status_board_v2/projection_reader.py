@@ -51,6 +51,7 @@ _RUNTIME_TRUTH_PASSTHROUGH_KEYS = frozenset(
         "shared_execution_visibility",
         "control_plane_contract",
         "participation_truth_consumption",
+        "cross_repo_acceptance_chain",
         "stale_or_cached_summary",
         "projection_surface_role",
         "board_facing_default",

@@ -110,6 +110,14 @@ def get_latest_device_acceptance_evidence_dict(device_id: str) -> Dict[str, Any]
     return record.to_dict() if record is not None else {}
 
 
+def list_device_acceptance_evidence_dicts() -> List[Dict[str, Any]]:
+    """返回当前所有设备的 acceptance 证据快照（按摄取时间升序）。"""
+    with _lock:
+        records = list(_latest_by_device.values())
+    records.sort(key=lambda item: item.ingested_at)
+    return [record.to_dict() for record in records]
+
+
 def clear_device_acceptance_evidence(device_id: Optional[str] = None) -> None:
     """清理 acceptance 证据（测试辅助）。"""
     with _lock:
@@ -177,5 +185,6 @@ __all__ = [
     "AndroidAcceptanceEvidenceRecord",
     "ingest_device_acceptance_report",
     "get_latest_device_acceptance_evidence_dict",
+    "list_device_acceptance_evidence_dicts",
     "clear_device_acceptance_evidence",
 ]
