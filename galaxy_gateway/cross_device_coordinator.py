@@ -333,6 +333,7 @@ class CrossDeviceCoordinator:
                 _dispatch_path = "compat_fallback"
             else:
                 _dispatch_path = "legacy_bypass"
+        _is_legacy_bypass = _dispatch_path == "legacy_bypass"
         _legacy_path_used = None
         if _dispatch_path == "compat_fallback":
             _legacy_path_used = (
@@ -341,9 +342,9 @@ class CrossDeviceCoordinator:
                 or _caller
                 or "cross_device_coordinator.compat_fallback"
             )
-        elif _dispatch_path == "legacy_bypass":
+        elif _is_legacy_bypass:
             _legacy_path_used = "cross_device_coordinator.execute_cross_device_task"
-        if _dispatch_path == "legacy_bypass":
+        if _is_legacy_bypass:
             get_gateway_metrics().inc("legacy_dispatch_total")
             logger.warning(
                 "LEGACY_DISPATCH | CrossDeviceCoordinator.execute_cross_device_task "
@@ -491,7 +492,7 @@ class CrossDeviceCoordinator:
                 result = await self._execute_generic_cross_device_task(command, context)
 
             if isinstance(result, dict):
-                result = dict(result)
+                result = result.copy()
             else:
                 result = {"success": False, "error": str(result)}
             result.setdefault("route_mode", _route_mode)
