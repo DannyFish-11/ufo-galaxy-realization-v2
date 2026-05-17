@@ -1284,7 +1284,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
 
 
 def _combine_closure_states(*states: Optional[str]) -> str:
-    normalized = [str(s) for s in states if s not in (None, "")]
+    normalized = [str(s) for s in states if s is not None and s != ""]
     if not normalized:
         return ClosureState.OPEN.value
     if ClosureState.OPEN.value in normalized:
@@ -1372,6 +1372,10 @@ def _build_local_cross_multi_foundation_audit(
     multi_state = mode_summary.get(ModeId.MULTI_DEVICE.value)
     layered_exists = bool(layered_mode_model)
 
+    structural_gap = ""
+    if multi_state != ClosureState.ESTABLISHED.value:
+        structural_gap = "多设备协作仍以参与矩阵和选路为主，完整并发协作与恢复策略仍未全闭合。"
+
     return {
         "local_foundation": {
             "closure_state": local_state,
@@ -1390,11 +1394,7 @@ def _build_local_cross_multi_foundation_audit(
         },
         "layer_relation_zh": "local 是执行基底，cross-device 是跨端路由，multi-device 是并行协作形态。",
         "layered_mode_model_present": layered_exists,
-        "structural_gap_zh": (
-            "多设备协作仍以参与矩阵和选路为主，完整并发协作与恢复策略仍未全闭合。"
-            if multi_state != ClosureState.ESTABLISHED.value
-            else ""
-        ),
+        "structural_gap_zh": structural_gap,
     }
 
 
