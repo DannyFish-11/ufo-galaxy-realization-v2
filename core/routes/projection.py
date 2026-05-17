@@ -6001,7 +6001,15 @@ def _build_foundational_system_truth(truth_payload: Dict[str, Any]) -> Dict[str,
             "partial_count": int(snapshot.get("partial_count") or 0),
             "open_count": int(snapshot.get("open_count") or 0),
             "state_source": "core.current_state_backbone_audit.ClosureState",
+            "is_engineering_approximation": True,
+            "native_model_convergence": (
+                dict(snapshot.get("native_three_state_final_audit") or {}).get("outcome")
+            ),
         },
+        "native_three_state_final_audit": dict(snapshot.get("native_three_state_final_audit") or {}),
+        "local_cross_multi_foundation_audit": dict(
+            snapshot.get("local_cross_multi_foundation_audit") or {}
+        ),
         "task_system_layered_status": {
             "request_dispatch_chain": chain_summary.get("request_chain"),
             "execution_chain": chain_summary.get("execution_chain"),
@@ -6010,6 +6018,7 @@ def _build_foundational_system_truth(truth_payload: Dict[str, Any]) -> Dict[str,
             "projection_chain": chain_summary.get("projection_chain"),
             "delegated_execution_mode": mode_summary.get("delegated_execution"),
         },
+        "task_system_body_final_audit": dict(snapshot.get("task_system_body_final_audit") or {}),
         "source_of_truth_refs": [
             "core.current_state_backbone_audit.build_system_backbone_snapshot",
             "core.current_state_backbone_audit.ClosureState",
