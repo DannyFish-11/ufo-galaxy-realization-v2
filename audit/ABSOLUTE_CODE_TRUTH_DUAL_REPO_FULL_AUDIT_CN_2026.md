@@ -57,7 +57,7 @@ FRESH_INTEGRATED_DUAL_REPO_AUDIT_2026_V3、UNIFIED_DUAL_REPO_REALITY_COGNITION_C
 | V2 有本地执行路径（不涉及 Android）和跨设备执行路径 | `core/local_execution_chain.py`，`core/cross_device_execution_chain.py` |
 | Android 的入口是 `GalaxyConnectionService`（持久后台 Service） | `galaxy_gateway/android/handlers/` 通过 V2 侧镜像描述可验证 |
 | Android 与 V2 通过 AIP v3 WebSocket 协议通信 | `galaxy_gateway/protocol/aip_v3.py`，`/ws/device/{device_id}` |
-| Android 有完整的本地 AI 执行栈（llama.cpp + NCNN） | `audit/FRESH_INTEGRATED_DUAL_REPO_AUDIT_2026_V3.md` Section 1（代码来源：`app/build.gradle`，`LlamaCppPlannerService.kt`，`NcnnGroundingService.kt`） |
+| Android 有完整的本地 AI 执行栈（llama.cpp + NCNN） | Android 侧：`app/build.gradle`（`com.github.ggerganov:llama.cpp:b4833`，`com.github.nihui:ncnn-android-vulkan:20240410`），`planner/LlamaCppPlannerService.kt`（`external fun nativeLoadModel`），`grounding/NcnnGroundingService.kt`（`external fun nativeGround`），`local/LocalLoopExecutor.kt` |
 | NATS 是可选的分布式消息总线，不配置则 no-op | `core/nats_bus.py` 中 `_HAS_NATS = False` 时整体降级，`GALAXY_NATS_URL` 环境变量控制 |
 | Mesh 是 WS 之上的 P2P 加速层，不是独立协议 | `core/mesh_coordinator.py` 注释：`MESH_TRANSPORT_ROLE = "MESH::OVERLAY_ENRICHMENT_ONLY"` |
 
