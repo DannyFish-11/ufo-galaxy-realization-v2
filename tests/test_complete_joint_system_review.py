@@ -33,6 +33,7 @@ from core.complete_joint_system_review import (
     PropositionVerdict,
     RemainingIssue,
     RuntimeFlowStage,
+    RuntimeMaturity,
     StageGate,
     StageVerdict,
     V2ConvergencePriority,
@@ -64,6 +65,7 @@ _EXPECTED_DOMAIN_TOPICS = {
 
 _EXPECTED_PROPOSITION_IDS = {f"P{i}" for i in range(1, 13)}  # P1 .. P12
 _EXPECTED_ISSUE_IDS = {f"R{i}" for i in range(1, 14)}  # R1 .. R13
+_EXPECTED_RUNTIME_STAGE_COUNT = 13
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +203,9 @@ def test_propositions_use_all_three_verdicts() -> None:
     report = build_complete_joint_system_review()
     verdicts = {p.verdict for p in report.propositions}
     assert PropositionVerdict.HARD_ESTABLISHED in verdicts, "At least one HARD_ESTABLISHED proposition expected"
-    assert PropositionVerdict.PARTIALLY_ESTABLISHED in verdicts, "At least one PARTIALLY_ESTABLISHED proposition expected"
+    assert (
+        PropositionVerdict.PARTIALLY_ESTABLISHED in verdicts
+    ), "At least one PARTIALLY_ESTABLISHED proposition expected"
     assert PropositionVerdict.SHOULD_SCALE_BACK in verdicts, "At least one SHOULD_SCALE_BACK proposition expected"
 
 
@@ -249,6 +253,7 @@ def test_all_propositions_have_rationale() -> None:
 
 def test_report_has_all_13_remaining_issues() -> None:
     report = build_complete_joint_system_review()
+    assert all(isinstance(i, RemainingIssue) for i in report.remaining_issues)
     ids = {i.issue_id for i in report.remaining_issues}
     missing = _EXPECTED_ISSUE_IDS - ids
     assert not missing, f"Missing remaining issues: {missing}"
@@ -321,6 +326,7 @@ def test_r2_is_state_truth_must_first() -> None:
 
 def test_closure_map_has_one_entry_per_proposition() -> None:
     report = build_complete_joint_system_review()
+    assert all(isinstance(c, ClosureMapEntry) for c in report.closure_map)
     prop_ids = {p.prop_id for p in report.propositions}
     map_ids = {c.prop_id for c in report.closure_map}
     assert prop_ids == map_ids, "Closure map must have exactly one entry per proposition"
@@ -354,15 +360,29 @@ def test_partially_established_propositions_have_blocking_issues() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_runtime_flow_has_six_stages_covering_end_to_end_chain() -> None:
+def test_runtime_flow_has_13_stages_with_expected_axes() -> None:
     report = build_complete_joint_system_review()
-    assert len(report.runtime_flow) == 6
+    assert len(report.runtime_flow) == _EXPECTED_RUNTIME_STAGE_COUNT
     assert all(isinstance(stage, RuntimeFlowStage) for stage in report.runtime_flow)
-    titles = {stage.title_zh for stage in report.runtime_flow}
-    assert any("入口" in title for title in titles)
-    assert any("分发" in title or "执行路径" in title for title in titles)
-    assert any("回流" in title for title in titles)
-    assert any("闭环" in title or "收口" in title for title in titles)
+    stage_ids = {stage.stage_id for stage in report.runtime_flow}
+    assert stage_ids == {f"C{i}" for i in range(1, _EXPECTED_RUNTIME_STAGE_COUNT + 1)}
+    axes = {stage.chain_axis for stage in report.runtime_flow}
+    expected_axes = {
+        "clone_setup",
+        "startup",
+        "ingress",
+        "auth",
+        "registration",
+        "dispatch",
+        "participation",
+        "mesh",
+        "result_return",
+        "truth_return",
+        "truth_surface",
+        "validation",
+        "full_practical_use",
+    }
+    assert axes == expected_axes
 
 
 def test_runtime_flow_stages_have_v2_anchors_and_truth_text() -> None:
@@ -370,6 +390,14 @@ def test_runtime_flow_stages_have_v2_anchors_and_truth_text() -> None:
     for stage in report.runtime_flow:
         assert stage.runtime_truth_zh
         assert stage.v2_anchors
+        assert isinstance(stage.maturity, RuntimeMaturity)
+
+
+def test_runtime_flow_maturity_honestly_contains_non_fully_wired_stages() -> None:
+    report = build_complete_joint_system_review()
+    maturities = {stage.maturity for stage in report.runtime_flow}
+    assert RuntimeMaturity.PARTIALLY_WIRED in maturities
+    assert RuntimeMaturity.WEAK_EVIDENCE in maturities
 
 
 def test_cross_repo_mismatches_are_explicit_and_linked_to_issues() -> None:
@@ -537,7 +565,10 @@ def test_to_dict_runtime_flow_entries_have_required_fields() -> None:
     for stage in payload["runtime_flow"]:
         assert "stage_id" in stage
         assert "title_zh" in stage
+        assert "chain_axis" in stage
+        assert "maturity" in stage
         assert "runtime_truth_zh" in stage
+        assert "blocking_issue_ids" in stage
         assert "v2_anchors" in stage
 
 

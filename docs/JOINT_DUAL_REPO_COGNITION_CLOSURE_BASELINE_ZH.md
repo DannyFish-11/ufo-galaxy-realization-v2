@@ -48,6 +48,30 @@
 - **阶段理由**：中心治理与执行/透明面已成形，但 mesh full runtime、跨仓运行态一致性、多模态运行级证据仍是关键未闭合项。
 - 注：完成度数值来自可机读 scorecard 计算，后续应以 `build_joint_dual_repo_cognition_closure_review()` 的实时输出为准。
 
+## 3.1) clone → 完整使用链路矩阵（可机读 Runtime Flow）
+
+> 结构化来源：`core/complete_joint_system_review.py` 的 `runtime_flow`（C1~C13）。
+>
+> 成熟度标签：`fully_wired / partially_wired / nominal_only / weak_evidence / missing`
+
+| 阶段 | 轴线 | 当前成熟度 | 结论 |
+|---|---|---|---|
+| C1 | clone_setup | partially_wired | V2 侧最小路径清晰，但双仓一体化启动脚本仍缺 |
+| C2 | startup | partially_wired | 双侧可启动，但活体恢复与跨仓回归证据薄 |
+| C3 | ingress | partially_wired | ingress canonical 首跳已形成，仍需持续防漂移回归 |
+| C4 | auth | partially_wired | ingress_boundary 已落地，跨仓冲突裁决证据仍薄 |
+| C5 | registration | partially_wired | posture/attach/ack 已打通，会话重建证明不足 |
+| C6 | dispatch | partially_wired | canonical dispatch 已在用，但编排消费覆盖不完整 |
+| C7 | participation | partially_wired | Android 参与链成立，本地 inference 门控闭环不足 |
+| C8 | mesh | nominal_only | 参与 contract 成立，full mesh runtime 仍 constrained |
+| C9 | result_return | partially_wired | result 回流主链存在，异常活体证据仍薄 |
+| C10 | truth_return | partially_wired | evidence/acceptance/completion 链存在，组合异常闭环不足 |
+| C11 | truth_surface | partially_wired | panel/operator 同源化推进中，仍有控制面漂移风险 |
+| C12 | validation | weak_evidence | 单仓测试多，双仓真实设备自动化回归不足 |
+| C13 | full_practical_use | weak_evidence | 系统已非 PoC，但 clone→完整可用尚未 fully close |
+
+该矩阵把“能力存在”与“运行级闭环证据”显式拆开：同一阶段可结构成立但运行证据不足，不再被误判为 fully closed。
+
 ## 4) 双仓关键代码锚点（抽样）
 
 ### V2 侧
