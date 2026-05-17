@@ -218,8 +218,8 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "path."
         ),
         canonical_replacement=(
-            "python unified_launcher.py  "
-            "(or python main.py on Windows: start.bat)"
+            "python main.py  "
+            "(or start.bat on Windows; direct advanced invocation: python unified_launcher.py)"
         ),
     ),
     PurgeDecision(
@@ -274,11 +274,12 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "start_galaxy.py was a legacy compatibility wrapper that delegated "
             "to unified_launcher.py.  PR-10 hardened it; the post-PR-10 cleanup "
             "fully removes it.  There is no use case for the wrapper now that "
-            "unified_launcher.py is the sole startup authority.  The file has been "
+            "main.py is the official startup authority and unified_launcher.py is "
+            "a subordinate launcher.  The file has been "
             "deleted from the repository.  Use 'python main.py' or "
             "'python unified_launcher.py' directly."
         ),
-        canonical_replacement="python unified_launcher.py  (or python main.py)",
+        canonical_replacement="python main.py  (or python unified_launcher.py for direct subordinate invocation)",
     ),
     PurgeDecision(
         asset_path="start_l4.py",
@@ -287,11 +288,12 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         rationale=(
             "start_l4.py was frozen since PR-6 (delegates to unified_launcher.py). "
             "The post-PR-10 cleanup fully removes it.  There is no use case for "
-            "the wrapper now that unified_launcher.py manages L4 lifecycle.  "
+            "the wrapper now that main.py is the official startup authority and "
+            "unified_launcher.py manages subordinate L4 lifecycle.  "
             "The file has been deleted from the repository.  Use 'python main.py' "
             "or 'python unified_launcher.py' directly."
         ),
-        canonical_replacement="python unified_launcher.py  (or python main.py)",
+        canonical_replacement="python main.py  (or python unified_launcher.py for direct subordinate invocation)",
     ),
 
     # ── PR-S6: Final server-side legacy demotion ──────────────────────────

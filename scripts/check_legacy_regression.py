@@ -87,7 +87,8 @@ def _check_no_new_bat_launchers_in_windows_client() -> List[str]:
             f"[PR-8 REGRESSION] New .bat launcher detected: {rel}\n"
             f"  windows_client/ must not contain .bat launcher files.  "
             f"The last remaining legacy launchers were deleted in PR-8.\n"
-            f"  Use start.bat (repo root) or python unified_launcher.py instead."
+            f"  Use python main.py instead "
+            f"(or start.bat on Windows / python unified_launcher.py for direct subordinate invocation)."
         )
     return violations
 

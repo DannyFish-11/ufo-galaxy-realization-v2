@@ -9,9 +9,9 @@ modules in this package are part of the active Windows runtime.
 Retired surfaces — fully deleted (PR-8)
 -----------------------------------------
 - ``START_CLIENT.bat``             — Deleted.  Was: legacy F12 sidebar launcher.
-  Canonical replacement: ``start.bat`` or ``python unified_launcher.py``.
+  Canonical replacement: ``start.bat`` or ``python main.py``.
 - ``start_galaxy_client.bat``      — Deleted.  Was: legacy Gateway WebSocket
-  client launcher.  Canonical replacement: ``python unified_launcher.py``.
+  client launcher.  Canonical replacement: ``python main.py``.
 
 Retired surfaces archived here
 --------------------------------

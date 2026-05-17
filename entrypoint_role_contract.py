@@ -30,6 +30,10 @@ ENTRYPOINT_ROLE_CONTRACT_SENTINEL: str = (
 
 MAIN_ENTRY_ID: str = "main.py:main"
 UNIFIED_LAUNCHER_ENTRY_ID: str = "unified_launcher.py:main"
+LEGACY_DOCKER_LAUNCHER_ENTRY_ID: str = "scripts.launcher_v2:main"
+LEGACY_WINDOWS_RUN_UI_ENTRY_ID: str = (
+    "enhancements.clients.windows_client.run_ui:module_import"
+)
 
 
 class EntrypointRole(str, Enum):
@@ -112,6 +116,20 @@ ENTRYPOINT_ROLE_REGISTRY: Dict[str, EntrypointRecord] = {
         trigger_boundary="legacy dashboard surface",
         non_main_reason="legacy compatibility surface",
     ),
+    LEGACY_DOCKER_LAUNCHER_ENTRY_ID: EntrypointRecord(
+        entry_id=LEGACY_DOCKER_LAUNCHER_ENTRY_ID,
+        role=EntrypointRole.COMPAT_FALLBACK_LEGACY,
+        module_path="scripts/launcher_v2.py",
+        trigger_boundary="legacy Docker/container orchestration helper",
+        non_main_reason="legacy deployment helper only",
+    ),
+    LEGACY_WINDOWS_RUN_UI_ENTRY_ID: EntrypointRecord(
+        entry_id=LEGACY_WINDOWS_RUN_UI_ENTRY_ID,
+        role=EntrypointRole.COMPAT_FALLBACK_LEGACY,
+        module_path="enhancements/clients/windows_client/run_ui.py",
+        trigger_boundary="hard-disabled legacy Windows launcher stub",
+        non_main_reason="retired legacy launcher surface",
+    ),
 }
 
 
@@ -133,6 +151,8 @@ ANDROID_V2_MAINLINE_BRIDGE_ANCHORS: Dict[str, str] = {
         "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt::"
         "MsgType.TASK_SUBMIT/TASK_ASSIGN/TASK_RESULT"
     ),
+    "v2_startup_authority": MAIN_ENTRY_ID,
+    "v2_subordinate_launcher": UNIFIED_LAUNCHER_ENTRY_ID,
     "v2_gateway_ingress": "galaxy_gateway.routes.chat:chat_endpoint",
     "v2_mainline_runtime_shell": (
         "core.desktop_presence_runtime:DesktopPresenceRuntime.handle_request"

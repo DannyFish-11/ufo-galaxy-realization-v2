@@ -261,7 +261,7 @@ def print_powershell_hint() -> None:
         "  • 字体:   Consolas (右键标题栏 → 属性 → 字体)\n"
         "  • 列宽:   窗口宽度 ≥ 120 列 (属性 → 布局 → 宽度 120)\n"
         "  • UTF-8:  运行 chcp 65001 后再启动 Galaxy\n"
-        "  示例: chcp 65001 && python unified_launcher.py\n"
+        "  示例: chcp 65001 && python main.py\n"
     )
 
 
