@@ -478,6 +478,7 @@ class TestParticipationTruthConsumption:
         assert matrix["devices"][0]["dispatch_eligible"] is True
         assert matrix["devices"][0]["runtime_lifecycle_truth"]["participating"] is True
         assert matrix["devices"][0]["runtime_lifecycle_truth"]["dispatchable"] is True
+        assert matrix["devices"][0]["participation_reason_codes"] == ["all-eligible"]
         assert matrix["devices"][1]["selected"] is False
         assert matrix["devices"][1]["dispatch_eligible"] is False
         assert matrix["devices"][1]["participation_tier"] == "control_only"

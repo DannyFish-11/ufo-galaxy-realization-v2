@@ -5993,26 +5993,45 @@ def _build_runtime_lifecycle_truth(
     lifecycle_record: Optional[Dict[str, Any]],
     participation_status: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    record = dict(lifecycle_record or {})
-    status = dict(participation_status or {})
-    stage = str(record.get("stage") or "")
-    connected_or_higher = stage in {
+    """Build lifecycle-backed runtime truth flags for board-facing surfaces.
+
+    The result normalizes lifecycle record fields into explicit semantics
+    (registered/connected/attached/alive/active/dispatchable/participating)
+    while keeping compatibility fallbacks when a lifecycle record is absent.
+    """
+    _REGISTERED_OR_HIGHER_STAGES = {
+        "registered",
         "connected",
         "ready",
         "participating",
         "takeover_eligible",
     }
-    ready_or_higher = stage in {"ready", "participating", "takeover_eligible"}
-    participating_stage = stage == "participating"
+    _CONNECTED_OR_HIGHER_STAGES = {
+        "connected",
+        "ready",
+        "participating",
+        "takeover_eligible",
+    }
+    _READY_OR_HIGHER_STAGES = {"ready", "participating", "takeover_eligible"}
+    _ACTIVE_PARTICIPATION_STAGES = {"participating", "takeover_eligible"}
+
+    record = dict(lifecycle_record or {})
+    status = dict(participation_status or {})
+    stage = str(record.get("stage") or "")
+    connected_or_higher = stage in _CONNECTED_OR_HIGHER_STAGES
+    ready_or_higher = stage in _READY_OR_HIGHER_STAGES
+    active_or_participating = bool(record.get("execution_active") or stage in _ACTIVE_PARTICIPATION_STAGES)
 
     registered = bool(
-        stage in {"registered", "connected", "ready", "participating", "takeover_eligible"}
+        stage in _REGISTERED_OR_HIGHER_STAGES
         or record.get("registration_ack_success")
     )
     connected = bool(connected_or_higher or record.get("websocket_connected"))
+    # connected_or_higher stages indicate registration has reached a state where
+    # the device can be treated as attached for board-facing lifecycle truth.
     attached = bool(record.get("registration_fully_attached") or connected_or_higher)
     alive = bool(record.get("websocket_connected") and not record.get("operator_suspended"))
-    active = bool(record.get("execution_active") or participating_stage)
+    active = active_or_participating
     dispatchable = bool(
         ready_or_higher
         or (
@@ -6021,9 +6040,9 @@ def _build_runtime_lifecycle_truth(
             and connected
         )
     )
-    participating = bool(active or stage in {"participating", "takeover_eligible"})
-    runtime_present = bool(status.get("runtime_present") if "runtime_present" in status else connected)
-    routable = bool(status.get("routable")) if "routable" in status else connected
+    participating = active_or_participating
+    runtime_present = bool(status.get("runtime_present", connected))
+    routable = bool(status.get("routable", connected))
 
     return {
         "stage": stage or None,
@@ -6050,6 +6069,7 @@ def _build_runtime_lifecycle_truth(
 
 
 def _participation_tier_from_lifecycle_stage(stage: Optional[str]) -> Optional[str]:
+    """Map lifecycle stage string to canonical participation tier."""
     if stage in (None, ""):
         return None
     try:
@@ -6148,6 +6168,8 @@ def _build_all_device_participation_matrix(
                 )
             )
         )
+        # Selected device keeps orchestrator-selected truth to preserve operator
+        # focus compatibility; non-selected devices derive from lifecycle truth.
         row_dispatch_eligible = (
             dispatch_eligible_selected if is_selected else bool(runtime_lifecycle_truth.get("dispatchable"))
         )
@@ -6175,6 +6197,9 @@ def _build_all_device_participation_matrix(
                 "cross_device_eligible": bool(status.get("cross_device_eligible")),
                 "orchestration_eligible": bool(status.get("orchestration_eligible")),
                 "participation_reason": status.get("participation_reason"),
+                "participation_reason_codes": [str(status.get("participation_reason"))]
+                if status.get("participation_reason")
+                else [],
                 "runtime_lifecycle_truth": runtime_lifecycle_truth,
                 "attachment_semantics": {
                     "fully_attached": row_fully_attached,
@@ -6218,6 +6243,11 @@ def _build_all_device_participation_matrix(
                     "selected_device_not_in_udm;lifecycle_truth_available"
                     if lifecycle_record
                     else "selected_device_not_in_udm"
+                ),
+                "participation_reason_codes": (
+                    ["selected_device_not_in_udm", "lifecycle_truth_available"]
+                    if lifecycle_record
+                    else ["selected_device_not_in_udm"]
                 ),
                 "runtime_lifecycle_truth": runtime_lifecycle_truth,
                 "attachment_semantics": {

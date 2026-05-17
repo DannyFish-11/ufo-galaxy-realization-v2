@@ -180,17 +180,9 @@ class DeviceSurface:
                     row_constrained = bool(row.get("runtime_constrained"))
                     row_attach = str(row.get("device_lifecycle_stage") or "-")
                     lifecycle_truth = row.get("runtime_lifecycle_truth")
-                    life_compact = ""
-                    if isinstance(lifecycle_truth, dict):
-                        life_compact = (
-                            f" life=reg:{int(bool(lifecycle_truth.get('registered')))}"
-                            f"/conn:{int(bool(lifecycle_truth.get('connected')))}"
-                            f"/att:{int(bool(lifecycle_truth.get('attached')))}"
-                            f"/alive:{int(bool(lifecycle_truth.get('alive')))}"
-                            f"/active:{int(bool(lifecycle_truth.get('active')))}"
-                            f"/dispatch:{int(bool(lifecycle_truth.get('dispatchable')))}"
-                            f"/part:{int(bool(lifecycle_truth.get('participating')))}"
-                        )
+                    life_compact = self._format_lifecycle_truth_compact(lifecycle_truth)
+                    if life_compact:
+                        life_compact = " " + life_compact
                     lines.append(
                         "  │    "
                         f"{c(selected_mark, _COLOUR_STAGE)} {c(row_device_id, _COLOUR_DEVICE)} "
@@ -272,3 +264,20 @@ class DeviceSurface:
 
         lines.append(c("  └─────────────────────────────────────────────────┘", BOLD))
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_lifecycle_truth_compact(lifecycle_truth: Any) -> str:
+        """Render runtime_lifecycle_truth into compact 0/1 lifecycle flags."""
+        if not isinstance(lifecycle_truth, dict):
+            return ""
+        def _flag(name: str) -> int:
+            return int(bool(lifecycle_truth.get(name)))
+        return (
+            f" life=reg:{_flag('registered')}"
+            f"/conn:{_flag('connected')}"
+            f"/att:{_flag('attached')}"
+            f"/alive:{_flag('alive')}"
+            f"/active:{_flag('active')}"
+            f"/dispatch:{_flag('dispatchable')}"
+            f"/part:{_flag('participating')}"
+        )
