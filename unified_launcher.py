@@ -66,6 +66,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+from entrypoint_role_contract import EntrypointRole, ensure_entrypoint_role
+
 # 设置项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -765,6 +767,10 @@ async def _run_check_only(galaxy: 'GalaxyUnified'):
 
 def main():
     """主函数"""
+    if not ensure_entrypoint_role("unified_launcher.py:main", EntrypointRole.SUB_ENTRY):
+        logger.error("Entrypoint role contract violation: unified_launcher lost SUB_ENTRY role.")
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="Galaxy - L4 级自主性智能系统（统一融合版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -88,6 +88,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 logger = logging.getLogger("Galaxy.OpenClawd")
 
+OPENCLAWD_ENTRYPOINT_ROLE: str = "internal_entry"
+"""Entrypoint role contract (PR-01): subject-core internal stage entry, not startup main entry."""
+
 # ============================================================================
 # Helper: local-device detection + Parallel-group state machine
 # ============================================================================

@@ -100,6 +100,9 @@ from core.schemas.task_envelope import TaskEnvelope
 
 logger = logging.getLogger("Galaxy.CommandRouter")
 
+COMMAND_ROUTER_ENTRYPOINT_ROLE: str = "internal_entry"
+"""Entrypoint role contract (PR-01): cross-device substrate internal stage entry only."""
+
 # ── PR-G5: resilience defaults from env vars (safe, backward-compatible) ────
 _DEFAULT_MAX_QUEUE_DEPTH: int = int(os.environ.get("GALAXY_ROUTER_MAX_QUEUE_DEPTH", "200"))
 _DEFAULT_CB_ENABLED: bool = os.environ.get("GALAXY_ROUTER_CB_ENABLED", "true").lower() not in ("false", "0")
