@@ -71,7 +71,7 @@ def test_baseline_exposes_stage_attribution_and_capability_matrix():
     ]
     assert payload["classification_counts"][CAPABILITY_CLASS_FULLY_WIRED] >= 0
     assert sum(payload["classification_counts"].values()) == len(payload["capability_inventory"])
-    assert payload["explicit_gaps"], "必须显式暴露缺口，而不是只给乐观摘要"
+    assert payload["explicit_gaps"], "Explicit gaps must be exposed when baseline fails"
 
 
 def test_baseline_can_close_cross_repo_chain_with_seeded_runtime_evidence():

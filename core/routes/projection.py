@@ -6426,12 +6426,13 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "participation_truth_consumption",
             _build_participation_truth_consumption({}),
         )
+    runtime_truth_payload = result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}
     result["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
-        truth_payload=(result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}),
+        truth_payload=runtime_truth_payload,
         board_payload=result,
     )
     result["dual_repo_completeness_baseline"] = _build_dual_repo_completeness_baseline_projection(
-        truth_payload=(result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}),
+        truth_payload=runtime_truth_payload,
         board_payload=result,
     )
     _apply_shared_visibility_field(

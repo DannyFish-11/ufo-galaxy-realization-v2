@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -39,6 +40,8 @@ _SETUP_FILES = (
     "pyproject.toml",
     "main.py",
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -198,25 +201,40 @@ def _check_setup_stage() -> tuple[bool, Dict[str, Any]]:
 def _check_config_stage() -> tuple[bool, Dict[str, Any]]:
     root_dir = _repo_root()
     config_path = os.path.join(root_dir, "config.json")
+    resolved_config_path = os.path.realpath(config_path)
+    resolved_root = os.path.realpath(root_dir)
+    try:
+        path_safe = os.path.commonpath([resolved_root, resolved_config_path]) == resolved_root
+    except ValueError:
+        path_safe = False
     parsed = False
     parse_error: Optional[str] = None
-    if os.path.isfile(config_path):
+    if path_safe and os.path.isfile(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as fp:
                 json.load(fp)
             parsed = True
-        except Exception as exc:  # noqa: BLE001
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
             parse_error = str(exc)
+            logger.debug("dual_repo_completeness_baseline: failed to parse config.json: %s", exc)
+    elif not path_safe:
+        parse_error = "config_path_outside_repo_root"
+        logger.debug(
+            "dual_repo_completeness_baseline: rejected config path outside repo root: %s",
+            resolved_config_path,
+        )
     has_unified_config = False
     try:
         import core.unified_config  # noqa: F401
 
         has_unified_config = True
-    except Exception:
-        has_unified_config = False
+    except (ImportError, ModuleNotFoundError) as exc:
+        logger.debug("dual_repo_completeness_baseline: unified_config import failed: %s", exc)
     passed = bool(parsed and has_unified_config)
     return passed, {
         "config_path": config_path,
+        "resolved_config_path": resolved_config_path,
+        "path_safe": path_safe,
         "config_exists": os.path.isfile(config_path),
         "config_json_valid": parsed,
         "config_parse_error": parse_error,
@@ -370,7 +388,7 @@ def _classification_counts(capabilities: Sequence[_CapabilitySignal]) -> Dict[st
         CAPABILITY_CLASS_MISSING: 0,
     }
     for item in capabilities:
-        counts[item.classification] = counts.get(item.classification, 0) + 1
+        counts[item.classification] += 1
     return counts
 
 
@@ -417,9 +435,10 @@ def _build_summary(
             "dispatch/participation→mesh→result_return→truth_panel_surface 全阶段可验证。"
         )
     stage_names = ",".join(stage.get("stage", "unknown") for stage in blocking_stages)
+    count_summary = ", ".join(f"{name}:{value}" for name, value in classification_counts.items())
     return (
         f"双仓完整性基线未通过，阻断阶段={stage_names}；"
-        f"分类统计={classification_counts}；显式缺口数={len(explicit_gaps)}。"
+        f"分类统计={count_summary}；显式缺口数={len(explicit_gaps)}。"
     )
 
 
