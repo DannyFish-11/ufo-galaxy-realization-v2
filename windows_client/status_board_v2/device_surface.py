@@ -208,7 +208,12 @@ class DeviceSurface:
 
         if acceptance_chain:
             e2e_status = str(acceptance_chain.get("overall_status") or "(unknown)")
-            e2e_colour = _COLOUR_OK if e2e_status == "passed" else _COLOUR_ERROR
+            if e2e_status == "passed":
+                e2e_colour = _COLOUR_OK
+            elif e2e_status in {"in_progress", "pending", "unknown"}:
+                e2e_colour = _COLOUR_WARN
+            else:
+                e2e_colour = _COLOUR_ERROR
             lines.append(f"  │  {c('E2E     :', BOLD)} {c(e2e_status, e2e_colour)}")
             summary = str(acceptance_chain.get("summary") or "")
             if summary:

@@ -267,5 +267,9 @@ class TestCrossRepoAcceptanceChain:
         assert snapshot["overall_status"] == "failed"
         assert snapshot["failing_stage"] == "mesh_lifecycle"
         assert snapshot["failure_boundaries"][0]["boundary"] == "mesh_lifecycle"
-        mesh_stage = next(stage for stage in snapshot["stages"] if stage["stage"] == "mesh_lifecycle")
+        mesh_stage = next(
+            (stage for stage in snapshot["stages"] if stage["stage"] == "mesh_lifecycle"),
+            None,
+        )
+        assert mesh_stage is not None
         assert "mesh 生命周期缺口" in mesh_stage["summary"]

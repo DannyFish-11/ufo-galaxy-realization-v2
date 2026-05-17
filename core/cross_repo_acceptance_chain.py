@@ -270,10 +270,10 @@ def _build_surface_visibility_stage(
     truth_payload: Dict[str, Any],
     board_payload: Dict[str, Any],
 ) -> Dict[str, Any]:
-    truth_visibility = _coerce_dict(truth_payload.get("shared_execution_visibility"))
-    truth_participation = _coerce_dict(truth_payload.get("participation_truth_consumption"))
-    board_visibility = _coerce_dict(board_payload.get("shared_execution_visibility"))
-    board_participation = _coerce_dict(board_payload.get("participation_truth_consumption"))
+    truth_visibility = _ensure_dict(truth_payload.get("shared_execution_visibility"))
+    truth_participation = _ensure_dict(truth_payload.get("participation_truth_consumption"))
+    board_visibility = _ensure_dict(board_payload.get("shared_execution_visibility"))
+    board_participation = _ensure_dict(board_payload.get("participation_truth_consumption"))
     runtime_truth_visible = bool(truth_visibility) and bool(truth_participation)
     board_visible = bool(board_visibility) and bool(board_participation)
     closure_visible = bool(
@@ -315,10 +315,10 @@ def _resolve_device_id(
 ) -> Optional[str]:
     for candidate in (
         explicit_device_id,
-        _coerce_dict(truth_payload.get("participation_truth_consumption")).get("selected_device_id"),
-        _coerce_dict(board_payload.get("participation_truth_consumption")).get("selected_device_id"),
-        _coerce_dict(truth_payload.get("runtime_decision_reasoning")).get("selected_device"),
-        _coerce_dict(truth_payload.get("runtime_decision_reasoning")).get("selected_device_id"),
+        _ensure_dict(truth_payload.get("participation_truth_consumption")).get("selected_device_id"),
+        _ensure_dict(board_payload.get("participation_truth_consumption")).get("selected_device_id"),
+        _ensure_dict(truth_payload.get("runtime_decision_reasoning")).get("selected_device"),
+        _ensure_dict(truth_payload.get("runtime_decision_reasoning")).get("selected_device_id"),
     ):
         if candidate not in (None, ""):
             return str(candidate)
@@ -337,10 +337,7 @@ def _resolve_device_id(
 
         sessions = get_android_mesh_lifecycle_store().get_all_sessions()
         if sessions:
-            latest_session = sorted(
-                sessions,
-                key=lambda item: (float(getattr(item, "updated_at", 0.0)), float(getattr(item, "created_at", 0.0))),
-            )[-1]
+            latest_session = sorted(sessions, key=_session_timestamp_key)[-1]
             return str(getattr(latest_session, "device_id", "") or "") or None
     except Exception:
         pass
@@ -372,10 +369,7 @@ def _resolve_mesh_session(
         sessions = get_sessions_for_device(str(device_id), include_terminal=True)
         if not sessions:
             return {}
-        latest = sorted(
-            sessions,
-            key=lambda item: (float(getattr(item, "updated_at", 0.0)), float(getattr(item, "created_at", 0.0))),
-        )[-1]
+        latest = sorted(sessions, key=_session_timestamp_key)[-1]
         return latest.to_dict()
     except Exception:
         return {}
@@ -412,7 +406,14 @@ def _build_chain_summary(
     )
 
 
-def _coerce_dict(value: Any) -> Dict[str, Any]:
+def _session_timestamp_key(value: Any) -> tuple[float, float]:
+    return (
+        float(getattr(value, "updated_at", 0.0) or 0.0),
+        float(getattr(value, "created_at", 0.0) or 0.0),
+    )
+
+
+def _ensure_dict(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
