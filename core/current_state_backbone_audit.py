@@ -1412,7 +1412,6 @@ def _build_native_three_state_closeout(
     - 被工程近似遮蔽的部分
     """
     tristate_enum_exists = _probe("core.desktop_presence_runtime", "TriState")
-    tristate_lifecycle_exists = _probe("core.desktop_presence_runtime", "presence_tristate")
     continuum_phase_exists = _probe("core.continuum", "tri_state_phase")
 
     # --- 直接映射：DesktopPresenceRuntime.TriState 是工程表达 ---------------
@@ -1485,7 +1484,7 @@ def _build_native_three_state_closeout(
         "当前最接近原生三态的单一收敛点是 core.desktop_presence_runtime.TriState。"
     )
 
-    convergence_assessment = "partial_single_canonical_source_identified" if tristate_enum_exists else "no_canonical_source"
+    convergence_assessment = "partial_convergence" if tristate_enum_exists else "no_canonical_source"
 
     return {
         "closure_push_zh": closure_push_zh,
@@ -1517,49 +1516,79 @@ def _build_central_agent_body_classification() -> Dict[str, Any]:
     has_rag_memory = _module_exists("core.rag_memory")
     has_device_router = _module_exists("galaxy_gateway.device_router")
 
-    existing_center_intelligence: List[Dict[str, str]] = [
-        {
-            "component": "core.command_router.CommandRouter",
-            "role_zh": "跨设备执行路由——将阈限态执行路径路由到远端设备。",
-            "classification": "center_coordination_infrastructure",
-        },
-        {
-            "component": "core.capability_orchestrator",
-            "role_zh": "能力调度——决定走本地还是跨设备执行。",
-            "classification": "center_coordination_infrastructure",
-        },
-        {
-            "component": "core.runtime.source_dispatch_orchestrator",
-            "role_zh": "请求分发编排——任务起源与分发的工程编排层。",
-            "classification": "center_coordination_infrastructure",
-        },
-        {
-            "component": "core.agent_factory",
-            "role_zh": "Agent 工厂——支持模板/LLM生成/分裂三种 Agent 创建模式。",
-            "classification": "center_intelligence_partial",
-            "note_zh": "具备 Agent 创建能力，但不等于完整中心智能体——缺少统一任务理解和规划层。",
-        },
-        {
-            "component": "core.mesh_coordinator / core.nats_bus",
-            "role_zh": "Mesh/NATS 协作通信基础——多设备协作消息骨架。",
-            "classification": "center_coordination_infrastructure",
-        },
-        {
-            "component": "core.unified_result_ingress",
-            "role_zh": "结果入口聚合——汇聚多路结果并写入真值链。",
-            "classification": "center_coordination_infrastructure",
-        },
-        {
-            "component": "core.routes.projection",
-            "role_zh": "真值投影层——向 operator/board/panel/desktop 暴露系统状态。",
-            "classification": "center_coordination_infrastructure",
-        },
+    existing_center_intelligence: List[Dict[str, str]] = []
+    if has_command_router:
+        existing_center_intelligence.append(
+            {
+                "component": "core.command_router.CommandRouter",
+                "role_zh": "跨设备执行路由——将阈限态执行路径路由到远端设备。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_capability_orchestrator:
+        existing_center_intelligence.append(
+            {
+                "component": "core.capability_orchestrator",
+                "role_zh": "能力调度——决定走本地还是跨设备执行。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_source_dispatch:
+        existing_center_intelligence.append(
+            {
+                "component": "core.runtime.source_dispatch_orchestrator",
+                "role_zh": "请求分发编排——任务起源与分发的工程编排层。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_agent_factory:
+        existing_center_intelligence.append(
+            {
+                "component": "core.agent_factory",
+                "role_zh": "Agent 工厂——支持模板/LLM生成/分裂三种 Agent 创建模式。",
+                "classification": "center_intelligence_partial",
+                "note_zh": "具备 Agent 创建能力，但不等于完整中心智能体——缺少统一任务理解和规划层。",
+            }
+        )
+    if has_mesh_coordinator or has_nats_bus:
+        existing_center_intelligence.append(
+            {
+                "component": "core.mesh_coordinator / core.nats_bus",
+                "role_zh": "Mesh/NATS 协作通信基础——多设备协作消息骨架。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_result_ingress:
+        existing_center_intelligence.append(
+            {
+                "component": "core.unified_result_ingress",
+                "role_zh": "结果入口聚合——汇聚多路结果并写入真值链。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_projection:
+        existing_center_intelligence.append(
+            {
+                "component": "core.routes.projection",
+                "role_zh": "真值投影层——向 operator/board/panel/desktop 暴露系统状态。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    if has_device_router:
+        existing_center_intelligence.append(
+            {
+                "component": "galaxy_gateway.device_router",
+                "role_zh": "设备路由——管理到远端设备的路由选择。",
+                "classification": "center_coordination_infrastructure",
+            }
+        )
+    existing_center_intelligence.append(
         {
             "component": "core.rag_memory",
             "role_zh": "RAG 记忆层——具备向量检索增强记忆能力。",
             "classification": "center_intelligence_partial" if has_rag_memory else "absent",
-        },
-    ]
+        }
+    )
 
     # 仅是基础设施的部分
     only_coordination_infra: List[str] = [
