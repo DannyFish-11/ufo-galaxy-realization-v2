@@ -396,6 +396,11 @@ class TestParticipationTruthConsumption:
         assert result["fully_attached"] is True
         assert result["attachment_semantics"]["fully_attached"] is True
         assert result["attachment_semantics"]["attachment_visible"] is True
+        assert "selected_device_runtime_truth" in result
+        assert result["selected_device_runtime_truth"]["source"] in {
+            "core.device_lifecycle_state.get_lifecycle_record",
+            "core.device_selection.assess_device_participation (compat_fallback)",
+        }
 
     def test_build_consumption_projects_all_device_participation_matrix(self, monkeypatch):
         from core.routes import projection as projection_routes
@@ -431,8 +436,18 @@ class TestParticipationTruthConsumption:
         monkeypatch.setattr(projection_routes, "_assess_device_participation_status", _fake_assess)
         monkeypatch.setattr(
             projection_routes,
-            "_lookup_device_lifecycle_stage",
-            lambda device_id: "participating" if device_id == "android-prod-1" else "registered",
+            "_lookup_device_lifecycle_record",
+            lambda device_id: {
+                "stage": "participating" if device_id == "android-prod-1" else "registered",
+                "websocket_connected": True,
+                "registration_ack_success": True,
+                "registration_fully_attached": device_id == "android-prod-1",
+                "readiness_satisfied": device_id == "android-prod-1",
+                "dispatch_gate_passed": device_id == "android-prod-1",
+                "execution_active": device_id == "android-prod-1",
+                "operator_suspended": False,
+                "registration_gaps": [],
+            },
         )
 
         truth_payload = {
@@ -461,8 +476,13 @@ class TestParticipationTruthConsumption:
         assert matrix["selected_device_id"] == "android-prod-1"
         assert matrix["devices"][0]["selected"] is True
         assert matrix["devices"][0]["dispatch_eligible"] is True
+        assert matrix["devices"][0]["runtime_lifecycle_truth"]["participating"] is True
+        assert matrix["devices"][0]["runtime_lifecycle_truth"]["dispatchable"] is True
+        assert matrix["devices"][0]["participation_reason_codes"] == ["all-eligible"]
         assert matrix["devices"][1]["selected"] is False
         assert matrix["devices"][1]["dispatch_eligible"] is False
+        assert matrix["devices"][1]["participation_tier"] == "control_only"
+        assert matrix["devices"][1]["runtime_lifecycle_truth"]["registered"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -632,6 +652,18 @@ class TestDeviceSurface:
             participation_truth_consumption=dict(_RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]),
             cross_repo_acceptance_chain=dict(_RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"]),
         )
+        matrix = proj["participation_truth_consumption"].get("all_device_participation_matrix") or {}
+        devices = matrix.get("devices") or []
+        if devices:
+            devices[0]["runtime_lifecycle_truth"] = {
+                "registered": True,
+                "connected": True,
+                "attached": True,
+                "alive": True,
+                "active": True,
+                "dispatchable": True,
+                "participating": True,
+            }
         out = DeviceSurface().render(proj)
         assert "android-prod-1" in out
         assert "dispatch_eligible" in out
@@ -639,6 +671,7 @@ class TestDeviceSurface:
         assert "local=False" in out
         assert "constrained=False" in out
         assert "participating" in out
+        assert "life=reg:1/conn:1/att:1/alive:1/active:1/dispatch:1/part:1" in out
         assert "Matrix" in out
         assert "android-lab-2" in out
         assert "E2E" in out
