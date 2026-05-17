@@ -1361,15 +1361,27 @@ def _build_closure_map(
 
 
 def _build_runtime_flow() -> List[RuntimeFlowStage]:
-    """Build clone-to-complete-use chain with explicit maturity labeling."""
+    """Build 13-stage clone-to-complete-use chain with explicit maturity labels.
+
+    - stage_id: ``C1``..``C13`` in lifecycle order.
+    - chain_axis: clone_setup, startup, ingress, auth, registration, dispatch,
+      participation, mesh, result_return, truth_return, truth_surface,
+      validation, full_practical_use.
+    - maturity: ``RuntimeMaturity`` label that distinguishes real closure from
+      nominal or weak-evidence stages.
+    - blocking_issue_ids: links each stage to ``RemainingIssue`` IDs so reviewers
+      can trace exactly what still blocks that chain segment.
+    """
     return [
         RuntimeFlowStage(
             "C1",
             "克隆后基础启动认知入口",
             "clone_setup",
             RuntimeMaturity.PARTIALLY_WIRED,
-            "V2 仓已有 clone-to-use 文档与最小启动命令，但双仓（含 Android）"
-            "从克隆到联调的统一一步式脚本仍缺失。",
+            (
+                "V2 仓已有 clone-to-use 文档与最小启动命令，"
+                "但双仓（含 Android）从克隆到联调的统一一步式脚本仍缺失。"
+            ),
             ["R6", "R13"],
             [
                 "README.md",
@@ -1386,8 +1398,10 @@ def _build_runtime_flow() -> List[RuntimeFlowStage]:
             "服务启动与运行承载建立",
             "startup",
             RuntimeMaturity.PARTIALLY_WIRED,
-            "V2 主入口（main.py/unified_launcher）可启动，Android 侧可通过 "
-            "GalaxyWebSocketClient 接入；但双仓活体启动编排与恢复演练仍缺回归厚度。",
+            (
+                "V2 主入口（main.py/unified_launcher）可启动，Android 侧可通过 "
+                "GalaxyWebSocketClient 接入；但双仓活体启动编排与恢复演练仍缺回归厚度。"
+            ),
             ["R6", "R9", "R13"],
             [
                 "main.py",
@@ -1688,6 +1702,7 @@ def _build_v2_next_convergence_priority() -> V2ConvergencePriority:
             ANDROID_ANCHOR_MESH_CONTRACT,
         ],
     )
+
 
 def _build_integrity_repair_actions() -> List[IntegrityRepairAction]:
     """Build V2-side integrity repairs reinforced by this convergence baseline."""
