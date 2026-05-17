@@ -772,8 +772,10 @@ async def _run_check_only(galaxy: 'GalaxyUnified'):
 def main():
     """主函数"""
     if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
-        logger.error("Entrypoint role contract violation: unified_launcher lost SUB_ENTRY role.")
-        sys.exit(1)
+        logger.error(
+            "Entrypoint role contract violation: unified_launcher does not have SUB_ENTRY role."
+        )
+        return 1
 
     parser = argparse.ArgumentParser(
         description="Galaxy - L4 级自主性智能系统（统一融合版）",
@@ -948,4 +950,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

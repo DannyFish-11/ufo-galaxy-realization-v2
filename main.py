@@ -148,11 +148,13 @@ def main() -> int:
        subject.
     """
 
-    if not assert_single_unique_main_entrypoint():
-        logger.error("Entrypoint role contract violation: unique main entrypoint is not stable.")
+    single_main_ok = assert_single_unique_main_entrypoint()
+    main_role_ok = ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN)
+    if not single_main_ok:
+        logger.error("Entrypoint role contract violation: single unique main entrypoint is broken.")
         return 1
-    if not ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN):
-        logger.error("Entrypoint role contract violation: main.py lost UNIQUE_MAIN role.")
+    if not main_role_ok:
+        logger.error("Entrypoint role contract violation: main.py does not have UNIQUE_MAIN role.")
         return 1
 
     # --setup: shortcut to configuration wizard (bypasses bring-up)
