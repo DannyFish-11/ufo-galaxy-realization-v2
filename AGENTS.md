@@ -107,7 +107,7 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 ### 启动服务
 ```bash
 python main.py                # 启动系统（权威入口）
-python unified_launcher.py    # 等效入口
+python unified_launcher.py    # 下级组件，由 main.py 在 Phase 4-6 调用；非独立入口
 ```
 
 ### 运行测试
