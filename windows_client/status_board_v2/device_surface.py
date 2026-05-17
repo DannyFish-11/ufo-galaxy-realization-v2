@@ -159,6 +159,36 @@ class DeviceSurface:
                 f"  │  {c('Attach  :', BOLD)} {c(str(lifecycle_stage), _COLOUR_NONE)}"
             )
 
+        matrix = participation.get("all_device_participation_matrix")
+        if isinstance(matrix, dict):
+            matrix_devices = matrix.get("devices") or []
+            if matrix_devices:
+                lines.append(
+                    f"  │  {c('Matrix  :', BOLD)} "
+                    f"{c(f'{len(matrix_devices)} devices', _COLOUR_DEVICE)}"
+                )
+                for row in matrix_devices[:4]:
+                    if not isinstance(row, dict):
+                        continue
+                    row_device_id = str(row.get("device_id") or "?")
+                    if len(row_device_id) > 18:
+                        row_device_id = row_device_id[:15] + "..."
+                    selected_mark = "*" if bool(row.get("selected")) else "-"
+                    row_tier = str(row.get("participation_tier") or "unknown")
+                    row_dispatch = bool(row.get("dispatch_eligible"))
+                    row_local = bool(row.get("local_mode_active"))
+                    row_constrained = bool(row.get("runtime_constrained"))
+                    row_attach = str(row.get("device_lifecycle_stage") or "-")
+                    lines.append(
+                        "  │    "
+                        f"{c(selected_mark, _COLOUR_STAGE)} {c(row_device_id, _COLOUR_DEVICE)} "
+                        f"{c(f'tier={row_tier}', _COLOUR_NONE)} "
+                        f"{c(f'dispatch={row_dispatch}', _COLOUR_OK if row_dispatch else _COLOUR_ERROR)} "
+                        f"{c(f'local={row_local}', _COLOUR_NONE)} "
+                        f"{c(f'constrained={row_constrained}', _COLOUR_NONE)} "
+                        f"{c(f'attach={row_attach}', _COLOUR_NONE)}"
+                    )
+
         # ------------------------------------------------------------------
         # Dispatch readiness blocker section
         # 当 device_dispatch_readiness 存在时，显示结构化拦截原因，
