@@ -272,4 +272,8 @@ class TestCrossRepoAcceptanceChain:
             None,
         )
         assert mesh_stage is not None
-        assert "mesh 生命周期缺口" in mesh_stage["summary"]
+        assert mesh_stage["details"]["missing_segments"] == [
+            "mesh_join",
+            "mesh_result",
+            "mesh_leave",
+        ]

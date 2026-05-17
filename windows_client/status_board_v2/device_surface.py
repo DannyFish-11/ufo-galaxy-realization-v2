@@ -207,7 +207,7 @@ class DeviceSurface:
                 )
 
         if acceptance_chain:
-            e2e_status = str(acceptance_chain.get("overall_status") or "(unknown)")
+            e2e_status = str(acceptance_chain.get("overall_status") or "unknown")
             if e2e_status == "passed":
                 e2e_colour = _COLOUR_OK
             elif e2e_status in {"in_progress", "pending", "unknown"}:
