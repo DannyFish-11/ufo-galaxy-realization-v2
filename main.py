@@ -50,6 +50,7 @@ from entrypoint_role_contract import (
     MAIN_ENTRY_ID,
     assert_single_unique_main_entrypoint,
     ensure_entrypoint_role,
+    get_entrypoint_record,
 )
 
 # ---------------------------------------------------------------------------
@@ -151,10 +152,19 @@ def main() -> int:
     single_main_ok = assert_single_unique_main_entrypoint()
     main_role_ok = ensure_entrypoint_role(MAIN_ENTRY_ID, EntrypointRole.UNIQUE_MAIN)
     if not single_main_ok:
-        logger.error("Entrypoint role contract violation: single unique main entrypoint is broken.")
+        logger.error(
+            "Entrypoint role contract violation: expected exactly one UNIQUE_MAIN entrypoint (%s).",
+            MAIN_ENTRY_ID,
+        )
         return 1
     if not main_role_ok:
-        logger.error("Entrypoint role contract violation: main.py does not have UNIQUE_MAIN role.")
+        actual = get_entrypoint_record(MAIN_ENTRY_ID)
+        logger.error(
+            "Entrypoint role contract violation: %s expected=%s actual=%s",
+            MAIN_ENTRY_ID,
+            EntrypointRole.UNIQUE_MAIN.value,
+            actual.role.value if actual else "missing",
+        )
         return 1
 
     # --setup: shortcut to configuration wizard (bypasses bring-up)

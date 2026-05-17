@@ -70,6 +70,7 @@ from entrypoint_role_contract import (
     EntrypointRole,
     UNIFIED_LAUNCHER_ENTRY_ID,
     ensure_entrypoint_role,
+    get_entrypoint_record,
 )
 
 # 设置项目根目录
@@ -772,8 +773,12 @@ async def _run_check_only(galaxy: 'GalaxyUnified'):
 def main():
     """主函数"""
     if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
+        actual = get_entrypoint_record(UNIFIED_LAUNCHER_ENTRY_ID)
         logger.error(
-            "Entrypoint role contract violation: unified_launcher does not have SUB_ENTRY role."
+            "Entrypoint role contract violation: %s expected=%s actual=%s",
+            UNIFIED_LAUNCHER_ENTRY_ID,
+            EntrypointRole.SUB_ENTRY.value,
+            actual.role.value if actual else "missing",
         )
         return 1
 
