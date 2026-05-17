@@ -1,1 +1,3 @@
-# RELOCATED\n\nThis directory has been moved to [docs/pulls/](docs/pulls/).
+# RELOCATED
+
+This directory has been moved to [docs/pulls/](docs/pulls/).
