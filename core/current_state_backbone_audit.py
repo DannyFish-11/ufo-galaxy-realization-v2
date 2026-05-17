@@ -1283,6 +1283,180 @@ def build_backbone_snapshot() -> BackboneSnapshot:
 # ---------------------------------------------------------------------------
 
 
+def _combine_closure_states(*states: Optional[str]) -> str:
+    normalized = [str(s) for s in states if s not in (None, "")]
+    if not normalized:
+        return ClosureState.OPEN.value
+    if ClosureState.OPEN.value in normalized:
+        return ClosureState.OPEN.value
+    if ClosureState.PARTIAL.value in normalized:
+        return ClosureState.PARTIAL.value
+    return ClosureState.ESTABLISHED.value
+
+
+def _build_native_three_state_final_audit(
+    *,
+    mode_summary: Dict[str, str],
+    layered_mode_model: Dict[str, Any],
+) -> Dict[str, Any]:
+    tri_state_phase_exists = _probe("core.continuum", "tri_state_phase")
+    presence_tristate_exists = _probe("core.desktop_presence_runtime", "presence_tristate")
+    engineering_closure_exists = bool(mode_summary)
+    tier_mapping_exists = bool(layered_mode_model.get("tier_to_closure_hints"))
+
+    competing_models: List[Dict[str, Any]] = []
+    if tri_state_phase_exists:
+        competing_models.append(
+            {
+                "model_name": "continuum_tri_state_phase",
+                "state_kind": "interaction_presence",
+                "source": "core.continuum.tri_state_phase",
+            }
+        )
+    if presence_tristate_exists:
+        competing_models.append(
+            {
+                "model_name": "desktop_presence_tristate",
+                "state_kind": "presence_runtime",
+                "source": "core.desktop_presence_runtime.presence_tristate",
+            }
+        )
+    if engineering_closure_exists:
+        competing_models.append(
+            {
+                "model_name": "closure_state_triad",
+                "state_kind": "engineering_closure",
+                "source": "core.current_state_backbone_audit.ClosureState",
+            }
+        )
+    if tier_mapping_exists:
+        competing_models.append(
+            {
+                "model_name": "android_tier_grouping",
+                "state_kind": "participation_semantic_grouping",
+                "source": "core.v2_unified_mode_model.tier_to_closure_hints",
+            }
+        )
+
+    if engineering_closure_exists and len(competing_models) > 1:
+        outcome = "multiple_competing_three_state_models_not_converged"
+        honesty_note = "代码里存在多个三态解释源，当前尚未收敛为单一原生三态。"
+    elif engineering_closure_exists:
+        outcome = "engineering_approximation_only"
+        honesty_note = "当前可稳定输出的是工程闭合三态，不等于系统原生三态。"
+    else:
+        outcome = "native_three_state_missing"
+        honesty_note = "当前仓库未形成可机读三态模型。"
+
+    return {
+        "outcome": outcome,
+        "honesty_note_zh": honesty_note,
+        "native_model_converged": False,
+        "engineering_approximation_model": {
+            "name": "closure_state_triad",
+            "states": ["established", "partial", "open"],
+            "source": "core.current_state_backbone_audit.ClosureState",
+        },
+        "competing_models": competing_models,
+        "explicit_placeholder_warning": "不要把工程闭合三态当作系统原生三态。",
+    }
+
+
+def _build_local_cross_multi_foundation_audit(
+    *,
+    mode_summary: Dict[str, str],
+    layered_mode_model: Dict[str, Any],
+) -> Dict[str, Any]:
+    local_state = mode_summary.get(ModeId.LOCAL.value)
+    cross_state = mode_summary.get(ModeId.CROSS_DEVICE.value)
+    multi_state = mode_summary.get(ModeId.MULTI_DEVICE.value)
+    layered_exists = bool(layered_mode_model)
+
+    return {
+        "local_foundation": {
+            "closure_state": local_state,
+            "meaning_zh": "单设备本地执行基础层。",
+            "code_source": "ModeId.LOCAL + layered_mode_model.local_layer",
+        },
+        "cross_device_foundation": {
+            "closure_state": cross_state,
+            "meaning_zh": "中心对远端设备的跨设备路由与委托层。",
+            "code_source": "ModeId.CROSS_DEVICE + device_router/command_router",
+        },
+        "multi_device_foundation": {
+            "closure_state": multi_state,
+            "meaning_zh": "多个设备并行参与同一任务系统体的协作层。",
+            "code_source": "ModeId.MULTI_DEVICE + android_device_state_store",
+        },
+        "layer_relation_zh": "local 是执行基底，cross-device 是跨端路由，multi-device 是并行协作形态。",
+        "layered_mode_model_present": layered_exists,
+        "structural_gap_zh": (
+            "多设备协作仍以参与矩阵和选路为主，完整并发协作与恢复策略仍未全闭合。"
+            if multi_state != ClosureState.ESTABLISHED.value
+            else ""
+        ),
+    }
+
+
+def _build_task_system_body_final_audit(
+    *,
+    chain_summary: Dict[str, str],
+    mode_summary: Dict[str, str],
+) -> Dict[str, Any]:
+    request_state = chain_summary.get(ChainId.REQUEST.value)
+    execution_state = chain_summary.get(ChainId.EXECUTION.value)
+    truth_uplink_state = chain_summary.get(ChainId.ANDROID_TRUTH_UPLINK.value)
+    backflow_state = chain_summary.get(ChainId.RESULT_BACKFLOW.value)
+    closure_state = chain_summary.get(ChainId.CLOSURE_ACCEPTANCE.value)
+    projection_state = chain_summary.get(ChainId.PROJECTION.value)
+    delegated_mode_state = mode_summary.get(ModeId.DELEGATED_EXECUTION.value)
+    multi_mode_state = mode_summary.get(ModeId.MULTI_DEVICE.value)
+
+    planning_ready = _module_exists("core.runtime.source_dispatch_orchestrator")
+    cooperation_modules_ready = _module_exists("core.mesh_coordinator") and _module_exists("core.nats_bus")
+
+    return {
+        "origination_understanding": {
+            "closure_state": _combine_closure_states(
+                request_state,
+                ClosureState.ESTABLISHED.value if planning_ready else ClosureState.OPEN.value,
+            ),
+            "code_refs": ["core.command_router", "core.runtime.source_dispatch_orchestrator"],
+        },
+        "planning_and_local_remote_selection": {
+            "closure_state": _combine_closure_states(
+                request_state,
+                mode_summary.get(ModeId.LOCAL.value),
+                mode_summary.get(ModeId.CROSS_DEVICE.value),
+            ),
+            "code_refs": ["core.runtime.source_dispatch_orchestrator", "galaxy_gateway.routing.device_selection"],
+        },
+        "delegation_and_execution": {
+            "closure_state": _combine_closure_states(execution_state, delegated_mode_state),
+            "code_refs": ["galaxy_gateway/device_router.py", "core/capability_orchestrator.py"],
+        },
+        "cooperation_and_recovery": {
+            "closure_state": _combine_closure_states(
+                multi_mode_state,
+                ClosureState.ESTABLISHED.value if cooperation_modules_ready else ClosureState.OPEN.value,
+            ),
+            "code_refs": ["core/mesh_coordinator.py", "core/nats_bus.py"],
+        },
+        "result_aggregation_and_backflow": {
+            "closure_state": _combine_closure_states(backflow_state, truth_uplink_state),
+            "code_refs": ["core/unified_result_ingress.py", "core/canonical_completion_ingress.py"],
+        },
+        "truth_update_and_operator_projection": {
+            "closure_state": _combine_closure_states(closure_state, projection_state),
+            "code_refs": ["core/result_truth_acceptance_gate.py", "core/routes/projection.py"],
+        },
+        "remaining_missing_zh": [
+            "任务理解/计划/恢复仍以工程链路拼接为主，尚未形成完整中心智能体闭环。",
+            "多设备协作阶段缺少稳定的真实多设备并发验收证据。",
+        ],
+    }
+
+
 def build_system_backbone_snapshot() -> Dict[str, Any]:
     """构建系统骨架机读摘要，供 operator/board 消费。
 
@@ -1348,6 +1522,18 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         {"label": item["label"], "detail_zh": item["detail_zh"]}
         for item in d["open_items"]
     ]
+    native_three_state_final_audit = _build_native_three_state_final_audit(
+        mode_summary=mode_summary,
+        layered_mode_model=dict(d.get("layered_mode_model") or {}),
+    )
+    local_cross_multi_foundation_audit = _build_local_cross_multi_foundation_audit(
+        mode_summary=mode_summary,
+        layered_mode_model=dict(d.get("layered_mode_model") or {}),
+    )
+    task_system_body_final_audit = _build_task_system_body_final_audit(
+        chain_summary=chain_summary,
+        mode_summary=mode_summary,
+    )
 
     return {
         "authority": CURRENT_STATE_BACKBONE_AUDIT_AUTHORITY,
@@ -1365,5 +1551,8 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         "partial_count": len(d["partial"]),
         "open_count": len(d["open_items"]),
         "top_open_items": top_open,
+        "native_three_state_final_audit": native_three_state_final_audit,
+        "local_cross_multi_foundation_audit": local_cross_multi_foundation_audit,
+        "task_system_body_final_audit": task_system_body_final_audit,
         "honesty_note_zh": d["honesty_note_zh"],
     }

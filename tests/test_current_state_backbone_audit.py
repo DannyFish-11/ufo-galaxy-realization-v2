@@ -464,6 +464,9 @@ class TestBuildSystemBackboneSnapshot:
             "partial_count",
             "open_count",
             "top_open_items",
+            "native_three_state_final_audit",
+            "local_cross_multi_foundation_audit",
+            "task_system_body_final_audit",
             "honesty_note_zh",
         }
         for key in required_keys:
@@ -519,6 +522,44 @@ class TestBuildSystemBackboneSnapshot:
             assert "label" in item
             assert "detail_zh" in item
             assert item["label"]
+
+    def test_native_three_state_final_audit_is_honest(self):
+        audit = self.summary["native_three_state_final_audit"]
+        assert audit["outcome"] in {
+            "multiple_competing_three_state_models_not_converged",
+            "engineering_approximation_only",
+            "native_three_state_missing",
+        }
+        assert audit["engineering_approximation_model"]["states"] == [
+            "established",
+            "partial",
+            "open",
+        ]
+        assert "competing_models" in audit
+
+    def test_local_cross_multi_foundation_audit_distinguishes_layers(self):
+        audit = self.summary["local_cross_multi_foundation_audit"]
+        assert "local_foundation" in audit
+        assert "cross_device_foundation" in audit
+        assert "multi_device_foundation" in audit
+        assert "local" in audit["layer_relation_zh"]
+        assert "cross-device" in audit["layer_relation_zh"]
+        assert "multi-device" in audit["layer_relation_zh"]
+
+    def test_task_system_body_final_audit_covers_whole_body(self):
+        audit = self.summary["task_system_body_final_audit"]
+        required = {
+            "origination_understanding",
+            "planning_and_local_remote_selection",
+            "delegation_and_execution",
+            "cooperation_and_recovery",
+            "result_aggregation_and_backflow",
+            "truth_update_and_operator_projection",
+            "remaining_missing_zh",
+        }
+        for key in required:
+            assert key in audit
+        assert isinstance(audit["remaining_missing_zh"], list)
 
     def test_system_identity_mentions_v2_and_android(self):
         identity = self.summary["system_identity_zh"]

@@ -88,7 +88,11 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
         None,
     }
     assert foundational["real_three_state_model"]["states"] == ["established", "partial", "open"]
+    assert foundational["real_three_state_model"]["is_engineering_approximation"] is True
+    assert "native_three_state_final_audit" in foundational
+    assert "local_cross_multi_foundation_audit" in foundational
     assert "task_system_layered_status" in foundational
+    assert "task_system_body_final_audit" in foundational
     assert payload["execution_stage"] is None
 
 
