@@ -2699,6 +2699,11 @@ class CommandRouter:
             _meta = envelope.metadata or {}
             context["task_id"] = envelope.task_id
             context["trace_id"] = envelope.trace_id
+            context["route_mode"] = str(
+                _meta.get("route_mode")
+                or context.get("route_mode")
+                or "cross_device"
+            )
             if _meta.get("source_device_id"):
                 context["source_device_id"] = _meta.get("source_device_id")
             if _meta.get("source_runtime_posture"):

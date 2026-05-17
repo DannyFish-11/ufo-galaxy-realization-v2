@@ -654,6 +654,7 @@ class CapabilityOrchestrator:
             context = {k: v for k, v in params.items() if k not in ("message", "command")}
             context = dict(context)
             context.setdefault("route_mode", "cross_device")
+            context.setdefault("dispatch_path", "canonical_dispatch")
             if not context.get("source_device_id") and context.get("device_id"):
                 context["source_device_id"] = context.get("device_id")
             try:
@@ -668,6 +669,9 @@ class CapabilityOrchestrator:
 
                 fallback_context = dict(context)
                 fallback_context["route_mode"] = "cross_device_compat_fallback"
+                fallback_context["dispatch_path"] = "compat_fallback"
+                fallback_context["compat_path_used"] = "cross_device_coordinator"
+                fallback_context["fallback_reason"] = "device_router_exception"
                 fallback_context["_compat_legacy_bypass"] = (
                     "capability_orchestrator.builtin_cross_device"
                 )

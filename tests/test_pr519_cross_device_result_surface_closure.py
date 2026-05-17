@@ -370,6 +370,44 @@ class TestG_CoordinatorWiring(unittest.TestCase):
             self.assertFalse(result.get("success"))
             mock_surface.assert_called_once()
 
+    def test_G4_compat_fallback_is_recorded_as_non_canonical_dispatch(self):
+        from core.cross_device_execution_chain import get_cross_device_chain
+        from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
+        coord = CrossDeviceCoordinator()
+        coord._analyze_cross_device_task = MagicMock(return_value="generic")
+        coord._execute_generic_cross_device_task = AsyncMock(
+            return_value={"success": True, "message": "compat"}
+        )
+
+        task_id = str(uuid.uuid4())
+        result = _run(coord.execute_cross_device_task(
+            "test command",
+            {
+                "task_id": task_id,
+                "route_mode": "cross_device_compat_fallback",
+                "dispatch_path": "compat_fallback",
+                "fallback_reason": "device_router_exception",
+                "compat_path_used": "cross_device_coordinator",
+                "_compat_legacy_bypass": "capability_orchestrator.builtin_cross_device",
+            },
+            _substrate_caller="capability_orchestrator.compat_fallback",
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["dispatch_path"], "compat_fallback")
+        snap = get_cross_device_chain().snapshot()
+        records = [r for r in snap.recent_records if r.task_id == task_id]
+        self.assertGreater(len(records), 0)
+        record = records[-1]
+        self.assertFalse(record.is_canonical)
+        self.assertEqual(
+            record.legacy_path_used,
+            "capability_orchestrator.builtin_cross_device",
+        )
+        self.assertEqual(record.extra.get("dispatch_path"), "compat_fallback")
+        self.assertEqual(record.extra.get("fallback_reason"), "device_router_exception")
+
 
 # ===========================================================================
 # H) DeviceRouter wiring
