@@ -3666,6 +3666,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """返回 Android→V2 代表性跨仓验收链的阶段化快照。"""
         return JSONResponse(content=_build_cross_repo_acceptance_chain_projection())
 
+    @router.get("/api/v1/acceptance/dual-repo-completeness-baseline")
+    async def get_dual_repo_completeness_baseline() -> JSONResponse:
+        """返回双仓从 clone 到端态观测面的可执行完整性基线快照。"""
+        return JSONResponse(content=_build_dual_repo_completeness_baseline_projection())
+
     @router.get("/api/v1/projection/runtime/session-snapshot")
     async def get_runtime_session_snapshot() -> JSONResponse:
         """Return a durable runtime session snapshot summary.
@@ -4231,6 +4236,9 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         payload["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
             truth_payload=payload,
         )
+        payload["dual_repo_completeness_baseline"] = _build_dual_repo_completeness_baseline_projection(
+            truth_payload=payload,
+        )
         payload["execution_stage"] = payload["shared_execution_visibility"].get("surface_execution_stage")
         payload["current_task_summary"] = payload["shared_execution_visibility"].get("surface_summary")
 
@@ -4306,6 +4314,7 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "shared_execution_visibility": _derive_shared_execution_visibility({}),
             "participation_truth_consumption": _build_participation_truth_consumption({}),
             "cross_repo_acceptance_chain": _build_cross_repo_acceptance_chain_projection(),
+            "dual_repo_completeness_baseline": _build_dual_repo_completeness_baseline_projection(),
             "execution_stage": None,
             "current_task_summary": None,
             "projection_surface_role": "runtime_truth_board_facing",
@@ -6407,6 +6416,38 @@ def _build_cross_repo_acceptance_chain_projection(
         }
 
 
+def _build_dual_repo_completeness_baseline_projection(
+    *,
+    truth_payload: Optional[Dict[str, Any]] = None,
+    board_payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """构建双仓系统完整性基线快照。"""
+    try:
+        from core.dual_repo_completeness_baseline import build_dual_repo_completeness_baseline  # noqa: PLC0415
+
+        return build_dual_repo_completeness_baseline(
+            truth_payload=dict(truth_payload or {}),
+            board_payload=dict(board_payload or {}),
+        )
+    except Exception as exc:
+        logger.debug("_build_dual_repo_completeness_baseline_projection unavailable: %s", exc)
+        return {
+            "overall_status": "failed",
+            "summary_zh": f"dual-repo completeness baseline unavailable: {exc}",
+            "blocking_stage_ids": ["clone"],
+            "classification_counts": {},
+            "explicit_gaps": [
+                {
+                    "type": "stage",
+                    "stage": "clone",
+                    "failure_boundary": "dual_repo_completeness_baseline_unavailable",
+                    "summary": str(exc),
+                }
+            ],
+            "_source": "core.routes.projection._build_dual_repo_completeness_baseline_projection",
+        }
+
+
 def _apply_shared_visibility_field(
     payload: Dict[str, Any],
     *,
@@ -6517,6 +6558,8 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             )
         if isinstance(runtime_truth.get("cross_repo_acceptance_chain"), dict):
             result["cross_repo_acceptance_chain"] = runtime_truth.get("cross_repo_acceptance_chain")
+        if isinstance(runtime_truth.get("dual_repo_completeness_baseline"), dict):
+            result["dual_repo_completeness_baseline"] = runtime_truth.get("dual_repo_completeness_baseline")
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
@@ -6551,8 +6594,13 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "participation_truth_consumption",
             _build_participation_truth_consumption({}),
         )
+    runtime_truth_payload = result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}
     result["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
-        truth_payload=(result.get("runtime_truth") if isinstance(result.get("runtime_truth"), dict) else {}),
+        truth_payload=runtime_truth_payload,
+        board_payload=result,
+    )
+    result["dual_repo_completeness_baseline"] = _build_dual_repo_completeness_baseline_projection(
+        truth_payload=runtime_truth_payload,
         board_payload=result,
     )
     _apply_shared_visibility_field(
