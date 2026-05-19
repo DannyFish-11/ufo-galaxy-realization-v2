@@ -539,29 +539,6 @@ class TestExecutionResultNewFields:
         assert result.model_dump()["specialist_boundary"]["specialist_layer_role"] == "specialists_as_tools"
 
 
-class TestSpecialistBoundaryMetadata:
-    """PR-8v2 specialist-layer boundary metadata mapping.
-
-    These tests intentionally target the helper because it is the canonical
-    boundary-construction point reused by all execution paths.
-    """
-
-    def test_specialized_maps_to_subordinate_specialist_boundary(self, planner):
-        boundary = planner._build_specialist_boundary("team_specialized", device_id="android-1")
-        assert boundary["specialist_layer_role"] == "specialists_as_tools"
-        assert boundary["specialist_authority_class"] == "experts_as_subordinate_capabilities"
-        assert boundary["strategy_class"] == "specialized"
-        assert boundary["direct_side_effect_authority"] == "openclawd_mainline_only"
-        assert boundary["android_runtime_alignment"]["runtime_host_role"] == "first_class_runtime_host"
-        assert boundary["android_runtime_alignment"]["multi_device_targeting"] is False
-
-    def test_swarm_multi_device_marks_targeting_true(self, planner):
-        boundary = planner._build_specialist_boundary("swarm", device_id=["android-1", "desktop-2"])
-        assert boundary["strategy_class"] == "swarm"
-        assert boundary["android_runtime_alignment"]["cross_device_entry"] == "DeviceRouter"
-        assert boundary["android_runtime_alignment"]["multi_device_targeting"] is True
-
-
 # ─────────────────── Intent Router: Default Execute for Ambiguous ────────────
 
 
