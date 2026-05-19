@@ -295,21 +295,31 @@ class TestCrossRepoAcceptanceChain:
             board_payload=board_payload,
         )
 
-        gate = snapshot.get("gate_candidate") or {}
+        gate = snapshot.get("gate_candidate", {})
         assert gate.get("mode") == "advisory"
         assert gate.get("is_gate_consumable") is True
         assert isinstance(gate.get("required_stage_ids"), list)
         assert gate.get("verdict") in {"pass", "block"}
 
-        boundary = snapshot.get("truth_boundary_contract") or {}
-        assert set(boundary.keys()) == {
+        boundary = snapshot.get("truth_boundary_contract", {})
+        assert set(boundary.keys()) >= {
             "authority_truth_source",
             "acceptance_closure_truth",
             "outward_projection_truth",
             "diagnostics_snapshot",
         }
+        assert set(boundary["authority_truth_source"].keys()) >= {
+            "runtime_truth_output_chain",
+            "android_truth_ssot",
+            "result_acceptance_gate",
+        }
+        assert "gate_verdict" in boundary["acceptance_closure_truth"]
+        assert "required_stage_ids" in boundary["acceptance_closure_truth"]
         assert boundary["diagnostics_snapshot"]["is_authoritative_truth"] is False
+        assert boundary["diagnostics_snapshot"]["is_audit_artifact"] is True
+        assert boundary["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
         assert boundary["outward_projection_truth"]["must_not_define_authority_truth"] is True
+        assert "canonical_inputs" in boundary["outward_projection_truth"]
 
     def test_enforced_gate_can_allow_specific_failure_boundaries(self):
         from core.android_acceptance_evidence_store import ingest_device_acceptance_report

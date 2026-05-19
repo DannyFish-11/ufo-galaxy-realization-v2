@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY = (
     "CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY::"
@@ -442,16 +442,18 @@ def _build_gate_candidate(
     gate_allowed_failure_boundaries: Optional[List[str]],
 ) -> Dict[str, Any]:
     normalized_mode = _normalize_gate_mode(gate_mode)
-    required_stages = tuple(
-        str(stage).strip()
-        for stage in (gate_required_stages or CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES)
-        if stage is not None and str(stage).strip()
-    )
-    allowed_failure_boundaries = {
-        str(boundary).strip()
-        for boundary in (gate_allowed_failure_boundaries or [])
-        if boundary is not None and str(boundary).strip()
-    }
+    required_stages_list: List[str] = []
+    for stage in (gate_required_stages or CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES):
+        normalized_stage = str(stage).strip() if stage is not None else ""
+        if normalized_stage:
+            required_stages_list.append(normalized_stage)
+    required_stages = tuple(required_stages_list)
+
+    allowed_failure_boundaries: Set[str] = set()
+    for boundary in (gate_allowed_failure_boundaries or []):
+        normalized_boundary = str(boundary).strip() if boundary is not None else ""
+        if normalized_boundary:
+            allowed_failure_boundaries.add(normalized_boundary)
     stage_map = {str(stage.get("stage") or ""): stage for stage in stages if isinstance(stage, dict)}
     missing_required_stages = [stage for stage in required_stages if stage not in stage_map]
     failed_required_stages = [
@@ -459,14 +461,19 @@ def _build_gate_candidate(
         for stage in required_stages
         if stage in stage_map and stage_map[stage].get("status") != "passed"
     ]
+    failed_required_stage_set = set(failed_required_stages)
     blocking_failed_stages = [
         stage
         for stage in failed_required_stages
-        if str((stage_map.get(stage, {}) or {}).get("failure_boundary") or "")
+        if str(stage_map.get(stage, {}).get("failure_boundary") or "")
         not in allowed_failure_boundaries
     ]
     all_required_present = len(missing_required_stages) == 0
-    passed_required_stages = [stage for stage in required_stages if stage in stage_map and stage not in failed_required_stages]
+    passed_required_stages = [
+        stage
+        for stage in required_stages
+        if stage in stage_map and stage not in failed_required_stage_set
+    ]
     gate_passed = all_required_present and len(blocking_failed_stages) == 0
     verdict = "pass" if gate_passed else "block"
     return {

@@ -6515,15 +6515,19 @@ def _build_truth_acceptance_closure_contract(
     closure_basis = dict(runtime_reasoning.get("closure_basis") or {})
     chain_contract = dict(chain.get("truth_boundary_contract") or {})
     gate = dict(chain.get("gate_candidate") or {})
+    if "is_fully_closed" in shared_visibility:
+        is_fully_closed = bool(shared_visibility.get("is_fully_closed"))
+    elif "is_fully_closed" in closure_basis:
+        is_fully_closed = bool(closure_basis.get("is_fully_closed"))
+    else:
+        is_fully_closed = False
     return {
         "authority_truth_source": dict(chain_contract.get("authority_truth_source") or {}),
         "acceptance_closure_truth": {
             **dict(chain_contract.get("acceptance_closure_truth") or {}),
             "acceptance_verdict": shared_visibility.get("acceptance_verdict"),
             "completion_state": shared_visibility.get("completion_state"),
-            "is_fully_closed": bool(
-                shared_visibility.get("is_fully_closed") or closure_basis.get("is_fully_closed")
-            ),
+            "is_fully_closed": is_fully_closed,
         },
         "outward_projection_truth": {
             **dict(chain_contract.get("outward_projection_truth") or {}),
