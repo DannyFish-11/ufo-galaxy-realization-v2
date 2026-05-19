@@ -180,7 +180,7 @@ def get_surfaces_by_peripheral_role(role: PeripheralCapabilityRole) -> List[Peri
     return [s for s in PERIPHERAL_CAPABILITY_SURFACE_REGISTRY if s.role == role]
 
 
-def get_android_v2_link_surfaces() -> Tuple[str, ...]:
+def get_android_integration_surface_paths() -> Tuple[str, ...]:
     return (
         "galaxy_gateway.android_bridge",
         "galaxy_gateway.device_router",
@@ -189,6 +189,11 @@ def get_android_v2_link_surfaces() -> Tuple[str, ...]:
         "android.GalaxyConnectionService",
         "android.RuntimeController",
     )
+
+
+def get_android_v2_link_surfaces() -> Tuple[str, ...]:
+    """Backward-compatible alias for callers using the original PR-10V2 name."""
+    return get_android_integration_surface_paths()
 
 
 def build_capability_registry_ingress_contract() -> Dict[str, object]:
@@ -204,7 +209,7 @@ def build_capability_registry_ingress_contract() -> Dict[str, object]:
             "galaxy_gateway.device_router.DeviceRouter",
         ],
         "specialists_as_tools_relation": "capability catalog serves tool sub-layer, not vice versa",
-        "android_link_surface": list(get_android_v2_link_surfaces()),
+        "android_link_surface": list(get_android_integration_surface_paths()),
     }
 
 
@@ -229,7 +234,7 @@ def build_peripheral_capability_boundary_snapshot() -> Dict[str, object]:
         "total_surfaces": len(surfaces),
         "by_role": by_role,
         "constrained_surfaces": constrained,
-        "android_v2_link_surfaces": list(get_android_v2_link_surfaces()),
+        "android_v2_link_surfaces": list(get_android_integration_surface_paths()),
         "surfaces": surfaces,
         "generated_at": time.time(),
     }

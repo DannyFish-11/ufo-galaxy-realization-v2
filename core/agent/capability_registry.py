@@ -272,8 +272,8 @@ class CapabilityRegistry:
                 "ingress_boundary_contract",
                 build_capability_registry_ingress_contract(),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("ingress boundary contract annotation skipped for '%s': %s", item.name, exc)
         metadata["runtime_state"] = runtime_state
         item.metadata = metadata
         item.available = runtime_state.get("availability") in {"available", "degraded"}

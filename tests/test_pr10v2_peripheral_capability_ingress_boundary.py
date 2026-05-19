@@ -16,7 +16,7 @@ from core.peripheral_capability_boundary import (
     PeripheralCapabilityRole,
     build_peripheral_capability_boundary_snapshot,
     classify_peripheral_capability_surface,
-    get_android_v2_link_surfaces,
+    get_android_integration_surface_paths,
     get_surfaces_by_peripheral_role,
 )
 
@@ -90,7 +90,7 @@ def test_classifier_supports_surface_id_and_module_path() -> None:
 
 
 def test_android_link_surfaces_reference_android_and_v2_real_chain() -> None:
-    link_surfaces = get_android_v2_link_surfaces()
+    link_surfaces = get_android_integration_surface_paths()
     assert "galaxy_gateway.android_bridge" in link_surfaces
     assert "galaxy_gateway.device_router" in link_surfaces
     assert "android.GalaxyWebSocketClient" in link_surfaces
@@ -113,6 +113,10 @@ def test_canonical_execution_chain_marks_peripheral_ingress_side_paths() -> None
     assert (
         SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingest_runtime"]
         == "peripheral_multimodal_ingress_shell_adapter"
+    )
+    assert (
+        SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingress_bus"]
+        == "peripheral_multimodal_ingress_transport"
     )
     assert (
         SIDE_PATH_MODULE_REGISTRY["core.continuation_rebind_registry"]
