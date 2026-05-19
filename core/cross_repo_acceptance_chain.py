@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY = (
     "CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY::"
@@ -25,6 +25,16 @@ ANDROID_REPO_COORDINATION_ASSUMPTIONS = (
 
 _READY_LIFECYCLE_STAGES = {"ready", "participating", "takeover_eligible"}
 _REGISTERED_LIFECYCLE_STAGES = _READY_LIFECYCLE_STAGES | {"registered", "connected"}
+CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_MODE = "advisory"
+CROSS_REPO_ACCEPTANCE_GATE_SUPPORTED_MODES = ("advisory", "enforced")
+CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES = (
+    "android_entry",
+    "registration",
+    "participation_dispatchability",
+    "mesh_lifecycle",
+    "result_backflow",
+    "surface_visibility",
+)
 
 
 def build_cross_repo_acceptance_chain(
@@ -33,6 +43,9 @@ def build_cross_repo_acceptance_chain(
     session_id: Optional[str] = None,
     truth_payload: Optional[Dict[str, Any]] = None,
     board_payload: Optional[Dict[str, Any]] = None,
+    gate_mode: str = CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_MODE,
+    gate_required_stages: Optional[List[str]] = None,
+    gate_allowed_failure_boundaries: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """构建一个具备阶段边界的跨仓端到端验收链快照。"""
     truth_payload = dict(truth_payload or {})
@@ -65,6 +78,19 @@ def build_cross_repo_acceptance_chain(
     failed_stages = [stage for stage in stages if stage["status"] == "failed"]
     overall_status = "passed" if not failed_stages else "failed"
     current_stage = failed_stages[0]["stage"] if failed_stages else stages[-1]["stage"]
+    gate = _build_gate_candidate(
+        stages=stages,
+        gate_mode=gate_mode,
+        gate_required_stages=gate_required_stages,
+        gate_allowed_failure_boundaries=gate_allowed_failure_boundaries,
+    )
+    truth_boundary_contract = _build_truth_boundary_contract(
+        stages=stages,
+        gate=gate,
+        overall_status=overall_status,
+        truth_payload=truth_payload,
+        board_payload=board_payload,
+    )
 
     return {
         "chain_id": f"cross_repo_acceptance_{uuid.uuid4().hex[:12]}",
@@ -91,6 +117,8 @@ def build_cross_repo_acceptance_chain(
             session_id=resolved_session_id,
             stages=stages,
         ),
+        "gate_candidate": gate,
+        "truth_boundary_contract": truth_boundary_contract,
         "android_repo_coordination_assumptions": list(ANDROID_REPO_COORDINATION_ASSUMPTIONS),
         "stages": stages,
         "_source": "core.cross_repo_acceptance_chain.build_cross_repo_acceptance_chain",
@@ -406,6 +434,122 @@ def _build_chain_summary(
     )
 
 
+def _build_gate_candidate(
+    *,
+    stages: List[Dict[str, Any]],
+    gate_mode: str,
+    gate_required_stages: Optional[List[str]],
+    gate_allowed_failure_boundaries: Optional[List[str]],
+) -> Dict[str, Any]:
+    normalized_mode = _normalize_gate_mode(gate_mode)
+    required_stages_list: List[str] = []
+    for stage in (gate_required_stages or CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES):
+        normalized_stage = str(stage).strip() if stage is not None else ""
+        if normalized_stage:
+            required_stages_list.append(normalized_stage)
+    required_stages = tuple(required_stages_list)
+
+    allowed_failure_boundaries: Set[str] = set()
+    for boundary in (gate_allowed_failure_boundaries or []):
+        normalized_boundary = str(boundary).strip() if boundary is not None else ""
+        if normalized_boundary:
+            allowed_failure_boundaries.add(normalized_boundary)
+    stage_map = {str(stage.get("stage") or ""): stage for stage in stages if isinstance(stage, dict)}
+    missing_required_stages = [stage for stage in required_stages if stage not in stage_map]
+    failed_required_stages = [
+        stage
+        for stage in required_stages
+        if stage in stage_map and stage_map[stage].get("status") != "passed"
+    ]
+    failed_required_stage_set = set(failed_required_stages)
+    blocking_failed_stages = [
+        stage
+        for stage in failed_required_stages
+        if str(stage_map.get(stage, {}).get("failure_boundary") or "")
+        not in allowed_failure_boundaries
+    ]
+    all_required_present = len(missing_required_stages) == 0
+    passed_required_stages = [
+        stage
+        for stage in required_stages
+        if stage in stage_map and stage not in failed_required_stage_set
+    ]
+    gate_passed = all_required_present and len(blocking_failed_stages) == 0
+    verdict = "pass" if gate_passed else "block"
+    return {
+        "authority": "core.cross_repo_acceptance_chain._build_gate_candidate",
+        "mode": normalized_mode,
+        "supported_modes": list(CROSS_REPO_ACCEPTANCE_GATE_SUPPORTED_MODES),
+        "required_stage_ids": list(required_stages),
+        "allowed_failure_boundaries": sorted(allowed_failure_boundaries),
+        "all_required_present": all_required_present,
+        "passed_required_stage_count": len(passed_required_stages),
+        "missing_required_stages": missing_required_stages,
+        "failed_required_stages": failed_required_stages,
+        "blocking_failed_stages": blocking_failed_stages,
+        "verdict": verdict,
+        "is_gate_consumable": True,
+        "would_block_release_gate": not gate_passed,
+        "enforced_blocking_active": normalized_mode == "enforced" and not gate_passed,
+    }
+
+
+def _build_truth_boundary_contract(
+    *,
+    stages: List[Dict[str, Any]],
+    gate: Dict[str, Any],
+    overall_status: str,
+    truth_payload: Dict[str, Any],
+    board_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    truth_visibility = _ensure_dict(truth_payload.get("shared_execution_visibility"))
+    board_visibility = _ensure_dict(board_payload.get("shared_execution_visibility"))
+    closure_visible = bool(
+        truth_visibility.get("result_closure_established")
+        or board_visibility.get("result_closure_established")
+        or truth_visibility.get("completion_state") == "closed"
+        or board_visibility.get("completion_state") == "closed"
+    )
+    return {
+        "authority_truth_source": {
+            "runtime_truth_output_chain": "core.runtime_truth_output_chain.build_output_chain_snapshot",
+            "android_truth_ssot": "core.v2_android_truth_ssot.build_v2_android_truth_block",
+            "result_acceptance_gate": "core.result_truth_acceptance_gate.evaluate_result_truth_acceptance",
+        },
+        "acceptance_closure_truth": {
+            "source": "cross_repo_acceptance_chain.stages + shared_execution_visibility",
+            "overall_status": overall_status,
+            "result_closure_visible": closure_visible,
+            "gate_verdict": gate.get("verdict"),
+            "gate_mode": gate.get("mode"),
+            "required_stage_ids": list(gate.get("required_stage_ids") or []),
+            "blocking_failed_stages": list(gate.get("blocking_failed_stages") or []),
+        },
+        "outward_projection_truth": {
+            "role": "consumer_only_projection",
+            "canonical_inputs": [
+                "truth_payload.shared_execution_visibility",
+                "truth_payload.participation_truth_consumption",
+                "board_payload.shared_execution_visibility",
+            ],
+            "must_not_define_authority_truth": True,
+        },
+        "diagnostics_snapshot": {
+            "source": "cross_repo_acceptance_chain.stages",
+            "stage_count": len(stages),
+            "is_authoritative_truth": False,
+            "is_audit_artifact": True,
+        },
+    }
+
+
+def _normalize_gate_mode(value: Any) -> str:
+    mode = str(value or "").strip().lower()
+    if mode in CROSS_REPO_ACCEPTANCE_GATE_SUPPORTED_MODES:
+        return mode
+    return CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_MODE
+
+
 def _session_timestamp_key(value: Any) -> tuple[float, float]:
     return (
         float(getattr(value, "updated_at", 0.0) or 0.0),
@@ -420,5 +564,8 @@ def _ensure_dict(value: Any) -> Dict[str, Any]:
 __all__ = [
     "ANDROID_REPO_COORDINATION_ASSUMPTIONS",
     "CROSS_REPO_ACCEPTANCE_CHAIN_AUTHORITY",
+    "CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_MODE",
+    "CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_REQUIRED_STAGES",
+    "CROSS_REPO_ACCEPTANCE_GATE_SUPPORTED_MODES",
     "build_cross_repo_acceptance_chain",
 ]
