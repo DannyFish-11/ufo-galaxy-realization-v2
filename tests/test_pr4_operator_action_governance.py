@@ -616,8 +616,48 @@ class TestOperatorBoardProjection:
         assert "runtime_decision_reasoning" in d
         assert "unified_mode_model" in d
         assert "latest_closure_reasoning" in d
+        assert "operational_state_board" in d
+        assert "participation_truth_consumption" in d
+        assert "foundational_system_truth" in d
         assert "control_plane_contract" in d
         assert "authority" in d
+
+    def test_board_projection_consumes_runtime_truth_state_blocks(self, monkeypatch):
+        from core.routes import projection as projection_routes
+        from core.pr4_operator_action_governance import build_operator_board_projection
+
+        fake_operational_board = {"authority": "test_board", "categories": []}
+        fake_participation = {"selected_device_id": "android-test-01"}
+        fake_foundational = {"real_three_state_model": {"states": ["established", "partial", "open"]}}
+        monkeypatch.setattr(
+            projection_routes,
+            "_attach_operational_state_board",
+            lambda payload, route_paths=None: {**payload, "operational_state_board": fake_operational_board},
+        )
+        monkeypatch.setattr(
+            projection_routes,
+            "_derive_shared_execution_visibility",
+            lambda payload: {"completion_state": "not_started"},
+        )
+        monkeypatch.setattr(
+            projection_routes,
+            "_build_participation_truth_consumption",
+            lambda payload: fake_participation,
+        )
+        monkeypatch.setattr(
+            projection_routes,
+            "_build_foundational_system_truth",
+            lambda payload: fake_foundational,
+        )
+
+        proj = build_operator_board_projection()
+        assert proj.operational_state_board.get("authority") == "test_board"
+        assert proj.participation_truth_consumption.get("selected_device_id") == "android-test-01"
+        assert proj.foundational_system_truth.get("real_three_state_model", {}).get("states") == [
+            "established",
+            "partial",
+            "open",
+        ]
 
     def test_board_reflects_last_action(self):
         from core.pr4_operator_action_governance import (

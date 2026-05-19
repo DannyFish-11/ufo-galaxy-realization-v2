@@ -533,6 +533,9 @@ class OperatorActionBoardProjection:
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     latest_closure_reasoning: Dict[str, Any] = field(default_factory=dict)
+    operational_state_board: Dict[str, Any] = field(default_factory=dict)
+    participation_truth_consumption: Dict[str, Any] = field(default_factory=dict)
+    foundational_system_truth: Dict[str, Any] = field(default_factory=dict)
     control_plane_contract: Dict[str, Any] = field(default_factory=dict)
 
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
@@ -560,6 +563,9 @@ class OperatorActionBoardProjection:
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "unified_mode_model": dict(self.unified_mode_model),
             "latest_closure_reasoning": dict(self.latest_closure_reasoning),
+            "operational_state_board": dict(self.operational_state_board),
+            "participation_truth_consumption": dict(self.participation_truth_consumption),
+            "foundational_system_truth": dict(self.foundational_system_truth),
             "control_plane_contract": dict(self.control_plane_contract),
             "authority": self.authority,
         }
@@ -1568,6 +1574,35 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: latest closure reasoning unavailable: %s",
+            exc,
+        )
+
+    # --- Canonical runtime-truth state contract blocks (same source helpers as board/projection) ---
+    try:
+        from core.routes.projection import (
+            _attach_operational_state_board,
+            _build_foundational_system_truth,
+            _build_participation_truth_consumption,
+            _derive_shared_execution_visibility,
+        )
+
+        runtime_truth_payload: Dict[str, Any] = {
+            "runtime_decision_reasoning": dict(proj.runtime_decision_reasoning or {}),
+        }
+        runtime_truth_payload = _attach_operational_state_board(runtime_truth_payload, route_paths=None)
+        runtime_truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(
+            runtime_truth_payload
+        )
+        proj.operational_state_board = dict(runtime_truth_payload.get("operational_state_board") or {})
+        proj.participation_truth_consumption = dict(
+            _build_participation_truth_consumption(runtime_truth_payload) or {}
+        )
+        proj.foundational_system_truth = dict(
+            _build_foundational_system_truth(runtime_truth_payload) or {}
+        )
+    except Exception as exc:
+        logger.debug(
+            "build_operator_board_projection: canonical runtime-truth state blocks unavailable: %s",
             exc,
         )
 
