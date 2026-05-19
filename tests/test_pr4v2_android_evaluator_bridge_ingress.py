@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 
 import pytest
@@ -27,7 +28,7 @@ def _msg(msg_type: str, device_id: str, payload: dict) -> dict:
         "version": "3.0",
         "type": msg_type,
         "device_id": device_id,
-        "timestamp": int(uuid.uuid4().int % 10_000_000),
+        "timestamp": int(time.time()),
         "message_id": str(uuid.uuid4()),
         "payload": payload,
     }

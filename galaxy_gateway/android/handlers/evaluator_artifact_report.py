@@ -19,10 +19,18 @@ _REPORT_TO_EVALUATOR_KIND = {
 }
 
 
+def _truth_reconciled_flag(outcome: Any) -> Optional[bool]:
+    reconcile_outcome = getattr(outcome, "truth_reconcile_outcome", None)
+    if reconcile_outcome is None:
+        return None
+    return bool(getattr(reconcile_outcome, "was_reconciled", False))
+
+
 def _resolve_evaluator_kind(msg_type: str, payload: Dict[str, Any]) -> str:
-    if not msg_type:
+    normalised = (msg_type or "").strip().lower()
+    if not normalised:
         return ""
-    mapped = _REPORT_TO_EVALUATOR_KIND.get(msg_type.strip().lower(), "")
+    mapped = _REPORT_TO_EVALUATOR_KIND.get(normalised, "")
     if mapped:
         return mapped
     raw = payload.get("evaluator_kind")
@@ -56,9 +64,7 @@ async def handle_evaluator_artifact_report(
     outcome = ingest_android_evaluator_artifact(canonical_message)
     reject_reason: str = outcome.reject_reason or ""
     canonical_update: str = outcome.canonical_update or ""
-    truth_reconciled: Optional[bool] = None
-    if outcome.truth_reconcile_outcome is not None:
-        truth_reconciled = bool(getattr(outcome.truth_reconcile_outcome, "was_reconciled", False))
+    truth_reconciled = _truth_reconciled_flag(outcome)
 
     logger.info(
         "android evaluator report ingested: type=%s device_id=%s evaluator_kind=%s stored=%s reject=%s",

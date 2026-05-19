@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.android_acceptance_evidence_store import ingest_device_acceptance_report
 from core.android_evaluator_artifact_ingress import ingest_android_evaluator_artifact
+from galaxy_gateway.android.handlers.evaluator_artifact_report import (
+    _truth_reconciled_flag,
+)
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -66,11 +69,7 @@ async def handle_device_acceptance_report(
         "evidence_snapshot_id": record.snapshot_id,
         "evaluator_kind": "acceptance",
         "evaluator_artifact_ingested": bool(evaluator_outcome.was_stored),
-        "truth_ingress_reconciled": (
-            bool(getattr(evaluator_outcome.truth_reconcile_outcome, "was_reconciled", False))
-            if evaluator_outcome.truth_reconcile_outcome is not None
-            else None
-        ),
+        "truth_ingress_reconciled": _truth_reconciled_flag(evaluator_outcome),
         "canonical_update": evaluator_outcome.canonical_update or "",
         "ingress_reject_reason": evaluator_outcome.reject_reason or "",
     }
