@@ -27,10 +27,10 @@ def _truth_reconciled_flag(outcome: Any) -> Optional[bool]:
 
 
 def _resolve_evaluator_kind(msg_type: str, payload: Dict[str, Any]) -> str:
-    normalised = (msg_type or "").strip().lower()
-    if not normalised:
+    normalized = (msg_type or "").strip().lower()
+    if not normalized:
         return ""
-    mapped = _REPORT_TO_EVALUATOR_KIND.get(normalised, "")
+    mapped = _REPORT_TO_EVALUATOR_KIND.get(normalized, "")
     if mapped:
         return mapped
     raw = payload.get("evaluator_kind")

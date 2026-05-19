@@ -311,7 +311,7 @@ class MessageType(str, Enum):
     # ValueError and the gateway to return UNKNOWN_MESSAGE_TYPE to Android.
     # They are now registered here so the dispatch table can route them to
     # canonical governance ingress handlers (readiness/governance/acceptance/
-    # strategy) or compat logging (cancel_result), instead of UNKNOWN_MESSAGE_TYPE.
+    # strategy) or compatibility logging (cancel_result), instead of UNKNOWN_MESSAGE_TYPE.
     CANCEL_RESULT = "cancel_result"
     DEVICE_READINESS_REPORT = "device_readiness_report"
     DEVICE_GOVERNANCE_REPORT = "device_governance_report"
