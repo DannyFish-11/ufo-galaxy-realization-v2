@@ -210,6 +210,10 @@ CANONICAL_STAGE_ORDER: tuple = (
 
 #: Modules that have been demoted to adapter / facade / helper status.
 #: They MUST NOT act as parallel top-level dispatch authorities.
+#:
+#: PR-7 additions: AgentKernel / ExecutionPlanner / TeamManager / AgentTeam
+#: and SystemOrchestrator are explicitly registered here so that tooling and
+#: tests can assert they are NOT parallel central authorities.
 SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "core.e2e_orchestrator": SIDE_PATH_FACADE_ROLE,
     "core.unified_orchestration_spine": "multi_step_session_governor",
@@ -226,6 +230,15 @@ SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "core.runtime_closure_audit": "audit_layer_read_only",
     "core.truth_projection_boundary": "projection_boundary_classifier",
     "core.projection_surface_bridge": "outward_projection_bridge",
+    # PR-7: Expert capability sub-layers — NOT parallel central authorities
+    "core.agent.kernel": "embedded_cognition_sub_layer",
+    "core.agent.execution_planner": "execution_planning_helper",
+    "core.agent_team": "expert_execution_sub_layer",
+    # PR-7: Startup helper — NOT a per-request runtime controller
+    "core.system_orchestrator": "startup_phase_helper",
+    # PR-7: Internal sub-domain coordinators — NOT universal per-request gates
+    "core.device_orchestrator": "device_domain_coordinator",
+    "core.swarm_coordinator": "swarm_domain_coordinator",
 }
 
 # Canonical minimal real runtime mainline (PR-6 fixed boundary)
