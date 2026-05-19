@@ -4237,6 +4237,10 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         payload["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
             truth_payload=payload,
         )
+        payload["truth_acceptance_closure_contract"] = _build_truth_acceptance_closure_contract(
+            truth_payload=payload,
+            cross_repo_acceptance_chain=payload.get("cross_repo_acceptance_chain"),
+        )
         payload["dual_repo_completeness_baseline"] = _build_dual_repo_completeness_baseline_projection(
             truth_payload=payload,
         )
@@ -4316,6 +4320,10 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             "participation_truth_consumption": _build_participation_truth_consumption({}),
             "foundational_system_truth": _build_foundational_system_truth({}),
             "cross_repo_acceptance_chain": _build_cross_repo_acceptance_chain_projection(),
+            "truth_acceptance_closure_contract": _build_truth_acceptance_closure_contract(
+                truth_payload={},
+                cross_repo_acceptance_chain={},
+            ),
             "dual_repo_completeness_baseline": _build_dual_repo_completeness_baseline_projection(),
             "execution_stage": None,
             "current_task_summary": None,
@@ -5574,6 +5582,10 @@ def _source_of_truth_boundaries() -> Dict[str, str]:
         "v2_authoritative": "Derived from V2 canonical core/contracts sources.",
         "android_originated": "Requires Android-originated evidence from Android-linked surfaces.",
         "joint_cross_repo_derived": "Derived from correlated Android + V2 sources.",
+        "authority_truth_source": "Canonical authority truth producers (runtime truth compiler / Android SSOT / acceptance gate).",
+        "acceptance_closure_truth": "Acceptance and closure truth used to determine if results can be closed and consumed.",
+        "outward_projection_truth": "Operator/board projection surfaces that only consume canonical truth and never define it.",
+        "diagnostics_snapshot": "Audit and diagnostics artifacts; useful for investigation but not authority truth.",
     }
 
 
@@ -6491,6 +6503,43 @@ def _build_cross_repo_acceptance_chain_projection(
         }
 
 
+def _build_truth_acceptance_closure_contract(
+    *,
+    truth_payload: Optional[Dict[str, Any]] = None,
+    cross_repo_acceptance_chain: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    truth_payload = dict(truth_payload or {})
+    chain = dict(cross_repo_acceptance_chain or {})
+    shared_visibility = dict(truth_payload.get("shared_execution_visibility") or {})
+    runtime_reasoning = dict(truth_payload.get("runtime_decision_reasoning") or {})
+    closure_basis = dict(runtime_reasoning.get("closure_basis") or {})
+    chain_contract = dict(chain.get("truth_boundary_contract") or {})
+    gate = dict(chain.get("gate_candidate") or {})
+    return {
+        "authority_truth_source": dict(chain_contract.get("authority_truth_source") or {}),
+        "acceptance_closure_truth": {
+            **dict(chain_contract.get("acceptance_closure_truth") or {}),
+            "acceptance_verdict": shared_visibility.get("acceptance_verdict"),
+            "completion_state": shared_visibility.get("completion_state"),
+            "is_fully_closed": bool(
+                shared_visibility.get("is_fully_closed") or closure_basis.get("is_fully_closed")
+            ),
+        },
+        "outward_projection_truth": {
+            **dict(chain_contract.get("outward_projection_truth") or {}),
+            "projection_surface_role": truth_payload.get("projection_surface_role", "runtime_truth_board_facing"),
+            "board_facing_default": bool(truth_payload.get("board_facing_default", True)),
+        },
+        "diagnostics_snapshot": {
+            **dict(chain_contract.get("diagnostics_snapshot") or {}),
+            "chain_overall_status": chain.get("overall_status"),
+            "failure_boundaries": list(chain.get("failure_boundaries") or []),
+        },
+        "gate_candidate": gate,
+        "_source": "core.routes.projection._build_truth_acceptance_closure_contract",
+    }
+
+
 def _build_dual_repo_completeness_baseline_projection(
     *,
     truth_payload: Optional[Dict[str, Any]] = None,
@@ -6679,6 +6728,10 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
     result["cross_repo_acceptance_chain"] = _build_cross_repo_acceptance_chain_projection(
         truth_payload=runtime_truth_payload,
         board_payload=result,
+    )
+    result["truth_acceptance_closure_contract"] = _build_truth_acceptance_closure_contract(
+        truth_payload=runtime_truth_payload,
+        cross_repo_acceptance_chain=result.get("cross_repo_acceptance_chain"),
     )
     result["dual_repo_completeness_baseline"] = _build_dual_repo_completeness_baseline_projection(
         truth_payload=runtime_truth_payload,

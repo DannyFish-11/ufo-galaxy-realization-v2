@@ -74,6 +74,17 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert "all_device_participation_matrix" in payload["participation_truth_consumption"]
     assert "devices" in payload["participation_truth_consumption"]["all_device_participation_matrix"]
     assert "foundational_system_truth" in payload
+    assert "truth_acceptance_closure_contract" in payload
+    truth_contract = payload["truth_acceptance_closure_contract"]
+    assert set(truth_contract.keys()) >= {
+        "authority_truth_source",
+        "acceptance_closure_truth",
+        "outward_projection_truth",
+        "diagnostics_snapshot",
+        "gate_candidate",
+    }
+    assert truth_contract["outward_projection_truth"]["projection_surface_role"] == "runtime_truth_board_facing"
+    assert truth_contract["diagnostics_snapshot"]["is_authoritative_truth"] is False
     foundational = payload["foundational_system_truth"]
     assert foundational["cross_device_foundation"]["closure_state"] in {
         "established",

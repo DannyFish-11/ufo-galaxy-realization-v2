@@ -277,3 +277,102 @@ class TestCrossRepoAcceptanceChain:
             "mesh_result",
             "mesh_leave",
         ]
+
+    def test_gate_candidate_and_truth_boundary_contract_are_exposed(self):
+        from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain
+
+        device_id = f"pr20-contract-{uuid.uuid4().hex[:8]}"
+        truth_payload = _build_truth_payload(device_id)
+        board_payload = {
+            "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
+            "participation_truth_consumption": dict(
+                truth_payload["participation_truth_consumption"]
+            ),
+        }
+        snapshot = build_cross_repo_acceptance_chain(
+            device_id=device_id,
+            truth_payload=truth_payload,
+            board_payload=board_payload,
+        )
+
+        gate = snapshot.get("gate_candidate") or {}
+        assert gate.get("mode") == "advisory"
+        assert gate.get("is_gate_consumable") is True
+        assert isinstance(gate.get("required_stage_ids"), list)
+        assert gate.get("verdict") in {"pass", "block"}
+
+        boundary = snapshot.get("truth_boundary_contract") or {}
+        assert set(boundary.keys()) == {
+            "authority_truth_source",
+            "acceptance_closure_truth",
+            "outward_projection_truth",
+            "diagnostics_snapshot",
+        }
+        assert boundary["diagnostics_snapshot"]["is_authoritative_truth"] is False
+        assert boundary["outward_projection_truth"]["must_not_define_authority_truth"] is True
+
+    def test_enforced_gate_can_allow_specific_failure_boundaries(self):
+        from core.android_acceptance_evidence_store import ingest_device_acceptance_report
+        from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain
+        from core.device_lifecycle_state import (
+            DeviceLifecycleTransitionEvent,
+            transition_device_lifecycle,
+        )
+
+        device_id = f"pr20-gate-{uuid.uuid4().hex[:8]}"
+        transition_device_lifecycle(
+            device_id,
+            DeviceLifecycleTransitionEvent.register_ack_sent,
+            websocket_connected=True,
+            registration_ack_success=True,
+        )
+        transition_device_lifecycle(
+            device_id,
+            DeviceLifecycleTransitionEvent.registration_fully_attached,
+            registration_fully_attached=True,
+            capability_visible=True,
+        )
+        transition_device_lifecycle(
+            device_id,
+            DeviceLifecycleTransitionEvent.readiness_satisfied,
+            readiness_satisfied=True,
+            dispatch_gate_passed=True,
+        )
+        transition_device_lifecycle(
+            device_id,
+            DeviceLifecycleTransitionEvent.execution_session_started,
+            execution_active=True,
+        )
+        ingest_device_acceptance_report(
+            device_id=device_id,
+            payload={"acceptance_tag": "device_accepted_for_graduation"},
+            message_id="msg-gate",
+        )
+
+        truth_payload = _build_truth_payload(device_id)
+        board_payload = {
+            "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
+            "participation_truth_consumption": dict(
+                truth_payload["participation_truth_consumption"]
+            ),
+        }
+        strict_snapshot = build_cross_repo_acceptance_chain(
+            device_id=device_id,
+            truth_payload=truth_payload,
+            board_payload=board_payload,
+            gate_mode="enforced",
+        )
+        allowlisted_snapshot = build_cross_repo_acceptance_chain(
+            device_id=device_id,
+            truth_payload=truth_payload,
+            board_payload=board_payload,
+            gate_mode="enforced",
+            gate_allowed_failure_boundaries=["mesh_lifecycle"],
+        )
+
+        strict_gate = strict_snapshot["gate_candidate"]
+        allowlisted_gate = allowlisted_snapshot["gate_candidate"]
+        assert strict_gate["verdict"] == "block"
+        assert strict_gate["enforced_blocking_active"] is True
+        assert allowlisted_gate["verdict"] == "pass"
+        assert allowlisted_gate["enforced_blocking_active"] is False
