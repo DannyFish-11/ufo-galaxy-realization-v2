@@ -303,7 +303,7 @@ class ExecutionPlanner:
         self,
         strategy: str,
         *,
-        device_id: Union[str, List[str], Any] = "",
+        device_id: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
         """Build PR-8v2 specialist-layer boundary metadata for runtime consumers."""
         normalized_strategy = (strategy or "single").lower()
@@ -332,6 +332,19 @@ class ExecutionPlanner:
                 "multi_device_targeting": multi_device,
             },
         }
+
+    @staticmethod
+    def _resolve_boundary_strategy(
+        chosen_strategy: Optional[str],
+        mode: Optional[str],
+        fallback_strategy: str,
+    ) -> str:
+        """Resolve strategy used for specialist-boundary classification."""
+        if chosen_strategy is not None:
+            return chosen_strategy
+        if mode is not None:
+            return mode
+        return fallback_strategy
 
     def _auto_select_template(self, message: str, intent: IntentResult) -> str:
         """根据消息内容和意图自动选择最合适的 Agent 模板。"""
@@ -508,10 +521,10 @@ class ExecutionPlanner:
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
-            _strategy_for_boundary = (
-                result.chosen_strategy
-                if result.chosen_strategy is not None
-                else (result.mode if result.mode is not None else strategy)
+            _strategy_for_boundary = self._resolve_boundary_strategy(
+                result.chosen_strategy,
+                result.mode,
+                strategy,
             )
             if result.specialist_boundary is None:
                 result.specialist_boundary = self._build_specialist_boundary(

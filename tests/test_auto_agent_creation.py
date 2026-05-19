@@ -537,7 +537,11 @@ class TestExecutionResultNewFields:
 
 
 class TestSpecialistBoundaryMetadata:
-    """PR-8v2 specialist-layer boundary metadata mapping."""
+    """PR-8v2 specialist-layer boundary metadata mapping.
+
+    These tests intentionally target the helper because it is the canonical
+    boundary-construction point reused by all execution paths.
+    """
 
     def test_specialized_maps_to_subordinate_specialist_boundary(self, planner):
         boundary = planner._build_specialist_boundary("team_specialized", device_id="android-1")
