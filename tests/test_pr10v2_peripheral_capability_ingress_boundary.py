@@ -145,7 +145,7 @@ def test_capability_registry_annotations_include_ingress_boundary_contract() -> 
     )
     stored = registry.get(item_name)
     assert stored is not None
-    contract = dict((stored.metadata or {}).get("ingress_boundary_contract") or {})
+    contract = stored.metadata.get("ingress_boundary_contract", {}) if stored.metadata else {}
     assert contract.get("role") == "capability_ingress_surface"
     assert contract.get("may_not_claim_runtime_authority") is True
     assert "galaxy_gateway.device_router.DeviceRouter" in contract.get(
