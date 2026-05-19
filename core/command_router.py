@@ -1989,6 +1989,14 @@ class CommandRouter:
                         _v3_blocked_result["remote_execution_mode"] = envelope.remote_execution_mode.value
                     _v3_blocked_result["execution_substrate_role"] = "execution_substrate"
                     _v3_blocked_result["arch_layer_id"] = "execution_substrate"
+                    _v3_blocked_result["tool_invocation_truth"] = {
+                        "route_envelope_invoked": True,
+                        "dispatch_executed": False,
+                    }
+                    _v3_blocked_result["repo_mutation_truth"] = {
+                        "in_scope": False,
+                        "mutation_applied": False,
+                    }
                     # Stamp lifecycle state (always "failed" since success=False)
                     try:
                         from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS_v3
@@ -2015,6 +2023,8 @@ class CommandRouter:
                         "failure_domain": _v3_blocked_result.get("failure_domain"),
                         "failure_is_retryable": _v3_blocked_result.get("failure_is_retryable"),
                         "success": False,
+                        "tool_invocation_truth": _v3_blocked_result.get("tool_invocation_truth"),
+                        "repo_mutation_truth": _v3_blocked_result.get("repo_mutation_truth"),
                     }
                     return _v3_blocked_result
 
@@ -2561,6 +2571,21 @@ class CommandRouter:
         result.setdefault("execution_substrate_role", "execution_substrate")
         # PR-10: stamp architecture diagnostics layer identifier (additive).
         result.setdefault("arch_layer_id", "execution_substrate")
+        result.setdefault(
+            "tool_invocation_truth",
+            {
+                "route_envelope_invoked": True,
+                "dispatch_executed": True,
+            },
+        )
+        result.setdefault(
+            "repo_mutation_truth",
+            {
+                # CommandRouter is a transport substrate; repo mutation side effects are out of scope here.
+                "in_scope": False,
+                "mutation_applied": False,
+            },
+        )
 
         # PR-12: stamp canonical lifecycle state on substrate result (additive).
         try:
@@ -2600,6 +2625,8 @@ class CommandRouter:
                 "failure_domain": result.get("failure_domain"),
                 "failure_is_retryable": result.get("failure_is_retryable"),
                 "success": result.get("success"),
+                "tool_invocation_truth": result.get("tool_invocation_truth"),
+                "repo_mutation_truth": result.get("repo_mutation_truth"),
             },
         )
 

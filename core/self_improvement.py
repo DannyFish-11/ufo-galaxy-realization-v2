@@ -476,11 +476,47 @@ class SelfHealingLoop:
                         "apply_patch requires PLAN_PATCH stage (safety gate)"
                     ),
                 }
-            proposal.apply_result = dict(apply_metadata or {})
+            raw_apply_metadata = dict(apply_metadata or {})
+            operator_approved = bool(raw_apply_metadata.get("operator_approved", False))
+            reported_mutation_applied = bool(raw_apply_metadata.get("repo_mutation_applied", False))
+            # A repo mutation is treated as true only when both signals exist:
+            # operator approval (authorization truth) + execution-layer mutation report (execution truth).
+            mutation_applied = operator_approved and reported_mutation_applied
+            proposal.apply_result = {
+                "runtime_authority": "OpenClawd/SelfHealingLoop",
+                "planner_intent_truth": {
+                    "intent_layer": "planner",
+                    "intent_stage": EngineeringStage.PLAN_PATCH.value,
+                    "intent_only": True,
+                },
+                "tool_invocation_truth": {
+                    "tool_name": "engineer__apply",
+                    "invoked": True,
+                },
+                "side_effect_authorization": {
+                    "stage_gate_passed": True,
+                    "operator_approved": operator_approved,
+                    "authorization_status": ("authorized" if operator_approved else "not_authorized"),
+                },
+                "repo_mutation_truth": {
+                    "mutation_reported": reported_mutation_applied,
+                    "mutation_applied": mutation_applied,
+                },
+                "raw_apply_metadata": raw_apply_metadata,
+            }
             proposal.stage = EngineeringStage.APPLY
             proposal.updated_at = time.time()
         logger.info("SelfHealingLoop: proposal %s → APPLY", proposal_id)
-        return {"success": True, "proposal_id": proposal_id, "stage": EngineeringStage.APPLY.value}
+        return {
+            "success": True,
+            "proposal_id": proposal_id,
+            "stage": EngineeringStage.APPLY.value,
+            "runtime_authority": "OpenClawd/SelfHealingLoop",
+            "planner_intent_truth": proposal.apply_result.get("planner_intent_truth", {}),
+            "tool_invocation_truth": proposal.apply_result.get("tool_invocation_truth", {}),
+            "side_effect_authorization": proposal.apply_result.get("side_effect_authorization", {}),
+            "repo_mutation_truth": proposal.apply_result.get("repo_mutation_truth", {}),
+        }
 
     # ------------------------------------------------------------------
     # Stage 5 — VALIDATE

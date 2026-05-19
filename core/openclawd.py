@@ -6421,9 +6421,35 @@ class OpenClawd:
                 proposal_id = arguments.get("proposal_id", "")
                 if not proposal_id:
                     return {"success": False, "error": "engineer__apply requires 'proposal_id' argument"}
+                apply_metadata = arguments.get("apply_metadata", {})
+                if not isinstance(apply_metadata, dict):
+                    apply_metadata = {"raw_apply_metadata": str(apply_metadata)}
+                # Approval precedence: explicit argument > apply_metadata hint > default False.
+                _operator_approved_arg = arguments.get("operator_approved")
+                if _operator_approved_arg is None:
+                    operator_approved = bool(apply_metadata.get("operator_approved", False))
+                else:
+                    operator_approved = bool(_operator_approved_arg)
+                apply_metadata = {
+                    **apply_metadata,
+                    "operator_approved": operator_approved,
+                    "operator_intent": {
+                        "intent_source": "operator",
+                        "approval_state": ("approved" if operator_approved else "not_declared"),
+                    },
+                    "planner_intent": {
+                        "proposal_id": proposal_id,
+                        "intent_stage": "plan_patch",
+                    },
+                    "runtime_authority": "OpenClawd/SelfHealingLoop",
+                    "tool_invocation_truth": {
+                        "tool_name": "engineer__apply",
+                        "invoked_by": "core.openclawd._dispatch_engineer_tool",
+                    },
+                }
                 return loop.apply_patch(
                     proposal_id=proposal_id,
-                    apply_metadata=arguments.get("apply_metadata", {}),
+                    apply_metadata=apply_metadata,
                 )
 
             elif action == "validate":
