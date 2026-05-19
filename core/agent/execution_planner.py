@@ -274,7 +274,7 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
-    _DEFAULT_STRATEGY_CLASS = "single"
+    _DEFAULT_STRATEGY_NAME = "single"
 
     # PR86: 工具摘要中展示的最大工具数（避免 prompt 过长）
     _MAX_TOOL_SUMMARY_COUNT = 20
@@ -325,17 +325,17 @@ class ExecutionPlanner:
             - direct_side_effect_authority
             - android_runtime_alignment
         """
-        normalized_strategy = (strategy or self._DEFAULT_STRATEGY_CLASS).lower()
+        normalized_strategy = (strategy or self._DEFAULT_STRATEGY_NAME).lower()
         strategy_class = {
-            "single": self._DEFAULT_STRATEGY_CLASS,
-            "single_agent": self._DEFAULT_STRATEGY_CLASS,
+            "single": self._DEFAULT_STRATEGY_NAME,
+            "single_agent": self._DEFAULT_STRATEGY_NAME,
             "specialized": "specialized",
             "parallel": "specialized",
             "team_specialized": "specialized",
             "swarm": "swarm",
             "team_swarm": "swarm",
             "fractal": "fractal",
-        }.get(normalized_strategy, self._DEFAULT_STRATEGY_CLASS)
+        }.get(normalized_strategy, self._DEFAULT_STRATEGY_NAME)
 
         # A single explicit target (str or one-element list) is treated as
         # non-multi-device.  We only mark multi-device when >1 targets exist.
