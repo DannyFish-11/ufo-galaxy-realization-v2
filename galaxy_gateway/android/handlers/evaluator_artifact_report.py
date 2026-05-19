@@ -34,7 +34,8 @@ def _resolve_evaluator_kind(msg_type: str, payload: Dict[str, Any]) -> str:
     if mapped:
         return mapped
     raw = payload.get("evaluator_kind")
-    return str(raw).strip().lower() if isinstance(raw, str) else ""
+    fallback_kind = str(raw).strip().lower() if isinstance(raw, str) else ""
+    return fallback_kind
 
 
 async def handle_evaluator_artifact_report(

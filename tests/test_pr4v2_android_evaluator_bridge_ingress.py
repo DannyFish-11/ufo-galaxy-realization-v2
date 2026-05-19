@@ -15,7 +15,7 @@ try:
     from galaxy_gateway.protocol.aip_v3 import MessageType
 
     _AVAILABLE = True
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
     _AVAILABLE = False
 
 _skip_if_unavailable = pytest.mark.skipif(
