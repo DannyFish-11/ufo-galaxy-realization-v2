@@ -5951,6 +5951,15 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         f"result_closed={result_closure_established}",
     ]
     acceptance_verdict = closure_basis.get("acceptance_verdict")
+    acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
+    authority_completion_truth = (
+        acceptance_verdict_normalized == "accept"
+        and bool(closure_basis.get("is_fully_closed"))
+    )
+    acceptance_completion_truth = acceptance_verdict_normalized == "accept"
+    repo_mutation_completion_truth = closure_basis.get("repo_mutation_completion_truth")
+    if repo_mutation_completion_truth in (None, ""):
+        repo_mutation_completion_truth = "unknown"
     if acceptance_verdict not in (None, ""):
         summary_parts.append(f"acceptance={acceptance_verdict}")
     if waiting_dependencies:
@@ -5964,9 +5973,15 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         "waiting_dependencies": waiting_dependencies,
         "acceptance_verdict": acceptance_verdict,
         "is_fully_closed": bool(closure_basis.get("is_fully_closed")),
+        "authority_completion_truth": authority_completion_truth,
+        "acceptance_completion_truth": acceptance_completion_truth,
+        "repo_mutation_completion_truth": repo_mutation_completion_truth,
+        "closure_candidate_state": completion_state,
         "completion_state": completion_state,
         "surface_execution_stage": surface_execution_stage,
         "surface_summary": " | ".join(summary_parts),
+        "operator_visible_done_summary": " | ".join(summary_parts),
+        "operator_visible_done_summary_role": "operator_visible_interpretation_only",
         "source_of_truth_refs": [
             "operational_state_board.task_execution_visibility",
             "runtime_decision_reasoning.closure_basis",
@@ -6521,11 +6536,23 @@ def _build_truth_acceptance_closure_contract(
         is_fully_closed = bool(closure_basis.get("is_fully_closed"))
     else:
         is_fully_closed = False
+    acceptance_verdict = shared_visibility.get("acceptance_verdict")
+    acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
+    authority_completion_truth = bool(shared_visibility.get("authority_completion_truth"))
+    if not authority_completion_truth and acceptance_verdict_normalized == "accept":
+        authority_completion_truth = is_fully_closed
     return {
         "authority_truth_source": dict(chain_contract.get("authority_truth_source") or {}),
         "acceptance_closure_truth": {
             **dict(chain_contract.get("acceptance_closure_truth") or {}),
-            "acceptance_verdict": shared_visibility.get("acceptance_verdict"),
+            "acceptance_verdict": acceptance_verdict,
+            "authority_completion_truth": authority_completion_truth,
+            "acceptance_completion_truth": acceptance_verdict_normalized == "accept",
+            "closure_candidate_state": shared_visibility.get("closure_candidate_state")
+            or shared_visibility.get("completion_state"),
+            "repo_mutation_completion_truth": shared_visibility.get(
+                "repo_mutation_completion_truth", "unknown"
+            ),
             "completion_state": shared_visibility.get("completion_state"),
             "is_fully_closed": is_fully_closed,
         },
@@ -6533,6 +6560,11 @@ def _build_truth_acceptance_closure_contract(
             **dict(chain_contract.get("outward_projection_truth") or {}),
             "projection_surface_role": truth_payload.get("projection_surface_role", "runtime_truth_board_facing"),
             "board_facing_default": bool(truth_payload.get("board_facing_default", True)),
+            "operator_visible_done_summary": shared_visibility.get("operator_visible_done_summary"),
+            "operator_visible_done_summary_role": shared_visibility.get(
+                "operator_visible_done_summary_role",
+                "operator_visible_interpretation_only",
+            ),
         },
         "diagnostics_snapshot": {
             **dict(chain_contract.get("diagnostics_snapshot") or {}),

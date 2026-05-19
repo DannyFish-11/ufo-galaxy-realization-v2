@@ -85,6 +85,19 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     }
     assert "outward_projection_truth" in truth_contract
     assert truth_contract["outward_projection_truth"]["projection_surface_role"] == "runtime_truth_board_facing"
+    assert (
+        truth_contract["outward_projection_truth"]["operator_visible_done_summary_role"]
+        == "operator_visible_interpretation_only"
+    )
+    assert truth_contract["acceptance_closure_truth"]["closure_candidate_state"] in {
+        "not_started",
+        "in_progress",
+        "incomplete",
+        "blocked",
+        "closed",
+    }
+    assert isinstance(truth_contract["acceptance_closure_truth"]["authority_completion_truth"], bool)
+    assert isinstance(truth_contract["acceptance_closure_truth"]["acceptance_completion_truth"], bool)
     assert truth_contract["diagnostics_snapshot"]["is_authoritative_truth"] is False
     assert truth_contract["diagnostics_snapshot"]["is_audit_artifact"] is True
     assert truth_contract["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
