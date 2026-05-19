@@ -150,6 +150,9 @@ class ExecutionResult(BaseModel):
     """Twin coupling mode: tight / loose / decoupled / shadow (default: loose)"""
     soul_enforced: Optional[bool] = None
     """True when SOUL policy was actively injected into this execution path (single/team/swarm/fractal)"""
+    # PR-8v2: specialists-as-tools boundary metadata (advisory, non-authoritative)
+    specialist_boundary: Optional[Dict[str, Any]] = None
+    """Specialist layer boundary contract carried as execution metadata."""
     # C阶段 5C: 执行链路可视化细化 — latency / token / cost（均为可选，保持向后兼容）
     total_latency_ms: Optional[float] = None
     """整条执行链路总延迟（毫秒），等同于 duration_ms，额外暴露便于 UI 消费"""
@@ -295,6 +298,35 @@ class ExecutionPlanner:
 
     def __init__(self, llm_router: Optional[Any] = None) -> None:
         self._llm_router = llm_router
+
+    def _build_specialist_boundary(self, strategy: str, *, device_id: Any = "") -> Dict[str, Any]:
+        """Build PR-8v2 specialist-layer boundary metadata for runtime consumers."""
+        normalized_strategy = (strategy or "single").lower()
+        if normalized_strategy in ("single", "single_agent"):
+            strategy_class = "single"
+        elif normalized_strategy in ("specialized", "parallel", "team_specialized"):
+            strategy_class = "specialized"
+        elif normalized_strategy in ("swarm", "team_swarm"):
+            strategy_class = "swarm"
+        elif normalized_strategy == "fractal":
+            strategy_class = "fractal"
+        else:
+            strategy_class = "single"
+
+        multi_device = isinstance(device_id, list) and len(device_id) > 1
+        return {
+            "specialist_layer_role": "specialists_as_tools",
+            "specialist_authority_class": "experts_as_subordinate_capabilities",
+            "strategy_class": strategy_class,
+            "planner_kernel_team_authority": "advisory_subordinate_only",
+            "direct_side_effect_authority": "openclawd_mainline_only",
+            "android_runtime_alignment": {
+                "runtime_host_role": "first_class_runtime_host",
+                "transport_binding": "GalaxyConnectionService/GalaxyWebSocketClient",
+                "cross_device_entry": "DeviceRouter",
+                "multi_device_targeting": multi_device,
+            },
+        }
 
     def _auto_select_template(self, message: str, intent: IntentResult) -> str:
         """根据消息内容和意图自动选择最合适的 Agent 模板。"""
@@ -471,10 +503,16 @@ class ExecutionPlanner:
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
+            if result.specialist_boundary is None:
+                result.specialist_boundary = self._build_specialist_boundary(
+                    result.chosen_strategy or result.mode or strategy,
+                    device_id=plan.device_id,
+                )
             # 在结果中记录工具来源
             if result.task_result is None:
                 result.task_result = {}
             result.task_result["capability_stats"] = cap_stats
+            result.task_result.setdefault("specialist_boundary", result.specialist_boundary)
             # C阶段 5C: 填充 latency/token/cost 字段
             result.total_latency_ms = duration_ms
             try:
@@ -530,6 +568,10 @@ class ExecutionPlanner:
                 tool_calls=tool_calls,
                 error="timeout",
                 duration_ms=duration_ms,
+                specialist_boundary=self._build_specialist_boundary(
+                    strategy,
+                    device_id=plan.device_id,
+                ),
             )
         except Exception as exc:
             duration_ms = (time.monotonic() - t0) * 1000
@@ -542,6 +584,10 @@ class ExecutionPlanner:
                 tool_calls=tool_calls,
                 error=str(exc),
                 duration_ms=duration_ms,
+                specialist_boundary=self._build_specialist_boundary(
+                    strategy,
+                    device_id=plan.device_id,
+                ),
             )
 
     # ──────────────────────────────────────────────────────────────────

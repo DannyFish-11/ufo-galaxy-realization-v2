@@ -68,7 +68,7 @@ def _make_openclawd():
     return oc
 
 
-def _make_kernel_response(*, delegation_hint=None):
+def _make_kernel_response(*, delegation_hint=None, specialist_boundary=None):
     from core.agent.kernel import KernelResponse
     from core.agent.intent_router import IntentResult
     return KernelResponse(
@@ -79,6 +79,7 @@ def _make_kernel_response(*, delegation_hint=None):
         session_id="test-session",
         intent=IntentResult(mode="chat_only", raw_intent="chat_only", confidence=0.9),
         delegation_hint=delegation_hint,
+        specialist_boundary=specialist_boundary,
     )
 
 
@@ -221,6 +222,33 @@ class TestOpenClawdKernelOwnership:
             "so OpenClawd can inspect the cognition artifact's delegation suggestion."
         )
         assert meta["kernel_delegation_hint"] == "local"
+
+    @pytest.mark.asyncio
+    async def test_process_metadata_stamps_kernel_specialist_boundary(self):
+        """process() kernel path must expose specialist-layer boundary metadata."""
+        oc = _make_openclawd()
+        mock_kernel = MagicMock()
+        boundary = {
+            "specialist_layer_role": "specialists_as_tools",
+            "direct_side_effect_authority": "openclawd_mainline_only",
+        }
+        mock_kernel.handle_message = AsyncMock(
+            return_value=_make_kernel_response(specialist_boundary=boundary)
+        )
+        oc._get_kernel = lambda: mock_kernel
+        oc._get_router = lambda: None
+        oc._ensure_initialized = lambda: None
+        oc._emit_audit = MagicMock()
+        oc.sync_device_capabilities = MagicMock()
+        oc._record_turn = AsyncMock()
+        oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
+        oc._run_execution = lambda state, entry_mode=None: {
+            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+        }
+
+        result = await oc.process(message="hello", session_id="s3")
+        meta = result.get("metadata", {})
+        assert meta.get("kernel_specialist_boundary") == boundary
 
 
 # ---------------------------------------------------------------------------

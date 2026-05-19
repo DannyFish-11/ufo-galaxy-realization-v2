@@ -489,6 +489,7 @@ class TestExecutionResultNewFields:
         assert result.chosen_providers is None
         assert result.twin_id is None
         assert result.twin_coupling is None
+        assert result.specialist_boundary is None
 
     def test_new_fields_can_be_set(self):
         """New fields can be set explicitly."""
@@ -504,6 +505,7 @@ class TestExecutionResultNewFields:
         assert result.chosen_providers == ["deepseek:deepseek-chat", "openai:gpt-4o"]
         assert result.twin_id == "twin_abc123"
         assert result.twin_coupling == "loose"
+        assert result.specialist_boundary is None
 
     def test_backward_compat_serialization(self):
         """Old fields still serialize correctly with new additions."""
@@ -520,6 +522,37 @@ class TestExecutionResultNewFields:
         # New fields present but None
         assert "chosen_strategy" in d
         assert d["chosen_strategy"] is None
+        assert "specialist_boundary" in d
+        assert d["specialist_boundary"] is None
+
+    def test_specialist_boundary_can_be_set(self):
+        """specialist_boundary is a serializable additive metadata field."""
+        boundary = {
+            "specialist_layer_role": "specialists_as_tools",
+            "direct_side_effect_authority": "openclawd_mainline_only",
+        }
+        result = ExecutionResult(success=True, reply="ok", specialist_boundary=boundary)
+        assert result.specialist_boundary == boundary
+        assert result.model_dump()["specialist_boundary"]["specialist_layer_role"] == "specialists_as_tools"
+
+
+class TestSpecialistBoundaryMetadata:
+    """PR-8v2 specialist-layer boundary metadata mapping."""
+
+    def test_specialized_maps_to_subordinate_specialist_boundary(self, planner):
+        boundary = planner._build_specialist_boundary("team_specialized", device_id="android-1")
+        assert boundary["specialist_layer_role"] == "specialists_as_tools"
+        assert boundary["specialist_authority_class"] == "experts_as_subordinate_capabilities"
+        assert boundary["strategy_class"] == "specialized"
+        assert boundary["direct_side_effect_authority"] == "openclawd_mainline_only"
+        assert boundary["android_runtime_alignment"]["runtime_host_role"] == "first_class_runtime_host"
+        assert boundary["android_runtime_alignment"]["multi_device_targeting"] is False
+
+    def test_swarm_multi_device_marks_targeting_true(self, planner):
+        boundary = planner._build_specialist_boundary("swarm", device_id=["android-1", "desktop-2"])
+        assert boundary["strategy_class"] == "swarm"
+        assert boundary["android_runtime_alignment"]["cross_device_entry"] == "DeviceRouter"
+        assert boundary["android_runtime_alignment"]["multi_device_targeting"] is True
 
 
 # ─────────────────── Intent Router: Default Execute for Ambiguous ────────────

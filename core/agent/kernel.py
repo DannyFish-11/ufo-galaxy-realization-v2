@@ -221,6 +221,8 @@ class KernelResponse(BaseModel):
     # Assembles task-semantic, budget, memory-bias, cognitive, and governance
     # influence layers into a single coherent observability surface.
     runtime_decision_explanation: Optional[Dict[str, Any]] = None
+    # PR-8v2: specialist capability boundary payload (advisory metadata only).
+    specialist_boundary: Optional[Dict[str, Any]] = None
 
     def to_api_dict(self) -> Dict[str, Any]:
         """转换为 API 响应兼容的 dict（兼容现有 UnifiedChatResponse）。"""
@@ -255,6 +257,8 @@ class KernelResponse(BaseModel):
             "memory_bias_hint": self.memory_bias_hint,
             # PR-20: unified runtime decision explanation (advisory, may be None)
             "runtime_decision_explanation": self.runtime_decision_explanation,
+            # PR-8v2: specialists-as-tools boundary metadata
+            "specialist_boundary": self.specialist_boundary,
         }
 
 
@@ -633,6 +637,8 @@ class AgentKernel:
             memory_bias_hint=_memory_bias_hint_dict,
             # PR-20: unified runtime decision explanation
             runtime_decision_explanation=_runtime_decision_explanation,
+            # PR-8v2: specialists-as-tools boundary metadata from planner layer
+            specialist_boundary=exec_result.specialist_boundary,
         )
 
         # ── 步骤 4: 记录会话 ──
