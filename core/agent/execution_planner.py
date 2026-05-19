@@ -21,7 +21,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -299,7 +299,12 @@ class ExecutionPlanner:
     def __init__(self, llm_router: Optional[Any] = None) -> None:
         self._llm_router = llm_router
 
-    def _build_specialist_boundary(self, strategy: str, *, device_id: Any = "") -> Dict[str, Any]:
+    def _build_specialist_boundary(
+        self,
+        strategy: str,
+        *,
+        device_id: Union[str, List[str], Any] = "",
+    ) -> Dict[str, Any]:
         """Build PR-8v2 specialist-layer boundary metadata for runtime consumers."""
         normalized_strategy = (strategy or "single").lower()
         if normalized_strategy in ("single", "single_agent"):
@@ -503,16 +508,20 @@ class ExecutionPlanner:
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
+            _strategy_for_boundary = (
+                result.chosen_strategy
+                if result.chosen_strategy is not None
+                else (result.mode if result.mode is not None else strategy)
+            )
             if result.specialist_boundary is None:
                 result.specialist_boundary = self._build_specialist_boundary(
-                    result.chosen_strategy or result.mode or strategy,
+                    _strategy_for_boundary,
                     device_id=plan.device_id,
                 )
             # 在结果中记录工具来源
             if result.task_result is None:
                 result.task_result = {}
             result.task_result["capability_stats"] = cap_stats
-            result.task_result.setdefault("specialist_boundary", result.specialist_boundary)
             # C阶段 5C: 填充 latency/token/cost 字段
             result.total_latency_ms = duration_ms
             try:
