@@ -37,9 +37,10 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
     msg_type: str, handler_suffix: str
 ) -> None:
     bridge = AndroidBridge()
+    websocket = object()
     resp = await handle_generic_forward(
         bridge,
-        None,
+        websocket,
         {"type": msg_type, "device_id": "dev-transport", "message_id": f"msg-{msg_type}"},
     )
 
