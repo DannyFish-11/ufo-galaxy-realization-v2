@@ -104,6 +104,9 @@ from galaxy_gateway.android.handlers.mesh_lifecycle import (
 )
 from galaxy_gateway.android.handlers.reconciliation_signal import handle_reconciliation_signal
 from galaxy_gateway.android.handlers.acceptance_report import handle_device_acceptance_report
+from galaxy_gateway.android.handlers.evaluator_artifact_report import (
+    handle_evaluator_artifact_report,
+)
 from galaxy_gateway.android.handlers.device_state_snapshot import (
     handle_device_state_snapshot,
     handle_device_execution_event,
@@ -871,17 +874,17 @@ class AndroidBridge:
         )
 
         # Android Lifecycle / Governance Uplink Reports
-        # These types are emitted by GalaxyConnectionService.kt but were previously
-        # absent from MessageType, causing gateway to return UNKNOWN_MESSAGE_TYPE.
-        # Route to handle_generic_forward so Android receives a structured ACK
-        # instead of an error response, and the message is logged (not silently dropped).
+        # readiness/governance/strategy are canonical policy inputs and must
+        # enter Android evaluator artifact ingress (not generic forwarding).
+        self._message_handlers[MessageType.CANCEL_RESULT] = _wrap(handle_generic_forward)
         for _android_report_type in (
-            MessageType.CANCEL_RESULT,
             MessageType.DEVICE_READINESS_REPORT,
             MessageType.DEVICE_GOVERNANCE_REPORT,
             MessageType.DEVICE_STRATEGY_REPORT,
         ):
-            self._message_handlers[_android_report_type] = _wrap(handle_generic_forward)
+            self._message_handlers[_android_report_type] = _wrap(
+                handle_evaluator_artifact_report
+            )
         self._message_handlers[MessageType.DEVICE_ACCEPTANCE_REPORT] = _wrap(
             handle_device_acceptance_report
         )

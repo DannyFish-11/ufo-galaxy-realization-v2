@@ -6,6 +6,10 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict
 
 from core.android_acceptance_evidence_store import ingest_device_acceptance_report
+from core.android_evaluator_artifact_ingress import ingest_android_evaluator_artifact
+from galaxy_gateway.android.handlers.evaluator_artifact_report import (
+    _truth_reconciled_flag,
+)
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -33,6 +37,21 @@ async def handle_device_acceptance_report(
         record.acceptance_tag,
         record.mapped_android_proof_class,
     )
+    evaluator_outcome = ingest_android_evaluator_artifact(
+        {
+            "type": "governance_artifact",
+            "device_id": device_id,
+            "message_id": message.get("message_id"),
+            "task_id": str(message.get("task_id") or payload_dict.get("task_id") or ""),
+            "payload": {
+                **payload_dict,
+                "evaluator_kind": "acceptance",
+                "session_id": str(payload_dict.get("session_id") or message.get("session_id") or ""),
+                "contract_id": str(payload_dict.get("contract_id") or message.get("contract_id") or ""),
+                "trace_id": str(payload_dict.get("trace_id") or message.get("trace_id") or ""),
+            },
+        }
+    )
     ack_type = (
         f"{msg_type}_ack"
         if isinstance(msg_type, str) and msg_type.strip()
@@ -48,4 +67,9 @@ async def handle_device_acceptance_report(
         "mapped_android_proof_class": record.mapped_android_proof_class,
         "mapped_evidence_trust_level": record.mapped_evidence_trust_level,
         "evidence_snapshot_id": record.snapshot_id,
+        "evaluator_kind": "acceptance",
+        "evaluator_artifact_ingested": bool(evaluator_outcome.was_stored),
+        "truth_ingress_reconciled": _truth_reconciled_flag(evaluator_outcome),
+        "canonical_update": evaluator_outcome.canonical_update or "",
+        "ingress_reject_reason": evaluator_outcome.reject_reason or "",
     }
