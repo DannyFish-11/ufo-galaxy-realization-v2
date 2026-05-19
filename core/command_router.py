@@ -1960,9 +1960,14 @@ class CommandRouter:
                         _slot_not_reg_val = _CDS.SLOT_NOT_REGISTERED.value
                     except Exception:
                         _slot_not_reg_val = "slot_not_registered"
-                    _all_unregistered = bool(_v3_blocked_targets) and all(
-                        getattr(s, "status", "") == _slot_not_reg_val
-                        for s in (_v3_slot_result.blocked_slots if _v3_slot_result else [])
+                    _all_unregistered = (
+                        bool(_v3_blocked_targets)
+                        and _v3_slot_result is not None
+                        and bool(_v3_slot_result.blocked_slots)
+                        and all(
+                            getattr(s, "status", "") == _slot_not_reg_val
+                            for s in _v3_slot_result.blocked_slots
+                        )
                     )
                     if _all_unregistered:
                         # Unknown devices: allow dispatch to proceed and let the
