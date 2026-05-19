@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import MagicMock
 
 try:
     from galaxy_gateway.android.handlers.generic import (
@@ -37,7 +38,7 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
     msg_type: str, handler_suffix: str
 ) -> None:
     bridge = AndroidBridge()
-    websocket = object()
+    websocket = MagicMock()
     resp = await handle_generic_forward(
         bridge,
         websocket,
