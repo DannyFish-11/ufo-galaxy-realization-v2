@@ -91,6 +91,41 @@ _MAPPINGS: Dict[str, AndroidRuntimeWSMapping] = {
         truth_path="core.android_delegated_signal_ingress",
         handling_level="canonical",
     ),
+    MessageType.DEVICE_READINESS_REPORT.value: AndroidRuntimeWSMapping(
+        message_type=MessageType.DEVICE_READINESS_REPORT.value,
+        semantic_family="governance_policy_input",
+        normalization_kind="device_readiness_report",
+        routing_path="android_bridge.evaluator_artifact_ingress",
+        truth_path="core.android_evaluator_artifact_ingress",
+        handling_level="canonical",
+    ),
+    MessageType.DEVICE_GOVERNANCE_REPORT.value: AndroidRuntimeWSMapping(
+        message_type=MessageType.DEVICE_GOVERNANCE_REPORT.value,
+        semantic_family="governance_policy_input",
+        normalization_kind="device_governance_report",
+        routing_path="android_bridge.evaluator_artifact_ingress",
+        truth_path="core.android_evaluator_artifact_ingress",
+        handling_level="canonical",
+    ),
+    MessageType.DEVICE_ACCEPTANCE_REPORT.value: AndroidRuntimeWSMapping(
+        message_type=MessageType.DEVICE_ACCEPTANCE_REPORT.value,
+        semantic_family="governance_policy_input",
+        normalization_kind="device_acceptance_report",
+        routing_path="android_bridge.acceptance_report_handler",
+        truth_path=(
+            "core.android_acceptance_evidence_store+"
+            "core.android_evaluator_artifact_ingress"
+        ),
+        handling_level="canonical",
+    ),
+    MessageType.DEVICE_STRATEGY_REPORT.value: AndroidRuntimeWSMapping(
+        message_type=MessageType.DEVICE_STRATEGY_REPORT.value,
+        semantic_family="governance_policy_input",
+        normalization_kind="device_strategy_report",
+        routing_path="android_bridge.evaluator_artifact_ingress",
+        truth_path="core.android_evaluator_artifact_ingress",
+        handling_level="canonical",
+    ),
     MessageType.FILE_TRANSFER.value: AndroidRuntimeWSMapping(
         message_type=MessageType.FILE_TRANSFER.value,
         semantic_family="transfer_signal",
