@@ -650,11 +650,18 @@ class CapabilityOrchestrator:
             # 跨设备协同：优先走 canonical DeviceRouter 路径，
             # 仅在 router 异常时才显式退回 compatibility fallback。
             from galaxy_gateway.device_router import device_router as canonical_device_router
+            from core.cross_device_dispatch_boundary import (
+                DISPATCH_PATH_CANONICAL,
+                DISPATCH_PATH_COMPAT_FALLBACK,
+                ROUTE_MODE_CROSS_DEVICE,
+                ROUTE_MODE_COMPAT_FALLBACK,
+                SUBSTRATE_CALLER_COMPAT,
+            )
             command = params.get("message", params.get("command", ""))
             context = {k: v for k, v in params.items() if k not in ("message", "command")}
             context = dict(context)
-            context.setdefault("route_mode", "cross_device")
-            context.setdefault("dispatch_path", "canonical_dispatch")
+            context.setdefault("route_mode", ROUTE_MODE_CROSS_DEVICE)
+            context.setdefault("dispatch_path", DISPATCH_PATH_CANONICAL)
             if not context.get("source_device_id") and context.get("device_id"):
                 context["source_device_id"] = context.get("device_id")
             try:
@@ -668,8 +675,8 @@ class CapabilityOrchestrator:
                 from galaxy_gateway.cross_device_coordinator import cross_device_coordinator
 
                 fallback_context = dict(context)
-                fallback_context["route_mode"] = "cross_device_compat_fallback"
-                fallback_context["dispatch_path"] = "compat_fallback"
+                fallback_context["route_mode"] = ROUTE_MODE_COMPAT_FALLBACK
+                fallback_context["dispatch_path"] = DISPATCH_PATH_COMPAT_FALLBACK
                 fallback_context["compat_path_used"] = "cross_device_coordinator"
                 fallback_context["fallback_reason"] = "device_router_exception"
                 fallback_context["_compat_legacy_bypass"] = (
@@ -678,7 +685,7 @@ class CapabilityOrchestrator:
                 result = await cross_device_coordinator.execute_cross_device_task(
                     command,
                     fallback_context,
-                    _substrate_caller="capability_orchestrator.compat_fallback",
+                    _substrate_caller=SUBSTRATE_CALLER_COMPAT,
                 )
             _reply = (
                 result.get("message")

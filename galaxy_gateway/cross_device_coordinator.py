@@ -115,6 +115,21 @@ CROSS_DEVICE_COORDINATOR_FORMATION_DESCRIPTOR_ATTACHED = (
     "Resolves GAP-517-004."
 )
 
+# PR-02: Import dispatch boundary constants from the single authoritative
+# source of truth.  These replace inline string literals in
+# execute_cross_device_task() so the dispatch path classification logic
+# is driven by the canonical boundary contract.
+from core.cross_device_dispatch_boundary import (  # noqa: E402
+    DISPATCH_PATH_CANONICAL,
+    DISPATCH_PATH_CONTROLLED_FALLBACK,
+    DISPATCH_PATH_COMPAT_FALLBACK,
+    DISPATCH_PATH_LEGACY_BYPASS,
+    SUBSTRATE_CALLER_DEVICE_ROUTER,
+    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
+)
+
+CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
+
 # Module-level key used in the context dict passed by DeviceRouter when it
 # delegates to this coordinator.  Presence of this key signals a canonical
 # invocation; absence triggers a LEGACY_DISPATCH warning.
@@ -317,7 +332,7 @@ class CrossDeviceCoordinator:
         3. 手机和电脑同步播放控制
         4. 跨设备剪贴板共享
         """
-        # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
+        # ── PR-518/GAP-517-003 / PR-02: Substrate-caller guard ──────────────
         _ctx = dict(context or {})
         _caller = _substrate_caller or _ctx.get(_SUBSTRATE_CALLER_CTX_KEY, "")
         _route_mode = str(_ctx.get("route_mode") or "cross_device")
@@ -325,17 +340,17 @@ class CrossDeviceCoordinator:
         _compat_legacy_bypass = str(_ctx.get("_compat_legacy_bypass") or "")
         _compat_path_used = str(_ctx.get("compat_path_used") or "")
         _dispatch_path = str(_ctx.get("dispatch_path") or "")
-        _is_canonical = _caller == "device_router.route_task"
+        _is_canonical = _caller == SUBSTRATE_CALLER_DEVICE_ROUTER
         if not _dispatch_path:
             if _is_canonical:
-                _dispatch_path = "canonical_fallback" if _fallback_reason else "canonical_dispatch"
+                _dispatch_path = DISPATCH_PATH_CONTROLLED_FALLBACK if _fallback_reason else DISPATCH_PATH_CANONICAL
             elif _caller:
-                _dispatch_path = "compat_fallback"
+                _dispatch_path = DISPATCH_PATH_COMPAT_FALLBACK
             else:
-                _dispatch_path = "legacy_bypass"
-        _is_legacy_bypass = _dispatch_path == "legacy_bypass"
+                _dispatch_path = DISPATCH_PATH_LEGACY_BYPASS
+        _is_legacy_bypass = _dispatch_path == DISPATCH_PATH_LEGACY_BYPASS
         _legacy_path_used = None
-        if _dispatch_path == "compat_fallback":
+        if _dispatch_path == DISPATCH_PATH_COMPAT_FALLBACK:
             _legacy_path_used = (
                 _compat_legacy_bypass
                 or _compat_path_used

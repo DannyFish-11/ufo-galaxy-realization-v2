@@ -290,6 +290,19 @@ from core.unified.gateway_capability_projection import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
+# PR-02: Import dispatch boundary constants from the single authoritative
+# source of truth.  These constants replace inline string literals that were
+# previously scattered throughout route_task() and related methods.
+# ---------------------------------------------------------------------------
+from core.cross_device_dispatch_boundary import (  # noqa: E402
+    DISPATCH_PATH_CANONICAL,
+    DISPATCH_PATH_CONTROLLED_FALLBACK,
+    CROSS_DEVICE_DISPATCH_PR02_SENTINEL,
+)
+
+CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
+
+# ---------------------------------------------------------------------------
 # PR-S3: Single dispatch and orchestration authority sentinel.
 #
 # DeviceRouter is the canonical single entry for all device-bound task
@@ -1070,7 +1083,7 @@ class DeviceRouter:
                 route_mode = str(route_mode or "cross_device")
                 ctx = dict(ctx)
                 ctx["route_mode"] = route_mode
-                ctx.setdefault("dispatch_path", "canonical_dispatch")
+                ctx.setdefault("dispatch_path", DISPATCH_PATH_CANONICAL)
 
                 # --- Round 4: hard constraint — check cross-device switch ---
                 if not is_cross_device_enabled():
@@ -1172,7 +1185,7 @@ class DeviceRouter:
                             coordinator = get_cross_device_coordinator()
                             fallback_ctx = dict(task.get("context", ctx) or {})
                             fallback_ctx["route_mode"] = route_mode
-                            fallback_ctx["dispatch_path"] = "canonical_fallback"
+                            fallback_ctx["dispatch_path"] = DISPATCH_PATH_CONTROLLED_FALLBACK
                             fallback_ctx["fallback_reason"] = "agent_bridge_local_fallback"
                             return await coordinator.execute_cross_device_task(
                                 task.get("command", command),
@@ -1199,7 +1212,7 @@ class DeviceRouter:
                 coordinator = get_cross_device_coordinator()
                 fallback_ctx = dict(ctx)
                 fallback_ctx["route_mode"] = route_mode
-                fallback_ctx["dispatch_path"] = "canonical_fallback"
+                fallback_ctx["dispatch_path"] = DISPATCH_PATH_CONTROLLED_FALLBACK
                 fallback_ctx["fallback_reason"] = "agent_bridge_import_error"
                 result = await coordinator.execute_cross_device_task(
                     command,
