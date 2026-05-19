@@ -659,6 +659,21 @@ class TestOperatorBoardProjection:
             "open",
         ]
 
+    def test_board_projection_gracefully_degrades_when_runtime_truth_helpers_fail(self, monkeypatch):
+        from core.routes import projection as projection_routes
+        from core.pr4_operator_action_governance import build_operator_board_projection
+
+        monkeypatch.setattr(
+            projection_routes,
+            "_attach_operational_state_board",
+            lambda payload, route_paths=None: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+
+        proj = build_operator_board_projection()
+        assert proj.operational_state_board == {}
+        assert proj.participation_truth_consumption == {}
+        assert proj.foundational_system_truth == {}
+
     def test_board_reflects_last_action(self):
         from core.pr4_operator_action_governance import (
             OperatorActionAuditRecord,

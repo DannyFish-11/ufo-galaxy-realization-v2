@@ -171,6 +171,7 @@ def _render_category_item(lines: List[str], item: Dict[str, Any]) -> None:
         if boundary_raw and boundary_short != boundary_raw
         else boundary_short
     )
+    boundary = _clip(boundary, max_len=64)
     summary = _clip(str(item.get("summary") or ""))
     colour = _state_colour(state)
 
