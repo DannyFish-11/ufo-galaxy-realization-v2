@@ -1946,87 +1946,117 @@ class CommandRouter:
                             update={"targets": _v3_approved_targets}
                         )
                 else:
-                    # All targets blocked — hard reject.
-                    _blocked_detail = "; ".join(
-                        f"{s.device_id}: {s.reason} (dim={s.blocking_dimension})"
+                    # All targets blocked — check whether every blocked slot is
+                    # SLOT_NOT_REGISTERED (device completely unknown to UDM).
+                    # For truly unknown devices we proceed to _execute_command so
+                    # the execution layer can attempt the dispatch and return an
+                    # authoritative failure_domain.  For devices that ARE registered
+                    # but have a known blocking condition (transport failure,
+                    # registration gap, occupancy, policy, etc.) we hard-reject here.
+                    try:
+                        from core.canonical_dispatch_slot_authority import (
+                            CanonicalDispatchSlotStatus as _CDS,
+                        )
+                        _slot_not_reg_val = _CDS.SLOT_NOT_REGISTERED.value
+                    except Exception:
+                        _slot_not_reg_val = "slot_not_registered"
+                    _all_unregistered = bool(_v3_blocked_targets) and all(
+                        getattr(s, "status", "") == _slot_not_reg_val
                         for s in (_v3_slot_result.blocked_slots if _v3_slot_result else [])
                     )
-                    logger.warning(
-                        "route_envelope [V3-slot-gate]: ALL target(s) blocked by "
-                        "canonical slot authority — block_reason=%r blocked=%s "
-                        "task_id=%s",
-                        _v3_block_reason,
-                        _v3_blocked_targets,
-                        envelope.task_id,
-                    )
-                    _v3_blocked_result: Dict[str, Any] = {
-                        "request_id": envelope.task_id,
-                        "task_id": envelope.task_id,
-                        "trace_id": envelope.trace_id,
-                        "command_id": (envelope.metadata or {}).get(
-                            "command_id", envelope.task_id
-                        ),
-                        "device_id": _v3_pre_targets[0] if _v3_pre_targets else "",
-                        "command": envelope.tool_name,
-                        "via": "command_router",
-                        "success": False,
-                        "result": None,
-                        "error_code": GatewayErrorCode.V3_SLOT_BLOCKED.value,
-                        "error_message": (
-                            f"V3 canonical slot authority blocked all dispatch targets. "
-                            f"block_reason={_v3_block_reason!r}. "
-                            f"Detail: {_blocked_detail}"
-                        ),
-                        "v3_slot_gate": {
-                            "applied": True,
-                            "approved": [],
-                            "blocked": _v3_blocked_targets,
-                            "block_reason": _v3_block_reason,
-                        },
-                        "latency_ms": 0.0,
-                    }
-                    if envelope.remote_execution_mode is not None:
-                        _v3_blocked_result["remote_execution_mode"] = envelope.remote_execution_mode.value
-                    _v3_blocked_result["execution_substrate_role"] = "execution_substrate"
-                    _v3_blocked_result["arch_layer_id"] = "execution_substrate"
-                    _v3_blocked_result["tool_invocation_truth"] = {
-                        "route_envelope_invoked": True,
-                        "dispatch_executed": False,
-                    }
-                    _v3_blocked_result["repo_mutation_truth"] = {
-                        "in_scope": False,
-                        "mutation_applied": False,
-                    }
-                    # Stamp lifecycle state (always "failed" since success=False)
-                    try:
-                        from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS_v3
-                        _v3_blocked_result["lifecycle_state"] = _ELS_v3.FAILED.value
+                    if _all_unregistered:
+                        # Unknown devices: allow dispatch to proceed and let the
+                        # execution layer surface the failure with proper domain.
+                        logger.debug(
+                            "route_envelope [V3-slot-gate]: all %d target(s) "
+                            "SLOT_NOT_REGISTERED (unknown devices); proceeding to "
+                            "dispatch (graceful degradation) task_id=%s",
+                            len(_v3_blocked_targets),
+                            envelope.task_id,
+                        )
+                        _v3_approved_targets = list(_v3_pre_targets)
+                    else:
+                        # Known-bad devices: hard reject with structured V3_SLOT_BLOCKED error.
+                        _blocked_detail = "; ".join(
+                            f"{s.device_id}: {s.reason} (dim={s.blocking_dimension})"
+                            for s in (_v3_slot_result.blocked_slots if _v3_slot_result else [])
+                        )
+                        logger.warning(
+                            "route_envelope [V3-slot-gate]: ALL target(s) blocked by "
+                            "canonical slot authority — block_reason=%r blocked=%s "
+                            "task_id=%s",
+                            _v3_block_reason,
+                            _v3_blocked_targets,
+                            envelope.task_id,
+                        )
+                        _v3_blocked_result: Dict[str, Any] = {
+                            "request_id": envelope.task_id,
+                            "task_id": envelope.task_id,
+                            "trace_id": envelope.trace_id,
+                            "command_id": (envelope.metadata or {}).get(
+                                "command_id", envelope.task_id
+                            ),
+                            "device_id": _v3_pre_targets[0] if _v3_pre_targets else "",
+                            "command": envelope.tool_name,
+                            "via": "command_router",
+                            "success": False,
+                            "result": None,
+                            "error_code": GatewayErrorCode.V3_SLOT_BLOCKED.value,
+                            "error_message": (
+                                f"V3 canonical slot authority blocked all dispatch targets. "
+                                f"block_reason={_v3_block_reason!r}. "
+                                f"Detail: {_blocked_detail}"
+                            ),
+                            "v3_slot_gate": {
+                                "applied": True,
+                                "approved": [],
+                                "blocked": _v3_blocked_targets,
+                                "block_reason": _v3_block_reason,
+                            },
+                            "latency_ms": 0.0,
+                        }
                         if envelope.remote_execution_mode is not None:
-                            _v3_blocked_result["lifecycle_via_waiting_remote"] = True
-                    except Exception:
-                        pass
-                    # Stamp failure domain from V3_SLOT_BLOCKED error code
-                    try:
-                        from core.failure_domains import classify_from_error_code as _cfe_v3
-                        _fd_v3 = _cfe_v3(GatewayErrorCode.V3_SLOT_BLOCKED.value)
-                        _v3_blocked_result["failure_domain"] = _fd_v3.domain.value
-                        _v3_blocked_result["failure_is_retryable"] = _fd_v3.is_retryable
-                    except Exception:
-                        pass
-                    # Stamp introspection snapshot
-                    _v3_blocked_result["introspection_snapshot"] = {
-                        "authority_role": "execution_substrate",
-                        "execution_path": "local",
-                        "execution_substrate_role": "execution_substrate",
-                        "execution_mode": _v3_blocked_result.get("remote_execution_mode"),
-                        "lifecycle_state": _v3_blocked_result.get("lifecycle_state"),
-                        "failure_domain": _v3_blocked_result.get("failure_domain"),
-                        "failure_is_retryable": _v3_blocked_result.get("failure_is_retryable"),
-                        "success": False,
-                        "tool_invocation_truth": _v3_blocked_result.get("tool_invocation_truth"),
-                        "repo_mutation_truth": _v3_blocked_result.get("repo_mutation_truth"),
-                    }
-                    return _v3_blocked_result
+                            _v3_blocked_result["remote_execution_mode"] = envelope.remote_execution_mode.value
+                        _v3_blocked_result["execution_substrate_role"] = "execution_substrate"
+                        _v3_blocked_result["arch_layer_id"] = "execution_substrate"
+                        _v3_blocked_result["tool_invocation_truth"] = {
+                            "route_envelope_invoked": True,
+                            "dispatch_executed": False,
+                        }
+                        _v3_blocked_result["repo_mutation_truth"] = {
+                            "in_scope": False,
+                            "mutation_applied": False,
+                        }
+                        # Stamp lifecycle state (always "failed" since success=False)
+                        try:
+                            from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS_v3
+                            _v3_blocked_result["lifecycle_state"] = _ELS_v3.FAILED.value
+                            if envelope.remote_execution_mode is not None:
+                                _v3_blocked_result["lifecycle_via_waiting_remote"] = True
+                        except Exception:
+                            pass
+                        # Stamp failure domain from V3_SLOT_BLOCKED error code
+                        try:
+                            from core.failure_domains import classify_from_error_code as _cfe_v3
+                            _fd_v3 = _cfe_v3(GatewayErrorCode.V3_SLOT_BLOCKED.value)
+                            _v3_blocked_result["failure_domain"] = _fd_v3.domain.value
+                            _v3_blocked_result["failure_is_retryable"] = _fd_v3.is_retryable
+                        except Exception:
+                            pass
+                        # Stamp introspection snapshot
+                        _v3_blocked_result["introspection_snapshot"] = {
+                            "authority_role": "execution_substrate",
+                            "execution_path": "local",
+                            "execution_substrate_role": "execution_substrate",
+                            "execution_mode": _v3_blocked_result.get("remote_execution_mode"),
+                            "lifecycle_state": _v3_blocked_result.get("lifecycle_state"),
+                            "failure_domain": _v3_blocked_result.get("failure_domain"),
+                            "failure_is_retryable": _v3_blocked_result.get("failure_is_retryable"),
+                            "success": False,
+                            "tool_invocation_truth": _v3_blocked_result.get("tool_invocation_truth"),
+                            "repo_mutation_truth": _v3_blocked_result.get("repo_mutation_truth"),
+                        }
+                        return _v3_blocked_result
 
             except Exception as _v3_exc:
                 logger.debug(

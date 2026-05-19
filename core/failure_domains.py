@@ -402,6 +402,10 @@ _GATEWAY_ERROR_CODE_MAP: Dict[str, FailureDomain] = {
     "TRANSPORT_ERROR": FailureDomain.TRANSPORT_FAILURE,
     "EXECUTOR_FAILED": FailureDomain.EXECUTOR_FAILURE,
     "VALIDATION_ERROR": FailureDomain.VALIDATION_FAILURE,
+    # PR-V3: canonical dispatch slot authority blocked all targets.
+    # Semantically equivalent to remote device unavailable: the slot gate
+    # determined that no registered or reachable device is available.
+    "V3_SLOT_BLOCKED": FailureDomain.REMOTE_DEVICE_UNAVAILABLE,
 }
 
 
