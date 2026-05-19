@@ -14,6 +14,33 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+GENERIC_FORWARD_TRANSPORT_ONLY_POLICY = (
+    "ANDROID_BRIDGE::GENERIC_FORWARD_TRANSPORT_ONLY_V1: "
+    "handle_generic_forward() is a transitional transport ACK path only. "
+    "It must not absorb canonical governance, acceptance, or runtime-state ingress."
+)
+
+GENERIC_FORWARD_CANONICAL_INGRESS_GUARD_POLICY = (
+    "ANDROID_BRIDGE::GENERIC_FORWARD_CANONICAL_INGRESS_GUARD_V1: "
+    "High-value Android reports and runtime-state uplinks must use their "
+    "dedicated canonical ingress handlers, not handle_generic_forward()."
+)
+
+_CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE = {
+    "device_readiness_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
+    "device_governance_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
+    "device_strategy_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
+    "device_acceptance_report": "galaxy_gateway.android.handlers.acceptance_report.handle_device_acceptance_report",
+    "device_state_snapshot": "galaxy_gateway.android.handlers.device_state_snapshot.handle_device_state_snapshot",
+    "device_execution_event": "galaxy_gateway.android.handlers.device_state_snapshot.handle_device_execution_event",
+}
+
+
+def is_generic_forward_blocked_message_type(message_type: Any) -> bool:
+    """Return True when *message_type* must use a dedicated canonical ingress handler."""
+    normalized = str(message_type or "").strip().lower()
+    return normalized in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE
+
 
 async def handle_generic_forward(
     bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
@@ -21,6 +48,28 @@ async def handle_generic_forward(
     """通用占位处理器：记录日志并返回 ACK（后续可扩展为实际转发逻辑）"""
     msg_type = message.get("type")
     device_id = message.get("device_id")
+    normalized_type = str(msg_type or "").strip().lower()
+    if normalized_type in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE:
+        logger.warning(
+            "Rejected canonical-ingress message from generic_forward: type=%s device_id=%s handler=%s",
+            normalized_type,
+            device_id,
+            _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE[normalized_type],
+        )
+        return {
+            "type": "error",
+            "device_id": device_id,
+            "status": "rejected",
+            "message_id": message.get("message_id"),
+            "original_type": normalized_type,
+            "error_code": "CANONICAL_INGRESS_REQUIRED",
+            "error_message": (
+                f"{normalized_type} must use its dedicated canonical ingress handler, "
+                "not handle_generic_forward"
+            ),
+            "canonical_ingress_required": True,
+            "canonical_ingress_handler": _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE[normalized_type],
+        }
     logger.debug("Received %s from %s: forwarding", msg_type, device_id)
     return {
         "type": f"{msg_type}_ack" if msg_type else "ack",
