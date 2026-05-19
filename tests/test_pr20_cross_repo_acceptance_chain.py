@@ -315,10 +315,17 @@ class TestCrossRepoAcceptanceChain:
         }
         assert "gate_verdict" in boundary["acceptance_closure_truth"]
         assert "required_stage_ids" in boundary["acceptance_closure_truth"]
+        assert "closure_candidate_visible" in boundary["acceptance_closure_truth"]
+        assert "authority_completion_truth" in boundary["acceptance_closure_truth"]
+        assert "acceptance_completion_truth" in boundary["acceptance_closure_truth"]
         assert boundary["diagnostics_snapshot"]["is_authoritative_truth"] is False
         assert boundary["diagnostics_snapshot"]["is_audit_artifact"] is True
         assert boundary["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
         assert boundary["outward_projection_truth"]["must_not_define_authority_truth"] is True
+        assert (
+            boundary["outward_projection_truth"]["operator_visible_done_summary_role"]
+            == "operator_visible_interpretation_only"
+        )
         assert "canonical_inputs" in boundary["outward_projection_truth"]
 
     def test_enforced_gate_can_allow_specific_failure_boundaries(self):

@@ -504,12 +504,27 @@ def _build_truth_boundary_contract(
 ) -> Dict[str, Any]:
     truth_visibility = _ensure_dict(truth_payload.get("shared_execution_visibility"))
     board_visibility = _ensure_dict(board_payload.get("shared_execution_visibility"))
-    closure_visible = bool(
+    closure_candidate_visible = bool(
         truth_visibility.get("result_closure_established")
         or board_visibility.get("result_closure_established")
         or truth_visibility.get("completion_state") == "closed"
         or board_visibility.get("completion_state") == "closed"
     )
+    acceptance_verdict = (
+        truth_visibility.get("acceptance_verdict")
+        or board_visibility.get("acceptance_verdict")
+        or "unknown"
+    )
+    acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
+    authority_completion_truth = bool(
+        truth_visibility.get("authority_completion_truth")
+        or board_visibility.get("authority_completion_truth")
+    )
+    if not authority_completion_truth and acceptance_verdict_normalized == "accept":
+        authority_completion_truth = bool(
+            truth_visibility.get("is_fully_closed")
+            or board_visibility.get("is_fully_closed")
+        )
     return {
         "authority_truth_source": {
             "runtime_truth_output_chain": "core.runtime_truth_output_chain.build_output_chain_snapshot",
@@ -519,7 +534,11 @@ def _build_truth_boundary_contract(
         "acceptance_closure_truth": {
             "source": "cross_repo_acceptance_chain.stages + shared_execution_visibility",
             "overall_status": overall_status,
-            "result_closure_visible": closure_visible,
+            "result_closure_visible": closure_candidate_visible,
+            "closure_candidate_visible": closure_candidate_visible,
+            "authority_completion_truth": authority_completion_truth,
+            "acceptance_completion_truth": acceptance_verdict_normalized == "accept",
+            "acceptance_verdict": acceptance_verdict,
             "gate_verdict": gate.get("verdict"),
             "gate_mode": gate.get("mode"),
             "required_stage_ids": list(gate.get("required_stage_ids") or []),
@@ -533,6 +552,9 @@ def _build_truth_boundary_contract(
                 "board_payload.shared_execution_visibility",
             ],
             "must_not_define_authority_truth": True,
+            "operator_visible_done_summary": truth_visibility.get("operator_visible_done_summary")
+            or board_visibility.get("operator_visible_done_summary"),
+            "operator_visible_done_summary_role": "operator_visible_interpretation_only",
         },
         "diagnostics_snapshot": {
             "source": "cross_repo_acceptance_chain.stages",
