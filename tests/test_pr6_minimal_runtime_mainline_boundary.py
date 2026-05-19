@@ -44,12 +44,11 @@ def test_desktop_runtime_shell_stage_is_in_chain_and_before_openclawd():
 def test_is_canonical_module_accepts_runtime_shell_and_rejects_demoted_paths():
     for module in MINIMAL_RUNTIME_MAINLINE_MODULES:
         assert is_canonical_module(module) is True
-    assert is_canonical_module("core.e2e_orchestrator") is False
-    assert is_canonical_module("core.unified_orchestration_spine") is False
-    assert is_canonical_module("core.runtime_closure_audit") is False
+    for side_path_module in SIDE_PATH_MODULE_REGISTRY:
+        assert is_canonical_module(side_path_module) is False
 
 
-def test_demoted_side_paths_include_facade_compat_projection_android_bindings():
+def test_demoted_side_paths_configuration():
     assert SIDE_PATH_MODULE_REGISTRY["core.e2e_orchestrator"] == "side_path_facade"
     assert (
         SIDE_PATH_MODULE_REGISTRY["core.unified_orchestration_spine"]
@@ -70,4 +69,4 @@ def test_demoted_side_paths_include_facade_compat_projection_android_bindings():
 def test_boundary_snapshot_exposes_mainline_and_side_paths():
     boundary = get_minimal_runtime_mainline_boundary()
     assert boundary["minimal_runtime_mainline"] == list(MINIMAL_RUNTIME_MAINLINE_MODULES)
-    assert boundary["side_path_modules"]["core.repo_coordinator"] == "legacy_management_facade"
+    assert boundary["side_path_modules"]["core.e2e_orchestrator"] == "side_path_facade"

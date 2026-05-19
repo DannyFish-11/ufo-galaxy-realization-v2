@@ -93,7 +93,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger("Galaxy.CanonicalExecutionChain")
 
@@ -376,11 +376,15 @@ def build_chain_context(
 
 def is_canonical_module(module_name: str) -> bool:
     """Return ``True`` when *module_name* is one of the fixed canonical
-    minimal runtime mainline authorities."""
+    minimal runtime mainline authorities.
+
+    "Fixed minimal runtime mainline" in PR6v2 means the stable four-component chain:
+    DesktopPresenceRuntime → OpenClawd → CommandRouter → DeviceRouter.
+    """
     return module_name in MINIMAL_RUNTIME_MAINLINE_MODULES
 
 
-def get_minimal_runtime_mainline_boundary() -> Dict[str, Any]:
+def get_minimal_runtime_mainline_boundary() -> Dict[str, Union[List[str], Dict[str, str]]]:
     """Return the fixed minimal runtime mainline and demoted side-path surfaces.
 
     This keeps the runtime chain explicit while preserving engineering-value
