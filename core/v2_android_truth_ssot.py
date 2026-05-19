@@ -92,6 +92,28 @@ ANDROID_PARTICIPATION_PROVENANCE = (
     " via core.v2_android_truth_ssot"
 )
 
+ANDROID_UPLINK_CANONICAL_TRUTH_ENTRY: str = (
+    "ANDROID_UPLINK_CANONICAL_TRUTH_ENTRY_V1::PR9V2: "
+    "core.v2_android_truth_ssot.build_v2_android_truth_block() is the "
+    "declared canonical Android uplink entry point into the V2 truth output "
+    "chain.  Android-originated runtime signals (execution result, device "
+    "posture, session continuation, takeover response) MUST pass through "
+    "this function before entering core.canonical_session_truth.  "
+    "Any Android uplink path that terminates before calling "
+    "build_v2_android_truth_block() is a generic_forward or UI-only path "
+    "and must not be described as entering the V2 canonical truth output chain.  "
+    "Canonical uplink chain: "
+    "galaxy_gateway.android.handlers "
+    "→ core.android_participant_truth_ingress "
+    "→ core.v2_android_truth_ssot.build_v2_android_truth_block [HERE] "
+    "→ core.canonical_session_truth.merge_session_truth "
+    "→ compile_runtime_truth (Stage 1) "
+    "→ compile_outward_truth (Stage 2) "
+    "→ projection surfaces (Stage 3)."
+)
+"""PR-9V2 authority sentinel: declares build_v2_android_truth_block() as the
+canonical Android uplink entry point into the V2 truth output chain."""
+
 # ---------------------------------------------------------------------------
 # 字段别名映射
 # ---------------------------------------------------------------------------
