@@ -74,6 +74,12 @@ def test_android_bridge_routes_canonical_reports_away_from_generic_forward() -> 
 
 @_skip_if_unavailable
 def test_runtime_ws_profile_keeps_governance_truth_and_transport_off_generic_forward() -> None:
+    expected_paths = {
+        MessageType.FILE_TRANSFER: "galaxy_gateway.android.handlers.file_transfer.handle_file_transfer",
+        MessageType.PEER_ANNOUNCE: "galaxy_gateway.android.handlers.peer_exchange.handle_peer_announce",
+        MessageType.PEER_EXCHANGE: "galaxy_gateway.android.handlers.peer_exchange.handle_peer_exchange",
+        MessageType.MESH_TOPOLOGY: "galaxy_gateway.android.handlers.mesh_topology.handle_mesh_topology",
+    }
     for msg_type in (
         MessageType.DEVICE_READINESS_REPORT,
         MessageType.DEVICE_GOVERNANCE_REPORT,
@@ -81,10 +87,9 @@ def test_runtime_ws_profile_keeps_governance_truth_and_transport_off_generic_for
         MessageType.DEVICE_ACCEPTANCE_REPORT,
         MessageType.DEVICE_STATE_SNAPSHOT,
         MessageType.DEVICE_EXECUTION_EVENT,
-        MessageType.FILE_TRANSFER,
-        MessageType.PEER_ANNOUNCE,
-        MessageType.PEER_EXCHANGE,
-        MessageType.MESH_TOPOLOGY,
+        *expected_paths.keys(),
     ):
         mapping = classify_android_runtime_ws_mapping(msg_type.value)
         assert "generic_forward" not in mapping.routing_path
+        if msg_type in expected_paths:
+            assert mapping.routing_path == expected_paths[msg_type]
