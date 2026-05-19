@@ -771,23 +771,32 @@ class TestCrossDeviceCoordinatorWiring:
 # R.  CapabilityOrchestrator wiring — boundary constants used in orchestrator
 # ============================================================================
 
+@pytest.fixture
+def _builtin_cross_device_cap():
+    """Shared builtin_cross_device Capability for orchestrator wiring tests."""
+    from core.capability_orchestrator import Capability, CapabilityType
+    return Capability(
+        id="builtin_cross_device",
+        name="跨设备协同",
+        description="跨设备任务",
+        type=CapabilityType.BUILTIN,
+    )
+
+
 class TestCapabilityOrchestratorWiring:
 
     @pytest.mark.asyncio
-    async def test_R01_orchestrator_builtin_cross_device_sets_canonical_dispatch_path(self):
+    async def test_R01_orchestrator_builtin_cross_device_sets_canonical_dispatch_path(
+        self, _builtin_cross_device_cap
+    ):
         """CapabilityOrchestrator._execute_builtin must set dispatch_path=canonical_dispatch
         in the context passed to DeviceRouter (behavioral verification)."""
         from unittest.mock import AsyncMock, patch
-        from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
+        from core.capability_orchestrator import CapabilityOrchestrator
         from core.cross_device_dispatch_boundary import DISPATCH_PATH_CANONICAL
 
         orch = CapabilityOrchestrator()
-        cap = Capability(
-            id="builtin_cross_device",
-            name="跨设备协同",
-            description="跨设备任务",
-            type=CapabilityType.BUILTIN,
-        )
+        cap = _builtin_cross_device_cap
         captured_context = {}
 
         async def capture_route(command, context):
@@ -807,20 +816,17 @@ class TestCapabilityOrchestratorWiring:
         )
 
     @pytest.mark.asyncio
-    async def test_R02_orchestrator_builtin_cross_device_compat_sets_compat_dispatch_path(self):
+    async def test_R02_orchestrator_builtin_cross_device_compat_sets_compat_dispatch_path(
+        self, _builtin_cross_device_cap
+    ):
         """CapabilityOrchestrator compat fallback must set dispatch_path=compat_fallback
         in the context passed to CrossDeviceCoordinator (behavioral verification)."""
         from unittest.mock import AsyncMock, patch
-        from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
+        from core.capability_orchestrator import CapabilityOrchestrator
         from core.cross_device_dispatch_boundary import DISPATCH_PATH_COMPAT_FALLBACK
 
         orch = CapabilityOrchestrator()
-        cap = Capability(
-            id="builtin_cross_device",
-            name="跨设备协同",
-            description="跨设备任务",
-            type=CapabilityType.BUILTIN,
-        )
+        cap = _builtin_cross_device_cap
         captured_context = {}
 
         async def capture_coordinator(command, context, **kwargs):
@@ -844,19 +850,16 @@ class TestCapabilityOrchestratorWiring:
         )
 
     @pytest.mark.asyncio
-    async def test_R03_orchestrator_compat_fallback_sets_compat_route_mode(self):
+    async def test_R03_orchestrator_compat_fallback_sets_compat_route_mode(
+        self, _builtin_cross_device_cap
+    ):
         """CapabilityOrchestrator compat fallback must set route_mode=cross_device_compat_fallback."""
         from unittest.mock import AsyncMock, patch
-        from core.capability_orchestrator import Capability, CapabilityOrchestrator, CapabilityType
+        from core.capability_orchestrator import CapabilityOrchestrator
         from core.cross_device_dispatch_boundary import ROUTE_MODE_COMPAT_FALLBACK
 
         orch = CapabilityOrchestrator()
-        cap = Capability(
-            id="builtin_cross_device",
-            name="跨设备协同",
-            description="跨设备任务",
-            type=CapabilityType.BUILTIN,
-        )
+        cap = _builtin_cross_device_cap
         captured_context = {}
 
         async def capture_coordinator(command, context, **kwargs):

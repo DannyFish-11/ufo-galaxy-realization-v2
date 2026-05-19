@@ -374,9 +374,9 @@ _CATEGORY_POLICY_NOTES: Dict[DispatchPathCategory, str] = {
 
 
 def classify_dispatch_call(
-    dispatch_path: str = "",
-    substrate_caller: str = "",
-    route_mode: str = "",
+    dispatch_path: Optional[str] = None,
+    substrate_caller: Optional[str] = None,
+    route_mode: Optional[str] = None,
 ) -> DispatchBoundaryClassification:
     """Classify a cross-device dispatch call into one of the four boundary
     categories.
