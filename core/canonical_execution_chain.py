@@ -255,6 +255,11 @@ SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "core.center_distributed_agent_system_review": "operator_audit_surface",
     "core.ownership_transfer_proof_quality": "ownership_proof_diagnostics",
     "core.flow_level_truth_ownership": "flow_level_ownership_diagnostics",
+    # PR-10V2: Peripheral capability ingress layers — NOT parallel runtime control
+    "core.multimodal.ingest_runtime": "peripheral_multimodal_ingress_shell_adapter",
+    "core.multimodal.ingress_bus": "peripheral_multimodal_ingress_transport",
+    "core.continuation_rebind_registry": "continuation_rebind_ingress_adapter",
+    "galaxy_gateway.android_bridge": "android_protocol_handoff_ingress_adapter",
 }
 
 # Canonical minimal real runtime mainline (PR-6 fixed boundary)
