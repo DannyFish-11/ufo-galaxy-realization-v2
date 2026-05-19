@@ -239,6 +239,22 @@ SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     # PR-7: Internal sub-domain coordinators — NOT universal per-request gates
     "core.device_orchestrator": "device_domain_coordinator",
     "core.swarm_coordinator": "swarm_domain_coordinator",
+    # PR-8: Transport / relay / dispatch layer — NOT distributed control plane
+    "core.delegated_runtime_dispatch_intent": "dispatch_intent_helper",
+    # PR-8: Handoff / takeover prototypes — real but NOT completed bidirectional mesh
+    "core.canonical_handoff_path": "handoff_path_anchor_prototype",
+    "core.takeover_tracking": "takeover_accept_reject_tracking_prototype",
+    "core.android_handoff_v2_response_ingress": "handoff_v2_response_ingress_prototype",
+    "core.android_delegated_runtime_lifecycle_coordinator": (
+        "delegated_lifecycle_event_facade_prototype"
+    ),
+    "contracts.handoff_envelope_v2": "handoff_envelope_contract_prototype",
+    # PR-8: Projection / diagnostics / operator — NOT distributed runtime authority
+    "core.android_delegated_runtime_audit": "delegated_runtime_diagnostics_read_only",
+    "core.distributed_release_gate_skeleton": "diagnostic_release_gate_scaffold",
+    "core.center_distributed_agent_system_review": "operator_audit_surface",
+    "core.ownership_transfer_proof_quality": "ownership_proof_diagnostics",
+    "core.flow_level_truth_ownership": "flow_level_ownership_diagnostics",
 }
 
 # Canonical minimal real runtime mainline (PR-6 fixed boundary)
