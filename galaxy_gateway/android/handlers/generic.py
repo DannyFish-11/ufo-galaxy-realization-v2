@@ -37,7 +37,7 @@ _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE = {
 
 
 def is_generic_forward_blocked_message_type(message_type: Any) -> bool:
-    """Return True when *message_type* must use a dedicated canonical ingress handler."""
+    """Return True when message_type must use a dedicated canonical ingress handler."""
     normalized = str(message_type or "").strip().lower()
     return normalized in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE
 

@@ -57,6 +57,7 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
 @_skip_if_unavailable
 def test_android_bridge_routes_canonical_reports_away_from_generic_forward() -> None:
     bridge = AndroidBridge()
+    assert MessageType.AGENT_CONFIG_UPDATE in bridge._message_handlers
     generic_handler = bridge._message_handlers[MessageType.AGENT_CONFIG_UPDATE]
 
     for msg_type in (
