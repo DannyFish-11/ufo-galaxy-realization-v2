@@ -3718,6 +3718,9 @@ class OpenClawd:
                             # that any routing suggestion from AgentKernel is advisory;
                             # final multi-model routing authority belongs to OpenClawd.
                             "kernel_routing_authority": kernel_result.routing_authority,
+                            # PR-8v2: specialist layer boundary is surfaced for
+                            # downstream consumers but remains advisory metadata.
+                            "kernel_specialist_boundary": kernel_result.specialist_boundary,
                             # PR-11: compact execution plan summary for diagnostics
                             "execution_plan_summary": self._summarise_execution_plan(_plan_k),
                             # PR-12: plan-level lifecycle state for observability

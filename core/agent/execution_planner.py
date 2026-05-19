@@ -21,7 +21,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -150,6 +150,9 @@ class ExecutionResult(BaseModel):
     """Twin coupling mode: tight / loose / decoupled / shadow (default: loose)"""
     soul_enforced: Optional[bool] = None
     """True when SOUL policy was actively injected into this execution path (single/team/swarm/fractal)"""
+    # PR-8v2: specialists-as-tools boundary metadata (advisory, non-authoritative)
+    specialist_boundary: Optional[Dict[str, Any]] = None
+    """Specialist layer boundary contract carried as execution metadata."""
     # C阶段 5C: 执行链路可视化细化 — latency / token / cost（均为可选，保持向后兼容）
     total_latency_ms: Optional[float] = None
     """整条执行链路总延迟（毫秒），等同于 duration_ms，额外暴露便于 UI 消费"""
@@ -271,6 +274,7 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
+    _DEFAULT_STRATEGY_NAME = "single"
 
     # PR86: 工具摘要中展示的最大工具数（避免 prompt 过长）
     _MAX_TOOL_SUMMARY_COUNT = 20
@@ -295,6 +299,79 @@ class ExecutionPlanner:
 
     def __init__(self, llm_router: Optional[Any] = None) -> None:
         self._llm_router = llm_router
+
+    def _build_specialist_boundary(
+        self,
+        strategy: str,
+        *,
+        device_id: Optional[Union[str, List[str]]] = None,
+    ) -> Dict[str, Any]:
+        """Build PR-8v2 specialist-layer boundary metadata for runtime consumers.
+
+        Args:
+            strategy: Strategy label produced by planner/executor
+                (for example ``single_agent``, ``team_specialized``, ``swarm``,
+                ``fractal``).
+            device_id: Optional device targeting descriptor from the execution
+                plan. ``None`` and non-list values are treated as non-multi-device.
+                A list with more than one device marks multi-device targeting.
+
+        Returns:
+            Dict containing specialist-layer boundary metadata, including:
+            - specialist_layer_role
+            - specialist_authority_class
+            - strategy_class
+            - planner_kernel_team_authority
+            - direct_side_effect_authority
+            - android_runtime_alignment
+        """
+        normalized_strategy = (strategy or self._DEFAULT_STRATEGY_NAME).lower()
+        strategy_class = {
+            "single": self._DEFAULT_STRATEGY_NAME,
+            "single_agent": self._DEFAULT_STRATEGY_NAME,
+            "specialized": "specialized",
+            "parallel": "specialized",
+            "team_specialized": "specialized",
+            "swarm": "swarm",
+            "team_swarm": "swarm",
+            "fractal": "fractal",
+        }.get(normalized_strategy, self._DEFAULT_STRATEGY_NAME)
+
+        # A single explicit target (str or one-element list) is treated as
+        # non-multi-device.  We only mark multi-device when >1 targets exist.
+        multi_device = isinstance(device_id, list) and len(device_id) > 1
+        return {
+            "specialist_layer_role": "specialists_as_tools",
+            "specialist_authority_class": "experts_as_subordinate_capabilities",
+            "strategy_class": strategy_class,
+            "planner_kernel_team_authority": "advisory_subordinate_only",
+            "direct_side_effect_authority": "openclawd_mainline_only",
+            "android_runtime_alignment": {
+                "runtime_host_role": "first_class_runtime_host",
+                "transport_binding": "GalaxyConnectionService/GalaxyWebSocketClient",
+                "cross_device_entry": "DeviceRouter",
+                "multi_device_targeting": multi_device,
+            },
+        }
+
+    @staticmethod
+    def _resolve_boundary_strategy(
+        chosen_strategy: Optional[str],
+        mode: Optional[str],
+        fallback_strategy: str,
+    ) -> str:
+        """Resolve strategy used for specialist-boundary classification.
+
+        Priority order:
+        1. ``chosen_strategy`` (most specific runtime strategy output)
+        2. ``mode`` (execution mode surface when chosen strategy is unavailable)
+        3. ``fallback_strategy`` (planner-selected strategy fallback)
+        """
+        if chosen_strategy is not None:
+            return chosen_strategy
+        if mode is not None:
+            return mode
+        return fallback_strategy
 
     def _auto_select_template(self, message: str, intent: IntentResult) -> str:
         """根据消息内容和意图自动选择最合适的 Agent 模板。"""
@@ -471,6 +548,16 @@ class ExecutionPlanner:
             result.agent_steps = steps
             result.tool_calls = tool_calls
             result.duration_ms = duration_ms
+            _strategy_for_boundary = self._resolve_boundary_strategy(
+                result.chosen_strategy,
+                result.mode,
+                strategy,
+            )
+            if result.specialist_boundary is None:
+                result.specialist_boundary = self._build_specialist_boundary(
+                    _strategy_for_boundary,
+                    device_id=plan.device_id,
+                )
             # 在结果中记录工具来源
             if result.task_result is None:
                 result.task_result = {}
@@ -530,6 +617,10 @@ class ExecutionPlanner:
                 tool_calls=tool_calls,
                 error="timeout",
                 duration_ms=duration_ms,
+                specialist_boundary=self._build_specialist_boundary(
+                    strategy,
+                    device_id=plan.device_id,
+                ),
             )
         except Exception as exc:
             duration_ms = (time.monotonic() - t0) * 1000
@@ -542,6 +633,10 @@ class ExecutionPlanner:
                 tool_calls=tool_calls,
                 error=str(exc),
                 duration_ms=duration_ms,
+                specialist_boundary=self._build_specialist_boundary(
+                    strategy,
+                    device_id=plan.device_id,
+                ),
             )
 
     # ──────────────────────────────────────────────────────────────────

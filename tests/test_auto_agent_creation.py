@@ -399,6 +399,13 @@ async def test_e2e_intent_routing_to_auto_agent():
     assert result.auto_agent_id is not None
     assert result.auto_agent_template is not None
     assert result.auto_agent_template in AGENT_TEMPLATES
+    assert result.specialist_boundary is not None
+    assert result.specialist_boundary["specialist_layer_role"] == "specialists_as_tools"
+    assert result.specialist_boundary["specialist_authority_class"] == "experts_as_subordinate_capabilities"
+    assert result.specialist_boundary["planner_kernel_team_authority"] == "advisory_subordinate_only"
+    assert result.specialist_boundary["direct_side_effect_authority"] == "openclawd_mainline_only"
+    assert result.specialist_boundary["android_runtime_alignment"]["runtime_host_role"] == "first_class_runtime_host"
+    assert result.specialist_boundary["android_runtime_alignment"]["cross_device_entry"] == "DeviceRouter"
 
 
 @pytest.mark.asyncio
@@ -489,6 +496,7 @@ class TestExecutionResultNewFields:
         assert result.chosen_providers is None
         assert result.twin_id is None
         assert result.twin_coupling is None
+        assert result.specialist_boundary is None
 
     def test_new_fields_can_be_set(self):
         """New fields can be set explicitly."""
@@ -504,6 +512,7 @@ class TestExecutionResultNewFields:
         assert result.chosen_providers == ["deepseek:deepseek-chat", "openai:gpt-4o"]
         assert result.twin_id == "twin_abc123"
         assert result.twin_coupling == "loose"
+        assert result.specialist_boundary is None
 
     def test_backward_compat_serialization(self):
         """Old fields still serialize correctly with new additions."""
@@ -520,6 +529,18 @@ class TestExecutionResultNewFields:
         # New fields present but None
         assert "chosen_strategy" in d
         assert d["chosen_strategy"] is None
+        assert "specialist_boundary" in d
+        assert d["specialist_boundary"] is None
+
+    def test_specialist_boundary_can_be_set(self):
+        """specialist_boundary is a serializable additive metadata field."""
+        boundary = {
+            "specialist_layer_role": "specialists_as_tools",
+            "direct_side_effect_authority": "openclawd_mainline_only",
+        }
+        result = ExecutionResult(success=True, reply="ok", specialist_boundary=boundary)
+        assert result.specialist_boundary == boundary
+        assert result.model_dump()["specialist_boundary"]["specialist_layer_role"] == "specialists_as_tools"
 
 
 # ─────────────────── Intent Router: Default Execute for Ambiguous ────────────
