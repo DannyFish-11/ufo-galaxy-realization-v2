@@ -399,6 +399,9 @@ async def test_e2e_intent_routing_to_auto_agent():
     assert result.auto_agent_id is not None
     assert result.auto_agent_template is not None
     assert result.auto_agent_template in AGENT_TEMPLATES
+    assert result.specialist_boundary is not None
+    assert result.specialist_boundary["specialist_layer_role"] == "specialists_as_tools"
+    assert result.specialist_boundary["direct_side_effect_authority"] == "openclawd_mainline_only"
 
 
 @pytest.mark.asyncio

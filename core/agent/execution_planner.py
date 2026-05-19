@@ -305,7 +305,25 @@ class ExecutionPlanner:
         *,
         device_id: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
-        """Build PR-8v2 specialist-layer boundary metadata for runtime consumers."""
+        """Build PR-8v2 specialist-layer boundary metadata for runtime consumers.
+
+        Args:
+            strategy: Strategy label produced by planner/executor
+                (for example ``single_agent``, ``team_specialized``, ``swarm``,
+                ``fractal``).
+            device_id: Optional device targeting descriptor from the execution
+                plan. ``None`` and non-list values are treated as non-multi-device.
+                A list with more than one device marks multi-device targeting.
+
+        Returns:
+            Dict containing specialist-layer boundary metadata, including:
+            - specialist_layer_role
+            - specialist_authority_class
+            - strategy_class
+            - planner_kernel_team_authority
+            - direct_side_effect_authority
+            - android_runtime_alignment
+        """
         normalized_strategy = (strategy or "single").lower()
         if normalized_strategy in ("single", "single_agent"):
             strategy_class = "single"
@@ -339,7 +357,13 @@ class ExecutionPlanner:
         mode: Optional[str],
         fallback_strategy: str,
     ) -> str:
-        """Resolve strategy used for specialist-boundary classification."""
+        """Resolve strategy used for specialist-boundary classification.
+
+        Priority order:
+        1. ``chosen_strategy`` (most specific runtime strategy output)
+        2. ``mode`` (execution mode surface when chosen strategy is unavailable)
+        3. ``fallback_strategy`` (planner-selected strategy fallback)
+        """
         if chosen_strategy is not None:
             return chosen_strategy
         if mode is not None:
