@@ -8,6 +8,7 @@ try:
         handle_generic_forward,
         is_generic_forward_blocked_message_type,
     )
+    from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
     from galaxy_gateway.android_bridge import AndroidBridge
     from galaxy_gateway.protocol.aip_v3 import MessageType
 
@@ -69,3 +70,21 @@ def test_android_bridge_routes_canonical_reports_away_from_generic_forward() -> 
         MessageType.DEVICE_EXECUTION_EVENT,
     ):
         assert bridge._message_handlers[msg_type] is not generic_handler
+
+
+@_skip_if_unavailable
+def test_runtime_ws_profile_keeps_governance_truth_and_transport_off_generic_forward() -> None:
+    for msg_type in (
+        MessageType.DEVICE_READINESS_REPORT,
+        MessageType.DEVICE_GOVERNANCE_REPORT,
+        MessageType.DEVICE_STRATEGY_REPORT,
+        MessageType.DEVICE_ACCEPTANCE_REPORT,
+        MessageType.DEVICE_STATE_SNAPSHOT,
+        MessageType.DEVICE_EXECUTION_EVENT,
+        MessageType.FILE_TRANSFER,
+        MessageType.PEER_ANNOUNCE,
+        MessageType.PEER_EXCHANGE,
+        MessageType.MESH_TOPOLOGY,
+    ):
+        mapping = classify_android_runtime_ws_mapping(msg_type.value)
+        assert "generic_forward" not in mapping.routing_path
