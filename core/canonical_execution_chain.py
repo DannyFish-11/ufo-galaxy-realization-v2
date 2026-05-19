@@ -19,6 +19,11 @@ Canonical execution chain::
     core/routes/* (adapter / validator surface only — no orchestration authority)
         │  ← CHAIN_STAGE: ROUTE_ADAPTER
         ▼
+    core/desktop_presence_runtime.py  ← DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY
+        │   Runtime shell authority. Owns runtime session lifecycle and always
+        │   invokes OpenClawd as inner execution core.
+        │  ← CHAIN_STAGE: DESKTOP_RUNTIME_SHELL
+        ▼
     core/openclawd.py  ← OPENCLAWD_SUBJECT_AUTHORITY
         │   Subject/execution core.  Owns: intent resolution, execution-path
         │   branching (local / cross_device / hybrid / none), liminal lifecycle.
@@ -88,7 +93,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger("Galaxy.CanonicalExecutionChain")
 
@@ -100,6 +105,12 @@ CANONICAL_CHAIN_AUTHORITY: str = "core.canonical_execution_chain"
 """Sentinel: identifies this module as the canonical chain authority
 declaration.  Import this symbol to assert that a call site is operating
 within the declared canonical execution chain."""
+
+DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY: str = (
+    "core.desktop_presence_runtime.DesktopPresenceRuntime"
+)
+"""Sentinel: ``DesktopPresenceRuntime`` is the canonical runtime shell authority.
+It owns runtime-session lifecycle and invokes OpenClawd as the execution core."""
 
 OPENCLAWD_SUBJECT_AUTHORITY: str = "core.openclawd.OpenClawd"
 """Sentinel: ``OpenClawd`` is the subject/execution core and top-level
@@ -146,6 +157,10 @@ class CanonicalChainStage(str, Enum):
     ROUTE_ADAPTER = "route_adapter"
     """Route module validates / translates the request (no orchestration)."""
 
+    DESKTOP_RUNTIME_SHELL = "desktop_runtime_shell"
+    """DesktopPresenceRuntime drives runtime-session lifecycle and invokes
+    OpenClawd as the canonical inner execution core."""
+
     OPENCLAWD_SUBJECT = "openclawd_subject"
     """OpenClawd acts as subject/execution core — intent resolution and
     execution-path branching."""
@@ -168,6 +183,7 @@ class CanonicalChainStage(str, Enum):
 CHAIN_STAGE_AUTHORITY: Dict[CanonicalChainStage, str] = {
     CanonicalChainStage.ROUTE_INGRESS:               ROUTE_ADAPTER_ROLE,
     CanonicalChainStage.ROUTE_ADAPTER:               ROUTE_ADAPTER_ROLE,
+    CanonicalChainStage.DESKTOP_RUNTIME_SHELL:       DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY,
     CanonicalChainStage.OPENCLAWD_SUBJECT:           OPENCLAWD_SUBJECT_AUTHORITY,
     CanonicalChainStage.COMMAND_ROUTER_ORCHESTRATION: COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
     CanonicalChainStage.DEVICE_ROUTER_DISPATCH:      DEVICE_ROUTER_DISPATCH_AUTHORITY,
@@ -179,6 +195,7 @@ CHAIN_STAGE_AUTHORITY: Dict[CanonicalChainStage, str] = {
 CANONICAL_STAGE_ORDER: tuple = (
     CanonicalChainStage.ROUTE_INGRESS,
     CanonicalChainStage.ROUTE_ADAPTER,
+    CanonicalChainStage.DESKTOP_RUNTIME_SHELL,
     CanonicalChainStage.OPENCLAWD_SUBJECT,
     CanonicalChainStage.COMMAND_ROUTER_ORCHESTRATION,
     CanonicalChainStage.DEVICE_ROUTER_DISPATCH,
@@ -195,6 +212,7 @@ CANONICAL_STAGE_ORDER: tuple = (
 #: They MUST NOT act as parallel top-level dispatch authorities.
 SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "core.e2e_orchestrator": SIDE_PATH_FACADE_ROLE,
+    "core.unified_orchestration_spine": "multi_step_session_governor",
     "core.local_execution_chain": "audit_helper",
     "core.cross_device_execution_chain": "audit_helper",
     "core.hybrid_executor": "fallback_execution_helper",
@@ -203,7 +221,21 @@ SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "galaxy_gateway.agent_bridge": "runtime_handoff_adapter",
     "galaxy_gateway.task_router": "legacy_compat_surface",
     "galaxy_gateway.cross_device_coordinator": "internal_cross_device_substrate",
+    "core.android_runtime_dispatch_binding": "android_runtime_binding_helper",
+    "core.android_evaluator_artifact_ingress": "android_governance_ingress_adapter",
+    "core.runtime_closure_audit": "audit_layer_read_only",
+    "core.truth_projection_boundary": "projection_boundary_classifier",
+    "core.projection_surface_bridge": "outward_projection_bridge",
 }
+
+# Canonical minimal real runtime mainline (PR-6 fixed boundary)
+MINIMAL_RUNTIME_MAINLINE_MODULES: tuple = (
+    DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY,
+    OPENCLAWD_SUBJECT_AUTHORITY,
+    COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
+    DEVICE_ROUTER_DISPATCH_AUTHORITY,
+)
+"""Ordered fixed boundary for the minimal real runtime mainline."""
 
 
 # ---------------------------------------------------------------------------
@@ -343,13 +375,25 @@ def build_chain_context(
 # ---------------------------------------------------------------------------
 
 def is_canonical_module(module_name: str) -> bool:
-    """Return ``True`` when *module_name* is one of the three canonical
-    authority components (OpenClawd, CommandRouter, DeviceRouter)."""
-    return module_name in (
-        OPENCLAWD_SUBJECT_AUTHORITY,
-        COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
-        DEVICE_ROUTER_DISPATCH_AUTHORITY,
-    )
+    """Return ``True`` when *module_name* is one of the fixed canonical
+    minimal runtime mainline authorities.
+
+    "Fixed minimal runtime mainline" in PR6v2 means the stable four-component chain:
+    DesktopPresenceRuntime → OpenClawd → CommandRouter → DeviceRouter.
+    """
+    return module_name in MINIMAL_RUNTIME_MAINLINE_MODULES
+
+
+def get_minimal_runtime_mainline_boundary() -> Dict[str, Union[List[str], Dict[str, str]]]:
+    """Return the fixed minimal runtime mainline and demoted side-path surfaces.
+
+    This keeps the runtime chain explicit while preserving engineering-value
+    adapters/facades/compat surfaces as non-mainline roles.
+    """
+    return {
+        "minimal_runtime_mainline": list(MINIMAL_RUNTIME_MAINLINE_MODULES),
+        "side_path_modules": dict(SIDE_PATH_MODULE_REGISTRY),
+    }
 
 
 def get_side_path_role(module_name: str) -> Optional[str]:
@@ -365,6 +409,7 @@ def get_side_path_role(module_name: str) -> Optional[str]:
 __all__ = [
     # Sentinels
     "CANONICAL_CHAIN_AUTHORITY",
+    "DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY",
     "OPENCLAWD_SUBJECT_AUTHORITY",
     "COMMAND_ROUTER_ORCHESTRATION_AUTHORITY",
     "DEVICE_ROUTER_DISPATCH_AUTHORITY",
@@ -375,9 +420,11 @@ __all__ = [
     "CHAIN_STAGE_AUTHORITY",
     "CANONICAL_STAGE_ORDER",
     "SIDE_PATH_MODULE_REGISTRY",
+    "MINIMAL_RUNTIME_MAINLINE_MODULES",
     # Dataclasses / functions
     "ChainExecutionContext",
     "build_chain_context",
     "is_canonical_module",
     "get_side_path_role",
+    "get_minimal_runtime_mainline_boundary",
 ]
