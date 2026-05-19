@@ -45,7 +45,7 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
         {"type": msg_type, "device_id": "dev-transport", "message_id": f"msg-{msg_type}"},
     )
 
-    assert is_generic_forward_blocked_message_type(msg_type) is True
+    assert is_generic_forward_blocked_message_type(msg_type)
     assert resp["type"] == "error"
     assert resp["status"] == "rejected"
     assert resp["error_code"] == "CANONICAL_INGRESS_REQUIRED"

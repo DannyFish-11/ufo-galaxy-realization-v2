@@ -36,10 +36,20 @@ _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE = {
 }
 
 
+def _normalize_message_type(message_type: Any) -> str:
+    return str(message_type or "").strip().lower()
+
+
 def is_generic_forward_blocked_message_type(message_type: Any) -> bool:
-    """Return True when message_type must use a dedicated canonical ingress handler."""
-    normalized = str(message_type or "").strip().lower()
-    return normalized in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE
+    """Return whether a message type must bypass generic forward.
+
+    Args:
+        message_type: String wire message type such as ``device_readiness_report``.
+
+    Returns:
+        True when the message type requires canonical ingress routing.
+    """
+    return _normalize_message_type(message_type) in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE
 
 
 async def handle_generic_forward(
@@ -48,7 +58,7 @@ async def handle_generic_forward(
     """通用占位处理器：记录日志并返回 ACK（后续可扩展为实际转发逻辑）"""
     msg_type = message.get("type")
     device_id = message.get("device_id")
-    normalized_type = str(msg_type or "").strip().lower()
+    normalized_type = _normalize_message_type(msg_type)
     if normalized_type in _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE:
         logger.warning(
             "Rejected canonical-ingress message from generic_forward: type=%s device_id=%s handler=%s",
