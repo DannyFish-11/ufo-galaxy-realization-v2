@@ -6424,7 +6424,12 @@ class OpenClawd:
                 apply_metadata = arguments.get("apply_metadata", {})
                 if not isinstance(apply_metadata, dict):
                     apply_metadata = {"raw_apply_metadata": str(apply_metadata)}
-                operator_approved = bool(arguments.get("operator_approved", apply_metadata.get("operator_approved", False)))
+                # Approval precedence: explicit argument > apply_metadata hint > default False.
+                _operator_approved_arg = arguments.get("operator_approved")
+                if _operator_approved_arg is None:
+                    operator_approved = bool(apply_metadata.get("operator_approved", False))
+                else:
+                    operator_approved = bool(_operator_approved_arg)
                 apply_metadata = {
                     **apply_metadata,
                     "operator_approved": operator_approved,

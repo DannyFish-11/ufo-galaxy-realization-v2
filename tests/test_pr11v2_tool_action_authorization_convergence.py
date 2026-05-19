@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 
 
 def _run(coro):
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    return asyncio.run(coro)
 
 
 def _make_openclawd():
@@ -97,8 +92,21 @@ def test_openclawd_engineer_apply_emits_intent_authority_truth_contract():
 
 
 def test_command_router_stamps_tool_and_repo_truth_fields():
-    import core.command_router as mod
+    from core.command_router import CommandRouter
+    from core.schemas.task_envelope import TaskEnvelope
 
-    src = inspect.getsource(mod.CommandRouter.route_envelope)
-    assert "tool_invocation_truth" in src
-    assert "repo_mutation_truth" in src
+    async def _executor(*_args, **_kwargs):
+        return {"ok": True}
+
+    router = CommandRouter(executor=_executor)
+    envelope = TaskEnvelope(
+        tool_name="ping",
+        targets=["dev-1"],
+        args={"x": 1},
+    )
+    result = _run(router.route_envelope(envelope))
+
+    assert "tool_invocation_truth" in result
+    assert result["tool_invocation_truth"]["route_envelope_invoked"] is True
+    assert "repo_mutation_truth" in result
+    assert result["repo_mutation_truth"]["mutation_applied"] is False

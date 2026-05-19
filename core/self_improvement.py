@@ -479,7 +479,9 @@ class SelfHealingLoop:
             raw_apply_metadata = dict(apply_metadata or {})
             operator_approved = bool(raw_apply_metadata.get("operator_approved", False))
             reported_mutation_applied = bool(raw_apply_metadata.get("repo_mutation_applied", False))
-            mutation_applied = bool(operator_approved and reported_mutation_applied)
+            # A repo mutation is treated as true only when both signals exist:
+            # operator approval (authorization truth) + execution-layer mutation report (execution truth).
+            mutation_applied = operator_approved and reported_mutation_applied
             proposal.apply_result = {
                 "runtime_authority": "OpenClawd/SelfHealingLoop",
                 "planner_intent_truth": {

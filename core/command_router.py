@@ -2581,6 +2581,7 @@ class CommandRouter:
         result.setdefault(
             "repo_mutation_truth",
             {
+                # CommandRouter is a transport substrate; repo mutation side effects are out of scope here.
                 "in_scope": False,
                 "mutation_applied": False,
             },
