@@ -38,9 +38,11 @@ def test_runtime_ws_profile_mapping_covers_transfer_and_mesh() -> None:
     assert delegated.semantic_family == "transfer_delegated_execution"
     assert delegated.handling_level == "canonical"
     assert mesh.semantic_family == "mesh_participation"
-    assert mesh.handling_level == "compat-forwarded"
+    assert mesh.handling_level == "transport-canonical"
+    assert mesh.routing_path == "galaxy_gateway.android.handlers.mesh_topology.handle_mesh_topology"
     assert transfer.semantic_family == "transfer_signal"
-    assert transfer.handling_level == "compat-forwarded"
+    assert transfer.handling_level == "transport-canonical"
+    assert transfer.routing_path == "galaxy_gateway.android.handlers.file_transfer.handle_file_transfer"
 
 
 def test_normalized_ingress_kind_and_classifier_cover_runtime_ws_extensions() -> None:

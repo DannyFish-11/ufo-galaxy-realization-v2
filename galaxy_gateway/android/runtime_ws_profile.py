@@ -25,7 +25,8 @@ ANDROID_RUNTIME_WS_READINESS_POSTURE_EXPECTATION = (
     "capability/reporting and status signals are readiness/posture evidence (not parallel authority)"
 )
 ANDROID_RUNTIME_WS_TRANSFER_EXPECTATION = (
-    "delegated execution and transfer-family signals must enter canonical control semantics"
+    "delegated execution and transfer-family signals must stay transport-bounded"
+    " and not become governance/truth authority"
 )
 ANDROID_RUNTIME_WS_MESH_EXPECTATION = (
     "mesh participation signals are accepted at ingress and routed as transport coordination inputs"
@@ -130,33 +131,33 @@ _MAPPINGS: Dict[str, AndroidRuntimeWSMapping] = {
         message_type=MessageType.FILE_TRANSFER.value,
         semantic_family="transfer_signal",
         normalization_kind="file_transfer",
-        routing_path="android_bridge.generic_forward",
-        truth_path="compat_ingress_record",
-        handling_level="compat-forwarded",
+        routing_path="galaxy_gateway.android.handlers.file_transfer.handle_file_transfer",
+        truth_path="transport_coordination_input",
+        handling_level="transport-canonical",
     ),
     MessageType.PEER_ANNOUNCE.value: AndroidRuntimeWSMapping(
         message_type=MessageType.PEER_ANNOUNCE.value,
         semantic_family="mesh_participation",
         normalization_kind="peer_announce",
-        routing_path="android_bridge.generic_forward",
+        routing_path="galaxy_gateway.android.handlers.peer_exchange.handle_peer_announce",
         truth_path="transport_coordination_input",
-        handling_level="compat-forwarded",
+        handling_level="transport-canonical",
     ),
     MessageType.PEER_EXCHANGE.value: AndroidRuntimeWSMapping(
         message_type=MessageType.PEER_EXCHANGE.value,
         semantic_family="mesh_participation",
         normalization_kind="peer_exchange",
-        routing_path="android_bridge.generic_forward",
+        routing_path="galaxy_gateway.android.handlers.peer_exchange.handle_peer_exchange",
         truth_path="transport_coordination_input",
-        handling_level="compat-forwarded",
+        handling_level="transport-canonical",
     ),
     MessageType.MESH_TOPOLOGY.value: AndroidRuntimeWSMapping(
         message_type=MessageType.MESH_TOPOLOGY.value,
         semantic_family="mesh_participation",
         normalization_kind="mesh_topology",
-        routing_path="android_bridge.generic_forward",
+        routing_path="galaxy_gateway.android.handlers.mesh_topology.handle_mesh_topology",
         truth_path="transport_coordination_input",
-        handling_level="compat-forwarded",
+        handling_level="transport-canonical",
     ),
 }
 
