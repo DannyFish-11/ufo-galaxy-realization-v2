@@ -165,7 +165,13 @@ def _render_category_item(lines: List[str], item: Dict[str, Any]) -> None:
     label = str(item.get("label") or item.get("category_id") or "state")
     state = str(item.get("state") or _UNKNOWN)
     boundary_raw = str(item.get("source_of_truth_boundary") or "")
-    boundary = _BOUNDARY_SHORT.get(boundary_raw, boundary_raw[:5] or "?")
+    boundary_short = _BOUNDARY_SHORT.get(boundary_raw, boundary_raw[:5] or "?")
+    boundary = (
+        f"{boundary_short}/{boundary_raw}"
+        if boundary_raw and boundary_short != boundary_raw
+        else boundary_short
+    )
+    boundary = _clip(boundary, max_len=64)
     summary = _clip(str(item.get("summary") or ""))
     colour = _state_colour(state)
 
