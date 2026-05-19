@@ -534,13 +534,21 @@ def build_execution_plan(
     if extra_steps:
         steps.extend(extra_steps)
 
+    _metadata = dict(plan_metadata or {})
+    _metadata.setdefault("intent_layer", "planner_intent")
+    _metadata.setdefault("intent_truth", "planned_not_executed")
+    _metadata.setdefault("tool_invocation_truth", "not_invoked_by_plan")
+    _metadata.setdefault("side_effect_execution_truth", "not_executed_by_plan")
+    _metadata.setdefault("runtime_authority", "subject_decision_authority")
+    _metadata.setdefault("repo_mutation_authorization_truth", "not_authorized_by_plan")
+
     plan = ExecutionPlan(
         trace_id=trace_id,
         session_id=session_id,
         execution_path=execution_path,
         delegation_point=delegation_point,
         steps=steps,
-        metadata=dict(plan_metadata or {}),
+        metadata=_metadata,
     )
 
     # PR-12: stamp the initial lifecycle state on the plan and all steps.
@@ -677,6 +685,10 @@ def plan_summary(plan: Optional[ExecutionPlan]) -> Dict[str, Any]:
             "trace_id": "",
             "session_id": "",
             "lifecycle_state": None,
+            "intent_truth": "planned_not_executed",
+            "tool_invocation_truth": "not_invoked_by_plan",
+            "side_effect_execution_truth": "not_executed_by_plan",
+            "repo_mutation_authorization_truth": "not_authorized_by_plan",
         }
     return {
         "plan_id": plan.plan_id,
@@ -692,4 +704,12 @@ def plan_summary(plan: Optional[ExecutionPlan]) -> Dict[str, Any]:
         "session_id": plan.session_id,
         # PR-12: include lifecycle state in summary
         "lifecycle_state": plan.lifecycle_state,
+        "intent_truth": (plan.metadata or {}).get("intent_truth", "planned_not_executed"),
+        "tool_invocation_truth": (plan.metadata or {}).get("tool_invocation_truth", "not_invoked_by_plan"),
+        "side_effect_execution_truth": (plan.metadata or {}).get(
+            "side_effect_execution_truth", "not_executed_by_plan"
+        ),
+        "repo_mutation_authorization_truth": (plan.metadata or {}).get(
+            "repo_mutation_authorization_truth", "not_authorized_by_plan"
+        ),
     }
