@@ -93,7 +93,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, TypedDict
 
 logger = logging.getLogger("Galaxy.CanonicalExecutionChain")
 
@@ -323,6 +323,16 @@ class ChainExecutionContext:
         }
 
 
+class MinimalRuntimeMainlineBoundary(TypedDict):
+    """Serializable boundary view for PR6v2 minimal runtime mainline locking."""
+
+    minimal_runtime_mainline: List[str]
+    """Ordered canonical chain modules (runtime shell -> OpenClawd -> router -> dispatch)."""
+
+    side_path_modules: Dict[str, str]
+    """Demoted module-path -> role map for facade/compat/helper/audit/projection layers."""
+
+
 def build_chain_context(
     *,
     trace_id: Optional[str] = None,
@@ -379,12 +389,12 @@ def is_canonical_module(module_name: str) -> bool:
     minimal runtime mainline authorities.
 
     "Fixed minimal runtime mainline" in PR6v2 means the stable four-component chain:
-    DesktopPresenceRuntime → OpenClawd → CommandRouter → DeviceRouter.
+    DesktopPresenceRuntime -> OpenClawd -> CommandRouter -> DeviceRouter.
     """
     return module_name in MINIMAL_RUNTIME_MAINLINE_MODULES
 
 
-def get_minimal_runtime_mainline_boundary() -> Dict[str, Union[List[str], Dict[str, str]]]:
+def get_minimal_runtime_mainline_boundary() -> MinimalRuntimeMainlineBoundary:
     """Return the fixed minimal runtime mainline and demoted side-path surfaces.
 
     This keeps the runtime chain explicit while preserving engineering-value
@@ -423,6 +433,7 @@ __all__ = [
     "MINIMAL_RUNTIME_MAINLINE_MODULES",
     # Dataclasses / functions
     "ChainExecutionContext",
+    "MinimalRuntimeMainlineBoundary",
     "build_chain_context",
     "is_canonical_module",
     "get_side_path_role",

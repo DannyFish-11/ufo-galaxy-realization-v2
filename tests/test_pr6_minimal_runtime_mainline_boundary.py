@@ -49,6 +49,24 @@ def test_is_canonical_module_accepts_runtime_shell_and_rejects_demoted_paths():
 
 
 def test_demoted_side_paths_configuration():
+    expected_side_path_modules = {
+        "core.e2e_orchestrator",
+        "core.unified_orchestration_spine",
+        "core.local_execution_chain",
+        "core.cross_device_execution_chain",
+        "core.hybrid_executor",
+        "core.remote_execution_mode_resolver",
+        "core.repo_coordinator",
+        "galaxy_gateway.agent_bridge",
+        "galaxy_gateway.task_router",
+        "galaxy_gateway.cross_device_coordinator",
+        "core.android_runtime_dispatch_binding",
+        "core.android_evaluator_artifact_ingress",
+        "core.runtime_closure_audit",
+        "core.truth_projection_boundary",
+        "core.projection_surface_bridge",
+    }
+    assert set(SIDE_PATH_MODULE_REGISTRY.keys()) == expected_side_path_modules
     assert SIDE_PATH_MODULE_REGISTRY["core.e2e_orchestrator"] == "side_path_facade"
     assert (
         SIDE_PATH_MODULE_REGISTRY["core.unified_orchestration_spine"]
