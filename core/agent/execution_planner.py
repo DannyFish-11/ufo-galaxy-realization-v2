@@ -274,6 +274,7 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
+    _DEFAULT_STRATEGY_CLASS = "single"
 
     # PR86: 工具摘要中展示的最大工具数（避免 prompt 过长）
     _MAX_TOOL_SUMMARY_COUNT = 20
@@ -324,18 +325,20 @@ class ExecutionPlanner:
             - direct_side_effect_authority
             - android_runtime_alignment
         """
-        normalized_strategy = (strategy or "single").lower()
-        if normalized_strategy in ("single", "single_agent"):
-            strategy_class = "single"
-        elif normalized_strategy in ("specialized", "parallel", "team_specialized"):
-            strategy_class = "specialized"
-        elif normalized_strategy in ("swarm", "team_swarm"):
-            strategy_class = "swarm"
-        elif normalized_strategy == "fractal":
-            strategy_class = "fractal"
-        else:
-            strategy_class = "single"
+        normalized_strategy = (strategy or self._DEFAULT_STRATEGY_CLASS).lower()
+        strategy_class = {
+            "single": self._DEFAULT_STRATEGY_CLASS,
+            "single_agent": self._DEFAULT_STRATEGY_CLASS,
+            "specialized": "specialized",
+            "parallel": "specialized",
+            "team_specialized": "specialized",
+            "swarm": "swarm",
+            "team_swarm": "swarm",
+            "fractal": "fractal",
+        }.get(normalized_strategy, self._DEFAULT_STRATEGY_CLASS)
 
+        # A single explicit target (str or one-element list) is treated as
+        # non-multi-device.  We only mark multi-device when >1 targets exist.
         multi_device = isinstance(device_id, list) and len(device_id) > 1
         return {
             "specialist_layer_role": "specialists_as_tools",

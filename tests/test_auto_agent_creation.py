@@ -401,7 +401,11 @@ async def test_e2e_intent_routing_to_auto_agent():
     assert result.auto_agent_template in AGENT_TEMPLATES
     assert result.specialist_boundary is not None
     assert result.specialist_boundary["specialist_layer_role"] == "specialists_as_tools"
+    assert result.specialist_boundary["specialist_authority_class"] == "experts_as_subordinate_capabilities"
+    assert result.specialist_boundary["planner_kernel_team_authority"] == "advisory_subordinate_only"
     assert result.specialist_boundary["direct_side_effect_authority"] == "openclawd_mainline_only"
+    assert result.specialist_boundary["android_runtime_alignment"]["runtime_host_role"] == "first_class_runtime_host"
+    assert result.specialist_boundary["android_runtime_alignment"]["cross_device_entry"] == "DeviceRouter"
 
 
 @pytest.mark.asyncio
