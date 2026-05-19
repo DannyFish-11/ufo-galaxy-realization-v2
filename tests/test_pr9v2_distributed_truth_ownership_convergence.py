@@ -42,7 +42,7 @@ Locks the following invariants:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import pytest
 
