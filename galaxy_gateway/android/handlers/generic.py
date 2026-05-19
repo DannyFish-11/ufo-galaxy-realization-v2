@@ -27,12 +27,12 @@ GENERIC_FORWARD_CANONICAL_INGRESS_GUARD_POLICY = (
 )
 
 _CANONICAL_INGRESS_HANDLER_BY_MESSAGE_TYPE = {
-    "device_readiness_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
-    "device_governance_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
-    "device_strategy_report": "galaxy_gateway.android.handlers.evaluator_artifact_report.handle_evaluator_artifact_report",
-    "device_acceptance_report": "galaxy_gateway.android.handlers.acceptance_report.handle_device_acceptance_report",
-    "device_state_snapshot": "galaxy_gateway.android.handlers.device_state_snapshot.handle_device_state_snapshot",
-    "device_execution_event": "galaxy_gateway.android.handlers.device_state_snapshot.handle_device_execution_event",
+    "device_readiness_report": "android_evaluator_artifact_ingress",
+    "device_governance_report": "android_evaluator_artifact_ingress",
+    "device_strategy_report": "android_evaluator_artifact_ingress",
+    "device_acceptance_report": "android_acceptance_report_ingress",
+    "device_state_snapshot": "android_device_state_snapshot_ingress",
+    "device_execution_event": "android_device_execution_event_ingress",
 }
 
 

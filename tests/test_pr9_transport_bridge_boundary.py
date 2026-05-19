@@ -24,18 +24,18 @@ _skip_if_unavailable = pytest.mark.skipif(
 @pytest.mark.asyncio
 @_skip_if_unavailable
 @pytest.mark.parametrize(
-    ("msg_type", "handler_suffix"),
+    ("msg_type", "handler_name"),
     [
-        ("device_readiness_report", "handle_evaluator_artifact_report"),
-        ("device_governance_report", "handle_evaluator_artifact_report"),
-        ("device_strategy_report", "handle_evaluator_artifact_report"),
-        ("device_acceptance_report", "handle_device_acceptance_report"),
-        ("device_state_snapshot", "handle_device_state_snapshot"),
-        ("device_execution_event", "handle_device_execution_event"),
+        ("device_readiness_report", "android_evaluator_artifact_ingress"),
+        ("device_governance_report", "android_evaluator_artifact_ingress"),
+        ("device_strategy_report", "android_evaluator_artifact_ingress"),
+        ("device_acceptance_report", "android_acceptance_report_ingress"),
+        ("device_state_snapshot", "android_device_state_snapshot_ingress"),
+        ("device_execution_event", "android_device_execution_event_ingress"),
     ],
 )
 async def test_generic_forward_rejects_canonical_ingress_message_types(
-    msg_type: str, handler_suffix: str
+    msg_type: str, handler_name: str
 ) -> None:
     bridge = AndroidBridge()
     websocket = MagicMock()
@@ -51,7 +51,7 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
     assert resp["error_code"] == "CANONICAL_INGRESS_REQUIRED"
     assert resp["canonical_ingress_required"] is True
     assert resp["original_type"] == msg_type
-    assert resp["canonical_ingress_handler"].endswith(handler_suffix)
+    assert resp["canonical_ingress_handler"] == handler_name
 
 
 @_skip_if_unavailable
