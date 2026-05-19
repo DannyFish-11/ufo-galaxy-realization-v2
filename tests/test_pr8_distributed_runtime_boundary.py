@@ -369,8 +369,10 @@ class TestBuildBoundaryReport:
 
     def test_report_generated_at_is_recent(self):
         import time
+        before = time.time()
         report = build_distributed_runtime_boundary_report()
-        assert time.time() - report.generated_at < 5.0
+        after = time.time()
+        assert before <= report.generated_at <= after + 1.0
 
     def test_report_to_dict_is_complete(self):
         report = build_distributed_runtime_boundary_report()

@@ -128,7 +128,7 @@ ANDROID_PARTICIPATION_RUNTIME_NODE
 
 Policy invariants
 -----------------
-1. The distributed runtime main chain is exactly the four-module sequence:
+1. The distributed runtime main chain is exactly the five-node sequence:
    DesktopPresenceRuntime → OpenClawd → CommandRouter → DeviceRouter →
    Android runtime node.  No other module is the distributed runtime main
    chain authority.
