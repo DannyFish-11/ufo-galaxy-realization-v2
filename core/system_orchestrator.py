@@ -557,6 +557,8 @@ class SystemOrchestrator:
         # V6 center authority boundary integrity check — boundary / startup layer
         authority_boundary_status: str = "not_checked"
         authority_boundary_data: Dict[str, Any] = {}
+        quasi_platform_state_boundary_status: str = "not_checked"
+        quasi_platform_state_boundary_data: Dict[str, Any] = {}
         phase_status = PhaseStatus.OK
         strict_authority = os.environ.get("GALAXY_STRICT_AUTHORITY_CHECK", "").lower() in (
             "1", "true", "yes"
@@ -602,6 +604,49 @@ class SystemOrchestrator:
             authority_boundary_data = {"error": str(exc)}
             logger.debug("[Phase 7] V6 center authority boundary check skipped — %s", exc)
 
+        # PR-14V2 runtime extension: quasi-platform state integrity assertion.
+        # Keep this in startup/readiness guard layer (not hot request path).
+        try:
+            from core.bounded_subject_platform_boundary import (
+                build_quasi_platform_runtime_assertion_report,
+            )
+
+            quasi_platform_state_boundary_data = build_quasi_platform_runtime_assertion_report()
+            if bool(quasi_platform_state_boundary_data.get("intact")):
+                quasi_platform_state_boundary_status = "intact"
+                logger.info(
+                    "[Phase 7] Quasi-platform boundary assertion: INTACT — "
+                    "canonical center / bounded subject / outward consumption "
+                    "boundaries verified."
+                )
+            else:
+                quasi_platform_state_boundary_status = "degraded"
+                if strict_authority:
+                    phase_status = PhaseStatus.FAILED
+                    logger.error(
+                        "[Phase 7] Quasi-platform boundary assertion FAILED "
+                        "(GALAXY_STRICT_AUTHORITY_CHECK=1): %s",
+                        quasi_platform_state_boundary_data.get("violations"),
+                    )
+                elif phase_status != PhaseStatus.FAILED:
+                    phase_status = PhaseStatus.DEGRADED
+                    logger.warning(
+                        "[Phase 7] Quasi-platform boundary assertion DEGRADED: %s",
+                        quasi_platform_state_boundary_data.get("violations"),
+                    )
+                detail = (
+                    f"{detail} | quasi_platform_boundary="
+                    f"{'FAILED' if strict_authority else 'DEGRADED'} "
+                    f"violations={quasi_platform_state_boundary_data.get('violations')}"
+                )
+        except Exception as exc:
+            quasi_platform_state_boundary_status = "error"
+            quasi_platform_state_boundary_data = {"error": str(exc)}
+            logger.debug(
+                "[Phase 7] Quasi-platform boundary assertion check skipped — %s",
+                exc,
+            )
+
         return PhaseResult(
             phase=StartupPhase.READINESS_SUMMARY,
             status=phase_status,
@@ -611,6 +656,8 @@ class SystemOrchestrator:
                 "system_mode": summary.system_mode,
                 "authority_boundary_status": authority_boundary_status,
                 "authority_boundary": authority_boundary_data,
+                "quasi_platform_state_boundary_status": quasi_platform_state_boundary_status,
+                "quasi_platform_state_boundary": quasi_platform_state_boundary_data,
             },
         )
 
