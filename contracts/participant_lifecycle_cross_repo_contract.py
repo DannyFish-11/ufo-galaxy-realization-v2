@@ -175,13 +175,9 @@ class ParticipantLifecycleCrossRepoVerificationReport:
         }
 
 
-def _transition_index() -> FrozenSet[Tuple[ParticipantLifecycleState, ParticipantLifecycleState, ParticipantTransitionTrigger]]:
-    return frozenset((t.from_state, t.to_state, t.trigger) for t in PARTICIPANT_STATE_TRANSITIONS)
-
-
 _V2_TRANSITION_INDEX: FrozenSet[
     Tuple[ParticipantLifecycleState, ParticipantLifecycleState, ParticipantTransitionTrigger]
-] = _transition_index()
+] = frozenset((t.from_state, t.to_state, t.trigger) for t in PARTICIPANT_STATE_TRANSITIONS)
 
 
 def verify_participant_lifecycle_cross_repo_contract(
@@ -195,7 +191,11 @@ def verify_participant_lifecycle_cross_repo_contract(
     if set(ANDROID_FORMAL_STATE_CLASS_BY_WIRE.keys()) != set(ANDROID_FORMAL_WIRE_VALUES):
         issues.append("Android formal state-class mapping does not exactly cover declared wire values.")
 
-    observed_android_wire_values = set(android_wire_values) if android_wire_values is not None else set(ANDROID_FORMAL_WIRE_VALUES)
+    if android_wire_values is not None:
+        observed_android_wire_values = set(android_wire_values)
+    else:
+        observed_android_wire_values = set(ANDROID_FORMAL_WIRE_VALUES)
+
     if observed_android_wire_values != set(ANDROID_FORMAL_WIRE_VALUES):
         missing = sorted(set(ANDROID_FORMAL_WIRE_VALUES) - observed_android_wire_values)
         extra = sorted(observed_android_wire_values - set(ANDROID_FORMAL_WIRE_VALUES))
