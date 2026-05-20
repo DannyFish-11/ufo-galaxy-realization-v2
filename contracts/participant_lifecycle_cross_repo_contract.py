@@ -43,7 +43,7 @@ PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_VERSION: str = "1.0.0"
 # When Android lifecycle semantics intentionally change, bump this ref together
 # with the contract mapping and tests in this module.
 ANDROID_AUDITED_REF: str = "b66d9891c4aa67a6ec4db76137a30d8e6ead34e3"
-# Blob SHA for FormalParticipantLifecycleState.kt at ANDROID_AUDITED_REF.
+# Git blob SHA-1 for FormalParticipantLifecycleState.kt at ANDROID_AUDITED_REF.
 # This is file-level evidence for the exact Android formal-state definition
 # consumed by this contract (distinct from the repository commit hash above).
 ANDROID_FORMAL_PARTICIPANT_LIFECYCLE_SOURCE_SHA: str = "8f41ea2202868a9f05c02053768752677d91c7f4"

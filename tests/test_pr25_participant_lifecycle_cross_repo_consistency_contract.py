@@ -18,7 +18,7 @@ from contracts.participant_lifecycle_cross_repo_contract import (
 )
 from contracts.participant_lifecycle_schema import ParticipantLifecycleState
 
-SHA1_HASH_LENGTH = 40
+SHA1_HEX_LENGTH = 40
 
 
 def test_authority_sentinel_and_version_present() -> None:
@@ -29,7 +29,7 @@ def test_authority_sentinel_and_version_present() -> None:
         PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY
     )
     assert PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_VERSION == "1.0.0"
-    assert len(ANDROID_AUDITED_REF) == SHA1_HASH_LENGTH
+    assert len(ANDROID_AUDITED_REF) == SHA1_HEX_LENGTH
 
 
 def test_v2_state_class_mapping_covers_all_states() -> None:
@@ -84,9 +84,9 @@ def test_manifest_contains_machine_checkable_sections() -> None:
     assert payload["v2_role"] == "canonical_governance_center"
     assert payload["android_role"] == "bounded_relative_subject_runtime"
     assert isinstance(payload["android_audited_ref"], str)
-    assert len(payload["android_audited_ref"]) == SHA1_HASH_LENGTH
+    assert len(payload["android_audited_ref"]) == SHA1_HEX_LENGTH
     assert isinstance(payload["android_formal_source_sha"], str)
-    assert len(payload["android_formal_source_sha"]) == SHA1_HASH_LENGTH
+    assert len(payload["android_formal_source_sha"]) == SHA1_HEX_LENGTH
     assert isinstance(payload["android_anchor"], str) and payload["android_anchor"].endswith(
         "FormalParticipantLifecycleState.kt"
     )
