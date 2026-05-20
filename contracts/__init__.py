@@ -564,3 +564,67 @@ __all__ += [
     "build_target_selection_decision",
     "build_failure_handling_decision",
 ]
+
+# PR-Task3: Distributed Subject Contract v1 and Participant Lifecycle Schema
+from contracts.distributed_subject_contract_v1 import (
+    DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL,
+    PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER,
+    SUBJECT_EVIDENCE_IS_NOT_CANONICAL_TRUTH,
+    CONTRACT_FIELD_LABEL_IS_EXPLICIT_POLICY,
+    ContractFieldLabel,
+    SubjectContractDimension,
+    SubjectContractField,
+    DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS,
+    DistributedSubjectContractVersion,
+    get_fields_by_dimension,
+    get_fields_by_label,
+    get_field,
+    build_contract_version,
+    build_contract_manifest,
+)
+
+from contracts.participant_lifecycle_schema import (
+    PARTICIPANT_LIFECYCLE_SCHEMA_SENTINEL,
+    PARTICIPANT_ROLE_IS_ASSIGNED_BY_CENTER,
+    PARTICIPANT_STATE_TRANSITIONS_ARE_AUTHORITATIVE,
+    ParticipantRole,
+    ParticipantLifecycleState,
+    ParticipantTransitionTrigger,
+    ParticipantStateTransition,
+    PARTICIPANT_STATE_TRANSITIONS,
+    ParticipantRecord,
+    build_participant_record,
+    get_allowed_transitions,
+    build_lifecycle_schema_manifest,
+)
+
+__all__ += [
+    # PR-Task3: Distributed Subject Contract v1
+    "DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL",
+    "PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER",
+    "SUBJECT_EVIDENCE_IS_NOT_CANONICAL_TRUTH",
+    "CONTRACT_FIELD_LABEL_IS_EXPLICIT_POLICY",
+    "ContractFieldLabel",
+    "SubjectContractDimension",
+    "SubjectContractField",
+    "DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS",
+    "DistributedSubjectContractVersion",
+    "get_fields_by_dimension",
+    "get_fields_by_label",
+    "get_field",
+    "build_contract_version",
+    "build_contract_manifest",
+    # PR-Task3: Participant Lifecycle Schema
+    "PARTICIPANT_LIFECYCLE_SCHEMA_SENTINEL",
+    "PARTICIPANT_ROLE_IS_ASSIGNED_BY_CENTER",
+    "PARTICIPANT_STATE_TRANSITIONS_ARE_AUTHORITATIVE",
+    "ParticipantRole",
+    "ParticipantLifecycleState",
+    "ParticipantTransitionTrigger",
+    "ParticipantStateTransition",
+    "PARTICIPANT_STATE_TRANSITIONS",
+    "ParticipantRecord",
+    "build_participant_record",
+    "get_allowed_transitions",
+    "build_lifecycle_schema_manifest",
+]
