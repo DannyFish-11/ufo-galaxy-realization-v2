@@ -1,0 +1,85 @@
+{
+  "version": "v1",
+  "repositories": {
+    "canonical_center_repository": "DannyFish-11/ufo-galaxy-realization-v2",
+    "bounded_subject_repository": "DannyFish-11/ufo-galaxy-android"
+  },
+  "system_definition": {
+    "canonical_center": "V2 is the sole canonical governance / truth convergence / dispatch arbitration / closure authority center.",
+    "bounded_subject": "Android is a bounded relative subject runtime with local lifecycle, local AI consumption, local execution judgment, and local visible surfaces, but no global truth finalization or global dispatch authority.",
+    "stable_quasi_platform_state": true,
+    "fully_mature_distributed_platform": false
+  },
+  "boundaries": {
+    "canonical_center_boundary": {
+      "summary": "Canonical center boundary is V2-only and non-parallel.",
+      "code_evidence": [
+        "core.center_authority_boundary.assert_center_authority_intact",
+        "core.unified_result_ingress.UnifiedResultIngress",
+        "core.unified_continuity_legality_authority.UnifiedContinuityLegalityAuthority",
+        "core.canonical_dispatch_slot_authority.CanonicalDispatchSlotAuthority"
+      ]
+    },
+    "bounded_subject_boundary": {
+      "summary": "Bounded subject runtime authority remains local and non-sovereign.",
+      "code_evidence": [
+        "contracts.distributed_subject_contract_v1.DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL",
+        "core.android_participant_truth_ingress.ingest_android_participant_truth_message",
+        "core.v2_android_truth_ssot.build_v2_android_truth_block"
+      ]
+    },
+    "participant_governance_boundary": {
+      "summary": "Participant lifecycle state transitions are center-authorized only.",
+      "code_evidence": [
+        "core.operator_action_governance",
+        "core.execution_governance_audit_authority.ExecutionGovernanceAuditAuthority"
+      ]
+    },
+    "observability_diagnostics_evidence_boundary": {
+      "summary": "Observability and diagnostics are classification/evidence layers, not parallel authority.",
+      "code_evidence": [
+        "core.cross_subject_observability_contract.CROSS_SUBJECT_OBSERVABILITY_CONTRACT_AUTHORITY",
+        "core.cross_subject_observability_contract.VisibilityLevel",
+        "core.cross_subject_observability_contract.EvidenceContractKind"
+      ]
+    },
+    "outward_consumption_boundary": {
+      "summary": "Outward surfaces are consumption-only and must not reassemble authority.",
+      "code_evidence": [
+        "core.final_acceptance_surface_boundary.build_final_acceptance_surface_boundary",
+        "core.final_acceptance_surface_boundary.FINAL_ACCEPTANCE_SURFACE_NO_AUTHORITY_REASSEMBLY_POLICY",
+        "core.outward_runtime_truth.compile_outward_truth"
+      ]
+    }
+  },
+  "outward_contract_summary": {
+    "consumption_only": true,
+    "no_authority_reassembly": true,
+    "no_parallel_final_integration_framework": true,
+    "canonical_outputs_only": true,
+    "surface_examples": [
+      "core.routes.operator",
+      "core.routes.projection",
+      "core.unified_panel_aggregation"
+    ]
+  },
+  "android_v2_alignment": {
+    "v2_role": "canonical_center",
+    "android_role": "bounded_relative_subject_runtime",
+    "android_is_parallel_center": false,
+    "android_has_global_truth_finalization": false,
+    "android_has_global_dispatch_authority": false,
+    "android_uplink_chain": "GalaxyConnectionService.kt -> GalaxyWebSocketClient.kt -> core.android_participant_truth_ingress -> core.v2_android_truth_ssot -> core.unified_runtime_truth_ingress"
+  },
+  "narrative_guardrails": {
+    "no_parallel_center_claim": true,
+    "no_outward_authority_layer_claim": true,
+    "no_fully_mature_platform_claim": true
+  },
+  "runtime_assertion_anchors": [
+    "core.center_authority_boundary.assert_center_authority_intact",
+    "core.bounded_subject_platform_boundary.assert_quasi_platform_state_intact",
+    "core.bounded_subject_platform_boundary.build_quasi_platform_runtime_assertion_report",
+    "core.final_acceptance_surface_boundary.build_final_acceptance_surface_boundary"
+  ]
+}

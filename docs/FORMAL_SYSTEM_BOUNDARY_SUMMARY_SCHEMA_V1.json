@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DannyFish-11/ufo-galaxy-realization-v2/docs/FORMAL_SYSTEM_BOUNDARY_SUMMARY_SCHEMA_V1.json",
+  "title": "Formal System Boundary Summary v1",
+  "type": "object",
+  "required": [
+    "version",
+    "repositories",
+    "system_definition",
+    "boundaries",
+    "outward_contract_summary",
+    "android_v2_alignment",
+    "narrative_guardrails",
+    "runtime_assertion_anchors"
+  ],
+  "properties": {
+    "version": {
+      "const": "v1"
+    },
+    "repositories": {
+      "type": "object",
+      "required": [
+        "canonical_center_repository",
+        "bounded_subject_repository"
+      ],
+      "properties": {
+        "canonical_center_repository": {
+          "const": "DannyFish-11/ufo-galaxy-realization-v2"
+        },
+        "bounded_subject_repository": {
+          "const": "DannyFish-11/ufo-galaxy-android"
+        }
+      },
+      "additionalProperties": false
+    },
+    "system_definition": {
+      "type": "object",
+      "required": [
+        "canonical_center",
+        "bounded_subject",
+        "stable_quasi_platform_state",
+        "fully_mature_distributed_platform"
+      ],
+      "properties": {
+        "canonical_center": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bounded_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stable_quasi_platform_state": {
+          "const": true
+        },
+        "fully_mature_distributed_platform": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "boundaries": {
+      "type": "object",
+      "required": [
+        "canonical_center_boundary",
+        "bounded_subject_boundary",
+        "participant_governance_boundary",
+        "observability_diagnostics_evidence_boundary",
+        "outward_consumption_boundary"
+      ],
+      "properties": {
+        "canonical_center_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "bounded_subject_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "participant_governance_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "observability_diagnostics_evidence_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "outward_consumption_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        }
+      },
+      "additionalProperties": false
+    },
+    "outward_contract_summary": {
+      "type": "object",
+      "required": [
+        "consumption_only",
+        "no_authority_reassembly",
+        "no_parallel_final_integration_framework",
+        "canonical_outputs_only",
+        "surface_examples"
+      ],
+      "properties": {
+        "consumption_only": {
+          "const": true
+        },
+        "no_authority_reassembly": {
+          "const": true
+        },
+        "no_parallel_final_integration_framework": {
+          "const": true
+        },
+        "canonical_outputs_only": {
+          "const": true
+        },
+        "surface_examples": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "android_v2_alignment": {
+      "type": "object",
+      "required": [
+        "v2_role",
+        "android_role",
+        "android_is_parallel_center",
+        "android_has_global_truth_finalization",
+        "android_has_global_dispatch_authority",
+        "android_uplink_chain"
+      ],
+      "properties": {
+        "v2_role": {
+          "const": "canonical_center"
+        },
+        "android_role": {
+          "const": "bounded_relative_subject_runtime"
+        },
+        "android_is_parallel_center": {
+          "const": false
+        },
+        "android_has_global_truth_finalization": {
+          "const": false
+        },
+        "android_has_global_dispatch_authority": {
+          "const": false
+        },
+        "android_uplink_chain": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "narrative_guardrails": {
+      "type": "object",
+      "required": [
+        "no_parallel_center_claim",
+        "no_outward_authority_layer_claim",
+        "no_fully_mature_platform_claim"
+      ],
+      "properties": {
+        "no_parallel_center_claim": {
+          "const": true
+        },
+        "no_outward_authority_layer_claim": {
+          "const": true
+        },
+        "no_fully_mature_platform_claim": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtime_assertion_anchors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 4
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "boundaryAxis": {
+      "type": "object",
+      "required": [
+        "summary",
+        "code_evidence"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code_evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
