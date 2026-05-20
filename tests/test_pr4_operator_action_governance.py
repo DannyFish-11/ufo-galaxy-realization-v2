@@ -1027,6 +1027,8 @@ class TestPR4Routes:
         assert "runtime_decision_reasoning" in data
         assert "latest_closure_reasoning" in data
         assert data["authority"] == "OPERATOR_ROUTES_V1"
+        assert data["consumption_contract_boundary"]["consumption_layer_role"] == "operator_board_projection_consumer_only"
+        assert data["consumption_contract_boundary"]["ui_visible_summary_is_backend_truth"] is False
 
     def test_pr4_snapshot_returns_200(self, client):
         resp = client.get("/api/v1/operator/pr4/snapshot")
@@ -1037,6 +1039,10 @@ class TestPR4Routes:
         assert "contract_version" in data
         assert data["contract_version"] == "4.0.0"
         assert data["authority"] == "OPERATOR_ROUTES_V1"
+        chain = data["consumption_contract_boundary"]["action_intent_approval_execution_chain"]
+        assert chain["intent_entry"] == "/api/v1/operator/action"
+        assert chain["approval_signal"] == "approval_token"
+        assert chain["execution_path"] == "OperatorSurface.execute_operator_action"
 
     def test_android_directed_action_dispatch_returns_200(self, client):
         resp = client.post(
