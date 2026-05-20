@@ -80,8 +80,10 @@ def test_manifest_contains_machine_checkable_sections() -> None:
     payload = build_participant_lifecycle_cross_repo_contract_manifest()
     assert payload["v2_role"] == "canonical_governance_center"
     assert payload["android_role"] == "bounded_relative_subject_runtime"
-    assert isinstance(payload["android_audited_ref"], str) and len(payload["android_audited_ref"]) == SHA1_HASH_LENGTH
-    assert isinstance(payload["android_formal_source_sha"], str) and len(payload["android_formal_source_sha"]) == SHA1_HASH_LENGTH
+    assert isinstance(payload["android_audited_ref"], str)
+    assert len(payload["android_audited_ref"]) == SHA1_HASH_LENGTH
+    assert isinstance(payload["android_formal_source_sha"], str)
+    assert len(payload["android_formal_source_sha"]) == SHA1_HASH_LENGTH
     assert isinstance(payload["android_anchor"], str) and payload["android_anchor"].endswith(
         "FormalParticipantLifecycleState.kt"
     )

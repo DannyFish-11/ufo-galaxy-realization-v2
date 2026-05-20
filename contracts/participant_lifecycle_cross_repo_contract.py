@@ -183,7 +183,7 @@ class ParticipantLifecycleCrossRepoVerificationReport:
         }
 
 
-_V2_TRANSITION_INDEX: FrozenSet[
+_V2_VALID_TRANSITIONS: FrozenSet[
     Tuple[ParticipantLifecycleState, ParticipantLifecycleState, ParticipantTransitionTrigger]
 ] = frozenset((t.from_state, t.to_state, t.trigger) for t in PARTICIPANT_STATE_TRANSITIONS)
 
@@ -236,7 +236,7 @@ def verify_participant_lifecycle_cross_repo_contract(
 
     for mapping in CRITICAL_TRIGGER_SEMANTIC_MAPPINGS:
         key = (mapping.v2_from_state, mapping.v2_to_state, mapping.trigger)
-        if key not in _V2_TRANSITION_INDEX:
+        if key not in _V2_VALID_TRANSITIONS:
             issues.append(
                 "Critical trigger semantic mapping missing V2 transition: "
                 f"{mapping.v2_from_state.value} --{mapping.trigger.value}--> {mapping.v2_to_state.value}."
