@@ -450,7 +450,7 @@ PLATFORM_BOUNDARY_AXIS_REGISTRY: List[BoundaryAxisDescriptor] = [
 # Quasi-platform state evaluation
 # ---------------------------------------------------------------------------
 
-def _evaluate_quasi_platform_state(
+def evaluate_quasi_platform_state(
     axes: List[BoundaryAxisDescriptor],
 ) -> Tuple[bool, List[str]]:
     """Evaluate whether all five boundary axes satisfy quasi-platform state.
@@ -500,7 +500,7 @@ def build_platform_boundary_snapshot() -> PlatformBoundarySnapshot:
         acceptance gates, health checks, and CI release-blocking tests.
     """
     axes = list(PLATFORM_BOUNDARY_AXIS_REGISTRY)
-    intact, violations = _evaluate_quasi_platform_state(axes)
+    intact, violations = evaluate_quasi_platform_state(axes)
     return PlatformBoundarySnapshot(
         axes=axes,
         quasi_platform_state_intact=intact,

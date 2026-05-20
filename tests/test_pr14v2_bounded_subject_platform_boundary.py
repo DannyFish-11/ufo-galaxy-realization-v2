@@ -63,6 +63,7 @@ from core.bounded_subject_platform_boundary import (
     QuasiPlatformStateBoundaryViolation,
     assert_quasi_platform_state_intact,
     build_platform_boundary_snapshot,
+    evaluate_quasi_platform_state,
     get_platform_boundary_axes,
     get_system_definition,
 )
@@ -223,7 +224,7 @@ def test_assert_quasi_platform_state_intact_does_not_raise() -> None:
 
 def test_violation_raised_when_android_v2_inconsistent() -> None:
     from core.bounded_subject_platform_boundary import (
-        _evaluate_quasi_platform_state,
+        evaluate_quasi_platform_state,
     )
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.CANONICAL_CENTER,
@@ -233,14 +234,14 @@ def test_violation_raised_when_android_v2_inconsistent() -> None:
         android_v2_consistent=False,  # bad
         no_parallel_authority=True,
     )
-    intact, violations = _evaluate_quasi_platform_state([bad_axis])
+    intact, violations = evaluate_quasi_platform_state([bad_axis])
     assert not intact
     assert violations
 
 
 def test_violation_raised_when_parallel_authority_introduced() -> None:
     from core.bounded_subject_platform_boundary import (
-        _evaluate_quasi_platform_state,
+        evaluate_quasi_platform_state,
     )
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.BOUNDED_SUBJECT,
@@ -250,14 +251,14 @@ def test_violation_raised_when_parallel_authority_introduced() -> None:
         android_v2_consistent=True,
         no_parallel_authority=False,  # bad
     )
-    intact, violations = _evaluate_quasi_platform_state([bad_axis])
+    intact, violations = evaluate_quasi_platform_state([bad_axis])
     assert not intact
     assert violations
 
 
 def test_quasi_platform_state_boundary_violation_carries_snapshot() -> None:
     from core.bounded_subject_platform_boundary import (
-        _evaluate_quasi_platform_state,
+        evaluate_quasi_platform_state,
     )
     bad_axis = BoundaryAxisDescriptor(
         axis=PlatformBoundaryAxis.OUTWARD_CONSUMPTION,
@@ -267,7 +268,7 @@ def test_quasi_platform_state_boundary_violation_carries_snapshot() -> None:
         android_v2_consistent=False,
         no_parallel_authority=True,
     )
-    intact, violations = _evaluate_quasi_platform_state([bad_axis])
+    intact, violations = evaluate_quasi_platform_state([bad_axis])
     snap = PlatformBoundarySnapshot(
         axes=[bad_axis],
         quasi_platform_state_intact=intact,
