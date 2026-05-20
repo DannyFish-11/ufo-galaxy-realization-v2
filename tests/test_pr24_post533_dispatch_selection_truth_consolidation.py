@@ -1067,3 +1067,42 @@ class TestScoreCandidateReuseEffect:
         )
         assert score > 0
         assert reason == ""
+
+
+# ===========================================================================
+# Group T — explicit participant lifecycle projection in dispatch selection
+# ===========================================================================
+
+
+@pytest.mark.skipif(
+    not (_ORCHESTRATOR_AVAILABLE and _REGISTRY_AVAILABLE),
+    reason="orchestrator or registry unavailable",
+)
+class TestParticipantLifecycleProjection:
+    def test_takeover_in_progress_candidate_is_not_dispatch_eligible(self):
+        reg = _make_registry_with_active_session("sess-t1", "dev-t1")
+        result = _select_target_from_candidates(
+            registry=reg,
+            readiness_inputs={"dev-t1": _FakeReadiness("dev-t1")},
+            participation_inputs={"dev-t1": _FakeParticipation("dev-t1")},
+            execution_runtime_inputs={
+                "dev-t1": {
+                    "device_id": "dev-t1",
+                    "highest_priority_execution_type": "takeover_request",
+                }
+            },
+        )
+        assert result is None
+
+    def test_selected_target_metadata_contains_participant_lifecycle_projection(self):
+        reg = _make_registry_with_active_session("sess-t2", "dev-t2")
+        result = _select_target_from_candidates(
+            registry=reg,
+            readiness_inputs={"dev-t2": _FakeReadiness("dev-t2")},
+            participation_inputs={"dev-t2": _FakeParticipation("dev-t2")},
+            execution_runtime_inputs={"dev-t2": {"device_id": "dev-t2"}},
+        )
+        assert result is not None
+        projection = (result.metadata or {}).get("participant_lifecycle", {})
+        assert projection.get("state") in {"attached", "executing", "degraded_state"}
+        assert projection.get("dispatch_eligible") is True
