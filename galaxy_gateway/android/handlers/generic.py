@@ -123,7 +123,9 @@ async def handle_generic_forward(
             "original_type": normalized_type,
             "error_code": "GENERIC_FORWARD_TYPE_NOT_ALLOWED",
             "error_message": (
-                f"{normalized_type or '<empty>'} is not in generic_forward compat allowlist"
+                f"Message type {normalized_type or '<empty>'} is not allowed through "
+                "generic_forward; add it to _GENERIC_FORWARD_COMPAT_MESSAGE_TYPES "
+                "only for bounded compat, or route it to a dedicated handler"
             ),
             "compat_policy": GENERIC_FORWARD_COMPAT_GATE_POLICY,
             "allowed_compat_types": list(_GENERIC_FORWARD_COMPAT_MESSAGE_TYPES),
