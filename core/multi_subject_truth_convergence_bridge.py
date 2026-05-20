@@ -98,10 +98,27 @@ def build_multi_subject_truth_bridge(
     formation: Optional[Dict[str, Any]] = None,
     participant_results: Optional[List[Any]] = None,
     source_device_id: str = "",
+    recovery_device_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Build a minimal participant governance + truth convergence snapshot."""
+    """Build a minimal participant governance + truth convergence snapshot.
+
+    Parameters
+    ----------
+    formation:
+        Formation dict containing ``primary_execution_device_id`` and
+        ``members`` list.
+    participant_results:
+        List of per-device result dicts.
+    source_device_id:
+        Device ID of the originating source.
+    recovery_device_ids:
+        Optional list of device IDs that are re-joining after a prior
+        failure or suspension.  These are flagged in participant entries
+        and influence the ``completion_state`` classification.
+    """
     formation = formation or {}
     participant_results = participant_results or []
+    recovery_ids = set(recovery_device_ids or [])
 
     members = formation.get("members") if isinstance(formation, dict) else None
     if not isinstance(members, list):
@@ -147,6 +164,7 @@ def build_multi_subject_truth_bridge(
                 "formation_role": str(member.get("role", "") or "unassigned"),
                 "signal": signal,
                 "is_source": bool(source_device_id and source_device_id == device_id),
+                "is_recovery": device_id in recovery_ids,
             }
         )
 
@@ -167,7 +185,14 @@ def build_multi_subject_truth_bridge(
     failed_count = sum(1 for p in participants if p["state"] == "failed")
     suspended_count = sum(1 for p in participants if p["state"] == "suspended")
 
-    if participants and success_count == len(participants):
+    # Check recovery-path completion: at least one recovering device succeeded.
+    recovery_succeeded = any(
+        p["state"] == "ready" and p.get("is_recovery", False) for p in participants
+    )
+
+    if recovery_succeeded and success_count > 0:
+        completion_state = "recovery_completion"
+    elif participants and success_count == len(participants):
         completion_state = "success"
     elif takeover_candidate and success_count > 0:
         completion_state = "takeover_continuation"
@@ -178,6 +203,13 @@ def build_multi_subject_truth_bridge(
     else:
         completion_state = "failed"
 
+    # reconcile_required: set when the closure is ambiguous.
+    _reconcile_required = (
+        (completion_state == "failed" and lost_count > 0 and not takeover_candidate)
+        or (completion_state == "failed" and degraded_count > 0)
+        or (recovery_succeeded and not recovery_ids)
+    )
+
     closure = {
         "completion_state": completion_state,
         "terminal": completion_state in {
@@ -185,9 +217,11 @@ def build_multi_subject_truth_bridge(
             "partial_success",
             "degraded_completion",
             "takeover_continuation",
+            "recovery_completion",
             "failed",
         },
         "requires_review": completion_state != "success",
+        "reconcile_required": _reconcile_required,
         "canonical_truth_status": "converged" if participants else "partial",
     }
 
