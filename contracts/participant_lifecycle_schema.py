@@ -113,7 +113,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -642,16 +642,11 @@ class ParticipantRecord:
         """
         for t in PARTICIPANT_STATE_TRANSITIONS:
             if t.from_state == self.state and t.trigger == trigger:
-                return ParticipantRecord(
-                    participant_id=self.participant_id,
-                    device_id=self.device_id,
-                    role=self.role,
+                return replace(
+                    self,
                     state=t.to_state,
-                    runtime_attachment_session_id=self.runtime_attachment_session_id,
                     last_transition_trigger=trigger,
                     last_updated=time.time(),
-                    diagnostics_visible=self.diagnostics_visible,
-                    metadata=dict(self.metadata),
                 )
         raise ValueError(
             f"No allowed transition from state={self.state.value!r} "

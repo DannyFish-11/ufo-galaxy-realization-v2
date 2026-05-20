@@ -650,12 +650,16 @@ class TestContractsInitReexports:
 
 class TestSentinelConstants:
     def test_T1_distributed_subject_sentinel_non_empty(self):
-        assert DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL
-        assert "v1" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL.lower() or "contracts" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL
+        assert DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL, "Sentinel must be non-empty"
+        assert "contracts" in DISTRIBUTED_SUBJECT_CONTRACT_V1_SENTINEL, (
+            "Sentinel must reference the contracts module path"
+        )
 
     def test_T2_lifecycle_governed_by_center_sentinel(self):
-        assert PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
-        assert "V2" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER or "canonical" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER
+        assert PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER, "Sentinel must be non-empty"
+        assert "canonical" in PARTICIPANT_LIFECYCLE_IS_GOVERNED_BY_CENTER, (
+            "Sentinel must reference canonical governance"
+        )
 
     def test_T3_evidence_not_canonical_truth_sentinel(self):
         assert SUBJECT_EVIDENCE_IS_NOT_CANONICAL_TRUTH
