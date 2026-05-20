@@ -1738,6 +1738,82 @@ def select_dispatch_mode(
 # ---------------------------------------------------------------------------
 
 
+def _derive_dispatch_candidate_lifecycle(
+    *,
+    readiness: Any,
+    participation: Any,
+    posture: str,
+    execution_busy: bool,
+    execution_runtime_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Derive explicit participant lifecycle projection for dispatch arbitration."""
+    participant_tier = str(
+        getattr(participation, "participant_tier", "") or ""
+    ).strip().lower()
+    role = "assistant"
+    role_display = role
+    if participant_tier == "fallback_runtime_host":
+        role = "fallback"
+    if participant_tier in {"observer_endpoint", "command_endpoint"}:
+        role = "suspended"
+    if not getattr(participation, "orchestration_eligible", False):
+        role = "suspended"
+
+    _posture_norm = (posture or "").strip().lower() or "join_runtime"
+    state = "attached"
+    trigger = "attach_success"
+    dispatch_eligible = True
+    dispatch_implication = "participant_attached"
+
+    if role == "suspended":
+        state = "suspended_state"
+        trigger = "suspension_ordered"
+        dispatch_eligible = False
+        dispatch_implication = "participant_suspended"
+    elif not bool(getattr(readiness, "registered", False)) or not bool(
+        getattr(readiness, "routable", False)
+    ):
+        state = "detached"
+        trigger = "transport_disconnected"
+        dispatch_eligible = False
+        dispatch_implication = "participant_lost"
+    elif _posture_norm == "control_only":
+        state = "suspended_state"
+        trigger = "suspension_ordered"
+        dispatch_eligible = False
+        dispatch_implication = "posture_control_only"
+    elif execution_runtime_state and str(
+        execution_runtime_state.get("highest_priority_execution_type") or ""
+    ).strip() == "takeover_request":
+        state = "taking_over"
+        trigger = "takeover_initiated"
+        dispatch_eligible = False
+        role = "takeover_candidate"
+        role_display = "takeover candidate"
+        dispatch_implication = "takeover_in_progress"
+    elif execution_busy:
+        state = "executing"
+        trigger = "execution_started"
+        dispatch_implication = "participant_busy_executing"
+    elif execution_runtime_state and int(
+        execution_runtime_state.get("active_execution_count", 0) or 0
+    ) > 0:
+        state = "degraded_state"
+        trigger = "capability_degraded"
+        role = "degraded"
+        role_display = "degraded_participant"
+        dispatch_implication = "participant_runtime_pressure"
+
+    return {
+        "role": role,
+        "role_display": role_display,
+        "state": state,
+        "trigger": trigger,
+        "dispatch_eligible": dispatch_eligible,
+        "dispatch_implication": dispatch_implication,
+    }
+
+
 def _score_candidate(
     session_id: str,
     device_id: str,
@@ -1833,6 +1909,20 @@ def _score_candidate(
     _posture_norm = (posture or "").strip().lower() or "join_runtime"
     if _posture_norm == "control_only":
         return 0, "posture:control_only:not_dispatch_target"
+
+    _lifecycle = _derive_dispatch_candidate_lifecycle(
+        readiness=readiness,
+        participation=participation,
+        posture=_posture_norm,
+        execution_busy=execution_busy,
+        execution_runtime_state=execution_runtime_state,
+    )
+    if not bool(_lifecycle.get("dispatch_eligible", False)):
+        return (
+            0,
+            f"participant_lifecycle:{_lifecycle.get('state', 'unknown')}:"
+            f"{_lifecycle.get('dispatch_implication', 'not_dispatch_eligible')}",
+        )
 
     # --- Reuse preference (optional, contributes to score) ---
     if reuse_eligible:
@@ -2264,6 +2354,13 @@ def _select_target_from_candidates(
 
         if score > best_score:
             best_score = score
+            _lifecycle_projection = _derive_dispatch_candidate_lifecycle(
+                readiness=readiness,
+                participation=participation,
+                posture=_entry_posture,
+                execution_busy=_execution_busy,
+                execution_runtime_state=execution_runtime_by_device.get(device_id),
+            )
             _android_participation_tier = normalize_android_participation_tier(
                 android_participation_evidence
             )
@@ -2299,6 +2396,7 @@ def _select_target_from_candidates(
                     "canonical_execution_gate_decision": _canonical_gate_decision,
                     "canonical_execution_gate_reasons": list(_canonical_gate_reasons),
                     "execution_runtime_state": execution_runtime_by_device.get(device_id),
+                    "participant_lifecycle": _lifecycle_projection,
                     "runtime_decision_reasoning": build_runtime_decision_reasoning_block(
                         selected_runtime="android_delegated",
                         selected_device=device_id,

@@ -896,6 +896,106 @@ class TestBridgeIsRecoveryFlag:
 
 
 # ===========================================================================
+# 22b. Bridge participant lifecycle machine projection
+# ===========================================================================
+
+
+class TestBridgeParticipantLifecycleMachine:
+    def test_bridge_participant_contains_lifecycle_projection(self):
+        from core.multi_subject_truth_convergence_bridge import (
+            build_multi_subject_truth_bridge,
+        )
+
+        with patch(
+            "core.multi_subject_truth_convergence_bridge._derive_signal",
+            return_value={
+                "readiness": "ready",
+                "posture": "join_runtime",
+                "busy": True,
+                "orchestration_eligible": True,
+                "reasons": [],
+            },
+        ):
+            snap = build_multi_subject_truth_bridge(
+                formation={
+                    "primary_execution_device_id": "dev-a",
+                    "members": [{"device_id": "dev-a", "role": "primary_execution_device"}],
+                },
+                participant_results=[],
+            )
+        participant = snap["participants"][0]
+        assert participant["lifecycle_state"] == "executing"
+        assert participant["lifecycle_trigger"] == "execution_started"
+        assert participant["dispatch_eligible"] is True
+
+    def test_bridge_suspended_participant_is_dispatch_ineligible(self):
+        from core.multi_subject_truth_convergence_bridge import (
+            build_multi_subject_truth_bridge,
+        )
+
+        with patch(
+            "core.multi_subject_truth_convergence_bridge._derive_signal",
+            return_value={
+                "readiness": "suspended",
+                "posture": "control_only",
+                "busy": False,
+                "orchestration_eligible": False,
+                "reasons": ["manual_suspend"],
+            },
+        ):
+            snap = build_multi_subject_truth_bridge(
+                formation={
+                    "primary_execution_device_id": "dev-a",
+                    "members": [{"device_id": "dev-a", "role": "support_device"}],
+                },
+                participant_results=[],
+            )
+        participant = snap["participants"][0]
+        assert participant["role"] == "suspended"
+        assert participant["lifecycle_state"] == "suspended_state"
+        assert participant["dispatch_eligible"] is False
+        assert "dev-a" in snap["participant_lifecycle_machine"]["dispatch_blocked_participants"]
+
+    def test_bridge_primary_loss_promotes_takeover_candidate_with_role_event(self):
+        from core.multi_subject_truth_convergence_bridge import (
+            build_multi_subject_truth_bridge,
+        )
+
+        with patch(
+            "core.multi_subject_truth_convergence_bridge._derive_signal",
+            return_value={
+                "readiness": "ready",
+                "posture": "join_runtime",
+                "busy": False,
+                "orchestration_eligible": True,
+                "reasons": [],
+            },
+        ):
+            snap = build_multi_subject_truth_bridge(
+                formation={
+                    "primary_execution_device_id": "dev-primary",
+                    "members": [
+                        {"device_id": "dev-primary", "role": "primary_execution_device"},
+                        {"device_id": "dev-fallback", "role": "fallback_device"},
+                    ],
+                },
+                participant_results=[
+                    {"device_id": "dev-primary", "success": False, "error": "device lost"},
+                    {"device_id": "dev-fallback", "success": True},
+                ],
+            )
+
+        participants_by_id = {p["device_id"]: p for p in snap["participants"]}
+        assert participants_by_id["dev-primary"]["role"] == "degraded"
+        assert participants_by_id["dev-fallback"]["role"] == "takeover_candidate"
+        assert participants_by_id["dev-fallback"]["lifecycle_state"] == "takeover_candidate_state"
+        assert any(
+            event.get("event") == "promotion" and event.get("device_id") == "dev-fallback"
+            for event in snap["role_lifecycle"]["events"]
+        )
+
+
+# ===========================================================================
 # 23. Empty bridge_snapshot
 # ===========================================================================
 
