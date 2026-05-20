@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 
 try:
     from galaxy_gateway.android.handlers.generic import (
+        get_generic_forward_compat_allowlist,
         handle_generic_forward,
+        is_generic_forward_compat_message_type,
         is_generic_forward_blocked_message_type,
     )
     from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
@@ -55,6 +57,54 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
     assert resp["canonical_ingress_handler"] == handler_name
 
 
+@pytest.mark.asyncio
+@_skip_if_unavailable
+@pytest.mark.parametrize(
+    "msg_type",
+    [
+        "agent_config_update",
+        "agent_restart",
+        "ui_tree_request",
+        "action_execute",
+        "action_sequence_execute",
+        "app_start",
+        "app_stop",
+        "system_command",
+        "cancel_result",
+    ],
+)
+async def test_generic_forward_accepts_allowlisted_types(msg_type: str) -> None:
+    bridge = AndroidBridge()
+    websocket = MagicMock()
+    resp = await handle_generic_forward(
+        bridge,
+        websocket,
+        {"type": msg_type, "device_id": "dev-transport", "message_id": f"msg-{msg_type}"},
+    )
+
+    assert is_generic_forward_compat_message_type(msg_type)
+    assert resp["status"] == "received"
+    assert resp["type"] == f"{msg_type}_ack"
+
+
+@pytest.mark.asyncio
+@_skip_if_unavailable
+async def test_generic_forward_rejects_non_allowlisted_type() -> None:
+    bridge = AndroidBridge()
+    websocket = MagicMock()
+    resp = await handle_generic_forward(
+        bridge,
+        websocket,
+        {"type": "unclassified_compat_probe", "device_id": "dev-transport", "message_id": "msg-x"},
+    )
+
+    assert not is_generic_forward_compat_message_type("unclassified_compat_probe")
+    assert resp["type"] == "error"
+    assert resp["status"] == "rejected"
+    assert resp["error_code"] == "GENERIC_FORWARD_TYPE_NOT_ALLOWED"
+    assert resp["allowed_compat_types"] == list(get_generic_forward_compat_allowlist())
+
+
 @_skip_if_unavailable
 def test_android_bridge_routes_canonical_reports_away_from_generic_forward() -> None:
     bridge = AndroidBridge()
@@ -70,6 +120,22 @@ def test_android_bridge_routes_canonical_reports_away_from_generic_forward() -> 
         MessageType.DEVICE_EXECUTION_EVENT,
     ):
         assert bridge._message_handlers[msg_type] is not generic_handler
+
+
+@_skip_if_unavailable
+def test_generic_forward_allowlist_is_explicit_and_stable() -> None:
+    expected = {
+        "agent_config_update",
+        "agent_restart",
+        "ui_tree_request",
+        "action_execute",
+        "action_sequence_execute",
+        "app_start",
+        "app_stop",
+        "system_command",
+        "cancel_result",
+    }
+    assert set(get_generic_forward_compat_allowlist()) == expected
 
 
 @_skip_if_unavailable

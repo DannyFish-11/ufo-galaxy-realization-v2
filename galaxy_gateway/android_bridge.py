@@ -90,7 +90,10 @@ from galaxy_gateway.android.handlers.goal_execution import (
 from galaxy_gateway.android.handlers.capability_report import handle_capability_report
 from galaxy_gateway.android.handlers.diagnostics import handle_diagnostics_payload
 from galaxy_gateway.android.handlers.vision import handle_vision_request
-from galaxy_gateway.android.handlers.generic import handle_generic_forward
+from galaxy_gateway.android.handlers.generic import (
+    handle_generic_forward,
+    get_generic_forward_compat_allowlist,
+)
 from galaxy_gateway.android.handlers.delegated_signal import handle_delegated_execution_signal
 from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
@@ -804,14 +807,12 @@ class AndroidBridge:
         self._message_handlers[MessageType.SESSION_MIGRATE] = _wrap(handle_session_migrate)
         self._message_handlers[MessageType.AGENT_PING] = _wrap(handle_agent_ping)
         self._message_handlers[MessageType.AGENT_STATUS] = _wrap(handle_agent_status)
-        self._message_handlers[MessageType.AGENT_CONFIG_UPDATE] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.AGENT_RESTART] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.UI_TREE_REQUEST] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.ACTION_EXECUTE] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.ACTION_SEQUENCE_EXECUTE] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.APP_START] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.APP_STOP] = _wrap(handle_generic_forward)
-        self._message_handlers[MessageType.SYSTEM_COMMAND] = _wrap(handle_generic_forward)
+        # Bounded compat path: generic-forward is an explicit allowlist gate,
+        # not an open fallback for unclassified message semantics.
+        for _compat_message_type in get_generic_forward_compat_allowlist():
+            self._message_handlers[MessageType(_compat_message_type)] = _wrap(
+                handle_generic_forward
+            )
         self._message_handlers[MessageType.FILE_TRANSFER] = _wrap(handle_file_transfer)
         self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_peer_announce)
         self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_peer_exchange)
@@ -876,7 +877,6 @@ class AndroidBridge:
         # Android Lifecycle / Governance Uplink Reports
         # readiness/governance/strategy are canonical policy inputs and must
         # enter Android evaluator artifact ingress (not generic forwarding).
-        self._message_handlers[MessageType.CANCEL_RESULT] = _wrap(handle_generic_forward)
         for _android_report_type in (
             MessageType.DEVICE_READINESS_REPORT,
             MessageType.DEVICE_GOVERNANCE_REPORT,
