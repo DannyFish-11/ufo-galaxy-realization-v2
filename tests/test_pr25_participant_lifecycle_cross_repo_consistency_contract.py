@@ -22,7 +22,10 @@ SHA1_HASH_LENGTH = 40
 
 
 def test_authority_sentinel_and_version_present() -> None:
-    assert "PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY" in (
+    assert PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY.startswith(
+        "PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY::"
+    )
+    assert "contracts.participant_lifecycle_cross_repo_contract" in (
         PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY
     )
     assert PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_VERSION == "1.0.0"
