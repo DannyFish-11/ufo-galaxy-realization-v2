@@ -87,9 +87,8 @@ def test_manifest_contains_machine_checkable_sections() -> None:
     assert len(payload["android_audited_ref"]) == SHA1_HEX_LENGTH
     assert isinstance(payload["android_formal_source_sha"], str)
     assert len(payload["android_formal_source_sha"]) == SHA1_HEX_LENGTH
-    assert isinstance(payload["android_anchor"], str) and payload["android_anchor"].endswith(
-        "FormalParticipantLifecycleState.kt"
-    )
+    assert isinstance(payload["android_anchor"], str)
+    assert payload["android_anchor"].endswith("FormalParticipantLifecycleState.kt")
     assert payload["android_formal_wire_values"] == sorted(ANDROID_FORMAL_WIRE_VALUES)
     assert payload["verification"]["passed"] is True
     assert payload["critical_trigger_semantic_mappings"]
