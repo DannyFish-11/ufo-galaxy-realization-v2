@@ -111,7 +111,7 @@ async def handle_generic_forward(
         }
     if normalized_type not in _GENERIC_FORWARD_COMPAT_MESSAGE_TYPE_SET:
         logger.warning(
-            "Rejected non-whitelisted message from generic_forward: type=%s device_id=%s",
+            "Rejected non-allowlisted message from generic_forward: type=%s device_id=%s",
             normalized_type,
             device_id,
         )
