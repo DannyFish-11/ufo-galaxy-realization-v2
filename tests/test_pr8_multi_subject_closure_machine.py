@@ -683,6 +683,87 @@ class TestReconcileTriggerRecoveryUnverified:
 
 
 # ===========================================================================
+# 17b. Explicit conflict completion_state reconciliation
+# ===========================================================================
+
+
+class TestExplicitConflictResolution:
+    def test_multi_result_conflict_maps_to_reconcile_required(self):
+        from core.multi_subject_closure_machine import (
+            ClosureTerminalKind,
+            ReconcileRequiredTrigger,
+            build_closure_candidate,
+        )
+
+        snapshot = _bridge(
+            "MULTI_RESULT_CONFLICT",
+            [
+                _p("dev-a", "primary", "ready"),
+                _p("dev-b", "assistant", "failed"),
+            ],
+            success=1,
+            failed=1,
+        )
+        c = build_closure_candidate(snapshot)
+        assert c.terminal_kind == ClosureTerminalKind.reconcile_required
+        assert c.reconcile_required is True
+        assert (
+            ReconcileRequiredTrigger.conflicting_participant_signals.value
+            in c.reconcile_triggers
+        )
+
+    def test_partial_result_contradiction_maps_to_reconcile_required(self):
+        from core.multi_subject_closure_machine import (
+            ClosureTerminalKind,
+            ReconcileRequiredTrigger,
+            build_closure_candidate,
+        )
+
+        snapshot = _bridge(
+            "PARTIAL_RESULT_CONTRADICTION",
+            [
+                _p("dev-a", "primary", "ready"),
+                _p("dev-b", "assistant", "degraded"),
+            ],
+            success=1,
+            degraded=1,
+        )
+        c = build_closure_candidate(snapshot)
+        assert c.terminal_kind == ClosureTerminalKind.reconcile_required
+        assert c.reconcile_required is True
+        assert (
+            ReconcileRequiredTrigger.conflicting_participant_signals.value
+            in c.reconcile_triggers
+        )
+
+    def test_conflict_kind_field_also_forces_center_reconcile(self):
+        from core.multi_subject_closure_machine import (
+            ClosureTerminalKind,
+            ReconcileRequiredTrigger,
+            build_closure_candidate,
+        )
+
+        snapshot = _bridge(
+            "partial_success",
+            [
+                _p("dev-a", "primary", "ready"),
+                _p("dev-b", "assistant", "failed"),
+            ],
+            success=1,
+            failed=1,
+        )
+        snapshot["closure"]["conflict_kind"] = "MULTI_RESULT_CONFLICT"
+
+        c = build_closure_candidate(snapshot)
+        assert c.terminal_kind == ClosureTerminalKind.reconcile_required
+        assert c.reconcile_required is True
+        assert (
+            ReconcileRequiredTrigger.conflicting_participant_signals.value
+            in c.reconcile_triggers
+        )
+
+
+# ===========================================================================
 # 18. No reconcile on nominal success
 # ===========================================================================
 

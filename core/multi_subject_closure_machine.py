@@ -152,6 +152,25 @@ from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set
 
 logger = logging.getLogger("Galaxy.MultiSubjectClosureMachine")
 
+_EXPLICIT_MULTI_RESULT_CONFLICT_STATES: FrozenSet[str] = frozenset(
+    {
+        "multi_result_conflict",
+        "multi_subject_result_conflict",
+    }
+)
+_EXPLICIT_PARTIAL_CONTRADICTION_STATES: FrozenSet[str] = frozenset(
+    {
+        "partial_result_contradiction",
+        "partial_subject_contradiction",
+    }
+)
+_EXPLICIT_RECONCILE_CONFLICT_CLASSES: FrozenSet[str] = frozenset(
+    {
+        "multi_result_conflict",
+        "partial_result_contradiction",
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Authority / policy sentinels
 # ---------------------------------------------------------------------------
@@ -473,12 +492,15 @@ def _build_participant_records(
         device_id = str(p.get("device_id", "") or "")
         if not device_id:
             continue
+        role = _normalize_token(p.get("role"), default="assistant")
+        state = _normalize_token(p.get("state"), default="unknown")
+        formation_role = _normalize_token(p.get("formation_role"), default="unassigned")
         records.append(
             ParticipantClosureRecord(
                 device_id=device_id,
-                role=str(p.get("role", "") or "assistant"),
-                state=str(p.get("state", "") or "unknown"),
-                formation_role=str(p.get("formation_role", "") or "unassigned"),
+                role=role,
+                state=state,
+                formation_role=formation_role,
                 is_source=bool(p.get("is_source", False)),
                 is_recovery=device_id in recovery_device_ids or bool(p.get("is_recovery", False)),
             )
@@ -486,8 +508,34 @@ def _build_participant_records(
     return records
 
 
+def _normalize_token(value: Any, *, default: str = "") -> str:
+    token = str(value or "").strip().lower()
+    if token:
+        return token
+    return default
+
+
+def _classify_explicit_conflict_state(
+    bridge_completion_state: str,
+    bridge_closure: Dict[str, Any],
+) -> Optional[str]:
+    state = _normalize_token(bridge_completion_state)
+    conflict_kind = _normalize_token(bridge_closure.get("conflict_kind"))
+
+    if state in _EXPLICIT_MULTI_RESULT_CONFLICT_STATES:
+        return "multi_result_conflict"
+    if state in _EXPLICIT_PARTIAL_CONTRADICTION_STATES:
+        return "partial_result_contradiction"
+    if conflict_kind in _EXPLICIT_MULTI_RESULT_CONFLICT_STATES:
+        return "multi_result_conflict"
+    if conflict_kind in _EXPLICIT_PARTIAL_CONTRADICTION_STATES:
+        return "partial_result_contradiction"
+    return None
+
+
 def _classify_terminal_kind(
     bridge_completion_state: str,
+    explicit_conflict_class: Optional[str],
     participants: List[ParticipantClosureRecord],
     recovery_device_ids: FrozenSet[str],
     takeover_candidate_device_id: Optional[str],
@@ -508,7 +556,10 @@ def _classify_terminal_kind(
     7. failed                 → ClosureTerminalKind.failed
     8. (default)              → ClosureTerminalKind.in_progress
     """
-    state = bridge_completion_state.lower().strip()
+    if explicit_conflict_class:
+        return ClosureTerminalKind.reconcile_required
+
+    state = _normalize_token(bridge_completion_state)
 
     if state == "success":
         return ClosureTerminalKind.success
@@ -545,6 +596,7 @@ def _compute_reconcile_triggers(
     terminal_kind: ClosureTerminalKind,
     participants: List[ParticipantClosureRecord],
     recovery_device_ids: FrozenSet[str],
+    explicit_conflict_class: Optional[str],
     formation_member_count: int,
     lost_count: int,
     degraded_count: int,
@@ -558,7 +610,9 @@ def _compute_reconcile_triggers(
         triggers.append(ReconcileRequiredTrigger.participant_lost_no_takeover.value)
 
     # Trigger 2: conflicting signals for same participant
-    if _detect_conflicting_signals(participants):
+    if _detect_conflicting_signals(participants) or (
+        explicit_conflict_class in _EXPLICIT_RECONCILE_CONFLICT_CLASSES
+    ):
         triggers.append(ReconcileRequiredTrigger.conflicting_participant_signals.value)
 
     # Trigger 3: formation declared members but closure machine sees zero participants
@@ -652,9 +706,14 @@ class MultiSubjectClosureMachine:
 
         bridge_closure = bridge_snapshot.get("closure") or {}
         bridge_completion_state = str(bridge_closure.get("completion_state", "") or "")
+        explicit_conflict_class = _classify_explicit_conflict_state(
+            bridge_completion_state=bridge_completion_state,
+            bridge_closure=bridge_closure,
+        )
 
         terminal_kind = _classify_terminal_kind(
             bridge_completion_state=bridge_completion_state,
+            explicit_conflict_class=explicit_conflict_class,
             participants=participants,
             recovery_device_ids=recovery_ids,
             takeover_candidate_device_id=takeover_candidate_device_id,
@@ -668,6 +727,7 @@ class MultiSubjectClosureMachine:
             terminal_kind=terminal_kind,
             participants=participants,
             recovery_device_ids=recovery_ids,
+            explicit_conflict_class=explicit_conflict_class,
             formation_member_count=formation_member_count,
             lost_count=lost_count,
             degraded_count=degraded_count,
