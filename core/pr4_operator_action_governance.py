@@ -1577,29 +1577,18 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             exc,
         )
 
-    # --- Canonical runtime-truth state contract blocks (same source helpers as board/projection) ---
+    # --- Canonical runtime-truth state contract blocks (backend authority input) ---
     try:
-        from core.routes.projection import (
-            _attach_operational_state_board,
-            _build_foundational_system_truth,
-            _build_participation_truth_consumption,
-            _derive_shared_execution_visibility,
+        from core.control_plane_authority_input import (
+            build_control_plane_backend_authority_input,
         )
 
-        runtime_truth_payload: Dict[str, Any] = {
-            "runtime_decision_reasoning": dict(proj.runtime_decision_reasoning or {}),
-        }
-        runtime_truth_payload = _attach_operational_state_board(runtime_truth_payload, route_paths=None)
-        runtime_truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(
-            runtime_truth_payload
+        runtime_truth_payload = build_control_plane_backend_authority_input(
+            runtime_decision_reasoning=dict(proj.runtime_decision_reasoning or {}),
         )
         proj.operational_state_board = dict(runtime_truth_payload.get("operational_state_board") or {})
-        proj.participation_truth_consumption = dict(
-            _build_participation_truth_consumption(runtime_truth_payload) or {}
-        )
-        proj.foundational_system_truth = dict(
-            _build_foundational_system_truth(runtime_truth_payload) or {}
-        )
+        proj.participation_truth_consumption = dict(runtime_truth_payload.get("participation_truth_consumption") or {})
+        proj.foundational_system_truth = dict(runtime_truth_payload.get("foundational_system_truth") or {})
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: canonical runtime-truth state blocks unavailable: %s",
