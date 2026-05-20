@@ -73,7 +73,7 @@ async def test_generic_forward_rejects_canonical_ingress_message_types(
         "cancel_result",
     ],
 )
-async def test_generic_forward_whitelist_accepts_only_explicit_compat_types(msg_type: str) -> None:
+async def test_generic_forward_accepts_whitelisted_types(msg_type: str) -> None:
     bridge = AndroidBridge()
     websocket = MagicMock()
     resp = await handle_generic_forward(
@@ -89,7 +89,7 @@ async def test_generic_forward_whitelist_accepts_only_explicit_compat_types(msg_
 
 @pytest.mark.asyncio
 @_skip_if_unavailable
-async def test_generic_forward_rejects_non_whitelisted_unclassified_type() -> None:
+async def test_generic_forward_rejects_non_whitelisted_type() -> None:
     bridge = AndroidBridge()
     websocket = MagicMock()
     resp = await handle_generic_forward(

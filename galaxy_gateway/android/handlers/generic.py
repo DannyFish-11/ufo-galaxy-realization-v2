@@ -26,7 +26,7 @@ GENERIC_FORWARD_CANONICAL_INGRESS_GUARD_POLICY = (
     "dedicated canonical ingress handlers, not handle_generic_forward()."
 )
 
-GENERIC_FORWARD_COMPAT_WHITELIST_GATE_POLICY = (
+GENERIC_FORWARD_COMPAT_GATE_POLICY = (
     "ANDROID_BRIDGE::GENERIC_FORWARD_COMPAT_WHITELIST_GATE_V1: "
     "handle_generic_forward() only accepts explicitly enumerated compat message types. "
     "Unclassified messages must be rejected at the contract boundary."
@@ -125,7 +125,7 @@ async def handle_generic_forward(
             "error_message": (
                 f"{normalized_type or '<empty>'} is not in generic_forward compat allowlist"
             ),
-            "compat_policy": GENERIC_FORWARD_COMPAT_WHITELIST_GATE_POLICY,
+            "compat_policy": GENERIC_FORWARD_COMPAT_GATE_POLICY,
             "allowed_compat_types": list(_GENERIC_FORWARD_COMPAT_MESSAGE_TYPES),
         }
     logger.debug("Received %s from %s: forwarding", msg_type, device_id)
