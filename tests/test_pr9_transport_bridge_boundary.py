@@ -102,7 +102,7 @@ async def test_generic_forward_rejects_non_whitelisted_type() -> None:
     assert resp["type"] == "error"
     assert resp["status"] == "rejected"
     assert resp["error_code"] == "GENERIC_FORWARD_TYPE_NOT_ALLOWED"
-    assert set(resp["allowed_compat_types"]) == set(get_generic_forward_compat_allowlist())
+    assert resp["allowed_compat_types"] == list(get_generic_forward_compat_allowlist())
 
 
 @_skip_if_unavailable
