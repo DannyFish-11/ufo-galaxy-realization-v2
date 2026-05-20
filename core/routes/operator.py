@@ -238,6 +238,8 @@ def _operator_consumption_contract_boundary() -> Dict[str, Any]:
             "intent_entry": "/api/v1/operator/action",
             "approval_signal": "approval_token",
             "execution_path": "OperatorSurface.execute_operator_action",
+            "android_directed_intent_entry": "/api/v1/operator/actions/android-directed",
+            "canonical_governance_contract": "core.v2_unified_state_contract.build_control_plane_surface_contract",
         },
     }
     if _build_final_acceptance_surface_boundary is not None:
@@ -1502,6 +1504,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.pr4_operator_action_governance import (
                 build_android_directed_action_spec,
+                record_android_directed_action_dispatch_trace,
             )
 
             action_kind = body.get("action_kind", "")
@@ -1527,10 +1530,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 target_session_id=body.get("target_session_id", ""),
                 payload=dict(body.get("payload") or {}),
             )
+            audit_record = record_android_directed_action_dispatch_trace(spec)
 
             return JSONResponse(content={
                 **spec.to_dict(),
                 "pending": True,
+                "audit_id": audit_record.audit_id,
                 "authority": "OPERATOR_ROUTES_V1",
             })
         except Exception as exc:
@@ -1598,6 +1603,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content={
                 "acked": True,
                 "dispatch_id": dispatch_id,
+                "closure_trace": (
+                    get_android_directed_action_terminal_state(dispatch_id).get("operator_control_closure_trace")
+                    or {}
+                ),
                 "authority": "OPERATOR_ROUTES_V1",
             })
         except Exception as exc:

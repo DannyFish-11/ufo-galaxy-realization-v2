@@ -185,6 +185,12 @@ class TestOperatorActionAuditRecord:
         assert d["rollback_needed"] is False
         assert d["android_dispatch_id"] == ""
         assert d["android_ack_received"] is False
+        assert d["canonical_entry"] == "/api/v1/operator/action"
+        assert d["canonical_governance_contract"] == "core.v2_unified_state_contract.build_control_plane_surface_contract"
+        assert d["routed_subject_ids"] == []
+        assert d["participant_ack_state"] == "not_required"
+        assert d["truth_convergence_state"] == "not_evaluated"
+        assert d["closure_verification_state"] == "not_evaluated"
 
     def test_record_and_retrieve_audit(self):
         from core.pr4_operator_action_governance import (
@@ -1058,6 +1064,11 @@ class TestPR4Routes:
         assert "android_dispatch_id" in data
         assert data["pending"] is True
         assert data["device_id"] == "device_route_01"
+        assert data["audit_id"].startswith("opadit_")
+        trace = data["operator_control_closure_trace"]
+        assert trace["canonical_entry"] == "/api/v1/operator/actions/android-directed"
+        assert "device_route_01" in trace["routed_subject_ids"]
+        assert trace["participant_ack_state"] == "pending"
         assert data["authority"] == "OPERATOR_ROUTES_V1"
 
     def test_android_directed_action_missing_action_kind(self, client):
@@ -1119,6 +1130,10 @@ class TestPR4Routes:
         data = resp.json()
         assert data["acked"] is True
         assert data["dispatch_id"] == spec.android_dispatch_id
+        trace = data["closure_trace"]
+        assert trace["canonical_entry"] == "/api/v1/operator/actions/android-directed"
+        assert trace["participant_ack_state"] == "acked"
+        assert trace["closure_verification_state"] == "pending_canonical_closure_verification"
 
     def test_existing_action_endpoint_still_works(self, client):
         """PR-4 must not break the existing POST /api/v1/operator/action endpoint."""
