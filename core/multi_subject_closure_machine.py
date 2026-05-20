@@ -164,6 +164,12 @@ _EXPLICIT_PARTIAL_CONTRADICTION_STATES: FrozenSet[str] = frozenset(
         "partial_subject_contradiction",
     }
 )
+_EXPLICIT_RECONCILE_CONFLICT_CLASSES: FrozenSet[str] = frozenset(
+    {
+        "multi_result_conflict",
+        "partial_result_contradiction",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Authority / policy sentinels
@@ -486,12 +492,15 @@ def _build_participant_records(
         device_id = str(p.get("device_id", "") or "")
         if not device_id:
             continue
+        role = _normalize_token(p.get("role"), default="assistant")
+        state = _normalize_token(p.get("state"), default="unknown")
+        formation_role = _normalize_token(p.get("formation_role"), default="unassigned")
         records.append(
             ParticipantClosureRecord(
                 device_id=device_id,
-                role=str(p.get("role", "") or "assistant").strip().lower(),
-                state=str(p.get("state", "") or "unknown").strip().lower(),
-                formation_role=str(p.get("formation_role", "") or "unassigned").strip().lower(),
+                role=role,
+                state=state,
+                formation_role=formation_role,
                 is_source=bool(p.get("is_source", False)),
                 is_recovery=device_id in recovery_device_ids or bool(p.get("is_recovery", False)),
             )
@@ -499,8 +508,11 @@ def _build_participant_records(
     return records
 
 
-def _normalize_token(value: Any) -> str:
-    return str(value or "").strip().lower()
+def _normalize_token(value: Any, *, default: str = "") -> str:
+    token = str(value or "").strip().lower()
+    if token:
+        return token
+    return default
 
 
 def _classify_explicit_conflict_state(
@@ -598,12 +610,9 @@ def _compute_reconcile_triggers(
         triggers.append(ReconcileRequiredTrigger.participant_lost_no_takeover.value)
 
     # Trigger 2: conflicting signals for same participant
-    if _detect_conflicting_signals(participants):
-        triggers.append(ReconcileRequiredTrigger.conflicting_participant_signals.value)
-    elif explicit_conflict_class in {
-        "multi_result_conflict",
-        "partial_result_contradiction",
-    }:
+    if _detect_conflicting_signals(participants) or (
+        explicit_conflict_class in _EXPLICIT_RECONCILE_CONFLICT_CLASSES
+    ):
         triggers.append(ReconcileRequiredTrigger.conflicting_participant_signals.value)
 
     # Trigger 3: formation declared members but closure machine sees zero participants

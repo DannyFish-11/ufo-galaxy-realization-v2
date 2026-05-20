@@ -683,7 +683,7 @@ class TestReconcileTriggerRecoveryUnverified:
 
 
 # ===========================================================================
-# 17b. Explicit conflict completion_state reconciliation (PR17)
+# 17b. Explicit conflict completion_state reconciliation
 # ===========================================================================
 
 
