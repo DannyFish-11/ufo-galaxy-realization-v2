@@ -5609,7 +5609,7 @@ def _source_of_truth_boundaries() -> Dict[str, str]:
         "authority_truth_source": "Canonical authority truth producers (runtime truth compiler / Android SSOT / acceptance gate).",
         "acceptance_closure_truth": "Acceptance and closure truth used to determine if results can be closed and consumed.",
         "outward_projection_truth": "Operator/board projection surfaces that only consume canonical truth and never define it.",
-        "ui_visible_summary_not_backend_truth": "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth.",
+        "ui_visible_summary_constraint": "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth.",
         "diagnostics_snapshot": "Audit and diagnostics artifacts; useful for investigation but not authority truth.",
     }
 

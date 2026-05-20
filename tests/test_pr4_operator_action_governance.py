@@ -1042,6 +1042,7 @@ class TestPR4Routes:
         chain = data["consumption_contract_boundary"]["action_intent_approval_execution_chain"]
         assert chain["intent_entry"] == "/api/v1/operator/action"
         assert chain["approval_signal"] == "approval_token"
+        assert chain["execution_path"] == "OperatorSurface.execute_operator_action"
 
     def test_android_directed_action_dispatch_returns_200(self, client):
         resp = client.post(

@@ -104,7 +104,7 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert truth_contract["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
     assert isinstance(truth_contract["diagnostics_snapshot"]["stage_count"], int)
     assert (
-        payload["source_of_truth_boundaries"]["ui_visible_summary_not_backend_truth"]
+        payload["source_of_truth_boundaries"]["ui_visible_summary_constraint"]
         == "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth."
     )
     foundational = payload["foundational_system_truth"]
