@@ -202,6 +202,13 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.Routes.Operator")
 
+try:
+    from core.final_acceptance_surface_boundary import (
+        build_final_acceptance_surface_boundary as _build_final_acceptance_surface_boundary,
+    )
+except Exception:  # pragma: no cover
+    _build_final_acceptance_surface_boundary = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Authority sentinel
 # ---------------------------------------------------------------------------
@@ -218,7 +225,7 @@ OPERATOR_ROUTES_AUTHORITY: str = (
 
 
 def _operator_consumption_contract_boundary() -> Dict[str, Any]:
-    return {
+    boundary = {
         "canonical_backend_contract": {
             "surface": "operator",
             "authority": "OPERATOR_ROUTES_V1",
@@ -233,6 +240,14 @@ def _operator_consumption_contract_boundary() -> Dict[str, Any]:
             "execution_path": "OperatorSurface.execute_operator_action",
         },
     }
+    if _build_final_acceptance_surface_boundary is not None:
+        boundary["final_acceptance_surface_boundary"] = _build_final_acceptance_surface_boundary(
+            surface="operator",
+            consumer_role="operator_board_projection_consumer_only",
+            canonical_backend_contract="core.v2_unified_state_contract.build_control_plane_surface_contract",
+            product_surface="/api/v1/operator/*",
+        )
+    return boundary
 
 
 # ---------------------------------------------------------------------------
