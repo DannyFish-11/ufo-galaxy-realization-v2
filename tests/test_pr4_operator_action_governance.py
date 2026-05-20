@@ -591,6 +591,52 @@ class TestAndroidDirectedActionSpec:
         assert "expected_ack_within_seconds" in d
         assert "rollback_on_timeout" in d
         assert d["payload"]["reason"] == "operator_isolation"
+        assert "routed_subject_ids" in d
+        assert "device_sus_01" in d["routed_subject_ids"]
+        assert "flow_001" in d["routed_subject_ids"]
+
+    def test_multi_subject_ack_requires_full_subject_coverage(self):
+        from core.pr4_operator_action_governance import (
+            build_android_directed_action_spec,
+            acknowledge_android_directed_action,
+            get_pending_android_directed_actions,
+            get_android_directed_action_terminal_state,
+            AndroidDirectedActionKind,
+        )
+        spec = build_android_directed_action_spec(
+            action_kind=AndroidDirectedActionKind.revalidate_participation.value,
+            device_id="device_multi_01",
+            operator_action_id="opact_multi_ack",
+            target_flow_id="flow_multi_01",
+            routed_subject_ids=["participant_alpha"],
+        )
+        assert acknowledge_android_directed_action(
+            spec.android_dispatch_id,
+            ack_subject_ids=["device_multi_01"],
+        ) is True
+        pending = get_pending_android_directed_actions()
+        assert any(p.android_dispatch_id == spec.android_dispatch_id for p in pending)
+        partial_terminal = get_android_directed_action_terminal_state(spec.android_dispatch_id)
+        partial_trace = partial_terminal["operator_control_closure_trace"]
+        assert partial_terminal["state"] == "partial_ack"
+        assert partial_trace["participant_ack_state"] == "partial_ack"
+        assert "flow_multi_01" in partial_trace["pending_subject_ids"]
+
+        assert acknowledge_android_directed_action(
+            spec.android_dispatch_id,
+            ack_subject_ids=["flow_multi_01", "participant_alpha"],
+            truth_convergence_state="canonical_truth_converged",
+            closure_verification_state="verified",
+        ) is True
+        pending = get_pending_android_directed_actions()
+        assert not any(p.android_dispatch_id == spec.android_dispatch_id for p in pending)
+        terminal = get_android_directed_action_terminal_state(spec.android_dispatch_id)
+        trace = terminal["operator_control_closure_trace"]
+        assert terminal["state"] == "acked"
+        assert trace["participant_ack_state"] == "acked"
+        assert trace["truth_convergence_state"] == "canonical_truth_converged"
+        assert trace["closure_verification_state"] == "verified"
+        assert trace["pending_subject_ids"] == []
 
 
 # ===========================================================================
@@ -1070,6 +1116,55 @@ class TestPR4Routes:
         assert "device_route_01" in trace["routed_subject_ids"]
         assert trace["participant_ack_state"] == "pending"
         assert data["authority"] == "OPERATOR_ROUTES_V1"
+
+    def test_android_directed_multi_subject_ack_truth_closure_chain(self, client):
+        dispatch_resp = client.post(
+            "/api/v1/operator/actions/android-directed",
+            json={
+                "action_kind": "retry_delegated_execution",
+                "device_id": "device_route_multi_01",
+                "target_flow_id": "flow_route_multi_01",
+                "routed_subject_ids": ["participant_beta"],
+                "user_id": "admin",
+            },
+        )
+        assert dispatch_resp.status_code == 200
+        dispatch_data = dispatch_resp.json()
+        dispatch_id = dispatch_data["android_dispatch_id"]
+        routed_subject_ids = dispatch_data["operator_control_closure_trace"]["routed_subject_ids"]
+        assert "device_route_multi_01" in routed_subject_ids
+        assert "flow_route_multi_01" in routed_subject_ids
+        assert "participant_beta" in routed_subject_ids
+
+        partial_ack_resp = client.post(
+            f"/api/v1/operator/actions/android-directed/{dispatch_id}/ack",
+            json={"ack_subject_ids": ["device_route_multi_01"]},
+        )
+        assert partial_ack_resp.status_code == 200
+        partial_ack_data = partial_ack_resp.json()
+        assert partial_ack_data["dispatch_state"] == "partial_ack"
+        partial_trace = partial_ack_data["closure_trace"]
+        assert partial_trace["participant_ack_state"] == "partial_ack"
+        assert "flow_route_multi_01" in partial_trace["pending_subject_ids"]
+
+        final_ack_resp = client.post(
+            f"/api/v1/operator/actions/android-directed/{dispatch_id}/ack",
+            json={
+                "ack_subject_ids": ["flow_route_multi_01", "participant_beta"],
+                "truth_convergence_state": "canonical_truth_converged",
+                "closure_verification_state": "verified",
+                "failure_diagnostics": ["none"],
+            },
+        )
+        assert final_ack_resp.status_code == 200
+        final_ack_data = final_ack_resp.json()
+        assert final_ack_data["dispatch_state"] == "acked"
+        final_trace = final_ack_data["closure_trace"]
+        assert final_trace["participant_ack_state"] == "acked"
+        assert final_trace["truth_convergence_state"] == "canonical_truth_converged"
+        assert final_trace["closure_verification_state"] == "verified"
+        assert final_trace["state_update_entry"] == "/api/v1/operator/actions/android-directed/{dispatch_id}/ack"
+        assert final_trace["pending_subject_ids"] == []
 
     def test_android_directed_action_missing_action_kind(self, client):
         resp = client.post(
