@@ -89,6 +89,7 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
         truth_contract["outward_projection_truth"]["operator_visible_done_summary_role"]
         == "operator_visible_interpretation_only"
     )
+    assert truth_contract["outward_projection_truth"]["ui_visible_summary_is_backend_truth"] is False
     assert truth_contract["acceptance_closure_truth"]["closure_candidate_state"] in {
         "not_started",
         "in_progress",
@@ -102,6 +103,10 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert truth_contract["diagnostics_snapshot"]["is_audit_artifact"] is True
     assert truth_contract["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
     assert isinstance(truth_contract["diagnostics_snapshot"]["stage_count"], int)
+    assert (
+        payload["source_of_truth_boundaries"]["ui_visible_summary_not_backend_truth"]
+        == "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth."
+    )
     foundational = payload["foundational_system_truth"]
     assert foundational["cross_device_foundation"]["closure_state"] in {
         "established",

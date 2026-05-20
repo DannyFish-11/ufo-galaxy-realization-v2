@@ -217,6 +217,24 @@ OPERATOR_ROUTES_AUTHORITY: str = (
 )
 
 
+def _operator_consumption_contract_boundary() -> Dict[str, Any]:
+    return {
+        "canonical_backend_contract": {
+            "surface": "operator",
+            "authority": "OPERATOR_ROUTES_V1",
+            "source": "core.operator_surface + core.v2_unified_state_contract",
+        },
+        "consumption_layer_role": "operator_board_projection_consumer_only",
+        "ui_visible_summary_role": "operator_visible_interpretation_only",
+        "ui_visible_summary_is_backend_truth": False,
+        "action_intent_approval_execution_chain": {
+            "intent_entry": "/api/v1/operator/action",
+            "approval_signal": "approval_token",
+            "execution_path": "OperatorSurface.execute_operator_action",
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -1372,6 +1390,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content={
                 **proj.to_dict(),
                 "authority": "OPERATOR_ROUTES_V1",
+                "consumption_contract_boundary": _operator_consumption_contract_boundary(),
             })
         except Exception as exc:
             logger.error("operator_board_operable_truth endpoint error: %s", exc)
@@ -1408,6 +1427,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             return JSONResponse(content={
                 **snap.to_dict(),
                 "authority": "OPERATOR_ROUTES_V1",
+                "consumption_contract_boundary": _operator_consumption_contract_boundary(),
             })
         except Exception as exc:
             logger.error("pr4_operable_surface_snapshot endpoint error: %s", exc)
