@@ -1874,10 +1874,11 @@ class DeviceRouter:
 
                     for _participant in _truth_bridge.get("participants", []):
                         _state = str(_participant.get("state", "") or "")
-                        if _state in {"ready", "degraded", "lost", "recovering"}:
+                        _mapped_state = "lost" if _state == "suspended" else _state
+                        if _mapped_state in {"ready", "degraded", "lost"}:
                             on_participant_readiness_changed(
                                 str(_participant.get("device_id", "")),
-                                _state,
+                                _mapped_state,
                                 formation=_formation_group,
                                 reason="device_router.dispatch_result_convergence",
                             )
@@ -1904,7 +1905,7 @@ class DeviceRouter:
                     "跨设备任务执行完成"
                     if success
                     else (
-                        "接管继续执行完成"
+                        "接管继续执行成功"
                         if _completion_state == "takeover_continuation"
                         else "部分子任务执行失败"
                     )

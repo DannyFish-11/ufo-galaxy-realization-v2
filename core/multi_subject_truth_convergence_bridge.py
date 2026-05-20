@@ -132,17 +132,19 @@ def build_multi_subject_truth_bridge(
                 state = "degraded"
         else:
             state = _classify_participant_result(_participant_result)
-        role = _base_role_from_formation(member, primary_device_id)
+        base_role = _base_role_from_formation(member, primary_device_id)
+        role = base_role
         if signal.get("orchestration_eligible") is False:
             role = "suspended"
             state = "suspended"
-        elif signal.get("readiness") == "lost" and state == "ready":
+        elif signal.get("readiness") == "lost" and state != "suspended":
             state = "lost"
 
         participants.append(
             {
                 "device_id": device_id,
                 "role": role,
+                "base_role": base_role,
                 "state": state,
                 "formation_role": str(member.get("role", "") or "unassigned"),
                 "signal": signal,

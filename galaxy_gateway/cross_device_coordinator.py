@@ -538,7 +538,7 @@ class CrossDeviceCoordinator:
                     for _participant in _truth_bridge.get("participants", []):
                         _state = str(_participant.get("state", "") or "")
                         _mapped_state = "lost" if _state == "suspended" else _state
-                        if _mapped_state in {"ready", "degraded", "lost", "recovering"}:
+                        if _mapped_state in {"ready", "degraded", "lost"}:
                             on_participant_readiness_changed(
                                 str(_participant.get("device_id", "")),
                                 _mapped_state,

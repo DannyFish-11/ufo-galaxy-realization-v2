@@ -88,11 +88,7 @@ async def test_device_router_attaches_truth_bridge_for_partial_cross_device():
         result = await router._dispatch_cross_device_task(task, devices, _substrate_caller="test")
 
     assert "truth_convergence_bridge" in result
-    assert result["completion_state"] in {
-        "degraded_completion",
-        "partial_success",
-        "takeover_continuation",
-    }
+    assert result["completion_state"] in {"degraded_completion", "takeover_continuation"}
     assert "participant_roles" in result
     assert "failure_isolation" in result
 
