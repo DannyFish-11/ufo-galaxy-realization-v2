@@ -106,6 +106,13 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_UNAVAILABLE"
     )
 
+try:
+    from core.final_acceptance_surface_boundary import (
+        build_final_acceptance_surface_boundary as _build_final_acceptance_surface_boundary,
+    )
+except Exception:  # pragma: no cover
+    _build_final_acceptance_surface_boundary = None  # type: ignore[assignment]
+
 # PR-4 (post-533 dual-repo runtime host unification): Canonical Session Truth
 # alignment sentinel.  Asserts that the canonical session truth module is
 # importable from this module's context, so projection endpoints can embed
@@ -6570,7 +6577,7 @@ def _build_truth_acceptance_closure_contract(
     authority_completion_truth = bool(shared_visibility.get("authority_completion_truth"))
     if not authority_completion_truth and acceptance_verdict_normalized == "accept":
         authority_completion_truth = is_fully_closed
-    return {
+    contract = {
         "authority_truth_source": dict(chain_contract.get("authority_truth_source") or {}),
         "acceptance_closure_truth": {
             **dict(chain_contract.get("acceptance_closure_truth") or {}),
@@ -6604,6 +6611,14 @@ def _build_truth_acceptance_closure_contract(
         "gate_candidate": gate,
         "_source": "core.routes.projection._build_truth_acceptance_closure_contract",
     }
+    if _build_final_acceptance_surface_boundary is not None:
+        contract["final_acceptance_surface_boundary"] = _build_final_acceptance_surface_boundary(
+            surface="projection_runtime_truth_contract",
+            consumer_role="runtime_truth_board_facing_consumer_only",
+            canonical_backend_contract="core.v2_unified_state_contract.build_control_plane_surface_contract",
+            product_surface="/api/v1/projection/runtime-truth",
+        )
+    return contract
 
 
 def _build_dual_repo_completeness_baseline_projection(

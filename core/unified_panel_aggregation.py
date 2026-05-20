@@ -305,6 +305,7 @@ class UnifiedPanelPayload:
     runtime_decision_reasoning: Dict[str, Any] = field(default_factory=dict)
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     control_plane_contract: Dict[str, Any] = field(default_factory=dict)
+    final_acceptance_surface_boundary: Dict[str, Any] = field(default_factory=dict)
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -356,6 +357,7 @@ class UnifiedPanelPayload:
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
             "unified_mode_model": dict(self.unified_mode_model),
             "control_plane_contract": dict(self.control_plane_contract),
+            "final_acceptance_surface_boundary": dict(self.final_acceptance_surface_boundary),
             # provenance
             "_source": self._source,
         }
@@ -866,6 +868,9 @@ class UnifiedPanelAggregationService:
     def _fill_control_plane_contract(self, payload: UnifiedPanelPayload) -> None:
         """Attach typed control-plane contract semantics for panel surface."""
         try:
+            from core.final_acceptance_surface_boundary import (
+                build_final_acceptance_surface_boundary,
+            )
             from core.v2_unified_state_contract import (
                 build_control_plane_surface_contract,
                 build_shared_control_plane_basis,
@@ -908,6 +913,12 @@ class UnifiedPanelAggregationService:
                 projection=projection,
                 stale_or_cached_summary=stale_or_cached_summary,
                 shared_basis=shared_basis,
+            )
+            payload.final_acceptance_surface_boundary = build_final_acceptance_surface_boundary(
+                surface="panel",
+                consumer_role="product_panel_consumption_only",
+                canonical_backend_contract="core.v2_unified_state_contract.build_control_plane_surface_contract",
+                product_surface="/api/v1/panel/unified",
             )
         except Exception as exc:
             logger.debug("build_payload: control-plane contract unavailable: %s", exc)
