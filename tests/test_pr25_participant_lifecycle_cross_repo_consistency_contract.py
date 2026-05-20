@@ -78,7 +78,11 @@ def test_manifest_contains_machine_checkable_sections() -> None:
     payload = build_participant_lifecycle_cross_repo_contract_manifest()
     assert payload["v2_role"] == "canonical_governance_center"
     assert payload["android_role"] == "bounded_relative_subject_runtime"
+    assert isinstance(payload["android_audited_ref"], str) and len(payload["android_audited_ref"]) == 40
+    assert isinstance(payload["android_formal_source_sha"], str) and len(payload["android_formal_source_sha"]) == 40
+    assert isinstance(payload["android_anchor"], str) and payload["android_anchor"].endswith(
+        "FormalParticipantLifecycleState.kt"
+    )
     assert payload["android_formal_wire_values"] == sorted(ANDROID_FORMAL_WIRE_VALUES)
     assert payload["verification"]["passed"] is True
     assert payload["critical_trigger_semantic_mappings"]
-

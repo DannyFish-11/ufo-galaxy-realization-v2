@@ -179,6 +179,11 @@ def _transition_index() -> FrozenSet[Tuple[ParticipantLifecycleState, Participan
     return frozenset((t.from_state, t.to_state, t.trigger) for t in PARTICIPANT_STATE_TRANSITIONS)
 
 
+_V2_TRANSITION_INDEX: FrozenSet[
+    Tuple[ParticipantLifecycleState, ParticipantLifecycleState, ParticipantTransitionTrigger]
+] = _transition_index()
+
+
 def verify_participant_lifecycle_cross_repo_contract(
     android_wire_values: Iterable[str] | None = None,
 ) -> ParticipantLifecycleCrossRepoVerificationReport:
@@ -221,10 +226,9 @@ def verify_participant_lifecycle_cross_repo_contract(
             f"got {sorted(x.value for x in terminal_triggers)}."
         )
 
-    transition_index = _transition_index()
     for mapping in CRITICAL_TRIGGER_SEMANTIC_MAPPINGS:
         key = (mapping.v2_from_state, mapping.v2_to_state, mapping.trigger)
-        if key not in transition_index:
+        if key not in _V2_TRANSITION_INDEX:
             issues.append(
                 "Critical trigger semantic mapping missing V2 transition: "
                 f"{mapping.v2_from_state.value} --{mapping.trigger.value}--> {mapping.v2_to_state.value}."
@@ -254,7 +258,7 @@ def build_participant_lifecycle_cross_repo_contract_manifest() -> Dict[str, obje
         "v2_state_classes": {k.value: v.value for k, v in V2_STATE_CLASS_BY_STATE.items()},
         "v2_terminal_states": [s.value for s in sorted(V2_TERMINAL_STATES, key=lambda x: x.value)],
         "android_formal_wire_values": sorted(ANDROID_FORMAL_WIRE_VALUES),
-        "android_formal_state_classes": dict(ANDROID_FORMAL_STATE_CLASS_BY_WIRE),
+        "android_formal_state_classes": {k: v.value for k, v in ANDROID_FORMAL_STATE_CLASS_BY_WIRE.items()},
         "android_capability_advertisement_allowed": sorted(ANDROID_FORMAL_CAPABILITY_ADVERTISEMENT_ALLOWED),
         "android_capability_advertisement_blocked": sorted(ANDROID_FORMAL_CAPABILITY_ADVERTISEMENT_BLOCKED),
         "android_closure_terminal_states": sorted(ANDROID_FORMAL_CLOSURE_TERMINAL_STATES),
@@ -271,4 +275,3 @@ def build_participant_lifecycle_cross_repo_contract_manifest() -> Dict[str, obje
         ],
         "verification": report.to_dict(),
     }
-
