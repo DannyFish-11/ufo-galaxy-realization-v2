@@ -554,15 +554,53 @@ DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS: List[SubjectContractField] = [
     SubjectContractField(
         name="participant_diagnostics_uplink",
         dimension=SubjectContractDimension.DIAGNOSTICS,
-        label=ContractFieldLabel.TRANSITIONAL,
+        label=ContractFieldLabel.CANONICAL,
         description=(
-            "Path for Android to uplink diagnostics to V2 for operator "
-            "visibility.  Transitional: the uplink format and ingress path "
-            "are not yet fully formalised."
+            "Formalised canonical evidence uplink path for Android to upload "
+            "diagnostics, evidence, and participant signals to V2 for runtime "
+            "processing and operator visibility.  Entry point: "
+            "GalaxyConnectionService → galaxy_gateway.android.handlers → "
+            "android_participant_truth_ingress / "
+            "android_evaluator_artifact_ingress.  "
+            "Supersedes the prior TRANSITIONAL declaration."
         ),
-        v2_anchor="core/operator_surface.py",
+        v2_anchor=(
+            "core/android_participant_truth_ingress.py, "
+            "core/android_evaluator_artifact_ingress.py, "
+            "core/cross_subject_observability_contract.py"
+        ),
+        android_anchor="GalaxyConnectionService.kt, GalaxyWebSocketClient.kt",
+        notes=(
+            "Superseded from TRANSITIONAL to CANONICAL by PR-12V2. "
+            "See core/cross_subject_observability_contract.py for the full "
+            "4-level visibility taxonomy and uplink path declaration."
+        ),
+    ),
+    SubjectContractField(
+        name="runtime_visible_diagnostics",
+        dimension=SubjectContractDimension.DIAGNOSTICS,
+        label=ContractFieldLabel.CANONICAL,
+        description=(
+            "Diagnostics and evidence that have crossed the local_visible→"
+            "runtime_visible boundary via the declared uplink path and are "
+            "now visible to the V2 runtime infrastructure.  These reach the "
+            "V2 truth chain through android_participant_truth_ingress and "
+            "android_evaluator_artifact_ingress; they MUST NOT bypass the "
+            "declared ingress modules.  Classified as runtime_visible by "
+            "core/cross_subject_observability_contract.py."
+        ),
+        v2_anchor=(
+            "core/android_participant_truth_ingress.py, "
+            "core/android_evaluator_artifact_ingress.py, "
+            "core/cross_subject_observability_contract.py"
+        ),
         android_anchor="GalaxyConnectionService.kt",
-        notes="Will be superseded by formalised evidence uplink contract.",
+        notes=(
+            "Introduced by PR-12V2.  runtime_visible evidence MUST NOT be "
+            "treated as canonical truth until the V2 SSOT build step promotes "
+            "it.  See cross_subject_observability_contract.py for the full "
+            "uplink path."
+        ),
     ),
     SubjectContractField(
         name="operator_visible_diagnostics",
@@ -570,11 +608,47 @@ DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS: List[SubjectContractField] = [
         label=ContractFieldLabel.CANONICAL,
         description=(
             "Diagnostics surface presented to the operator via "
-            "core/operator_surface.py.  Canonical, read-only projection; "
-            "must not feed back into canonical truth."
+            "core/operator_surface.py and core/routes/operator.py.  "
+            "Canonical, read-only projection; must not feed back into "
+            "canonical truth.  Classified as operator_visible by "
+            "core/cross_subject_observability_contract.py."
         ),
-        v2_anchor="core/operator_surface.py, core/routes/operator.py",
+        v2_anchor=(
+            "core/operator_surface.py, core/routes/operator.py, "
+            "core/operator_execution_observability_surface.py, "
+            "core/cross_subject_observability_contract.py"
+        ),
         android_anchor="",
+        notes=(
+            "Updated by PR-12V2 to reference cross_subject_observability_contract.py "
+            "as the authoritative 4-level visibility classification."
+        ),
+    ),
+    SubjectContractField(
+        name="product_visible_diagnostics",
+        dimension=SubjectContractDimension.DIAGNOSTICS,
+        label=ContractFieldLabel.CANONICAL,
+        description=(
+            "Diagnostics and evidence surfaced to product-facing consumers "
+            "(end users, product dashboards, desktop projection).  These are "
+            "the outermost read-only consumers and MUST only consume canonical "
+            "/ bounded outputs produced by the Stage 2 outward truth chain "
+            "(compile_outward_truth).  No write path to canonical truth. "
+            "Classified as product_visible by "
+            "core/cross_subject_observability_contract.py."
+        ),
+        v2_anchor=(
+            "core/outward_runtime_truth.py, "
+            "core/final_acceptance_surface_boundary.py, "
+            "core/unified_panel_aggregation.py, "
+            "core/cross_subject_observability_contract.py"
+        ),
+        android_anchor="",
+        notes=(
+            "Introduced by PR-12V2.  product_visible_diagnostics MUST only "
+            "consume Stage 2 outward truth outputs.  No subsystem internals "
+            "or local-visible evidence may be surfaced here directly."
+        ),
     ),
 
     # ── Readiness / Posture / Capability / Busy ──────────────────────────────
