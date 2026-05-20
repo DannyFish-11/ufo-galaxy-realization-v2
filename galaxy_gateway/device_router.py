@@ -1286,6 +1286,12 @@ class DeviceRouter:
                 route_mode=route_mode or ctx.get("route_mode", "cross_device"),
                 source_device_id=source_device_id,
                 target_device_ids=_target_ids,
+                extra={
+                    "completion_state": result.get("completion_state"),
+                    "participant_roles": result.get("participant_roles"),
+                    "failure_isolation": result.get("failure_isolation"),
+                    "truth_convergence_bridge": result.get("truth_convergence_bridge"),
+                },
             )
 
             if source_runtime_posture is not None:
@@ -1854,12 +1860,61 @@ class DeviceRouter:
 
             # 汇总结果
             success = all(r.get("success", False) for r in results if isinstance(r, dict))
+            _truth_bridge = {}
+            try:
+                from core.multi_subject_truth_convergence_bridge import build_multi_subject_truth_bridge
 
+                _truth_bridge = build_multi_subject_truth_bridge(
+                    formation=_formation_dict,
+                    participant_results=[r for r in results if isinstance(r, dict)],
+                    source_device_id=task.get("source_device_id", ""),
+                )
+                try:
+                    from core.multi_device_runtime_harness import on_participant_readiness_changed
+
+                    for _participant in _truth_bridge.get("participants", []):
+                        _state = str(_participant.get("state", "") or "")
+                        if _state in {"ready", "degraded", "lost", "recovering"}:
+                            on_participant_readiness_changed(
+                                str(_participant.get("device_id", "")),
+                                _state,
+                                formation=_formation_group,
+                                reason="device_router.dispatch_result_convergence",
+                            )
+                except Exception as _harness_err:
+                    logger.debug(
+                        "DeviceRouter._dispatch_cross_device_task: readiness convergence update skipped — %s",
+                        _harness_err,
+                    )
+            except Exception as _bridge_err:
+                logger.debug(
+                    "DeviceRouter._dispatch_cross_device_task: truth convergence bridge skipped — %s",
+                    _bridge_err,
+                )
+
+            _completion_state = (
+                _truth_bridge.get("closure", {}).get("completion_state")
+                if isinstance(_truth_bridge, dict)
+                else None
+            )
             _result: dict = {
                 "success": success,
                 "subtask_results": results,
-                "message": "跨设备任务执行完成" if success else "部分子任务执行失败",
+                "message": (
+                    "跨设备任务执行完成"
+                    if success
+                    else (
+                        "接管继续执行完成"
+                        if _completion_state == "takeover_continuation"
+                        else "部分子任务执行失败"
+                    )
+                ),
             }
+            if isinstance(_truth_bridge, dict) and _truth_bridge:
+                _result["truth_convergence_bridge"] = _truth_bridge
+                _result["participant_roles"] = _truth_bridge.get("participant_roles", {})
+                _result["failure_isolation"] = _truth_bridge.get("failure_isolation", {})
+                _result["completion_state"] = _truth_bridge.get("closure", {}).get("completion_state", "unknown")
             # PR-520 / GAP-517-004: attach the canonical formation descriptor
             # to the result so that callers and audit surfaces can inspect it.
             if _formation_dict:

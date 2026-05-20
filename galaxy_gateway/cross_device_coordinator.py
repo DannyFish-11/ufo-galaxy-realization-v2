@@ -510,6 +510,52 @@ class CrossDeviceCoordinator:
                 result = result.copy()
             else:
                 result = {"success": False, "error": str(result)}
+            _participant_results = []
+            if isinstance(result.get("subtask_results"), list):
+                _participant_results = [r for r in result.get("subtask_results", []) if isinstance(r, dict)]
+            if not _participant_results:
+                for _did in list(_ctx.get("target_device_ids") or []):
+                    _participant_results.append(
+                        {
+                            "device_id": _did,
+                            "success": bool(result.get("success", False)),
+                            "error": result.get("error"),
+                            "message": result.get("message"),
+                        }
+                    )
+            _truth_bridge = {}
+            try:
+                from core.multi_subject_truth_convergence_bridge import build_multi_subject_truth_bridge
+
+                _truth_bridge = build_multi_subject_truth_bridge(
+                    formation=_formation_dict,
+                    participant_results=_participant_results,
+                    source_device_id=_ctx.get("source_device_id", ""),
+                )
+                try:
+                    from core.multi_device_runtime_harness import on_participant_readiness_changed
+
+                    for _participant in _truth_bridge.get("participants", []):
+                        _state = str(_participant.get("state", "") or "")
+                        _mapped_state = "lost" if _state == "suspended" else _state
+                        if _mapped_state in {"ready", "degraded", "lost", "recovering"}:
+                            on_participant_readiness_changed(
+                                str(_participant.get("device_id", "")),
+                                _mapped_state,
+                                formation=_formation_group,
+                                session_id=_ctx.get("session_id"),
+                                reason="cross_device_coordinator.result_convergence",
+                            )
+                except Exception as _harness_err:
+                    logger.debug(
+                        "CrossDeviceCoordinator.execute_cross_device_task: readiness convergence update skipped — %s",
+                        _harness_err,
+                    )
+            except Exception as _bridge_err:
+                logger.debug(
+                    "CrossDeviceCoordinator.execute_cross_device_task: truth convergence bridge skipped — %s",
+                    _bridge_err,
+                )
             result.setdefault("route_mode", _route_mode)
             result.setdefault("dispatch_path", _dispatch_path)
             if _fallback_reason:
@@ -520,6 +566,11 @@ class CrossDeviceCoordinator:
                 result.setdefault("compat_legacy_bypass", _compat_legacy_bypass)
             if _dispatch_path == "legacy_bypass":
                 result.setdefault("legacy_bypass", True)
+            if isinstance(_truth_bridge, dict) and _truth_bridge:
+                result["truth_convergence_bridge"] = _truth_bridge
+                result["participant_roles"] = _truth_bridge.get("participant_roles", {})
+                result["failure_isolation"] = _truth_bridge.get("failure_isolation", {})
+                result["completion_state"] = _truth_bridge.get("closure", {}).get("completion_state", "unknown")
 
             # PR-519 / GAP-517-007: normalise result into canonical surfaces
             # before returning so that outcomes are visible through
@@ -542,6 +593,10 @@ class CrossDeviceCoordinator:
                         "compat_path_used": _compat_path_used,
                         "compat_legacy_bypass": _compat_legacy_bypass,
                         "substrate_caller": _caller,
+                        "completion_state": result.get("completion_state"),
+                        "participant_roles": result.get("participant_roles"),
+                        "failure_isolation": result.get("failure_isolation"),
+                        "truth_convergence_bridge": result.get("truth_convergence_bridge"),
                     }.items()
                     if value
                 },
@@ -561,6 +616,7 @@ class CrossDeviceCoordinator:
                 "error": f"跨设备任务执行失败: {str(e)}",
                 "route_mode": _route_mode,
                 "dispatch_path": _dispatch_path,
+                "completion_state": "failed",
             }
             if _fallback_reason:
                 _err_result["fallback_reason"] = _fallback_reason
