@@ -62,6 +62,7 @@ from core.bounded_subject_platform_boundary import (
     PlatformBoundarySnapshot,
     QuasiPlatformStateBoundaryViolation,
     assert_quasi_platform_state_intact,
+    build_quasi_platform_runtime_assertion_report,
     build_platform_boundary_snapshot,
     evaluate_quasi_platform_state,
     get_platform_boundary_axes,
@@ -279,6 +280,20 @@ def test_quasi_platform_state_boundary_violation_carries_snapshot() -> None:
     assert not exc.snapshot.quasi_platform_state_intact
 
 
+def test_assert_quasi_platform_state_raises_when_parallel_final_integration_detected(monkeypatch) -> None:
+    import core.bounded_subject_platform_boundary as boundary
+    original_builder = boundary.build_final_acceptance_surface_boundary
+
+    def _fake_boundary_builder(**kwargs):
+        data = original_builder(**kwargs)
+        data["no_parallel_final_integration_framework"] = False
+        return data
+
+    monkeypatch.setattr(boundary, "build_final_acceptance_surface_boundary", _fake_boundary_builder)
+    with pytest.raises(QuasiPlatformStateBoundaryViolation):
+        boundary.assert_quasi_platform_state_intact()
+
+
 # ===========================================================================
 # 15–16: Helper functions
 # ===========================================================================
@@ -317,6 +332,16 @@ def test_snapshot_axis_count_equals_five() -> None:
     snap = build_platform_boundary_snapshot()
     d = snap.to_dict()
     assert d["axis_count"] == 5
+
+
+def test_runtime_assertion_report_is_intact_and_covers_final_integration_guard() -> None:
+    report = build_quasi_platform_runtime_assertion_report()
+    assert report["intact"] is True
+    assert report["violations"] == []
+    assert report["axis_count"] == 5
+    flags = report["final_acceptance_boundary_flags"]
+    assert flags["no_parallel_final_integration_framework"] is True
+    assert flags["outward_surfaces_consume_canonical_outputs_only"] is True
 
 
 # ===========================================================================

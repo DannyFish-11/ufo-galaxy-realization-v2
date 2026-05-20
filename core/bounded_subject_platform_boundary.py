@@ -126,6 +126,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.final_acceptance_surface_boundary import build_final_acceptance_surface_boundary
+
 
 # ---------------------------------------------------------------------------
 # Authority sentinel
@@ -508,6 +510,86 @@ def build_platform_boundary_snapshot() -> PlatformBoundarySnapshot:
     )
 
 
+def build_quasi_platform_runtime_assertion_report() -> Dict[str, Any]:
+    """Build runtime-checkable quasi-platform integrity assertion report."""
+    snapshot = build_platform_boundary_snapshot()
+    violations: List[str] = list(snapshot.violations)
+    axes = list(snapshot.axes)
+    axis_map = {axis.axis: axis for axis in axes}
+
+    if len(axes) != 5:
+        violations.append(
+            f"axis_registry_count={len(axes)} expected=5"
+        )
+    if len(axis_map) != len(axes):
+        violations.append("axis_registry_contains_duplicate_axis_entries")
+    if sum(1 for axis in axes if axis.axis == PlatformBoundaryAxis.CANONICAL_CENTER) != 1:
+        violations.append("canonical_center_uniqueness_violation")
+
+    canonical_axis = axis_map.get(PlatformBoundaryAxis.CANONICAL_CENTER)
+    if canonical_axis is None:
+        violations.append("canonical_center_axis_missing")
+    elif (
+        "sole canonical governance"
+        not in canonical_axis.policy_sentinel.lower()
+    ):
+        violations.append("canonical_center_policy_anchor_missing")
+
+    bounded_subject_axis = axis_map.get(PlatformBoundaryAxis.BOUNDED_SUBJECT)
+    if bounded_subject_axis is None:
+        violations.append("bounded_subject_axis_missing")
+    elif (
+        "global truth finalization"
+        not in bounded_subject_axis.policy_sentinel.lower()
+    ):
+        violations.append("bounded_subject_non_sovereignty_policy_anchor_missing")
+
+    observability_axis = axis_map.get(PlatformBoundaryAxis.OBSERVABILITY_EVIDENCE)
+    if observability_axis is None:
+        violations.append("observability_axis_missing")
+    else:
+        observability_policy = observability_axis.policy_sentinel.lower()
+        if "canonical truth source" not in observability_policy:
+            violations.append("observability_not_truth_authority_policy_anchor_missing")
+
+    outward_axis = axis_map.get(PlatformBoundaryAxis.OUTWARD_CONSUMPTION)
+    if outward_axis is None:
+        violations.append("outward_consumption_axis_missing")
+    else:
+        outward_policy = outward_axis.policy_sentinel.lower()
+        if "consumption" not in outward_policy:
+            violations.append("outward_consumption_only_policy_anchor_missing")
+
+    final_acceptance_boundary = build_final_acceptance_surface_boundary(
+        surface="quasi_platform_runtime_assertion",
+        consumer_role="runtime_assertion_guard",
+        canonical_backend_contract="core.v2_unified_state_contract.build_control_plane_surface_contract",
+        product_surface="/internal/runtime/quasi-platform-state",
+    )
+    if not bool(final_acceptance_boundary.get("no_parallel_final_integration_framework")):
+        violations.append("parallel_final_integration_framework_detected")
+    if not bool(final_acceptance_boundary.get("outward_surfaces_consume_canonical_outputs_only")):
+        violations.append("outward_surfaces_not_consumption_only")
+
+    intact = len(violations) == 0
+    return {
+        "intact": intact,
+        "violations": violations,
+        "axis_count": len(axes),
+        "checked_axes": [axis.axis.value for axis in axes],
+        "final_acceptance_boundary_flags": {
+            "no_parallel_final_integration_framework": bool(
+                final_acceptance_boundary.get("no_parallel_final_integration_framework")
+            ),
+            "outward_surfaces_consume_canonical_outputs_only": bool(
+                final_acceptance_boundary.get("outward_surfaces_consume_canonical_outputs_only")
+            ),
+        },
+        "snapshot": snapshot.to_dict(),
+        "_source": "core.bounded_subject_platform_boundary.build_quasi_platform_runtime_assertion_report",
+    }
+
+
 def assert_quasi_platform_state_intact() -> None:
     """Assert that all five platform boundary axes are intact.
 
@@ -516,11 +598,28 @@ def assert_quasi_platform_state_intact() -> None:
     QuasiPlatformStateBoundaryViolation
         When one or more boundary axes are not intact.
     """
-    snapshot = build_platform_boundary_snapshot()
-    if not snapshot.quasi_platform_state_intact:
+    runtime_report = build_quasi_platform_runtime_assertion_report()
+    if not runtime_report["intact"]:
+        snapshot_dict = dict(runtime_report.get("snapshot") or {})
+        snapshot = PlatformBoundarySnapshot(
+            snapshot_id=snapshot_dict.get("snapshot_id", str(uuid.uuid4())),
+            timestamp=float(snapshot_dict.get("timestamp", time.time())),
+            system_definition=snapshot_dict.get("system_definition", QUASI_PLATFORM_STATE_DEFINITION),
+            authority_sentinel=snapshot_dict.get(
+                "authority_sentinel",
+                BOUNDED_SUBJECT_PLATFORM_BOUNDARY_AUTHORITY,
+            ),
+            pr14v2_sentinel=snapshot_dict.get(
+                "pr14v2_sentinel",
+                BOUNDED_SUBJECT_PLATFORM_BOUNDARY_PR14V2_SENTINEL,
+            ),
+            axes=get_platform_boundary_axes(),
+            quasi_platform_state_intact=False,
+            violations=list(runtime_report.get("violations") or []),
+        )
         raise QuasiPlatformStateBoundaryViolation(
             f"Quasi-platform state boundary not intact: "
-            f"violations={snapshot.violations}",
+            f"violations={runtime_report['violations']}",
             snapshot=snapshot,
         )
 

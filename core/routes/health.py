@@ -27,6 +27,35 @@ logger = logging.getLogger("Galaxy.API")
 HEALTH_ROUTES_AUTHORITY = "core.routes.health"
 
 
+def _build_quasi_platform_health_assertion() -> dict:
+    """Build runtime quasi-platform integrity assertion for health surfaces."""
+    try:
+        from core.bounded_subject_platform_boundary import (
+            build_quasi_platform_runtime_assertion_report,
+        )
+
+        report = build_quasi_platform_runtime_assertion_report()
+        status = "intact" if bool(report.get("intact")) else "degraded"
+        return {
+            "status": status,
+            "intact": bool(report.get("intact")),
+            "violations": list(report.get("violations") or []),
+            "checked_axes": list(report.get("checked_axes") or []),
+            "final_acceptance_boundary_flags": dict(report.get("final_acceptance_boundary_flags") or {}),
+            "assertion_source": report.get("_source"),
+        }
+    except Exception as exc:
+        logger.warning("quasi-platform health assertion unavailable: %s", exc)
+        return {
+            "status": "error",
+            "intact": False,
+            "violations": [f"assertion_unavailable:{exc}"],
+            "checked_axes": [],
+            "final_acceptance_boundary_flags": {},
+            "assertion_source": "core.routes.health._build_quasi_platform_health_assertion",
+        }
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create health routes router."""
     router = APIRouter()
@@ -37,7 +66,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.health_integration import get_unified_health_manager
             uhm = get_unified_health_manager()
-            return JSONResponse(uhm.get_dashboard())
+            payload = dict(uhm.get_dashboard() or {})
+            payload["quasi_platform_state_integrity"] = _build_quasi_platform_health_assertion()
+            return JSONResponse(payload)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -47,7 +78,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.health_integration import get_unified_health_manager
             uhm = get_unified_health_manager()
-            return JSONResponse(uhm.get_quick_status())
+            payload = dict(uhm.get_quick_status() or {})
+            payload["quasi_platform_state_integrity"] = _build_quasi_platform_health_assertion()
+            return JSONResponse(payload)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
