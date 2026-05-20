@@ -66,6 +66,7 @@ Public API
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import uuid
 import re
@@ -246,6 +247,8 @@ class UnifiedResultIngressOutcome:
     continuity_legality_verdict: str = ""
     """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
     value string produced by the continuity gate (empty when not evaluated)."""
+    continuity_legality_mode: str = ""
+    """Continuity legality strictness mode applied to this result ingress call."""
     problem_execution_closure: Dict[str, Any] = field(default_factory=dict)
     """Additive closure split: task closure vs delegated-step closure vs user-problem closure."""
     task_completed: bool = False
@@ -331,9 +334,17 @@ class UnifiedResultIngress:
         # Terminal result ingestion MUST submit to the same continuity
         # authority as reconnect, replay, and delegated recovery paths.
         # Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY.
-        continuity_verdict = self._check_continuity_legality(event)
+        continuity_mode = self._resolve_continuity_mode(event)
+        continuity_verdict = self._check_continuity_legality(
+            event,
+            mode=continuity_mode,
+        )
         outcome.continuity_legality_verdict = continuity_verdict
-        if continuity_verdict in ("reject", "require_review"):
+        outcome.continuity_legality_mode = continuity_mode
+        if self._should_block_on_continuity_verdict(
+            continuity_verdict,
+            mode=continuity_mode,
+        ):
             outcome.continuity_rejected = True
             outcome.incomplete_reason = f"continuity_rejected:{continuity_verdict}"
             logger.warning(
@@ -489,7 +500,38 @@ class UnifiedResultIngress:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _check_continuity_legality(self, event: NormalizedResultEvent) -> str:
+    def _resolve_continuity_mode(self, event: NormalizedResultEvent) -> str:
+        payload = event.payload or {}
+        for key in (
+            "continuity_legality_mode",
+            "canonical_continuity_mode",
+            "canonical_governance_mode",
+        ):
+            raw = str(payload.get(key) or "").strip().lower()
+            if raw in {"strict", "compat", "relaxed"}:
+                return raw
+        env_mode = str(
+            os.environ.get("GALAXY_RESULT_INGRESS_CONTINUITY_MODE", "compat")
+        ).strip().lower()
+        if env_mode in {"strict", "compat", "relaxed"}:
+            return env_mode
+        return "compat"
+
+    @staticmethod
+    def _should_block_on_continuity_verdict(verdict: str, *, mode: str) -> bool:
+        norm_mode = str(mode).strip().lower()
+        if verdict == "reject":
+            return True
+        if verdict == "require_review":
+            return norm_mode == "strict"
+        return False
+
+    def _check_continuity_legality(
+        self,
+        event: NormalizedResultEvent,
+        *,
+        mode: str,
+    ) -> str:
         """Run the unified continuity legality gate for terminal result ingestion.
 
         Returns the verdict string: ``"allow"``, ``"reject"``, or
@@ -510,14 +552,24 @@ class UnifiedResultIngress:
                 runtime_attachment_session_id=event.runtime_attachment_session_id or "",
                 durable_session_id=event.durable_session_id or "",
             )
-            report = evaluate_continuity_legality(ContinuityLegalityPath.TERMINAL_RESULT_INGESTION, ctx)
+            report = evaluate_continuity_legality(
+                ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+                ctx,
+                mode=mode,
+            )
             return report.verdict.value
         except Exception as _e:
             logger.debug(
-                "unified_result_ingress: continuity legality gate unavailable " "(non-fatal, passing through): %s",
+                "unified_result_ingress: continuity legality gate unavailable "
+                "(mode=%s): %s",
+                mode,
                 _e,
             )
-            return "allow"
+            if str(mode).strip().lower() == "strict":
+                return "require_review"
+            if str(mode).strip().lower() == "relaxed":
+                return "allow"
+            return "require_review"
 
     def _check_idempotency(self, event: NormalizedResultEvent) -> bool:
         """Return True iff the idempotency_key is already recorded."""

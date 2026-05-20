@@ -98,11 +98,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.CanonicalDispatchSlotAuthority")
+
+DEFAULT_DISPATCH_AUTHORITY_MODE_ENV = "GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE"
+"""Environment variable controlling default canonical dispatch authority mode.
+
+Accepted values: ``strict`` / ``compat`` / ``relaxed``.
+"""
 
 # ---------------------------------------------------------------------------
 # Authority and policy sentinels
@@ -461,6 +468,32 @@ class CanonicalDispatchSlotsResult:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_dispatch_authority_mode(
+    *,
+    authority_mode: Optional[str],
+    continuity_context: Optional[Dict[str, Any]],
+) -> str:
+    if authority_mode:
+        return str(authority_mode).strip().lower()
+    ctx = continuity_context or {}
+    for key in (
+        "canonical_dispatch_authority_mode",
+        "dispatch_authority_mode",
+        "canonical_governance_mode",
+    ):
+        raw = str(ctx.get(key) or "").strip().lower()
+        if raw in {"strict", "compat", "relaxed"}:
+            return raw
+    env_mode = str(os.environ.get(DEFAULT_DISPATCH_AUTHORITY_MODE_ENV, "compat")).strip().lower()
+    if env_mode in {"strict", "compat", "relaxed"}:
+        return env_mode
+    return "compat"
+
+
+def _is_strict_authority_mode(mode: str) -> bool:
+    return str(mode).strip().lower() == "strict"
+
+
 def evaluate_canonical_dispatch_slot(
     device_id: str,
     execution_mode: str,
@@ -470,6 +503,7 @@ def evaluate_canonical_dispatch_slot(
     runtime_attachment_session_id: Optional[str] = None,
     task_id: Optional[str] = None,
     continuity_context: Optional[Dict[str, Any]] = None,
+    authority_mode: Optional[str] = None,
 ) -> CanonicalDispatchSlot:
     """Evaluate whether *device_id* is an approved canonical dispatch slot.
 
@@ -517,6 +551,10 @@ def evaluate_canonical_dispatch_slot(
             runtime_attachment_session_id=runtime_attachment_session_id,
             task_id=task_id,
             continuity_context=continuity_context or {},
+            authority_mode=_resolve_dispatch_authority_mode(
+                authority_mode=authority_mode,
+                continuity_context=continuity_context,
+            ),
         )
     except Exception as exc:
         logger.warning(
@@ -546,6 +584,7 @@ def get_canonical_dispatch_slots(
     runtime_attachment_session_id: Optional[str] = None,
     task_id: Optional[str] = None,
     continuity_context: Optional[Dict[str, Any]] = None,
+    authority_mode: Optional[str] = None,
 ) -> CanonicalDispatchSlotsResult:
     """Evaluate a list of candidate devices and return approved dispatch slots.
 
@@ -584,6 +623,10 @@ def get_canonical_dispatch_slots(
             runtime_attachment_session_id=runtime_attachment_session_id,
             task_id=task_id,
             continuity_context=continuity_context or {},
+            authority_mode=_resolve_dispatch_authority_mode(
+                authority_mode=authority_mode,
+                continuity_context=continuity_context,
+            ),
         )
     except Exception as exc:
         logger.warning(
@@ -614,9 +657,13 @@ def _evaluate_slot_impl(
     runtime_attachment_session_id: Optional[str],
     task_id: Optional[str],
     continuity_context: Dict[str, Any],
+    authority_mode: str,
 ) -> CanonicalDispatchSlot:
     """Evaluate all ten dimensions in order; return on first blocking result."""
-    notes: List[str] = [f"execution_mode={execution_mode!r}"]
+    notes: List[str] = [
+        f"execution_mode={execution_mode!r}",
+        f"authority_mode={authority_mode!r}",
+    ]
     if task_id:
         notes.append(f"task_id={task_id!r}")
 
@@ -698,9 +745,13 @@ def _evaluate_slot_impl(
         session_id=session_id,
         runtime_attachment_session_id=runtime_attachment_session_id,
         extra_context=continuity_context,
+        authority_mode=authority_mode,
     )
     dimensions["continuity_legality"] = (continuity_verdict == "allow")
-    if continuity_verdict == "reject" or continuity_verdict == "hard_reject":
+    if continuity_verdict in {"reject", "hard_reject"} or (
+        continuity_verdict == "require_review"
+        and _is_strict_authority_mode(authority_mode)
+    ):
         notes.extend(continuity_notes)
         return CanonicalDispatchSlot(
             device_id=device_id,
@@ -726,6 +777,7 @@ def _evaluate_slot_impl(
     mode_eligible, mode_notes = _eval_execution_mode_eligibility(
         device_id=device_id,
         execution_mode=execution_mode,
+        authority_mode=authority_mode,
     )
     dimensions["execution_mode_eligibility"] = mode_eligible
     if not mode_eligible:
@@ -755,6 +807,7 @@ def _evaluate_slot_impl(
     occupancy_clear, occupancy_notes = _eval_occupancy(
         device_id=device_id,
         task_id=task_id,
+        authority_mode=authority_mode,
     )
     dimensions["occupancy"] = occupancy_clear
     if not occupancy_clear:
@@ -785,6 +838,7 @@ def _evaluate_slot_impl(
     policy_allowed, policy_notes = _eval_policy_allowance(
         device_id=device_id,
         execution_mode=execution_mode,
+        authority_mode=authority_mode,
     )
     dimensions["policy_allowance"] = policy_allowed
     if not policy_allowed:
@@ -820,6 +874,7 @@ def _evaluate_slot_impl(
         delegated_handoff_ok, delegated_notes = _eval_delegated_handoff_acceptability(
             device_id=device_id,
             execution_mode=execution_mode,
+            authority_mode=authority_mode,
         )
     dimensions["delegated_handoff_acceptability"] = delegated_handoff_ok
     if not delegated_handoff_ok:
@@ -886,6 +941,7 @@ def _get_slots_impl(
     runtime_attachment_session_id: Optional[str],
     task_id: Optional[str],
     continuity_context: Dict[str, Any],
+    authority_mode: str,
 ) -> CanonicalDispatchSlotsResult:
     """Evaluate each device and partition into approved/blocked slots."""
     if not device_ids:
@@ -909,6 +965,7 @@ def _get_slots_impl(
             runtime_attachment_session_id=runtime_attachment_session_id,
             task_id=task_id,
             continuity_context=continuity_context,
+            authority_mode=authority_mode,
         )
         if slot.slot_approved:
             approved.append(slot)
@@ -1013,6 +1070,7 @@ def _eval_continuity_legality(
     session_id: Optional[str],
     runtime_attachment_session_id: Optional[str],
     extra_context: Dict[str, Any],
+    authority_mode: str,
 ) -> tuple:
     """Evaluate continuity legality (dimension 4).
 
@@ -1026,40 +1084,29 @@ def _eval_continuity_legality(
             evaluate_continuity_legality,
         )
 
-        # Map execution mode to continuity path
-        _mode_to_path = {
-            "local": ContinuityLegalityPath.online_dispatch,
-            "single_device_remote": ContinuityLegalityPath.online_dispatch,
-            "cross_device": ContinuityLegalityPath.online_dispatch,
-            "parallel_fanout": ContinuityLegalityPath.online_dispatch,
-            "handoff": ContinuityLegalityPath.online_dispatch,
-            "takeover": ContinuityLegalityPath.online_dispatch,
-            "wake_routed": ContinuityLegalityPath.online_dispatch,
-            "delegated_runtime": ContinuityLegalityPath.delegated_recovery,
-            "hybrid": ContinuityLegalityPath.online_dispatch,
-        }
-        path = _mode_to_path.get(execution_mode, ContinuityLegalityPath.online_dispatch)
+        path = ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE
 
         _attach_id = (
             runtime_attachment_session_id
             or extra_context.get("runtime_attachment_session_id")
             or ""
         )
-        _sess_id = (
-            session_id
-            or extra_context.get("session_id")
-            or ""
-        )
+        _durable_session_id = session_id or extra_context.get("session_id") or ""
         _runtime_sess_id = extra_context.get("runtime_session_id", "")
+        _continuity_epoch = int(extra_context.get("continuity_epoch") or 0)
 
         ctx = ContinuityLegalityContext(
-            device_id=device_id,
             path=path,
+            device_id=device_id,
+            durable_session_id=_durable_session_id,
             runtime_attachment_session_id=_attach_id,
-            session_id=_sess_id,
             runtime_session_id=_runtime_sess_id,
+            continuity_epoch=_continuity_epoch,
+            metadata={
+                "dispatch_execution_mode": execution_mode,
+            },
         )
-        report = evaluate_continuity_legality(ctx)
+        report = evaluate_continuity_legality(path, ctx, mode=authority_mode)
         verdict = report.verdict if hasattr(report, "verdict") else "allow"
         # Convert verdict object to string if needed
         verdict_str = verdict.value if hasattr(verdict, "value") else str(verdict)
@@ -1077,15 +1124,16 @@ def _eval_continuity_legality(
             device_id,
             exc,
         )
-        # When continuity authority is unavailable, allow through
-        # (conservative: do not block on unavailable authority)
-        return "allow", [f"continuity_legality_unavailable: {exc}"]
+        if _is_strict_authority_mode(authority_mode):
+            return "require_review", [f"continuity_legality_unavailable(strict): {exc}"]
+        return "allow", [f"continuity_legality_unavailable(compat): {exc}"]
 
 
 def _eval_execution_mode_eligibility(
     *,
     device_id: str,
     execution_mode: str,
+    authority_mode: str,
 ) -> tuple:
     """Evaluate execution-mode eligibility (dimension 6).
 
@@ -1139,14 +1187,16 @@ def _eval_execution_mode_eligibility(
             execution_mode,
             exc,
         )
-        # When check unavailable, allow through (do not create false blocks)
-        return True, [f"execution_mode_eligibility_unavailable: {exc}"]
+        if _is_strict_authority_mode(authority_mode):
+            return False, [f"execution_mode_eligibility_unavailable(strict): {exc}"]
+        return True, [f"execution_mode_eligibility_unavailable(compat): {exc}"]
 
 
 def _eval_occupancy(
     *,
     device_id: str,
     task_id: Optional[str],
+    authority_mode: str,
 ) -> tuple:
     """Evaluate occupancy / reservation state (dimension 7).
 
@@ -1170,14 +1220,16 @@ def _eval_occupancy(
             device_id,
             exc,
         )
-        # When pool manager unavailable, treat as clear
-        return True, [f"occupancy_check_unavailable: {exc}"]
+        if _is_strict_authority_mode(authority_mode):
+            return False, [f"occupancy_check_unavailable(strict): {exc}"]
+        return True, [f"occupancy_check_unavailable(compat): {exc}"]
 
 
 def _eval_policy_allowance(
     *,
     device_id: str,
     execution_mode: str,
+    authority_mode: str,
 ) -> tuple:
     """Evaluate device-level and system-level dispatch policy (dimension 8).
 
@@ -1212,14 +1264,16 @@ def _eval_policy_allowance(
             device_id,
             exc,
         )
-        # When policy unavailable, allow through
-        return True, [f"policy_allowance_unavailable: {exc}"]
+        if _is_strict_authority_mode(authority_mode):
+            return False, [f"policy_allowance_unavailable(strict): {exc}"]
+        return True, [f"policy_allowance_unavailable(compat): {exc}"]
 
 
 def _eval_delegated_handoff_acceptability(
     *,
     device_id: str,
     execution_mode: str,
+    authority_mode: str,
 ) -> tuple:
     """Evaluate delegated / handoff acceptability (dimension 10).
 
@@ -1250,8 +1304,9 @@ def _eval_delegated_handoff_acceptability(
             execution_mode,
             exc,
         )
-        # When gate unavailable, allow through
-        return True, [f"delegated_handoff_acceptability_unavailable: {exc}"]
+        if _is_strict_authority_mode(authority_mode):
+            return False, [f"delegated_handoff_acceptability_unavailable(strict): {exc}"]
+        return True, [f"delegated_handoff_acceptability_unavailable(compat): {exc}"]
 
 
 # ---------------------------------------------------------------------------

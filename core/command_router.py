@@ -1872,6 +1872,11 @@ class CommandRouter:
         _v3_blocked_targets: List[str] = []
         _v3_block_reason: str = ""
         _v3_slot_result = None
+        _v3_authority_mode = str(
+            (envelope.metadata or {}).get("canonical_dispatch_authority_mode")
+            or (envelope.metadata or {}).get("canonical_governance_mode")
+            or os.environ.get("GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE", "compat")
+        ).strip().lower()
         _v3_pre_targets = list(envelope.targets)
         if _v3_pre_targets:
             try:
@@ -1915,6 +1920,7 @@ class CommandRouter:
                     runtime_attachment_session_id=_v3_attachment_sid or None,
                     task_id=envelope.task_id,
                     continuity_context=_v3_continuity_ctx or None,
+                    authority_mode=_v3_authority_mode,
                 )
                 _v3_slot_gate_applied = True
                 _v3_approved_targets = list(_v3_slot_result.approved_device_ids)
@@ -2029,8 +2035,39 @@ class CommandRouter:
                     return _v3_blocked_result
 
             except Exception as _v3_exc:
-                logger.debug(
-                    "route_envelope [V3-slot-gate]: skipped (fail-open): %s",
+                _v3_block_reason = f"slot_authority_unavailable:{_v3_exc}"
+                if _v3_authority_mode == "strict":
+                    logger.warning(
+                        "route_envelope [V3-slot-gate]: strict mode blocks dispatch on authority error: %s",
+                        _v3_exc,
+                    )
+                    return {
+                        "request_id": envelope.task_id,
+                        "task_id": envelope.task_id,
+                        "trace_id": envelope.trace_id,
+                        "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
+                        "device_id": _v3_pre_targets[0] if _v3_pre_targets else "",
+                        "command": envelope.tool_name,
+                        "via": "command_router",
+                        "success": False,
+                        "result": None,
+                        "error_code": GatewayErrorCode.V3_SLOT_BLOCKED.value,
+                        "error_message": (
+                            "V3 canonical slot authority unavailable in strict mode; "
+                            f"dispatch blocked. Details: {_v3_exc}"
+                        ),
+                        "v3_slot_gate": {
+                            "applied": False,
+                            "mode": _v3_authority_mode,
+                            "approved": [],
+                            "blocked": list(_v3_pre_targets),
+                            "block_reason": _v3_block_reason,
+                        },
+                        "latency_ms": 0.0,
+                    }
+                logger.warning(
+                    "route_envelope [V3-slot-gate]: compat fallback on authority error mode=%s err=%s",
+                    _v3_authority_mode,
                     _v3_exc,
                 )
 
@@ -2048,6 +2085,7 @@ class CommandRouter:
         # Stamp V3 slot gate result into constraint chain trace for end-to-end
         # reviewability.
         _constraint_chain_trace["v3_slot_gate_applied"] = _v3_slot_gate_applied
+        _constraint_chain_trace["v3_slot_gate_mode"] = _v3_authority_mode
         _constraint_chain_trace["v3_approved_targets"] = _v3_approved_targets
         _constraint_chain_trace["v3_blocked_targets"] = _v3_blocked_targets
         _constraint_chain_trace["v3_block_reason"] = _v3_block_reason

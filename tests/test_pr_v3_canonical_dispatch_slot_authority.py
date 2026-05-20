@@ -733,6 +733,7 @@ class TestExecutionModesCoverageByAuthority:
             runtime_attachment_session_id=None,
             task_id=None,
             continuity_context={},
+            authority_mode="compat",
         )
 
     def test_parallel_fanout_collects_all_approved_slots(self) -> None:
