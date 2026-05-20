@@ -800,8 +800,8 @@ def test_contract_authority_sentinel_references_pr12v2_semantics():
         "Authority sentinel must reference superseding the TRANSITIONAL "
         "participant_diagnostics_uplink field."
     )
-    # Must reference the 4-level visibility taxonomy
-    assert "4-level" in auth or "four" in auth or "local-visible" in auth or "local_visible" in auth
+    # Must reference the 4-level visibility taxonomy by naming the local_visible level
+    assert "local_visible" in auth or "local-visible" in auth
 
 
 # ---------------------------------------------------------------------------

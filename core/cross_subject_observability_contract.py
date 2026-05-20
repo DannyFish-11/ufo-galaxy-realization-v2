@@ -1088,9 +1088,7 @@ def get_surfaces_by_visibility(
 # ---------------------------------------------------------------------------
 
 
-def build_cross_subject_observability_snapshot() -> (
-    CrossSubjectObservabilitySnapshot
-):
+def build_cross_subject_observability_snapshot() -> CrossSubjectObservabilitySnapshot:
     """Build an aggregate observability snapshot for operator / CI visibility.
 
     Returns
