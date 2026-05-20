@@ -1604,8 +1604,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 "acked": True,
                 "dispatch_id": dispatch_id,
                 "closure_trace": (
-                    get_android_directed_action_terminal_state(dispatch_id).get("operator_control_closure_trace")
-                    or {}
+                    (get_android_directed_action_terminal_state(dispatch_id) or {}).get(
+                        "operator_control_closure_trace",
+                        {},
+                    )
                 ),
                 "authority": "OPERATOR_ROUTES_V1",
             })

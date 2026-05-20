@@ -114,7 +114,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger("Galaxy.PR4.OperatorActionGovernance")
 
@@ -727,9 +727,11 @@ def _determine_system_health(
 
 def _build_android_directed_subject_ids(spec: AndroidDirectedActionSpec) -> List[str]:
     subjects: List[str] = []
+    seen: Set[str] = set()
     for item in (spec.device_id, spec.target_flow_id, spec.target_task_id, spec.target_session_id):
         value = str(item or "").strip()
-        if value and value not in subjects:
+        if value and value not in seen:
+            seen.add(value)
             subjects.append(value)
     return subjects
 
@@ -1503,11 +1505,14 @@ def execute_governed_operator_action(
 
     post_state = _capture_post_state()
     routed_subject_ids: List[str] = []
+    routed_subject_seen: Set[str] = set()
     for subject_id in affected_entity_ids:
         subject = str(subject_id or "").strip()
-        if subject and subject not in routed_subject_ids:
+        if subject and subject not in routed_subject_seen:
+            routed_subject_seen.add(subject)
             routed_subject_ids.append(subject)
-    if device_id and device_id not in routed_subject_ids:
+    if device_id and device_id not in routed_subject_seen:
+        routed_subject_seen.add(device_id)
         routed_subject_ids.append(device_id)
     if android_dispatch_id:
         participant_ack_state = "pending"
@@ -1639,10 +1644,13 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         proj.last_action_error = last.error
         proj.last_action_triggered_at = last.triggered_at
         proj.last_action_affected_entity_ids = list(last.affected_entity_ids)
+        routed_subjects_for_trace = list(last.routed_subject_ids)
+        if not routed_subjects_for_trace:
+            routed_subjects_for_trace = list(last.affected_entity_ids)
         proj.last_action_closure_trace = _build_operator_control_closure_trace(
             action_id=last.action_id,
             action_kind=last.action_kind,
-            routed_subject_ids=list(last.routed_subject_ids or last.affected_entity_ids),
+            routed_subject_ids=routed_subjects_for_trace,
             participant_ack_state=last.participant_ack_state,
             truth_convergence_state=last.truth_convergence_state,
             closure_verification_state=last.closure_verification_state,
