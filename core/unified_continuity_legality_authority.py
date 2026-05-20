@@ -124,6 +124,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -280,6 +281,17 @@ class ContinuityLegalityVerdict(str, Enum):
     def is_hard_rejected(self) -> bool:
         """Return True only for REJECT (not REQUIRE_REVIEW)."""
         return self is ContinuityLegalityVerdict.REJECT
+
+
+class ContinuityLegalityMode(str, Enum):
+    """Continuity legality gating strictness."""
+
+    STRICT = "strict"
+    COMPAT = "compat"
+    RELAXED = "relaxed"
+
+
+DEFAULT_CONTINUITY_LEGALITY_MODE_ENV = "GALAXY_CONTINUITY_LEGALITY_MODE"
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +528,7 @@ def reset_unified_continuity_legality_authority() -> None:
 def evaluate_continuity_legality(
     path: ContinuityLegalityPath,
     ctx: ContinuityLegalityContext,
+    mode: Optional[Any] = None,
 ) -> ContinuityLegalityReport:
     """Evaluate continuity legality for *ctx* on the given *path*.
 
@@ -536,7 +549,45 @@ def evaluate_continuity_legality(
         before proceeding.  When ``report.is_rejected`` the path MUST
         abort and return a rejection response.
     """
-    return get_unified_continuity_legality_authority().evaluate(path, ctx)
+    return get_unified_continuity_legality_authority().evaluate(path, ctx, mode=mode)
+
+
+def resolve_continuity_legality_mode(
+    path: ContinuityLegalityPath,
+    *,
+    explicit_mode: Optional[Any] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> ContinuityLegalityMode:
+    """Resolve strictness mode for continuity legality decisions."""
+
+    def _parse(raw: Any) -> Optional[ContinuityLegalityMode]:
+        try:
+            return ContinuityLegalityMode(str(raw).strip().lower())
+        except Exception:
+            return None
+
+    if explicit_mode is not None:
+        parsed = _parse(explicit_mode)
+        if parsed is not None:
+            return parsed
+
+    if metadata:
+        for key in (
+            "continuity_legality_mode",
+            "canonical_continuity_mode",
+            "canonical_governance_mode",
+        ):
+            parsed = _parse(metadata.get(key))
+            if parsed is not None:
+                return parsed
+
+    parsed = _parse(os.environ.get(DEFAULT_CONTINUITY_LEGALITY_MODE_ENV, ""))
+    if parsed is not None:
+        return parsed
+
+    if path in _STRICT_MODE_PATHS:
+        return ContinuityLegalityMode.STRICT
+    return ContinuityLegalityMode.COMPAT
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +610,7 @@ class UnifiedContinuityLegalityAuthority:
         self,
         path: ContinuityLegalityPath,
         ctx: ContinuityLegalityContext,
+        mode: Optional[Any] = None,
     ) -> ContinuityLegalityReport:
         """Evaluate all relevant continuity dimensions for *path* + *ctx*.
 
@@ -607,8 +659,9 @@ class UnifiedContinuityLegalityAuthority:
             dimension_outcomes.append(outcome)
 
         # ── Aggregate ──────────────────────────────────────────────────────
+        resolved_mode = resolve_continuity_legality_mode(path, explicit_mode=mode)
         overall, reject_reason = self._aggregate(
-            dimension_outcomes, path
+            dimension_outcomes, path, resolved_mode
         )
 
         return ContinuityLegalityReport(
@@ -1273,6 +1326,7 @@ class UnifiedContinuityLegalityAuthority:
     def _aggregate(
         outcomes: List[DimensionLegalityOutcome],
         path: ContinuityLegalityPath,
+        mode: ContinuityLegalityMode,
     ) -> tuple:  # Tuple[ContinuityLegalityVerdict, str]: (overall_verdict, reject_reason)
         """Aggregate dimension outcomes into the overall verdict.
 
@@ -1291,13 +1345,14 @@ class UnifiedContinuityLegalityAuthority:
 
         for outcome in outcomes:
             if outcome.verdict is ContinuityLegalityVerdict.REQUIRE_REVIEW:
-                if path in _STRICT_MODE_PATHS:
+                if mode is ContinuityLegalityMode.STRICT:
                     return ContinuityLegalityVerdict.REQUIRE_REVIEW, outcome.reason
-                # Non-strict paths: REQUIRE_REVIEW is advisory — pass through
+                # Compat/relaxed modes: REQUIRE_REVIEW is advisory — pass through
                 logger.debug(
-                    "unified_continuity_legality: REQUIRE_REVIEW on non-strict "
-                    "path=%s dim=%s reason=%s — passing through",
+                    "unified_continuity_legality: REQUIRE_REVIEW advisory "
+                    "path=%s mode=%s dim=%s reason=%s — passing through",
                     path.value,
+                    mode.value,
                     outcome.dimension.value,
                     outcome.reason,
                 )
@@ -1322,12 +1377,15 @@ __all__ = [
     "ContinuityLegalityPath",
     "ContinuityLegalityDimension",
     "ContinuityLegalityVerdict",
+    "ContinuityLegalityMode",
+    "DEFAULT_CONTINUITY_LEGALITY_MODE_ENV",
     # Dataclasses
     "ContinuityLegalityContext",
     "DimensionLegalityOutcome",
     "ContinuityLegalityReport",
     # Functions
     "evaluate_continuity_legality",
+    "resolve_continuity_legality_mode",
     "get_unified_continuity_legality_authority",
     "reset_unified_continuity_legality_authority",
     # Class

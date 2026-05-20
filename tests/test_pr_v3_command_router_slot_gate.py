@@ -17,6 +17,7 @@ Coverage
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -512,7 +513,7 @@ class TestExistingGatesPreserved:
         assert result["success"] is False
 
     def test_v3_gate_fail_open_does_not_crash_router(self) -> None:
-        """If V3 raises an exception, route_envelope must still proceed (fail-open)."""
+        """Compat mode: V3 exception does not crash router and keeps degraded compatibility."""
         router = CommandRouter()
         env = _make_envelope(targets=["dev_resilient"])
 
@@ -520,29 +521,14 @@ class TestExistingGatesPreserved:
             raise RuntimeError("V3 authority internal error")
 
         async def _run() -> Dict[str, Any]:
-            with patch(
-                "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
-                side_effect=mock_get_slots_raises,
-            ):
-                with patch.object(
-                    router,
-                    "_execute_command",
-                    new_callable=AsyncMock,
-                    return_value={
-                        "success": True,
-                        "result": None,
-                        "error_code": None,
-                        "error_message": "",
-                        "task_id": env.task_id,
-                        "device_id": "dev_resilient",
-                        "command": "test_tool",
-                        "via": "mock",
-                        "latency_ms": 0.0,
-                    },
+            with patch.dict(os.environ, {"GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE": "compat"}):
+                with patch(
+                    "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+                    side_effect=mock_get_slots_raises,
                 ):
                     with patch.object(
                         router,
-                        "_route_cross_device_envelope",
+                        "_execute_command",
                         new_callable=AsyncMock,
                         return_value={
                             "success": True,
@@ -552,16 +538,49 @@ class TestExistingGatesPreserved:
                             "task_id": env.task_id,
                             "device_id": "dev_resilient",
                             "command": "test_tool",
-                            "via": "mock_cross",
+                            "via": "mock",
                             "latency_ms": 0.0,
                         },
                     ):
-                        return await router.route_envelope(env)
+                        with patch.object(
+                            router,
+                            "_route_cross_device_envelope",
+                            new_callable=AsyncMock,
+                            return_value={
+                                "success": True,
+                                "result": None,
+                                "error_code": None,
+                                "error_message": "",
+                                "task_id": env.task_id,
+                                "device_id": "dev_resilient",
+                                "command": "test_tool",
+                                "via": "mock_cross",
+                                "latency_ms": 0.0,
+                            },
+                        ):
+                            return await router.route_envelope(env)
 
         result = asyncio.get_event_loop().run_until_complete(_run())
         # Must not crash; must return a result dict
         assert isinstance(result, dict), "route_envelope must return dict even when V3 fails"
         assert "success" in result
+
+    def test_v3_gate_strict_mode_blocks_on_authority_error(self) -> None:
+        router = CommandRouter()
+        env = _make_envelope(targets=["dev_strict"])
+
+        async def _run() -> Dict[str, Any]:
+            with patch.dict(os.environ, {"GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE": "strict"}):
+                with patch(
+                    "core.canonical_dispatch_slot_authority.get_canonical_dispatch_slots",
+                    side_effect=RuntimeError("strict-mode-v3-error"),
+                ):
+                    return await router.route_envelope(env)
+
+        result = asyncio.get_event_loop().run_until_complete(_run())
+        assert result["success"] is False
+        assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value
+        assert "strict mode" in str(result.get("error_message", "")).lower()
 
 
 # ---------------------------------------------------------------------------

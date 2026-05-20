@@ -85,6 +85,7 @@ Functions
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -244,6 +245,8 @@ class RuntimeTruthIngressOutcome:
     continuity_legality_verdict: str = ""
     """The :class:`~core.unified_continuity_legality_authority.ContinuityLegalityVerdict`
     value string (empty when not evaluated)."""
+    continuity_legality_mode: str = ""
+    """Configured continuity legality strictness mode (strict/compat/relaxed)."""
     result_produced: bool = False
     """True when this ingress observed a terminal execution result signal."""
     truth_ingested_or_accepted: bool = False
@@ -272,6 +275,7 @@ class RuntimeTruthIngressOutcome:
             "message_type": self.message_type,
             "continuity_rejected": self.continuity_rejected,
             "continuity_legality_verdict": self.continuity_legality_verdict,
+            "continuity_legality_mode": self.continuity_legality_mode,
             "result_produced": self.result_produced,
             "truth_ingested_or_accepted": self.truth_ingested_or_accepted,
             "closure_accepted": self.closure_accepted,
@@ -285,7 +289,7 @@ class RuntimeTruthIngressOutcome:
 
 
 def _check_runtime_ingress_continuity(
-    message: Dict[str, Any], msg_type: str
+    message: Dict[str, Any], msg_type: str, *, mode: str
 ) -> tuple:  # Tuple[str, bool]: (verdict_str, is_hard_rejected)
     """Run the unified continuity legality gate for an inbound runtime update.
 
@@ -320,16 +324,42 @@ def _check_runtime_ingress_continuity(
             emission_seq=int(message.get("emission_seq") or 0),
             contract_id=str(message.get("contract_id") or ""),
         )
-        report = evaluate_continuity_legality(path, ctx)
-        # Only hard REJECT (stale terminal identity) blocks routing
-        return report.verdict.value, report.verdict.is_hard_rejected()
+        report = evaluate_continuity_legality(path, ctx, mode=mode)
+        verdict = report.verdict.value
+        if verdict == "reject":
+            return verdict, True
+        if verdict == "require_review":
+            return verdict, str(mode).strip().lower() == "strict"
+        return verdict, False
     except Exception as _e:
         logger.debug(
             "unified_runtime_truth_ingress: continuity gate unavailable "
-            "(non-fatal, passing through): %s",
+            "(mode=%s): %s",
+            mode,
             _e,
         )
-        return "allow", False
+        if str(mode).strip().lower() == "strict":
+            return "require_review", True
+        if str(mode).strip().lower() == "relaxed":
+            return "allow", False
+        return "require_review", False
+
+
+def _resolve_runtime_truth_continuity_mode(message: Dict[str, Any]) -> str:
+    for key in (
+        "continuity_legality_mode",
+        "canonical_continuity_mode",
+        "canonical_governance_mode",
+    ):
+        raw = str(message.get(key) or "").strip().lower()
+        if raw in {"strict", "compat", "relaxed"}:
+            return raw
+    env_mode = str(
+        os.environ.get("GALAXY_RUNTIME_TRUTH_CONTINUITY_MODE", "compat")
+    ).strip().lower()
+    if env_mode in {"strict", "compat", "relaxed"}:
+        return env_mode
+    return "compat"
 
 
 def _resolve_execution_signal_reconciled(sub_outcome: Any) -> bool:
@@ -509,8 +539,11 @@ def ingest_android_runtime_state_update(
     # recovery and replay paths.  Execution signals are evaluated under
     # ONLINE_SIGNAL_INGESTION; all other types under ATTACHMENT_RESUME.
     # Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY.
+    _continuity_mode = _resolve_runtime_truth_continuity_mode(message)
     _continuity_verdict, _continuity_rejected = _check_runtime_ingress_continuity(
-        message, msg_type
+        message,
+        msg_type,
+        mode=_continuity_mode,
     )
     if _continuity_rejected:
         return RuntimeTruthIngressOutcome(
@@ -520,6 +553,7 @@ def ingest_android_runtime_state_update(
             message_type=msg_type,
             continuity_rejected=True,
             continuity_legality_verdict=_continuity_verdict,
+            continuity_legality_mode=_continuity_mode,
         )
 
     # ── Priority 1: Handoff responses ────────────────────────────────────
