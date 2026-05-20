@@ -106,6 +106,10 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.CanonicalDispatchSlotAuthority")
 
 DEFAULT_DISPATCH_AUTHORITY_MODE_ENV = "GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE"
+"""Environment variable controlling default canonical dispatch authority mode.
+
+Accepted values: ``strict`` / ``compat`` / ``relaxed``.
+"""
 
 # ---------------------------------------------------------------------------
 # Authority and policy sentinels
@@ -1087,13 +1091,14 @@ def _eval_continuity_legality(
             or extra_context.get("runtime_attachment_session_id")
             or ""
         )
-        _sess_id = session_id or extra_context.get("session_id") or ""
+        _durable_session_id = session_id or extra_context.get("session_id") or ""
         _runtime_sess_id = extra_context.get("runtime_session_id", "")
         _continuity_epoch = int(extra_context.get("continuity_epoch") or 0)
 
         ctx = ContinuityLegalityContext(
+            path=path,
             device_id=device_id,
-            durable_session_id=_sess_id,
+            durable_session_id=_durable_session_id,
             runtime_attachment_session_id=_attach_id,
             runtime_session_id=_runtime_sess_id,
             continuity_epoch=_continuity_epoch,

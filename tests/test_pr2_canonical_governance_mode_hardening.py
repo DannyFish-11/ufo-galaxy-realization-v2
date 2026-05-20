@@ -76,7 +76,7 @@ def test_dispatch_slot_compat_allows_require_review_continuity() -> None:
     assert slot.slot_approved is True
 
 
-def test_unified_result_ingress_blocks_require_review_only_in_strict() -> None:
+def test_unified_result_ingress_blocks_require_review_in_strict_mode_only() -> None:
     from core.unified_result_ingress import (
         NormalizedResultEvent,
         ResultSourceChannel,

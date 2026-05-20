@@ -284,7 +284,15 @@ class ContinuityLegalityVerdict(str, Enum):
 
 
 class ContinuityLegalityMode(str, Enum):
-    """Continuity legality gating strictness."""
+    """Continuity legality gating strictness.
+
+    STRICT
+        ``require_review`` is blocking (fail-closed with review requirement).
+    COMPAT
+        ``require_review`` is advisory and does not block the hot path.
+    RELAXED
+        Most permissive compatibility mode; keeps review signals advisory.
+    """
 
     STRICT = "strict"
     COMPAT = "compat"
@@ -1345,7 +1353,7 @@ class UnifiedContinuityLegalityAuthority:
 
         for outcome in outcomes:
             if outcome.verdict is ContinuityLegalityVerdict.REQUIRE_REVIEW:
-                if mode is ContinuityLegalityMode.STRICT:
+                if mode == ContinuityLegalityMode.STRICT:
                     return ContinuityLegalityVerdict.REQUIRE_REVIEW, outcome.reason
                 # Compat/relaxed modes: REQUIRE_REVIEW is advisory — pass through
                 logger.debug(

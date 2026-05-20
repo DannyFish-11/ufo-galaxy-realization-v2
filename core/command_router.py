@@ -2054,7 +2054,7 @@ class CommandRouter:
                         "error_code": GatewayErrorCode.V3_SLOT_BLOCKED.value,
                         "error_message": (
                             "V3 canonical slot authority unavailable in strict mode; "
-                            f"dispatch blocked. detail={_v3_exc}"
+                            f"dispatch blocked. Details: {_v3_exc}"
                         ),
                         "v3_slot_gate": {
                             "applied": False,
