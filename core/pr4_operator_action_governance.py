@@ -887,18 +887,6 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
         spec.action_kind,
         spec.device_id,
     )
-    # Wire into closure chain: record subject ack for the operator action
-    try:
-        from core.operator_action_closure_chain import record_subject_ack
-        if spec.operator_action_id:
-            record_subject_ack(
-                action_id=spec.operator_action_id,
-                subject_id=spec.device_id or android_dispatch_id,
-                ack_state="acked",
-                ack_payload={"android_dispatch_id": android_dispatch_id},
-            )
-    except Exception as _ack_exc:
-        logger.debug("closure_chain: record_subject_ack failed (non-fatal): %s", _ack_exc)
     return True
 
 
@@ -1393,39 +1381,6 @@ def execute_governed_operator_action(
     )
     record_operator_action_audit(audit_record)
 
-    # --- Closure chain: open a traceable action → ack → truth → closure record ---
-    try:
-        from core.operator_action_closure_chain import (
-            open_chain_for_operator_action,
-            verify_closure as verify_chain_closure,
-            ClosureChainStage,
-        )
-        chain_record = open_chain_for_operator_action(
-            action_id=action_id,
-            action_kind=action_kind,
-            operator_user_id=operator_user_id,
-            trace_id=str(getattr(pre_state, "trace_id", "") or ""),
-            device_id=device_id or None,
-        )
-        # For V2-local actions (no device) with a definitive outcome, close immediately
-        if not chain_record.routed_subjects and outcome in {
-            OperatorActionOrchestrationOutcome.success.value,
-            OperatorActionOrchestrationOutcome.policy_blocked.value,
-            OperatorActionOrchestrationOutcome.failed.value,
-        }:
-            _verdict = (
-                "success" if outcome == OperatorActionOrchestrationOutcome.success.value
-                else "policy_blocked" if outcome == OperatorActionOrchestrationOutcome.policy_blocked.value
-                else "failed"
-            )
-            verify_chain_closure(
-                action_id=action_id,
-                closure_verdict=_verdict,
-                closure_payload={"outcome": outcome, "error": error},
-            )
-    except Exception as _chain_exc:
-        logger.debug("closure_chain: open_chain failed (non-fatal): %s", _chain_exc)
-
     return {
         "outcome": outcome,
         "affected_entity_ids": list(affected_entity_ids),
@@ -1567,27 +1522,17 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             if device_for_reasoning in (None, ""):
                 device_for_reasoning = proj.android_participation_verdict.get("device_id")
 
-            # When building reasoning from historical evidence, strip the
-            # panel's ambient mode_state from the base so that the evidence
-            # ring's selected_runtime drives execution_location rather than
-            # the instantaneous device mode (e.g. "local" when no real device
-            # is attached).  We preserve all other base fields (readiness,
-            # closure, etc.) by rebuilding from a copy.
-            _base_for_evidence: Any = proj.runtime_decision_reasoning
-            if device_for_reasoning and isinstance(_base_for_evidence, dict):
-                _base_for_evidence = dict(_base_for_evidence)
-                _mode_basis_copy = dict(_base_for_evidence.get("mode_basis") or {})
-                # Remove ambient mode_state so selected_runtime is authoritative
-                _mode_basis_copy.pop("mode_state", None)
-                _base_for_evidence["mode_basis"] = _mode_basis_copy
-
             reasoning_block = overlay_runtime_decision_reasoning_block(
-                _base_for_evidence,
+                proj.runtime_decision_reasoning,
                 task_id=latest_entry.task_id,
                 selected_runtime="android_delegated" if device_for_reasoning else "v2_local",
                 selected_device=device_for_reasoning,
                 participation_tier=tier_for_reasoning,
-                mode_state=None,
+                mode_state=(
+                    proj.runtime_decision_reasoning.get("mode_basis", {}).get("mode_state")
+                    if isinstance(proj.runtime_decision_reasoning, dict)
+                    else None
+                ),
                 readiness_summary={
                     "verdict": (
                         proj.runtime_decision_reasoning.get("readiness_basis", {}).get("readiness_state")
