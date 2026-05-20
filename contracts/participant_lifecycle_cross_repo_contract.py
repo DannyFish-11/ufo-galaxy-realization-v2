@@ -39,8 +39,13 @@ PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_AUTHORITY: str = (
 
 PARTICIPANT_LIFECYCLE_CROSS_REPO_CONTRACT_VERSION: str = "1.0.0"
 
-# Android reference used when this contract snapshot was calibrated.
+# Android repository commit audited when this contract was calibrated.
+# When Android lifecycle semantics intentionally change, bump this ref together
+# with the contract mapping and tests in this module.
 ANDROID_AUDITED_REF: str = "b66d9891c4aa67a6ec4db76137a30d8e6ead34e3"
+# Blob SHA for FormalParticipantLifecycleState.kt at ANDROID_AUDITED_REF.
+# This is file-level evidence for the exact Android formal-state definition
+# consumed by this contract (distinct from the repository commit hash above).
 ANDROID_FORMAL_PARTICIPANT_LIFECYCLE_SOURCE_SHA: str = "8f41ea2202868a9f05c02053768752677d91c7f4"
 ANDROID_FORMAL_PARTICIPANT_LIFECYCLE_ANCHOR: str = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/FormalParticipantLifecycleState.kt"
@@ -134,9 +139,12 @@ CRITICAL_TRIGGER_SEMANTIC_MAPPINGS: Tuple[CriticalTriggerSemanticMapping, ...] =
         trigger=ParticipantTransitionTrigger.RECOVERY_INITIATED,
         v2_from_state=ParticipantLifecycleState.DETACHED,
         v2_to_state=ParticipantLifecycleState.RECOVERING,
-        android_from_wire="ready",
+        android_from_wire="recovering",
         android_to_wire="recovering",
-        description="Disconnect/recovery initiation must move both sides into recovery semantics.",
+        description=(
+            "When V2 upgrades detached to recovering, Android runtime is already in "
+            "recovering semantics (bounded-runtime recovery has started)."
+        ),
     ),
     CriticalTriggerSemanticMapping(
         trigger=ParticipantTransitionTrigger.RECOVERY_COMPLETED,
