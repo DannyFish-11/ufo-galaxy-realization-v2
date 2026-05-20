@@ -11,12 +11,17 @@ def test_boundary_module_exports_pr13v2_sentinels() -> None:
 
     assert "AUTHORITY" in FINAL_ACCEPTANCE_SURFACE_BOUNDARY_AUTHORITY
     assert "PR13V2" in FINAL_ACCEPTANCE_SURFACE_BOUNDARY_PR13V2_SENTINEL
-    assert "FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY" in FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY
+    assert "canonical center authority" in FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY
+    assert "consumption-only outward/product/operator surfaces" in FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY
     assert "NO_AUTHORITY_REASSEMBLY" in FINAL_ACCEPTANCE_SURFACE_NO_AUTHORITY_REASSEMBLY_POLICY
 
 
 def test_boundary_builder_exposes_final_integration_boundary_axes() -> None:
-    from core.final_acceptance_surface_boundary import build_final_acceptance_surface_boundary
+    from core.final_acceptance_surface_boundary import (
+        BOUNDED_SUBJECT_RUNTIME_ENTRY_POINTS,
+        FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY,
+        build_final_acceptance_surface_boundary,
+    )
 
     boundary = build_final_acceptance_surface_boundary(
         surface="panel",
@@ -39,9 +44,14 @@ def test_boundary_builder_exposes_final_integration_boundary_axes() -> None:
     assert integration["center_authority"]["truth_convergence"] == (
         "core.v2_android_truth_ssot.build_v2_android_truth_block"
     )
+    assert integration["policy"] == FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY
     assert integration["distributed_contract"]["contract_version"] == "distributed_subject_contract_v1"
     assert integration["outward_consumption"]["canonical_outputs_only"] is True
+    assert integration["outward_consumption"]["must_not_reassemble_authority_truth_dispatch"] is True
     assert integration["product_facing_integration"]["surface"] == "/api/v1/panel/unified"
+    assert set(integration["subject_runtime_authority"]["bounded_runtime_owner"]) == set(
+        BOUNDED_SUBJECT_RUNTIME_ENTRY_POINTS
+    )
     assert "core.android_participant_truth_ingress" in boundary["android_v2_contract_alignment"][
         "android_ingress_to_v2_truth_chain"
     ]

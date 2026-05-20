@@ -32,6 +32,13 @@ FINAL_INTEGRATION_BOUNDARY_CONVERGENCE_POLICY = (
     "consumption-only outward/product/operator surfaces."
 )
 
+BOUNDED_SUBJECT_RUNTIME_ENTRY_POINTS = (
+    "core.android_participant_truth_ingress",
+    "core.v2_unified_state_contract.build_shared_control_plane_basis",
+)
+
+DISTRIBUTED_SUBJECT_CONTRACT_VERSION = "distributed_subject_contract_v1"
+
 
 def build_final_acceptance_surface_boundary(
     *,
@@ -79,13 +86,13 @@ def build_final_acceptance_surface_boundary(
                 "closure": canonical_runtime_governance_truth_authority["acceptance_closure"],
             },
             "subject_runtime_authority": {
-                "bounded_runtime_owner": "Android bounded subject runtime + V2 participant runtime",
+                "bounded_runtime_owner": BOUNDED_SUBJECT_RUNTIME_ENTRY_POINTS,
                 "android_runtime_truth_entry": "core.android_participant_truth_ingress",
                 "android_runtime_truth_authority": "core.v2_android_truth_ssot.build_v2_android_truth_block",
                 "participant_runtime_state": "core.v2_unified_state_contract.build_shared_control_plane_basis",
             },
             "distributed_contract": {
-                "contract_version": "distributed_subject_contract_v1",
+                "contract_version": DISTRIBUTED_SUBJECT_CONTRACT_VERSION,
                 "contract_owner": "core.v2_unified_state_contract.build_control_plane_surface_contract",
                 "operator_action_entry": "/api/v1/operator/action",
             },
