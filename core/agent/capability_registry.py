@@ -265,6 +265,15 @@ class CapabilityRegistry:
             "last_updated": runtime_state["last_updated"],
             "authority_lineage": list(metadata["authority_lineage"]),
         }
+        try:
+            from core.peripheral_capability_boundary import build_capability_registry_ingress_contract
+
+            metadata.setdefault(
+                "ingress_boundary_contract",
+                build_capability_registry_ingress_contract(),
+            )
+        except ImportError as exc:
+            logger.debug("ingress boundary contract annotation skipped for '%s': %s", item.name, exc)
         metadata["runtime_state"] = runtime_state
         item.metadata = metadata
         item.available = runtime_state.get("availability") in {"available", "degraded"}

@@ -230,6 +230,30 @@ except ImportError:  # pragma: no cover
         "PROJECTION_ROUTES::TRUTH_PROJECTION_BOUNDARY_ALIGNED_PR7_UNAVAILABLE"
     )
 
+# PR-10V2: peripheral capability ingress boundary alignment sentinel.
+# Confirms projection routes can consume the explicit boundary snapshot for
+# desktop/shell/multimodal/continuation peripheral capability ingress surfaces.
+try:
+    from core.peripheral_capability_boundary import (  # noqa: F401
+        PERIPHERAL_CAPABILITY_BOUNDARY_AUTHORITY as _PCB_AUTHORITY,
+        PERIPHERAL_CAPABILITY_BOUNDARY_PR10V2_SENTINEL as _PCB_PR10V2,
+        build_peripheral_capability_boundary_snapshot as _build_peripheral_capability_boundary_snapshot,
+    )
+
+    PERIPHERAL_CAPABILITY_BOUNDARY_ALIGNED_PR10V2: str = (
+        "PROJECTION_ROUTES::PERIPHERAL_CAPABILITY_BOUNDARY_ALIGNED_PR10V2_V1: "
+        "core.peripheral_capability_boundary is available to projection routes.  "
+        "Peripheral capability ingress surfaces are explicitly separated from "
+        "runtime mainline authority and projection/operator consumer surfaces."
+    )
+except ImportError:  # pragma: no cover
+    PERIPHERAL_CAPABILITY_BOUNDARY_ALIGNED_PR10V2: str = (  # type: ignore[no-redef]
+        "PROJECTION_ROUTES::PERIPHERAL_CAPABILITY_BOUNDARY_ALIGNED_PR10V2_UNAVAILABLE"
+    )
+
+    def _build_peripheral_capability_boundary_snapshot() -> Dict[str, Any]:
+        return {}
+
 # PR package 8 (post-533 dual-repo runtime unification master plan, MAIN repo
 # side): canonical delegated-runtime dispatch intent and handoff-preparation
 # foundations.  Importing the authority sentinel and the PR-8 sentinel from
@@ -6052,11 +6076,15 @@ def _build_foundational_system_truth(truth_payload: Dict[str, Any]) -> Dict[str,
             snapshot.get("central_agent_body_classification") or {}
         ),
         "remaining_work_split": dict(snapshot.get("remaining_work_split") or {}),
+        "peripheral_capability_ingress_boundary": dict(
+            _build_peripheral_capability_boundary_snapshot() or {}
+        ),
         "source_of_truth_refs": [
             "core.current_state_backbone_audit.build_system_backbone_snapshot",
             "core.current_state_backbone_audit.ClosureState",
             "core.current_state_backbone_audit.ModeId",
             "core.current_state_backbone_audit.ChainId",
+            "core.peripheral_capability_boundary.build_peripheral_capability_boundary_snapshot",
         ],
         "_source": "core.routes.projection._build_foundational_system_truth",
     }
