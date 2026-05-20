@@ -1489,6 +1489,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             Optional target session ID.
         ``payload``
             Optional additional payload dict.
+        ``routed_subject_ids``
+            Optional additional participant subject IDs for multi-subject
+            governance actions (e.g. participant role IDs, continuity lanes).
 
         Returns::
 
@@ -1528,6 +1531,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 target_flow_id=body.get("target_flow_id", ""),
                 target_task_id=body.get("target_task_id", ""),
                 target_session_id=body.get("target_session_id", ""),
+                routed_subject_ids=[
+                    str(x).strip()
+                    for x in list(body.get("routed_subject_ids") or [])
+                    if str(x).strip()
+                ],
                 payload=dict(body.get("payload") or {}),
             )
             audit_record = record_android_directed_action_dispatch_trace(spec)
@@ -1550,7 +1558,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
     # ------------------------------------------------------------------
 
     @router.post("/api/v1/operator/actions/android-directed/{dispatch_id}/ack")
-    async def operator_android_directed_action_ack(dispatch_id: str) -> JSONResponse:
+    async def operator_android_directed_action_ack(
+        dispatch_id: str,
+        body: Optional[Dict[str, Any]] = None,
+    ) -> JSONResponse:
         """Acknowledge that an Android device has executed a directed action.
 
         Called when a ``DEVICE_EXECUTION_EVENT`` with an ``operator_action_id``
@@ -1562,6 +1573,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         ``dispatch_id``
             The ``android_dispatch_id`` from the
             :class:`~core.pr4_operator_action_governance.AndroidDirectedActionSpec`.
+        ``body`` (optional)
+            ``ack_subject_ids`` for multi-subject ACK coverage updates,
+            plus optional ``truth_convergence_state``,
+            ``closure_verification_state``, and ``failure_diagnostics``.
 
         Returns::
 
@@ -1577,8 +1592,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.pr4_operator_action_governance import (
                 acknowledge_android_directed_action,
                 get_android_directed_action_terminal_state,
+                get_android_directed_action_pending_state,
             )
-            acked = acknowledge_android_directed_action(dispatch_id)
+            body = dict(body or {})
+            acked = acknowledge_android_directed_action(
+                dispatch_id,
+                ack_subject_ids=[
+                    str(x).strip()
+                    for x in list(body.get("ack_subject_ids") or [])
+                    if str(x).strip()
+                ],
+                truth_convergence_state=str(body.get("truth_convergence_state") or ""),
+                closure_verification_state=str(body.get("closure_verification_state") or ""),
+                failure_diagnostics=[
+                    str(x).strip()
+                    for x in list(body.get("failure_diagnostics") or [])
+                    if str(x).strip()
+                ],
+            )
             if not acked:
                 terminal_state = get_android_directed_action_terminal_state(dispatch_id)
                 if terminal_state.get("state") == "timed_out":
@@ -1600,15 +1631,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     },
                     status_code=404,
                 )
+            terminal_state = get_android_directed_action_terminal_state(dispatch_id)
+            pending_state = get_android_directed_action_pending_state(dispatch_id)
+            closure_trace = (
+                (terminal_state or {}).get("operator_control_closure_trace")
+                or (pending_state or {}).get("operator_control_closure_trace")
+                or {}
+            )
+            dispatch_state = (
+                (terminal_state or {}).get("state")
+                or (pending_state or {}).get("state")
+                or "acked"
+            )
             return JSONResponse(content={
                 "acked": True,
                 "dispatch_id": dispatch_id,
-                "closure_trace": (
-                    (get_android_directed_action_terminal_state(dispatch_id) or {}).get(
-                        "operator_control_closure_trace",
-                        {},
-                    )
-                ),
+                "dispatch_state": dispatch_state,
+                "closure_trace": closure_trace,
                 "authority": "OPERATOR_ROUTES_V1",
             })
         except Exception as exc:

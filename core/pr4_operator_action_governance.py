@@ -133,6 +133,7 @@ PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY: str = (
 PR4_CONVERGENCE_CONTRACT_VERSION: str = "4.0.0"
 OPERATOR_ACTION_CANONICAL_ENTRY: str = "/api/v1/operator/action"
 ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY: str = "/api/v1/operator/actions/android-directed"
+ANDROID_DIRECTED_ACK_CANONICAL_ENTRY: str = "/api/v1/operator/actions/android-directed/{dispatch_id}/ack"
 CANONICAL_GOVERNANCE_CONTRACT: str = (
     "core.v2_unified_state_contract.build_control_plane_surface_contract"
 )
@@ -476,6 +477,7 @@ class AndroidDirectedActionSpec:
     target_task_id: str = ""
     target_session_id: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
+    routed_subject_ids: List[str] = field(default_factory=list)
     dispatched_at: float = field(default_factory=time.time)
     expected_ack_within_seconds: int = 30
     expires_at: float = 0.0
@@ -498,6 +500,7 @@ class AndroidDirectedActionSpec:
             "target_task_id": self.target_task_id,
             "target_session_id": self.target_session_id,
             "payload": dict(self.payload),
+            "routed_subject_ids": _build_android_directed_subject_ids(self),
             "dispatched_at": self.dispatched_at,
             "expected_ack_within_seconds": self.expected_ack_within_seconds,
             "expires_at": expires_at,
@@ -728,7 +731,15 @@ def _determine_system_health(
 def _build_android_directed_subject_ids(spec: AndroidDirectedActionSpec) -> List[str]:
     subjects: List[str] = []
     seen: Set[str] = set()
-    for item in (spec.device_id, spec.target_flow_id, spec.target_task_id, spec.target_session_id):
+    payload_routed = spec.payload.get("routed_subject_ids", []) if isinstance(spec.payload, dict) else []
+    for item in (
+        spec.device_id,
+        spec.target_flow_id,
+        spec.target_task_id,
+        spec.target_session_id,
+        *(spec.routed_subject_ids or []),
+        *([x for x in payload_routed if isinstance(x, str)]),
+    ):
         value = str(item or "").strip()
         if value and value not in seen:
             seen.add(value)
@@ -745,6 +756,10 @@ def _build_operator_control_closure_trace(
     truth_convergence_state: str,
     closure_verification_state: str,
     canonical_entry: str = OPERATOR_ACTION_CANONICAL_ENTRY,
+    state_update_entry: str = "",
+    acknowledged_subject_ids: Optional[List[str]] = None,
+    pending_subject_ids: Optional[List[str]] = None,
+    failure_diagnostics: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     return {
         "action_id": action_id,
@@ -755,6 +770,10 @@ def _build_operator_control_closure_trace(
         "participant_ack_state": participant_ack_state,
         "truth_convergence_state": truth_convergence_state,
         "closure_verification_state": closure_verification_state,
+        "state_update_entry": state_update_entry or canonical_entry,
+        "acknowledged_subject_ids": list(acknowledged_subject_ids or []),
+        "pending_subject_ids": list(pending_subject_ids or []),
+        "failure_diagnostics": list(failure_diagnostics or []),
     }
 
 
@@ -824,6 +843,7 @@ def build_android_directed_action_spec(
     target_flow_id: str = "",
     target_task_id: str = "",
     target_session_id: str = "",
+    routed_subject_ids: Optional[List[str]] = None,
     payload: Optional[Dict[str, Any]] = None,
 ) -> AndroidDirectedActionSpec:
     """Build an :class:`AndroidDirectedActionSpec` for a device-targeted operator action.
@@ -853,6 +873,7 @@ def build_android_directed_action_spec(
         target_flow_id=target_flow_id,
         target_task_id=target_task_id,
         target_session_id=target_session_id,
+        routed_subject_ids=[str(x).strip() for x in list(routed_subject_ids or []) if str(x).strip()],
         payload=dict(payload or {}),
     )
     spec.expires_at = spec.dispatched_at + max(1, int(spec.expected_ack_within_seconds))
@@ -956,17 +977,19 @@ def _expire_pending_android_directed_actions(now: Optional[float] = None) -> Lis
     return expired_dispatch_ids
 
 
-def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
-    """Record that an Android device has ACKed a directed action.
+def acknowledge_android_directed_action(
+    android_dispatch_id: str,
+    *,
+    ack_subject_ids: Optional[List[str]] = None,
+    truth_convergence_state: str = "",
+    closure_verification_state: str = "",
+    failure_diagnostics: Optional[List[str]] = None,
+) -> bool:
+    """Record participant ACK/state update for a directed action.
 
-    Called when the Android device's ACK message is received (e.g. via
-    ``DEVICE_EXECUTION_EVENT`` with ``operator_action_id`` set).
-
-    Args:
-        android_dispatch_id: The dispatch ID from :class:`AndroidDirectedActionSpec`.
-
-    Returns:
-        True when the dispatch ID was found and marked as ACKed; False otherwise.
+    ACK updates remain canonical-governance state updates: participant ACK
+    coverage can be partial for multi-subject actions, and truth/closure
+    states are updated alongside the ACK trail.
     """
     _expire_pending_android_directed_actions()
     spec = _PENDING_ANDROID_ACTIONS.get(android_dispatch_id)
@@ -983,24 +1006,64 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
             android_dispatch_id,
         )
         return False
-    # Mark ACKed by removing from pending — audit records carry the full trail
-    _PENDING_ANDROID_ACTIONS.pop(android_dispatch_id, None)
-    spec.lifecycle_state = "acked"
+    expected_subject_ids = _build_android_directed_subject_ids(spec)
+    existing_acked = list(spec.payload.get("_acked_subject_ids") or [])
+    incoming_acked = [str(x).strip() for x in list(ack_subject_ids or []) if str(x).strip()]
+    if not incoming_acked:
+        incoming_acked = [spec.device_id] if spec.device_id else []
+    acked_seen: Set[str] = set()
+    acked_subject_ids: List[str] = []
+    for subject in [*existing_acked, *incoming_acked]:
+        value = str(subject or "").strip()
+        if value and value not in acked_seen:
+            acked_seen.add(value)
+            acked_subject_ids.append(value)
+    pending_subject_ids = [subject for subject in expected_subject_ids if subject not in acked_seen]
+    all_subjects_acked = len(pending_subject_ids) == 0
+
+    if all_subjects_acked:
+        _PENDING_ANDROID_ACTIONS.pop(android_dispatch_id, None)
+        spec.lifecycle_state = "acked"
+    else:
+        spec.lifecycle_state = "partial_ack"
     spec.lifecycle_failure_reason = ""
+    spec.payload["_acked_subject_ids"] = list(acked_subject_ids)
+    resolved_truth_state = (
+        truth_convergence_state.strip()
+        or (
+            "participant_ack_recorded_pending_canonical_truth"
+            if all_subjects_acked
+            else "participant_ack_partial_pending_canonical_truth"
+        )
+    )
+    resolved_closure_state = (
+        closure_verification_state.strip()
+        or (
+            "pending_canonical_closure_verification"
+            if all_subjects_acked
+            else "pending_participant_ack_completion"
+        )
+    )
+    diagnostics = [str(x).strip() for x in list(failure_diagnostics or []) if str(x).strip()]
+    closure_trace = _build_operator_control_closure_trace(
+        action_id=spec.operator_action_id,
+        action_kind=spec.action_kind,
+        routed_subject_ids=expected_subject_ids,
+        participant_ack_state=("acked" if all_subjects_acked else "partial_ack"),
+        truth_convergence_state=resolved_truth_state,
+        closure_verification_state=resolved_closure_state,
+        canonical_entry=ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY,
+        state_update_entry=ANDROID_DIRECTED_ACK_CANONICAL_ENTRY,
+        acknowledged_subject_ids=acked_subject_ids,
+        pending_subject_ids=pending_subject_ids,
+        failure_diagnostics=diagnostics,
+    )
     _TERMINAL_ANDROID_ACTIONS[android_dispatch_id] = {
-        "state": "acked",
+        "state": ("acked" if all_subjects_acked else "partial_ack"),
         "reason": "",
         "acked_at": time.time(),
         "spec": spec.to_dict(),
-        "operator_control_closure_trace": _build_operator_control_closure_trace(
-            action_id=spec.operator_action_id,
-            action_kind=spec.action_kind,
-            routed_subject_ids=_build_android_directed_subject_ids(spec),
-            participant_ack_state="acked",
-            truth_convergence_state="participant_ack_recorded_pending_canonical_truth",
-            closure_verification_state="pending_canonical_closure_verification",
-            canonical_entry=ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY,
-        ),
+        "operator_control_closure_trace": closure_trace,
     }
     record_operator_action_audit(
         OperatorActionAuditRecord(
@@ -1010,18 +1073,23 @@ def acknowledge_android_directed_action(android_dispatch_id: str) -> bool:
             policy_evaluation="participant_ack_received",
             policy_basis="android participant ack updated canonical closure trace",
             outcome=OperatorActionOrchestrationOutcome.success.value,
-            affected_entity_ids=_build_android_directed_subject_ids(spec),
+            affected_entity_ids=expected_subject_ids,
             downstream_effects=[
-                f"android_directed_action_ack_received:dispatch_id={android_dispatch_id}"
+                f"android_directed_action_ack_received:dispatch_id={android_dispatch_id}",
+                (
+                    "android_directed_action_ack_coverage:"
+                    f"{len(acked_subject_ids)}/{len(expected_subject_ids)}"
+                ),
             ],
             android_dispatch_id=android_dispatch_id,
             android_dispatched_at=spec.dispatched_at,
-            android_ack_received=True,
-            canonical_entry=ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY,
-            routed_subject_ids=_build_android_directed_subject_ids(spec),
-            participant_ack_state="acked",
-            truth_convergence_state="participant_ack_recorded_pending_canonical_truth",
-            closure_verification_state="pending_canonical_closure_verification",
+            android_ack_received=all_subjects_acked,
+            canonical_entry=ANDROID_DIRECTED_ACK_CANONICAL_ENTRY,
+            routed_subject_ids=expected_subject_ids,
+            participant_ack_state=("acked" if all_subjects_acked else "partial_ack"),
+            truth_convergence_state=resolved_truth_state,
+            closure_verification_state=resolved_closure_state,
+            error="; ".join(diagnostics),
         )
     )
     logger.info(
@@ -1042,6 +1110,18 @@ def get_pending_android_directed_actions() -> List[AndroidDirectedActionSpec]:
 def get_android_directed_action_terminal_state(android_dispatch_id: str) -> Dict[str, Any]:
     """Return terminal lifecycle state for a dispatch id, if already closed."""
     return dict(_TERMINAL_ANDROID_ACTIONS.get(android_dispatch_id) or {})
+
+
+def get_android_directed_action_pending_state(android_dispatch_id: str) -> Dict[str, Any]:
+    """Return current pending lifecycle state for a dispatch id, if still open."""
+    spec = _PENDING_ANDROID_ACTIONS.get(android_dispatch_id)
+    if spec is None:
+        return {}
+    return {
+        "state": spec.lifecycle_state,
+        "spec": spec.to_dict(),
+        "operator_control_closure_trace": (spec.to_dict().get("operator_control_closure_trace") or {}),
+    }
 
 
 # ---------------------------------------------------------------------------
