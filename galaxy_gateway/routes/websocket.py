@@ -48,6 +48,16 @@ CANONICAL_DEVICE_INGRESS_AUTHORITY = (
     "(AIP v3). All other device WS paths are compat/deprecated/debug/legacy-disabled."
 )
 
+DEVICE_WS_INGRESS_SURFACE_REGISTRY = (
+    {"path": "/ws/device/{device_id}", "classification": "canonical"},
+    {"path": "/ws/android/{device_id}", "classification": "compat"},
+    {"path": "/ws/android", "classification": "compat"},
+    {"path": "/ws/ufo3/{device_id}", "classification": "legacy-disabled"},
+    {"path": "/ws/webrtc/{device_id}", "classification": "media"},
+    {"path": "/ws/{device_id}", "classification": "deprecated"},
+    {"path": "/ws", "classification": "debug"},
+)
+
 # Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable legacy WS paths such as
 # /ws/ufo3.  By default these paths are disabled to enforce the unified Gateway
 # entry point (AIP v3 via /ws/device/{id}).
@@ -66,7 +76,13 @@ if _LEGACY_PROTOCOLS_ENABLED:
 # Internal Android WS handler (also exported for tests)
 # ---------------------------------------------------------------------------
 
-async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
+async def _handle_android_ws(
+    websocket: WebSocket,
+    device_id: str,
+    *,
+    ingress_path: str = "/ws/device/{device_id}",
+    ingress_classification: str = "canonical",
+) -> None:
     """Internal handler used by all Android WS endpoints.
 
     Routes every message through ``android_bridge.handle_message()`` so that
@@ -82,7 +98,21 @@ async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
     from galaxy_gateway.android_bridge import android_bridge as _android_bridge
     from galaxy_gateway.protocol.compat import normalise_to_v3_dict as _normalise
 
+    if ingress_classification not in {"canonical", "compat", "legacy-disabled"}:
+        raise ValueError(
+            f"Unsupported ingress_classification={ingress_classification!r} for Android WS ingress"
+        )
+
     await websocket.accept()
+    is_canonical_ingress = ingress_classification == "canonical"
+    if not is_canonical_ingress:
+        logger.warning(
+            "Non-canonical WS ingress used: path=%s classification=%s device_id=%s; "
+            "canonical ingress is /ws/device/{device_id}",
+            ingress_path,
+            ingress_classification,
+            device_id,
+        )
     logger.info("Android device connected via android_bridge: device_id=%s", device_id)
 
     try:
@@ -102,6 +132,9 @@ async def _handle_android_ws(websocket: WebSocket, device_id: str) -> None:
             # Registration handlers can validate identity/auth without conflating
             # mere socket connectivity with effective authenticated participation.
             message["_ingress_connection_device_id"] = device_id
+            message["_ingress_ws_path"] = ingress_path
+            message["_ingress_ws_classification"] = ingress_classification
+            message["_ingress_is_canonical"] = is_canonical_ingress
             if "_ingress_transport_token" not in message:
                 _ws_query_token = websocket.query_params.get("token")
                 if _ws_query_token:
@@ -147,7 +180,12 @@ def register_websocket_routes(app: FastAPI) -> None:
             "canonical ingress is /ws/device/{device_id}",
             device_id,
         )
-        await _handle_android_ws(websocket, device_id)
+        await _handle_android_ws(
+            websocket,
+            device_id,
+            ingress_path="/ws/android/{device_id}",
+            ingress_classification="compat",
+        )
 
     @app.websocket("/ws/android")
     async def websocket_android(websocket: WebSocket, device_id: str = Query(None)):
@@ -166,7 +204,12 @@ def register_websocket_routes(app: FastAPI) -> None:
             "canonical ingress is /ws/device/{device_id}",
             device_id,
         )
-        await _handle_android_ws(websocket, device_id)
+        await _handle_android_ws(
+            websocket,
+            device_id,
+            ingress_path="/ws/android",
+            ingress_classification="compat",
+        )
 
     @app.websocket("/ws/ufo3/{device_id}")
     async def websocket_ufo3(websocket: WebSocket, device_id: str):
@@ -205,7 +248,12 @@ def register_websocket_routes(app: FastAPI) -> None:
             )
             return
         logger.info("Legacy path /ws/ufo3/ used for device %s", device_id)
-        await _handle_android_ws(websocket, device_id)
+        await _handle_android_ws(
+            websocket,
+            device_id,
+            ingress_path="/ws/ufo3/{device_id}",
+            ingress_classification="legacy-disabled",
+        )
 
     @app.websocket("/ws/device/{device_id}")
     async def websocket_device(websocket: WebSocket, device_id: str):
@@ -220,7 +268,12 @@ def register_websocket_routes(app: FastAPI) -> None:
         /ws/ufo3) are non-canonical and must not be treated as peer-level ingress.
         """
         logger.info("Canonical ingress /ws/device/ accepted device %s", device_id)
-        await _handle_android_ws(websocket, device_id)
+        await _handle_android_ws(
+            websocket,
+            device_id,
+            ingress_path="/ws/device/{device_id}",
+            ingress_classification="canonical",
+        )
 
     @app.websocket("/ws/webrtc/{device_id}")
     async def webrtc_signaling_proxy(websocket: WebSocket, device_id: str):
