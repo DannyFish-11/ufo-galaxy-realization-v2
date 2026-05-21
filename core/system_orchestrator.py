@@ -476,8 +476,7 @@ class SystemOrchestrator:
 
         if hard_failures:
             parts: List[str] = []
-            if hard_failures:
-                parts.append("hard_failures=" + ",".join(hard_failures))
+            parts.append("hard_failures=" + ",".join(hard_failures))
             if issues:
                 parts.append("degraded_issues=" + ",".join(issues))
             return PhaseResult(

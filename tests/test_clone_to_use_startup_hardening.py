@@ -94,14 +94,14 @@ class TestNatsProbeStrictness:
         monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
         assert health_checks._nats_tcp_failure_is_critical() is True
 
-    def test_nats_critical_when_cross_device_enabled(self, monkeypatch):
+    def test_nats_non_critical_when_cross_device_enabled_without_strict(self, monkeypatch):
         from launcher import health_checks
 
         monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
         assert health_checks._nats_tcp_failure_is_critical() is False
 
-    def test_nats_critical_when_nats_enabled(self, monkeypatch):
+    def test_nats_non_critical_when_nats_enabled_without_strict(self, monkeypatch):
         from launcher import health_checks
 
         monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)

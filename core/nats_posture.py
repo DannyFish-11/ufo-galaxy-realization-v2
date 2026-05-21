@@ -67,7 +67,7 @@ def evaluate_nats_posture() -> Dict[str, Any]:
         "posture": posture,
         "required": required,
         "system_mode": fabric.mode.value,
-        "nats_url": os.environ.get("GALAXY_NATS_URL", fabric.nats_url),
+        "nats_url": fabric.nats_url,
         "connected": connected,
         "noop_mode": noop_mode,
         "assertion_ok": assertion_ok,
