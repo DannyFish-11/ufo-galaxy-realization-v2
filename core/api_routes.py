@@ -614,6 +614,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
             await websocket.close(code=1008, reason="Core compat WS disabled")
             return
 
+        logger.warning(
+            "Core compat WS ingress used for device_id=%s. "
+            "This path is compatibility-only; canonical ingress is gateway /ws/device/{device_id}.",
+            device_id,
+        )
         await connection_manager.connect_device(websocket, device_id)
 
         # ── SSOT: propagate connection-online state to UDM first ──────────
