@@ -22,6 +22,19 @@
 4. `observability_diagnostics_evidence_boundary`
 5. `outward_consumption_boundary`
 
+## 2.1) Canonical Center / Truth / Dispatch / Observability / Outward 边界总览
+
+`docs/FORMAL_SYSTEM_BOUNDARY_SUMMARY_V1.json` 还固定了 `canonical_boundary_summary`：
+
+- `canonical_center_boundary`
+- `truth_convergence_boundary`
+- `dispatch_governance_closure_boundary`
+- `observability_diagnostics_evidence_boundary`
+- `outward_consumption_projection_boundary`
+- `stable_quasi_platform_state_definition`
+
+该分组用于长期防漂移：明确 V2 是 canonical governance center，而 outward/operator/projection/panel 仅是消费与投影层。
+
 ## 3) Outward Contract Summary
 
 Outward contract 只允许消费 canonical outputs，不允许 authority/truth/dispatch/closure 重组。  
@@ -29,6 +42,13 @@ Outward contract 只允许消费 canonical outputs，不允许 authority/truth/d
 
 - `core.final_acceptance_surface_boundary.build_final_acceptance_surface_boundary`
 - `core.bounded_subject_platform_boundary.build_quasi_platform_runtime_assertion_report`
+
+并通过 `operator_projection_observability_boundary_summary` 固定：
+
+- operator governance plane 是中心侧定义，不是平行主权中心
+- projection surface 是 consumption-only
+- observability/diagnostics/evidence 是证据契约层，不是 authority center
+- outward surfaces 不是 parallel canonical center
 
 ## 4) Runtime Assertion / Test Anchors
 

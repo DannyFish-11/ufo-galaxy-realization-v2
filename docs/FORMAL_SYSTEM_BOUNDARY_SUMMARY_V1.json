@@ -52,6 +52,51 @@
       ]
     }
   },
+  "canonical_boundary_summary": {
+    "canonical_center_boundary": {
+      "summary": "V2 is the sole canonical governance center for ingest, routing, dispatch authority, truth convergence, participant governance, closure, operator governance plane, outward truth compilation, and observability contract definition.",
+      "code_evidence": [
+        "core.center_authority_boundary.assert_center_authority_intact",
+        "core.unified_runtime_truth_ingress",
+        "core.unified_orchestration_spine"
+      ]
+    },
+    "truth_convergence_boundary": {
+      "summary": "Truth convergence finalization is center-owned; participant runtimes contribute evidence/signals but do not finalize canonical truth.",
+      "code_evidence": [
+        "core.v2_android_truth_ssot.build_v2_android_truth_block",
+        "core.unified_result_ingress.UnifiedResultIngress",
+        "core.task_result_canonical_truth_chain"
+      ]
+    },
+    "dispatch_governance_closure_boundary": {
+      "summary": "Dispatch legality, participant governance, and multi-subject closure semantics remain center-authorized and must converge through canonical contracts.",
+      "code_evidence": [
+        "core.canonical_dispatch_slot_authority.CanonicalDispatchSlotAuthority",
+        "core.operator_action_governance",
+        "core.multi_subject_closure_machine"
+      ]
+    },
+    "observability_diagnostics_evidence_boundary": {
+      "summary": "Observability/diagnostics/evidence contracts classify and uplink evidence; they are not a parallel authority or parallel canonical center.",
+      "code_evidence": [
+        "core.cross_subject_observability_contract",
+        "core.bounded_subject_platform_boundary.build_quasi_platform_runtime_assertion_report"
+      ]
+    },
+    "outward_consumption_projection_boundary": {
+      "summary": "Outward/operator/projection/panel surfaces are consumption/projection/operation-facing layers only and must not reassemble authority.",
+      "code_evidence": [
+        "core.final_acceptance_surface_boundary.build_final_acceptance_surface_boundary",
+        "core.routes.operator._operator_consumption_contract_boundary",
+        "core.routes.projection._build_truth_acceptance_closure_contract"
+      ]
+    },
+    "stable_quasi_platform_state_definition": {
+      "summary": "V2 is in a stable quasi-platform state with fixed canonical governance and bounded-subject contracts, and is explicitly not a fully mature distributed platform.",
+      "fully_mature_distributed_platform": false
+    }
+  },
   "outward_contract_summary": {
     "consumption_only": true,
     "no_authority_reassembly": true,
@@ -62,6 +107,12 @@
       "core.routes.projection",
       "core.unified_panel_aggregation"
     ]
+  },
+  "operator_projection_observability_boundary_summary": {
+    "operator_governance_plane_center_defined": true,
+    "projection_surface_consumption_only": true,
+    "observability_is_evidence_contract_not_authority": true,
+    "outward_surface_is_not_parallel_center": true
   },
   "android_v2_alignment": {
     "v2_role": "canonical_center",
