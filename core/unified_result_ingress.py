@@ -383,6 +383,10 @@ class UnifiedResultIngressOutcome:
     """Unified continuity adjudication classification for this ingress decision."""
     continuity_adjudication_evidence: Dict[str, Any] = field(default_factory=dict)
     """Structured continuity adjudication evidence for diagnostics and tests."""
+    closure_evidence_ledger: Dict[str, Any] = field(default_factory=dict)
+    """Per-task closure adjudication evidence ledger snapshot."""
+    final_truth_provenance: Dict[str, Any] = field(default_factory=dict)
+    """Final-truth provenance derived from closure evidence ledger."""
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +417,7 @@ class UnifiedResultIngress:
         self._lock = threading.Lock()
         self._last_closure_outcome: Dict[str, Any] = {}
         self._last_joint_idempotency_evidence: Dict[str, Any] = {}
+        self._closure_evidence_ledger_by_task: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -682,6 +687,10 @@ class UnifiedResultIngress:
         event: NormalizedResultEvent,
         outcome: UnifiedResultIngressOutcome,
     ) -> None:
+        ledger_entry = self._upsert_closure_evidence_ledger(event, outcome)
+        provenance = self._build_final_truth_provenance(ledger_entry)
+        outcome.closure_evidence_ledger = dict(ledger_entry)
+        outcome.final_truth_provenance = dict(provenance)
         summary = {
             "available": True,
             "task_id": event.task_id,
@@ -707,6 +716,8 @@ class UnifiedResultIngress:
                 outcome.continuity_adjudication_evidence or {}
             ),
             "stale_classification": str(outcome.stale_classification or ""),
+            "closure_evidence_ledger": dict(ledger_entry),
+            "final_truth_provenance": dict(provenance),
             "updated_at": time.time(),
         }
         with self._lock:
@@ -715,6 +726,131 @@ class UnifiedResultIngress:
     def get_last_closure_outcome(self) -> Dict[str, Any]:
         with self._lock:
             return dict(self._last_closure_outcome)
+
+    def _upsert_closure_evidence_ledger(
+        self,
+        event: NormalizedResultEvent,
+        outcome: UnifiedResultIngressOutcome,
+    ) -> Dict[str, Any]:
+        task_id = str(event.task_id or "")
+        if not task_id:
+            return {}
+
+        now = time.time()
+        identity = {
+            "task_id": task_id,
+            "device_id": str(event.device_id or ""),
+            "participant_id": str(event.participant_id or event.device_id or ""),
+            "session_epoch": event.session_epoch,
+            "runtime_session_id": str(event.runtime_session_id or ""),
+            "runtime_attachment_session_id": str(event.runtime_attachment_session_id or ""),
+            "result_id": str(event.idempotency_key or ""),
+            "completion_emission_id": str(event.completion_emission_id or ""),
+            "source_channel": event.source_channel.value,
+        }
+        reason = (
+            str((outcome.continuity_adjudication_evidence or {}).get("triggering_reason") or "")
+            or str(outcome.incomplete_reason or "")
+            or str(outcome.stale_classification or "")
+            or str(outcome.completion_disposition or "unknown")
+        )
+        event_evidence = {
+            "disposition": str(outcome.completion_disposition or ""),
+            "classification": str(outcome.continuity_adjudication_classification or ""),
+            "reason": reason,
+            "identity": identity,
+            "adjudication_evidence": dict(outcome.continuity_adjudication_evidence or {}),
+            "stale_evidence": dict(outcome.stale_epoch_evidence or {}),
+            "joint_idempotency_evidence": dict(outcome.joint_idempotency_evidence or {}),
+            "recorded_at": now,
+        }
+
+        with self._lock:
+            ledger = dict(self._closure_evidence_ledger_by_task.get(task_id) or {})
+            if not ledger:
+                ledger = {
+                    "task_id": task_id,
+                    "first_accepted_completion": {},
+                    "competing_events": [],
+                    "competing_summary": {
+                        "duplicate_ignored": 0,
+                        "stale_rejected": 0,
+                        "superseded_by_newer_epoch_session": 0,
+                    },
+                    "updated_at": now,
+                }
+
+            accepted = dict(ledger.get("first_accepted_completion") or {})
+            disposition = str(outcome.completion_disposition or "")
+            if disposition == "first_accepted":
+                if not accepted:
+                    ledger["first_accepted_completion"] = dict(event_evidence)
+                else:
+                    accepted_identity = dict((accepted.get("identity") or {}))
+                    accepted_epoch = accepted_identity.get("session_epoch")
+                    presented_epoch = identity.get("session_epoch")
+                    superseded = (
+                        isinstance(accepted_epoch, int)
+                        and isinstance(presented_epoch, int)
+                        and presented_epoch > accepted_epoch
+                    ) or (
+                        bool(accepted_identity.get("runtime_session_id"))
+                        and bool(identity.get("runtime_session_id"))
+                        and accepted_identity.get("runtime_session_id") != identity.get("runtime_session_id")
+                    )
+                    if superseded:
+                        superseded_event = dict(event_evidence)
+                        superseded_event["disposition"] = "superseded_by_newer_epoch_session"
+                        superseded_event["reason"] = "accepted_event_superseded_by_newer_epoch_or_session"
+                        competing = list(ledger.get("competing_events") or [])
+                        competing.append(superseded_event)
+                        ledger["competing_events"] = competing[-20:]
+                        summary = dict(ledger.get("competing_summary") or {})
+                        summary["superseded_by_newer_epoch_session"] = int(
+                            summary.get("superseded_by_newer_epoch_session", 0)
+                        ) + 1
+                        ledger["competing_summary"] = summary
+                        ledger["first_accepted_completion"] = dict(event_evidence)
+            else:
+                competing = list(ledger.get("competing_events") or [])
+                competing.append(event_evidence)
+                ledger["competing_events"] = competing[-20:]
+                summary = dict(ledger.get("competing_summary") or {})
+                if disposition == "duplicate_ignored":
+                    summary["duplicate_ignored"] = int(summary.get("duplicate_ignored", 0)) + 1
+                if disposition == "stale_rejected":
+                    summary["stale_rejected"] = int(summary.get("stale_rejected", 0)) + 1
+                    stale_cls = str(outcome.stale_classification or "")
+                    stale_ev = dict(outcome.stale_epoch_evidence or {})
+                    if stale_cls in {"epoch_mismatch", "replay_epoch_mismatch"}:
+                        stored_epoch = stale_ev.get("stored_epoch")
+                        presented_epoch = stale_ev.get("presented_epoch")
+                        if isinstance(stored_epoch, int) and isinstance(presented_epoch, int):
+                            if stored_epoch > presented_epoch:
+                                summary["superseded_by_newer_epoch_session"] = int(
+                                    summary.get("superseded_by_newer_epoch_session", 0)
+                                ) + 1
+                ledger["competing_summary"] = summary
+
+            ledger["updated_at"] = now
+            self._closure_evidence_ledger_by_task[task_id] = dict(ledger)
+            return dict(ledger)
+
+    @staticmethod
+    def _build_final_truth_provenance(ledger_entry: Dict[str, Any]) -> Dict[str, Any]:
+        if not ledger_entry:
+            return {}
+        accepted = dict(ledger_entry.get("first_accepted_completion") or {})
+        accepted_identity = dict(accepted.get("identity") or {})
+        accepted_reason = str(accepted.get("reason") or "")
+        competing_summary = dict(ledger_entry.get("competing_summary") or {})
+        return {
+            "accepted_event_identity": accepted_identity,
+            "accepted_reason_basis": accepted_reason,
+            "competing_rejected_or_ignored_summary": competing_summary,
+            "evidence_ledger_task_id": str(ledger_entry.get("task_id") or ""),
+            "evidence_ledger_updated_at": ledger_entry.get("updated_at"),
+        }
 
     async def process_async(
         self,
