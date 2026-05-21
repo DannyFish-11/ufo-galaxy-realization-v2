@@ -100,11 +100,9 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY: tuple[DeviceWsIngressSurface, ...] = (
 )
 
 _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS = frozenset(
-    {
-        entry["classification"]
-        for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
-        if entry["android_bridge_ingress"]
-    }
+    entry["classification"]
+    for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
+    if entry["android_bridge_ingress"]
 )
 
 # Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable legacy WS paths such as
