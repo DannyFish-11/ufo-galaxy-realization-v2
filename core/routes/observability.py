@@ -286,20 +286,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         """
         try:
-            from core.nats_posture import evaluate_nats_posture
+            from core.nats_posture import evaluate_nats_posture, build_default_posture_snapshot
             posture = evaluate_nats_posture()
             bus_stats = posture.get("bus", {})
         except Exception as exc:
-            posture = {
-                "posture": "development-allowed-degraded",
-                "required": False,
-                "system_mode": "desktop-local",
-                "nats_url": os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222"),
-                "connected": False,
-                "noop_mode": True,
-                "assertion_ok": True,
-                "violation_reason": "",
-            }
+            posture = build_default_posture_snapshot()
             bus_stats = {"error": str(exc)}
 
         brain_status = None

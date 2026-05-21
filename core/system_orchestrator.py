@@ -376,7 +376,10 @@ class SystemOrchestrator:
             )
             diagnostics["nats_posture"] = nats_posture
             if not nats_posture.get("assertion_ok", True):
-                reason = nats_posture.get("violation_reason") or "nats_posture_violation"
+                reason = (
+                    nats_posture.get("violation_reason")
+                    or "nats_posture_violation_unknown_reason"
+                )
                 hard_failures.append(str(reason))
         except Exception as exc:
             diagnostics["checks"]["nats_posture_assertion_ok"] = False

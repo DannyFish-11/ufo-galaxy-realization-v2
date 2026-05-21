@@ -110,6 +110,29 @@ class TestNatsProbeStrictness:
         assert health_checks._nats_tcp_failure_is_critical() is False
 
 
+class TestNatsPosturePolicy:
+    """Canonical NATS posture should stay explicit across env combinations."""
+
+    def test_posture_cross_device_without_strict_is_development_allowed(self, monkeypatch):
+        from core.nats_posture import evaluate_nats_posture
+
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
+        monkeypatch.delenv("GALAXY_NATS_ENABLED", raising=False)
+        posture = evaluate_nats_posture()
+        assert posture["posture"] == "development-allowed-degraded"
+        assert posture["required"] is False
+
+    def test_posture_nats_enabled_without_strict_is_development_allowed(self, monkeypatch):
+        from core.nats_posture import evaluate_nats_posture
+
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
+        monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
+        posture = evaluate_nats_posture()
+        assert posture["posture"] == "development-allowed-degraded"
+        assert posture["required"] is False
+
+
 class TestOrchestratorNatsPostureGuard:
     """Phase-4 preflight should enforce required NATS posture."""
 
