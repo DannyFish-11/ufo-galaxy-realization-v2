@@ -24,7 +24,22 @@ def build_continuity_adjudication_evidence(
     related_identity: Optional[Dict[str, Any]] = None,
     decision_point: str = "",
 ) -> Dict[str, Any]:
-    """Build structured continuity adjudication evidence for diagnostics/tests."""
+    """Build structured continuity adjudication evidence for diagnostics/tests.
+
+    Parameters
+    ----------
+    classification:
+        Unified continuity adjudication state (or equivalent string).
+    triggering_reason:
+        Human-readable reason that caused this classification.
+    epoch_session_basis:
+        Relevant session/epoch basis used during adjudication
+        (for example ``session_epoch`` or reconnect continuity outcome).
+    related_identity:
+        Minimal task/envelope/result identity involved in this decision.
+    decision_point:
+        Runtime decision point identifier (for example ingress stale gate).
+    """
     normalized_classification = (
         classification.value
         if isinstance(classification, ContinuityAdjudicationClassification)

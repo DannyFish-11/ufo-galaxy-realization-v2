@@ -274,10 +274,19 @@ def _apply_pending_lifecycle_reconnect_decisions(
                 f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"
             ),
         }
-        classification = _PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION.get(
-            decision,
-            ContinuityAdjudicationClassification.abandoned_or_superseded.value,
-        )
+        classification = _PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION.get(decision)
+        if classification is None:
+            classification = (
+                ContinuityAdjudicationClassification.abandoned_or_superseded.value
+            )
+            logger.warning(
+                "reconnect lifecycle decision unmapped to continuity adjudication "
+                "classification; falling back to abandoned-or-superseded "
+                "device_id=%s task_id=%s decision=%s",
+                device_id,
+                record.task_id,
+                decision,
+            )
         evidence["continuity_adjudication_classification"] = classification
         evidence["continuity_adjudication"] = build_continuity_adjudication_evidence(
             classification=classification,
@@ -346,6 +355,7 @@ def _summarize_pending_lifecycle_decisions(
 def _summarize_pending_lifecycle_adjudication_classifications(
     decisions: List[Dict[str, Any]],
 ) -> Dict[str, int]:
+    """Aggregate reconnect pending lifecycle adjudication classifications."""
     summary: Dict[str, int] = {}
     for decision in decisions:
         key = str(decision.get("continuity_adjudication_classification") or "unknown")
