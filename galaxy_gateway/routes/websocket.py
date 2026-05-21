@@ -114,7 +114,7 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY: tuple[DeviceWsIngressSurface, ...] = (
     {"path": "/ws", "classification": "debug", "android_bridge_ingress": False},
 )
 
-_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS = frozenset(
+_VALID_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS = frozenset(
     entry["classification"]
     for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
     if entry["android_bridge_ingress"]
@@ -160,11 +160,11 @@ async def _handle_android_ws(
     from galaxy_gateway.android_bridge import android_bridge as _android_bridge
     from galaxy_gateway.protocol.compat import normalise_to_v3_dict as _normalise
 
-    if ingress_classification not in _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS:
+    if ingress_classification not in _VALID_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS:
         raise ValueError(
             f"Unsupported ingress_classification={ingress_classification!r} for android_bridge ingress. "
             f"Valid classifications for android_bridge ingress routes: "
-            f"{sorted(_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS)}"
+            f"{sorted(_VALID_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS)}"
         )
 
     await websocket.accept()
