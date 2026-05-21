@@ -170,6 +170,143 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
     return buffered_count
 
 
+def _apply_pending_lifecycle_reconnect_decisions(
+    *,
+    device_id: str,
+    continuity_outcome: str,
+    delivery_replay_scheduled: bool,
+) -> List[Dict[str, Any]]:
+    """Consume pending lifecycle records on reconnect and make deterministic decisions.
+
+    This closes the reconnect gap where pending envelopes previously remained in
+    the registry and silently waited for timeout.  Decisions align with the
+    existing lifecycle registry owner model:
+
+    * ``DEVICE_DISPATCH`` / ``CROSS_DEVICE`` + ``continuity_resume`` → resume
+    * ``ROUTING`` → replay/reconciliation required
+    * ``GATEWAY_INGRESS`` → failover / re-issue required
+    * ``RESULT_COMPLETION`` or timed-out records → abandon as stale/closed
+    """
+    try:
+        from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
+            get_lifecycle_registry,
+        )
+    except Exception as exc:  # pragma: no cover - graceful degradation
+        logger.debug(
+            "reconnect pending lifecycle decisions unavailable: device_id=%s error=%s",
+            device_id,
+            exc,
+        )
+        return []
+
+    registry = get_lifecycle_registry()
+    decisions: List[Dict[str, Any]] = []
+    pending_records = list(registry.get_pending_for_device(device_id))
+
+    for record in pending_records:
+        decision = "resume_existing_execution"
+        action = "resume_existing_execution"
+        reason = ""
+        should_fail = False
+
+        if record.is_timed_out():
+            decision = "mark_abandoned_stale"
+            action = "abandon_pending_envelope"
+            reason = "pending_envelope_timed_out_before_reconnect_decision"
+            should_fail = True
+        elif record.owner == LifecycleOwner.RESULT_COMPLETION:
+            decision = "closure_already_decided"
+            action = "abandon_pending_envelope"
+            reason = "pending_record_already_at_result_completion_owner"
+            should_fail = True
+        elif continuity_outcome != "continuity_resume":
+            if record.owner == LifecycleOwner.ROUTING:
+                decision = "request_replay_reconciliation"
+                action = "fail_pending_for_replay"
+                reason = "new_attachment_blocks_routing_stage_resume"
+            else:
+                decision = "trigger_failover"
+                action = "fail_pending_for_failover"
+                reason = f"new_attachment_blocks_{record.owner.value}_resume"
+            should_fail = True
+        elif record.owner == LifecycleOwner.ROUTING:
+            decision = "request_replay_reconciliation"
+            action = "fail_pending_for_replay"
+            reason = "reconnect_requires_routing_replay"
+            should_fail = True
+        elif record.owner == LifecycleOwner.GATEWAY_INGRESS:
+            decision = "trigger_failover"
+            action = "fail_pending_for_failover"
+            reason = "reconnect_requires_gateway_reissue_or_failover"
+            should_fail = True
+
+        evidence = {
+            "task_id": record.task_id,
+            "trace_id": record.trace_id,
+            "target_device_id": record.target_device_id,
+            "tool_name": record.tool_name,
+            "owner": record.owner.value,
+            "elapsed_seconds": round(record.elapsed(), 3),
+            "timeout_seconds": float(record.timeout),
+            "continuity_outcome": continuity_outcome,
+            "decision": decision,
+            "action": action,
+            "reason": reason,
+            "delivery_replay_scheduled": bool(delivery_replay_scheduled),
+            "diagnostic_trace": (
+                f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"
+            ),
+        }
+
+        if should_fail:
+            registry.fail(
+                record.task_id,
+                f"reconnect_lifecycle_decision:{decision}:{reason}",
+            )
+            logger.warning(
+                "reconnect lifecycle decision | device_id=%s task_id=%s decision=%s owner=%s reason=%s",
+                device_id,
+                record.task_id,
+                decision,
+                record.owner.value,
+                reason,
+            )
+        else:
+            registry.merge_metadata(
+                record.task_id,
+                {
+                    "reconnect_lifecycle_decision": decision,
+                    "reconnect_lifecycle_reason": reason or "continuity_resume_for_existing_execution",
+                    "reconnect_lifecycle_trace": evidence["diagnostic_trace"],
+                    "reconnect_delivery_replay_scheduled": bool(delivery_replay_scheduled),
+                },
+            )
+            registry.transfer_ownership(record.task_id, LifecycleOwner.DEVICE_DISPATCH)
+            logger.info(
+                "reconnect lifecycle decision | device_id=%s task_id=%s decision=%s owner=%s replay_scheduled=%s",
+                device_id,
+                record.task_id,
+                decision,
+                record.owner.value,
+                delivery_replay_scheduled,
+            )
+
+        decisions.append(evidence)
+
+    return decisions
+
+
+def _summarize_pending_lifecycle_decisions(
+    decisions: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    summary: Dict[str, int] = {}
+    for decision in decisions:
+        key = str(decision.get("decision") or "unknown")
+        summary[key] = summary.get(key, 0) + 1
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # Canonical reconnect path sentinel
 # ---------------------------------------------------------------------------
@@ -844,6 +981,14 @@ async def handle_device_register(
                 )
             )
             _recovery_replay_scheduled = _recovery_replay_buffered_count > 0
+        _pending_lifecycle_decisions = _apply_pending_lifecycle_reconnect_decisions(
+            device_id=device_id,
+            continuity_outcome=_reconnect_outcome,
+            delivery_replay_scheduled=_recovery_replay_scheduled,
+        )
+        _pending_lifecycle_summary = _summarize_pending_lifecycle_decisions(
+            _pending_lifecycle_decisions
+        )
 
         ack = MessageBuilder.device_register_ack(
             device_id=device_id,
@@ -867,6 +1012,10 @@ async def handle_device_register(
             ack["runtime_session_id"] = _reg_entry.runtime_session_id
         ack["recovery_replay_buffered_count"] = _recovery_replay_buffered_count
         ack["recovery_replay_scheduled"] = _recovery_replay_scheduled
+        ack["pending_lifecycle_decision_count"] = len(_pending_lifecycle_decisions)
+        ack["pending_lifecycle_decision_summary"] = _pending_lifecycle_summary
+        if _pending_lifecycle_decisions:
+            ack["pending_lifecycle_decisions"] = _pending_lifecycle_decisions
         # Surface registration completeness so callers can assert the state.
         ack["registration_fully_attached"] = len(_gaps) == 0
         if _gaps:
@@ -1132,14 +1281,26 @@ async def handle_device_reconnect(
                 device_id, _attach_exc,
             )
 
+        _pending_lifecycle_decisions = _apply_pending_lifecycle_reconnect_decisions(
+            device_id=device_id,
+            continuity_outcome=outcome,
+            delivery_replay_scheduled=False,
+        )
+
         ack = {
             "type": "reconnect_ack",
             "device_id": device_id,
             "success": True,
             "continuity_outcome": outcome,
             "runtime_attachment_session_id": resolved_attachment_id,
+            "pending_lifecycle_decision_count": len(_pending_lifecycle_decisions),
+            "pending_lifecycle_decision_summary": _summarize_pending_lifecycle_decisions(
+                _pending_lifecycle_decisions
+            ),
             "message": f"Reconnect processed: {outcome}",
         }
+        if _pending_lifecycle_decisions:
+            ack["pending_lifecycle_decisions"] = _pending_lifecycle_decisions
         return ack
 
     except Exception as exc:

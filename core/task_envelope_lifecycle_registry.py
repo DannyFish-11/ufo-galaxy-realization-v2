@@ -393,6 +393,30 @@ class TaskEnvelopeLifecycleRegistry:
         )
         return True
 
+    def merge_metadata(
+        self,
+        task_id: str,
+        metadata_updates: Dict[str, Any],
+    ) -> bool:
+        """Merge *metadata_updates* into a pending record's metadata.
+
+        Returns ``True`` when a matching pending record was found and updated.
+        """
+        record = self._pending.get(task_id)
+        if record is None:
+            return False
+        updated = dataclasses.replace(
+            record,
+            metadata={**record.metadata, **dict(metadata_updates or {})},
+        )
+        self._pending[task_id] = updated
+        logger.debug(
+            "lifecycle_registry.merge_metadata | task_id=%s keys=%s",
+            task_id,
+            sorted((metadata_updates or {}).keys()),
+        )
+        return True
+
     # ── Result completion ─────────────────────────────────────────────────────
 
     def complete(
