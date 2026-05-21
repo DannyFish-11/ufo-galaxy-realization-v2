@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocket
 
-pytest.importorskip("websockets", reason="websockets required for gateway websocket tests")
+pytest.importorskip("websockets", reason="WebSockets required for gateway websocket tests")
 
 from galaxy_gateway.routes import websocket as ws_routes
 

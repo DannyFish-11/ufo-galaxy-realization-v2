@@ -163,7 +163,8 @@ async def _handle_android_ws(
     if ingress_classification not in _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS:
         raise ValueError(
             f"Unsupported ingress_classification={ingress_classification!r} for android_bridge ingress. "
-            f"Valid android_bridge classifications: {sorted(_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS)}"
+            f"Valid classifications for android_bridge ingress routes: "
+            f"{sorted(_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS)}"
         )
 
     await websocket.accept()
