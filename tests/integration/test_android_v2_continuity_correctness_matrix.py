@@ -300,6 +300,12 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
             ack["pending_lifecycle_decision_summary"].get("request_replay_reconciliation", 0)
             >= 1
         )
+        assert (
+            ack["continuity_adjudication_summary"].get(
+                "replay-reconciliation-required", 0
+            )
+            >= 1
+        )
         assert isinstance(ack.get("pending_lifecycle_decisions", []), list)
 
     @pytest.mark.asyncio

@@ -76,6 +76,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from core.continuity_adjudication import (
+    ContinuityAdjudicationClassification,
+    build_continuity_adjudication_evidence,
+)
+
 logger = logging.getLogger("Galaxy.UnifiedResultIngress")
 
 # Evidence verdicts that must block full closure in unified ingress.
@@ -374,6 +379,10 @@ class UnifiedResultIngressOutcome:
     joint_idempotency_evidence: Dict[str, Any] = field(default_factory=dict)
     """Structured evidence describing the joint result-id and task-lineage
     idempotency decision for this ingress event."""
+    continuity_adjudication_classification: str = ""
+    """Unified continuity adjudication classification for this ingress decision."""
+    continuity_adjudication_evidence: Dict[str, Any] = field(default_factory=dict)
+    """Structured continuity adjudication evidence for diagnostics and tests."""
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +450,26 @@ class UnifiedResultIngress:
             mode=continuity_mode,
         ):
             outcome.continuity_rejected = True
+            outcome.continuity_adjudication_classification = (
+                ContinuityAdjudicationClassification.replay_reconciliation_required.value
+            )
+            outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+                classification=outcome.continuity_adjudication_classification,
+                triggering_reason=f"continuity_legality_verdict:{continuity_verdict}",
+                epoch_session_basis={
+                    "session_epoch": event.session_epoch,
+                    "runtime_session_id": event.runtime_session_id,
+                    "runtime_attachment_session_id": event.runtime_attachment_session_id,
+                    "source_channel": event.source_channel.value,
+                },
+                related_identity={
+                    "task_id": event.task_id,
+                    "device_id": event.device_id,
+                    "result_id": event.idempotency_key,
+                    "completion_emission_id": event.completion_emission_id,
+                },
+                decision_point="unified_result_ingress.continuity_legality_gate",
+            )
             outcome.incomplete_reason = f"continuity_rejected:{continuity_verdict}"
             logger.warning(
                 "unified_result_ingress: continuity gate rejected result " "task_id=%r verdict=%r source=%s",
@@ -461,6 +490,30 @@ class UnifiedResultIngress:
             outcome.stale_classification = _stale_cls
             outcome.stale_epoch_evidence = _stale_evidence
             outcome.completion_disposition = "stale_rejected"
+            outcome.continuity_adjudication_classification = (
+                ContinuityAdjudicationClassification.stale_rejected.value
+            )
+            outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+                classification=outcome.continuity_adjudication_classification,
+                triggering_reason=(
+                    str(_stale_evidence.get("stale_reason") or "")
+                    or f"stale_classification:{_stale_cls}"
+                ),
+                epoch_session_basis={
+                    "session_epoch": event.session_epoch,
+                    "stored_epoch": _stale_evidence.get("stored_epoch"),
+                    "presented_epoch": _stale_evidence.get("presented_epoch"),
+                    "runtime_session_id": event.runtime_session_id,
+                    "runtime_attachment_session_id": event.runtime_attachment_session_id,
+                },
+                related_identity={
+                    "task_id": event.task_id,
+                    "device_id": event.device_id,
+                    "result_id": event.idempotency_key,
+                    "completion_emission_id": event.completion_emission_id,
+                },
+                decision_point="unified_result_ingress.stale_epoch_gate",
+            )
             outcome.joint_idempotency_evidence = self._fallback_joint_idempotency_evidence(
                 event,
                 completion_lineage=completion_lineage,
@@ -484,6 +537,26 @@ class UnifiedResultIngress:
         if self._check_idempotency(event):
             outcome.was_deduplicated = True
             outcome.completion_disposition = "duplicate_ignored"
+            outcome.continuity_adjudication_classification = (
+                ContinuityAdjudicationClassification.duplicate_ignored.value
+            )
+            outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+                classification=outcome.continuity_adjudication_classification,
+                triggering_reason="joint_idempotency_duplicate",
+                epoch_session_basis={
+                    "session_epoch": event.session_epoch,
+                    "runtime_session_id": event.runtime_session_id,
+                    "runtime_attachment_session_id": event.runtime_attachment_session_id,
+                },
+                related_identity={
+                    "task_id": event.task_id,
+                    "device_id": event.device_id,
+                    "result_id": event.idempotency_key,
+                    "completion_emission_id": event.completion_emission_id,
+                    "completion_lineage_key": completion_lineage.get("completion_lineage_key"),
+                },
+                decision_point="unified_result_ingress.idempotency_gate",
+            )
             outcome.joint_idempotency_evidence = (
                 self._consume_joint_idempotency_evidence()
                 or self._fallback_joint_idempotency_evidence(
@@ -504,6 +577,26 @@ class UnifiedResultIngress:
 
         self._record_idempotency(event)
         outcome.completion_disposition = "first_accepted"
+        outcome.continuity_adjudication_classification = (
+            ContinuityAdjudicationClassification.current_accepted.value
+        )
+        outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+            classification=outcome.continuity_adjudication_classification,
+            triggering_reason="passed_continuity_stale_idempotency_gates",
+            epoch_session_basis={
+                "session_epoch": event.session_epoch,
+                "runtime_session_id": event.runtime_session_id,
+                "runtime_attachment_session_id": event.runtime_attachment_session_id,
+            },
+            related_identity={
+                "task_id": event.task_id,
+                "device_id": event.device_id,
+                "result_id": event.idempotency_key,
+                "completion_emission_id": event.completion_emission_id,
+                "completion_lineage_key": completion_lineage.get("completion_lineage_key"),
+            },
+            decision_point="unified_result_ingress.accept_current_result",
+        )
         outcome.joint_idempotency_evidence = (
             self._consume_joint_idempotency_evidence()
             or self._fallback_joint_idempotency_evidence(
@@ -606,6 +699,12 @@ class UnifiedResultIngress:
             "completion_lineage": dict(outcome.completion_lineage or {}),
             "joint_idempotency_evidence": dict(
                 outcome.joint_idempotency_evidence or {}
+            ),
+            "continuity_adjudication_classification": str(
+                outcome.continuity_adjudication_classification or ""
+            ),
+            "continuity_adjudication_evidence": dict(
+                outcome.continuity_adjudication_evidence or {}
             ),
             "stale_classification": str(outcome.stale_classification or ""),
             "updated_at": time.time(),

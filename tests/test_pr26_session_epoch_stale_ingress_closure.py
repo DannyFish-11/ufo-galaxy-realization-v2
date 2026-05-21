@@ -212,6 +212,7 @@ class TestExplicitStaleFlag:
         evt = _make_event(is_stale=True)
         outcome = ingress.process(evt)
         assert outcome.stale_classification == "explicit_stale"
+        assert outcome.continuity_adjudication_classification == "stale-rejected"
 
     def test_C03_stale_epoch_evidence_non_empty(self):
         ingress = self._ingress()
@@ -375,6 +376,10 @@ class TestStaleEvidenceDiagnostics:
         assert ev.get("task_id") == "task-e01"
         assert ev.get("device_id") == "dev-e01"
         assert "source_channel" in ev
+        assert (
+            outcome.continuity_adjudication_evidence.get("classification")
+            == "stale-rejected"
+        )
 
     def test_E02_evidence_contains_stale_trigger(self):
         ingress = self._ingress()

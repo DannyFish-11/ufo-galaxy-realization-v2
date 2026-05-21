@@ -255,6 +255,11 @@ class TestIdempotency:
         evt = _make_event(_make_task_id())
         outcome = ingress.process(evt)
         assert not outcome.was_deduplicated
+        assert outcome.continuity_adjudication_classification == "current-accepted"
+        assert (
+            outcome.continuity_adjudication_evidence.get("triggering_reason")
+            == "passed_continuity_stale_idempotency_gates"
+        )
 
     def test_B02_second_ingest_deduplicated(self):
         ingress, _ = self._make_ingress_with_fresh_store()
@@ -263,6 +268,7 @@ class TestIdempotency:
         ingress.process(evt)  # first
         outcome = ingress.process(evt)  # second, same key
         assert outcome.was_deduplicated
+        assert outcome.continuity_adjudication_classification == "duplicate-ignored"
 
     def test_B03_deduplicated_returns_flag_true(self):
         ingress, _ = self._make_ingress_with_fresh_store()

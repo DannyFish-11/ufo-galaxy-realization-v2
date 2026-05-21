@@ -12,6 +12,10 @@ import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from core.continuity_adjudication import (
+    ContinuityAdjudicationClassification,
+    build_continuity_adjudication_evidence,
+)
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
 
@@ -21,6 +25,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RESUME_EXISTING_EXECUTION_REASON = "continuity_resume_for_existing_execution"
+
+_PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION = {
+    "resume_existing_execution": ContinuityAdjudicationClassification.reconnect_recovery_required.value,
+    "request_replay_reconciliation": ContinuityAdjudicationClassification.replay_reconciliation_required.value,
+    "trigger_failover": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
+    "closure_already_decided": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
+    "mark_abandoned_stale": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +274,26 @@ def _apply_pending_lifecycle_reconnect_decisions(
                 f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"
             ),
         }
+        classification = _PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION.get(
+            decision,
+            ContinuityAdjudicationClassification.abandoned_or_superseded.value,
+        )
+        evidence["continuity_adjudication_classification"] = classification
+        evidence["continuity_adjudication"] = build_continuity_adjudication_evidence(
+            classification=classification,
+            triggering_reason=reason,
+            epoch_session_basis={
+                "continuity_outcome": continuity_outcome,
+                "delivery_replay_scheduled": bool(delivery_replay_scheduled),
+            },
+            related_identity={
+                "task_id": record.task_id,
+                "trace_id": record.trace_id,
+                "target_device_id": record.target_device_id,
+                "owner": record.owner.value,
+            },
+            decision_point="registration.reconnect_pending_lifecycle",
+        )
 
         if should_fail:
             registry.fail(
@@ -307,6 +339,16 @@ def _summarize_pending_lifecycle_decisions(
     summary: Dict[str, int] = {}
     for decision in decisions:
         key = str(decision.get("decision") or "unknown")
+        summary[key] = summary.get(key, 0) + 1
+    return summary
+
+
+def _summarize_pending_lifecycle_adjudication_classifications(
+    decisions: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    summary: Dict[str, int] = {}
+    for decision in decisions:
+        key = str(decision.get("continuity_adjudication_classification") or "unknown")
         summary[key] = summary.get(key, 0) + 1
     return summary
 
@@ -993,6 +1035,11 @@ async def handle_device_register(
         _pending_lifecycle_summary = _summarize_pending_lifecycle_decisions(
             _pending_lifecycle_decisions
         )
+        _pending_lifecycle_classification_summary = (
+            _summarize_pending_lifecycle_adjudication_classifications(
+                _pending_lifecycle_decisions
+            )
+        )
 
         ack = MessageBuilder.device_register_ack(
             device_id=device_id,
@@ -1018,6 +1065,7 @@ async def handle_device_register(
         ack["recovery_replay_scheduled"] = _recovery_replay_scheduled
         ack["pending_lifecycle_decision_count"] = len(_pending_lifecycle_decisions)
         ack["pending_lifecycle_decision_summary"] = _pending_lifecycle_summary
+        ack["continuity_adjudication_summary"] = _pending_lifecycle_classification_summary
         if _pending_lifecycle_decisions:
             ack["pending_lifecycle_decisions"] = _pending_lifecycle_decisions
         # Surface registration completeness so callers can assert the state.
@@ -1299,6 +1347,9 @@ async def handle_device_reconnect(
             "runtime_attachment_session_id": resolved_attachment_id,
             "pending_lifecycle_decision_count": len(_pending_lifecycle_decisions),
             "pending_lifecycle_decision_summary": _summarize_pending_lifecycle_decisions(
+                _pending_lifecycle_decisions
+            ),
+            "continuity_adjudication_summary": _summarize_pending_lifecycle_adjudication_classifications(
                 _pending_lifecycle_decisions
             ),
             "message": f"Reconnect processed: {outcome}",
