@@ -45,6 +45,7 @@ class TestReadinessMatrixStructure:
             "protocol_regression_surface",
             "mainline_routing_enforcement_callsite",
             "aip_v3_version_stability",
+            "nats_posture_contract",
         }
         evaluated_ids = {d.dimension_id for d in matrix.dimensions}
         missing = required_dimensions - evaluated_ids
@@ -228,6 +229,25 @@ class TestCriticalDimensionsPass:
         assert dim is not None, "aip_v3_version_stability dimension not found"
         assert dim.status == DimensionStatus.PASSED, (
             f"aip_v3_version_stability failed: {dim.detail}"
+        )
+
+    def test_nats_posture_contract_passes(self) -> None:
+        """NATS posture contract should pass in default development posture."""
+        from core.runtime_readiness_matrix import (
+            evaluate_readiness_matrix,
+            reset_readiness_matrix,
+            DimensionStatus,
+        )
+        reset_readiness_matrix()
+        matrix = evaluate_readiness_matrix()
+
+        dim = next(
+            (d for d in matrix.dimensions if d.dimension_id == "nats_posture_contract"),
+            None,
+        )
+        assert dim is not None, "nats_posture_contract dimension not found"
+        assert dim.status == DimensionStatus.PASSED, (
+            f"nats_posture_contract failed: {dim.detail}"
         )
 
 

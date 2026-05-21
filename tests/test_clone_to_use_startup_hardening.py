@@ -91,19 +91,96 @@ class TestNatsProbeStrictness:
         from launcher import health_checks
 
         monkeypatch.setenv("GALAXY_FABRIC_STRICT", "true")
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
         assert health_checks._nats_tcp_failure_is_critical() is True
 
-    def test_nats_critical_when_cross_device_enabled(self, monkeypatch):
+    def test_nats_non_critical_when_cross_device_enabled_without_strict(self, monkeypatch):
         from launcher import health_checks
 
         monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
-        assert health_checks._nats_tcp_failure_is_critical() is True
+        assert health_checks._nats_tcp_failure_is_critical() is False
 
-    def test_nats_critical_when_nats_enabled(self, monkeypatch):
+    def test_nats_non_critical_when_nats_enabled_without_strict(self, monkeypatch):
         from launcher import health_checks
 
         monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
         monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
         monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
+        assert health_checks._nats_tcp_failure_is_critical() is False
+
+    def test_nats_critical_uses_posture_policy_when_required(self, monkeypatch):
+        from launcher import health_checks
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {"required": True},
+        )
         assert health_checks._nats_tcp_failure_is_critical() is True
+
+    def test_nats_non_critical_uses_posture_policy_when_not_required(self, monkeypatch):
+        from launcher import health_checks
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {"required": False},
+        )
+        assert health_checks._nats_tcp_failure_is_critical() is False
+
+
+class TestNatsPosturePolicy:
+    """Canonical NATS posture should stay explicit across env combinations."""
+
+    def test_posture_cross_device_without_strict_is_development_allowed(self, monkeypatch):
+        from core.nats_posture import evaluate_nats_posture
+
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+        monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
+        monkeypatch.delenv("GALAXY_NATS_ENABLED", raising=False)
+        posture = evaluate_nats_posture()
+        assert posture["posture"] == "development-allowed-degraded"
+        assert posture["required"] is False
+
+    def test_posture_nats_enabled_without_strict_is_development_allowed(self, monkeypatch):
+        from core.nats_posture import evaluate_nats_posture
+
+        monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
+        monkeypatch.delenv("GALAXY_FABRIC_STRICT", raising=False)
+        posture = evaluate_nats_posture()
+        assert posture["posture"] == "development-allowed-degraded"
+        assert posture["required"] is False
+
+
+class TestOrchestratorNatsPostureGuard:
+    """Phase-4 preflight should enforce required NATS posture."""
+
+    def test_phase4_fails_when_required_posture_assertion_fails(self, monkeypatch):
+        from core.system_orchestrator import SystemOrchestrator, PhaseStatus
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {
+                "posture": "production-required",
+                "required": True,
+                "assertion_ok": False,
+                "violation_reason": "required_nats_unreachable",
+            },
+        )
+        result = SystemOrchestrator()._run_phase_4_background_subsystems()
+        assert result.status == PhaseStatus.FAILED
+        assert "required_nats_unreachable" in result.detail
+
+    def test_phase4_ok_when_development_posture_allows_degraded(self, monkeypatch):
+        from core.system_orchestrator import SystemOrchestrator, PhaseStatus
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {
+                "posture": "development-allowed-degraded",
+                "required": False,
+                "assertion_ok": True,
+                "violation_reason": "",
+            },
+        )
+        result = SystemOrchestrator()._run_phase_4_background_subsystems()
+        assert result.status in {PhaseStatus.OK, PhaseStatus.DEGRADED}

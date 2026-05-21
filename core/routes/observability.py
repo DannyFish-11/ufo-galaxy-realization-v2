@@ -286,9 +286,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         """
         try:
-            from core.nats_bus import nats_bus
-            bus_stats = nats_bus.get_stats()
+            from core.nats_posture import evaluate_nats_posture, build_default_posture_snapshot
+            posture = evaluate_nats_posture()
+            bus_stats = posture.get("bus", {})
         except Exception as exc:
+            posture = build_default_posture_snapshot()
             bus_stats = {"error": str(exc)}
 
         brain_status = None
@@ -301,26 +303,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception:
             pass
 
-        connected = bus_stats.get("connected", False)
-        noop = bus_stats.get("noop_mode", True)
+        connected = posture.get("connected", bus_stats.get("connected", False))
+        noop = posture.get("noop_mode", bus_stats.get("noop_mode", True))
         status = "noop" if noop else ("connected" if connected else "disconnected")
-
-        # Resolve NATS requirements from the canonical system-mode config
-        # rather than hard-coding "required": True regardless of mode.
-        try:
-            from core.system_mode import resolve_fabric_config
-            _fabric = resolve_fabric_config()
-            nats_required = _fabric.nats_required
-            system_mode = _fabric.mode.value
-        except Exception:
-            logger.warning(
-                "Failed to resolve fabric config for /health/nats; defaulting to desktop-local",
-                exc_info=True,
-            )
-            nats_required = False
-            system_mode = "desktop-local"
-
-        nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+        nats_required = bool(posture.get("required", False))
+        system_mode = str(posture.get("system_mode", "desktop-local"))
+        _posture_nats_url = posture.get("nats_url")
+        nats_url = str(
+            _posture_nats_url
+            if _posture_nats_url is not None
+            else os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+        )
 
         if connected:
             message = "NATS is connected and operating as the internal scheduling mainline."
@@ -339,6 +332,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             "status": status,
             "system_mode": system_mode,
             "required": nats_required,
+            "posture": posture.get("posture"),
+            "assertion_ok": posture.get("assertion_ok", True),
+            "violation_reason": posture.get("violation_reason", ""),
             "nats_url": nats_url,
             "noop_mode": noop,
             "bus": bus_stats,

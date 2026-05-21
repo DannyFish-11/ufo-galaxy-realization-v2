@@ -165,6 +165,13 @@ def test_operator_nats_has_stats(client):
     assert "stats" in data
 
 
+def test_operator_nats_exposes_posture_fields(client):
+    data = client.get("/api/v1/operator/nats").json()
+    assert "posture" in data
+    assert "required" in data
+    assert "assertion_ok" in data
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/operator/heartbeat
 # ---------------------------------------------------------------------------

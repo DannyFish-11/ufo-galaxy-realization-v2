@@ -339,6 +339,7 @@ class SystemOrchestrator:
             "readiness_notes": [],
         }
         issues: List[str] = []
+        hard_failures: List[str] = []
 
         try:
             from core.command_router import get_command_router
@@ -365,6 +366,25 @@ class SystemOrchestrator:
         except Exception as exc:
             diagnostics["checks"]["dispatch_plan_ready"] = False
             issues.append(f"dispatch_plan_error:{exc}")
+
+        try:
+            from core.nats_posture import evaluate_nats_posture
+
+            nats_posture = evaluate_nats_posture()
+            diagnostics["checks"]["nats_posture_assertion_ok"] = bool(
+                nats_posture.get("assertion_ok", True)
+            )
+            diagnostics["nats_posture"] = nats_posture
+            if not nats_posture.get("assertion_ok", True):
+                reason = (
+                    nats_posture.get("violation_reason")
+                    or "nats_posture_violation_unknown_reason"
+                )
+                hard_failures.append(str(reason))
+        except Exception as exc:
+            diagnostics["checks"]["nats_posture_assertion_ok"] = False
+            diagnostics["nats_posture"] = {"error": str(exc)}
+            hard_failures.append(f"nats_posture_error:{exc}")
 
         # PR-A: Trigger mesh session recovery so that any non-terminal sessions
         # persisted from a previous run are surfaced before normal operation
@@ -453,6 +473,18 @@ class SystemOrchestrator:
             diagnostics["checks"]["lifecycle_registry_restored"] = False
             diagnostics["lifecycle_registry_restored_count"] = 0
             logger.debug("[Phase 4] Lifecycle registry restore skipped — %s", exc)
+
+        if hard_failures:
+            parts: List[str] = []
+            parts.append("hard_failures=" + ",".join(hard_failures))
+            if issues:
+                parts.append("degraded_issues=" + ",".join(issues))
+            return PhaseResult(
+                phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
+                status=PhaseStatus.FAILED,
+                detail="background readiness failed — " + "; ".join(parts),
+                data=diagnostics,
+            )
 
         if issues:
             return PhaseResult(

@@ -790,15 +790,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             }
         """
         try:
-            from core.nats_bus import nats_bus
-            stats = nats_bus.get_stats()
-            connected = nats_bus.is_connected() if hasattr(nats_bus, "is_connected") else stats.get("connected", False)
-            import os
-            nats_url = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
+            from core.nats_posture import evaluate_nats_posture
+
+            posture = evaluate_nats_posture()
+            stats = posture.get("bus", {})
             return JSONResponse(content={
-                "connected": connected,
-                "noop_mode": stats.get("noop_mode", True),
-                "nats_url": nats_url,
+                "connected": posture.get("connected", False),
+                "noop_mode": posture.get("noop_mode", True),
+                "nats_url": posture.get("nats_url", "nats://localhost:4222"),
+                "posture": posture.get("posture"),
+                "required": posture.get("required", False),
+                "assertion_ok": posture.get("assertion_ok", True),
+                "violation_reason": posture.get("violation_reason", ""),
+                "system_mode": posture.get("system_mode", "desktop-local"),
                 "stats": stats,
                 "authority": "OPERATOR_ROUTES_V1",
             })
