@@ -1004,7 +1004,7 @@ class UnifiedResultIngress:
             notify_with_context = getattr(ingress, "notify_with_android_context", None)
             has_context_notify = self._has_context_notification_method(ingress)
 
-            if callable(notify_with_context) and has_context_notify:
+            if has_context_notify:
                 notified = bool(
                     notify_with_context(
                         env,
