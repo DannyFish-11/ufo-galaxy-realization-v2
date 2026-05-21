@@ -786,6 +786,140 @@ def _record_live_mesh_runtime_proof(
             _increment_proof_counter_unlocked("live_mesh_failed_count")
 
 
+def _extract_staged_mesh_participant_device_ids(
+    mesh_session: Optional[Dict[str, Any]],
+) -> List[str]:
+    """Extract active participant device IDs from a staged mesh session dict."""
+    if not isinstance(mesh_session, dict):
+        return []
+    participants = mesh_session.get("participants") or []
+    device_ids: List[str] = []
+    for item in participants:
+        if not isinstance(item, dict):
+            continue
+        device_id = str(item.get("device_id") or "").strip()
+        if not device_id:
+            continue
+        status = str(item.get("status") or "").strip().lower()
+        if status and status not in {"active", "ready", "joined", "working"}:
+            continue
+        if item.get("online") is False:
+            continue
+        if device_id not in device_ids:
+            device_ids.append(device_id)
+    return device_ids
+
+
+def _dispatch_staged_mesh_participants(
+    *,
+    participant_device_ids: List[str],
+    task_id: Optional[str],
+    task: Optional[Dict[str, Any]],
+    trace_id: Optional[str],
+    session_id: Optional[str],
+) -> Dict[str, Any]:
+    """Dispatch staged-mesh task payload to participant devices via Android bridge."""
+    dispatches: Dict[str, Any] = {}
+    for device_id in participant_device_ids:
+        dispatches[device_id] = _try_android_bridge_dispatch(
+            device_id,
+            task_id or str(uuid.uuid4()),
+            task=task,
+            trace_id=trace_id,
+            session_id=session_id,
+        )
+    return dispatches
+
+
+def _coerce_mesh_participant_result_payload(
+    payload: Any,
+    *,
+    device_id: str,
+) -> Any:
+    """Normalize mesh lifecycle payload to participant result structure."""
+    if not isinstance(payload, dict):
+        return {"result": payload, "success": payload is not None, "device_id": device_id}
+
+    candidate = payload.get("result")
+    if isinstance(candidate, dict):
+        result: Dict[str, Any] = dict(candidate)
+    elif candidate is not None:
+        result = {"result": candidate}
+    else:
+        result = dict(payload)
+
+    if "success" not in result:
+        if isinstance(payload.get("success"), bool):
+            result["success"] = payload.get("success")
+        else:
+            result_kind = str(payload.get("result_kind") or payload.get("status") or "").strip().lower()
+            if result_kind in {"success", "ok", "completed"}:
+                result["success"] = True
+            elif result_kind in {"failure", "failed", "error", "timeout"}:
+                result["success"] = False
+    result.setdefault("device_id", device_id)
+    return result
+
+
+def _wait_for_staged_mesh_participant_results(
+    *,
+    mesh_session_id: Optional[str],
+    expected_device_ids: List[str],
+    timeout_seconds: float,
+    poll_interval_seconds: float = 0.1,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Wait for mesh participant results via Android mesh lifecycle ingress store."""
+    expected_ordered = [str(d).strip() for d in expected_device_ids if str(d).strip()]
+    expected_set = set(expected_ordered)
+    if not mesh_session_id or not expected_set:
+        return {}, {
+            "mesh_session_id": mesh_session_id,
+            "expected_device_ids": expected_ordered,
+            "received_device_ids": [],
+            "timed_out_device_ids": expected_ordered,
+            "timed_out": bool(expected_ordered),
+            "wait_seconds": 0.0,
+        }
+
+    wait_seconds = max(float(timeout_seconds), 0.0)
+    poll_seconds = max(float(poll_interval_seconds), 0.01)
+    deadline = time.time() + wait_seconds
+    collected: Dict[str, Any] = {}
+
+    while True:
+        try:
+            from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
+
+            store = get_android_mesh_lifecycle_store()
+            session_rec = store.get_session(str(mesh_session_id))
+            result_events = list(getattr(session_rec, "result_events", []) or []) if session_rec is not None else []
+            for event in result_events:
+                did = str(getattr(event, "device_id", "") or "").strip()
+                if not did or did not in expected_set or did in collected:
+                    continue
+                payload = getattr(event, "payload", {}) or {}
+                collected[did] = _coerce_mesh_participant_result_payload(payload, device_id=did)
+        except Exception:
+            pass
+
+        if len(collected) >= len(expected_set):
+            break
+        if time.time() >= deadline:
+            break
+        time.sleep(poll_seconds)
+
+    received_ids = [d for d in expected_ordered if d in collected]
+    timed_out_ids = [d for d in expected_ordered if d not in collected]
+    return collected, {
+        "mesh_session_id": mesh_session_id,
+        "expected_device_ids": expected_ordered,
+        "received_device_ids": received_ids,
+        "timed_out_device_ids": timed_out_ids,
+        "timed_out": bool(timed_out_ids),
+        "wait_seconds": wait_seconds,
+    }
+
+
 # ---------------------------------------------------------------------------
 # PR-33: Reconnect and Recovery Consistency Hardening
 # ---------------------------------------------------------------------------
@@ -3289,6 +3423,10 @@ def orchestrate_source_runtime_dispatch(
             coordinator_state = None
             coordinator_summary = None
             live_run_result = None
+            participant_device_ids: List[str] = []
+            participant_dispatches: Dict[str, Any] = {}
+            participant_results: Dict[str, Any] = {}
+            participant_wait: Dict[str, Any] = {}
             try:
                 from core.mesh.mesh_session_coordinator import (
                     coordinate_mesh_session,
@@ -3309,12 +3447,47 @@ def orchestrate_source_runtime_dispatch(
                 )
                 coordinator_summary = get_coordinator_summary(coordinator_state)
 
-                # PR-J: Drive the coordinator state to live completion
+                participant_device_ids = _extract_staged_mesh_participant_device_ids(mesh_session_dict)
+                participant_dispatches = _dispatch_staged_mesh_participants(
+                    participant_device_ids=participant_device_ids,
+                    task_id=task_id,
+                    task=task,
+                    trace_id=trace_id,
+                    session_id=session_id,
+                )
+                mesh_session_id = None
+                if isinstance(mesh_session_dict, dict):
+                    mesh_session_id = mesh_session_dict.get("session_id")
+                wait_timeout_seconds = 3.0
+                if isinstance(metadata, dict):
+                    raw_timeout = metadata.get("mesh_participant_wait_timeout_seconds")
+                    if raw_timeout is not None:
+                        try:
+                            wait_timeout_seconds = float(raw_timeout)
+                        except (TypeError, ValueError):
+                            pass
+                participant_results, participant_wait = _wait_for_staged_mesh_participant_results(
+                    mesh_session_id=mesh_session_id,
+                    expected_device_ids=participant_device_ids,
+                    timeout_seconds=wait_timeout_seconds,
+                )
+                timed_out_device_ids = participant_wait.get("timed_out_device_ids") or []
+                if timed_out_device_ids:
+                    errors.append(
+                        f"staged_mesh_participant_timeout:{','.join(str(v) for v in timed_out_device_ids)}"
+                    )
+
+                # PR-J: Drive the coordinator state to live completion with collected participant results.
                 from core.mesh.live_mesh_runtime_engine import run_live_mesh_session
                 live_run_result = run_live_mesh_session(
                     coordinator_state,
-                    participant_results={},
-                    metadata={"trace_id": trace_id, "task_id": task_id},
+                    participant_results=participant_results,
+                    metadata={
+                        "trace_id": trace_id,
+                        "task_id": task_id,
+                        "participant_dispatches": participant_dispatches,
+                        "participant_wait": participant_wait,
+                    },
                 )
                 # Update coordinator_state from live run result
                 live_coord = getattr(live_run_result, "coordinator_state", None)
@@ -3336,7 +3509,7 @@ def orchestrate_source_runtime_dispatch(
             )
 
             # Determine success and extract coordinator status for the result
-            success = coordinator_state is not None
+            success = False
             coordinator_status_val: Optional[str] = None
             if coordinator_state is not None:
                 _cs = getattr(coordinator_state, "status", None)
@@ -3355,14 +3528,25 @@ def orchestrate_source_runtime_dispatch(
             # PR-J: extract live run result fields
             live_outcome: Optional[str] = None
             live_merged_result: Optional[Dict[str, Any]] = None
+            mesh_completion_state = "failed_or_timeout"
             if live_run_result is not None:
                 live_outcome = getattr(live_run_result, "outcome", None)
                 live_merged_result = getattr(live_run_result, "merged_result", None)
+                if live_outcome == "completed":
+                    mesh_completion_state = "all_completed"
+                    success = True
+                elif live_outcome == "partial":
+                    mesh_completion_state = "partial_completed"
+                    success = True
+                else:
+                    mesh_completion_state = "failed_or_timeout"
                 # Propagate live run errors
                 live_errors = getattr(live_run_result, "errors", []) or []
                 for e in live_errors:
                     if e not in errors:
                         errors.append(e)
+            elif coordinator_state is not None:
+                success = True
 
             exec_result = {
                 "action_taken": "staged_mesh_coordinated",
@@ -3377,6 +3561,11 @@ def orchestrate_source_runtime_dispatch(
                 # PR-J live execution fields
                 "live_outcome": live_outcome,
                 "live_merged_result": live_merged_result,
+                "live_participant_results": participant_results,
+                "mesh_completion_state": mesh_completion_state,
+                "participant_dispatches": participant_dispatches,
+                "participant_wait": participant_wait,
+                "canonical_result_visible": live_merged_result is not None,
             }
             decision_reason = decision_reason or (
                 "staged_mesh:coordinated"
