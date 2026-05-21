@@ -842,6 +842,19 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fp.get("primary_source_kind"), "operator_derived_surface")
         self.assertIs(fp.get("acts_as_authority_layer"), False)
 
+    async def test_F12_panel_truth_source_path_is_explicit(self):
+        async with await self._client() as client:
+            resp = await client.get("/api/v1/panel/unified")
+        data = resp.json()
+        evidence = data.get("truth_compilation_evidence")
+        self.assertIsInstance(evidence, dict)
+        self.assertEqual(
+            evidence.get("primary_path"),
+            "core.outward_runtime_truth.compile_outward_truth",
+        )
+        self.assertIn(evidence.get("assembly_mode"), {"compiled_outward_truth_primary", "mixed_source_fallback"})
+        self.assertIn("mixed_source", evidence)
+
 
 # ---------------------------------------------------------------------------
 # G. Singleton management

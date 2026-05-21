@@ -679,6 +679,65 @@ def test_50c_desktop_status_board_assembly_includes_unified_operational_state_bo
     assert fingerprint.get("acts_as_authority_layer") is False
 
 
+def test_50d_desktop_board_prefers_compiled_outward_truth_for_task_truth(monkeypatch):
+    import importlib
+
+    routes_mod = importlib.import_module("core.routes.projection")
+
+    class _FakeOutwardSnapshot:
+        def to_dict(self):
+            return {
+                "surfacing_complete": True,
+                "unavailable_source_count": 0,
+                "operator_snapshot": {
+                    "active_task_count": 9,
+                    "recent_failure_count": 4,
+                    "reachable_executor_count": 7,
+                },
+            }
+
+    monkeypatch.setattr(routes_mod, "_compile_outward_truth", lambda: _FakeOutwardSnapshot())
+    monkeypatch.setattr(
+        routes_mod,
+        "_assemble_runtime_truth_payload",
+        lambda: {
+            "task_truth": {
+                "active_task_count": 1,
+                "recent_failure_count": 0,
+                "reachable_executor_count": 0,
+                "source": "runtime_truth_fallback",
+            },
+        },
+    )
+
+    payload = routes_mod._assemble_desktop_status_board_payload(route_paths={"/api/v1/projection/runtime"})
+    assert payload["task_truth"]["active_task_count"] == 9
+    evidence = payload.get("truth_compilation_evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("primary_path") == "core.outward_runtime_truth.compile_outward_truth"
+    assert evidence.get("assembly_mode") == "compiled_outward_truth_primary"
+
+
+def test_50e_desktop_board_mixed_source_fallback_is_explicitly_marked(monkeypatch):
+    import importlib
+
+    routes_mod = importlib.import_module("core.routes.projection")
+
+    monkeypatch.setattr(
+        routes_mod,
+        "_compile_outward_truth",
+        lambda: (_ for _ in ()).throw(RuntimeError("outward unavailable")),
+    )
+
+    payload = routes_mod._assemble_desktop_status_board_payload(route_paths={"/api/v1/projection/runtime"})
+    evidence = payload.get("truth_compilation_evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("assembly_mode") == "mixed_source_fallback"
+    assert evidence.get("fallback_used") is True
+    assert evidence.get("mixed_source") is True
+    assert "outward unavailable" in str(evidence.get("fallback_reason"))
+
+
 # ===========================================================================
 # 51-58: readiness and is_canonical convenience properties (PR-8 final)
 # ===========================================================================

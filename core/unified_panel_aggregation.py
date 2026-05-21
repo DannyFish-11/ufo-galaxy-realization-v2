@@ -315,6 +315,9 @@ class UnifiedPanelPayload:
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     control_plane_contract: Dict[str, Any] = field(default_factory=dict)
     final_acceptance_surface_boundary: Dict[str, Any] = field(default_factory=dict)
+    outward_truth: Dict[str, Any] = field(default_factory=dict)
+    task_truth: Dict[str, Any] = field(default_factory=dict)
+    truth_compilation_evidence: Dict[str, Any] = field(default_factory=dict)
     authority_source_fingerprint: Dict[str, Any] = field(
         default_factory=lambda: build_authority_source_fingerprint(
             surface_path="/api/v1/panel/unified",
@@ -380,6 +383,9 @@ class UnifiedPanelPayload:
             "unified_mode_model": dict(self.unified_mode_model),
             "control_plane_contract": dict(self.control_plane_contract),
             "final_acceptance_surface_boundary": dict(self.final_acceptance_surface_boundary),
+            "outward_truth": dict(self.outward_truth),
+            "task_truth": dict(self.task_truth),
+            "truth_compilation_evidence": dict(self.truth_compilation_evidence),
             "authority_source_fingerprint": dict(self.authority_source_fingerprint),
             # provenance
             "_source": self._source,
@@ -433,73 +439,79 @@ class UnifiedPanelAggregationService:
         # Each fill step is independently guarded so a failure in one source
         # never prevents other sources from contributing to the payload.
 
-        # 1. Operator snapshot — control-plane + shell/presence families
+        # 1. Compiled outward truth — primary source path for outward-facing truth
+        try:
+            self._fill_from_compiled_outward_truth(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: outward truth fill failed: %s", exc)
+
+        # 2. Operator snapshot — control-plane + shell/presence families
         try:
             self._fill_from_operator_snapshot(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: operator snapshot fill failed: %s", exc)
 
-        # 2. Android ecosystem + execution digest
+        # 3. Android ecosystem + execution digest
         try:
             self._fill_from_android_store(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: android store fill failed: %s", exc)
 
-        # 3. Continuum/flow execution projection
+        # 4. Continuum/flow execution projection
         try:
             self._fill_from_runtime_projection(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: runtime projection fill failed: %s", exc)
 
-        # 4. Execution readiness verdict
+        # 5. Execution readiness verdict
         try:
             self._fill_from_readiness_matrix(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: readiness matrix fill failed: %s", exc)
 
-        # 5. Active surface spec
+        # 6. Active surface spec
         try:
             self._fill_active_surface_spec(payload, mode=mode)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: surface spec fill failed: %s", exc)
 
-        # 6. Existence surface (PR-2) — unified assistant-like existence projection
+        # 7. Existence surface (PR-2) — unified assistant-like existence projection
         try:
             self._fill_from_existence_surface(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: existence surface fill failed: %s", exc)
 
-        # 7. Last operator action outcome (PR-3) — control-plane result integration
+        # 8. Last operator action outcome (PR-3) — control-plane result integration
         try:
             self._fill_from_last_operator_action(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: last operator action fill failed: %s", exc)
 
-        # 8. Execution result feedback (PR-4) — closed-loop roundtrip projection
+        # 9. Execution result feedback (PR-4) — closed-loop roundtrip projection
         try:
             self._fill_from_execution_roundtrip(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: execution roundtrip fill failed: %s", exc)
 
-        # 9. Android mode gate state — unified cross-device gate readiness
+        # 10. Android mode gate state — unified cross-device gate readiness
         try:
             self._fill_from_android_mode_gate_policy(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: android mode gate state fill failed: %s", exc)
 
-        # 10. Unified governance semantics (V2 authority vs Android autonomy)
+        # 11. Unified governance semantics (V2 authority vs Android autonomy)
         try:
             self._fill_from_unified_governance_semantics(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: governance semantics fill failed: %s", exc)
 
-        # 11. Android participation verdict (PR-next-convergence)
+        # 12. Android participation verdict (PR-next-convergence)
         try:
             self._fill_android_participation_verdict(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: android participation verdict fill failed: %s", exc)
 
-        # 12. Unified control-plane typed contract (PR6 convergence)
+        # 13. Unified control-plane typed contract (PR6 convergence)
         try:
             self._fill_control_plane_contract(payload)
         except Exception as exc:  # pragma: no cover
@@ -510,6 +522,64 @@ class UnifiedPanelAggregationService:
     # ------------------------------------------------------------------
     # Source fill methods (each isolated so one failure does not cascade)
     # ------------------------------------------------------------------
+
+    def _fill_from_compiled_outward_truth(self, payload: UnifiedPanelPayload) -> None:
+        """Fill outward truth/task truth from compile_outward_truth()."""
+        policy = "NO_PARALLEL_OUTWARD_ASSEMBLY_V1"
+        try:
+            from core.outward_runtime_truth import (
+                NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+                compile_outward_truth,
+            )
+
+            policy = NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY
+            outward = compile_outward_truth().to_dict()
+            payload.outward_truth = outward
+            operator_snapshot = outward.get("operator_snapshot") or {}
+            payload.task_truth = {
+                "active_task_count": int(operator_snapshot.get("active_task_count", 0) or 0),
+                "recent_failure_count": int(operator_snapshot.get("recent_failure_count", 0) or 0),
+                "reachable_executor_count": int(operator_snapshot.get("reachable_executor_count", 0) or 0),
+                "source": "outward_truth.operator_snapshot",
+            }
+            payload.truth_compilation_evidence = {
+                "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+                "assembly_mode": "compiled_outward_truth_primary",
+                "mixed_source": bool(
+                    (outward.get("unavailable_source_count", 0) or 0) > 0
+                    or not bool(outward.get("surfacing_complete", False))
+                ),
+                "fallback_used": False,
+                "policy": policy,
+                "surfacing_complete": bool(outward.get("surfacing_complete", False)),
+                "unavailable_source_count": int(outward.get("unavailable_source_count", 0) or 0),
+                "surfacing_notes": list(outward.get("surfacing_notes") or []),
+            }
+        except Exception as exc:
+            payload.outward_truth = {
+                "compiled_at": time.time(),
+                "authority": "core.outward_runtime_truth.compile_outward_truth",
+                "_fallback": True,
+            }
+            payload.task_truth = {
+                "active_task_count": payload.active_task_count,
+                "recent_failure_count": 0,
+                "reachable_executor_count": 0,
+                "source": "mixed_source_fallback",
+            }
+            payload.truth_compilation_evidence = {
+                "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+                "assembly_mode": "mixed_source_fallback",
+                "mixed_source": True,
+                "fallback_used": True,
+                "fallback_reason": str(exc),
+                "policy": policy,
+                "fallback_sources": [
+                    "core.operator_surface.OperatorSurface.operator_snapshot",
+                    "core.projection.build_runtime_projection",
+                    "core.android_device_state_store.get_device_ecosystem_summary",
+                ],
+            }
 
     def _fill_from_operator_snapshot(self, payload: UnifiedPanelPayload) -> None:
         """Fill operator/control-plane and shell/presence fields from OperatorSnapshot."""
