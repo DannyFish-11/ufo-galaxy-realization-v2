@@ -223,21 +223,19 @@ def evaluate_android_uplink_schema_gate(
             evidence=evidence,
         )
 
-    if observed_schema_version == ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION:
-        pass
-    elif (
+    if observed_schema_version != ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION:
+        if (
         compatibility_mode == "compat_degrade"
         and observed_schema_version in _LEGACY_COMPAT_SCHEMA_VERSIONS
-    ):
-        return AndroidUplinkSchemaGateDecision(
-            action="degrade",
-            message_type=normalized_type,
-            observed_schema_version=observed_schema_version,
-            observed_contract_version=observed_contract_version,
-            reason="legacy_schema_version_compat",
-            evidence=evidence,
-        )
-    else:
+        ):
+            return AndroidUplinkSchemaGateDecision(
+                action="degrade",
+                message_type=normalized_type,
+                observed_schema_version=observed_schema_version,
+                observed_contract_version=observed_contract_version,
+                reason="legacy_schema_version_compat",
+                evidence=evidence,
+            )
         observed_num = _to_int_or_none(observed_schema_version)
         expected_num = _to_int_or_none(ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION)
         if (

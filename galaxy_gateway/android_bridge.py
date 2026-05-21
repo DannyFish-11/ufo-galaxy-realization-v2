@@ -121,8 +121,12 @@ try:
     from contracts.cross_repo_schema_version_gate import (
         evaluate_android_uplink_schema_gate as _evaluate_android_uplink_schema_gate,
     )
-except Exception:
+except Exception as _schema_gate_import_exc:
     _evaluate_android_uplink_schema_gate = None  # type: ignore[assignment]
+    logging.getLogger(__name__).debug(
+        "android_bridge: cross-repo schema/version gate unavailable: %s",
+        _schema_gate_import_exc,
+    )
 
 # Bufferable message types for the pending-delivery buffer.  Only task-dispatch
 # message types are buffered; interactive/GUI/control messages are timing-sensitive
@@ -1011,6 +1015,7 @@ class AndroidBridge:
                     msg_type.value,
                     device_id,
                     gate_exc,
+                    exc_info=True,
                 )
 
         profile_mapping = classify_android_runtime_ws_mapping(msg_type.value)
