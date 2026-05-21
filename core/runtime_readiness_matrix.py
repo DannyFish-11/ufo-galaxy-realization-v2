@@ -485,6 +485,27 @@ def _eval_aip_v3_version_stable() -> Tuple[DimensionStatus, str]:
         return DimensionStatus.FAILED, f"AIP v3 version check failed: {exc}"
 
 
+def _eval_nats_posture_contract() -> Tuple[DimensionStatus, str]:
+    """Check canonical NATS posture policy and runtime assertion state."""
+    try:
+        from core.nats_posture import evaluate_nats_posture
+
+        posture = evaluate_nats_posture()
+        posture_name = posture.get("posture", "unknown")
+        if posture.get("assertion_ok", True):
+            return (
+                DimensionStatus.PASSED,
+                f"NATS posture '{posture_name}' assertion satisfied.",
+            )
+        return (
+            DimensionStatus.FAILED,
+            "NATS posture assertion failed: "
+            f"{posture.get('violation_reason') or 'unknown_reason'}",
+        )
+    except Exception as exc:
+        return DimensionStatus.UNKNOWN, f"NATS posture evaluation unavailable: {exc}"
+
+
 # ---------------------------------------------------------------------------
 # Dimension definitions
 # ---------------------------------------------------------------------------
@@ -546,6 +567,13 @@ _DIMENSION_SPECS: List[Tuple[str, str, DimensionSeverity, str, _EvaluatorFn]] = 
         DimensionSeverity.CRITICAL,
         "galaxy_gateway.android.message_builder",
         _eval_aip_v3_version_stable,
+    ),
+    (
+        "nats_posture_contract",
+        "NATS Runtime Posture Contract",
+        DimensionSeverity.CRITICAL,
+        "core.nats_posture",
+        _eval_nats_posture_contract,
     ),
 ]
 

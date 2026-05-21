@@ -493,6 +493,8 @@ class TestNatsHealthEndpoint:
             "GALAXY_NATS_ENABLED": "false",
         })
         assert result["required"] is False
+        assert result["posture"] == "development-allowed-degraded"
+        assert result["assertion_ok"] is True
 
     def test_required_true_in_cross_device_strict(self):
         result = self._call_nats_health_with_env({
@@ -501,6 +503,8 @@ class TestNatsHealthEndpoint:
             "GALAXY_NATS_ENABLED": "true",
         })
         assert result["required"] is True
+        assert result["posture"] == "production-required"
+        assert result["assertion_ok"] is False
 
     def test_system_mode_field_present(self):
         result = self._call_nats_health_with_env({

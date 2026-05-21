@@ -21,6 +21,14 @@ logger = logging.getLogger("Galaxy")
 
 def _nats_tcp_failure_is_critical() -> bool:
     """Return True when unreachable NATS should fail the overall health summary."""
+    try:
+        from core.nats_posture import evaluate_nats_posture
+
+        posture = evaluate_nats_posture()
+        return bool(posture.get("required", False))
+    except Exception:
+        pass
+
     if os.environ.get("GALAXY_FABRIC_STRICT", "").lower() in ("true", "1", "yes"):
         return True
     cross = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").lower() in ("true", "1", "yes")
