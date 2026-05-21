@@ -947,7 +947,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.android_device_state_store import get_device_ecosystem_summary
             summary = get_device_ecosystem_summary()
-            return JSONResponse(content={"authority": "OPERATOR_ROUTES_V1", **summary})
+            devices = summary.get("devices") if isinstance(summary.get("devices"), list) else []
+            absorbed_candidates = [
+                d.get("absorbed_at")
+                for d in devices
+                if isinstance(d, dict) and isinstance(d.get("absorbed_at"), (int, float))
+            ]
+            return JSONResponse(content={
+                "authority": "OPERATOR_ROUTES_V1",
+                **summary,
+                "authority_source_fingerprint": build_authority_source_fingerprint(
+                    surface_path="/api/v1/operator/devices/ecosystem",
+                    primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+                    source_roles={
+                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                        SOURCE_KIND_CANONICAL_TRUTH: "none",
+                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                    },
+                    source_freshness={
+                        "latest_device_absorbed_at": max(absorbed_candidates) if absorbed_candidates else None,
+                        "total_devices_with_snapshot": summary.get("total_devices_with_snapshot"),
+                    },
+                    observation_basis={
+                        "snapshot_source_path": "core.android_device_state_store.get_device_ecosystem_summary",
+                        "device_snapshot_count": len(devices),
+                    },
+                ),
+            })
         except Exception as exc:
             logger.error("devices_ecosystem endpoint error: %s", exc)
             return JSONResponse(
@@ -973,7 +1001,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     content={"detail": f"no state snapshot for device '{device_id}'"},
                     status_code=404,
                 )
-            return JSONResponse(content={"authority": "OPERATOR_ROUTES_V1", **snap.to_dict()})
+            snapshot_dict = snap.to_dict()
+            return JSONResponse(content={
+                "authority": "OPERATOR_ROUTES_V1",
+                **snapshot_dict,
+                "authority_source_fingerprint": build_authority_source_fingerprint(
+                    surface_path="/api/v1/operator/devices/ecosystem/{device_id}",
+                    primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+                    source_roles={
+                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                        SOURCE_KIND_CANONICAL_TRUTH: "none",
+                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                    },
+                    source_freshness={
+                        "device_id": device_id,
+                        "absorbed_at": snapshot_dict.get("absorbed_at"),
+                        "snapshot_ts": snapshot_dict.get("snapshot_ts"),
+                    },
+                    observation_basis={
+                        "snapshot_source": snapshot_dict.get("_source"),
+                        "canonical_reconciliation_status": snapshot_dict.get("canonical_reconciliation_status"),
+                    },
+                ),
+            })
         except Exception as exc:
             logger.error("device_ecosystem(%s) endpoint error: %s", device_id, exc)
             return JSONResponse(
@@ -1034,10 +1086,35 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 device_id=device_id or None,
                 limit=limit,
             )
+            event_absorbed_at_timestamps = [
+                absorbed_at
+                for absorbed_at in (getattr(e, "absorbed_at", None) for e in events)
+                if isinstance(absorbed_at, (int, float))
+            ]
             return JSONResponse(content={
                 "total_events": len(events),
                 "events": [e.to_dict() for e in events],
                 "authority": "OPERATOR_ROUTES_V1",
+                "authority_source_fingerprint": build_authority_source_fingerprint(
+                    surface_path="/api/v1/operator/devices/execution-events",
+                    primary_source_kind=SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
+                    source_roles={
+                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "primary",
+                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                        SOURCE_KIND_CANONICAL_TRUTH: "none",
+                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                    },
+                    source_freshness={
+                        "latest_event_absorbed_at": max(event_absorbed_at_timestamps, default=None),
+                        "event_count": len(events),
+                    },
+                    observation_basis={
+                        "event_source_path": "core.android_device_state_store.list_recent_execution_events",
+                        "filter_device_id": device_id,
+                        "filter_flow_id": flow_id,
+                    },
+                ),
             })
         except Exception as exc:
             logger.error("devices_execution_events endpoint error: %s", exc)

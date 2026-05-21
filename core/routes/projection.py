@@ -4375,6 +4375,15 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
                 SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
             },
+            source_freshness={
+                "compiled_at": payload.get("compiled_at"),
+                "fallback": bool(payload.get("_fallback", False)),
+            },
+            observation_basis={
+                "runtime_truth_compiler_authority": payload.get("compiler_authority"),
+                "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
+                "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", False)),
+            },
         )
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)
@@ -4470,6 +4479,15 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
                 SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
             },
+            source_freshness={
+                "compiled_at": payload.get("compiled_at"),
+                "fallback": True,
+            },
+            observation_basis={
+                "runtime_truth_compiler_authority": payload.get("compiler_authority"),
+                "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
+                "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", True)),
+            },
         )
         return payload
 
@@ -4490,6 +4508,12 @@ def _minimal_outward_truth_payload() -> Dict[str, Any]:
         },
         "_fallback": True,
     }
+
+
+def _coerce_truth_compilation_evidence(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Return payload truth_compilation_evidence when present and dict-typed."""
+    evidence = payload.get("truth_compilation_evidence")
+    return evidence if isinstance(evidence, dict) else {}
 
 
 def _assemble_projection() -> Dict[str, Any]:
@@ -6987,6 +7011,7 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         )
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: control-plane contract unavailable: %s", exc)
+    truth_compilation_evidence = _coerce_truth_compilation_evidence(result)
     result["authority_source_fingerprint"] = build_authority_source_fingerprint(
         surface_path="/api/v1/projection/desktop-status-board",
         primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
@@ -6996,6 +7021,24 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
             SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+        },
+        source_freshness={
+            "assembled_at": result.get("_assembled_at"),
+            "outward_truth_compiled_at": (
+                result.get("outward_truth", {}).get("compiled_at")
+                if isinstance(result.get("outward_truth"), dict)
+                else None
+            ),
+            "runtime_truth_compiled_at": (
+                result.get("runtime_truth", {}).get("compiled_at")
+                if isinstance(result.get("runtime_truth"), dict)
+                else None
+            ),
+        },
+        observation_basis={
+            "truth_compilation_primary_path": truth_compilation_evidence.get("primary_path"),
+            "truth_compilation_assembly_mode": truth_compilation_evidence.get("assembly_mode"),
+            "mixed_source": bool(truth_compilation_evidence.get("mixed_source", False)),
         },
     )
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
@@ -7077,6 +7120,7 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         "board_facing_default": True,
         "_assembled_at": time.time(),
     }
+    truth_compilation_evidence = _coerce_truth_compilation_evidence(payload)
     payload["authority_source_fingerprint"] = build_authority_source_fingerprint(
         surface_path="/api/v1/projection/desktop-status-board",
         primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
@@ -7086,6 +7130,24 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
             SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+        },
+        source_freshness={
+            "assembled_at": payload.get("_assembled_at"),
+            "outward_truth_compiled_at": (
+                payload.get("outward_truth", {}).get("compiled_at")
+                if isinstance(payload.get("outward_truth"), dict)
+                else None
+            ),
+            "runtime_truth_compiled_at": (
+                payload.get("runtime_truth", {}).get("compiled_at")
+                if isinstance(payload.get("runtime_truth"), dict)
+                else None
+            ),
+        },
+        observation_basis={
+            "truth_compilation_primary_path": truth_compilation_evidence.get("primary_path"),
+            "truth_compilation_assembly_mode": truth_compilation_evidence.get("assembly_mode"),
+            "mixed_source": bool(truth_compilation_evidence.get("mixed_source", True)),
         },
     )
     try:

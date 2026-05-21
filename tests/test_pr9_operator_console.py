@@ -235,6 +235,13 @@ class TestExecutionEventsBinding:
         data = op_client.get("/api/v1/operator/devices/execution-events").json()
         assert data.get("authority") == "OPERATOR_ROUTES_V1"
 
+    def test_execution_events_has_diagnostics_source_fingerprint(self, op_client):
+        data = op_client.get("/api/v1/operator/devices/execution-events").json()
+        fp = data.get("authority_source_fingerprint")
+        assert isinstance(fp, dict)
+        assert fp.get("surface_path") == "/api/v1/operator/devices/execution-events"
+        assert fp.get("primary_source_kind") == "diagnostics_visible_state"
+
 
 # ---------------------------------------------------------------------------
 # 5.  unified_launcher.py registers /operator-console

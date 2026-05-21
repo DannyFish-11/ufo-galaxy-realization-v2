@@ -840,7 +840,17 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(fp, dict)
         self.assertEqual(fp.get("surface_path"), "/api/v1/panel/unified")
         self.assertEqual(fp.get("primary_source_kind"), "operator_derived_surface")
+        self.assertTrue(fp.get("consumption_only"))
         self.assertIs(fp.get("acts_as_authority_layer"), False)
+        freshness = fp.get("source_freshness")
+        self.assertIsInstance(freshness, dict)
+        self.assertGreater(freshness.get("panel_generated_at", 0), 0)
+        basis = fp.get("observation_basis")
+        self.assertIsInstance(basis, dict)
+        self.assertEqual(
+            basis.get("truth_compilation_primary_path"),
+            "core.outward_runtime_truth.compile_outward_truth",
+        )
 
     async def test_F12_panel_truth_source_path_is_explicit(self):
         async with await self._client() as client:

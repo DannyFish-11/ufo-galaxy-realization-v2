@@ -260,6 +260,17 @@ def test_devices_ecosystem_has_counts(client):
     assert data["accessibility_ready_count"] == 1
 
 
+def test_devices_ecosystem_has_runtime_visible_authority_source_fingerprint(client):
+    absorb_device_state_snapshot("eco_fp_01", {"model_ready": True})
+    data = client.get("/api/v1/operator/devices/ecosystem").json()
+    fingerprint = data.get("authority_source_fingerprint")
+    assert isinstance(fingerprint, dict)
+    assert fingerprint.get("surface_path") == "/api/v1/operator/devices/ecosystem"
+    assert fingerprint.get("primary_source_kind") == "runtime_visible_state"
+    assert fingerprint.get("consumption_only") is True
+    assert fingerprint.get("acts_as_authority_layer") is False
+
+
 # ---------------------------------------------------------------------------
 # GET /api/v1/operator/devices/ecosystem/{device_id}
 # ---------------------------------------------------------------------------
@@ -289,6 +300,18 @@ def test_device_ecosystem_single_has_snapshot_fields(client):
     assert data["llama_cpp_available"] is True
     assert data["model_id"] == "mobilevlm_v2"
     assert data["offline_queue_depth"] == 2
+
+
+def test_device_ecosystem_single_has_runtime_visible_authority_source_fingerprint(client):
+    absorb_device_state_snapshot("field_fp_dev", {"model_ready": True})
+    data = client.get("/api/v1/operator/devices/ecosystem/field_fp_dev").json()
+    fingerprint = data.get("authority_source_fingerprint")
+    assert isinstance(fingerprint, dict)
+    assert fingerprint.get("surface_path") == "/api/v1/operator/devices/ecosystem/{device_id}"
+    assert fingerprint.get("primary_source_kind") == "runtime_visible_state"
+    freshness = fingerprint.get("source_freshness")
+    assert isinstance(freshness, dict)
+    assert freshness.get("device_id") == "field_fp_dev"
 
 
 # ---------------------------------------------------------------------------

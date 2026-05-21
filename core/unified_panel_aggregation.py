@@ -111,6 +111,11 @@ UNIFIED_PANEL_AGGREGATION_AUTHORITY: str = (
 )
 
 PANEL_STATE_SCHEMA_VERSION: str = "1.0"
+PANEL_FINGERPRINT_SUPPORTING_PATHS: List[str] = [
+    "core.operator_surface.OperatorSurface.operator_snapshot",
+    "core.android_device_state_store.get_device_ecosystem_summary",
+    "core.projection.build_runtime_projection",
+]
 
 # ---------------------------------------------------------------------------
 # UnifiedPanelPayload
@@ -517,11 +522,47 @@ class UnifiedPanelAggregationService:
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: control-plane contract fill failed: %s", exc)
 
+        self._annotate_authority_source_fingerprint(payload)
         return payload
 
     # ------------------------------------------------------------------
     # Source fill methods (each isolated so one failure does not cascade)
     # ------------------------------------------------------------------
+
+    def _annotate_authority_source_fingerprint(self, payload: UnifiedPanelPayload) -> None:
+        """Attach runtime-observed source metadata for panel unified response."""
+        evidence = payload.truth_compilation_evidence if isinstance(
+            payload.truth_compilation_evidence, dict
+        ) else {}
+        assembly_mode = str(evidence.get("assembly_mode") or "unknown")
+        support_paths = list(evidence.get("supporting_paths") or [])
+        if not support_paths:
+            support_paths = list(PANEL_FINGERPRINT_SUPPORTING_PATHS)
+        payload.authority_source_fingerprint = build_authority_source_fingerprint(
+            surface_path="/api/v1/panel/unified",
+            primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+            source_roles={
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+                SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "supporting",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+            },
+            source_freshness={
+                "panel_generated_at": payload.generated_at,
+                "outward_truth_compiled_at": (
+                    payload.outward_truth.get("compiled_at")
+                    if isinstance(payload.outward_truth, dict)
+                    else None
+                ),
+                "truth_compilation_assembly_mode": assembly_mode,
+            },
+            observation_basis={
+                "truth_compilation_primary_path": evidence.get("primary_path"),
+                "truth_compilation_supporting_paths": support_paths,
+                "mixed_source": bool(evidence.get("mixed_source", False)),
+            },
+        )
 
     def _fill_from_compiled_outward_truth(self, payload: UnifiedPanelPayload) -> None:
         """Fill outward truth/task truth from compile_outward_truth()."""
