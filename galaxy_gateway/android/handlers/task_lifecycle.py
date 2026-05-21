@@ -692,6 +692,13 @@ async def handle_task_result(
             message["evidence_acceptance_verdict"] = str(
                 _local_outcome.evidence_acceptance_verdict or ""
             )
+            message["stale_epoch_rejected"] = bool(_local_outcome.stale_epoch_rejected)
+            message["stale_classification"] = str(
+                _local_outcome.stale_classification or ""
+            )
+            message["stale_epoch_evidence"] = dict(
+                _local_outcome.stale_epoch_evidence or {}
+            )
             if _local_outcome.incomplete_reason:
                 message["incomplete_reason"] = _local_outcome.incomplete_reason
             logger.info(

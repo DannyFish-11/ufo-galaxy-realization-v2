@@ -24,6 +24,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+# Minimal longevity smoke loop: enough cycles to cover repeated resume behavior
+# without turning this correctness suite into a stress/performance test.
+LONG_RUNNING_RECONNECT_CYCLES = 5
+
 
 def _v3(msg_type: str, device_id: str, **extra: Any) -> Dict[str, Any]:
     return {
@@ -151,7 +155,7 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
         ws2 = _make_ws()
         device_id = f"cc02-{uuid.uuid4().hex[:8]}"
         attachment_id = f"attach-{uuid.uuid4().hex[:8]}"
-        buffered_task_id = f"buffered-{uuid.uuid4().hex[:8]}"
+        task_id = f"buffered-{uuid.uuid4().hex[:8]}"
 
         await bridge.handle_message(
             ws1,
@@ -169,7 +173,7 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
             _v3(
                 "task_assign",
                 device_id,
-                task_id=buffered_task_id,
+                task_id=task_id,
                 payload={"task_type": "continuity_replay"},
             ),
         )
@@ -193,7 +197,7 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
         ws2.send_json.assert_awaited_once()
         replayed = ws2.send_json.await_args_list[0].args[0]
         assert replayed["type"] == "task_assign"
-        assert replayed["task_id"] == buffered_task_id
+        assert replayed["task_id"] == task_id
 
     @pytest.mark.asyncio
     async def test_CC03_late_stale_completion_rejected(self, caplog: Any) -> None:
@@ -308,7 +312,7 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
         runtime_session_ids = []
         resolved_task_ids = []
 
-        for idx in range(5):
+        for idx in range(LONG_RUNNING_RECONNECT_CYCLES):
             ws = _make_ws()
             ack = await bridge.handle_message(
                 ws,
@@ -342,4 +346,4 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
             await bridge.disconnect_device(device_id)
 
         assert len(set(runtime_session_ids)) == 1
-        assert len(set(resolved_task_ids)) == 5
+        assert len(set(resolved_task_ids)) == LONG_RUNNING_RECONNECT_CYCLES
