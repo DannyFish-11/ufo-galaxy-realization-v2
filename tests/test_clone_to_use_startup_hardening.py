@@ -109,6 +109,24 @@ class TestNatsProbeStrictness:
         monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
         assert health_checks._nats_tcp_failure_is_critical() is False
 
+    def test_nats_critical_uses_posture_policy_when_required(self, monkeypatch):
+        from launcher import health_checks
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {"required": True},
+        )
+        assert health_checks._nats_tcp_failure_is_critical() is True
+
+    def test_nats_non_critical_uses_posture_policy_when_not_required(self, monkeypatch):
+        from launcher import health_checks
+
+        monkeypatch.setattr(
+            "core.nats_posture.evaluate_nats_posture",
+            lambda: {"required": False},
+        )
+        assert health_checks._nats_tcp_failure_is_critical() is False
+
 
 class TestNatsPosturePolicy:
     """Canonical NATS posture should stay explicit across env combinations."""

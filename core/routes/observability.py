@@ -308,7 +308,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         status = "noop" if noop else ("connected" if connected else "disconnected")
         nats_required = bool(posture.get("required", False))
         system_mode = str(posture.get("system_mode", "desktop-local"))
-        nats_url = str(posture.get("nats_url", os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")))
+        nats_url = str(posture.get("nats_url") or os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222"))
 
         if connected:
             message = "NATS is connected and operating as the internal scheduling mainline."

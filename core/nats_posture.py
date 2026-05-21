@@ -56,6 +56,9 @@ def evaluate_nats_posture() -> Dict[str, Any]:
     except Exception as exc:
         bus_error = str(exc)
 
+    # Policy contract:
+    # - production-required posture: NATS must be connected.
+    # - development-allowed-degraded posture: allow degraded/no-op operation.
     assertion_ok = connected if required else True
     violation_reason = "" if assertion_ok else "required_nats_unreachable"
 

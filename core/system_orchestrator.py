@@ -475,10 +475,15 @@ class SystemOrchestrator:
             logger.debug("[Phase 4] Lifecycle registry restore skipped — %s", exc)
 
         if hard_failures:
+            parts: List[str] = []
+            if hard_failures:
+                parts.append("hard_failures=" + ",".join(hard_failures))
+            if issues:
+                parts.append("degraded_issues=" + ",".join(issues))
             return PhaseResult(
                 phase=StartupPhase.BACKGROUND_SUBSYSTEMS,
                 status=PhaseStatus.FAILED,
-                detail="background readiness failed — " + "; ".join(hard_failures + issues),
+                detail="background readiness failed — " + "; ".join(parts),
                 data=diagnostics,
             )
 
