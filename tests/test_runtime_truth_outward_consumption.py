@@ -66,6 +66,11 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
 
     assert "outward_truth" in payload
     assert payload["task_truth"]["active_task_count"] == 2
+    evidence = payload.get("truth_compilation_evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("primary_path") == "core.outward_runtime_truth.compile_outward_truth"
+    assert evidence.get("assembly_mode") == "compiled_outward_truth_primary"
+    assert evidence.get("mixed_source") is True
     assert payload["startup_readiness"]["ready_to_route"] is True
     assert payload["runtime_decision_reasoning"]["selected_runtime"] == "v2_local"
     assert payload["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "local"

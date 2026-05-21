@@ -105,6 +105,7 @@ except ImportError:  # pragma: no cover
 # source from compile_outward_truth() rather than independently assembling state.
 try:
     from core.outward_runtime_truth import (  # noqa: F401
+        NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY as _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
         OUTWARD_RUNTIME_TRUTH_AUTHORITY as _ORT_AUTHORITY,
         compile_outward_truth as _compile_outward_truth,
     )
@@ -113,6 +114,9 @@ try:
 except ImportError:  # pragma: no cover
     OUTWARD_RUNTIME_TRUTH_INTEGRATED: str = (  # type: ignore[no-redef]
         "PROJECTION_ROUTES::OUTWARD_RUNTIME_TRUTH_INTEGRATED_UNAVAILABLE"
+    )
+    _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY = (  # type: ignore[assignment]
+        "NO_PARALLEL_OUTWARD_ASSEMBLY_V1: unavailable"
     )
 
 try:
@@ -4221,6 +4225,19 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 "reachable_executor_count": operator_snapshot.get("reachable_executor_count", 0),
                 "source": "outward_truth.operator_snapshot",
             }
+            payload["truth_compilation_evidence"] = {
+                "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+                "assembly_mode": "compiled_outward_truth_primary",
+                "mixed_source": True,
+                "fallback_used": False,
+                "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+                "surfacing_complete": bool(outward.get("surfacing_complete", False)),
+                "unavailable_source_count": int(outward.get("unavailable_source_count", 0) or 0),
+                "surfacing_notes": list(outward.get("surfacing_notes") or []),
+                "supporting_paths": [
+                    "core.projection.runtime_truth_compiler.compile_runtime_truth",
+                ],
+            }
         except Exception as exc:
             logger.debug("_assemble_runtime_truth_payload: outward truth unavailable: %s", exc)
             payload["outward_truth"] = _minimal_outward_truth_payload()
@@ -4233,6 +4250,17 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                     "source": "unavailable",
                 },
             )
+            payload["truth_compilation_evidence"] = {
+                "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+                "assembly_mode": "mixed_source_fallback",
+                "mixed_source": True,
+                "fallback_used": True,
+                "fallback_reason": str(exc),
+                "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+                "supporting_paths": [
+                    "core.projection.runtime_truth_compiler.compile_runtime_truth",
+                ],
+            }
 
         try:
             from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
@@ -4371,6 +4399,17 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 "recent_failure_count": 0,
                 "reachable_executor_count": 0,
                 "source": "fallback",
+            },
+            "truth_compilation_evidence": {
+                "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+                "assembly_mode": "mixed_source_fallback",
+                "mixed_source": True,
+                "fallback_used": True,
+                "fallback_reason": str(exc),
+                "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+                "supporting_paths": [
+                    "core.projection.runtime_truth_compiler.compile_runtime_truth",
+                ],
             },
             "startup_readiness": None,
             "has_canonical_topology": False,
@@ -6789,6 +6828,20 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "reachable_executor_count": operator_snapshot.get("reachable_executor_count", 0),
             "source": "outward_truth.operator_snapshot",
         }
+        result["truth_compilation_evidence"] = {
+            "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+            "assembly_mode": "compiled_outward_truth_primary",
+            "mixed_source": True,
+            "fallback_used": False,
+            "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+            "surfacing_complete": bool(outward.get("surfacing_complete", False)),
+            "unavailable_source_count": int(outward.get("unavailable_source_count", 0) or 0),
+            "surfacing_notes": list(outward.get("surfacing_notes") or []),
+            "supporting_paths": [
+                "core.routes.projection._assemble_runtime_truth_payload",
+                "contracts.desktop_status_projection.build_desktop_status_projection",
+            ],
+        }
     except Exception as exc:
         logger.debug(
             "_assemble_desktop_status_board_payload: outward truth unavailable: %s",
@@ -6800,6 +6853,18 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "recent_failure_count": 0,
             "reachable_executor_count": 0,
             "source": "fallback",
+        }
+        result["truth_compilation_evidence"] = {
+            "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+            "assembly_mode": "mixed_source_fallback",
+            "mixed_source": True,
+            "fallback_used": True,
+            "fallback_reason": str(exc),
+            "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+            "supporting_paths": [
+                "core.routes.projection._assemble_runtime_truth_payload",
+                "contracts.desktop_status_projection.build_desktop_status_projection",
+            ],
         }
 
     try:
@@ -6827,6 +6892,13 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             "_assemble_desktop_status_board_payload: runtime truth attachment failed: %s",
             exc,
         )
+        evidence = result.get("truth_compilation_evidence")
+        if isinstance(evidence, dict):
+            evidence["mixed_source"] = True
+            evidence.setdefault("supporting_paths", [])
+            if "runtime_truth_unavailable" not in evidence["supporting_paths"]:
+                evidence["supporting_paths"].append("runtime_truth_unavailable")
+            evidence.setdefault("runtime_truth_attachment_error", str(exc))
 
     if not isinstance(result.get("operational_state_board"), dict):
         result = _attach_operational_state_board(result, route_paths=route_paths)
@@ -6980,6 +7052,17 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             "recent_failure_count": 0,
             "reachable_executor_count": 0,
             "source": "fallback",
+        },
+        "truth_compilation_evidence": {
+            "primary_path": "core.outward_runtime_truth.compile_outward_truth",
+            "assembly_mode": "mixed_source_fallback",
+            "mixed_source": True,
+            "fallback_used": True,
+            "fallback_reason": "desktop_status_board_minimal_fallback",
+            "policy": _NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+            "supporting_paths": [
+                "contracts.desktop_status_projection.build_desktop_status_projection",
+            ],
         },
         "operational_state_board": _empty_operational_state_board(),
         "source_of_truth_boundaries": _source_of_truth_boundaries(),
