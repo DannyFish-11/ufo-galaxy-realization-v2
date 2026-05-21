@@ -10,7 +10,7 @@ from core.runtime import source_dispatch_orchestrator as orchestrator
 from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
 
-def _mesh_session(participants: List[str], *, session_id: str = "mesh_session_real") -> Dict[str, Any]:
+def _mesh_session(participants: List[str], *, session_id: str = "test_mesh_session_real") -> Dict[str, Any]:
     return {
         "session_id": session_id,
         "mesh_id": "mesh_real",
@@ -45,7 +45,7 @@ def test_wait_for_participant_results_all_completed() -> None:
 
 def test_wait_for_participant_results_partial_and_timeout() -> None:
     reset_android_mesh_lifecycle_store()
-    record_mesh_result("d1", session_id="s_wait_partial", payload={"success": True, "output": "ok"})
+    record_mesh_result("d1", session_id="s_wait_partial", payload={"result": {"output": "ok", "success": True}})
 
     collected, wait_meta = orchestrator._wait_for_staged_mesh_participant_results(
         mesh_session_id="s_wait_partial",

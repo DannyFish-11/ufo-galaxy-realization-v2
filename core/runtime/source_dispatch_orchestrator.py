@@ -712,6 +712,11 @@ _LIVE_MESH_RUNTIME_PROOF_STATE: Dict[str, Any] = {
     "last_live_run_at": None,
 }
 
+DEFAULT_STAGED_MESH_PARTICIPANT_WAIT_TIMEOUT_SECONDS: float = 3.0
+MIN_STAGED_MESH_PARTICIPANT_POLL_INTERVAL_SECONDS: float = 0.01
+MESH_RESULT_KIND_SUCCESS_VALUES: frozenset[str] = frozenset({"success", "ok", "completed"})
+MESH_RESULT_KIND_FAILURE_VALUES: frozenset[str] = frozenset({"failure", "failed", "error", "timeout"})
+
 
 def _coerce_proof_counter_value(value: Any) -> int:
     """Coerce stored proof counter values to int (legacy None-safe)."""
@@ -838,7 +843,10 @@ def _coerce_mesh_participant_result_payload(
 ) -> Any:
     """Normalize mesh lifecycle payload to participant result structure."""
     if not isinstance(payload, dict):
-        return {"result": payload, "success": payload is not None, "device_id": device_id}
+        success = bool(payload)
+        if isinstance(payload, str) and payload.strip().lower() in MESH_RESULT_KIND_FAILURE_VALUES:
+            success = False
+        return {"result": payload, "success": success, "device_id": device_id}
 
     candidate = payload.get("result")
     if isinstance(candidate, dict):
@@ -853,9 +861,9 @@ def _coerce_mesh_participant_result_payload(
             result["success"] = payload.get("success")
         else:
             result_kind = str(payload.get("result_kind") or payload.get("status") or "").strip().lower()
-            if result_kind in {"success", "ok", "completed"}:
+            if result_kind in MESH_RESULT_KIND_SUCCESS_VALUES:
                 result["success"] = True
-            elif result_kind in {"failure", "failed", "error", "timeout"}:
+            elif result_kind in MESH_RESULT_KIND_FAILURE_VALUES:
                 result["success"] = False
     result.setdefault("device_id", device_id)
     return result
@@ -882,7 +890,7 @@ def _wait_for_staged_mesh_participant_results(
         }
 
     wait_seconds = max(float(timeout_seconds), 0.0)
-    poll_seconds = max(float(poll_interval_seconds), 0.01)
+    poll_seconds = max(float(poll_interval_seconds), MIN_STAGED_MESH_PARTICIPANT_POLL_INTERVAL_SECONDS)
     deadline = time.time() + wait_seconds
     collected: Dict[str, Any] = {}
 
@@ -3458,7 +3466,7 @@ def orchestrate_source_runtime_dispatch(
                 mesh_session_id = None
                 if isinstance(mesh_session_dict, dict):
                     mesh_session_id = mesh_session_dict.get("session_id")
-                wait_timeout_seconds = 3.0
+                wait_timeout_seconds = DEFAULT_STAGED_MESH_PARTICIPANT_WAIT_TIMEOUT_SECONDS
                 if isinstance(metadata, dict):
                     raw_timeout = metadata.get("mesh_participant_wait_timeout_seconds")
                     if raw_timeout is not None:
@@ -3474,7 +3482,7 @@ def orchestrate_source_runtime_dispatch(
                 timed_out_device_ids = participant_wait.get("timed_out_device_ids") or []
                 if timed_out_device_ids:
                     errors.append(
-                        f"staged_mesh_participant_timeout:{','.join(str(v) for v in timed_out_device_ids)}"
+                        f"staged_mesh_participant_timeout devices={list(timed_out_device_ids)}"
                     )
 
                 # PR-J: Drive the coordinator state to live completion with collected participant results.
@@ -3509,7 +3517,6 @@ def orchestrate_source_runtime_dispatch(
             )
 
             # Determine success and extract coordinator status for the result
-            success = False
             coordinator_status_val: Optional[str] = None
             if coordinator_state is not None:
                 _cs = getattr(coordinator_state, "status", None)
@@ -3534,10 +3541,8 @@ def orchestrate_source_runtime_dispatch(
                 live_merged_result = getattr(live_run_result, "merged_result", None)
                 if live_outcome == "completed":
                     mesh_completion_state = "all_completed"
-                    success = True
                 elif live_outcome == "partial":
                     mesh_completion_state = "partial_completed"
-                    success = True
                 else:
                     mesh_completion_state = "failed_or_timeout"
                 # Propagate live run errors
@@ -3545,9 +3550,9 @@ def orchestrate_source_runtime_dispatch(
                 for e in live_errors:
                     if e not in errors:
                         errors.append(e)
-            elif coordinator_state is not None:
-                success = True
-
+            # "partial" is treated as operational success because at least one participant
+            # completed and the merged result is still closure-visible/canonical-visible.
+            success = live_outcome in ("completed", "partial")
             exec_result = {
                 "action_taken": "staged_mesh_coordinated",
                 "success": success,
