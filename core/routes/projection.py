@@ -4510,6 +4510,12 @@ def _minimal_outward_truth_payload() -> Dict[str, Any]:
     }
 
 
+def _coerce_truth_compilation_evidence(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Return payload truth_compilation_evidence when present and dict-typed."""
+    evidence = payload.get("truth_compilation_evidence")
+    return evidence if isinstance(evidence, dict) else {}
+
+
 def _assemble_projection() -> Dict[str, Any]:
     """Assemble a projection dict from live runtime state.
 
@@ -7005,6 +7011,7 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         )
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: control-plane contract unavailable: %s", exc)
+    truth_compilation_evidence = _coerce_truth_compilation_evidence(result)
     result["authority_source_fingerprint"] = build_authority_source_fingerprint(
         surface_path="/api/v1/projection/desktop-status-board",
         primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
@@ -7029,9 +7036,9 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             ),
         },
         observation_basis={
-            "truth_compilation_primary_path": (result.get("truth_compilation_evidence") or {}).get("primary_path"),
-            "truth_compilation_assembly_mode": (result.get("truth_compilation_evidence") or {}).get("assembly_mode"),
-            "mixed_source": bool((result.get("truth_compilation_evidence") or {}).get("mixed_source", False)),
+            "truth_compilation_primary_path": truth_compilation_evidence.get("primary_path"),
+            "truth_compilation_assembly_mode": truth_compilation_evidence.get("assembly_mode"),
+            "mixed_source": bool(truth_compilation_evidence.get("mixed_source", False)),
         },
     )
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
@@ -7113,6 +7120,7 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         "board_facing_default": True,
         "_assembled_at": time.time(),
     }
+    truth_compilation_evidence = _coerce_truth_compilation_evidence(payload)
     payload["authority_source_fingerprint"] = build_authority_source_fingerprint(
         surface_path="/api/v1/projection/desktop-status-board",
         primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
@@ -7137,9 +7145,9 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             ),
         },
         observation_basis={
-            "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
-            "truth_compilation_assembly_mode": (payload.get("truth_compilation_evidence") or {}).get("assembly_mode"),
-            "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", True)),
+            "truth_compilation_primary_path": truth_compilation_evidence.get("primary_path"),
+            "truth_compilation_assembly_mode": truth_compilation_evidence.get("assembly_mode"),
+            "mixed_source": bool(truth_compilation_evidence.get("mixed_source", True)),
         },
     )
     try:

@@ -241,7 +241,6 @@ class TestExecutionEventsBinding:
         assert isinstance(fp, dict)
         assert fp.get("surface_path") == "/api/v1/operator/devices/execution-events"
         assert fp.get("primary_source_kind") == "diagnostics_visible_state"
-        assert fp.get("primary_source_kind") != "canonical_truth"
 
 
 # ---------------------------------------------------------------------------

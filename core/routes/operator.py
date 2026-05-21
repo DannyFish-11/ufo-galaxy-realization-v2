@@ -1086,6 +1086,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 device_id=device_id or None,
                 limit=limit,
             )
+            event_absorbed_at_timestamps = [
+                absorbed_at
+                for absorbed_at in (getattr(e, "absorbed_at", None) for e in events)
+                if isinstance(absorbed_at, (int, float))
+            ]
             return JSONResponse(content={
                 "total_events": len(events),
                 "events": [e.to_dict() for e in events],
@@ -1101,14 +1106,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                         SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
                     },
                     source_freshness={
-                        "latest_event_absorbed_at": max(
-                            (
-                                e.absorbed_at
-                                for e in events
-                                if isinstance(getattr(e, "absorbed_at", None), (int, float))
-                            ),
-                            default=None,
-                        ),
+                        "latest_event_absorbed_at": max(event_absorbed_at_timestamps, default=None),
                         "event_count": len(events),
                     },
                     observation_basis={

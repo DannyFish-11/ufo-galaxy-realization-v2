@@ -267,7 +267,6 @@ def test_devices_ecosystem_has_runtime_visible_authority_source_fingerprint(clie
     assert isinstance(fingerprint, dict)
     assert fingerprint.get("surface_path") == "/api/v1/operator/devices/ecosystem"
     assert fingerprint.get("primary_source_kind") == "runtime_visible_state"
-    assert fingerprint.get("primary_source_kind") != "canonical_truth"
     assert fingerprint.get("consumption_only") is True
     assert fingerprint.get("acts_as_authority_layer") is False
 
@@ -310,7 +309,6 @@ def test_device_ecosystem_single_has_runtime_visible_authority_source_fingerprin
     assert isinstance(fingerprint, dict)
     assert fingerprint.get("surface_path") == "/api/v1/operator/devices/ecosystem/{device_id}"
     assert fingerprint.get("primary_source_kind") == "runtime_visible_state"
-    assert fingerprint.get("primary_source_kind") != "canonical_truth"
     freshness = fingerprint.get("source_freshness")
     assert isinstance(freshness, dict)
     assert freshness.get("device_id") == "field_fp_dev"

@@ -111,6 +111,11 @@ UNIFIED_PANEL_AGGREGATION_AUTHORITY: str = (
 )
 
 PANEL_STATE_SCHEMA_VERSION: str = "1.0"
+PANEL_FINGERPRINT_SUPPORTING_PATHS: List[str] = [
+    "core.operator_surface.OperatorSurface.operator_snapshot",
+    "core.android_device_state_store.get_device_ecosystem_summary",
+    "core.projection.build_runtime_projection",
+]
 
 # ---------------------------------------------------------------------------
 # UnifiedPanelPayload
@@ -532,11 +537,7 @@ class UnifiedPanelAggregationService:
         assembly_mode = str(evidence.get("assembly_mode") or "unknown")
         support_paths = list(evidence.get("supporting_paths") or [])
         if not support_paths:
-            support_paths = [
-                "core.operator_surface.OperatorSurface.operator_snapshot",
-                "core.android_device_state_store.get_device_ecosystem_summary",
-                "core.projection.build_runtime_projection",
-            ]
+            support_paths = list(PANEL_FINGERPRINT_SUPPORTING_PATHS)
         payload.authority_source_fingerprint = build_authority_source_fingerprint(
             surface_path="/api/v1/panel/unified",
             primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
