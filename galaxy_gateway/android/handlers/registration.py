@@ -211,7 +211,7 @@ def _apply_pending_lifecycle_reconnect_decisions(
         # action   = concrete reconnect action applied to the pending registry
         decision = "resume_existing_execution"
         action = "keep_pending_and_wait_for_result"
-        reason = ""
+        reason = _RESUME_EXISTING_EXECUTION_REASON
         should_fail = False
 
         if record.is_timed_out():
@@ -281,7 +281,7 @@ def _apply_pending_lifecycle_reconnect_decisions(
                 record.task_id,
                 {
                     "reconnect_lifecycle_decision": decision,
-                    "reconnect_lifecycle_reason": reason or _RESUME_EXISTING_EXECUTION_REASON,
+                    "reconnect_lifecycle_reason": reason,
                     "reconnect_lifecycle_trace": evidence["diagnostic_trace"],
                     "reconnect_delivery_replay_scheduled": bool(delivery_replay_scheduled),
                 },

@@ -396,7 +396,7 @@ class TaskEnvelopeLifecycleRegistry:
     def merge_metadata(
         self,
         task_id: str,
-        metadata_updates: Dict[str, Any],
+        metadata_updates: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Merge *metadata_updates* into a pending record's metadata.
 
