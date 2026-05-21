@@ -4375,6 +4375,15 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
                 SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
             },
+            source_freshness={
+                "compiled_at": payload.get("compiled_at"),
+                "fallback": bool(payload.get("_fallback", False)),
+            },
+            observation_basis={
+                "runtime_truth_compiler_authority": payload.get("compiler_authority"),
+                "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
+                "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", False)),
+            },
         )
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)
@@ -4469,6 +4478,15 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
                 SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
                 SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+            },
+            source_freshness={
+                "compiled_at": payload.get("compiled_at"),
+                "fallback": True,
+            },
+            observation_basis={
+                "runtime_truth_compiler_authority": payload.get("compiler_authority"),
+                "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
+                "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", True)),
             },
         )
         return payload
@@ -6997,6 +7015,24 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
             SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
         },
+        source_freshness={
+            "assembled_at": result.get("_assembled_at"),
+            "outward_truth_compiled_at": (
+                result.get("outward_truth", {}).get("compiled_at")
+                if isinstance(result.get("outward_truth"), dict)
+                else None
+            ),
+            "runtime_truth_compiled_at": (
+                result.get("runtime_truth", {}).get("compiled_at")
+                if isinstance(result.get("runtime_truth"), dict)
+                else None
+            ),
+        },
+        observation_basis={
+            "truth_compilation_primary_path": (result.get("truth_compilation_evidence") or {}).get("primary_path"),
+            "truth_compilation_assembly_mode": (result.get("truth_compilation_evidence") or {}).get("assembly_mode"),
+            "mixed_source": bool((result.get("truth_compilation_evidence") or {}).get("mixed_source", False)),
+        },
     )
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
     result.setdefault("board_facing_default", True)
@@ -7086,6 +7122,24 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
             SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
             SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+        },
+        source_freshness={
+            "assembled_at": payload.get("_assembled_at"),
+            "outward_truth_compiled_at": (
+                payload.get("outward_truth", {}).get("compiled_at")
+                if isinstance(payload.get("outward_truth"), dict)
+                else None
+            ),
+            "runtime_truth_compiled_at": (
+                payload.get("runtime_truth", {}).get("compiled_at")
+                if isinstance(payload.get("runtime_truth"), dict)
+                else None
+            ),
+        },
+        observation_basis={
+            "truth_compilation_primary_path": (payload.get("truth_compilation_evidence") or {}).get("primary_path"),
+            "truth_compilation_assembly_mode": (payload.get("truth_compilation_evidence") or {}).get("assembly_mode"),
+            "mixed_source": bool((payload.get("truth_compilation_evidence") or {}).get("mixed_source", True)),
         },
     )
     try:

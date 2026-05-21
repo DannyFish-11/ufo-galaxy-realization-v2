@@ -676,7 +676,14 @@ def test_50c_desktop_status_board_assembly_includes_unified_operational_state_bo
     assert isinstance(fingerprint, dict)
     assert fingerprint.get("surface_path") == "/api/v1/projection/desktop-status-board"
     assert fingerprint.get("primary_source_kind") == "compiled_outward_truth"
+    assert fingerprint.get("consumption_only") is True
     assert fingerprint.get("acts_as_authority_layer") is False
+    freshness = fingerprint.get("source_freshness")
+    assert isinstance(freshness, dict)
+    assert freshness.get("assembled_at") is not None
+    basis = fingerprint.get("observation_basis")
+    assert isinstance(basis, dict)
+    assert basis.get("truth_compilation_primary_path") == "core.outward_runtime_truth.compile_outward_truth"
 
 
 def test_50d_desktop_board_prefers_compiled_outward_truth_for_task_truth(monkeypatch):
