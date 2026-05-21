@@ -159,6 +159,7 @@ class MeshCoordinator:
             "probe_success": 0,
             "probe_fail": 0,
         }
+        self._last_overlay_dispatch: Dict[str, Any] = {"available": False}
 
     # ================================================================
     # Peer 管理
@@ -278,6 +279,24 @@ class MeshCoordinator:
         direct_health_checked = False
         fallback_reason = ""
 
+        def _return_with_dispatch_tracking(result: MeshSendResult) -> MeshSendResult:
+            self._last_overlay_dispatch = {
+                "available": True,
+                "source_device": source,
+                "target_device": target_device,
+                "payload_type": payload_type,
+                "success": bool(result.success),
+                "via": result.via.value,
+                "route_decision": result.route_decision,
+                "fallback_used": bool(result.fallback_used),
+                "fallback_reason": result.fallback_reason,
+                "latency_ms": result.latency_ms,
+                "error": result.error,
+                "timestamp": time.time(),
+                "authority": "mesh_overlay_coordination",
+            }
+            return result
+
         # 策略 1: P2P 直连
         direct_ok, direct_health_checked, direct_reason = await self._check_direct_viability(target_device, peer)
         if direct_ok:
@@ -294,7 +313,7 @@ class MeshCoordinator:
                 ok = await self._p2p_send(target_device, msg_bytes)
                 if ok:
                     self._stats["via_direct"] += 1
-                    return MeshSendResult(
+                    return _return_with_dispatch_tracking(MeshSendResult(
                         success=True,
                         via=ConnectionType.DIRECT,
                         target_device=target_device,
@@ -302,7 +321,7 @@ class MeshCoordinator:
                         direct_attempted=True,
                         direct_health_checked=direct_health_checked,
                         route_decision="direct_p2p",
-                    )
+                    ))
                 # P2P 失败 → 标记
                 peer.reachable_direct = False
                 peer.probe_failures += 1
@@ -326,7 +345,7 @@ class MeshCoordinator:
                 success = result.get("status") != "failed"
                 self._stats["via_relay"] += 1
                 self._stats["fallback_relay"] += 1
-                return MeshSendResult(
+                return _return_with_dispatch_tracking(MeshSendResult(
                     success=success,
                     via=ConnectionType.RELAY,
                     target_device=target_device,
@@ -337,9 +356,9 @@ class MeshCoordinator:
                     fallback_used=True,
                     fallback_reason=fallback_reason or "relay_path_selected",
                     route_decision="relay_fallback",
-                )
+                ))
             except Exception as e:
-                return MeshSendResult(
+                return _return_with_dispatch_tracking(MeshSendResult(
                     success=False,
                     via=ConnectionType.RELAY,
                     target_device=target_device,
@@ -350,7 +369,7 @@ class MeshCoordinator:
                     fallback_used=True,
                     fallback_reason=fallback_reason or "relay_send_error",
                     route_decision="relay_fallback_failed",
-                )
+                ))
 
         # 策略 3: WS fallback (服务端直接推送)
         if self._ws_send:
@@ -361,7 +380,7 @@ class MeshCoordinator:
                     "payload_type": payload_type,
                     "payload": payload,
                 })
-                return MeshSendResult(
+                return _return_with_dispatch_tracking(MeshSendResult(
                     success=ok,
                     via=ConnectionType.RELAY,
                     target_device=target_device,
@@ -371,9 +390,9 @@ class MeshCoordinator:
                     fallback_used=True,
                     fallback_reason=fallback_reason or "ws_path_selected",
                     route_decision="ws_fallback",
-                )
+                ))
             except Exception as e:
-                return MeshSendResult(
+                return _return_with_dispatch_tracking(MeshSendResult(
                     success=False,
                     via=ConnectionType.RELAY,
                     target_device=target_device,
@@ -384,9 +403,9 @@ class MeshCoordinator:
                     fallback_used=True,
                     fallback_reason=fallback_reason or "ws_send_error",
                     route_decision="ws_fallback_failed",
-                )
+                ))
 
-        return MeshSendResult(
+        return _return_with_dispatch_tracking(MeshSendResult(
             success=False,
             via=ConnectionType.UNKNOWN,
             target_device=target_device,
@@ -396,7 +415,7 @@ class MeshCoordinator:
             fallback_used=bool(fallback_reason),
             fallback_reason=fallback_reason,
             route_decision="no_sender_available",
-        )
+        ))
 
     # ================================================================
     # Peer 探测
@@ -557,12 +576,80 @@ class MeshCoordinator:
                                 if edge not in edges:
                                     edges.append(edge)
 
+        alive_peer_count = sum(1 for p in self._peers.values() if (now - p.last_seen) < self.PEER_EXPIRE)
+        topology_ready = alive_peer_count >= 2
+        canonical_closure: Dict[str, Any] = {"available": False, "closure_authority": "canonical_result_ingress"}
+        try:
+            from core.unified_result_ingress import get_last_result_closure_outcome
+
+            closure = get_last_result_closure_outcome()
+            if closure:
+                canonical_closure = {
+                    **closure,
+                    "available": True,
+                    "closure_authority": "canonical_result_ingress",
+                }
+        except Exception:
+            pass
+
+        merged_result_summary: Optional[Dict[str, Any]] = None
+        if canonical_closure.get("available"):
+            try:
+                from contracts.cross_runtime_result_merge import (
+                    from_execution_output,
+                    merge_runtime_results,
+                    build_result_merge_summary,
+                )
+
+                task_id = str(canonical_closure.get("task_id") or "")
+                normalized_status = str(canonical_closure.get("normalized_status") or "")
+                merge_unit = from_execution_output(
+                    {
+                        "success": normalized_status == "completed",
+                        "action_taken": "mesh_result_ingressed",
+                        "result": {"task_id": task_id},
+                    },
+                    task_id=task_id or None,
+                    trace_id=task_id or None,
+                    device_id=canonical_closure.get("device_id") or None,
+                    metadata={"source": "mesh_loop_baseline"},
+                )
+                merged = merge_runtime_results(
+                    result_units=[merge_unit],
+                    task_id=task_id or None,
+                    trace_id=task_id or None,
+                    merge_reason="mesh_loop_baseline_single_result",
+                )
+                merged_result_summary = build_result_merge_summary(result=merged).to_dict()
+            except Exception:
+                merged_result_summary = None
+
+        if merged_result_summary is not None:
+            canonical_closure["merged_result_summary"] = merged_result_summary
+
+        loop_baseline = {
+            "overlay_coordination": {
+                "authority": "mesh_overlay_coordination",
+                "topology_ready": topology_ready,
+                "alive_peers": alive_peer_count,
+                "last_dispatch": dict(self._last_overlay_dispatch),
+            },
+            "canonical_closure": canonical_closure,
+            "end_to_end_closed": bool(
+                topology_ready
+                and self._last_overlay_dispatch.get("success")
+                and canonical_closure.get("is_fully_closed")
+            ),
+        }
+
         return {
             "nodes": nodes,
             "edges": edges,
             "total_peers": len(self._peers),
             "direct_peers": sum(1 for p in self._peers.values() if p.reachable_direct),
             "relay_peers": sum(1 for p in self._peers.values() if not p.reachable_direct),
+            "topology_readiness": "ready" if topology_ready else "not_ready",
+            "loop_baseline": loop_baseline,
         }
 
     def get_stats(self) -> Dict:
