@@ -67,10 +67,10 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
-import uuid
 import re
+import threading
 import time
+import uuid
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
@@ -223,40 +223,49 @@ class NormalizedResultEvent:
     """Human-readable reason string populated by the caller when ``is_stale=True``.
     Propagated verbatim into the stale evidence dict for diagnostics."""
 
+    @staticmethod
+    def _first_available_text(*values: Any) -> str:
+        for value in values:
+            if value not in (None, ""):
+                text = str(value).strip()
+                if text:
+                    return text
+        return ""
+
+    def _derive_participant_id(self) -> str:
+        return self._first_available_text(
+            (self.payload or {}).get("participant_id"),
+            (self.payload or {}).get("participant_identity"),
+            (self.raw_message or {}).get("participant_id"),
+            (self.raw_message or {}).get("participant_identity"),
+            self.device_id,
+        )
+
+    def _derive_completion_emission_id(self) -> str:
+        for key in (
+            "completion_emission_id",
+            "emission_id",
+            "completion_id",
+            "handoff_id",
+            "result_id",
+            "message_id",
+        ):
+            value = self._first_available_text(
+                (self.payload or {}).get(key),
+                (self.raw_message or {}).get(key),
+            )
+            if value:
+                return value
+        return self._first_available_text(
+            self.trace_id,
+            f"{self.normalized_result_kind}:{self.normalized_status}",
+        )
+
     def __post_init__(self) -> None:
         if not self.participant_id:
-            self.participant_id = (
-                str(
-                    (self.payload or {}).get("participant_id")
-                    or (self.payload or {}).get("participant_identity")
-                    or (self.raw_message or {}).get("participant_id")
-                    or (self.raw_message or {}).get("participant_identity")
-                    or self.device_id
-                    or ""
-                ).strip()
-            )
+            self.participant_id = self._derive_participant_id()
         if not self.completion_emission_id:
-            emission_candidates = (
-                "completion_emission_id",
-                "emission_id",
-                "completion_id",
-                "handoff_id",
-                "result_id",
-                "message_id",
-            )
-            for key in emission_candidates:
-                raw_value = (
-                    (self.payload or {}).get(key)
-                    or (self.raw_message or {}).get(key)
-                )
-                if raw_value not in (None, ""):
-                    self.completion_emission_id = str(raw_value).strip()
-                    break
-            if not self.completion_emission_id:
-                self.completion_emission_id = (
-                    str(self.trace_id or "").strip()
-                    or f"{self.normalized_result_kind}:{self.normalized_status}"
-                )
+            self.completion_emission_id = self._derive_completion_emission_id()
         # Auto-generate idempotency_key when not explicitly set.
         if not self.idempotency_key and self.task_id:
             self.idempotency_key = f"{self.normalized_result_kind}:{self.task_id}"
@@ -1409,18 +1418,8 @@ class UnifiedResultIngress:
         self,
         event: NormalizedResultEvent,
     ) -> Dict[str, Any]:
-        participant_id = str(
-            event.participant_id
-            or (event.payload or {}).get("participant_id")
-            or (event.payload or {}).get("participant_identity")
-            or event.device_id
-            or ""
-        ).strip()
-        completion_emission_id = str(
-            event.completion_emission_id
-            or event.trace_id
-            or f"{event.normalized_result_kind}:{event.normalized_status}"
-        ).strip()
+        participant_id = str(event.participant_id or event.device_id or "").strip()
+        completion_emission_id = str(event.completion_emission_id or "").strip()
         epoch_token = (
             str(event.session_epoch)
             if event.session_epoch is not None
