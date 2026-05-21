@@ -902,6 +902,46 @@ async def handle_goal_execution_result(
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
+
+    # PR-46: Cross-repo schema/version gate enforcement (STRICT mode).
+    # goal_execution_result is a strict-reject type: schema/contract mismatches
+    # block the message before any canonical truth chain step.
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _ger_gate_decision = _evaluate_schema_gate(
+            message_type="goal_execution_result",
+            message=message,
+        )
+        if _ger_gate_decision is not None:
+            if _ger_gate_decision.action == "reject":
+                logger.warning(
+                    "handle_goal_execution_result: schema/version gate REJECTED ingress "
+                    "reason=%s observed_schema=%r task_id=%r device_id=%r "
+                    "— blocking before canonical truth chain",
+                    _ger_gate_decision.reason,
+                    _ger_gate_decision.observed_schema_version,
+                    task_id,
+                    device_id,
+                )
+                return
+            if _ger_gate_decision.action == "degrade":
+                logger.warning(
+                    "handle_goal_execution_result: schema/version gate DEGRADED ingress "
+                    "reason=%s observed_schema=%r task_id=%r device_id=%r "
+                    "— proceeding in degraded mode",
+                    _ger_gate_decision.reason,
+                    _ger_gate_decision.observed_schema_version,
+                    task_id,
+                    device_id,
+                )
+    except Exception as _ger_gate_err:
+        logger.debug(
+            "handle_goal_execution_result: schema gate check skipped (non-fatal): %s",
+            _ger_gate_err,
+        )
+
     # Raw Android status — may be "success", "failed", "error", "cancelled", "degraded".
     _raw_status = payload.get("status", "unknown")
     # Canonical V2 status — normalised from the Android taxonomy.

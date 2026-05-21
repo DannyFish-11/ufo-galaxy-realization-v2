@@ -76,6 +76,35 @@ async def handle_reconciliation_signal(
     device_id = message.get("device_id", "unknown")
     message_id = message.get("message_id") or str(uuid.uuid4())
 
+    # PR-46: Cross-repo schema/version gate enforcement (COMPAT mode).
+    # reconciliation_signal is a compat-degrade type: mismatches are logged
+    # and included in the ACK as diagnostics evidence, but reconciliation
+    # processing continues so that continuity recovery is not blocked.
+    _rs_gate_decision = None
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _rs_gate_decision = _evaluate_schema_gate(
+            message_type="reconciliation_signal",
+            message=message,
+        )
+        if _rs_gate_decision is not None and _rs_gate_decision.action in {"reject", "degrade"}:
+            logger.warning(
+                "reconciliation_signal: schema/version gate %s "
+                "type=reconciliation_signal reason=%s observed_schema=%r device=%s "
+                "— proceeding in degraded mode with diagnostics evidence",
+                _rs_gate_decision.action.upper(),
+                _rs_gate_decision.reason,
+                _rs_gate_decision.observed_schema_version,
+                device_id,
+            )
+    except Exception as _rs_gate_err:
+        logger.debug(
+            "reconciliation_signal: schema gate check skipped (non-fatal): %s",
+            _rs_gate_err,
+        )
+
     if _get_lifecycle_coordinator is not None:
         try:
             outcome = _get_lifecycle_coordinator().on_reconciliation_signal(
@@ -113,4 +142,9 @@ async def handle_reconciliation_signal(
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "correlation_id": message_id,
+        "schema_gate_evidence": (
+            _rs_gate_decision.to_dict()
+            if _rs_gate_decision is not None and _rs_gate_decision.action != "accept"
+            else None
+        ),
     }

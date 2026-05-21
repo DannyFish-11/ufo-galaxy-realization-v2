@@ -104,6 +104,35 @@ async def handle_device_state_snapshot(
     message_id = message.get("message_id") or str(uuid.uuid4())
     payload = message.get("payload") or {}
 
+    # PR-46: Cross-repo schema/version gate enforcement (COMPAT mode).
+    # device_state_snapshot is a compat-degrade type: mismatches are logged
+    # and included in the ACK as diagnostics evidence, but processing continues
+    # so that runtime transparency is not fully blocked by schema drift.
+    _dss_gate_decision = None
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _dss_gate_decision = _evaluate_schema_gate(
+            message_type="device_state_snapshot",
+            message=message,
+        )
+        if _dss_gate_decision is not None and _dss_gate_decision.action in {"reject", "degrade"}:
+            logger.warning(
+                "device_state_snapshot: schema/version gate %s "
+                "type=device_state_snapshot reason=%s observed_schema=%r device=%s "
+                "— proceeding in degraded mode with diagnostics evidence",
+                _dss_gate_decision.action.upper(),
+                _dss_gate_decision.reason,
+                _dss_gate_decision.observed_schema_version,
+                device_id,
+            )
+    except Exception as _dss_gate_err:
+        logger.debug(
+            "device_state_snapshot: schema gate check skipped (non-fatal): %s",
+            _dss_gate_err,
+        )
+
     status = "absorbed"
     reconciliation_status = "unknown"
     applied_to_canonical_truth = False
@@ -219,6 +248,11 @@ async def handle_device_state_snapshot(
         "applied_to_canonical_truth": applied_to_canonical_truth,
         "canonical_conflict": canonical_conflict,
         "network_participation_tier": participation_tier,
+        "schema_gate_evidence": (
+            _dss_gate_decision.to_dict()
+            if _dss_gate_decision is not None and _dss_gate_decision.action != "accept"
+            else None
+        ),
     }
 
 
@@ -251,6 +285,34 @@ async def handle_device_execution_event(
     device_id = message.get("device_id", "unknown")
     message_id = message.get("message_id") or str(uuid.uuid4())
     payload = message.get("payload") or {}
+
+    # PR-46: Cross-repo schema/version gate enforcement (COMPAT mode).
+    # device_execution_event is a compat-degrade type: mismatches are logged
+    # and included in the ACK as diagnostics evidence, but processing continues.
+    _dee_gate_decision = None
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _dee_gate_decision = _evaluate_schema_gate(
+            message_type="device_execution_event",
+            message=message,
+        )
+        if _dee_gate_decision is not None and _dee_gate_decision.action in {"reject", "degrade"}:
+            logger.warning(
+                "device_execution_event: schema/version gate %s "
+                "type=device_execution_event reason=%s observed_schema=%r device=%s "
+                "— proceeding in degraded mode with diagnostics evidence",
+                _dee_gate_decision.action.upper(),
+                _dee_gate_decision.reason,
+                _dee_gate_decision.observed_schema_version,
+                device_id,
+            )
+    except Exception as _dee_gate_err:
+        logger.debug(
+            "device_execution_event: schema gate check skipped (non-fatal): %s",
+            _dee_gate_err,
+        )
 
     status = "absorbed"
     try:
@@ -318,4 +380,9 @@ async def handle_device_execution_event(
         "device_id": device_id,
         "status": status,
         "correlation_id": message_id,
+        "schema_gate_evidence": (
+            _dee_gate_decision.to_dict()
+            if _dee_gate_decision is not None and _dee_gate_decision.action != "accept"
+            else None
+        ),
     }
