@@ -200,6 +200,15 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
+from core.authority_source_fingerprint import (
+    SOURCE_KIND_CANONICAL_TRUTH,
+    SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+    SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
+    SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+    SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+    build_authority_source_fingerprint,
+)
+
 logger = logging.getLogger("Galaxy.Routes.Operator")
 
 try:
@@ -1412,6 +1421,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 **proj.to_dict(),
                 "authority": "OPERATOR_ROUTES_V1",
                 "consumption_contract_boundary": _operator_consumption_contract_boundary(),
+                "authority_source_fingerprint": build_authority_source_fingerprint(
+                    surface_path="/api/v1/operator/board/operable-truth",
+                    primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+                    source_roles={
+                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+                        SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "none",
+                    },
+                ),
             })
         except Exception as exc:
             logger.error("operator_board_operable_truth endpoint error: %s", exc)

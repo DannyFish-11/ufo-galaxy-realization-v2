@@ -131,6 +131,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
             "governance_state",
             "mesh_runtime_state",
             "control_plane_contract",
+            "authority_source_fingerprint",
             # provenance
             "_source",
         }
@@ -830,6 +831,16 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
         data = resp.json()
         self.assertIn("readiness_verdict", data)
         self.assertIn(data["readiness_verdict"], {"READY", "BLOCKED", "DEGRADED", "UNKNOWN"})
+
+    async def test_F11_authority_source_fingerprint_is_machine_readable(self):
+        async with await self._client() as client:
+            resp = await client.get("/api/v1/panel/unified")
+        data = resp.json()
+        fp = data.get("authority_source_fingerprint")
+        self.assertIsInstance(fp, dict)
+        self.assertEqual(fp.get("surface_path"), "/api/v1/panel/unified")
+        self.assertEqual(fp.get("primary_source_kind"), "operator_derived_surface")
+        self.assertIs(fp.get("acts_as_authority_layer"), False)
 
 
 # ---------------------------------------------------------------------------

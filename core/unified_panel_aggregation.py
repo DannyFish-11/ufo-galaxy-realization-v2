@@ -86,6 +86,15 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.authority_source_fingerprint import (
+    SOURCE_KIND_CANONICAL_TRUTH,
+    SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+    SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
+    SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+    SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+    build_authority_source_fingerprint,
+)
+
 logger = logging.getLogger("Galaxy.UnifiedPanelAggregation")
 
 # ---------------------------------------------------------------------------
@@ -306,6 +315,19 @@ class UnifiedPanelPayload:
     unified_mode_model: Dict[str, Any] = field(default_factory=dict)
     control_plane_contract: Dict[str, Any] = field(default_factory=dict)
     final_acceptance_surface_boundary: Dict[str, Any] = field(default_factory=dict)
+    authority_source_fingerprint: Dict[str, Any] = field(
+        default_factory=lambda: build_authority_source_fingerprint(
+            surface_path="/api/v1/panel/unified",
+            primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+            source_roles={
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+                SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "none",
+            },
+        ),
+    )
 
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
@@ -358,6 +380,7 @@ class UnifiedPanelPayload:
             "unified_mode_model": dict(self.unified_mode_model),
             "control_plane_contract": dict(self.control_plane_contract),
             "final_acceptance_surface_boundary": dict(self.final_acceptance_surface_boundary),
+            "authority_source_fingerprint": dict(self.authority_source_fingerprint),
             # provenance
             "_source": self._source,
         }

@@ -1081,6 +1081,11 @@ class TestPR4Routes:
         assert data["authority"] == "OPERATOR_ROUTES_V1"
         assert data["consumption_contract_boundary"]["consumption_layer_role"] == "operator_board_projection_consumer_only"
         assert data["consumption_contract_boundary"]["ui_visible_summary_is_backend_truth"] is False
+        fingerprint = data.get("authority_source_fingerprint")
+        assert isinstance(fingerprint, dict)
+        assert fingerprint.get("surface_path") == "/api/v1/operator/board/operable-truth"
+        assert fingerprint.get("primary_source_kind") == "operator_derived_surface"
+        assert fingerprint.get("acts_as_authority_layer") is False
 
     def test_pr4_snapshot_returns_200(self, client):
         resp = client.get("/api/v1/operator/pr4/snapshot")

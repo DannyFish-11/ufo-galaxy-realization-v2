@@ -639,6 +639,7 @@ def test_50_minimal_fallback_payload_includes_required_keys():
         "authority_indicators",
         "integration_authority",
         "integration_health",
+        "authority_source_fingerprint",
     ):
         assert key in payload, f"missing key: {key}"
     # Authority indicators in fallback
@@ -671,6 +672,11 @@ def test_50c_desktop_status_board_assembly_includes_unified_operational_state_bo
     assert "result_closure_state" in category_ids
     assert "minimum_access_admission_verdict" in category_ids
     assert "shared_execution_visibility" in payload
+    fingerprint = payload.get("authority_source_fingerprint")
+    assert isinstance(fingerprint, dict)
+    assert fingerprint.get("surface_path") == "/api/v1/projection/desktop-status-board"
+    assert fingerprint.get("primary_source_kind") == "compiled_outward_truth"
+    assert fingerprint.get("acts_as_authority_layer") is False
 
 
 # ===========================================================================
