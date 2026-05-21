@@ -46,6 +46,20 @@ def test_summary_pins_five_required_boundaries() -> None:
     }
 
 
+def test_summary_pins_canonical_boundary_summary_sections() -> None:
+    summary = _load_json(SUMMARY_PATH)
+    canonical = summary["canonical_boundary_summary"]
+    assert set(canonical.keys()) == {
+        "canonical_center_boundary",
+        "truth_convergence_boundary",
+        "dispatch_governance_closure_boundary",
+        "observability_diagnostics_evidence_boundary",
+        "outward_consumption_projection_boundary",
+        "stable_quasi_platform_state_definition",
+    }
+    assert canonical["stable_quasi_platform_state_definition"]["fully_mature_distributed_platform"] is False
+
+
 def test_summary_pins_required_system_and_governance_flags() -> None:
     summary = _load_json(SUMMARY_PATH)
     assert summary["system_definition"]["stable_quasi_platform_state"] is True
@@ -56,6 +70,15 @@ def test_summary_pins_required_system_and_governance_flags() -> None:
     assert summary["narrative_guardrails"]["no_parallel_center_claim"] is True
     assert summary["narrative_guardrails"]["no_outward_authority_layer_claim"] is True
     assert summary["narrative_guardrails"]["no_fully_mature_platform_claim"] is True
+
+
+def test_operator_projection_observability_boundary_summary_is_consumption_and_non_parallel() -> None:
+    summary = _load_json(SUMMARY_PATH)
+    boundary_summary = summary["operator_projection_observability_boundary_summary"]
+    assert boundary_summary["operator_governance_plane_center_defined"] is True
+    assert boundary_summary["projection_surface_consumption_only"] is True
+    assert boundary_summary["observability_is_evidence_contract_not_authority"] is True
+    assert boundary_summary["outward_surface_is_not_parallel_center"] is True
 
 
 def test_summary_references_runtime_assertion_anchors() -> None:
@@ -116,6 +139,13 @@ def test_schema_pins_core_const_constraints() -> None:
     assert props["version"]["const"] == "v1"
     assert props["system_definition"]["properties"]["stable_quasi_platform_state"]["const"] is True
     assert props["system_definition"]["properties"]["fully_mature_distributed_platform"]["const"] is False
+    canonical = props["canonical_boundary_summary"]["properties"]
+    assert canonical["stable_quasi_platform_state_definition"]["properties"]["fully_mature_distributed_platform"]["const"] is False
+    projection = props["operator_projection_observability_boundary_summary"]["properties"]
+    assert projection["operator_governance_plane_center_defined"]["const"] is True
+    assert projection["projection_surface_consumption_only"]["const"] is True
+    assert projection["observability_is_evidence_contract_not_authority"]["const"] is True
+    assert projection["outward_surface_is_not_parallel_center"]["const"] is True
     assert props["android_v2_alignment"]["properties"]["android_is_parallel_center"]["const"] is False
     assert props["android_v2_alignment"]["properties"]["android_has_global_truth_finalization"]["const"] is False
     assert props["android_v2_alignment"]["properties"]["android_has_global_dispatch_authority"]["const"] is False

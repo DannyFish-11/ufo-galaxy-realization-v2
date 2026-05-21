@@ -8,7 +8,9 @@
     "repositories",
     "system_definition",
     "boundaries",
+    "canonical_boundary_summary",
     "outward_contract_summary",
+    "operator_projection_observability_boundary_summary",
     "android_v2_alignment",
     "narrative_guardrails",
     "runtime_assertion_anchors"
@@ -87,6 +89,52 @@
       },
       "additionalProperties": false
     },
+    "canonical_boundary_summary": {
+      "type": "object",
+      "required": [
+        "canonical_center_boundary",
+        "truth_convergence_boundary",
+        "dispatch_governance_closure_boundary",
+        "observability_diagnostics_evidence_boundary",
+        "outward_consumption_projection_boundary",
+        "stable_quasi_platform_state_definition"
+      ],
+      "properties": {
+        "canonical_center_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "truth_convergence_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "dispatch_governance_closure_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "observability_diagnostics_evidence_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "outward_consumption_projection_boundary": {
+          "$ref": "#/$defs/boundaryAxis"
+        },
+        "stable_quasi_platform_state_definition": {
+          "type": "object",
+          "required": [
+            "summary",
+            "fully_mature_distributed_platform"
+          ],
+          "properties": {
+            "summary": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fully_mature_distributed_platform": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "outward_contract_summary": {
       "type": "object",
       "required": [
@@ -116,6 +164,30 @@
             "minLength": 1
           },
           "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "operator_projection_observability_boundary_summary": {
+      "type": "object",
+      "required": [
+        "operator_governance_plane_center_defined",
+        "projection_surface_consumption_only",
+        "observability_is_evidence_contract_not_authority",
+        "outward_surface_is_not_parallel_center"
+      ],
+      "properties": {
+        "operator_governance_plane_center_defined": {
+          "const": true
+        },
+        "projection_surface_consumption_only": {
+          "const": true
+        },
+        "observability_is_evidence_contract_not_authority": {
+          "const": true
+        },
+        "outward_surface_is_not_parallel_center": {
+          "const": true
         }
       },
       "additionalProperties": false
