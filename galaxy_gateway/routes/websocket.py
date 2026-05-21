@@ -30,10 +30,26 @@ galaxy_gateway/routes/websocket.py — WebSocket endpoint registration.
 import logging
 import os
 import uuid
+from typing import Literal, TypedDict
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
+
+
+IngressClassification = Literal[
+    "canonical",
+    "compat",
+    "legacy-disabled",
+    "media",
+    "deprecated",
+    "debug",
+]
+
+
+class DeviceWsIngressSurface(TypedDict):
+    path: str
+    classification: IngressClassification
 
 # ============================================================================
 # CANONICAL_DEVICE_INGRESS_AUTHORITY
@@ -48,7 +64,7 @@ CANONICAL_DEVICE_INGRESS_AUTHORITY = (
     "(AIP v3). All other device WS paths are compat/deprecated/debug/legacy-disabled."
 )
 
-DEVICE_WS_INGRESS_SURFACE_REGISTRY = (
+DEVICE_WS_INGRESS_SURFACE_REGISTRY: tuple[DeviceWsIngressSurface, ...] = (
     {"path": "/ws/device/{device_id}", "classification": "canonical"},
     {"path": "/ws/android/{device_id}", "classification": "compat"},
     {"path": "/ws/android", "classification": "compat"},
@@ -56,6 +72,14 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = (
     {"path": "/ws/webrtc/{device_id}", "classification": "media"},
     {"path": "/ws/{device_id}", "classification": "deprecated"},
     {"path": "/ws", "classification": "debug"},
+)
+
+_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS = frozenset(
+    {
+        entry["classification"]
+        for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
+        if entry["path"] in {"/ws/device/{device_id}", "/ws/android/{device_id}", "/ws/android", "/ws/ufo3/{device_id}"}
+    }
 )
 
 # Set GALAXY_ENABLE_LEGACY_PROTOCOLS=true to re-enable legacy WS paths such as
@@ -98,7 +122,7 @@ async def _handle_android_ws(
     from galaxy_gateway.android_bridge import android_bridge as _android_bridge
     from galaxy_gateway.protocol.compat import normalise_to_v3_dict as _normalise
 
-    if ingress_classification not in {"canonical", "compat", "legacy-disabled"}:
+    if ingress_classification not in _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS:
         raise ValueError(
             f"Unsupported ingress_classification={ingress_classification!r} for Android WS ingress"
         )
