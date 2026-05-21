@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping
+from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional
 
 CROSS_REPO_SCHEMA_GATE_AUTHORITY: str = (
     "CROSS_REPO_SCHEMA_GATE_AUTHORITY::contracts.cross_repo_schema_version_gate::"
@@ -22,6 +22,7 @@ ANDROID_COMPLETION_CLOSURE_ANCHOR: str = (
     "AndroidCompletionClosureUplinkContract.kt"
 )
 ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION: str = "1"
+ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION: str = "1"
 
 REQUIRED_AIP_MESSAGE_TYPES: FrozenSet[str] = frozenset(
     {
@@ -86,6 +87,210 @@ class CrossRepoSchemaGateReport:
             "android_aip_models_source_sha": ANDROID_AIP_MODELS_SOURCE_SHA,
             "android_completion_closure_source_sha": ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA,
         }
+
+
+@dataclass
+class AndroidUplinkSchemaGateDecision:
+    action: str
+    message_type: str
+    observed_schema_version: str = ""
+    observed_contract_version: str = ""
+    reason: str = ""
+    expected_schema_version: str = ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION
+    expected_contract_version: str = ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION
+    evidence: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action": self.action,
+            "message_type": self.message_type,
+            "observed_schema_version": self.observed_schema_version,
+            "observed_contract_version": self.observed_contract_version,
+            "expected_schema_version": self.expected_schema_version,
+            "expected_contract_version": self.expected_contract_version,
+            "reason": self.reason,
+            "evidence": dict(self.evidence),
+            "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
+            "gate_version": CROSS_REPO_SCHEMA_GATE_VERSION,
+        }
+
+
+STRICT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "handoff_result",
+        "handoff_failure",
+        "handoff_envelope_v2_result",
+        "goal_execution_result",
+        "goal_result",
+    }
+)
+
+COMPAT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "device_state_snapshot",
+        "device_execution_event",
+        "reconciliation_signal",
+    }
+)
+
+COMPLETION_CONTRACT_ENFORCED_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "handoff_result",
+        "handoff_failure",
+        "handoff_envelope_v2_result",
+    }
+)
+
+_LEGACY_COMPAT_SCHEMA_VERSIONS: FrozenSet[str] = frozenset({"0"})
+
+
+def _extract_uplink_schema_version(message: Mapping[str, Any]) -> str:
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    schema_gate = payload_mapping.get("schema_gate")
+    schema_gate_mapping = schema_gate if isinstance(schema_gate, Mapping) else {}
+    lineage = payload_mapping.get("lineage")
+    lineage_mapping = lineage if isinstance(lineage, Mapping) else {}
+    candidates = (
+        message.get("android_completion_closure_uplink_schema_version"),
+        message.get("schema_version"),
+        message.get("uplink_schema_version"),
+        payload_mapping.get("android_completion_closure_uplink_schema_version"),
+        payload_mapping.get("schema_version"),
+        payload_mapping.get("uplink_schema_version"),
+        schema_gate_mapping.get("android_completion_closure_uplink_schema_version"),
+        schema_gate_mapping.get("schema_version"),
+        lineage_mapping.get("android_completion_closure_uplink_schema_version"),
+        lineage_mapping.get("schema_version"),
+    )
+    for candidate in candidates:
+        if candidate is not None and str(candidate).strip():
+            return str(candidate).strip()
+    return ""
+
+
+def _extract_completion_contract_version(message: Mapping[str, Any]) -> str:
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    schema_gate = payload_mapping.get("schema_gate")
+    schema_gate_mapping = schema_gate if isinstance(schema_gate, Mapping) else {}
+    candidates = (
+        message.get("completion_closure_contract_version"),
+        payload_mapping.get("completion_closure_contract_version"),
+        schema_gate_mapping.get("completion_closure_contract_version"),
+    )
+    for candidate in candidates:
+        if candidate is not None and str(candidate).strip():
+            return str(candidate).strip()
+    return ""
+
+
+def _to_int_or_none(raw: str) -> Optional[int]:
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def evaluate_android_uplink_schema_gate(
+    *,
+    message_type: str,
+    message: Mapping[str, Any],
+) -> Optional[AndroidUplinkSchemaGateDecision]:
+    normalized_type = str(message_type or "").strip().lower()
+    if normalized_type in STRICT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES:
+        compatibility_mode = "strict_reject"
+    elif normalized_type in COMPAT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES:
+        compatibility_mode = "compat_degrade"
+    else:
+        return None
+
+    observed_schema_version = _extract_uplink_schema_version(message)
+    observed_contract_version = _extract_completion_contract_version(message)
+    evidence = {
+        "compatibility_mode": compatibility_mode,
+        "required_by_cross_repo_gate": True,
+    }
+
+    if not observed_schema_version:
+        action = "reject" if compatibility_mode == "strict_reject" else "degrade"
+        return AndroidUplinkSchemaGateDecision(
+            action=action,
+            message_type=normalized_type,
+            observed_schema_version="",
+            observed_contract_version=observed_contract_version,
+            reason="missing_schema_version_metadata",
+            evidence=evidence,
+        )
+
+    if observed_schema_version == ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION:
+        pass
+    elif (
+        compatibility_mode == "compat_degrade"
+        and observed_schema_version in _LEGACY_COMPAT_SCHEMA_VERSIONS
+    ):
+        return AndroidUplinkSchemaGateDecision(
+            action="degrade",
+            message_type=normalized_type,
+            observed_schema_version=observed_schema_version,
+            observed_contract_version=observed_contract_version,
+            reason="legacy_schema_version_compat",
+            evidence=evidence,
+        )
+    else:
+        observed_num = _to_int_or_none(observed_schema_version)
+        expected_num = _to_int_or_none(ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION)
+        if (
+            compatibility_mode == "compat_degrade"
+            and observed_num is not None
+            and expected_num is not None
+            and observed_num < expected_num
+        ):
+            return AndroidUplinkSchemaGateDecision(
+                action="degrade",
+                message_type=normalized_type,
+                observed_schema_version=observed_schema_version,
+                observed_contract_version=observed_contract_version,
+                reason="older_schema_version_compat",
+                evidence=evidence,
+            )
+        return AndroidUplinkSchemaGateDecision(
+            action="reject",
+            message_type=normalized_type,
+            observed_schema_version=observed_schema_version,
+            observed_contract_version=observed_contract_version,
+            reason="schema_version_mismatch",
+            evidence=evidence,
+        )
+
+    if normalized_type in COMPLETION_CONTRACT_ENFORCED_MESSAGE_TYPES:
+        if not observed_contract_version:
+            return AndroidUplinkSchemaGateDecision(
+                action="reject",
+                message_type=normalized_type,
+                observed_schema_version=observed_schema_version,
+                observed_contract_version="",
+                reason="missing_completion_closure_contract_version",
+                evidence=evidence,
+            )
+        if observed_contract_version != ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION:
+            return AndroidUplinkSchemaGateDecision(
+                action="reject",
+                message_type=normalized_type,
+                observed_schema_version=observed_schema_version,
+                observed_contract_version=observed_contract_version,
+                reason="completion_closure_contract_mismatch",
+                evidence=evidence,
+            )
+
+    return AndroidUplinkSchemaGateDecision(
+        action="accept",
+        message_type=normalized_type,
+        observed_schema_version=observed_schema_version,
+        observed_contract_version=observed_contract_version,
+        reason="schema_version_gate_matched",
+        evidence=evidence,
+    )
 
 
 def build_projection_schema_gate_metadata() -> Dict[str, str]:

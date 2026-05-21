@@ -117,6 +117,13 @@ from galaxy_gateway.android.handlers.device_state_snapshot import (
 from galaxy_gateway.android.handlers.session_flow import handle_session_migrate
 from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
 
+try:
+    from contracts.cross_repo_schema_version_gate import (
+        evaluate_android_uplink_schema_gate as _evaluate_android_uplink_schema_gate,
+    )
+except Exception:
+    _evaluate_android_uplink_schema_gate = None  # type: ignore[assignment]
+
 # Bufferable message types for the pending-delivery buffer.  Only task-dispatch
 # message types are buffered; interactive/GUI/control messages are timing-sensitive
 # and must NOT be re-delivered after a reconnect because the window for their
@@ -955,6 +962,57 @@ class AndroidBridge:
                 f"Unknown message type: {msg_type_str}",
             )
 
+        schema_gate_evidence = None
+        if _evaluate_android_uplink_schema_gate is not None:
+            try:
+                gate_decision = _evaluate_android_uplink_schema_gate(
+                    message_type=msg_type.value,
+                    message=message,
+                )
+                if gate_decision is not None:
+                    schema_gate_evidence = gate_decision.to_dict()
+                    message["_cross_repo_schema_version_gate"] = schema_gate_evidence
+                    if gate_decision.action == "reject":
+                        logger.warning(
+                            "android_bridge: schema/version gate rejected inbound message "
+                            "type=%s device_id=%s reason=%s observed_schema=%s observed_contract=%s",
+                            msg_type.value,
+                            device_id,
+                            gate_decision.reason,
+                            gate_decision.observed_schema_version,
+                            gate_decision.observed_contract_version,
+                        )
+                        return MessageBuilder.error(
+                            device_id or "unknown",
+                            "CROSS_REPO_SCHEMA_VERSION_GATE_REJECTED",
+                            (
+                                "Inbound Android message rejected by cross-repo "
+                                f"schema/version gate ({gate_decision.reason})"
+                            ),
+                            details={
+                                "schema_version_gate": schema_gate_evidence,
+                                "message_type": msg_type.value,
+                            },
+                            correlation_id=str(message.get("message_id") or ""),
+                        )
+                    if gate_decision.action == "degrade":
+                        logger.warning(
+                            "android_bridge: schema/version gate compat-degraded inbound message "
+                            "type=%s device_id=%s reason=%s observed_schema=%s",
+                            msg_type.value,
+                            device_id,
+                            gate_decision.reason,
+                            gate_decision.observed_schema_version,
+                        )
+            except Exception as gate_exc:
+                logger.warning(
+                    "android_bridge: schema/version gate evaluation failed (non-fatal): "
+                    "type=%s device_id=%s error=%s",
+                    msg_type.value,
+                    device_id,
+                    gate_exc,
+                )
+
         profile_mapping = classify_android_runtime_ws_mapping(msg_type.value)
         logger.debug(
             "android runtime-ws ingress mapped: device_id=%s type=%s family=%s handling=%s",
@@ -977,6 +1035,8 @@ class AndroidBridge:
                         resp_payload.setdefault("trace_id", trace_id)
                     if route_mode:
                         resp_payload.setdefault("route_mode", route_mode)
+                if schema_gate_evidence:
+                    response.setdefault("schema_version_gate", schema_gate_evidence)
             return response
         else:
             logger.debug("No handler for message type: %s", msg_type)

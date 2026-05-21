@@ -496,6 +496,89 @@ class TestAndroidBridgeDispatch:
         assert resp["error_code"] == "UNKNOWN_MESSAGE_TYPE"
 
     @pytest.mark.asyncio
+    async def test_dispatch_handoff_result_missing_schema_version_rejected_by_gate(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "handoff_result",
+            "device_id": "dev_schema_missing",
+            "message_id": "msg_schema_missing",
+            "timestamp": int(time.time() * 1000),
+            "payload": {
+                "completion_closure_contract_version": "1",
+            },
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert resp["error_code"] == "CROSS_REPO_SCHEMA_VERSION_GATE_REJECTED"
+        assert resp["details"]["schema_version_gate"]["reason"] == "missing_schema_version_metadata"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_handoff_result_contract_mismatch_rejected_by_gate(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "handoff_envelope_v2_result",
+            "device_id": "dev_contract_mismatch",
+            "message_id": "msg_contract_mismatch",
+            "timestamp": int(time.time() * 1000),
+            "payload": {
+                "schema_version": "1",
+                "completion_closure_contract_version": "0",
+            },
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert resp["error_code"] == "CROSS_REPO_SCHEMA_VERSION_GATE_REJECTED"
+        assert resp["details"]["schema_version_gate"]["reason"] == "completion_closure_contract_mismatch"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_reconciliation_signal_old_schema_is_compat_degraded(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "reconciliation_signal",
+            "device_id": "dev_reconcile_old_schema",
+            "message_id": "msg_reconcile_old_schema",
+            "timestamp": int(time.time() * 1000),
+            "payload": {
+                "schema_version": "0",
+            },
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert resp["type"] == "reconciliation_signal_ack"
+        assert resp["schema_version_gate"]["action"] == "degrade"
+        assert resp["schema_version_gate"]["reason"] in {
+            "legacy_schema_version_compat",
+            "older_schema_version_compat",
+        }
+
+    @pytest.mark.asyncio
+    async def test_dispatch_device_snapshot_matching_schema_is_accepted_by_gate(self):
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        msg = {
+            "version": "3.0",
+            "type": "device_state_snapshot",
+            "device_id": "dev_snapshot_schema_match",
+            "message_id": "msg_snapshot_schema_match",
+            "timestamp": int(time.time() * 1000),
+            "payload": {
+                "schema_version": "1",
+                "model_ready": False,
+            },
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert resp["type"] == "device_state_snapshot_ack"
+        assert resp["schema_version_gate"]["action"] == "accept"
+        assert resp["schema_version_gate"]["reason"] == "schema_version_gate_matched"
+
+    @pytest.mark.asyncio
     async def test_trace_id_propagated_to_response(self):
         bridge = self._make_bridge()
         ws = _make_ws()
