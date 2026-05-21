@@ -562,7 +562,7 @@ async def handle_task_result(
     )
 
     # PR-46: Cross-repo schema/version gate enforcement.
-    # Evaluated before the V1 continuity legality check and any truth-chain
+    # Evaluated before the V1 continuity legality check and any truth chain
     # step so that schema/contract mismatches cannot silently enter the
     # canonical truth chain.  task_result is a strict-reject type.
     try:
