@@ -692,6 +692,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
+                            _raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _epoch_val: Optional[int] = (
+                                int(_raw_epoch) if _raw_epoch is not None else None
+                            )
                             _event = NormalizedResultEvent(
                                 task_id=task_id,
                                 device_id=device_id,
@@ -702,6 +706,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 payload=data,
                                 trace_id=data.get("trace_id", ""),
                                 raw_message=data,
+                                session_epoch=_epoch_val,
                             )
                             _compat_outcome = ingest_result(_event)
                             _compat_was_dedup = _compat_outcome.was_deduplicated
@@ -757,6 +762,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             )
 
                             _goal_mapped_status = _normalize_status(data.get("status", ""))
+                            _goal_raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _goal_epoch_val: Optional[int] = (
+                                int(_goal_raw_epoch) if _goal_raw_epoch is not None else None
+                            )
                             _goal_event = NormalizedResultEvent(
                                 task_id=_goal_task_id,
                                 device_id=device_id,
@@ -768,6 +777,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 trace_id=data.get("trace_id", ""),
                                 raw_message=data,
                                 idempotency_key=f"goal_result:{_goal_task_id}",
+                                session_epoch=_goal_epoch_val,
                             )
                             _goal_outcome = ingest_result(_goal_event)
                             if _goal_outcome.was_deduplicated:
@@ -845,6 +855,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
+                            _ger_raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _ger_epoch_val: Optional[int] = (
+                                int(_ger_raw_epoch) if _ger_raw_epoch is not None else None
+                            )
                             _ger_event = NormalizedResultEvent(
                                 task_id=_ger_task_id,
                                 device_id=device_id,
@@ -855,6 +869,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 payload=data,
                                 trace_id=data.get("trace_id", ""),
                                 raw_message=data,
+                                session_epoch=_ger_epoch_val,
                             )
                             _ger_outcome = ingest_result(_ger_event)
                             _ger_was_dedup = _ger_outcome.was_deduplicated

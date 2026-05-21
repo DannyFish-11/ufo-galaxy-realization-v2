@@ -196,6 +196,23 @@ class NormalizedResultEvent:
     raw_message: Dict[str, Any] = field(default_factory=dict)
     """The complete inbound message dict before any normalisation."""
 
+    # ── Session / continuity epoch ───────────────────────────────────────────
+    session_epoch: Optional[int] = None
+    """The ``continuity_epoch`` integer from the session that produced this result.
+    When set, ``UnifiedResultIngress`` compares it against the canonical stored epoch
+    for the device and classifies the result as stale when there is a mismatch.
+    Absence (``None``) means epoch comparison is skipped (legacy/unknown path)."""
+
+    is_stale: bool = False
+    """Explicit stale flag.  Upstream callers (e.g. replay drain, reconnect handler)
+    may pre-mark a result as stale before passing it to ``ingest_result()``.
+    When ``True`` the result is immediately classified as stale by the ingress
+    epoch gate and blocked from canonical closure adjudication."""
+
+    stale_reason: str = ""
+    """Human-readable reason string populated by the caller when ``is_stale=True``.
+    Propagated verbatim into the stale evidence dict for diagnostics."""
+
     def __post_init__(self) -> None:
         # Auto-generate idempotency_key when not explicitly set.
         if not self.idempotency_key and self.task_id:
@@ -285,6 +302,18 @@ class UnifiedResultIngressOutcome:
     Provides a stable Android truth snapshot co-sourced with this result closure.
     Empty when no device_id is available or the SSOT module is unavailable."""
 
+    # Stale epoch classification
+    stale_epoch_rejected: bool = False
+    """True iff the result was blocked by the epoch stale gate before reaching
+    closure adjudication.  Mutually exclusive with ``is_fully_closed=True``."""
+    stale_classification: str = ""
+    """One of ``"explicit_stale"``, ``"epoch_mismatch"``, ``"replay_epoch_mismatch"``
+    or ``""`` when not stale."""
+    stale_epoch_evidence: Dict[str, Any] = field(default_factory=dict)
+    """Diagnostic evidence dict produced by the epoch stale gate.  Contains at
+    minimum: ``task_id``, ``device_id``, ``session_epoch``, ``source_channel``,
+    ``stale_trigger``, ``stale_classification``, ``stale_check_at``."""
+
 
 # ---------------------------------------------------------------------------
 # UnifiedResultIngress
@@ -354,6 +383,28 @@ class UnifiedResultIngress:
                 event.task_id,
                 continuity_verdict,
                 event.source_channel.value,
+            )
+            self._record_last_closure_outcome(event, outcome)
+            return outcome
+
+        # Step 0.5: session epoch stale gate
+        # Prevents old-session / reconnect-late / replay-derived results from
+        # entering canonical closure adjudication.  Runs BEFORE idempotency so
+        # that stale results are not recorded in the durable idempotency store.
+        _stale, _stale_cls, _stale_evidence = self._check_stale_epoch(event)
+        if _stale:
+            outcome.stale_epoch_rejected = True
+            outcome.stale_classification = _stale_cls
+            outcome.stale_epoch_evidence = _stale_evidence
+            outcome.incomplete_reason = f"stale_epoch_rejected:{_stale_cls}"
+            logger.warning(
+                "unified_result_ingress: stale epoch gate blocked result "
+                "task_id=%r classification=%r device_id=%r source=%s evidence=%r",
+                event.task_id,
+                _stale_cls,
+                event.device_id,
+                event.source_channel.value,
+                _stale_evidence,
             )
             self._record_last_closure_outcome(event, outcome)
             return outcome
@@ -602,6 +653,75 @@ class UnifiedResultIngress:
             if str(mode).strip().lower() == "relaxed":
                 return "allow"
             return "require_review"
+
+    def _check_stale_epoch(
+        self,
+        event: NormalizedResultEvent,
+    ) -> tuple:
+        """Classify *event* for session/continuity epoch staleness.
+
+        Returns a ``(is_stale, classification, evidence)`` triple.
+
+        Classification strings
+        ----------------------
+        ``"explicit_stale"``
+            The event's ``is_stale`` flag was pre-set by the upstream caller.
+        ``"epoch_mismatch"``
+            ``event.session_epoch`` differs from the canonical stored epoch in
+            the session registry for ``event.device_id``.
+        ``"replay_epoch_mismatch"``
+            Source channel is :attr:`ResultSourceChannel.REPLAY` and
+            ``event.session_epoch`` differs from the registry epoch.
+
+        When no stale condition is detected returns ``(False, "", {})``.
+        """
+        evidence: Dict[str, Any] = {
+            "task_id": event.task_id,
+            "device_id": event.device_id,
+            "session_epoch": event.session_epoch,
+            "source_channel": event.source_channel.value,
+            "stale_check_at": time.time(),
+        }
+
+        # ── Case 1: explicit is_stale flag set by upstream caller ───────────
+        if event.is_stale:
+            reason = event.stale_reason or "explicit_is_stale"
+            evidence["stale_trigger"] = "explicit_flag"
+            evidence["stale_classification"] = "explicit_stale"
+            evidence["stale_reason"] = reason
+            return True, "explicit_stale", evidence
+
+        # ── Case 2: epoch comparison via registry ────────────────────────────
+        if event.session_epoch is not None and event.device_id:
+            try:
+                from core.attached_runtime_session_registry import (
+                    lookup_session_by_device,
+                )
+
+                registry_entry = lookup_session_by_device(event.device_id)
+                if registry_entry is not None:
+                    stored_epoch = getattr(registry_entry, "continuity_epoch", None)
+                    evidence["stored_epoch"] = stored_epoch
+                    evidence["presented_epoch"] = event.session_epoch
+                    if stored_epoch is not None and stored_epoch != event.session_epoch:
+                        is_replay = (
+                            event.source_channel == ResultSourceChannel.REPLAY
+                        )
+                        classification = (
+                            "replay_epoch_mismatch" if is_replay else "epoch_mismatch"
+                        )
+                        evidence["stale_trigger"] = "epoch_comparison"
+                        evidence["stale_classification"] = classification
+                        return True, classification, evidence
+            except Exception as _lookup_err:
+                logger.debug(
+                    "unified_result_ingress: stale epoch registry lookup skipped "
+                    "(non-fatal) task_id=%r err=%s",
+                    event.task_id,
+                    _lookup_err,
+                )
+
+        return False, "", {}
 
     def _check_idempotency(self, event: NormalizedResultEvent) -> bool:
         """Return True iff the idempotency_key is already recorded."""
