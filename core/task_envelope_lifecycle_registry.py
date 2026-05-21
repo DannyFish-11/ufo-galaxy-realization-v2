@@ -407,7 +407,7 @@ class TaskEnvelopeLifecycleRegistry:
             return False
         updated = dataclasses.replace(
             record,
-            metadata={**record.metadata, **dict(metadata_updates or {})},
+            metadata={**record.metadata, **(metadata_updates or {})},
         )
         self._pending[task_id] = updated
         logger.debug(

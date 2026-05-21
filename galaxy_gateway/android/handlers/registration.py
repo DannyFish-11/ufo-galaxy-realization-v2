@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_RESUME_EXISTING_EXECUTION_REASON = "continuity_resume_for_existing_execution"
+
 
 # ---------------------------------------------------------------------------
 # Registration completeness tracking
@@ -205,8 +207,10 @@ def _apply_pending_lifecycle_reconnect_decisions(
     pending_records = list(registry.get_pending_for_device(device_id))
 
     for record in pending_records:
+        # decision = lifecycle classification exposed to diagnostics / ACK payload
+        # action   = concrete reconnect action applied to the pending registry
         decision = "resume_existing_execution"
-        action = "resume_existing_execution"
+        action = "keep_pending_and_wait_for_result"
         reason = ""
         should_fail = False
 
@@ -277,7 +281,7 @@ def _apply_pending_lifecycle_reconnect_decisions(
                 record.task_id,
                 {
                     "reconnect_lifecycle_decision": decision,
-                    "reconnect_lifecycle_reason": reason or "continuity_resume_for_existing_execution",
+                    "reconnect_lifecycle_reason": reason or _RESUME_EXISTING_EXECUTION_REASON,
                     "reconnect_lifecycle_trace": evidence["diagnostic_trace"],
                     "reconnect_delivery_replay_scheduled": bool(delivery_replay_scheduled),
                 },
