@@ -561,6 +561,49 @@ async def handle_task_result(
         task_id, device_id, result_status,
     )
 
+    # PR-46: Cross-repo schema/version gate enforcement.
+    # Evaluated before the V1 continuity legality check and any truth-chain
+    # step so that schema/contract mismatches cannot silently enter the
+    # canonical truth chain.  task_result is a strict-reject type.
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _tl_msg_type = str(message.get("type") or "task_result")
+        _tl_gate_decision = _evaluate_schema_gate(
+            message_type=_tl_msg_type,
+            message=message,
+        )
+        if _tl_gate_decision is not None:
+            if _tl_gate_decision.action == "reject":
+                logger.warning(
+                    "handle_task_result: schema/version gate REJECTED ingress "
+                    "type=%s reason=%s observed_schema=%r task_id=%r device_id=%r "
+                    "— blocking before canonical truth chain",
+                    _tl_msg_type,
+                    _tl_gate_decision.reason,
+                    _tl_gate_decision.observed_schema_version,
+                    task_id,
+                    device_id,
+                )
+                return
+            if _tl_gate_decision.action == "degrade":
+                logger.warning(
+                    "handle_task_result: schema/version gate DEGRADED ingress "
+                    "type=%s reason=%s observed_schema=%r task_id=%r device_id=%r "
+                    "— proceeding in degraded mode",
+                    _tl_msg_type,
+                    _tl_gate_decision.reason,
+                    _tl_gate_decision.observed_schema_version,
+                    task_id,
+                    device_id,
+                )
+    except Exception as _tl_gate_err:
+        logger.debug(
+            "handle_task_result: schema gate check skipped (non-fatal): %s",
+            _tl_gate_err,
+        )
+
     # PR-V1-RESULT: Canonical V1 continuity legality pre-check.
     # Evaluate the inbound result against the unified continuity legality
     # authority BEFORE any truth-chain step (truth ingress, reconciliation,

@@ -106,6 +106,54 @@ async def handle_handoff_v2_result(
     message_id = message.get("message_id") or str(uuid.uuid4())
     msg_type = message.get("type", "unknown")
 
+    # PR-46: Cross-repo schema/version gate enforcement.
+    # Evaluated before any canonical ingress so that schema/contract mismatches
+    # cannot silently enter the canonical truth chain.
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
+        )
+        _schema_gate_decision = _evaluate_schema_gate(
+            message_type=msg_type,
+            message=message,
+        )
+        if _schema_gate_decision is not None:
+            if _schema_gate_decision.action == "reject":
+                logger.warning(
+                    "handoff_v2_result: schema/version gate REJECTED ingress "
+                    "type=%s reason=%s observed_schema=%r device=%s — "
+                    "blocking before canonical truth chain",
+                    msg_type,
+                    _schema_gate_decision.reason,
+                    _schema_gate_decision.observed_schema_version,
+                    device_id,
+                )
+                return {
+                    "version": "3.0",
+                    "type": "handoff_v2_result_ack",
+                    "device_id": device_id,
+                    "message_id": str(uuid.uuid4()),
+                    "correlation_id": message_id,
+                    "schema_gate_rejected": True,
+                    "schema_gate_reason": _schema_gate_decision.reason,
+                    "schema_gate_evidence": _schema_gate_decision.to_dict(),
+                }
+            if _schema_gate_decision.action == "degrade":
+                logger.warning(
+                    "handoff_v2_result: schema/version gate DEGRADED ingress "
+                    "type=%s reason=%s observed_schema=%r device=%s — "
+                    "proceeding in degraded mode",
+                    msg_type,
+                    _schema_gate_decision.reason,
+                    _schema_gate_decision.observed_schema_version,
+                    device_id,
+                )
+    except Exception as _schema_gate_err:
+        logger.debug(
+            "handoff_v2_result: schema gate check skipped (non-fatal): %s",
+            _schema_gate_err,
+        )
+
     if _ingest_handoff_response is not None:
         try:
             outcome = _ingest_handoff_response(message)

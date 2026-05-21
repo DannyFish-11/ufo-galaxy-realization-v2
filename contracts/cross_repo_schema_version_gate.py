@@ -122,6 +122,7 @@ STRICT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
         "handoff_envelope_v2_result",
         "goal_execution_result",
         "goal_result",
+        "task_result",
     }
 )
 
