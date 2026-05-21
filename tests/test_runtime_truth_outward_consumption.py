@@ -150,6 +150,11 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert "task_system_layered_status" in foundational
     assert "task_system_body_final_audit" in foundational
     assert payload["execution_stage"] is None
+    fingerprint = payload.get("authority_source_fingerprint")
+    assert isinstance(fingerprint, dict)
+    assert fingerprint.get("surface_path") == "/api/v1/projection/runtime-truth"
+    assert fingerprint.get("primary_source_kind") == "canonical_truth"
+    assert fingerprint.get("acts_as_authority_layer") is False
 
 
 def test_dispatch_semantics_exposes_planning_fields():

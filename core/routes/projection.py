@@ -39,6 +39,15 @@ if TYPE_CHECKING:  # pragma: no cover
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from core.authority_source_fingerprint import (
+    SOURCE_KIND_CANONICAL_TRUTH,
+    SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+    SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
+    SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+    SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+    build_authority_source_fingerprint,
+)
+
 logger = logging.getLogger("Galaxy.Routes.Projection")
 
 # PR-511: Projection Surface Bridge integration sentinel.
@@ -4328,6 +4337,17 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
         except Exception as exc:
             logger.debug("_assemble_runtime_truth_payload: control-plane contract unavailable: %s", exc)
 
+        payload["authority_source_fingerprint"] = build_authority_source_fingerprint(
+            surface_path="/api/v1/projection/runtime-truth",
+            primary_source_kind=SOURCE_KIND_CANONICAL_TRUTH,
+            source_roles={
+                SOURCE_KIND_CANONICAL_TRUTH: "primary",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+            },
+        )
         payload.setdefault("projection_surface_role", "runtime_truth_board_facing")
         payload.setdefault("board_facing_default", True)
         return payload
@@ -4401,6 +4421,17 @@ def _assemble_runtime_truth_payload() -> Dict[str, Any]:
             )
         except Exception as cp_exc:
             logger.debug("_assemble_runtime_truth_payload fallback: control-plane contract unavailable: %s", cp_exc)
+        payload["authority_source_fingerprint"] = build_authority_source_fingerprint(
+            surface_path="/api/v1/projection/runtime-truth",
+            primary_source_kind=SOURCE_KIND_CANONICAL_TRUTH,
+            source_roles={
+                SOURCE_KIND_CANONICAL_TRUTH: "primary",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+            },
+        )
         return payload
 
 
@@ -6884,6 +6915,17 @@ def _assemble_desktop_status_board_payload(route_paths: Any = None) -> Dict[str,
         )
     except Exception as exc:
         logger.debug("_assemble_desktop_status_board_payload: control-plane contract unavailable: %s", exc)
+    result["authority_source_fingerprint"] = build_authority_source_fingerprint(
+        surface_path="/api/v1/projection/desktop-status-board",
+        primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+        source_roles={
+            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "primary",
+            SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+        },
+    )
     result.setdefault("projection_surface_role", "desktop_status_board_truth")
     result.setdefault("board_facing_default", True)
     return result
@@ -6952,6 +6994,17 @@ def _minimal_desktop_status_board_fallback() -> Dict[str, Any]:
         "board_facing_default": True,
         "_assembled_at": time.time(),
     }
+    payload["authority_source_fingerprint"] = build_authority_source_fingerprint(
+        surface_path="/api/v1/projection/desktop-status-board",
+        primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+        source_roles={
+            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "primary",
+            SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+        },
+    )
     try:
         from core.v2_unified_state_contract import build_control_plane_surface_contract
 
