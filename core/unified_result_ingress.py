@@ -68,9 +68,9 @@ from __future__ import annotations
 import logging
 import os
 import re
-import threading
 import time
 import uuid
+import threading
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
@@ -840,6 +840,9 @@ class UnifiedResultIngress:
             ).strip()
             lineage_duplicate = False
             if lineage_key:
+                # Intentional: when a legacy path omits result_id / idempotency_key,
+                # task-level completion lineage still provides canonical duplicate
+                # suppression and evidence for terminal replays/re-sends.
                 checked_keys.append(lineage_key)
                 lineage_duplicate = check_result_idempotency(lineage_key)
             evidence["joint_idempotency_keys_checked"] = checked_keys
@@ -887,7 +890,11 @@ class UnifiedResultIngress:
                 completion_lineage.get("completion_lineage_key") or ""
             ).strip()
             if lineage_key:
+                # Intentional: lineage evidence remains durable even when a legacy
+                # path did not provide a separate result idempotency key.
                 record_result_idempotency(lineage_key)
+                # Keep the summary list unique because callers may explicitly set
+                # idempotency_key to the same composite lineage token.
                 if lineage_key not in recorded_keys:
                     recorded_keys.append(lineage_key)
             evidence["joint_idempotency_recorded_keys"] = recorded_keys
@@ -994,8 +1001,11 @@ class UnifiedResultIngress:
             # _stamp_android_truth_context(). If SSOT stamping is unavailable,
             # they remain None and completion ingress still degrades gracefully.
             notify_with_context = getattr(ingress, "notify_with_android_context", None)
+            has_explicit_context_notify = callable(
+                getattr(type(ingress), "notify_with_android_context", None)
+            ) or "notify_with_android_context" in getattr(ingress, "__dict__", {})
 
-            if callable(notify_with_context):
+            if callable(notify_with_context) and has_explicit_context_notify:
                 notified = bool(
                     notify_with_context(
                         env,
