@@ -70,6 +70,7 @@ import os
 import threading
 import uuid
 import re
+import time
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
@@ -311,6 +312,7 @@ class UnifiedResultIngress:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._last_closure_outcome: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -353,6 +355,7 @@ class UnifiedResultIngress:
                 continuity_verdict,
                 event.source_channel.value,
             )
+            self._record_last_closure_outcome(event, outcome)
             return outcome
 
         # Step 1: idempotency
@@ -365,6 +368,7 @@ class UnifiedResultIngress:
                 event.idempotency_key,
                 event.source_channel.value,
             )
+            self._record_last_closure_outcome(event, outcome)
             return outcome
 
         self._record_idempotency(event)
@@ -436,8 +440,36 @@ class UnifiedResultIngress:
         outcome.task_completed = bool(outcome.problem_execution_closure.get("task_completed"))
         outcome.problem_solved = bool(outcome.problem_execution_closure.get("problem_solved"))
         outcome.problem_solved_via = str(outcome.problem_execution_closure.get("problem_solved_via") or "")
+        self._record_last_closure_outcome(event, outcome)
 
         return outcome
+
+    def _record_last_closure_outcome(
+        self,
+        event: NormalizedResultEvent,
+        outcome: UnifiedResultIngressOutcome,
+    ) -> None:
+        summary = {
+            "available": True,
+            "task_id": event.task_id,
+            "device_id": event.device_id,
+            "normalized_status": outcome.normalized_status,
+            "is_fully_closed": bool(outcome.is_fully_closed),
+            "truth_chain_complete": bool(outcome.truth_chain_complete),
+            "completion_notified": bool(outcome.completion_notified),
+            "problem_solved": bool(outcome.problem_solved),
+            "problem_solved_via": str(outcome.problem_solved_via or ""),
+            "incomplete_reason": str(outcome.incomplete_reason or ""),
+            "source_channel": event.source_channel.value,
+            "closure_authority": "canonical_result_ingress",
+            "updated_at": time.time(),
+        }
+        with self._lock:
+            self._last_closure_outcome = summary
+
+    def get_last_closure_outcome(self) -> Dict[str, Any]:
+        with self._lock:
+            return dict(self._last_closure_outcome)
 
     async def process_async(
         self,
@@ -1176,6 +1208,11 @@ async def ingest_result_async(
     return await get_unified_result_ingress().process_async(event, store_fn=store_fn, bridge=bridge)
 
 
+def get_last_result_closure_outcome() -> Dict[str, Any]:
+    """Return the latest canonical closure summary observed by unified result ingress."""
+    return get_unified_result_ingress().get_last_closure_outcome()
+
+
 def normalize_status(raw_status: Optional[str]) -> str:
     """Map Android/device result status to canonical V2 task status.
 
@@ -1212,5 +1249,6 @@ __all__ = [
     "get_unified_result_ingress",
     "ingest_result",
     "ingest_result_async",
+    "get_last_result_closure_outcome",
     "normalize_status",
 ]

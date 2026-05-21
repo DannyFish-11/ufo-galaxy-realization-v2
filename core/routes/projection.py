@@ -3494,6 +3494,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             _canonical_enrichment: Optional[dict] = None
             _canonical_surfacing_state: str = "unavailable"
             _canonical_surfacing_gaps: list = []
+            _mesh_loop_baseline: Optional[dict] = None
+            _mesh_topology_readiness: str = "unavailable"
             try:
                 from core.multi_device_projection_canonicalization import (
                     enrich_multi_device_projection,
@@ -3524,6 +3526,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     _enrich_exc,
                 )
                 _canonical_surfacing_gaps = [f"GAP-517-008: canonical enrichment failed: {_enrich_exc}"]
+
+            try:
+                from core.mesh_coordinator import get_mesh_coordinator
+
+                _topology = get_mesh_coordinator().get_topology()
+                _mesh_loop_baseline = _topology.get("loop_baseline")
+                _mesh_topology_readiness = str(_topology.get("topology_readiness") or "unavailable")
+            except Exception as _mesh_baseline_exc:
+                logger.debug("multi-device projection: mesh loop baseline unavailable: %s", _mesh_baseline_exc)
 
             projection = build_multi_device_runtime_projection(
                 runtime_devices=runtime_devices,
@@ -3559,6 +3570,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                         else False
                     ),
                     "pr_522_gap_008_resolved": True,
+                    "mesh_topology_readiness": _mesh_topology_readiness,
+                    "mesh_loop_baseline": _mesh_loop_baseline,
                 },
             )
             return JSONResponse(content=projection.to_dict())
