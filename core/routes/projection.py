@@ -6590,6 +6590,16 @@ def _build_truth_acceptance_closure_contract(
     authority_completion_truth = bool(shared_visibility.get("authority_completion_truth"))
     if not authority_completion_truth and acceptance_verdict_normalized == "accept":
         authority_completion_truth = is_fully_closed
+    try:
+        from contracts.cross_repo_schema_version_gate import build_projection_schema_gate_metadata
+
+        schema_gate = build_projection_schema_gate_metadata()
+    except Exception as exc:
+        logger.debug("_build_truth_acceptance_closure_contract schema_gate unavailable: %s", exc)
+        schema_gate = {
+            "authority": "contracts.cross_repo_schema_version_gate.unavailable",
+            "gate_version": "unavailable",
+        }
     contract = {
         "authority_truth_source": dict(chain_contract.get("authority_truth_source") or {}),
         "acceptance_closure_truth": {
@@ -6622,6 +6632,7 @@ def _build_truth_acceptance_closure_contract(
             "failure_boundaries": list(chain.get("failure_boundaries") or []),
         },
         "gate_candidate": gate,
+        "schema_gate": schema_gate,
         "_source": "core.routes.projection._build_truth_acceptance_closure_contract",
     }
     if _build_final_acceptance_surface_boundary is not None:

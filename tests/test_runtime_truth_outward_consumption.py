@@ -4,6 +4,10 @@ from __future__ import annotations
 def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monkeypatch):
     import types
     import sys
+    from contracts.cross_repo_schema_version_gate import (
+        CROSS_REPO_SCHEMA_GATE_VERSION,
+        verify_cross_repo_schema_gate,
+    )
     from core.routes import projection as projection_routes
     import core.runtime.source_dispatch_orchestrator as orchestrator
 
@@ -82,6 +86,7 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
         "outward_projection_truth",
         "diagnostics_snapshot",
         "gate_candidate",
+        "schema_gate",
     }
     assert "outward_projection_truth" in truth_contract
     assert truth_contract["outward_projection_truth"]["projection_surface_role"] == "runtime_truth_board_facing"
@@ -103,6 +108,24 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert truth_contract["diagnostics_snapshot"]["is_audit_artifact"] is True
     assert truth_contract["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
     assert isinstance(truth_contract["diagnostics_snapshot"]["stage_count"], int)
+    assert truth_contract["schema_gate"]["gate_version"] == CROSS_REPO_SCHEMA_GATE_VERSION
+    report = verify_cross_repo_schema_gate(
+        message_type_values=[
+            "reconciliation_signal",
+            "handoff_envelope_v2",
+            "handoff_envelope_v2_result",
+            "takeover_request",
+            "takeover_response",
+            "mesh_join",
+            "mesh_result",
+            "mesh_leave",
+            "device_state_snapshot",
+            "device_execution_event",
+            "device_acceptance_report",
+        ],
+        runtime_truth_payload=payload,
+    )
+    assert report.passed, report.issues
     assert (
         payload["source_of_truth_boundaries"]["ui_visible_summary_constraint"]
         == "UI-visible summary is consumption-only interpretation and must not be promoted to backend truth."
