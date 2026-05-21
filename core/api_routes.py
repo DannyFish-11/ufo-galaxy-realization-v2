@@ -692,7 +692,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
-                            _raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _raw_epoch = (
+                                data["continuity_epoch"] if "continuity_epoch" in data
+                                else data.get("session_epoch")
+                            )
                             _epoch_val: Optional[int] = (
                                 int(_raw_epoch) if _raw_epoch is not None else None
                             )
@@ -762,7 +765,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             )
 
                             _goal_mapped_status = _normalize_status(data.get("status", ""))
-                            _goal_raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _goal_raw_epoch = (
+                                data["continuity_epoch"] if "continuity_epoch" in data
+                                else data.get("session_epoch")
+                            )
                             _goal_epoch_val: Optional[int] = (
                                 int(_goal_raw_epoch) if _goal_raw_epoch is not None else None
                             )
@@ -855,7 +861,10 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
-                            _ger_raw_epoch = data.get("continuity_epoch") or data.get("session_epoch")
+                            _ger_raw_epoch = (
+                                data["continuity_epoch"] if "continuity_epoch" in data
+                                else data.get("session_epoch")
+                            )
                             _ger_epoch_val: Optional[int] = (
                                 int(_ger_raw_epoch) if _ger_raw_epoch is not None else None
                             )

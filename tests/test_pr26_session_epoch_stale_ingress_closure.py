@@ -250,15 +250,10 @@ class TestEpochMismatchViaRegistry:
         registry_entry = _make_registry_entry(continuity_epoch=3)
 
         with patch(
-            "core.unified_result_ingress.UnifiedResultIngress._check_stale_epoch",
-            wraps=ingress._check_stale_epoch,
-        ) as _wrapped:
-            # Patch the registry lookup inside _check_stale_epoch
-            with patch(
-                "core.attached_runtime_session_registry.lookup_session_by_device",
-                return_value=registry_entry,
-            ):
-                outcome = ingress.process(evt)
+            "core.attached_runtime_session_registry.lookup_session_by_device",
+            return_value=registry_entry,
+        ):
+            outcome = ingress.process(evt)
 
         assert outcome.stale_epoch_rejected is False
 
@@ -315,6 +310,36 @@ class TestEpochMismatchViaRegistry:
             outcome = ingress.process(evt)
 
         assert outcome.stale_epoch_rejected is False
+
+    def test_D07_epoch_zero_is_valid_and_compared_correctly(self):
+        """session_epoch=0 is a valid epoch value and must not be treated as falsy."""
+        ingress = self._ingress()
+        # Presented epoch=0, stored epoch=0 → NOT stale
+        evt_match = _make_event(session_epoch=0, device_id="dev-epoch0-match")
+        registry_entry = _make_registry_entry(continuity_epoch=0)
+
+        with patch(
+            "core.attached_runtime_session_registry.lookup_session_by_device",
+            return_value=registry_entry,
+        ):
+            outcome = ingress.process(evt_match)
+
+        assert outcome.stale_epoch_rejected is False
+
+    def test_D08_epoch_zero_mismatch_is_stale(self):
+        """session_epoch=0 presented against stored epoch=1 must be classified stale."""
+        ingress = self._ingress()
+        evt = _make_event(session_epoch=0, device_id="dev-epoch0-mismatch")
+        registry_entry = _make_registry_entry(continuity_epoch=1)
+
+        with patch(
+            "core.attached_runtime_session_registry.lookup_session_by_device",
+            return_value=registry_entry,
+        ):
+            outcome = ingress.process(evt)
+
+        assert outcome.stale_epoch_rejected is True
+        assert outcome.stale_classification == "epoch_mismatch"
 
     def test_D06_evidence_contains_epoch_details_on_mismatch(self):
         ingress = self._ingress()
