@@ -159,9 +159,11 @@ class TestReconnectPendingLifecycleClosure:
 
         assert ack["continuity_outcome"] == "continuity_resume"
         assert ack["pending_lifecycle_decision_summary"]["resume_existing_execution"] == 1
+        assert ack["continuity_adjudication_summary"]["reconnect-recovery-required"] == 1
         decision = ack["pending_lifecycle_decisions"][0]
         assert decision["task_id"] == "resume-task"
         assert decision["decision"] == "resume_existing_execution"
+        assert decision["continuity_adjudication_classification"] == "reconnect-recovery-required"
 
         record = get_lifecycle_registry().get_record("resume-task")
         assert record is not None
@@ -197,8 +199,10 @@ class TestReconnectPendingLifecycleClosure:
         )
 
         assert ack["pending_lifecycle_decision_summary"]["closure_already_decided"] == 1
+        assert ack["continuity_adjudication_summary"]["abandoned-or-superseded"] == 1
         decision = ack["pending_lifecycle_decisions"][0]
         assert decision["decision"] == "closure_already_decided"
+        assert decision["continuity_adjudication_classification"] == "abandoned-or-superseded"
         assert not get_lifecycle_registry().is_pending("closure-task")
 
     @pytest.mark.asyncio
@@ -232,8 +236,10 @@ class TestReconnectPendingLifecycleClosure:
         )
 
         assert ack["pending_lifecycle_decision_summary"]["mark_abandoned_stale"] == 1
+        assert ack["continuity_adjudication_summary"]["abandoned-or-superseded"] == 1
         decision = ack["pending_lifecycle_decisions"][0]
         assert decision["decision"] == "mark_abandoned_stale"
+        assert decision["continuity_adjudication_classification"] == "abandoned-or-superseded"
         assert not get_lifecycle_registry().is_pending("stale-task")
 
     @pytest.mark.asyncio
@@ -281,9 +287,40 @@ class TestReconnectPendingLifecycleClosure:
         assert summary["resume_existing_execution"] == 1
         assert summary["request_replay_reconciliation"] == 1
         assert summary["trigger_failover"] == 1
+        cls_summary = ack["continuity_adjudication_summary"]
+        assert cls_summary["reconnect-recovery-required"] == 1
+        assert cls_summary["replay-reconciliation-required"] == 1
+        assert cls_summary["abandoned-or-superseded"] == 1
 
         registry = get_lifecycle_registry()
         assert registry.get_record("mixed-resume-task") is not None
         assert registry.get_record("mixed-resume-task").owner == LifecycleOwner.DEVICE_DISPATCH
         assert not registry.is_pending("mixed-routing-task")
         assert not registry.is_pending("mixed-ingress-task")
+
+    def test_canonical_ingress_and_reconnect_share_unified_classification_vocabulary(self) -> None:
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        ingress = UnifiedResultIngress()
+        ingress._check_continuity_legality = lambda e, mode: "allow"  # type: ignore[method-assign]
+        ingress._check_idempotency = lambda e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda e: True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda e, o: None  # type: ignore[method-assign]
+
+        from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel
+
+        event = NormalizedResultEvent(
+            task_id="same-vocab-task",
+            device_id="same-vocab-device",
+            raw_message_type="goal_execution_result",
+            normalized_result_kind="goal_execution_result",
+            normalized_status="completed",
+            source_channel=ResultSourceChannel.CANONICAL_WS,
+            payload={"task_id": "same-vocab-task", "status": "completed"},
+            idempotency_key="same-vocab-task",
+        )
+        outcome = ingress.process(event)
+        assert outcome.continuity_adjudication_classification == "current-accepted"
