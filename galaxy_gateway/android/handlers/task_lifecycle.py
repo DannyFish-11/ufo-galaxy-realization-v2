@@ -675,6 +675,9 @@ async def handle_task_result(
                     message.get("runtime_attachment_session_id") or ""
                 ),
                 durable_session_id=str(message.get("durable_session_id") or ""),
+                session_epoch=message.get("session_epoch"),
+                is_stale=bool(message.get("is_stale", False)),
+                stale_reason=str(message.get("stale_reason") or ""),
                 trace_id=str(message.get("trace_id") or ""),
                 raw_message=dict(message),
             )
@@ -688,6 +691,13 @@ async def handle_task_result(
             message["is_fully_closed"] = bool(_local_outcome.is_fully_closed)
             message["evidence_acceptance_verdict"] = str(
                 _local_outcome.evidence_acceptance_verdict or ""
+            )
+            message["stale_epoch_rejected"] = bool(_local_outcome.stale_epoch_rejected)
+            message["stale_classification"] = str(
+                _local_outcome.stale_classification or ""
+            )
+            message["stale_epoch_evidence"] = dict(
+                _local_outcome.stale_epoch_evidence or {}
             )
             if _local_outcome.incomplete_reason:
                 message["incomplete_reason"] = _local_outcome.incomplete_reason
