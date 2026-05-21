@@ -155,6 +155,10 @@ class NormalizedResultEvent:
     device_id: str = ""
     """The device that produced this result."""
 
+    participant_id: str = ""
+    """Participant identity for task-level completion lineage.
+    Defaults to ``device_id`` when a more specific participant identifier is absent."""
+
     raw_message_type: str = ""
     """The original ``type`` field from the inbound message before aliasing."""
 
@@ -192,6 +196,12 @@ class NormalizedResultEvent:
     trace_id: str = ""
     """Trace/correlation identifier (if provided by the source)."""
 
+    completion_emission_id: str = ""
+    """Stable identity for the emitted terminal completion signal.
+    Defaults to the first available completion-ish identifier from payload /
+    raw_message (for example ``completion_emission_id``, ``handoff_id``,
+    ``result_id``, ``message_id``) and falls back to ``<kind>:<status>``."""
+
     # ── Raw message (for downstream helpers that need the full envelope) ─────
     raw_message: Dict[str, Any] = field(default_factory=dict)
     """The complete inbound message dict before any normalisation."""
@@ -214,6 +224,39 @@ class NormalizedResultEvent:
     Propagated verbatim into the stale evidence dict for diagnostics."""
 
     def __post_init__(self) -> None:
+        if not self.participant_id:
+            self.participant_id = (
+                str(
+                    (self.payload or {}).get("participant_id")
+                    or (self.payload or {}).get("participant_identity")
+                    or (self.raw_message or {}).get("participant_id")
+                    or (self.raw_message or {}).get("participant_identity")
+                    or self.device_id
+                    or ""
+                ).strip()
+            )
+        if not self.completion_emission_id:
+            emission_candidates = (
+                "completion_emission_id",
+                "emission_id",
+                "completion_id",
+                "handoff_id",
+                "result_id",
+                "message_id",
+            )
+            for key in emission_candidates:
+                raw_value = (
+                    (self.payload or {}).get(key)
+                    or (self.raw_message or {}).get(key)
+                )
+                if raw_value not in (None, ""):
+                    self.completion_emission_id = str(raw_value).strip()
+                    break
+            if not self.completion_emission_id:
+                self.completion_emission_id = (
+                    str(self.trace_id or "").strip()
+                    or f"{self.normalized_result_kind}:{self.normalized_status}"
+                )
         # Auto-generate idempotency_key when not explicitly set.
         if not self.idempotency_key and self.task_id:
             self.idempotency_key = f"{self.normalized_result_kind}:{self.task_id}"
@@ -313,6 +356,14 @@ class UnifiedResultIngressOutcome:
     """Diagnostic evidence dict produced by the epoch stale gate.  Contains at
     minimum: ``task_id``, ``device_id``, ``session_epoch``, ``source_channel``,
     ``stale_trigger``, ``stale_classification``, ``stale_check_at``."""
+    completion_disposition: str = ""
+    """Canonical completion disposition: ``first_accepted``,
+    ``duplicate_ignored``, or ``stale_rejected``."""
+    completion_lineage: Dict[str, Any] = field(default_factory=dict)
+    """Task-level completion lineage evidence for this ingress event."""
+    joint_idempotency_evidence: Dict[str, Any] = field(default_factory=dict)
+    """Structured evidence describing the joint result-id and task-lineage
+    idempotency decision for this ingress event."""
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +393,7 @@ class UnifiedResultIngress:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._last_closure_outcome: Dict[str, Any] = {}
+        self._last_joint_idempotency_evidence: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -360,6 +412,8 @@ class UnifiedResultIngress:
             task_id=event.task_id,
             normalized_status=event.normalized_status,
         )
+        completion_lineage = self._build_completion_lineage(event)
+        outcome.completion_lineage = dict(completion_lineage)
 
         # Step 0: unified continuity legality gate
         # Terminal result ingestion MUST submit to the same continuity
@@ -396,6 +450,13 @@ class UnifiedResultIngress:
             outcome.stale_epoch_rejected = True
             outcome.stale_classification = _stale_cls
             outcome.stale_epoch_evidence = _stale_evidence
+            outcome.completion_disposition = "stale_rejected"
+            outcome.joint_idempotency_evidence = self._fallback_joint_idempotency_evidence(
+                event,
+                completion_lineage=completion_lineage,
+                decision="stale_rejected",
+                stale_classification=_stale_cls,
+            )
             outcome.incomplete_reason = f"stale_epoch_rejected:{_stale_cls}"
             logger.warning(
                 "unified_result_ingress: stale epoch gate blocked result "
@@ -412,6 +473,15 @@ class UnifiedResultIngress:
         # Step 1: idempotency
         if self._check_idempotency(event):
             outcome.was_deduplicated = True
+            outcome.completion_disposition = "duplicate_ignored"
+            outcome.joint_idempotency_evidence = (
+                self._consume_joint_idempotency_evidence()
+                or self._fallback_joint_idempotency_evidence(
+                    event,
+                    completion_lineage=completion_lineage,
+                    decision="duplicate_ignored",
+                )
+            )
             outcome.incomplete_reason = "deduplicated"
             logger.debug(
                 "unified_result_ingress: duplicate suppressed " "task_id=%r idempotency_key=%r source=%s",
@@ -423,6 +493,15 @@ class UnifiedResultIngress:
             return outcome
 
         self._record_idempotency(event)
+        outcome.completion_disposition = "first_accepted"
+        outcome.joint_idempotency_evidence = (
+            self._consume_joint_idempotency_evidence()
+            or self._fallback_joint_idempotency_evidence(
+                event,
+                completion_lineage=completion_lineage,
+                decision="first_accepted",
+            )
+        )
 
         logger.info(
             "unified_result_ingress: processing result " "task_id=%r status=%r kind=%r source=%s channel=%s",
@@ -513,6 +592,12 @@ class UnifiedResultIngress:
             "incomplete_reason": str(outcome.incomplete_reason or ""),
             "source_channel": event.source_channel.value,
             "closure_authority": "canonical_result_ingress",
+            "completion_disposition": str(outcome.completion_disposition or ""),
+            "completion_lineage": dict(outcome.completion_lineage or {}),
+            "joint_idempotency_evidence": dict(
+                outcome.joint_idempotency_evidence or {}
+            ),
+            "stale_classification": str(outcome.stale_classification or ""),
             "updated_at": time.time(),
         }
         with self._lock:
@@ -678,7 +763,9 @@ class UnifiedResultIngress:
         evidence: Dict[str, Any] = {
             "task_id": event.task_id,
             "device_id": event.device_id,
+            "participant_id": event.participant_id or event.device_id,
             "session_epoch": event.session_epoch,
+            "completion_emission_id": event.completion_emission_id,
             "source_channel": event.source_channel.value,
             "stale_check_at": time.time(),
         }
@@ -725,26 +812,83 @@ class UnifiedResultIngress:
 
     def _check_idempotency(self, event: NormalizedResultEvent) -> bool:
         """Return True iff the idempotency_key is already recorded."""
-        if not event.idempotency_key:
-            return False
+        completion_lineage = self._build_completion_lineage(event)
+        evidence = self._fallback_joint_idempotency_evidence(
+            event,
+            completion_lineage=completion_lineage,
+            decision="pending_first_record",
+        )
         try:
             from core.durable_result_idempotency import check_result_idempotency
 
-            return check_result_idempotency(event.idempotency_key)
+            checked_keys = []
+            result_duplicate = False
+            if event.idempotency_key:
+                checked_keys.append(event.idempotency_key)
+                result_duplicate = check_result_idempotency(event.idempotency_key)
+            lineage_key = str(
+                completion_lineage.get("completion_lineage_key") or ""
+            ).strip()
+            lineage_duplicate = False
+            if lineage_key:
+                checked_keys.append(lineage_key)
+                lineage_duplicate = check_result_idempotency(lineage_key)
+            evidence["joint_idempotency_keys_checked"] = checked_keys
+            evidence["result_idempotency_duplicate"] = bool(result_duplicate)
+            evidence["completion_lineage_duplicate"] = bool(lineage_duplicate)
+            duplicate_reason = ""
+            if result_duplicate and lineage_duplicate:
+                duplicate_reason = "result_idempotency+completion_lineage"
+            elif result_duplicate:
+                duplicate_reason = "result_idempotency"
+            elif lineage_duplicate:
+                duplicate_reason = "completion_lineage"
+            if duplicate_reason:
+                evidence["duplicate_reason"] = duplicate_reason
+                evidence["joint_idempotency_decision"] = "duplicate_ignored"
+            self._set_last_joint_idempotency_evidence(evidence)
+            return bool(result_duplicate or lineage_duplicate)
         except Exception as _e:
             logger.debug("unified_result_ingress: idempotency check skipped (non-fatal): %s", _e)
+            evidence["joint_idempotency_decision"] = "idempotency_check_skipped"
+            evidence["joint_idempotency_error"] = str(_e)
+            self._set_last_joint_idempotency_evidence(evidence)
             return False
 
     def _record_idempotency(self, event: NormalizedResultEvent) -> None:
         """Record the idempotency_key so subsequent duplicates are suppressed."""
-        if not event.idempotency_key:
-            return
+        completion_lineage = self._build_completion_lineage(event)
+        evidence = (
+            dict(self._last_joint_idempotency_evidence)
+            if self._last_joint_idempotency_evidence
+            else self._fallback_joint_idempotency_evidence(
+                event,
+                completion_lineage=completion_lineage,
+                decision="first_accepted",
+            )
+        )
         try:
             from core.durable_result_idempotency import record_result_idempotency
 
-            record_result_idempotency(event.idempotency_key)
+            recorded_keys = []
+            if event.idempotency_key:
+                record_result_idempotency(event.idempotency_key)
+                recorded_keys.append(event.idempotency_key)
+            lineage_key = str(
+                completion_lineage.get("completion_lineage_key") or ""
+            ).strip()
+            if lineage_key:
+                record_result_idempotency(lineage_key)
+                if lineage_key not in recorded_keys:
+                    recorded_keys.append(lineage_key)
+            evidence["joint_idempotency_recorded_keys"] = recorded_keys
+            evidence["joint_idempotency_decision"] = "first_accepted"
+            self._set_last_joint_idempotency_evidence(evidence)
         except Exception as _e:
             logger.debug("unified_result_ingress: idempotency record skipped (non-fatal): %s", _e)
+            evidence["joint_idempotency_decision"] = "idempotency_record_skipped"
+            evidence["joint_idempotency_error"] = str(_e)
+            self._set_last_joint_idempotency_evidence(evidence)
 
     def _run_truth_chain(self, event: NormalizedResultEvent) -> bool:
         """Run the four-step canonical truth chain and return True iff complete."""
@@ -1250,15 +1394,78 @@ class UnifiedResultIngress:
     def _log_outcome(self, event: NormalizedResultEvent, outcome: UnifiedResultIngressOutcome) -> None:
         logger.info(
             "unified_result_ingress: result processed "
-            "task_id=%r status=%r source=%s "
+            "task_id=%r status=%r source=%s disposition=%s "
             "truth_chain=%s completion=%s store=%s",
             event.task_id,
             event.normalized_status,
             event.source_channel.value,
+            outcome.completion_disposition,
             outcome.truth_chain_complete,
             outcome.completion_notified,
             outcome.store_task_result_ran,
         )
+
+    def _build_completion_lineage(
+        self,
+        event: NormalizedResultEvent,
+    ) -> Dict[str, Any]:
+        participant_id = str(
+            event.participant_id
+            or (event.payload or {}).get("participant_id")
+            or (event.payload or {}).get("participant_identity")
+            or event.device_id
+            or ""
+        ).strip()
+        completion_emission_id = str(
+            event.completion_emission_id
+            or event.trace_id
+            or f"{event.normalized_result_kind}:{event.normalized_status}"
+        ).strip()
+        epoch_token = (
+            str(event.session_epoch)
+            if event.session_epoch is not None
+            else "unknown_epoch"
+        )
+        lineage_key = (
+            f"completion_lineage:{event.normalized_result_kind}:{event.task_id}:"
+            f"{participant_id}:{epoch_token}:{completion_emission_id}"
+        )
+        return {
+            "task_id": event.task_id,
+            "device_id": event.device_id,
+            "participant_id": participant_id,
+            "session_epoch": event.session_epoch,
+            "completion_emission_id": completion_emission_id,
+            "source_channel": event.source_channel.value,
+            "normalized_result_kind": event.normalized_result_kind,
+            "normalized_status": event.normalized_status,
+            "result_idempotency_key": event.idempotency_key,
+            "completion_lineage_key": lineage_key,
+        }
+
+    def _fallback_joint_idempotency_evidence(
+        self,
+        event: NormalizedResultEvent,
+        *,
+        completion_lineage: Dict[str, Any],
+        decision: str,
+        stale_classification: str = "",
+    ) -> Dict[str, Any]:
+        evidence = dict(completion_lineage)
+        evidence["joint_idempotency_decision"] = decision
+        if stale_classification:
+            evidence["stale_classification"] = stale_classification
+        return evidence
+
+    def _set_last_joint_idempotency_evidence(self, evidence: Dict[str, Any]) -> None:
+        with self._lock:
+            self._last_joint_idempotency_evidence = dict(evidence)
+
+    def _consume_joint_idempotency_evidence(self) -> Dict[str, Any]:
+        with self._lock:
+            evidence = dict(self._last_joint_idempotency_evidence)
+            self._last_joint_idempotency_evidence = {}
+            return evidence
 
     def _build_problem_execution_closure(
         self,
