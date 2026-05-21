@@ -675,6 +675,9 @@ async def handle_task_result(
                     message.get("runtime_attachment_session_id") or ""
                 ),
                 durable_session_id=str(message.get("durable_session_id") or ""),
+                session_epoch=message.get("session_epoch"),
+                is_stale=bool(message.get("is_stale", False)),
+                stale_reason=str(message.get("stale_reason") or ""),
                 trace_id=str(message.get("trace_id") or ""),
                 raw_message=dict(message),
             )
