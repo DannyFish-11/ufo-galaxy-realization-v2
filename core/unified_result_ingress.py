@@ -226,10 +226,11 @@ class NormalizedResultEvent:
     @staticmethod
     def _first_available_text(*values: Any) -> str:
         for value in values:
-            if value not in (None, ""):
-                text = str(value).strip()
-                if text:
-                    return text
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
         return ""
 
     def _derive_participant_id(self) -> str:
@@ -1001,11 +1002,9 @@ class UnifiedResultIngress:
             # _stamp_android_truth_context(). If SSOT stamping is unavailable,
             # they remain None and completion ingress still degrades gracefully.
             notify_with_context = getattr(ingress, "notify_with_android_context", None)
-            has_explicit_context_notify = callable(
-                getattr(type(ingress), "notify_with_android_context", None)
-            ) or "notify_with_android_context" in getattr(ingress, "__dict__", {})
+            has_context_notify = self._has_context_notification_method(ingress)
 
-            if callable(notify_with_context) and has_explicit_context_notify:
+            if callable(notify_with_context) and has_context_notify:
                 notified = bool(
                     notify_with_context(
                         env,
@@ -1032,6 +1031,16 @@ class UnifiedResultIngress:
         except Exception as _e:
             logger.debug("unified_result_ingress: completion ingress skipped (non-fatal): %s", _e)
             return False
+
+    @staticmethod
+    def _has_context_notification_method(ingress: Any) -> bool:
+        # MagicMock-style test doubles can synthesize arbitrary callable
+        # attributes via __getattr__(). Require a class-level or explicitly
+        # attached instance attribute so mock-only completion ingress objects
+        # still exercise the plain notify() fallback path.
+        return callable(getattr(type(ingress), "notify_with_android_context", None)) or (
+            "notify_with_android_context" in getattr(ingress, "__dict__", {})
+        )
 
     def _apply_problem_solving_closure_fallback(self, event: NormalizedResultEvent) -> None:
         """Backfill closure booleans from Android wire closure class.

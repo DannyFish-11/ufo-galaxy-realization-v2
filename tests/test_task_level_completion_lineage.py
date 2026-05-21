@@ -63,7 +63,7 @@ def _make_ingress():
 
 
 @contextmanager
-def _patched_durable_idempotency():
+def _mock_idempotency_store():
     seen: set[str] = set()
 
     def _check(key: str) -> bool:
@@ -95,7 +95,7 @@ def test_first_accepted_completion_records_lineage_evidence():
     ingress = _make_ingress()
     task_id = _task_id()
 
-    with _patched_durable_idempotency():
+    with _mock_idempotency_store():
         outcome = ingress.process(_event(task_id=task_id))
 
     assert outcome.was_deduplicated is False
@@ -112,7 +112,7 @@ def test_same_completion_resend_is_duplicate_ignored_with_distinct_evidence():
     task_id = _task_id()
     event = _event(task_id=task_id)
 
-    with _patched_durable_idempotency():
+    with _mock_idempotency_store():
         first = ingress.process(event)
         duplicate = ingress.process(event)
 
@@ -137,7 +137,7 @@ def test_same_task_different_epoch_completion_is_stale_rejected():
     ingress = _make_ingress()
     task_id = _task_id()
 
-    with _patched_durable_idempotency(), patch(
+    with _mock_idempotency_store(), patch(
         "core.attached_runtime_session_registry.lookup_session_by_device",
         return_value=_registry_entry(9),
     ):
@@ -155,7 +155,7 @@ def test_reconnect_repeated_terminal_upload_is_caught_by_lineage_evidence():
     first = _event(task_id=task_id, idempotency_key="result-a", trace_id="trace-a")
     replay = _event(task_id=task_id, idempotency_key="result-b", trace_id="trace-b")
 
-    with _patched_durable_idempotency():
+    with _mock_idempotency_store():
         first_outcome = ingress.process(first)
         replay_outcome = ingress.process(replay)
 
