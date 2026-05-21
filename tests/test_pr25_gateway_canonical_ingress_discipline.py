@@ -5,6 +5,7 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastapi.websockets import WebSocket
 
 pytest.importorskip("websockets", reason="websockets required for gateway websocket tests")
 
@@ -26,11 +27,11 @@ def _make_client_with_captured_ingress(monkeypatch):
     captured = []
 
     async def _fake_handle_android_ws(
-        websocket,
-        device_id,
+        websocket: WebSocket,
+        device_id: str,
         *,
-        ingress_path="/ws/device/{device_id}",
-        ingress_classification="canonical",
+        ingress_path: str = "/ws/device/{device_id}",
+        ingress_classification: str = "canonical",
     ):
         captured.append(
             {

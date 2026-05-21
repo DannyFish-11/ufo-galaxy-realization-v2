@@ -50,6 +50,7 @@ IngressClassification = Literal[
 class DeviceWsIngressSurface(TypedDict):
     path: str
     classification: IngressClassification
+    android_bridge_ingress: bool
 
 # ============================================================================
 # CANONICAL_DEVICE_INGRESS_AUTHORITY
@@ -65,20 +66,44 @@ CANONICAL_DEVICE_INGRESS_AUTHORITY = (
 )
 
 DEVICE_WS_INGRESS_SURFACE_REGISTRY: tuple[DeviceWsIngressSurface, ...] = (
-    {"path": "/ws/device/{device_id}", "classification": "canonical"},
-    {"path": "/ws/android/{device_id}", "classification": "compat"},
-    {"path": "/ws/android", "classification": "compat"},
-    {"path": "/ws/ufo3/{device_id}", "classification": "legacy-disabled"},
-    {"path": "/ws/webrtc/{device_id}", "classification": "media"},
-    {"path": "/ws/{device_id}", "classification": "deprecated"},
-    {"path": "/ws", "classification": "debug"},
+    {
+        "path": "/ws/device/{device_id}",
+        "classification": "canonical",
+        "android_bridge_ingress": True,
+    },
+    {
+        "path": "/ws/android/{device_id}",
+        "classification": "compat",
+        "android_bridge_ingress": True,
+    },
+    {
+        "path": "/ws/android",
+        "classification": "compat",
+        "android_bridge_ingress": True,
+    },
+    {
+        "path": "/ws/ufo3/{device_id}",
+        "classification": "legacy-disabled",
+        "android_bridge_ingress": True,
+    },
+    {
+        "path": "/ws/webrtc/{device_id}",
+        "classification": "media",
+        "android_bridge_ingress": False,
+    },
+    {
+        "path": "/ws/{device_id}",
+        "classification": "deprecated",
+        "android_bridge_ingress": False,
+    },
+    {"path": "/ws", "classification": "debug", "android_bridge_ingress": False},
 )
 
 _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS = frozenset(
     {
         entry["classification"]
         for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
-        if entry["path"] in {"/ws/device/{device_id}", "/ws/android/{device_id}", "/ws/android", "/ws/ufo3/{device_id}"}
+        if entry["android_bridge_ingress"]
     }
 )
 
@@ -124,7 +149,8 @@ async def _handle_android_ws(
 
     if ingress_classification not in _ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS:
         raise ValueError(
-            f"Unsupported ingress_classification={ingress_classification!r} for Android WS ingress"
+            f"Unsupported ingress_classification={ingress_classification!r} for Android WS ingress. "
+            f"Valid classifications: {sorted(_ANDROID_BRIDGE_INGRESS_CLASSIFICATIONS)}"
         )
 
     await websocket.accept()
