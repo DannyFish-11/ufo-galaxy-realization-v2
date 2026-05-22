@@ -776,7 +776,7 @@ def _emit_audit_event(
                 "canonical_update": canonical_update,
                 "reject_reason": reject_reason,
                 "policy": policy,
-                "recovery_state_routing": dict(recovery_state_routing or {}),
+                "recovery_state_routing": recovery_state_routing or {},
             },
         )
         return True
@@ -1449,7 +1449,22 @@ def _reconcile_recovery_state(
     except Exception as exc:  # noqa: BLE001
         return False, "", f"recovery_state_routing_error:{exc}", "", {}
 
-    routing_decision = decision.to_dict()
+    try:
+        routing_decision = decision.to_dict()
+    except Exception as exc:  # noqa: BLE001
+        routing_decision = {
+            "recovery_phase": decision.recovery_phase.value,
+            "v2_route": decision.v2_route.value,
+            "policy_reference": decision.policy_reference,
+            "diagnosis": f"{decision.diagnosis} to_dict_error:{exc}",
+            "is_canonical_closure_blocked": decision.is_canonical_closure_blocked,
+            "is_advisory_only": decision.is_advisory_only,
+            "is_degraded": decision.is_degraded,
+            "device_id": decision.device_id,
+            "session_id": decision.session_id,
+            "task_id": decision.task_id,
+            "raw_phase_str": decision.raw_phase_str,
+        }
 
     route_value = decision.v2_route.value
 
