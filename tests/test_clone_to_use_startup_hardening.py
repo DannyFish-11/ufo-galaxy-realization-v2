@@ -74,6 +74,26 @@ class TestPreflightApiTokenPolicy:
         crit_vars = [f.check.var for f in report.criticals]
         assert "GALAXY_API_TOKEN" in crit_vars
 
+    def test_core_compat_ws_critical_when_enabled_in_protected_cross_device_mode(self, monkeypatch):
+        from core.config_preflight import run_preflight
+
+        monkeypatch.setenv("GALAXY_SYSTEM_MODE", "desktop-cross-device")
+        monkeypatch.setenv("GALAXY_ENABLE_CORE_COMPAT_WS", "true")
+        monkeypatch.delenv("GALAXY_ALLOW_PROTECTED_CORE_COMPAT_WS", raising=False)
+        report = run_preflight(dry_run=True, fail_fast=False, mode="gateway", verbose=False)
+        crit_vars = [f.check.var for f in report.criticals]
+        assert "GALAXY_ENABLE_CORE_COMPAT_WS" in crit_vars
+
+    def test_core_compat_ws_override_clears_protected_cross_device_critical(self, monkeypatch):
+        from core.config_preflight import run_preflight
+
+        monkeypatch.setenv("GALAXY_SYSTEM_MODE", "desktop-cross-device")
+        monkeypatch.setenv("GALAXY_ENABLE_CORE_COMPAT_WS", "true")
+        monkeypatch.setenv("GALAXY_ALLOW_PROTECTED_CORE_COMPAT_WS", "true")
+        report = run_preflight(dry_run=True, fail_fast=False, mode="gateway", verbose=False)
+        crit_vars = [f.check.var for f in report.criticals]
+        assert "GALAXY_ENABLE_CORE_COMPAT_WS" not in crit_vars
+
 
 class TestNatsProbeStrictness:
     """launcher.health_checks NATS TCP failure severity."""

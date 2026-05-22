@@ -107,6 +107,17 @@ API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL = (
     "get_api_compatibility_surface_registry()."
 )
 
+CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY = (
+    "CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY_V1: "
+    "core.api_routes compatibility websocket ingress is never production-equivalent. "
+    "The canonical Android/V2 device ingress remains galaxy_gateway.routes.websocket "
+    "/ws/device/{device_id}; protected cross-device mode blocks the core-direct "
+    "compatibility ingress unless an explicit override is set for controlled fallback use."
+)
+
+PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV = "GALAXY_ALLOW_PROTECTED_CORE_COMPAT_WS"
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
 
 @dataclass(frozen=True)
 class APICompatibilitySurface:
@@ -158,6 +169,90 @@ def _normalize_chat_context(raw_context: Any) -> Optional[List[Dict]]:
 def get_api_compatibility_surface_registry() -> List[Dict[str, str]]:
     """Return an explicit list of compatibility-only API surfaces."""
     return [entry.to_dict() for entry in _API_COMPATIBILITY_SURFACES]
+
+
+def _env_truthy(value: Any) -> bool:
+    """Return True when an env-style value matches the accepted truthy tokens."""
+    return str(value or "").strip().lower() in _TRUTHY_ENV_VALUES
+
+
+def get_core_compat_device_ingress_policy(
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Return the effective activation policy for the core-direct compat WS route."""
+    from core.system_mode import resolve_fabric_config
+
+    effective_env = dict(os.environ if env is None else env)
+    fabric = resolve_fabric_config(effective_env)
+    compat_requested = _env_truthy(effective_env.get("GALAXY_ENABLE_CORE_COMPAT_WS", ""))
+    protected_override = _env_truthy(
+        effective_env.get(PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV, "")
+    )
+    protected_mode = fabric.is_cross_device
+    blocked_by_protected_mode = (
+        compat_requested and protected_mode and not protected_override
+    )
+    effective_enabled = compat_requested and not blocked_by_protected_mode
+
+    if blocked_by_protected_mode:
+        policy_state = "blocked_protected_mode"
+        reason = (
+            "Protected cross-device mode forbids the core-direct compatibility websocket ingress. "
+            f"Use the canonical gateway ingress /ws/device/{{device_id}} or set "
+            f"{PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV}=true only for explicitly controlled fallback use."
+        )
+    elif effective_enabled:
+        policy_state = "enabled"
+        reason = (
+            "Compatibility websocket ingress is explicitly enabled for non-canonical fallback use."
+            if not protected_override
+            else "Compatibility websocket ingress override is active in protected mode."
+        )
+    else:
+        policy_state = "disabled"
+        reason = (
+            "Compatibility websocket ingress is disabled by default; use canonical gateway ingress "
+            "/ws/device/{device_id}."
+        )
+
+    return {
+        "authority": CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY,
+        "compatibility_surface": "/ws/device/{device_id}",
+        "compatibility_surface_factory": "core.api_routes.create_websocket_routes",
+        "classification": "compatibility-only",
+        "canonical_device_ingress": "/ws/device/{device_id}",
+        "canonical_device_ingress_module": "galaxy_gateway.routes.websocket",
+        "canonical_required_for_production": True,
+        "production_equivalent": False,
+        "system_mode": fabric.mode.value,
+        "cross_device_enabled": fabric.cross_device_enabled,
+        "protected_mode": protected_mode,
+        "compat_requested": compat_requested,
+        "protected_override": protected_override,
+        "override_env_var": PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,
+        "blocked_by_protected_mode": blocked_by_protected_mode,
+        "effective_enabled": effective_enabled,
+        "policy_state": policy_state,
+        "reason": reason,
+    }
+
+
+def get_device_ingress_surface_report(
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Return a machine-readable view of canonical and compatibility ingress surfaces."""
+    from galaxy_gateway.routes.websocket import (
+        CANONICAL_DEVICE_INGRESS_AUTHORITY,
+        DEVICE_WS_INGRESS_SURFACE_REGISTRY,
+    )
+
+    return {
+        "canonical_device_ingress_authority": CANONICAL_DEVICE_INGRESS_AUTHORITY,
+        "gateway_device_ingress_surfaces": [
+            dict(entry) for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
+        ],
+        "core_compat_device_ingress_policy": get_core_compat_device_ingress_policy(env),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -549,10 +644,15 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     from core.desktop_presence_runtime import (
         get_desktop_presence_runtime as _get_desktop_presence_runtime,
     )
-    compat_ws_enabled = os.getenv("GALAXY_ENABLE_CORE_COMPAT_WS", "").lower() in (
-        "1",
-        "true",
-        "yes",
+    compat_ws_policy = get_core_compat_device_ingress_policy()
+    logger.info(
+        "Core compat WS ingress policy resolved: state=%s requested=%s enabled=%s "
+        "protected_mode=%s system_mode=%s",
+        compat_ws_policy["policy_state"],
+        compat_ws_policy["compat_requested"],
+        compat_ws_policy["effective_enabled"],
+        compat_ws_policy["protected_mode"],
+        compat_ws_policy["system_mode"],
     )
 
     def _stamp_problem_closure_to_task_queue(
@@ -601,17 +701,41 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         Compatibility-only path.  The canonical device ingress is
         galaxy_gateway/routes/websocket.py /ws/device/{device_id}.
         """
-        if not compat_ws_enabled:
+        if not compat_ws_policy["effective_enabled"]:
+            blocked_by_policy = compat_ws_policy["blocked_by_protected_mode"]
+            message_type = (
+                "compat_ws_blocked_protected_mode"
+                if blocked_by_policy
+                else "compat_ws_disabled"
+            )
             await websocket.accept()
             await websocket.send_json(
                 {
-                    "type": "compat_ws_disabled",
-                    "message": "Core compatibility WS ingress is disabled by default.",
+                    "type": message_type,
+                    "message": compat_ws_policy["reason"],
                     "recommended_canonical_path": f"/ws/device/{device_id}",
-                    "how_to_enable": "Set GALAXY_ENABLE_CORE_COMPAT_WS=true explicitly for fallback use.",
+                    "system_mode": compat_ws_policy["system_mode"],
+                    "policy_state": compat_ws_policy["policy_state"],
+                    "override_env_var": compat_ws_policy["override_env_var"],
+                    "how_to_enable": (
+                        "Set GALAXY_ENABLE_CORE_COMPAT_WS=true explicitly for fallback use."
+                        if not blocked_by_policy
+                        else (
+                            "Unset GALAXY_ENABLE_CORE_COMPAT_WS or move to canonical gateway ingress. "
+                            f"Only set {compat_ws_policy['override_env_var']}=true for explicitly "
+                            "controlled migration/debug fallback in protected mode."
+                        )
+                    ),
                 }
             )
-            await websocket.close(code=1008, reason="Core compat WS disabled")
+            await websocket.close(
+                code=1008,
+                reason=(
+                    "Core compat WS blocked by protected-mode policy"
+                    if blocked_by_policy
+                    else "Core compat WS disabled"
+                ),
+            )
             return
 
         logger.warning(

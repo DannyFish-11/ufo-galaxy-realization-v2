@@ -22,6 +22,16 @@ from core.operational_readiness_surface import (
 logger = logging.getLogger("Galaxy.Routes.OperationalReadiness")
 
 
+def _build_ingress_surface_context() -> dict:
+    try:
+        from core.api_routes import get_device_ingress_surface_report
+
+        return get_device_ingress_surface_report()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Operational readiness ingress surface context unavailable: %s", exc)
+        return {"error": str(exc)}
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create the read-only operational readiness router.
 
@@ -37,6 +47,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         report = build_operational_readiness_report(route_paths=route_paths)
         payload = report.to_dict()
         payload["route_surface_authority"] = OPERATIONAL_READINESS_SURFACE_AUTHORITY
+        payload["device_ingress_surfaces"] = _build_ingress_surface_context()
         return JSONResponse(content=payload)
 
     @router.get("/api/v1/projection/clone-to-use-acceptance")

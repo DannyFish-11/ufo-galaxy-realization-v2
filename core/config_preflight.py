@@ -50,10 +50,13 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
+import logging
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
+
+logger = logging.getLogger("Galaxy.ConfigPreflight")
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +467,63 @@ def _adjust_findings_for_token_policy(findings: List[Finding]) -> List[Finding]:
     return out
 
 
+def _build_protected_compat_ws_policy_finding() -> Optional[Finding]:
+    """Return a CRITICAL finding only for protected-mode compat WS policy violations.
+
+    Returns ``None`` when the compat ingress policy is not violated or when the
+    policy helper cannot be imported/evaluated.
+    """
+    try:
+        from core.api_routes import (
+            PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,
+            get_core_compat_device_ingress_policy,
+        )
+    except ImportError:
+        return None
+
+    try:
+        policy = get_core_compat_device_ingress_policy()
+    except Exception as exc:
+        logger.warning("Compat WS policy preflight probe failed: %s", exc)
+        return None
+    if not policy.get("blocked_by_protected_mode"):
+        return None
+
+    return Finding(
+        check=EnvCheck(
+            var="GALAXY_ENABLE_CORE_COMPAT_WS",
+            severity=Severity.CRITICAL,
+            description=(
+                "Core compatibility websocket ingress cannot be activated in protected "
+                "cross-device mode without an explicit override."
+            ),
+            hint=(
+                "Unset GALAXY_ENABLE_CORE_COMPAT_WS and use the canonical gateway ingress "
+                "/ws/device/{device_id} for production/cross-device operation.\n"
+                f"Only set {PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV}=true for explicitly "
+                "controlled migration/debug fallback sessions."
+            ),
+            groups=["gateway", "android", "all"],
+            allow_placeholder=False,
+        ),
+        present=False,
+    )
+
+
+def _augment_findings_with_compat_ws_policy(
+    findings: List[Finding],
+    groups: Sequence[str],
+) -> List[Finding]:
+    """Append protected-mode compat WS policy violations as CRITICAL findings."""
+    if not any(group in {"gateway", "android", "all"} for group in groups):
+        return findings
+
+    policy_finding = _build_protected_compat_ws_policy_finding()
+    if policy_finding is None:
+        return findings
+    return [*findings, policy_finding]
+
+
 def run_preflight(
     dry_run: bool = False,
     fail_fast: bool = True,
@@ -507,6 +567,7 @@ def run_preflight(
         findings.append(Finding(check=check, present=present, value_hint=hint))
 
     findings = _adjust_findings_for_token_policy(findings)
+    findings = _augment_findings_with_compat_ws_policy(findings, groups)
 
     report = PreflightReport(findings=findings, mode=mode)
 

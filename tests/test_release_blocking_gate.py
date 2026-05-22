@@ -81,6 +81,7 @@ try:
         CAPABILITY_STATE_MISMATCH_IS_BLOCKING_POLICY,
         PROTOCOL_DRIFT_IS_BLOCKING_POLICY,
         RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY,
+        PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY,
         ReleaseBlockingGateError,
         GateCriterionResult,
         ReleaseGateDecision,
@@ -119,6 +120,7 @@ _EXPECTED_CRITERION_IDS = {
     "protocol_drift",
     "readiness_matrix_not_blocked",
     "mainline_enforcement_callsite",
+    "protected_compat_ingress_policy",
 }
 
 
@@ -173,6 +175,7 @@ class TestGroupA_Sentinels:
             CAPABILITY_STATE_MISMATCH_IS_BLOCKING_POLICY,
             PROTOCOL_DRIFT_IS_BLOCKING_POLICY,
             RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY,
+            PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY,
         ):
             assert isinstance(policy, str) and len(policy) > 10, (
                 f"Policy string too short or not a string: {policy!r}"
@@ -276,22 +279,24 @@ class TestGroupC_ExitCode:
 
     def test_C03_raise_on_failure_raises_error(self):
         """evaluate_release_gate(raise_on_failure=True) must raise when blocked."""
-        decision = _make_blocked_decision()
-        with patch(
-            "core.release_blocking_gate.evaluate_release_gate",
-            wraps=lambda raise_on_failure=False: (
-                (_ for _ in ()).throw(
-                    ReleaseBlockingGateError(
-                        failed_criteria=decision.failed_criteria,
-                        decision=decision,
-                    )
+        import core.release_blocking_gate as _rbg
+
+        with patch.object(
+            _rbg,
+            "_CRITERIA_DEFS",
+            [
+                (
+                    "synthetic_block",
+                    "Synthetic Block",
+                    True,
+                    lambda: (CriterionStatus.FAILED, "synthetic failure"),
                 )
-                if raise_on_failure
-                else decision
-            ),
+            ],
         ):
-            with pytest.raises(ReleaseBlockingGateError):
-                evaluate_release_gate(raise_on_failure=True)
+            with pytest.raises(ReleaseBlockingGateError) as exc_info:
+                _rbg.evaluate_release_gate(raise_on_failure=True)
+        assert exc_info.value.failed_criteria == ["synthetic_block"]
+        assert isinstance(exc_info.value.decision, ReleaseGateDecision)
 
     def test_C04_error_has_failed_criteria(self):
         """ReleaseBlockingGateError.failed_criteria must be a non-empty list."""
@@ -377,3 +382,19 @@ class TestGroupD_EvaluateGate:
             assert status_val in valid, (
                 f"Criterion '{cr.criterion_id}' has invalid status: {status_val!r}"
             )
+
+    def test_D08_protected_compat_ingress_policy_blocks_requested_cross_device_compat(self):
+        from core.release_blocking_gate import _crit_protected_compat_ingress_policy
+
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+                "GALAXY_ENABLE_CORE_COMPAT_WS": "true",
+            },
+            clear=False,
+        ):
+            status, detail = _crit_protected_compat_ingress_policy()
+
+        assert status == CriterionStatus.FAILED
+        assert "canonical gateway ingress" in detail.lower() or "canonical" in detail.lower()
