@@ -1596,3 +1596,355 @@ class TestCanonicalGoalExecutionResultCompletion:
                 f"For raw_status={raw_status!r}, ingest_result_async received "
                 f"{received_statuses!r} instead of [{expected!r}]"
             )
+
+
+# ===========================================================================
+# Group K — Replay ordering adjudication (Step 0.75)
+# ===========================================================================
+
+
+def _make_replay_event(
+    task_id: Optional[str] = None,
+    replay_seq: Optional[int] = None,
+    replay_item_id: str = "",
+    replay_session_id: str = "test-session",
+    status: str = "completed",
+) -> Any:
+    """Build a NormalizedResultEvent on the REPLAY channel with ordering metadata."""
+    from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel
+
+    tid = task_id or _make_task_id()
+    evt = NormalizedResultEvent(
+        task_id=tid,
+        device_id="test-device",
+        raw_message_type="goal_execution_result",
+        normalized_result_kind="goal_execution_result",
+        normalized_status=status,
+        source_channel=ResultSourceChannel.REPLAY,
+        payload={"task_id": tid, "status": status, "result": "ok"},
+        trace_id="trace-replay-test",
+    )
+    evt.replay_seq = replay_seq
+    evt.replay_item_id = replay_item_id
+    evt.replay_session_id = replay_session_id
+    return evt
+
+
+def _make_isolated_replay_ingress():
+    """Return a fresh UnifiedResultIngress wired with no-op chain steps for isolation."""
+    from core.unified_result_ingress import UnifiedResultIngress
+
+    ingress = UnifiedResultIngress()
+    ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+    ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+    ingress._run_truth_chain = lambda _e: True  # type: ignore[method-assign]
+    ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+    ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+    ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+    return ingress
+
+
+class TestReplayOrderingAdjudication:
+    """Group K — Replay ordering adjudication (Step 0.75)."""
+
+    def test_K01_sentinel_present(self):
+        """UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY must be importable and non-empty."""
+        from core.unified_result_ingress import UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY
+
+        assert isinstance(UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY, str)
+        assert len(UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY) > 40
+        assert "REPLAY_ORDERING" in UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY
+
+    def test_K02_blocking_decisions_set_is_non_empty(self):
+        """REPLAY_ORDERING_BLOCKING_DECISIONS must contain out-of-order and stale."""
+        from core.unified_result_ingress import REPLAY_ORDERING_BLOCKING_DECISIONS
+
+        assert "reject_out_of_order" in REPLAY_ORDERING_BLOCKING_DECISIONS
+        assert "reject_stale" in REPLAY_ORDERING_BLOCKING_DECISIONS
+
+    def test_K03_in_order_replay_accepted(self):
+        """REPLAY event with valid ordering metadata is accepted (not blocked)."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        evt = _make_replay_event(
+            replay_seq=1,
+            replay_item_id="item-001",
+            replay_session_id="session-A",
+        )
+        outcome = ingress.process(evt)
+
+        assert outcome.replay_ordering_adjudicated is True
+        assert outcome.replay_ordering_decision == "accept"
+        assert outcome.replay_ordering_verdict == "authoritative_contract_defined"
+        assert outcome.replay_ordering_evidence["adjudication_status"] == "evaluated"
+        assert outcome.is_fully_closed is True
+
+    def test_K04_out_of_order_replay_blocked(self):
+        """REPLAY event with seq below session maximum is rejected (out of order)."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        # Accept seq=10 first to advance session max
+        evt1 = _make_replay_event(
+            replay_seq=10,
+            replay_item_id="item-010",
+            replay_session_id="session-oor",
+        )
+        ingress.process(evt1)
+
+        # Now send seq=5 (below max=10, within stale window) → out of order
+        evt2 = _make_replay_event(
+            task_id=_make_task_id(),
+            replay_seq=5,
+            replay_item_id="item-005",
+            replay_session_id="session-oor",
+        )
+        outcome = ingress.process(evt2)
+
+        assert outcome.replay_ordering_adjudicated is True
+        assert outcome.replay_ordering_decision == "reject_out_of_order"
+        assert outcome.is_fully_closed is False
+        assert "replay_ordering_rejected" in outcome.incomplete_reason
+
+    def test_K05_stale_replay_blocked(self):
+        """REPLAY event more than STALE_SEQ_WINDOW below max is classified stale and blocked."""
+        from core.offline_replay_ordering_contract import STALE_SEQ_WINDOW
+
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        # Advance session max to STALE_SEQ_WINDOW + 5
+        high_seq = STALE_SEQ_WINDOW + 5
+        evt1 = _make_replay_event(
+            replay_seq=high_seq,
+            replay_item_id="item-high",
+            replay_session_id="session-stale",
+        )
+        ingress.process(evt1)
+
+        # Send seq=0 (more than STALE_SEQ_WINDOW below high_seq) → stale
+        evt2 = _make_replay_event(
+            task_id=_make_task_id(),
+            replay_seq=0,
+            replay_item_id="item-stale",
+            replay_session_id="session-stale",
+        )
+        outcome = ingress.process(evt2)
+
+        assert outcome.replay_ordering_adjudicated is True
+        assert outcome.replay_ordering_decision == "reject_stale"
+        assert outcome.is_fully_closed is False
+        assert "replay_ordering_rejected" in outcome.incomplete_reason
+
+    def test_K06_duplicate_replay_decision_not_hard_blocked(self):
+        """REPLAY event with duplicate item_id is reject_duplicate but not hard-blocked.
+
+        The idempotency gate (Step 1) handles true duplicates.
+        reject_duplicate in replay ordering does not block — it is not in
+        REPLAY_ORDERING_BLOCKING_DECISIONS.
+        """
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        evt1 = _make_replay_event(
+            replay_seq=1,
+            replay_item_id="dup-item",
+            replay_session_id="session-dup",
+        )
+        ingress.process(evt1)
+
+        # Same item_id again → reject_duplicate (not hard-blocked)
+        evt2 = _make_replay_event(
+            task_id=_make_task_id(),
+            replay_seq=2,
+            replay_item_id="dup-item",  # same item_id
+            replay_session_id="session-dup",
+        )
+        outcome = ingress.process(evt2)
+
+        assert outcome.replay_ordering_adjudicated is True
+        assert outcome.replay_ordering_decision == "reject_duplicate"
+        # Not hard-blocked by replay ordering (idempotency handles this)
+        assert "replay_ordering_rejected" not in (outcome.incomplete_reason or "")
+
+    def test_K07_missing_ordering_metadata_produces_ambiguous_not_blocked(self):
+        """REPLAY event with no replay_seq and no replay_item_id → ambiguous_authority.
+
+        Missing metadata is NOT hard-blocked but produces a downgraded verdict
+        (not authoritative_contract_defined).
+        """
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        evt = _make_replay_event(
+            replay_seq=None,
+            replay_item_id="",  # missing
+        )
+        outcome = ingress.process(evt)
+
+        assert outcome.replay_ordering_adjudicated is True
+        assert outcome.replay_ordering_decision == "ambiguous_authority"
+        assert outcome.replay_ordering_verdict == "downgraded"
+        # Not hard-blocked
+        assert "replay_ordering_rejected" not in (outcome.incomplete_reason or "")
+        # Evidence is always populated
+        assert outcome.replay_ordering_evidence["adjudication_status"] == "missing_ordering_metadata"
+        assert "missing_fields" in outcome.replay_ordering_evidence
+
+    def test_K08_non_replay_channel_not_adjudicated(self):
+        """Non-REPLAY channel events must NOT have replay ordering adjudication run."""
+        ingress = _make_isolated_replay_ingress()
+
+        for channel in ("canonical_ws", "compat_ws", "rest_callback", "delegated"):
+            evt = _make_event(_make_task_id(), channel=channel)
+            outcome = ingress.process(evt)
+            assert outcome.replay_ordering_adjudicated is False, (
+                f"Channel {channel!r} should not trigger replay ordering adjudication"
+            )
+            assert outcome.replay_ordering_decision == ""
+            assert outcome.replay_ordering_verdict == ""
+            assert outcome.replay_ordering_evidence == {}
+
+    def test_K09_replay_ordering_evidence_always_in_outcome(self):
+        """Replay ordering evidence dict must be populated for all REPLAY events."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        for seq, item_id in [(1, "a"), (None, ""), (2, "b")]:
+            evt = _make_replay_event(replay_seq=seq, replay_item_id=item_id or "")
+            outcome = ingress.process(evt)
+            assert outcome.replay_ordering_adjudicated is True
+            assert isinstance(outcome.replay_ordering_evidence, dict)
+            assert "ordering_decision" in outcome.replay_ordering_evidence
+            assert "ordering_verdict" in outcome.replay_ordering_evidence
+
+    def test_K10_ordered_sequence_all_accepted(self):
+        """REPLAY events with monotonically increasing seq are all accepted."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        session_id = "session-ordered"
+        outcomes = []
+        for i in range(1, 6):
+            evt = _make_replay_event(
+                replay_seq=i,
+                replay_item_id=f"item-{i:03d}",
+                replay_session_id=session_id,
+            )
+            outcomes.append(ingress.process(evt))
+
+        decisions = [o.replay_ordering_decision for o in outcomes]
+        assert all(d == "accept" for d in decisions), (
+            f"All in-order items should be accepted; got: {decisions}"
+        )
+
+    def test_K11_blocking_replay_decision_does_not_reach_truth_chain(self):
+        """Truth chain must NOT be called for blocked replay events."""
+        from core.unified_result_ingress import UnifiedResultIngress
+
+        truth_chain_calls: list = []
+        ingress = UnifiedResultIngress()
+        ingress._check_idempotency = lambda _e: False  # type: ignore[method-assign]
+        ingress._record_idempotency = lambda _e: None  # type: ignore[method-assign]
+        ingress._run_truth_chain = lambda _e: truth_chain_calls.append("called") or True  # type: ignore[method-assign]
+        ingress._sync_lifecycle = lambda _e: None  # type: ignore[method-assign]
+        ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
+        ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
+        ingress.reset_replay_session_state()
+
+        # First item to advance session max
+        evt1 = _make_replay_event(
+            replay_seq=10,
+            replay_item_id="item-10",
+            replay_session_id="session-block",
+        )
+        ingress.process(evt1)
+        truth_chain_calls.clear()
+
+        # Out-of-order item — must be blocked before truth chain
+        evt2 = _make_replay_event(
+            task_id=_make_task_id(),
+            replay_seq=3,
+            replay_item_id="item-03",
+            replay_session_id="session-block",
+        )
+        outcome = ingress.process(evt2)
+
+        assert outcome.replay_ordering_decision == "reject_out_of_order"
+        assert outcome.is_fully_closed is False
+        assert truth_chain_calls == [], (
+            "Truth chain must not be called for blocked replay events"
+        )
+
+    def test_K12_evidence_dict_contains_required_keys_for_evaluated_case(self):
+        """Replay ordering evidence must have all required keys when evaluated."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        evt = _make_replay_event(
+            replay_seq=5,
+            replay_item_id="item-ev",
+            replay_session_id="session-ev",
+        )
+        outcome = ingress.process(evt)
+
+        required_keys = {
+            "adjudication_status",
+            "task_id",
+            "device_id",
+            "replay_item_id",
+            "replay_seq",
+            "session_key",
+            "ordering_decision",
+            "ordering_verdict",
+            "adjudication_at",
+        }
+        ev = outcome.replay_ordering_evidence
+        missing = required_keys - ev.keys()
+        assert not missing, f"Replay ordering evidence missing keys: {missing}"
+
+    def test_K13_last_closure_outcome_includes_replay_ordering(self):
+        """get_last_closure_outcome() must include replay ordering evidence for REPLAY events."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        evt = _make_replay_event(
+            replay_seq=1,
+            replay_item_id="item-lco",
+            replay_session_id="session-lco",
+        )
+        ingress.process(evt)
+
+        last = ingress.get_last_closure_outcome()
+        assert last.get("replay_ordering_adjudicated") is True
+        assert last.get("replay_ordering_decision") == "accept"
+        assert last.get("replay_ordering_verdict") == "authoritative_contract_defined"
+        assert isinstance(last.get("replay_ordering_evidence"), dict)
+
+    def test_K14_different_sessions_tracked_independently(self):
+        """Items in different session_ids must not affect each other's seq tracking."""
+        ingress = _make_isolated_replay_ingress()
+        ingress.reset_replay_session_state()
+
+        # Advance session A to max_seq=10
+        evt_a = _make_replay_event(
+            replay_seq=10,
+            replay_item_id="a-item-010",
+            replay_session_id="session-A",
+        )
+        ingress.process(evt_a)
+
+        # Session B starting at seq=1 should be accepted (independent tracking)
+        evt_b = _make_replay_event(
+            task_id=_make_task_id(),
+            replay_seq=1,
+            replay_item_id="b-item-001",
+            replay_session_id="session-B",
+        )
+        outcome_b = ingress.process(evt_b)
+
+        assert outcome_b.replay_ordering_decision == "accept", (
+            "Session B seq=1 should be accepted independently of Session A max=10"
+        )
+

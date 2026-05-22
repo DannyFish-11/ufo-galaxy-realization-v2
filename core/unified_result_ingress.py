@@ -87,8 +87,14 @@ logger = logging.getLogger("Galaxy.UnifiedResultIngress")
 # Evidence verdicts that must block full closure in unified ingress.
 EVIDENCE_CLOSURE_BLOCKING_VERDICTS = frozenset({"quarantine", "reject"})
 
+# Replay ordering decisions that block canonical closure.
+REPLAY_ORDERING_BLOCKING_DECISIONS = frozenset({
+    "reject_out_of_order",
+    "reject_stale",
+})
+
 # ---------------------------------------------------------------------------
-# Authority sentinel
+# Authority sentinels
 # ---------------------------------------------------------------------------
 
 UNIFIED_RESULT_INGRESS_POLICY: str = (
@@ -98,6 +104,19 @@ UNIFIED_RESULT_INGRESS_POLICY: str = (
     "result signal into a NormalizedResultEvent and pass it to "
     "ingest_result() before any state mutation occurs.  No competing result "
     "processing chain is permitted."
+)
+
+UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY: str = (
+    "UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_V1: For ResultSourceChannel.REPLAY "
+    "events, replay ordering adjudication MUST run (Step 0.75) before idempotency "
+    "recording and canonical closure adjudication.  Ordering evaluation uses the "
+    "contract defined in core.offline_replay_ordering_contract "
+    "(evaluate_replay_sequence / STALE_SEQ_WINDOW / OfflineReplayItemDecision).  "
+    "Decisions reject_out_of_order and reject_stale MUST block canonical closure.  "
+    "Decision ambiguous_authority (missing replay_item_id + replay_seq) MUST NOT "
+    "silently promote to full canonical closure.  "
+    "Missing ordering metadata produces visible evidence rather than silent acceptance.  "
+    "Non-REPLAY channels are not subject to replay ordering adjudication."
 )
 
 
@@ -228,6 +247,28 @@ class NormalizedResultEvent:
     stale_reason: str = ""
     """Human-readable reason string populated by the caller when ``is_stale=True``.
     Propagated verbatim into the stale evidence dict for diagnostics."""
+
+    # ── Replay ordering metadata (required for REPLAY channel adjudication) ──
+    replay_seq: Optional[int] = None
+    """Sequence number from the Android offline replay queue.
+    Required for replay ordering adjudication (Step 0.75).  When absent on a
+    REPLAY channel event, the item cannot be positively confirmed in-order and
+    the ordering decision is ``ambiguous_authority``.
+    Android callers MUST populate this from ``OfflineTaskQueue`` item seq."""
+
+    replay_session_id: str = ""
+    """Session scope identifier for replay ordering.  Defines the boundary
+    within which sequence numbers are compared for ordering enforcement.
+    Defaults to ``runtime_session_id`` when not explicitly set by the caller.
+    Android callers SHOULD populate this from the session that produced the
+    queued item so that cross-session replays remain identifiable."""
+
+    replay_item_id: str = ""
+    """Unique item identifier from the Android offline replay queue.
+    Required for per-item duplicate detection within a replay sequence.
+    When absent, the ordering contract cannot apply duplicate-avoidance and
+    classifies the item as ``ambiguous_authority``.
+    Android callers MUST populate this from ``OfflineTaskQueue`` item id."""
 
     @staticmethod
     def _first_available_text(*values: Any) -> str:
@@ -372,6 +413,22 @@ class UnifiedResultIngressOutcome:
     """Diagnostic evidence dict produced by the epoch stale gate.  Contains at
     minimum: ``task_id``, ``device_id``, ``session_epoch``, ``source_channel``,
     ``stale_trigger``, ``stale_classification``, ``stale_check_at``."""
+    # Replay ordering adjudication (Step 0.75 — REPLAY channel only)
+    replay_ordering_adjudicated: bool = False
+    """True iff replay ordering adjudication ran for this event (REPLAY channel only).
+    False for all non-REPLAY channel events and when the contract module is unavailable."""
+    replay_ordering_decision: str = ""
+    """Per-item ordering decision from the replay ordering contract.
+    One of ``accept``, ``reject_out_of_order``, ``reject_stale``,
+    ``reject_duplicate``, ``ambiguous_authority``.  Empty for non-REPLAY events."""
+    replay_ordering_verdict: str = ""
+    """Contract-level verdict from replay ordering adjudication.
+    One of ``authoritative_contract_defined``, ``contract_partially_evidenced``,
+    ``downgraded``, ``contract_not_yet_evidenced``.  Empty for non-REPLAY events."""
+    replay_ordering_evidence: Dict[str, Any] = field(default_factory=dict)
+    """Structured evidence from replay ordering adjudication.  Contains at minimum:
+    ``adjudication_status``, ``ordering_decision``, ``ordering_verdict``,
+    ``replay_item_id``, ``replay_seq``, ``session_key``.  Empty for non-REPLAY events."""
     completion_disposition: str = ""
     """Canonical completion disposition: ``first_accepted``,
     ``duplicate_ignored``, or ``stale_rejected``."""
@@ -404,14 +461,17 @@ class UnifiedResultIngress:
 
     Processing chain steps (in order)
     ----------------------------------
-    1. idempotency check / record
-    2. run_task_result_truth_chain (four-step truth chain)
-    3. CanonicalTaskRuntime lifecycle update  (if not already done by step 2)
-    4. Evidence quality classification (PR-4: execution evidence model + acceptance gate)
-    5. Stamp Android truth SSOT context (participation tier / readiness basis)
-    6. CanonicalCompletionIngress notify_with_android_context() / notify()
-    7. store_task_result / memory backflow    (async, best-effort)
-    8. structured logging
+    0.   Unified continuity legality gate
+    0.5. Session epoch stale gate
+    0.75 Replay ordering adjudication (REPLAY channel only)
+    1.   Idempotency check / record
+    2.   run_task_result_truth_chain (four-step truth chain)
+    3.   CanonicalTaskRuntime lifecycle update  (if not already done by step 2)
+    4.   Evidence quality classification (PR-4: execution evidence model + acceptance gate)
+    5.   Stamp Android truth SSOT context (participation tier / readiness basis)
+    6.   CanonicalCompletionIngress notify_with_android_context() / notify()
+    7.   store_task_result / memory backflow    (async, best-effort)
+    8.   Structured logging
     """
 
     def __init__(self) -> None:
@@ -419,6 +479,15 @@ class UnifiedResultIngress:
         self._last_closure_outcome: Dict[str, Any] = {}
         self._last_joint_idempotency_evidence: Dict[str, Any] = {}
         self._closure_evidence_ledger_by_task: Dict[str, Dict[str, Any]] = {}
+        # Replay session state: keyed by "{device_id}:{session_id}".
+        # Tracks max_seq and seen item_ids per replay session for ordering enforcement.
+        self._replay_session_state: Dict[str, Dict[str, Any]] = {}
+        self._replay_session_lock = threading.Lock()
+
+    def reset_replay_session_state(self) -> None:
+        """Clear all tracked replay session state (test isolation helper)."""
+        with self._replay_session_lock:
+            self._replay_session_state.clear()
 
     # ------------------------------------------------------------------
     # Public API
@@ -540,6 +609,38 @@ class UnifiedResultIngress:
             )
             self._record_last_closure_outcome(event, outcome)
             return outcome
+
+        # Step 0.75: Replay ordering adjudication (REPLAY channel only)
+        # Evaluates replay ordering semantics against the V2-side offline replay
+        # ordering contract BEFORE idempotency recording and canonical closure.
+        # Items that fail ordering adjudication (out-of-order, stale) are blocked.
+        # Items missing required ordering metadata (replay_item_id + replay_seq)
+        # are classified ambiguous_authority and do NOT silently pass as canonical.
+        if event.source_channel == ResultSourceChannel.REPLAY:
+            (
+                _replay_blocked,
+                _replay_decision,
+                _replay_verdict,
+                _replay_evidence,
+            ) = self._adjudicate_replay_ordering(event)
+            outcome.replay_ordering_adjudicated = True
+            outcome.replay_ordering_decision = _replay_decision
+            outcome.replay_ordering_verdict = _replay_verdict
+            outcome.replay_ordering_evidence = _replay_evidence
+            if _replay_blocked:
+                outcome.incomplete_reason = (
+                    f"replay_ordering_rejected:{_replay_decision}"
+                )
+                logger.warning(
+                    "unified_result_ingress: replay ordering gate blocked result "
+                    "task_id=%r decision=%r verdict=%r device_id=%r",
+                    event.task_id,
+                    _replay_decision,
+                    _replay_verdict,
+                    event.device_id,
+                )
+                self._record_last_closure_outcome(event, outcome)
+                return outcome
 
         # Step 1: idempotency
         if self._check_idempotency(event):
@@ -733,6 +834,10 @@ class UnifiedResultIngress:
             "stale_classification": str(outcome.stale_classification or ""),
             "closure_evidence_ledger": dict(ledger_entry),
             "final_truth_provenance": dict(provenance),
+            "replay_ordering_adjudicated": bool(outcome.replay_ordering_adjudicated),
+            "replay_ordering_decision": str(outcome.replay_ordering_decision or ""),
+            "replay_ordering_verdict": str(outcome.replay_ordering_verdict or ""),
+            "replay_ordering_evidence": dict(outcome.replay_ordering_evidence or {}),
             "updated_at": time.time(),
         }
         with self._lock:
@@ -1069,6 +1174,170 @@ class UnifiedResultIngress:
                 )
 
         return False, "", {}
+
+    def _adjudicate_replay_ordering(
+        self,
+        event: "NormalizedResultEvent",
+    ) -> "tuple[bool, str, str, Dict[str, Any]]":
+        """Adjudicate replay ordering for a REPLAY channel event.
+
+        Evaluates the event against the V2-side offline replay ordering contract
+        (``core.offline_replay_ordering_contract``) using per-session state
+        tracking.  Must be called only for ``ResultSourceChannel.REPLAY`` events.
+
+        Parameters
+        ----------
+        event
+            The REPLAY channel event being adjudicated.
+
+        Returns
+        -------
+        tuple of (is_blocked, decision_str, verdict_str, evidence_dict)
+            ``is_blocked`` is True when the ordering decision is
+            ``reject_out_of_order`` or ``reject_stale``.  ``ambiguous_authority``
+            and ``reject_duplicate`` do NOT block (the standard idempotency gate
+            handles duplicates; ambiguous is non-canonical but not hard-blocked).
+            ``evidence_dict`` always contains structured ordering evidence.
+        """
+        adjudication_at = time.time()
+        replay_item_id = str(event.replay_item_id or "").strip()
+        replay_seq = event.replay_seq  # None = missing
+        replay_session_id = str(
+            event.replay_session_id or event.runtime_session_id or ""
+        ).strip()
+        session_key = f"{event.device_id or ''}:{replay_session_id}"
+
+        try:
+            from core.offline_replay_ordering_contract import (
+                OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
+                OfflineReplayItemDecision,
+                OfflineReplayContractVerdict,
+                STALE_SEQ_WINDOW,
+            )
+        except Exception as _import_err:
+            logger.debug(
+                "unified_result_ingress: replay ordering contract unavailable "
+                "(non-fatal) task_id=%r err=%s",
+                event.task_id,
+                _import_err,
+            )
+            # Make "contract unavailable" explicit rather than silently passing.
+            evidence: Dict[str, Any] = {
+                "adjudication_status": "contract_unavailable",
+                "task_id": event.task_id,
+                "device_id": event.device_id,
+                "replay_item_id": replay_item_id,
+                "replay_seq": replay_seq,
+                "session_key": session_key,
+                "ordering_decision": "ambiguous_authority",
+                "ordering_verdict": "contract_not_yet_evidenced",
+                "adjudication_at": adjudication_at,
+            }
+            return False, "ambiguous_authority", "contract_not_yet_evidenced", evidence
+
+        has_seq = replay_seq is not None
+        has_item_id = bool(replay_item_id)
+
+        # Case 1: Missing both ordering fields → ambiguous authority
+        if not has_seq and not has_item_id:
+            evidence = {
+                "adjudication_status": "missing_ordering_metadata",
+                "task_id": event.task_id,
+                "device_id": event.device_id,
+                "replay_item_id": replay_item_id,
+                "replay_seq": replay_seq,
+                "session_key": session_key,
+                "ordering_decision": OfflineReplayItemDecision.ambiguous_authority.value,
+                "ordering_verdict": OfflineReplayContractVerdict.downgraded.value,
+                "missing_fields": ["replay_item_id", "replay_seq"],
+                "contract_authority": OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
+                "adjudication_at": adjudication_at,
+            }
+            logger.debug(
+                "unified_result_ingress: replay ordering — missing metadata "
+                "task_id=%r device_id=%r session_key=%r",
+                event.task_id,
+                event.device_id,
+                session_key,
+            )
+            return (
+                False,
+                OfflineReplayItemDecision.ambiguous_authority.value,
+                OfflineReplayContractVerdict.downgraded.value,
+                evidence,
+            )
+
+        # Case 2: Evaluate against per-session state
+        seq = int(replay_seq) if has_seq else 0
+
+        with self._replay_session_lock:
+            state = self._replay_session_state.get(session_key)
+            if state is None:
+                state = {"max_seq": -1, "seen_ids": set(), "item_count": 0}
+                self._replay_session_state[session_key] = state
+
+            max_seq_before = state["max_seq"]
+            seen_ids: set = state["seen_ids"]
+
+            is_dup = has_item_id and (replay_item_id in seen_ids)
+            is_stale = (not is_dup) and has_seq and (max_seq_before - seq > STALE_SEQ_WINDOW)
+            is_oor = (not is_dup) and (not is_stale) and has_seq and (seq < max_seq_before)
+
+            if is_dup:
+                decision = OfflineReplayItemDecision.reject_duplicate
+                verdict = OfflineReplayContractVerdict.contract_partially_evidenced
+            elif is_stale:
+                decision = OfflineReplayItemDecision.reject_stale
+                verdict = OfflineReplayContractVerdict.contract_partially_evidenced
+            elif is_oor:
+                decision = OfflineReplayItemDecision.reject_out_of_order
+                verdict = OfflineReplayContractVerdict.contract_partially_evidenced
+            elif not has_item_id:
+                # Has seq but no item_id → ambiguous (cannot dedup)
+                decision = OfflineReplayItemDecision.ambiguous_authority
+                verdict = OfflineReplayContractVerdict.downgraded
+                if has_seq and seq > state["max_seq"]:
+                    state["max_seq"] = seq
+            else:
+                decision = OfflineReplayItemDecision.accept
+                verdict = OfflineReplayContractVerdict.authoritative_contract_defined
+                seen_ids.add(replay_item_id)
+                if has_seq and seq > state["max_seq"]:
+                    state["max_seq"] = seq
+
+            state["item_count"] += 1
+
+        evidence = {
+            "adjudication_status": "evaluated",
+            "task_id": event.task_id,
+            "device_id": event.device_id,
+            "replay_item_id": replay_item_id,
+            "replay_seq": replay_seq,
+            "session_key": session_key,
+            "replay_session_id": replay_session_id,
+            "ordering_decision": decision.value,
+            "ordering_verdict": verdict.value,
+            "session_max_seq_before": max_seq_before,
+            "is_duplicate": is_dup,
+            "is_stale": is_stale,
+            "is_out_of_order": is_oor,
+            "contract_authority": OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
+            "adjudication_at": adjudication_at,
+        }
+
+        is_blocked = decision.value in REPLAY_ORDERING_BLOCKING_DECISIONS
+
+        logger.debug(
+            "unified_result_ingress: replay ordering adjudicated "
+            "task_id=%r decision=%r verdict=%r blocked=%s seq=%r max_before=%r",
+            event.task_id,
+            decision.value,
+            verdict.value,
+            is_blocked,
+            replay_seq,
+            max_seq_before,
+        )
+        return is_blocked, decision.value, verdict.value, evidence
 
     def _check_idempotency(self, event: NormalizedResultEvent) -> bool:
         """Return True iff the idempotency_key is already recorded."""
@@ -1670,18 +1939,35 @@ class UnifiedResultIngress:
             )
 
     def _log_outcome(self, event: NormalizedResultEvent, outcome: UnifiedResultIngressOutcome) -> None:
-        logger.info(
-            "unified_result_ingress: result processed "
-            "task_id=%r status=%r source=%s disposition=%s "
-            "truth_chain=%s completion=%s store=%s",
-            event.task_id,
-            event.normalized_status,
-            event.source_channel.value,
-            outcome.completion_disposition,
-            outcome.truth_chain_complete,
-            outcome.completion_notified,
-            outcome.store_task_result_ran,
-        )
+        if outcome.replay_ordering_adjudicated:
+            logger.info(
+                "unified_result_ingress: result processed "
+                "task_id=%r status=%r source=%s disposition=%s "
+                "truth_chain=%s completion=%s store=%s "
+                "replay_ordering_decision=%s replay_ordering_verdict=%s",
+                event.task_id,
+                event.normalized_status,
+                event.source_channel.value,
+                outcome.completion_disposition,
+                outcome.truth_chain_complete,
+                outcome.completion_notified,
+                outcome.store_task_result_ran,
+                outcome.replay_ordering_decision,
+                outcome.replay_ordering_verdict,
+            )
+        else:
+            logger.info(
+                "unified_result_ingress: result processed "
+                "task_id=%r status=%r source=%s disposition=%s "
+                "truth_chain=%s completion=%s store=%s",
+                event.task_id,
+                event.normalized_status,
+                event.source_channel.value,
+                outcome.completion_disposition,
+                outcome.truth_chain_complete,
+                outcome.completion_notified,
+                outcome.store_task_result_ran,
+            )
 
     def _build_completion_lineage(
         self,
@@ -1837,6 +2123,8 @@ def normalize_status(raw_status: Optional[str]) -> str:
 
 __all__ = [
     "UNIFIED_RESULT_INGRESS_POLICY",
+    "UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY",
+    "REPLAY_ORDERING_BLOCKING_DECISIONS",
     "ResultSourceChannel",
     "NormalizedResultEvent",
     "UnifiedResultIngressOutcome",
