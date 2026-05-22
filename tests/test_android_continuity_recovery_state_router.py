@@ -531,7 +531,7 @@ class TestRecoveryStateRoutingDecisionSerialisation:
 
 
 class TestIntegrationWithParticipantTruthIngress:
-    """I01–I08: recovery_state truth kind integration."""
+    """I01–I10: recovery_state truth kind integration."""
 
     def _make_message(self, recovery_phase: str, **overrides) -> Dict[str, Any]:
         msg: Dict[str, Any] = {
@@ -612,6 +612,42 @@ class TestIntegrationWithParticipantTruthIngress:
         assert isinstance(RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY, str)
         assert RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY.startswith("POLICY::")
 
+    def test_I09_outcome_exposes_structured_recovery_routing(self) -> None:
+        from core.android_participant_truth_ingress import (
+            ingest_android_participant_truth_message,
+        )
+        msg = self._make_message("reconciliation_required")
+        outcome = ingest_android_participant_truth_message(msg)
+        assert outcome.recovery_state_routing["recovery_phase"] == "reconciliation_required"
+        assert outcome.recovery_state_routing["v2_route"] == "trigger_reconciliation"
+        assert outcome.recovery_state_routing["is_canonical_closure_blocked"] is True
+
+    def test_I10_audit_event_includes_recovery_routing_and_policy(self, monkeypatch) -> None:
+        import core.android_participant_truth_ingress as ingress
+
+        captured: Dict[str, Any] = {}
+
+        def _capture_event(**kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        monkeypatch.setattr(ingress, "_REPLAY_AVAILABLE", True)
+        monkeypatch.setattr(ingress, "_emit_runtime_event", _capture_event)
+
+        outcome = ingress.ingest_android_participant_truth_message(
+            self._make_message("stale_recovery_artifact")
+        )
+
+        assert outcome.replay_event_emitted is True
+        assert captured["payload"]["policy"] == (
+            ingress.RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY
+        )
+        assert captured["payload"]["recovery_state_routing"]["recovery_phase"] == (
+            "stale_recovery_artifact"
+        )
+        assert captured["payload"]["recovery_state_routing"]["v2_route"] == (
+            "reject_stale_artifact"
+        )
+
 
 # ===========================================================================
 # J — Cross-invariant: advisory routes do not produce canonical closure
@@ -655,6 +691,26 @@ class TestAdvisoryRoutesDoNotProduceCanonicalClosure:
         outcome = reconcile_android_participant_truth(env)
         # canonical_update must not assert canonical closure
         assert "canonical_closure" not in outcome.canonical_update.lower()
+
+    def test_J03_unknown_phase_observability_marks_degraded_route(self) -> None:
+        from core.android_participant_truth_ingress import (
+            get_last_reconciliation_outcome,
+            ingest_android_participant_truth_message,
+        )
+
+        ingest_android_participant_truth_message({
+            "truth_kind": "recovery_state",
+            "device_id": "dev-j03",
+            "payload": {
+                "recovery_phase": "future_android_phase",
+                "session_id": "sess-j03",
+            },
+        })
+
+        outcome = get_last_reconciliation_outcome()
+        assert outcome is not None
+        assert outcome["recovery_state_routing"]["recovery_phase"] == "unknown"
+        assert outcome["recovery_state_routing"]["is_degraded"] is True
 
 
 # ===========================================================================

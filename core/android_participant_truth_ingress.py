@@ -596,6 +596,7 @@ class AndroidParticipantReconcileOutcome:
     reject_reason: str = ""
     replay_event_emitted: bool = False
     tracking_record_phase: str = ""
+    recovery_state_routing: Dict[str, Any] = field(default_factory=dict)
 
     def is_accepted(self) -> bool:
         return self.was_reconciled and not self.reject_reason
@@ -608,6 +609,7 @@ class AndroidParticipantReconcileOutcome:
             "reject_reason": self.reject_reason,
             "replay_event_emitted": self.replay_event_emitted,
             "tracking_record_phase": self.tracking_record_phase,
+            "recovery_state_routing": dict(self.recovery_state_routing),
             "envelope": self.envelope.to_dict() if self.envelope else None,
         }
 
@@ -731,6 +733,8 @@ def _emit_audit_event(
     was_reconciled: bool,
     canonical_update: str,
     reject_reason: str,
+    policy: str = CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+    recovery_state_routing: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Emit a ReplayFoundation runtime event for this reconciliation attempt.
 
@@ -762,7 +766,8 @@ def _emit_audit_event(
                 "was_reconciled": was_reconciled,
                 "canonical_update": canonical_update,
                 "reject_reason": reject_reason,
-                "policy": CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+                "policy": policy,
+                "recovery_state_routing": dict(recovery_state_routing or {}),
             },
         )
         return True
@@ -905,6 +910,7 @@ def reconcile_android_participant_truth(
     local_only = False
     reject_reason = ""
     tracking_record_phase = ""
+    recovery_state_routing: Dict[str, Any] = {}
 
     kind = envelope.truth_kind
 
@@ -943,7 +949,13 @@ def reconcile_android_participant_truth(
         )
 
     elif kind == AndroidParticipantTruthKind.recovery_state:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+        (
+            was_reconciled,
+            canonical_update,
+            reject_reason,
+            tracking_record_phase,
+            recovery_state_routing,
+        ) = (
             _reconcile_recovery_state(envelope)
         )
         # Advisory and pending routes are local-only (no canonical state mutation).
@@ -971,6 +983,12 @@ def reconcile_android_participant_truth(
         was_reconciled=was_reconciled,
         canonical_update=canonical_update,
         reject_reason=reject_reason,
+        policy=(
+            RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY
+            if kind == AndroidParticipantTruthKind.recovery_state
+            else CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY
+        ),
+        recovery_state_routing=recovery_state_routing,
     )
 
     # PR-10-V2: Emit to the unified Android delegated runtime audit recorder
@@ -1004,6 +1022,7 @@ def reconcile_android_participant_truth(
         reject_reason=reject_reason,
         replay_event_emitted=replay_event_emitted,
         tracking_record_phase=tracking_record_phase,
+        recovery_state_routing=recovery_state_routing,
     )
     # PR-10: Record the outcome for the operator review surface.
     _record_last_reconciliation_outcome(outcome)
@@ -1369,7 +1388,7 @@ def _reconcile_governance_artifact(
 
 def _reconcile_recovery_state(
     envelope: AndroidParticipantTruthEnvelope,
-) -> Tuple[bool, str, str, str]:
+) -> Tuple[bool, str, str, str, Dict[str, Any]]:
     """Route an Android recovery_state truth kind through the recovery-state router.
 
     This handler implements explicit routing for Android continuity recovery-state
@@ -1408,6 +1427,7 @@ def _reconcile_recovery_state(
             "",
             "recovery_state_router_unavailable:treated_as_advisory",
             "",
+            {},
         )
 
     try:
@@ -1418,7 +1438,9 @@ def _reconcile_recovery_state(
             task_id=envelope.task_id or "",
         )
     except Exception as exc:  # noqa: BLE001
-        return False, "", f"recovery_state_routing_error:{exc}", ""
+        return False, "", f"recovery_state_routing_error:{exc}", "", {}
+
+    decision_dict = decision.to_dict()
 
     route_value = decision.v2_route.value
 
@@ -1429,6 +1451,7 @@ def _reconcile_recovery_state(
             f"recovery_state_rejected:stale_recovery_artifact:"
             f"phase={decision.recovery_phase.value}",
             "",
+            decision_dict,
         )
 
     if route_value == "trigger_reconciliation":
@@ -1438,6 +1461,7 @@ def _reconcile_recovery_state(
             f"recovery_state_reconciliation_path_required:"
             f"phase={decision.recovery_phase.value}",
             "",
+            decision_dict,
         )
 
     if route_value == "require_closure_review":
@@ -1447,6 +1471,7 @@ def _reconcile_recovery_state(
             f"recovery_state_closure_review_required:"
             f"phase={decision.recovery_phase.value}:lost_inflight",
             "",
+            decision_dict,
         )
 
     # mark_recovery_pending or accept_advisory_evidence — advisory/local-only
@@ -1457,7 +1482,7 @@ def _reconcile_recovery_state(
         f"→route={route_value}"
         f"→degraded={decision.is_degraded}"
     )
-    return False, canonical_update, "", ""
+    return False, canonical_update, "", "", decision_dict
 
 
 def ingest_android_participant_truth_message(
@@ -1524,6 +1549,7 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
             "device_id": envelope.device_id if envelope else None,
             "task_id": envelope.task_id if envelope else None,
             "reject_reason": outcome.reject_reason,
+            "recovery_state_routing": dict(outcome.recovery_state_routing),
         }
         with _last_reconciliation_lock:
             _last_reconciliation_outcome = snapshot
@@ -1549,6 +1575,7 @@ def get_last_reconciliation_outcome() -> Optional[Dict[str, Any]]:
     - ``device_id`` — str or None
     - ``task_id`` — str or None
     - ``reject_reason`` — str
+    - ``recovery_state_routing`` — dict[str, Any]
     """
     with _last_reconciliation_lock:
         if _last_reconciliation_outcome is None:
