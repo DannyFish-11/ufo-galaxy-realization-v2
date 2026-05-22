@@ -850,8 +850,12 @@ def _lookup_canonical_task_snapshot(task_id: Optional[str]) -> Dict[str, str]:
         lifecycle_text = (
             lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
         ).strip().lower()
-        task_session_text = str(getattr(task, "session_id", "") or "").strip()
-        return {"task_lifecycle": lifecycle_text, "task_session_id": task_session_text}
+        identity = getattr(task, "identity", None)
+        task_session_id_text = str(getattr(identity, "session_id", "") or "").strip()
+        return {
+            "task_lifecycle": lifecycle_text,
+            "task_session_id": task_session_id_text,
+        }
     except Exception as exc:
         logger.debug("operator_intervention: canonical task lookup skipped: %s", exc)
         return {}
