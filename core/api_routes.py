@@ -172,6 +172,7 @@ def get_api_compatibility_surface_registry() -> List[Dict[str, str]]:
 
 
 def _env_truthy(value: Any) -> bool:
+    """Return True when an env-style value matches the accepted truthy tokens."""
     return str(value or "").strip().lower() in _TRUTHY_ENV_VALUES
 
 
@@ -702,14 +703,15 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         """
         if not compat_ws_policy["effective_enabled"]:
             blocked_by_policy = compat_ws_policy["blocked_by_protected_mode"]
+            message_type = (
+                "compat_ws_blocked_protected_mode"
+                if blocked_by_policy
+                else "compat_ws_disabled"
+            )
             await websocket.accept()
             await websocket.send_json(
                 {
-                    "type": (
-                        "compat_ws_blocked_protected_mode"
-                        if blocked_by_policy
-                        else "compat_ws_disabled"
-                    ),
+                    "type": message_type,
                     "message": compat_ws_policy["reason"],
                     "recommended_canonical_path": f"/ws/device/{device_id}",
                     "system_mode": compat_ws_policy["system_mode"],
