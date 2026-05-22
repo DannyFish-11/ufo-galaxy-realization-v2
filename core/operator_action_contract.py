@@ -186,6 +186,7 @@ class OperatorActionRequest:
     message: str = ""
     device_id: Optional[str] = None
     flow_id: Optional[str] = None
+    task_id: Optional[str] = None
     session_id: str = ""
     user_id: str = "operator"
     required_capabilities: List[str] = field(default_factory=list)
@@ -199,6 +200,7 @@ class OperatorActionRequest:
             "message": self.message,
             "device_id": self.device_id,
             "flow_id": self.flow_id,
+            "task_id": self.task_id,
             "session_id": self.session_id,
             "user_id": self.user_id,
             "required_capabilities": list(self.required_capabilities),
@@ -214,6 +216,7 @@ class OperatorActionRequest:
             message=data.get("message", ""),
             device_id=data.get("device_id"),
             flow_id=data.get("flow_id"),
+            task_id=data.get("task_id"),
             session_id=data.get("session_id", ""),
             user_id=data.get("user_id", "operator"),
             required_capabilities=list(data.get("required_capabilities") or []),

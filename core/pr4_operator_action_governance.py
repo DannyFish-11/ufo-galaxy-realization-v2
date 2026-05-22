@@ -110,6 +110,7 @@ Functions
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -425,6 +426,9 @@ class OperatorActionAuditRecord:
     participant_ack_state: str = "not_required"
     truth_convergence_state: str = "not_evaluated"
     closure_verification_state: str = "not_evaluated"
+    continuity_adjudication_classification: str = ""
+    continuity_adjudication_disposition: str = ""
+    continuity_adjudication_evidence: Dict[str, Any] = field(default_factory=dict)
     authority: str = PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY
 
     def to_dict(self) -> Dict[str, Any]:
@@ -452,6 +456,9 @@ class OperatorActionAuditRecord:
             "participant_ack_state": self.participant_ack_state,
             "truth_convergence_state": self.truth_convergence_state,
             "closure_verification_state": self.closure_verification_state,
+            "continuity_adjudication_classification": self.continuity_adjudication_classification,
+            "continuity_adjudication_disposition": self.continuity_adjudication_disposition,
+            "continuity_adjudication_evidence": dict(self.continuity_adjudication_evidence),
             "authority": self.authority,
         }
 
@@ -651,6 +658,24 @@ class PR4OperableSurfaceSnapshot:
 
 _PENDING_ANDROID_ACTIONS: Dict[str, AndroidDirectedActionSpec] = {}
 _TERMINAL_ANDROID_ACTIONS: Dict[str, Dict[str, Any]] = {}
+_OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS: Set[str] = set()
+_OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK = threading.Lock()
+
+_MANUAL_IDEMPOTENT_ACTION_KINDS: Set[str] = {
+    "trigger_recovery",
+    "reopen_session_continuity",
+    "rebind_session_continuity",
+    "reopen_closure",
+    "finalize_closure",
+    "reject_closure",
+}
+
+_TERMINAL_TASK_LIFECYCLES: Set[str] = {
+    "completed",
+    "failed",
+    "cancelled",
+    "degraded",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -777,6 +802,231 @@ def _build_operator_control_closure_trace(
     }
 
 
+def _build_operator_manual_action_idempotency_key(
+    *,
+    action_kind: str,
+    task_id: Optional[str],
+    flow_id: Optional[str],
+    session_id: Optional[str],
+    device_id: Optional[str],
+) -> str:
+    identity_parts = []
+    for label, value in (
+        ("task", task_id),
+        ("flow", flow_id),
+        ("session", session_id),
+        ("device", device_id),
+    ):
+        text = str(value or "").strip()
+        if text:
+            identity_parts.append(f"{label}={text}")
+    if not identity_parts:
+        identity_parts.append("unscoped=true")
+    identity = "|".join(identity_parts)
+    return f"operator_manual:{action_kind}:{identity}"
+
+
+def _is_sanctioned_reopen_path(
+    *,
+    approval_token: Optional[str],
+    action_notes: str,
+) -> bool:
+    token = str(approval_token or "").strip().lower()
+    notes = str(action_notes or "").strip().lower()
+    return token.startswith("sanctioned:") or "sanctioned_reopen" in notes
+
+
+def _lookup_canonical_task_snapshot(task_id: Optional[str]) -> Dict[str, str]:
+    task_id_text = str(task_id or "").strip()
+    if not task_id_text:
+        return {}
+    try:
+        from core.canonical_task import get_canonical_task_runtime
+
+        task = get_canonical_task_runtime().get_by_task_id(task_id_text)
+        if task is None:
+            return {}
+        lifecycle = getattr(task, "lifecycle", "")
+        lifecycle_text = (
+            lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
+        ).strip().lower()
+        identity = getattr(task, "identity", None)
+        task_session_id_text = str(getattr(identity, "session_id", "") or "").strip()
+        return {
+            "task_lifecycle": lifecycle_text,
+            "task_session_id": task_session_id_text,
+        }
+    except Exception as exc:
+        logger.debug("operator_intervention: canonical task lookup skipped: %s", exc)
+        return {}
+
+
+def _evaluate_operator_intervention_adjudication(
+    *,
+    action_kind: str,
+    task_id: Optional[str],
+    flow_id: Optional[str],
+    session_id: Optional[str],
+    device_id: Optional[str],
+    approval_token: Optional[str],
+    action_notes: str,
+) -> Dict[str, Any]:
+    from core.continuity_adjudication import (
+        ContinuityAdjudicationClassification,
+        adjudicate_duplicate_vs_first_accepted,
+        adjudicate_stale_vs_current,
+        build_continuity_adjudication_evidence,
+    )
+
+    related_identity = {
+        "action_kind": action_kind,
+        "task_id": str(task_id or ""),
+        "flow_id": str(flow_id or ""),
+        "session_id": str(session_id or ""),
+        "device_id": str(device_id or ""),
+    }
+    default_evidence = build_continuity_adjudication_evidence(
+        classification=ContinuityAdjudicationClassification.current_accepted,
+        triggering_reason="operator_intervention_gate_passed",
+        related_identity=related_identity,
+        decision_point="operator_intervention.continuity_gate",
+    )
+    default_evidence["intervention_status"] = "sanctioned_operator_intervention"
+    adjudication = {
+        "allow": True,
+        "classification": ContinuityAdjudicationClassification.current_accepted.value,
+        "disposition": "first_accepted",
+        "triggering_reason": "operator_intervention_gate_passed",
+        "idempotency_key": "",
+        "idempotency_reserved": False,
+        "evidence": default_evidence,
+    }
+    canonical_task_snapshot = _lookup_canonical_task_snapshot(task_id)
+    task_lifecycle = canonical_task_snapshot.get("task_lifecycle", "")
+    task_session_id = canonical_task_snapshot.get("task_session_id", "")
+
+    if action_kind == "reopen_closure" and task_id:
+        is_unsanctioned_terminal_reopen = (
+            task_lifecycle in _TERMINAL_TASK_LIFECYCLES
+            and not _is_sanctioned_reopen_path(
+            approval_token=approval_token,
+            action_notes=action_notes,
+            )
+        )
+        if is_unsanctioned_terminal_reopen:
+            stale = adjudicate_stale_vs_current(
+                is_stale=True,
+                stale_classification="final_closed_reopen_without_sanction",
+                stale_reason="final_closed_task_requires_sanctioned_reopen_path",
+            )
+            evidence = build_continuity_adjudication_evidence(
+                classification=stale.classification,
+                triggering_reason=stale.triggering_reason,
+                epoch_session_basis={"task_lifecycle": task_lifecycle},
+                related_identity=related_identity,
+                decision_point="operator_intervention.reopen_closure_guard",
+            )
+            evidence["intervention_status"] = "rejected_stale_intervention"
+            adjudication.update(
+                {
+                    "allow": False,
+                    "classification": stale.classification,
+                    "disposition": stale.completion_disposition or "stale_rejected",
+                    "triggering_reason": stale.triggering_reason,
+                    "evidence": evidence,
+                }
+            )
+            return adjudication
+
+    if session_id and task_id:
+        if task_session_id and task_session_id != str(session_id).strip():
+            stale = adjudicate_stale_vs_current(
+                is_stale=True,
+                stale_classification="operator_session_mismatch",
+                stale_reason="operator_session_id_mismatch_with_canonical_task_session",
+            )
+            evidence = build_continuity_adjudication_evidence(
+                classification=stale.classification,
+                triggering_reason=stale.triggering_reason,
+                epoch_session_basis={
+                    "requested_session_id": str(session_id),
+                    "canonical_task_session_id": task_session_id,
+                },
+                related_identity=related_identity,
+                decision_point="operator_intervention.session_stale_gate",
+            )
+            evidence["intervention_status"] = "rejected_stale_intervention"
+            adjudication.update(
+                {
+                    "allow": False,
+                    "classification": stale.classification,
+                    "disposition": stale.completion_disposition or "stale_rejected",
+                    "triggering_reason": stale.triggering_reason,
+                    "evidence": evidence,
+                }
+            )
+            return adjudication
+
+    if action_kind in _MANUAL_IDEMPOTENT_ACTION_KINDS:
+        idempotency_key = _build_operator_manual_action_idempotency_key(
+            action_kind=action_kind,
+            task_id=task_id,
+            flow_id=flow_id,
+            session_id=session_id,
+            device_id=device_id,
+        )
+        adjudication["idempotency_key"] = idempotency_key
+        with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+            is_duplicate = idempotency_key in _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS
+            if not is_duplicate:
+                _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
+                adjudication["idempotency_reserved"] = True
+        if is_duplicate:
+            duplicate = adjudicate_duplicate_vs_first_accepted(is_duplicate=True)
+            evidence = build_continuity_adjudication_evidence(
+                classification=duplicate.classification,
+                triggering_reason=duplicate.triggering_reason,
+                related_identity={**related_identity, "idempotency_key": idempotency_key},
+                decision_point="operator_intervention.idempotency_gate",
+            )
+            evidence["intervention_status"] = "duplicate_ignored_manual_action"
+            adjudication.update(
+                {
+                    "allow": False,
+                    "classification": duplicate.classification,
+                    "disposition": duplicate.completion_disposition or "duplicate_ignored",
+                    "triggering_reason": duplicate.triggering_reason,
+                    "evidence": evidence,
+                }
+            )
+            return adjudication
+
+    return adjudication
+
+
+def _record_operator_intervention_idempotency(
+    *,
+    action_kind: str,
+    outcome: str,
+    idempotency_key: str,
+    idempotency_reserved: bool,
+) -> None:
+    if not idempotency_key:
+        return
+    if action_kind not in _MANUAL_IDEMPOTENT_ACTION_KINDS:
+        return
+    accepted_outcome = outcome in {
+        OperatorActionOrchestrationOutcome.success.value,
+        OperatorActionOrchestrationOutcome.accepted_pending.value,
+        OperatorActionOrchestrationOutcome.partial_success.value,
+    }
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        if accepted_outcome and not idempotency_reserved:
+            _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
+        if not accepted_outcome and idempotency_reserved:
+            _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.discard(idempotency_key)
+
+
 # ---------------------------------------------------------------------------
 # Public API: audit log
 # ---------------------------------------------------------------------------
@@ -827,6 +1077,14 @@ def clear_operator_action_audit_log() -> None:
     """Clear the in-process audit log.  For testing only."""
     global _AUDIT_LOG
     _AUDIT_LOG = []
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
+
+
+def reset_operator_intervention_adjudication_state() -> None:
+    """Reset operator intervention continuity/idempotency state (testing only)."""
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -1183,10 +1441,34 @@ def execute_governed_operator_action(
     rollback_needed = False
     android_dispatch_id = ""
     android_dispatched_at: Optional[float] = None
+    intervention_adjudication = _evaluate_operator_intervention_adjudication(
+        action_kind=action_kind,
+        task_id=task_id,
+        flow_id=flow_id,
+        session_id=session_id,
+        device_id=device_id,
+        approval_token=approval_token,
+        action_notes=action_notes,
+    )
 
     try:
+        if not intervention_adjudication.get("allow", False):
+            outcome = OperatorActionOrchestrationOutcome.policy_blocked.value
+            error = (
+                "operator intervention rejected by continuity adjudication gate: "
+                f"{intervention_adjudication.get('triggering_reason', '')}"
+            )
+            downstream_effects.append(
+                "operator_intervention_rejected:"
+                f"{intervention_adjudication.get('disposition', 'unknown')}"
+            )
+            logger.debug(
+                "operator_intervention blocked before orchestration: action_kind=%s reason=%s",
+                action_kind,
+                intervention_adjudication.get("triggering_reason", ""),
+            )
         # ── retry_admission ───────────────────────────────────────────────
-        if action_kind == OperatorActionKind.retry_admission.value:
+        elif action_kind == OperatorActionKind.retry_admission.value:
             if task_id:
                 affected_entity_ids.append(task_id)
                 downstream_effects.append(
@@ -1584,6 +1866,14 @@ def execute_governed_operator_action(
         )
 
     post_state = _capture_post_state()
+    _record_operator_intervention_idempotency(
+        action_kind=action_kind,
+        outcome=outcome,
+        idempotency_key=str(intervention_adjudication.get("idempotency_key") or ""),
+        idempotency_reserved=bool(
+            intervention_adjudication.get("idempotency_reserved", False)
+        ),
+    )
     routed_subject_ids: List[str] = []
     routed_subject_seen: Set[str] = set()
     for subject_id in affected_entity_ids:
@@ -1627,6 +1917,15 @@ def execute_governed_operator_action(
         participant_ack_state=participant_ack_state,
         truth_convergence_state=truth_convergence_state,
         closure_verification_state=closure_verification_state,
+        continuity_adjudication_classification=str(
+            intervention_adjudication.get("classification") or ""
+        ),
+        continuity_adjudication_disposition=str(
+            intervention_adjudication.get("disposition") or ""
+        ),
+        continuity_adjudication_evidence=dict(
+            intervention_adjudication.get("evidence") or {}
+        ),
     )
     record_operator_action_audit(audit_record)
 
@@ -1639,6 +1938,9 @@ def execute_governed_operator_action(
         "android_dispatch_id": android_dispatch_id,
         "android_dispatched_at": android_dispatched_at,
         "audit_id": audit_record.audit_id,
+        "continuity_adjudication_classification": audit_record.continuity_adjudication_classification,
+        "continuity_adjudication_disposition": audit_record.continuity_adjudication_disposition,
+        "continuity_adjudication_evidence": dict(audit_record.continuity_adjudication_evidence),
         "_source": "pr4_operator_action_governance",
         "authority": PR4_OPERATOR_ACTION_GOVERNANCE_AUTHORITY,
     }
@@ -1735,6 +2037,15 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             truth_convergence_state=last.truth_convergence_state,
             closure_verification_state=last.closure_verification_state,
             canonical_entry=last.canonical_entry or OPERATOR_ACTION_CANONICAL_ENTRY,
+        )
+        proj.last_action_closure_trace["continuity_adjudication_classification"] = (
+            last.continuity_adjudication_classification
+        )
+        proj.last_action_closure_trace["continuity_adjudication_disposition"] = (
+            last.continuity_adjudication_disposition
+        )
+        proj.last_action_closure_trace["continuity_adjudication_evidence"] = dict(
+            last.continuity_adjudication_evidence or {}
         )
 
     # --- Pending Android-directed actions ---
