@@ -531,7 +531,7 @@ class TestRecoveryStateRoutingDecisionSerialisation:
 
 
 class TestIntegrationWithParticipantTruthIngress:
-    """I01–I10: recovery_state truth kind integration."""
+    """I01–I10: recovery_state ingress routing plus observability coverage."""
 
     def _make_message(self, recovery_phase: str, **overrides) -> Dict[str, Any]:
         msg: Dict[str, Any] = {

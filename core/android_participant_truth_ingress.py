@@ -738,6 +738,15 @@ def _emit_audit_event(
 ) -> bool:
     """Emit a ReplayFoundation runtime event for this reconciliation attempt.
 
+    Parameters
+    ----------
+    policy
+        Policy sentinel describing the canonical rule under which this
+        reconciliation attempt was handled.
+    recovery_state_routing
+        Optional structured Android recovery-state routing decision to include
+        in the emitted audit payload for observability.
+
     Returns True iff the event was successfully emitted.
     """
     if not _REPLAY_AVAILABLE or _emit_runtime_event is None:
@@ -1064,7 +1073,8 @@ def _reconcile_terminal_signal(
 ) -> Tuple[bool, str, str, str]:
     """Reconcile a terminal Android signal (cancel / failure / result).
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
+    recovery_state_routing_dict).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
