@@ -131,6 +131,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
             "governance_state",
             "mesh_runtime_state",
             "control_plane_contract",
+            "truth_surface_semantics",
             "authority_source_fingerprint",
             # provenance
             "_source",
@@ -262,6 +263,71 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
         if spec:  # graceful-degrade: only assert when surface selector is available
             self.assertIn("surface_type", spec)
             self.assertEqual(spec["surface_type"], "chat_panel")
+
+    def test_B07_truth_surface_semantics_marks_mixed_compiled_truth_non_canonical(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
+        class _FakeOutwardTruth:
+            def to_dict(self):
+                return {
+                    "compiled_at": time.time(),
+                    "operator_snapshot": {
+                        "active_task_count": 1,
+                        "recent_failure_count": 0,
+                        "reachable_executor_count": 1,
+                    },
+                    "surfacing_complete": False,
+                    "unavailable_source_count": 1,
+                }
+
+        svc = UnifiedPanelAggregationService()
+        with patch(
+            "core.outward_runtime_truth.compile_outward_truth",
+            return_value=_FakeOutwardTruth(),
+        ):
+            result = svc.build_payload()
+
+        semantics = result.truth_surface_semantics
+        self.assertEqual(semantics.get("truth_source_class"), "compiled_outward_truth_mixed")
+        self.assertIs(semantics.get("is_canonical_truth_surface"), False)
+        self.assertIs(semantics.get("is_explicitly_compiled_truth"), True)
+        self.assertIs(semantics.get("is_mixed_source_surface"), True)
+
+    def test_B08_truth_discipline_missing_evidence_forces_non_canonical_surface(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService, UnifiedPanelPayload
+
+        svc = UnifiedPanelAggregationService()
+        payload = UnifiedPanelPayload()
+        payload.truth_compilation_evidence = {}
+        payload.truth_surface_semantics = {"is_canonical_truth_surface": True}
+
+        svc._enforce_truth_surface_discipline(payload)
+
+        evidence = payload.truth_compilation_evidence
+        self.assertIn("discipline_issues", evidence)
+        self.assertIn("missing_truth_compilation_evidence_keys", ",".join(evidence["discipline_issues"]))
+        semantics = payload.truth_surface_semantics
+        self.assertIs(semantics.get("is_canonical_truth_surface"), False)
+        self.assertEqual(semantics.get("truth_source_class"), "runtime_visible_fallback")
+
+    def test_B09_fallback_truth_surface_sets_runtime_visible_primary_source_kind(self):
+        from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
+        svc = UnifiedPanelAggregationService()
+        with patch(
+            "core.outward_runtime_truth.compile_outward_truth",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = svc.build_payload()
+
+        self.assertEqual(
+            result.authority_source_fingerprint.get("primary_source_kind"),
+            "runtime_visible_state",
+        )
+        semantics = result.truth_surface_semantics
+        self.assertEqual(semantics.get("truth_source_class"), "runtime_visible_fallback")
+        self.assertIs(semantics.get("is_canonical_truth_surface"), False)
+        self.assertTrue(result.truth_compilation_evidence.get("fallback_used"))
 
 
 # ---------------------------------------------------------------------------
@@ -839,7 +905,10 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
         fp = data.get("authority_source_fingerprint")
         self.assertIsInstance(fp, dict)
         self.assertEqual(fp.get("surface_path"), "/api/v1/panel/unified")
-        self.assertEqual(fp.get("primary_source_kind"), "operator_derived_surface")
+        self.assertIn(
+            fp.get("primary_source_kind"),
+            {"compiled_outward_truth", "runtime_visible_state"},
+        )
         self.assertTrue(fp.get("consumption_only"))
         self.assertIs(fp.get("acts_as_authority_layer"), False)
         freshness = fp.get("source_freshness")
@@ -857,13 +926,25 @@ class TestPanelUnifiedRoute(unittest.IsolatedAsyncioTestCase):
             resp = await client.get("/api/v1/panel/unified")
         data = resp.json()
         evidence = data.get("truth_compilation_evidence")
+        semantics = data.get("truth_surface_semantics")
         self.assertIsInstance(evidence, dict)
+        self.assertIsInstance(semantics, dict)
         self.assertEqual(
             evidence.get("primary_path"),
             "core.outward_runtime_truth.compile_outward_truth",
         )
         self.assertIn(evidence.get("assembly_mode"), {"compiled_outward_truth_primary", "mixed_source_fallback"})
         self.assertIn("mixed_source", evidence)
+        self.assertIn(
+            semantics.get("truth_source_class"),
+            {
+                "compiled_outward_truth",
+                "compiled_outward_truth_mixed",
+                "runtime_visible_fallback",
+            },
+        )
+        if evidence.get("mixed_source") or evidence.get("fallback_used"):
+            self.assertIs(semantics.get("is_canonical_truth_surface"), False)
 
 
 # ---------------------------------------------------------------------------
