@@ -475,6 +475,10 @@ class TestGroupB_MainChainIngress:
         assert result.is_main_chain_accepted is True
         assert result.authority_source == V2_SEMANTIC_AUTHORITY
         assert GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN not in result.gap_types
+        assert result.ingress_transport_accepted is True
+        assert result.policy_admitted is True
+        assert result.canonical_truth_completed is False
+        assert result.mature_closure_achieved is False
 
     def test_b19_accept_no_carrier_context_gap_without_main_chain(self):
         result = accept_android_originated_nl_into_main_chain(

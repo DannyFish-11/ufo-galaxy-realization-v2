@@ -206,6 +206,8 @@ def test_final_truth_provenance_distinguishes_accepted_and_competing_events():
     assert dup.completion_disposition == "duplicate_ignored"
     assert stale_outcome.completion_disposition == "stale_rejected"
     summary = ingress.get_last_closure_outcome()
+    assert summary["canonical_truth_completed"] is False
+    assert summary["mature_closure_achieved"] is False
     provenance = summary["final_truth_provenance"]
     assert provenance["accepted_event_identity"]["completion_emission_id"] == "accepted-1"
     assert provenance["accepted_reason_basis"] != ""

@@ -25,6 +25,7 @@ def test_goal_execution_blocked_when_cross_device_disabled() -> None:
         result = asyncio.run(ge.handle_goal_execution(MagicMock(), MagicMock(), msg))
     assert result["error_code"] == "ANDROID_NL_INITIATION_BLOCKED"
     assert result["details"]["lineage"]["dispatch_lineage"] == "blocked_by_cross_device_gate"
+    assert result["details"]["lineage"]["policy_admitted"] is False
     assert "v2_cross_device_switch" in result["details"]["blocking_gates"]
 
 
@@ -67,7 +68,30 @@ def test_goal_execution_task_assign_contains_canonical_lineage() -> None:
     assert lineage["origin"] == "android"
     assert lineage["ingress_lineage"] == "canonical_ingress"
     assert lineage["protocol_lineage"] == "aip_v3_goal_execution"
+    assert lineage["policy_admitted"] is True
+    assert lineage["canonical_truth_completed"] is False
+    assert lineage["mature_closure_achieved"] is False
     assert result["payload"]["main_chain_ingress"]["is_main_chain_accepted"] is True
+
+
+def test_canonical_closure_flags_require_authoritative_acceptance() -> None:
+    canonical, mature = ge._derive_canonical_closure_flags(
+        is_fully_closed=True,
+        truth_chain_complete=True,
+        acceptance_verdict="accept_provisional",
+        lineage_quality="canonical_success",
+    )
+    assert canonical is False
+    assert mature is False
+
+    canonical, mature = ge._derive_canonical_closure_flags(
+        is_fully_closed=True,
+        truth_chain_complete=True,
+        acceptance_verdict="accept",
+        lineage_quality="canonical_success",
+    )
+    assert canonical is True
+    assert mature is True
 
 
 def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
@@ -187,6 +211,9 @@ def test_goal_execution_result_lineage_replay_assisted() -> None:
         return_value=False,
     ), patch(
         "core.durable_result_idempotency.record_result_idempotency",
+        return_value=None,
+    ), patch(
+        "contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate",
         return_value=None,
     ):
         asyncio.run(ge.handle_goal_execution_result(bridge, MagicMock(), message))

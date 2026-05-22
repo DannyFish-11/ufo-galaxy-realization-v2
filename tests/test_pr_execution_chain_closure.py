@@ -765,6 +765,7 @@ class TestExecutionChainClosureModule:
         d = r.to_dict()
         for key in ("record_id", "task_id", "chain_kind", "closure_state",
                     "acceptance_verdict", "truth_chain_complete", "is_fully_closed",
+                    "canonical_truth_completed", "mature_closure_achieved",
                     "normalized_status", "device_id", "executor_module",
                     "incomplete_reason", "extra", "recorded_at"):
             assert key in d, f"to_dict() missing key: {key}"

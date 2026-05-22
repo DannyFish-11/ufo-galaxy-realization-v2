@@ -185,6 +185,8 @@ class ChainClosureRecord:
     acceptance_verdict: str = ""
     truth_chain_complete: bool = False
     is_fully_closed: bool = False
+    canonical_truth_completed: bool = False
+    mature_closure_achieved: bool = False
     normalized_status: str = ""
     device_id: str = ""
     executor_module: str = ""
@@ -202,6 +204,8 @@ class ChainClosureRecord:
             "acceptance_verdict": self.acceptance_verdict,
             "truth_chain_complete": self.truth_chain_complete,
             "is_fully_closed": self.is_fully_closed,
+            "canonical_truth_completed": self.canonical_truth_completed,
+            "mature_closure_achieved": self.mature_closure_achieved,
             "normalized_status": self.normalized_status,
             "device_id": self.device_id,
             "executor_module": self.executor_module,
@@ -393,12 +397,20 @@ def record_local_chain_closure(
     acceptance_verdict = ""
     truth_chain_complete = False
     is_fully_closed = False
+    canonical_truth_completed = False
+    mature_closure_achieved = False
     incomplete_reason = ""
 
     if ingress_outcome is not None:
         acceptance_verdict = str(ingress_outcome.get("evidence_acceptance_verdict") or "")
         truth_chain_complete = bool(ingress_outcome.get("truth_chain_complete"))
         is_fully_closed = bool(ingress_outcome.get("is_fully_closed"))
+        canonical_truth_completed = (
+            is_fully_closed
+            and truth_chain_complete
+            and acceptance_verdict.lower() in {"accept", "accepted"}
+        )
+        mature_closure_achieved = canonical_truth_completed and (normalized_status == "completed")
         incomplete_reason = str(ingress_outcome.get("incomplete_reason") or "")
 
     record = ChainClosureRecord(
@@ -408,6 +420,8 @@ def record_local_chain_closure(
         acceptance_verdict=acceptance_verdict,
         truth_chain_complete=truth_chain_complete,
         is_fully_closed=is_fully_closed,
+        canonical_truth_completed=canonical_truth_completed,
+        mature_closure_achieved=mature_closure_achieved,
         normalized_status=normalized_status,
         executor_module=executor_module,
         incomplete_reason=incomplete_reason,
@@ -461,12 +475,20 @@ def record_cross_device_chain_closure(
     acceptance_verdict = ""
     truth_chain_complete = False
     is_fully_closed = False
+    canonical_truth_completed = False
+    mature_closure_achieved = False
     incomplete_reason = ""
 
     if ingress_outcome is not None:
         acceptance_verdict = str(ingress_outcome.get("evidence_acceptance_verdict") or "")
         truth_chain_complete = bool(ingress_outcome.get("truth_chain_complete"))
         is_fully_closed = bool(ingress_outcome.get("is_fully_closed"))
+        canonical_truth_completed = (
+            is_fully_closed
+            and truth_chain_complete
+            and acceptance_verdict.lower() in {"accept", "accepted"}
+        )
+        mature_closure_achieved = canonical_truth_completed and (normalized_status == "completed")
         incomplete_reason = str(ingress_outcome.get("incomplete_reason") or "")
 
     record = ChainClosureRecord(
@@ -476,6 +498,8 @@ def record_cross_device_chain_closure(
         acceptance_verdict=acceptance_verdict,
         truth_chain_complete=truth_chain_complete,
         is_fully_closed=is_fully_closed,
+        canonical_truth_completed=canonical_truth_completed,
+        mature_closure_achieved=mature_closure_achieved,
         normalized_status=normalized_status,
         device_id=device_id,
         incomplete_reason=incomplete_reason,

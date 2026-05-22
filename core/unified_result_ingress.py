@@ -703,6 +703,17 @@ class UnifiedResultIngress:
             "normalized_status": outcome.normalized_status,
             "is_fully_closed": bool(outcome.is_fully_closed),
             "truth_chain_complete": bool(outcome.truth_chain_complete),
+            "canonical_truth_completed": bool(
+                outcome.is_fully_closed
+                and outcome.truth_chain_complete
+                and str(outcome.evidence_acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
+            ),
+            "mature_closure_achieved": bool(
+                outcome.is_fully_closed
+                and outcome.truth_chain_complete
+                and str(outcome.evidence_acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
+                and not bool(outcome.incomplete_reason)
+            ),
             "completion_notified": bool(outcome.completion_notified),
             "problem_solved": bool(outcome.problem_solved),
             "problem_solved_via": str(outcome.problem_solved_via or ""),

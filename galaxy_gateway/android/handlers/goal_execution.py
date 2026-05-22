@@ -124,6 +124,15 @@ def _build_android_nl_lineage(
     closure_lineage: str = "pending_android_result_closure",
     audit_lineage: str = "pending_android_result_audit",
     gate_blocking_reasons: Optional[List[str]] = None,
+    ingress_transport_accepted: bool = True,
+    policy_admitted: bool = True,
+    local_execution_started: bool = False,
+    local_execution_completed: bool = False,
+    advisory_evidence_sent: bool = False,
+    uplink_acknowledged: bool = False,
+    reconciliation_acknowledged: bool = False,
+    canonical_truth_completed: bool = False,
+    mature_closure_achieved: bool = False,
 ) -> Dict[str, Any]:
     """Build canonical lineage metadata for Android NL cross-device flows."""
     return {
@@ -146,8 +155,50 @@ def _build_android_nl_lineage(
         "closure_lineage": closure_lineage,
         "audit_lineage": audit_lineage,
         "gate_blocking_reasons": list(gate_blocking_reasons or []),
+        "ingress_transport_accepted": bool(ingress_transport_accepted),
+        "policy_admitted": bool(policy_admitted),
+        "local_execution_started": bool(local_execution_started),
+        "local_execution_completed": bool(local_execution_completed),
+        "advisory_evidence_sent": bool(advisory_evidence_sent),
+        "uplink_acknowledged": bool(uplink_acknowledged),
+        "reconciliation_acknowledged": bool(reconciliation_acknowledged),
+        "canonical_truth_completed": bool(canonical_truth_completed),
+        "mature_closure_achieved": bool(mature_closure_achieved),
+        "canonical_authority": "v2",
         "lineage_recorded_at_ms": int(time.time() * 1000),
     }
+
+
+def _is_lineage_quality_non_canonical(lineage_quality: str) -> bool:
+    q = str(lineage_quality or "").strip().lower()
+    return q in {
+        _LINEAGE_QUALITY_REPLAY_ASSISTED,
+        _LINEAGE_QUALITY_RECOVERY_ASSISTED,
+        _LINEAGE_QUALITY_COMPAT_SUCCESS,
+        _LINEAGE_QUALITY_FALLBACK_SUCCESS,
+        _LINEAGE_QUALITY_DEGRADED_SUCCESS,
+        "blocked",
+    }
+
+
+def _derive_canonical_closure_flags(
+    *,
+    is_fully_closed: bool,
+    truth_chain_complete: bool,
+    acceptance_verdict: str,
+    lineage_quality: str,
+) -> Tuple[bool, bool]:
+    verdict = str(acceptance_verdict or "").strip().lower()
+    canonical_truth_completed = (
+        bool(is_fully_closed)
+        and bool(truth_chain_complete)
+        and verdict in {"accept", "accepted"}
+    )
+    mature_closure_achieved = (
+        canonical_truth_completed
+        and not _is_lineage_quality_non_canonical(lineage_quality)
+    )
+    return canonical_truth_completed, mature_closure_achieved
 
 
 def _evaluate_android_nl_initiation_gate(
@@ -356,6 +407,7 @@ async def handle_goal_execution(
             closure_lineage="not_started",
             audit_lineage="blocked_pre_dispatch",
             gate_blocking_reasons=gate_blocking_gates,
+            policy_admitted=False,
         )
         return MessageBuilder.error(
             device_id,
@@ -400,6 +452,7 @@ async def handle_goal_execution(
                         closure_lineage="not_started",
                         audit_lineage="governance_rejected",
                         gate_blocking_reasons=list(_gov_verdict.blocking_gates),
+                        policy_admitted=False,
                     ),
                 },
                 correlation_id=task_id,
@@ -471,6 +524,7 @@ async def handle_goal_execution(
                     reconciliation_lineage="not_started",
                     closure_lineage="not_started",
                     audit_lineage="main_chain_ingress_rejected",
+                    policy_admitted=False,
                 ),
                 "main_chain_ingress": ingress_result,
                 "android_governance_context": governance_context,
@@ -563,6 +617,7 @@ async def handle_parallel_subtask(
             closure_lineage="not_started",
             audit_lineage="blocked_pre_dispatch",
             gate_blocking_reasons=gate_blocking_gates,
+            policy_admitted=False,
         )
         return MessageBuilder.error(
             device_id,
@@ -607,6 +662,7 @@ async def handle_parallel_subtask(
                         closure_lineage="not_started",
                         audit_lineage="governance_rejected",
                         gate_blocking_reasons=list(_gov_verdict.blocking_gates),
+                        policy_admitted=False,
                     ),
                 },
                 correlation_id=task_id,
@@ -676,6 +732,7 @@ async def handle_parallel_subtask(
                     reconciliation_lineage="not_started",
                     closure_lineage="not_started",
                     audit_lineage="main_chain_ingress_rejected",
+                    policy_admitted=False,
                 ),
                 "main_chain_ingress": ingress_result,
                 "android_governance_context": governance_context,
@@ -969,6 +1026,16 @@ async def handle_goal_execution_result(
         "lineage_quality",
         _determine_result_lineage_quality(payload, status),
     )
+    result_lineage.setdefault("ingress_transport_accepted", True)
+    result_lineage.setdefault("policy_admitted", True)
+    result_lineage.setdefault("local_execution_started", True)
+    result_lineage.setdefault("local_execution_completed", True)
+    result_lineage.setdefault("advisory_evidence_sent", True)
+    result_lineage.setdefault("uplink_acknowledged", True)
+    result_lineage.setdefault("reconciliation_acknowledged", False)
+    result_lineage.setdefault("canonical_truth_completed", False)
+    result_lineage.setdefault("mature_closure_achieved", False)
+    result_lineage.setdefault("canonical_authority", "v2")
 
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on
@@ -1095,6 +1162,15 @@ async def handle_goal_execution_result(
         if _ger_ingress_outcome.was_deduplicated:
             # 已由 UnifiedResultIngress 幂等性保护拦截
             result_lineage["closure_lineage"] = "unified_ingress_deduplicated"
+            result_lineage["reconciliation_acknowledged"] = True
+            _canonical_completed, _mature_closure = _derive_canonical_closure_flags(
+                is_fully_closed=getattr(_ger_ingress_outcome, "is_fully_closed", False),
+                truth_chain_complete=getattr(_ger_ingress_outcome, "truth_chain_complete", False),
+                acceptance_verdict=getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", ""),
+                lineage_quality=str(result_lineage.get("lineage_quality") or ""),
+            )
+            result_lineage["canonical_truth_completed"] = _canonical_completed
+            result_lineage["mature_closure_achieved"] = _mature_closure
             logger.debug(
                 "handle_goal_execution_result: unified ingress deduplicated task_id=%r",
                 task_id,
@@ -1102,16 +1178,31 @@ async def handle_goal_execution_result(
         elif _ger_ingress_outcome.is_fully_closed:
             _ger_ingress_closed = True
             result_lineage["reconciliation_lineage"] = "unified_ingress_closed"
-            result_lineage["closure_lineage"] = "unified_ingress_accepted"
-            result_lineage["audit_lineage"] = "unified_ingress_complete"
-            result_lineage["acceptance_verdict"] = (
-                _ger_ingress_outcome.evidence_acceptance_verdict or "accepted"
+            _acceptance_verdict = (
+                getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", "") or ""
             )
+            if str(_acceptance_verdict).strip().lower() in {"accept_provisional", "accepted_provisional"}:
+                result_lineage["closure_lineage"] = "unified_ingress_provisional_non_canonical"
+                if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
+                    result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+            else:
+                result_lineage["closure_lineage"] = "unified_ingress_accepted"
+            result_lineage["audit_lineage"] = "unified_ingress_complete"
+            result_lineage["acceptance_verdict"] = _acceptance_verdict or "accepted"
             if result_lineage.get("lineage_quality") in (
                 _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
                 _LINEAGE_QUALITY_CANONICAL_SUCCESS,
             ):
                 result_lineage["lineage_quality"] = _LINEAGE_QUALITY_CANONICAL_SUCCESS
+            result_lineage["reconciliation_acknowledged"] = True
+            _canonical_completed, _mature_closure = _derive_canonical_closure_flags(
+                is_fully_closed=getattr(_ger_ingress_outcome, "is_fully_closed", False),
+                truth_chain_complete=getattr(_ger_ingress_outcome, "truth_chain_complete", False),
+                acceptance_verdict=_acceptance_verdict,
+                lineage_quality=str(result_lineage.get("lineage_quality") or ""),
+            )
+            result_lineage["canonical_truth_completed"] = _canonical_completed
+            result_lineage["mature_closure_achieved"] = _mature_closure
             logger.debug(
                 "handle_goal_execution_result: unified ingress fully closed task_id=%r "
                 "acceptance=%s truth_chain=%s",
@@ -1128,6 +1219,11 @@ async def handle_goal_execution_result(
             result_lineage["audit_lineage"] = "unified_ingress_partial"
             if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
                 result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+            result_lineage["reconciliation_acknowledged"] = bool(
+                getattr(_ger_ingress_outcome, "truth_chain_complete", False)
+            )
+            result_lineage["canonical_truth_completed"] = False
+            result_lineage["mature_closure_achieved"] = False
             logger.warning(
                 "handle_goal_execution_result: unified ingress partial for task_id=%r "
                 "reason=%s truth_chain=%s",
@@ -1155,6 +1251,9 @@ async def handle_goal_execution_result(
                 result_lineage["audit_lineage"] = "truth_chain_fallback_incomplete"
                 if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
                     result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+                result_lineage["reconciliation_acknowledged"] = False
+                result_lineage["canonical_truth_completed"] = False
+                result_lineage["mature_closure_achieved"] = False
                 logger.warning(
                     "handle_goal_execution_result: truth chain fallback incomplete "
                     "for task_id=%r: %s",
@@ -1165,6 +1264,14 @@ async def handle_goal_execution_result(
                 result_lineage["reconciliation_lineage"] = "truth_chain_fallback_reconciled"
                 result_lineage["closure_lineage"] = "truth_chain_fallback_complete"
                 result_lineage["audit_lineage"] = "truth_chain_fallback_complete"
+                if result_lineage.get("lineage_quality") in (
+                    _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
+                    _LINEAGE_QUALITY_CANONICAL_SUCCESS,
+                ):
+                    result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
+                result_lineage["reconciliation_acknowledged"] = True
+                result_lineage["canonical_truth_completed"] = False
+                result_lineage["mature_closure_achieved"] = False
         else:
             # 第二层回退：遗留助手（truth chain 模块亦不可用）
             logger.warning(
@@ -1193,6 +1300,9 @@ async def handle_goal_execution_result(
             result_lineage["audit_lineage"] = "legacy_fallback_truth_chain"
             if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
                 result_lineage["lineage_quality"] = _LINEAGE_QUALITY_FALLBACK_SUCCESS
+            result_lineage["reconciliation_acknowledged"] = False
+            result_lineage["canonical_truth_completed"] = False
+            result_lineage["mature_closure_achieved"] = False
             # 遗留完成通知
             try:
                 from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
