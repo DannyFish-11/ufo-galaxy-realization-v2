@@ -733,7 +733,7 @@ def _emit_audit_event(
     was_reconciled: bool,
     canonical_update: str,
     reject_reason: str,
-    policy: str = CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+    policy: str,
     recovery_state_routing: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Emit a ReplayFoundation runtime event for this reconciliation attempt.
