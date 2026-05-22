@@ -1185,8 +1185,7 @@ def _reconcile_task_phase(
     - The Android phase maps to a meaningful AcknowledgmentSignal.
     - The mapped signal advances the record (non-trivial transition).
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
-    recovery_state_routing_dict).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
