@@ -1073,8 +1073,7 @@ def _reconcile_terminal_signal(
 ) -> Tuple[bool, str, str, str]:
     """Reconcile a terminal Android signal (cancel / failure / result).
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
-    recovery_state_routing_dict).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
@@ -1151,8 +1150,7 @@ def _reconcile_status_signal(
 ) -> Tuple[bool, str, str, str]:
     """Reconcile an Android status (progress) signal.
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
-    recovery_state_routing_dict).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
@@ -1187,7 +1185,8 @@ def _reconcile_task_phase(
     - The Android phase maps to a meaningful AcknowledgmentSignal.
     - The mapped signal advances the record (non-trivial transition).
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
+    recovery_state_routing_dict).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
