@@ -737,37 +737,31 @@ class TestCompletionIngressNotify:
         ingress._notify_completion = lambda _e: True  # type: ignore[method-assign]
         ingress._log_outcome = lambda _e, _o: None  # type: ignore[method-assign]
 
-        with patch(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block",
-            return_value=_FakeTruthBlock(),
-        ), patch(
-            "core.android_acceptance_evidence_store.get_latest_device_acceptance_evidence_dict",
-            return_value={
-                "acceptance_tag": "device_accepted_for_graduation",
-                "mapped_android_proof_class": "confirmed_strong",
-                "mapped_evidence_trust_level": "trusted",
-                "snapshot_id": "accept-snap-02",
-                "dimension_states": {"governance": "pass"},
-                "missing_dimensions": [],
-                "mapping_reason": "acceptance_tag indicates graduation-level acceptance",
-            },
+        with (
+            patch(
+                "core.v2_android_truth_ssot.build_v2_android_truth_block",
+                return_value=_FakeTruthBlock(),
+            ),
+            patch(
+                "core.android_acceptance_evidence_store.get_latest_device_acceptance_evidence_dict",
+                return_value={
+                    "acceptance_tag": "device_accepted_for_graduation",
+                    "mapped_android_proof_class": "confirmed_strong",
+                    "mapped_evidence_trust_level": "trusted",
+                    "snapshot_id": "accept-snap-02",
+                    "dimension_states": {"governance": "pass"},
+                    "missing_dimensions": [],
+                    "mapping_reason": "acceptance_tag indicates graduation-level acceptance",
+                },
+            ),
         ):
             outcome = ingress.process(_make_event(_make_task_id(), channel="canonical_ws"))
 
         assert outcome.evidence_acceptance_verdict == "accept"
         assert outcome.effective_android_proof_class == "confirmed_strong"
-        assert (
-            outcome.android_evidence_resolution
-            == "acceptance_report_mapped_proof_class"
-        )
-        assert (
-            outcome.android_evidence_runtime_context["acceptance_tag"]
-            == "device_accepted_for_graduation"
-        )
-        assert (
-            "runtime_truth:acceptance_tag"
-            in outcome.android_evidence_runtime_context.get("context_sources", [])
-        )
+        assert outcome.android_evidence_resolution == "acceptance_report_mapped_proof_class"
+        assert outcome.android_evidence_runtime_context["acceptance_tag"] == "device_accepted_for_graduation"
+        assert "runtime_truth:acceptance_tag" in outcome.android_evidence_runtime_context.get("context_sources", [])
 
     def test_E10_android_truth_stamp_prefers_result_payload_over_ssot(self):
         from core.unified_result_ingress import UnifiedResultIngress
@@ -1772,7 +1766,8 @@ class TestReplayOrderingAdjudication:
         """REPLAY event with no replay_seq and no replay_item_id → ambiguous_authority.
 
         Missing metadata is NOT hard-blocked but produces a downgraded verdict
-        (not authoritative_contract_defined).
+        (not authoritative_contract_defined) and cannot claim full canonical
+        duplicate guarantees.
         """
         ingress = _make_isolated_replay_ingress()
         ingress.reset_replay_session_state()
@@ -1791,6 +1786,27 @@ class TestReplayOrderingAdjudication:
         # Evidence is always populated
         assert outcome.replay_ordering_evidence["adjudication_status"] == "missing_ordering_metadata"
         assert "missing_fields" in outcome.replay_ordering_evidence
+        assert outcome.dedupe_contract_action == "degrade"
+        assert outcome.is_fully_closed is False
+        assert "dedupe_contract:replay_ordering_ambiguous_authority" in outcome.incomplete_reason
+
+    def test_K07b_android_wire_result_missing_canonical_dedupe_fields_is_degraded(self):
+        ingress = _make_isolated_replay_ingress()
+        evt = _make_event(_make_task_id(), channel="compat_ws")
+        evt.raw_message = {
+            "version": "3.0",
+            "type": "task_result",
+            "payload": {"task_id": evt.task_id},
+        }
+        evt.payload = dict(evt.raw_message["payload"])
+        evt.raw_message_type = "task_result"
+        evt.normalized_result_kind = "task_result"
+        outcome = ingress.process(evt)
+
+        assert outcome.dedupe_contract_action == "degrade"
+        assert outcome.dedupe_contract_reason == "missing_canonical_result_dedupe_fields"
+        assert outcome.is_fully_closed is False
+        assert "android_dedupe_contract" in outcome.dedupe_contract_evidence
 
     def test_K08_non_replay_channel_not_adjudicated(self):
         """Non-REPLAY channel events must NOT have replay ordering adjudication run."""
@@ -1799,9 +1815,9 @@ class TestReplayOrderingAdjudication:
         for channel in ("canonical_ws", "compat_ws", "rest_callback", "delegated"):
             evt = _make_event(_make_task_id(), channel=channel)
             outcome = ingress.process(evt)
-            assert outcome.replay_ordering_adjudicated is False, (
-                f"Channel {channel!r} should not trigger replay ordering adjudication"
-            )
+            assert (
+                outcome.replay_ordering_adjudicated is False
+            ), f"Channel {channel!r} should not trigger replay ordering adjudication"
             assert outcome.replay_ordering_decision == ""
             assert outcome.replay_ordering_verdict == ""
             assert outcome.replay_ordering_evidence == {}
@@ -1835,9 +1851,7 @@ class TestReplayOrderingAdjudication:
             outcomes.append(ingress.process(evt))
 
         decisions = [o.replay_ordering_decision for o in outcomes]
-        assert all(d == "accept" for d in decisions), (
-            f"All in-order items should be accepted; got: {decisions}"
-        )
+        assert all(d == "accept" for d in decisions), f"All in-order items should be accepted; got: {decisions}"
 
     def test_K11_blocking_replay_decision_does_not_reach_truth_chain(self):
         """Truth chain must NOT be called for blocked replay events."""
@@ -1873,9 +1887,7 @@ class TestReplayOrderingAdjudication:
 
         assert outcome.replay_ordering_decision == "reject_out_of_order"
         assert outcome.is_fully_closed is False
-        assert truth_chain_calls == [], (
-            "Truth chain must not be called for blocked replay events"
-        )
+        assert truth_chain_calls == [], "Truth chain must not be called for blocked replay events"
 
     def test_K12_evidence_dict_contains_required_keys_for_evaluated_case(self):
         """Replay ordering evidence must have all required keys when evaluated."""
@@ -1944,7 +1956,6 @@ class TestReplayOrderingAdjudication:
         )
         outcome_b = ingress.process(evt_b)
 
-        assert outcome_b.replay_ordering_decision == "accept", (
-            "Session B seq=1 should be accepted independently of Session A max=10"
-        )
-
+        assert (
+            outcome_b.replay_ordering_decision == "accept"
+        ), "Session B seq=1 should be accepted independently of Session A max=10"

@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional
 
+from core.reliability_contract import (
+    ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY,
+    ANDROID_UPLINK_REPLAY_DEDUP_KEY,
+    ANDROID_UPLINK_RESULT_DEDUP_KEY,
+)
+
 CROSS_REPO_SCHEMA_GATE_AUTHORITY: str = (
     "CROSS_REPO_SCHEMA_GATE_AUTHORITY::contracts.cross_repo_schema_version_gate::"
     "minimal critical gate for AIP message types + projection/closure truth contract"
@@ -14,15 +20,13 @@ CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.0.0"
 ANDROID_AUDITED_REF: str = "3258b09b25d5279773122e86a7b1945586ff470b"
 ANDROID_AIP_MODELS_SOURCE_SHA: str = "3404657c7eda895978ec672e1e176152161b8fe1"
 ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA: str = "7838103668a19800ed74d3133f4f5e671359d65a"
-ANDROID_AIP_MODELS_ANCHOR: str = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt"
-)
+ANDROID_AIP_MODELS_ANCHOR: str = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt"
 ANDROID_COMPLETION_CLOSURE_ANCHOR: str = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
-    "AndroidCompletionClosureUplinkContract.kt"
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/" "AndroidCompletionClosureUplinkContract.kt"
 )
 ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION: str = "1"
 ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION: str = "1"
+ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION: str = "1"
 
 REQUIRED_AIP_MESSAGE_TYPES: FrozenSet[str] = frozenset(
     {
@@ -144,6 +148,47 @@ COMPLETION_CONTRACT_ENFORCED_MESSAGE_TYPES: FrozenSet[str] = frozenset(
 
 _LEGACY_COMPAT_SCHEMA_VERSIONS: FrozenSet[str] = frozenset({"0"})
 
+ANDROID_RESULT_DEDUPE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "task_result",
+        "goal_result",
+        "goal_execution_result",
+    }
+)
+
+ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "reconciliation_signal",
+        "handoff_result",
+        "handoff_failure",
+        "handoff_envelope_v2_result",
+        "device_state_snapshot",
+        "device_execution_event",
+    }
+)
+
+
+@dataclass
+class AndroidUplinkDedupeContractDecision:
+    action: str
+    message_type: str
+    contract_class: str = ""
+    reason: str = ""
+    evidence: Dict[str, Any] = field(default_factory=dict)
+    expected_contract_version: str = ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action": self.action,
+            "message_type": self.message_type,
+            "contract_class": self.contract_class,
+            "reason": self.reason,
+            "evidence": dict(self.evidence),
+            "expected_contract_version": self.expected_contract_version,
+            "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
+            "gate_version": CROSS_REPO_SCHEMA_GATE_VERSION,
+        }
+
 
 def _extract_uplink_schema_version(message: Mapping[str, Any]) -> str:
     payload = message.get("payload")
@@ -186,6 +231,22 @@ def _extract_completion_contract_version(message: Mapping[str, Any]) -> str:
     return ""
 
 
+def _extract_text_field(message: Mapping[str, Any], *field_names: str) -> str:
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    schema_gate = payload_mapping.get("schema_gate")
+    schema_gate_mapping = schema_gate if isinstance(schema_gate, Mapping) else {}
+    for field_name in field_names:
+        for candidate in (
+            message.get(field_name),
+            payload_mapping.get(field_name),
+            schema_gate_mapping.get(field_name),
+        ):
+            if candidate is not None and str(candidate).strip():
+                return str(candidate).strip()
+    return ""
+
+
 def _to_int_or_none(raw: str) -> Optional[int]:
     try:
         return int(str(raw).strip())
@@ -225,10 +286,7 @@ def evaluate_android_uplink_schema_gate(
         )
 
     if observed_schema_version != ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION:
-        if (
-        compatibility_mode == "compat_degrade"
-        and observed_schema_version in _LEGACY_COMPAT_SCHEMA_VERSIONS
-        ):
+        if compatibility_mode == "compat_degrade" and observed_schema_version in _LEGACY_COMPAT_SCHEMA_VERSIONS:
             return AndroidUplinkSchemaGateDecision(
                 action="degrade",
                 message_type=normalized_type,
@@ -292,6 +350,86 @@ def evaluate_android_uplink_schema_gate(
     )
 
 
+def evaluate_android_uplink_dedupe_contract(
+    *,
+    message_type: str,
+    message: Mapping[str, Any],
+) -> Optional[AndroidUplinkDedupeContractDecision]:
+    normalized_type = str(message_type or "").strip().lower()
+
+    if normalized_type in ANDROID_RESULT_DEDUPE_MESSAGE_TYPES:
+        task_id = _extract_text_field(message, "task_id", "goal_id")
+        idempotency_key = _extract_text_field(message, "idempotency_key")
+        completion_emission_id = _extract_text_field(
+            message,
+            "completion_emission_id",
+            "emission_id",
+            "completion_id",
+            "result_id",
+        )
+        missing_fields = []
+        if not task_id:
+            missing_fields.append("task_id")
+        if not idempotency_key:
+            missing_fields.append("idempotency_key")
+        if not completion_emission_id:
+            missing_fields.append("completion_emission_id")
+        action = "accept" if not missing_fields else "degrade"
+        reason = (
+            "canonical_dedupe_contract_satisfied" if not missing_fields else "missing_canonical_result_dedupe_fields"
+        )
+        return AndroidUplinkDedupeContractDecision(
+            action=action,
+            message_type=normalized_type,
+            contract_class="result",
+            reason=reason,
+            evidence={
+                "task_id_present": bool(task_id),
+                "idempotency_key_present": bool(idempotency_key),
+                "completion_emission_id_present": bool(completion_emission_id),
+                "missing_fields": missing_fields,
+                "dedup_key_contract": ANDROID_UPLINK_RESULT_DEDUP_KEY.to_dict(),
+            },
+        )
+
+    if normalized_type in ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES:
+        subject_identity = _extract_text_field(message, "contract_id", "session_id", "runtime_session_id")
+        reconciliation_identity = _extract_text_field(
+            message,
+            "reconciliation_id",
+            "signal_id",
+            "handoff_id",
+            "event_id",
+            "result_id",
+            "completion_emission_id",
+        )
+        missing_fields = []
+        if not subject_identity:
+            missing_fields.append("contract_id|session_id")
+        if not reconciliation_identity:
+            missing_fields.append("reconciliation_id|signal_id|handoff_id")
+        action = "accept" if not missing_fields else "degrade"
+        reason = (
+            "canonical_dedupe_contract_satisfied"
+            if not missing_fields
+            else "missing_canonical_reconciliation_dedupe_fields"
+        )
+        return AndroidUplinkDedupeContractDecision(
+            action=action,
+            message_type=normalized_type,
+            contract_class="reconciliation",
+            reason=reason,
+            evidence={
+                "subject_identity_present": bool(subject_identity),
+                "reconciliation_identity_present": bool(reconciliation_identity),
+                "missing_fields": missing_fields,
+                "dedup_key_contract": ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY.to_dict(),
+            },
+        )
+
+    return None
+
+
 def build_projection_schema_gate_metadata() -> Dict[str, str]:
     return {
         "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
@@ -319,9 +457,7 @@ def verify_cross_repo_schema_gate(
     payload = dict(runtime_truth_payload or {})
     missing_top_level = sorted(k for k in REQUIRED_RUNTIME_TRUTH_TOP_LEVEL_FIELDS if k not in payload)
     if missing_top_level:
-        issues.append(
-            f"runtime-truth projection is missing required top-level fields: {missing_top_level}."
-        )
+        issues.append(f"runtime-truth projection is missing required top-level fields: {missing_top_level}.")
 
     contract = payload.get("truth_acceptance_closure_contract")
     if not isinstance(contract, Mapping):
@@ -329,19 +465,13 @@ def verify_cross_repo_schema_gate(
     else:
         missing_contract = sorted(k for k in REQUIRED_TRUTH_ACCEPTANCE_CONTRACT_FIELDS if k not in contract)
         if missing_contract:
-            issues.append(
-                "truth_acceptance_closure_contract is missing required fields: "
-                f"{missing_contract}."
-            )
+            issues.append("truth_acceptance_closure_contract is missing required fields: " f"{missing_contract}.")
 
         acceptance = contract.get("acceptance_closure_truth")
         if isinstance(acceptance, Mapping):
             missing_acceptance = sorted(k for k in REQUIRED_ACCEPTANCE_CLOSURE_FIELDS if k not in acceptance)
             if missing_acceptance:
-                issues.append(
-                    "acceptance_closure_truth is missing required fields: "
-                    f"{missing_acceptance}."
-                )
+                issues.append("acceptance_closure_truth is missing required fields: " f"{missing_acceptance}.")
         else:
             issues.append("acceptance_closure_truth must be a mapping.")
 
@@ -372,12 +502,27 @@ def build_cross_repo_schema_gate_manifest() -> Dict[str, Any]:
     return {
         "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
         "gate_version": CROSS_REPO_SCHEMA_GATE_VERSION,
+        "android_canonical_dedupe_contract_version": ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION,
         "android_audited_ref": ANDROID_AUDITED_REF,
         "android_aip_models_source_sha": ANDROID_AIP_MODELS_SOURCE_SHA,
         "android_completion_closure_source_sha": ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA,
         "android_anchors": {
             "aip_models": ANDROID_AIP_MODELS_ANCHOR,
             "completion_closure_uplink_contract": ANDROID_COMPLETION_CLOSURE_ANCHOR,
+        },
+        "android_dedupe_contracts": {
+            "result": {
+                "message_types": sorted(ANDROID_RESULT_DEDUPE_MESSAGE_TYPES),
+                "dedup_key": ANDROID_UPLINK_RESULT_DEDUP_KEY.to_dict(),
+            },
+            "reconciliation": {
+                "message_types": sorted(ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES),
+                "dedup_key": ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY.to_dict(),
+            },
+            "replay": {
+                "message_types": ["offline_replay_result"],
+                "dedup_key": ANDROID_UPLINK_REPLAY_DEDUP_KEY.to_dict(),
+            },
         },
         "required_aip_message_types": sorted(REQUIRED_AIP_MESSAGE_TYPES),
         "required_runtime_truth_top_level_fields": sorted(REQUIRED_RUNTIME_TRUTH_TOP_LEVEL_FIELDS),

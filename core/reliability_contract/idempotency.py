@@ -37,6 +37,9 @@ __all__ = [
     "HANDOFF_DEDUP_KEY",
     "COMMAND_ROUTER_DEDUP_KEY",
     "DEVICE_WEBSOCKET_DEDUP_KEY",
+    "ANDROID_UPLINK_RESULT_DEDUP_KEY",
+    "ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY",
+    "ANDROID_UPLINK_REPLAY_DEDUP_KEY",
 ]
 
 
@@ -167,8 +170,7 @@ COMMAND_ROUTER_DEDUP_KEY = DeduplicationKey(
     source_component="core.command_router.CommandRouter",
     enforced=False,
     notes=(
-        "CommandRouter passes task_id to the remote agent. "
-        "No built-in dedup enforcement; callers are responsible."
+        "CommandRouter passes task_id to the remote agent. " "No built-in dedup enforcement; callers are responsible."
     ),
     schema_version=1,
 )
@@ -180,8 +182,55 @@ DEVICE_WEBSOCKET_DEDUP_KEY = DeduplicationKey(
     source_component="galaxy_gateway.transport.websocket_server",
     enforced=False,
     notes=(
-        "WebSocket messages carry a message_id field. "
-        "No dedup enforcement on the transport layer; best-effort path."
+        "WebSocket messages carry a message_id field. " "No dedup enforcement on the transport layer; best-effort path."
+    ),
+    schema_version=1,
+)
+
+#: Android-originated result uplink — task identity + stable delivery identity +
+#: terminal emission identity.  Message transport ids alone are NOT canonical.
+ANDROID_UPLINK_RESULT_DEDUP_KEY = DeduplicationKey(
+    fields=["task_id", "idempotency_key", "completion_emission_id"],
+    composition="<task_id>:<idempotency_key>:<completion_emission_id>",
+    source_component="core.unified_result_ingress.UnifiedResultIngress",
+    enforced=True,
+    notes=(
+        "Canonical Android result handling requires both a stable delivery "
+        "idempotency key and a stable terminal emission identity. "
+        "Transport-only identifiers such as message_id are compatibility hints, "
+        "not sufficient for full canonical duplicate guarantees."
+    ),
+    schema_version=1,
+)
+
+#: Android-originated reconciliation / runtime truth uplink — stable subject
+#: scope plus reconciliation/signal identity.
+ANDROID_UPLINK_RECONCILIATION_DEDUP_KEY = DeduplicationKey(
+    fields=["contract_id|session_id", "reconciliation_id|signal_id|handoff_id"],
+    composition="<contract_id|session_id>:<reconciliation_id|signal_id|handoff_id>",
+    source_component="contracts.cross_repo_schema_version_gate",
+    enforced=False,
+    notes=(
+        "Canonical reconciliation dedupe is scoped by delegated contract "
+        "identity when available, otherwise by runtime/session identity. "
+        "A stable reconciliation or signal identifier is required for full "
+        "cross-repo canonical duplicate semantics."
+    ),
+    schema_version=1,
+)
+
+#: Android offline replay uplink — replay session scope, queue item identity,
+#: and queue ordering number.
+ANDROID_UPLINK_REPLAY_DEDUP_KEY = DeduplicationKey(
+    fields=["replay_session_id", "replay_item_id", "replay_seq"],
+    composition="<replay_session_id>:<replay_item_id>:<replay_seq>",
+    source_component="core.unified_result_ingress.UnifiedResultIngress",
+    enforced=True,
+    notes=(
+        "Replay acceptance depends on both stable per-item identity and queue "
+        "ordering semantics. Missing replay_item_id or replay_seq must degrade "
+        "or block canonical replay guarantees rather than silently passing as "
+        "authoritative duplicate identity."
     ),
     schema_version=1,
 )
