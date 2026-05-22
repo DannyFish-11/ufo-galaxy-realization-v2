@@ -94,6 +94,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
+import json
 import logging
 import threading
 import time
@@ -103,6 +105,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.android_participation_truth_scoring import (
     get_android_participation_tier_score_bonus,
     normalize_android_participation_tier,
+)
+from core.continuity_adjudication import (
+    ContinuityAdjudicationClassification,
+    build_continuity_adjudication_evidence,
 )
 
 logger = logging.getLogger(__name__)
@@ -869,6 +875,124 @@ def _coerce_mesh_participant_result_payload(
     return result
 
 
+def _coerce_mesh_session_epoch(payload: Any) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("session_epoch", "execution_epoch", "epoch"):
+        raw = payload.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _derive_mesh_participant_emission_identity(
+    *,
+    payload: Any,
+    correlation_id: Optional[str],
+) -> str:
+    if isinstance(payload, dict):
+        for key in (
+            "completion_emission_id",
+            "emission_id",
+            "completion_id",
+            "result_id",
+            "message_id",
+        ):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value
+    cid = str(correlation_id or "").strip()
+    if cid:
+        return cid
+    payload_fingerprint_source = payload if isinstance(payload, dict) else {"result": payload}
+    payload_fingerprint = json.dumps(
+        payload_fingerprint_source,
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    payload_hash = hashlib.sha1(payload_fingerprint.encode("utf-8")).hexdigest()
+    return f"payload:{payload_hash}"
+
+
+def _build_mesh_participant_lineage(
+    *,
+    mesh_session_id: Optional[str],
+    participant_id: str,
+    payload: Any,
+    correlation_id: Optional[str],
+) -> Dict[str, Any]:
+    payload_dict = payload if isinstance(payload, dict) else {}
+    return {
+        "participant_id": participant_id,
+        "mesh_session_id": str(
+            mesh_session_id
+            or payload_dict.get("session_id")
+            or payload_dict.get("mesh_session_id")
+            or ""
+        ),
+        "task_id": str(payload_dict.get("task_id") or payload_dict.get("envelope_task_id") or ""),
+        "session_epoch": _coerce_mesh_session_epoch(payload_dict),
+        "participant_emission_id": _derive_mesh_participant_emission_identity(
+            payload=payload,
+            correlation_id=correlation_id,
+        ),
+    }
+
+
+def _build_mesh_participant_result_adjudication(
+    *,
+    lineage: Dict[str, Any],
+    classification: ContinuityAdjudicationClassification,
+    triggering_reason: str,
+    disposition: str,
+    decision_point: str,
+    selected_epoch: Optional[int] = None,
+) -> Dict[str, Any]:
+    evidence = build_continuity_adjudication_evidence(
+        classification=classification,
+        triggering_reason=triggering_reason,
+        epoch_session_basis={
+            "mesh_session_id": lineage.get("mesh_session_id"),
+            "session_epoch": lineage.get("session_epoch"),
+            "selected_epoch": selected_epoch,
+        },
+        related_identity={
+            "participant_id": lineage.get("participant_id"),
+            "task_id": lineage.get("task_id"),
+            "mesh_session_id": lineage.get("mesh_session_id"),
+            "participant_emission_id": lineage.get("participant_emission_id"),
+        },
+        decision_point=decision_point,
+    )
+    return {
+        "participant_id": lineage.get("participant_id"),
+        "task_id": lineage.get("task_id"),
+        "mesh_session_id": lineage.get("mesh_session_id"),
+        "session_epoch": lineage.get("session_epoch"),
+        "participant_emission_id": lineage.get("participant_emission_id"),
+        "classification": evidence.get("classification"),
+        "disposition": disposition,
+        "triggering_reason": triggering_reason,
+        "evidence": evidence,
+    }
+
+
+def _is_mesh_participant_explicit_stale(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if bool(payload.get("is_stale")):
+        return True
+    if str(payload.get("stale_reason") or "").strip():
+        return True
+    result_kind = str(payload.get("result_kind") or payload.get("status") or "").strip().lower()
+    return result_kind in {"stale", "expired", "superseded"}
+
+
 def _wait_for_staged_mesh_participant_results(
     *,
     mesh_session_id: Optional[str],
@@ -893,6 +1017,21 @@ def _wait_for_staged_mesh_participant_results(
     poll_seconds = max(float(poll_interval_seconds), MIN_STAGED_MESH_PARTICIPANT_POLL_INTERVAL_SECONDS)
     deadline = time.time() + wait_seconds
     collected: Dict[str, Any] = {}
+    accepted_lineage: Dict[str, Dict[str, Any]] = {}
+    participant_emission_seen: Dict[str, set[str]] = {}
+    processed_event_ids: set[str] = set()
+    participant_result_adjudication: List[Dict[str, Any]] = []
+    participant_result_summary: Dict[str, int] = {
+        "accepted": 0,
+        "ignored": 0,
+        "rejected": 0,
+        "current_accepted": 0,
+        "duplicate_ignored": 0,
+        "stale_rejected": 0,
+        "abandoned_or_superseded": 0,
+        "superseded_by_newer_epoch_session": 0,
+    }
+    settled_after_all_collected_at: Optional[float] = None
 
     while True:
         try:
@@ -902,16 +1041,174 @@ def _wait_for_staged_mesh_participant_results(
             session_rec = store.get_session(str(mesh_session_id))
             result_events = list(getattr(session_rec, "result_events", []) or []) if session_rec is not None else []
             for event in result_events:
+                event_id = str(getattr(event, "event_id", "") or "").strip()
+                if event_id and event_id in processed_event_ids:
+                    continue
                 did = str(getattr(event, "device_id", "") or "").strip()
-                if not did or did not in expected_set or did in collected:
+                if not did or did not in expected_set:
                     continue
                 payload = getattr(event, "payload", {}) or {}
+                lineage = _build_mesh_participant_lineage(
+                    mesh_session_id=mesh_session_id,
+                    participant_id=did,
+                    payload=payload,
+                    correlation_id=getattr(event, "correlation_id", None),
+                )
+                session_epoch = lineage.get("session_epoch")
+                emission_id = str(lineage.get("participant_emission_id") or "").strip()
+                seen = participant_emission_seen.setdefault(did, set())
+                if emission_id and emission_id in seen:
+                    participant_result_summary["ignored"] += 1
+                    participant_result_summary["duplicate_ignored"] += 1
+                    participant_result_adjudication.append(
+                        _build_mesh_participant_result_adjudication(
+                            lineage=lineage,
+                            classification=ContinuityAdjudicationClassification.duplicate_ignored,
+                            triggering_reason="duplicate_participant_emission",
+                            disposition="ignored",
+                            decision_point="source_dispatch_orchestrator.mesh_wait.duplicate_gate",
+                        )
+                    )
+                    if event_id:
+                        processed_event_ids.add(event_id)
+                    continue
+                if emission_id:
+                    seen.add(emission_id)
+
+                explicit_stale = _is_mesh_participant_explicit_stale(payload)
+                selected_lineage = accepted_lineage.get(did)
+                selected_epoch = (
+                    int(selected_lineage["session_epoch"])
+                    if selected_lineage is not None
+                    and selected_lineage.get("session_epoch") is not None
+                    else None
+                )
+                current_epoch = int(session_epoch) if session_epoch is not None else None
+                if explicit_stale:
+                    participant_result_summary["rejected"] += 1
+                    participant_result_summary["stale_rejected"] += 1
+                    participant_result_adjudication.append(
+                        _build_mesh_participant_result_adjudication(
+                            lineage=lineage,
+                            classification=ContinuityAdjudicationClassification.stale_rejected,
+                            triggering_reason="explicit_stale_flag",
+                            disposition="rejected",
+                            selected_epoch=selected_epoch,
+                            decision_point="source_dispatch_orchestrator.mesh_wait.stale_gate",
+                        )
+                    )
+                    if event_id:
+                        processed_event_ids.add(event_id)
+                    continue
+
+                if selected_lineage is not None:
+                    if current_epoch is not None and selected_epoch is not None and current_epoch < selected_epoch:
+                        participant_result_summary["rejected"] += 1
+                        participant_result_summary["stale_rejected"] += 1
+                        participant_result_summary["superseded_by_newer_epoch_session"] += 1
+                        participant_result_adjudication.append(
+                            _build_mesh_participant_result_adjudication(
+                                lineage=lineage,
+                                classification=ContinuityAdjudicationClassification.stale_rejected,
+                                triggering_reason="superseded_by_newer_epoch_session",
+                                disposition="rejected",
+                                selected_epoch=selected_epoch,
+                                decision_point="source_dispatch_orchestrator.mesh_wait.epoch_gate",
+                            )
+                        )
+                        if event_id:
+                            processed_event_ids.add(event_id)
+                        continue
+
+                    if (
+                        (current_epoch is not None and selected_epoch is not None and current_epoch > selected_epoch)
+                        or (current_epoch is not None and selected_epoch is None)
+                    ):
+                        participant_result_summary["rejected"] += 1
+                        participant_result_summary["abandoned_or_superseded"] += 1
+                        participant_result_summary["superseded_by_newer_epoch_session"] += 1
+                        participant_result_adjudication.append(
+                            _build_mesh_participant_result_adjudication(
+                                lineage=selected_lineage,
+                                classification=ContinuityAdjudicationClassification.abandoned_or_superseded,
+                                triggering_reason="superseded_by_newer_epoch_session",
+                                disposition="rejected",
+                                selected_epoch=current_epoch,
+                                decision_point="source_dispatch_orchestrator.mesh_wait.supersede_previous",
+                            )
+                        )
+                    elif current_epoch == selected_epoch:
+                        participant_result_summary["ignored"] += 1
+                        participant_result_summary["duplicate_ignored"] += 1
+                        participant_result_adjudication.append(
+                            _build_mesh_participant_result_adjudication(
+                                lineage=lineage,
+                                classification=ContinuityAdjudicationClassification.duplicate_ignored,
+                                triggering_reason="same_participant_same_epoch_duplicate",
+                                disposition="ignored",
+                                selected_epoch=selected_epoch,
+                                decision_point="source_dispatch_orchestrator.mesh_wait.same_epoch_gate",
+                            )
+                        )
+                        if event_id:
+                            processed_event_ids.add(event_id)
+                        continue
+                    elif current_epoch is None and selected_epoch is not None:
+                        participant_result_summary["rejected"] += 1
+                        participant_result_summary["stale_rejected"] += 1
+                        participant_result_adjudication.append(
+                            _build_mesh_participant_result_adjudication(
+                                lineage=lineage,
+                                classification=ContinuityAdjudicationClassification.stale_rejected,
+                                triggering_reason="missing_epoch_after_epoch_locked",
+                                disposition="rejected",
+                                selected_epoch=selected_epoch,
+                                decision_point="source_dispatch_orchestrator.mesh_wait.epoch_required_after_lock",
+                            )
+                        )
+                        if event_id:
+                            processed_event_ids.add(event_id)
+                        continue
+                    elif current_epoch is None and selected_epoch is None:
+                        participant_result_summary["ignored"] += 1
+                        participant_result_summary["duplicate_ignored"] += 1
+                        participant_result_adjudication.append(
+                            _build_mesh_participant_result_adjudication(
+                                lineage=lineage,
+                                classification=ContinuityAdjudicationClassification.duplicate_ignored,
+                                triggering_reason="same_participant_epoch_unknown_duplicate",
+                                disposition="ignored",
+                                decision_point="source_dispatch_orchestrator.mesh_wait.epoch_unknown_duplicate",
+                            )
+                        )
+                        if event_id:
+                            processed_event_ids.add(event_id)
+                        continue
+
                 collected[did] = _coerce_mesh_participant_result_payload(payload, device_id=did)
+                accepted_lineage[did] = lineage
+                participant_result_summary["accepted"] += 1
+                participant_result_summary["current_accepted"] += 1
+                participant_result_adjudication.append(
+                    _build_mesh_participant_result_adjudication(
+                        lineage=lineage,
+                        classification=ContinuityAdjudicationClassification.current_accepted,
+                        triggering_reason="participant_result_currently_accepted_for_merge",
+                        disposition="accepted",
+                        selected_epoch=selected_epoch,
+                        decision_point="source_dispatch_orchestrator.mesh_wait.accept_current",
+                    )
+                )
+                if event_id:
+                    processed_event_ids.add(event_id)
         except Exception:
             pass
 
         if len(collected) >= len(expected_set):
-            break
+            if settled_after_all_collected_at is None:
+                settled_after_all_collected_at = time.time() + min(max(poll_seconds, 0.02), 0.2)
+            if time.time() >= settled_after_all_collected_at:
+                break
         if time.time() >= deadline:
             break
         time.sleep(poll_seconds)
@@ -925,6 +1222,14 @@ def _wait_for_staged_mesh_participant_results(
         "timed_out_device_ids": timed_out_ids,
         "timed_out": bool(timed_out_ids),
         "wait_seconds": wait_seconds,
+        "participant_result_summary": dict(
+            participant_result_summary,
+            final_accepted_participant_count=len(received_ids),
+        ),
+        "participant_result_adjudication": participant_result_adjudication,
+        "accepted_participant_lineage": {
+            did: dict(accepted_lineage.get(did) or {}) for did in received_ids
+        },
     }
 
 
