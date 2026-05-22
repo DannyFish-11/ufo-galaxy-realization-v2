@@ -87,12 +87,17 @@ try:
 except ImportError:
     _reconcile_inbound_message = None  # type: ignore[assignment]
 
-# PR-4V2: Android participant/session/runtime truth ingress — top-level import
-# so tests can patch() it and import failures are handled gracefully.
+# PR-4V2 / PR-2-SINGLE-INGRESS: Android participant/session/runtime truth must
+# flow through the canonical unified ingress, NOT through direct sub-ingress
+# calls.  Import ingest_android_runtime_state_update as the single entry point.
 try:
-    from core.android_participant_truth_ingress import ingest_android_participant_truth_message as _ingest_participant_truth
+    from core.unified_runtime_truth_ingress import (
+        ingest_android_runtime_state_update as _ingest_via_canonical_ingress,
+        record_non_ingress_participant_truth_write as _record_bypass_attempt,
+    )
 except ImportError:
-    _ingest_participant_truth = None  # type: ignore[assignment]
+    _ingest_via_canonical_ingress = None  # type: ignore[assignment]
+    _record_bypass_attempt = None  # type: ignore[assignment]
 
 # PR-TTC: Canonical must-run truth chain for task_result processing.
 # Top-level import so tests can patch() the chain function.
@@ -412,33 +417,30 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
 def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> None:
     """Best-effort ingest *message* as Android participant truth into V2 canonical state.
 
-    Calls :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
-    when the ingress module is available.  The *message* dict is enriched with
-    the caller-supplied *truth_kind* value (which maps to
-    :class:`~core.android_participant_truth_ingress.AndroidParticipantTruthKind`)
-    before passing to the ingress function.
+    Routes through :func:`~core.unified_runtime_truth_ingress.ingest_android_runtime_state_update`
+    — the single canonical ingress — so that continuity-gate and routing-ambiguity
+    enforcement are always applied.  The caller-supplied *truth_kind* value is
+    injected into the message before routing so the participant-truth sub-ingress
+    can correctly classify the envelope.
 
     Failures are logged at WARNING level and the observable error counter is
     incremented so that monitoring can detect truth-ingress regressions without
     log-scraping.
     """
-    if _ingest_participant_truth is None:
+    if _ingest_via_canonical_ingress is None:
         return
     try:
         enriched = dict(message)
         # Inject truth_kind so the ingress envelope extractor classifies it
         # correctly even if the raw Android message does not carry the field.
         enriched.setdefault("truth_kind", truth_kind)
-        outcome = _ingest_participant_truth(enriched)
+        outcome = _ingest_via_canonical_ingress(enriched)
         if outcome.was_reconciled:
             logger.debug(
-                "PR-4V2 participant truth ingested: truth_kind=%s contract_id=%r "
-                "session_id=%r was_reconciled=True canonical_update=%r phase=%r",
+                "PR-4V2 participant truth ingested via canonical ingress: "
+                "truth_kind=%s routed_path=%r was_reconciled=True",
                 truth_kind,
-                outcome.envelope.contract_id if outcome.envelope else "",
-                outcome.envelope.session_id if outcome.envelope else "",
-                outcome.canonical_update,
-                outcome.tracking_record_phase,
+                outcome.routed_path,
             )
         elif outcome.reject_reason:
             logger.debug(

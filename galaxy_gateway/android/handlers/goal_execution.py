@@ -52,13 +52,15 @@ except ImportError:
 # so tests can patch() it and import failures are handled gracefully.
 # goal_execution_result carries a user-visible business result and must be
 # reconciled into V2 canonical participant truth (truth_kind="result") just
-# like task_result in task_lifecycle.py.
+# PR-8V2 / PR-2-SINGLE-INGRESS: Android participant truth for goal_execution_result
+# must flow through the canonical unified ingress, NOT through direct sub-ingress
+# calls.  Import ingest_android_runtime_state_update as the single entry point.
 try:
-    from core.android_participant_truth_ingress import (
-        ingest_android_participant_truth_message as _ingest_goal_result_truth,
+    from core.unified_runtime_truth_ingress import (
+        ingest_android_runtime_state_update as _ingest_goal_result_via_canonical_ingress,
     )
 except ImportError:
-    _ingest_goal_result_truth = None  # type: ignore[assignment]
+    _ingest_goal_result_via_canonical_ingress = None  # type: ignore[assignment]
 
 # PR-UNIFY: Canonical must-run truth chain for goal_execution_result processing.
 # Top-level import so tests can patch() the chain function.
@@ -342,29 +344,25 @@ def _make_completion_envelope(task_id: str, handoff_id: str = "") -> Any:
 def _try_ingest_goal_result_truth(message: Dict[str, Any]) -> None:
     """Best-effort ingest *message* as Android participant truth (result kind).
 
-    Calls :func:`~core.android_participant_truth_ingress.ingest_android_participant_truth_message`
-    when the ingress module is available, injecting ``truth_kind="result"`` so
-    the envelope extractor classifies the goal_execution_result as a canonical
-    result signal.
+    Routes through :func:`~core.unified_runtime_truth_ingress.ingest_android_runtime_state_update`
+    — the single canonical ingress — so that continuity-gate enforcement is
+    always applied.  Injects ``truth_kind="result"`` so the participant-truth
+    sub-ingress classifies the goal_execution_result as a canonical result signal.
 
     Failures are logged at DEBUG level and never propagated — this is an
     additive PR-8V2 path that complements the existing PR-13 reconcile call.
     """
-    if _ingest_goal_result_truth is None:
+    if _ingest_goal_result_via_canonical_ingress is None:
         return
     try:
         enriched = dict(message)
         enriched.setdefault("truth_kind", "result")
-        outcome = _ingest_goal_result_truth(enriched)
+        outcome = _ingest_goal_result_via_canonical_ingress(enriched)
         if outcome.was_reconciled:
             logger.debug(
-                "PR-8V2 goal_execution_result participant truth ingested: "
-                "contract_id=%r session_id=%r was_reconciled=True "
-                "canonical_update=%r phase=%r",
-                outcome.envelope.contract_id if outcome.envelope else "",
-                outcome.envelope.session_id if outcome.envelope else "",
-                outcome.canonical_update,
-                outcome.tracking_record_phase,
+                "PR-8V2 goal_execution_result participant truth ingested via "
+                "canonical ingress: routed_path=%r was_reconciled=True",
+                outcome.routed_path,
             )
         elif outcome.reject_reason:
             logger.debug(
