@@ -740,6 +740,16 @@ def _emit_audit_event(
 
     Parameters
     ----------
+    truth_kind
+        The reconciled Android truth kind being emitted for audit.
+    envelope
+        The source Android participant truth envelope.
+    was_reconciled
+        Whether this truth materially updated canonical V2 state.
+    canonical_update
+        Human-readable description of any canonical state update applied.
+    reject_reason
+        Rejection reason when the truth was not canonically reconciled.
     policy
         Policy sentinel describing the canonical rule under which this
         reconciliation attempt was handled.
@@ -1452,6 +1462,9 @@ def _reconcile_recovery_state(
     try:
         routing_decision = decision.to_dict()
     except Exception as exc:  # noqa: BLE001
+        # Preserve the stable observability subset of RecoveryStateRoutingDecision
+        # even if full serialisation fails.  Downstream review/audit consumers rely
+        # on these keys to understand how Android recovery evidence was routed.
         routing_decision = {
             "recovery_phase": decision.recovery_phase.value,
             "v2_route": decision.v2_route.value,
