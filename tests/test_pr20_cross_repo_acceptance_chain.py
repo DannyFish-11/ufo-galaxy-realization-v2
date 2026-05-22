@@ -334,6 +334,7 @@ class TestCrossRepoAcceptanceChain:
     def test_advisory_android_acceptance_evidence_does_not_claim_canonical_closure(self):
         from core.android_acceptance_evidence_store import ingest_device_acceptance_report
         from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain
+        from core.routes.projection import _derive_shared_execution_visibility
 
         device_id = f"pr20-advisory-{uuid.uuid4().hex[:8]}"
         ingest_device_acceptance_report(
@@ -355,9 +356,9 @@ class TestCrossRepoAcceptanceChain:
                 "acceptance_canonical_confirmation_required": True,
             },
         }
-        truth_payload["shared_execution_visibility"] = __import__(
-            "core.routes.projection", fromlist=["_derive_shared_execution_visibility"]
-        )._derive_shared_execution_visibility(truth_payload)
+        truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(
+            truth_payload
+        )
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
             "participation_truth_consumption": dict(

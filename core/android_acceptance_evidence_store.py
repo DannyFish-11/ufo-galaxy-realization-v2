@@ -15,6 +15,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 ANDROID_ADVISORY_EVIDENCE_AUTHORITY = "android_advisory"
+EVIDENCE_COMPLETENESS_INCOMPLETE = "incomplete"
+EVIDENCE_COMPLETENESS_COMPLETE = "complete"
+EVIDENCE_COMPLETENESS_PARTIAL = "partial"
 UNKNOWN_EVIDENCE_COMPLETENESS = "unknown"
 ADVISORY_ONLY_CLOSURE_SIGNIFICANCE = "advisory_only"
 ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS = "advisory_pending_confirmation"
@@ -179,7 +182,7 @@ def _map_acceptance_tag(
             "evidence_completeness": evidence_completeness,
             "closure_significance": (
                 "advisory_candidate"
-                if evidence_completeness == "complete"
+                if evidence_completeness == EVIDENCE_COMPLETENESS_COMPLETE
                 else "advisory_incomplete"
             ),
             "canonical_confirmation_required": True,
@@ -237,12 +240,12 @@ def _classify_evidence_completeness(
     mistaken for closure-grade complete evidence.
     """
     if missing_dimensions:
-        return "incomplete"
+        return EVIDENCE_COMPLETENESS_INCOMPLETE
     if dimension_states and snapshot_id:
-        return "complete"
+        return EVIDENCE_COMPLETENESS_COMPLETE
     if dimension_states or snapshot_id:
-        return "partial"
-    return "unknown"
+        return EVIDENCE_COMPLETENESS_PARTIAL
+    return UNKNOWN_EVIDENCE_COMPLETENESS
 
 
 def _coerce_text(value: Any) -> str:
