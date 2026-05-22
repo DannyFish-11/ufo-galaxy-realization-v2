@@ -13,8 +13,8 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from core.continuity_adjudication import (
-    ContinuityAdjudicationClassification,
     build_continuity_adjudication_evidence,
+    decide_reconnect_pending_policy,
 )
 from galaxy_gateway.android.message_builder import MessageBuilder
 from galaxy_gateway.android.models import AndroidDevice
@@ -23,17 +23,6 @@ if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
 
 logger = logging.getLogger(__name__)
-
-_RESUME_EXISTING_EXECUTION_REASON = "continuity_resume_for_existing_execution"
-
-_PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION = {
-    "resume_existing_execution": ContinuityAdjudicationClassification.reconnect_recovery_required.value,
-    "request_replay_reconciliation": ContinuityAdjudicationClassification.replay_reconciliation_required.value,
-    "trigger_failover": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
-    "closure_already_decided": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
-    "mark_abandoned_stale": ContinuityAdjudicationClassification.abandoned_or_superseded.value,
-}
-
 
 # ---------------------------------------------------------------------------
 # Registration completeness tracking
@@ -219,43 +208,15 @@ def _apply_pending_lifecycle_reconnect_decisions(
     pending_records = list(registry.get_pending_for_device(device_id))
 
     for record in pending_records:
-        # decision = lifecycle classification exposed to diagnostics / ACK payload
-        # action   = concrete reconnect action applied to the pending registry
-        decision = "resume_existing_execution"
-        action = "keep_pending_and_wait_for_result"
-        reason = _RESUME_EXISTING_EXECUTION_REASON
-        should_fail = False
-
-        if record.is_timed_out():
-            decision = "mark_abandoned_stale"
-            action = "abandon_pending_envelope"
-            reason = "pending_envelope_timed_out_before_reconnect_decision"
-            should_fail = True
-        elif record.owner == LifecycleOwner.RESULT_COMPLETION:
-            decision = "closure_already_decided"
-            action = "abandon_pending_envelope"
-            reason = "pending_record_already_at_result_completion_owner"
-            should_fail = True
-        elif continuity_outcome != "continuity_resume":
-            if record.owner == LifecycleOwner.ROUTING:
-                decision = "request_replay_reconciliation"
-                action = "fail_pending_for_replay"
-                reason = "new_attachment_blocks_routing_stage_resume"
-            else:
-                decision = "trigger_failover"
-                action = "fail_pending_for_failover"
-                reason = f"new_attachment_blocks_{record.owner.value}_resume"
-            should_fail = True
-        elif record.owner == LifecycleOwner.ROUTING:
-            decision = "request_replay_reconciliation"
-            action = "fail_pending_for_replay"
-            reason = "reconnect_requires_routing_replay"
-            should_fail = True
-        elif record.owner == LifecycleOwner.GATEWAY_INGRESS:
-            decision = "trigger_failover"
-            action = "fail_pending_for_failover"
-            reason = "reconnect_requires_gateway_reissue_or_failover"
-            should_fail = True
+        policy_decision = decide_reconnect_pending_policy(
+            continuity_outcome=continuity_outcome,
+            owner=record.owner.value,
+            is_timed_out=record.is_timed_out(),
+        )
+        decision = policy_decision.decision
+        action = policy_decision.action
+        reason = policy_decision.triggering_reason
+        should_fail = policy_decision.should_fail
 
         evidence = {
             "task_id": record.task_id,
@@ -274,19 +235,7 @@ def _apply_pending_lifecycle_reconnect_decisions(
                 f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"
             ),
         }
-        classification = _PENDING_DECISION_TO_ADJUDICATION_CLASSIFICATION.get(decision)
-        if classification is None:
-            classification = (
-                ContinuityAdjudicationClassification.abandoned_or_superseded.value
-            )
-            logger.warning(
-                "reconnect lifecycle decision unmapped to continuity adjudication "
-                "classification; falling back to abandoned-or-superseded "
-                "device_id=%s task_id=%s decision=%s",
-                device_id,
-                record.task_id,
-                decision,
-            )
+        classification = policy_decision.classification
         evidence["continuity_adjudication_classification"] = classification
         evidence["continuity_adjudication"] = build_continuity_adjudication_evidence(
             classification=classification,

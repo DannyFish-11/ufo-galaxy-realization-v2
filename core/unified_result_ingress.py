@@ -69,7 +69,6 @@ import logging
 import os
 import re
 import time
-import uuid
 import threading
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -77,7 +76,9 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from core.continuity_adjudication import (
-    ContinuityAdjudicationClassification,
+    adjudicate_continuity_legality_gate,
+    adjudicate_duplicate_vs_first_accepted,
+    adjudicate_stale_vs_current,
     build_continuity_adjudication_evidence,
 )
 
@@ -454,13 +455,15 @@ class UnifiedResultIngress:
             continuity_verdict,
             mode=continuity_mode,
         ):
-            outcome.continuity_rejected = True
-            outcome.continuity_adjudication_classification = (
-                ContinuityAdjudicationClassification.replay_reconciliation_required.value
+            continuity_policy = adjudicate_continuity_legality_gate(
+                should_block=True,
+                verdict=continuity_verdict,
             )
+            outcome.continuity_rejected = True
+            outcome.continuity_adjudication_classification = continuity_policy.classification
             outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
                 classification=outcome.continuity_adjudication_classification,
-                triggering_reason=f"continuity_legality_verdict:{continuity_verdict}",
+                triggering_reason=continuity_policy.triggering_reason,
                 epoch_session_basis={
                     "session_epoch": event.session_epoch,
                     "runtime_session_id": event.runtime_session_id,
@@ -491,19 +494,19 @@ class UnifiedResultIngress:
         # that stale results are not recorded in the durable idempotency store.
         _stale, _stale_cls, _stale_evidence = self._check_stale_epoch(event)
         if _stale:
+            stale_policy = adjudicate_stale_vs_current(
+                is_stale=True,
+                stale_classification=_stale_cls,
+                stale_reason=str(_stale_evidence.get("stale_reason") or ""),
+            )
             outcome.stale_epoch_rejected = True
             outcome.stale_classification = _stale_cls
             outcome.stale_epoch_evidence = _stale_evidence
-            outcome.completion_disposition = "stale_rejected"
-            outcome.continuity_adjudication_classification = (
-                ContinuityAdjudicationClassification.stale_rejected.value
-            )
+            outcome.completion_disposition = stale_policy.completion_disposition
+            outcome.continuity_adjudication_classification = stale_policy.classification
             outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
                 classification=outcome.continuity_adjudication_classification,
-                triggering_reason=(
-                    str(_stale_evidence.get("stale_reason") or "")
-                    or f"stale_classification:{_stale_cls}"
-                ),
+                triggering_reason=stale_policy.triggering_reason,
                 epoch_session_basis={
                     "session_epoch": event.session_epoch,
                     "stored_epoch": _stale_evidence.get("stored_epoch"),
@@ -540,14 +543,15 @@ class UnifiedResultIngress:
 
         # Step 1: idempotency
         if self._check_idempotency(event):
-            outcome.was_deduplicated = True
-            outcome.completion_disposition = "duplicate_ignored"
-            outcome.continuity_adjudication_classification = (
-                ContinuityAdjudicationClassification.duplicate_ignored.value
+            duplicate_policy = adjudicate_duplicate_vs_first_accepted(
+                is_duplicate=True,
             )
+            outcome.was_deduplicated = True
+            outcome.completion_disposition = duplicate_policy.completion_disposition
+            outcome.continuity_adjudication_classification = duplicate_policy.classification
             outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
                 classification=outcome.continuity_adjudication_classification,
-                triggering_reason="joint_idempotency_duplicate",
+                triggering_reason=duplicate_policy.triggering_reason,
                 epoch_session_basis={
                     "session_epoch": event.session_epoch,
                     "runtime_session_id": event.runtime_session_id,
@@ -581,13 +585,14 @@ class UnifiedResultIngress:
             return outcome
 
         self._record_idempotency(event)
-        outcome.completion_disposition = "first_accepted"
-        outcome.continuity_adjudication_classification = (
-            ContinuityAdjudicationClassification.current_accepted.value
+        accept_policy = adjudicate_duplicate_vs_first_accepted(
+            is_duplicate=False,
         )
+        outcome.completion_disposition = accept_policy.completion_disposition
+        outcome.continuity_adjudication_classification = accept_policy.classification
         outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
             classification=outcome.continuity_adjudication_classification,
-            triggering_reason="passed_continuity_stale_idempotency_gates",
+            triggering_reason=accept_policy.triggering_reason,
             epoch_session_basis={
                 "session_epoch": event.session_epoch,
                 "runtime_session_id": event.runtime_session_id,
