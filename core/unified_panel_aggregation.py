@@ -116,6 +116,12 @@ PANEL_FINGERPRINT_SUPPORTING_PATHS: List[str] = [
     "core.android_device_state_store.get_device_ecosystem_summary",
     "core.projection.build_runtime_projection",
 ]
+TRUTH_COMPILATION_EVIDENCE_REQUIRED_KEYS = (
+    "primary_path",
+    "assembly_mode",
+    "mixed_source",
+    "fallback_used",
+)
 
 # ---------------------------------------------------------------------------
 # UnifiedPanelPayload
@@ -323,16 +329,17 @@ class UnifiedPanelPayload:
     outward_truth: Dict[str, Any] = field(default_factory=dict)
     task_truth: Dict[str, Any] = field(default_factory=dict)
     truth_compilation_evidence: Dict[str, Any] = field(default_factory=dict)
+    truth_surface_semantics: Dict[str, Any] = field(default_factory=dict)
     authority_source_fingerprint: Dict[str, Any] = field(
         default_factory=lambda: build_authority_source_fingerprint(
             surface_path="/api/v1/panel/unified",
-            primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+            primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
             source_roles={
-                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
                 SOURCE_KIND_CANONICAL_TRUTH: "supporting",
-                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
-                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
-                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "none",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "expected_primary_pending",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             },
         ),
     )
@@ -391,6 +398,7 @@ class UnifiedPanelPayload:
             "outward_truth": dict(self.outward_truth),
             "task_truth": dict(self.task_truth),
             "truth_compilation_evidence": dict(self.truth_compilation_evidence),
+            "truth_surface_semantics": dict(self.truth_surface_semantics),
             "authority_source_fingerprint": dict(self.authority_source_fingerprint),
             # provenance
             "_source": self._source,
@@ -522,6 +530,12 @@ class UnifiedPanelAggregationService:
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: control-plane contract fill failed: %s", exc)
 
+        # 14. Truth-source discipline hardening for outward-facing payload fields.
+        try:
+            self._enforce_truth_surface_discipline(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: truth discipline hardening failed: %s", exc)
+
         self._annotate_authority_source_fingerprint(payload)
         return payload
 
@@ -534,20 +548,46 @@ class UnifiedPanelAggregationService:
         evidence = payload.truth_compilation_evidence if isinstance(
             payload.truth_compilation_evidence, dict
         ) else {}
+        semantics = payload.truth_surface_semantics if isinstance(
+            payload.truth_surface_semantics, dict
+        ) else {}
         assembly_mode = str(evidence.get("assembly_mode") or "unknown")
         support_paths = list(evidence.get("supporting_paths") or [])
         if not support_paths:
             support_paths = list(PANEL_FINGERPRINT_SUPPORTING_PATHS)
-        payload.authority_source_fingerprint = build_authority_source_fingerprint(
-            surface_path="/api/v1/panel/unified",
-            primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
-            source_roles={
-                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+        fallback_used = bool(evidence.get("fallback_used", False))
+        mixed_source = bool(evidence.get("mixed_source", False))
+        if fallback_used:
+            primary_source_kind = SOURCE_KIND_RUNTIME_VISIBLE_STATE
+            source_roles = {
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "expected_primary_unavailable",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+            }
+        elif mixed_source:
+            primary_source_kind = SOURCE_KIND_COMPILED_OUTWARD_TRUTH
+            source_roles = {
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
                 SOURCE_KIND_CANONICAL_TRUTH: "supporting",
                 SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
-                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "supporting",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "primary_degraded",
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
-            },
+            }
+        else:
+            primary_source_kind = SOURCE_KIND_COMPILED_OUTWARD_TRUTH
+            source_roles = {
+                SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "primary",
+                SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+            }
+        payload.authority_source_fingerprint = build_authority_source_fingerprint(
+            surface_path="/api/v1/panel/unified",
+            primary_source_kind=primary_source_kind,
+            source_roles=source_roles,
             source_freshness={
                 "panel_generated_at": payload.generated_at,
                 "outward_truth_compiled_at": (
@@ -560,9 +600,106 @@ class UnifiedPanelAggregationService:
             observation_basis={
                 "truth_compilation_primary_path": evidence.get("primary_path"),
                 "truth_compilation_supporting_paths": support_paths,
-                "mixed_source": bool(evidence.get("mixed_source", False)),
+                "mixed_source": mixed_source,
+                "truth_source_class": semantics.get("truth_source_class"),
+                "is_canonical_truth_surface": bool(semantics.get("is_canonical_truth_surface", False)),
             },
         )
+
+    def _build_truth_surface_semantics(
+        self,
+        *,
+        mixed_source: bool,
+        fallback_used: bool,
+        source_path: str,
+    ) -> Dict[str, Any]:
+        if fallback_used:
+            return {
+                "truth_source_class": "runtime_visible_fallback",
+                "source_path": source_path,
+                "is_canonical_truth_surface": False,
+                "is_explicitly_compiled_truth": False,
+                "is_mixed_source_surface": True,
+                "is_runtime_visible_only_surface": True,
+                "is_diagnostics_visible_surface": True,
+                "operator_interpretation_only": True,
+            }
+        if mixed_source:
+            return {
+                "truth_source_class": "compiled_outward_truth_mixed",
+                "source_path": source_path,
+                "is_canonical_truth_surface": False,
+                "is_explicitly_compiled_truth": True,
+                "is_mixed_source_surface": True,
+                "is_runtime_visible_only_surface": False,
+                "is_diagnostics_visible_surface": True,
+                "operator_interpretation_only": True,
+            }
+        return {
+            "truth_source_class": "compiled_outward_truth",
+            "source_path": source_path,
+            "is_canonical_truth_surface": True,
+            "is_explicitly_compiled_truth": True,
+            "is_mixed_source_surface": False,
+            "is_runtime_visible_only_surface": False,
+            "is_diagnostics_visible_surface": False,
+            "operator_interpretation_only": False,
+        }
+
+    def _enforce_truth_surface_discipline(self, payload: UnifiedPanelPayload) -> None:
+        """Harden outward truth semantics so non-canonical paths cannot masquerade as canonical."""
+        evidence = payload.truth_compilation_evidence
+        if not isinstance(evidence, dict):
+            evidence = {}
+        missing = [k for k in TRUTH_COMPILATION_EVIDENCE_REQUIRED_KEYS if k not in evidence]
+        issues = list(evidence.get("discipline_issues") or [])
+        if missing:
+            evidence.setdefault("primary_path", "core.outward_runtime_truth.compile_outward_truth")
+            evidence.setdefault("mixed_source", False)
+            evidence.setdefault("fallback_used", False)
+            evidence.setdefault(
+                "assembly_mode",
+                "mixed_source_fallback"
+                if bool(evidence.get("mixed_source", False)) or bool(evidence.get("fallback_used", False))
+                else "compiled_outward_truth_primary",
+            )
+            critical_keys_missing = "primary_path" in missing or "assembly_mode" in missing
+            if critical_keys_missing:
+                evidence["mixed_source"] = True
+                evidence["fallback_used"] = True
+                evidence["assembly_mode"] = "mixed_source_fallback"
+            issues.append(
+                {
+                    "issue": "missing_truth_compilation_evidence_keys",
+                    "missing_keys": sorted(missing),
+                }
+            )
+        mixed_source = bool(evidence.get("mixed_source", False))
+        fallback_used = bool(evidence.get("fallback_used", False))
+        expected_primary_path = "core.outward_runtime_truth.compile_outward_truth"
+        if str(evidence.get("primary_path") or "") != expected_primary_path:
+            issues.append(
+                {
+                    "issue": "unexpected_primary_path",
+                    "actual_primary_path": str(evidence.get("primary_path") or ""),
+                    "expected_primary_path": expected_primary_path,
+                }
+            )
+            mixed_source = True
+            fallback_used = True
+            evidence["mixed_source"] = True
+            evidence["fallback_used"] = True
+        evidence["discipline_issues"] = issues
+
+        semantics = self._build_truth_surface_semantics(
+            mixed_source=mixed_source,
+            fallback_used=fallback_used,
+            source_path=expected_primary_path,
+        )
+        payload.truth_compilation_evidence = evidence
+        payload.truth_surface_semantics = semantics
+        if isinstance(payload.outward_truth, dict):
+            payload.outward_truth["truth_surface_semantics"] = dict(semantics)
 
     def _fill_from_compiled_outward_truth(self, payload: UnifiedPanelPayload) -> None:
         """Fill outward truth/task truth from compile_outward_truth()."""
@@ -576,6 +713,10 @@ class UnifiedPanelAggregationService:
             policy = NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY
             outward = compile_outward_truth().to_dict()
             payload.outward_truth = outward
+            mixed_source = bool(
+                (outward.get("unavailable_source_count", 0) or 0) > 0
+                or not bool(outward.get("surfacing_complete", False))
+            )
             operator_snapshot = outward.get("operator_snapshot") or {}
             payload.task_truth = {
                 "active_task_count": int(operator_snapshot.get("active_task_count", 0) or 0),
@@ -586,16 +727,19 @@ class UnifiedPanelAggregationService:
             payload.truth_compilation_evidence = {
                 "primary_path": "core.outward_runtime_truth.compile_outward_truth",
                 "assembly_mode": "compiled_outward_truth_primary",
-                "mixed_source": bool(
-                    (outward.get("unavailable_source_count", 0) or 0) > 0
-                    or not bool(outward.get("surfacing_complete", False))
-                ),
+                "mixed_source": mixed_source,
                 "fallback_used": False,
                 "policy": policy,
                 "surfacing_complete": bool(outward.get("surfacing_complete", False)),
                 "unavailable_source_count": int(outward.get("unavailable_source_count", 0) or 0),
                 "surfacing_notes": list(outward.get("surfacing_notes") or []),
             }
+            payload.truth_surface_semantics = self._build_truth_surface_semantics(
+                mixed_source=mixed_source,
+                fallback_used=False,
+                source_path="core.outward_runtime_truth.compile_outward_truth",
+            )
+            payload.outward_truth["truth_surface_semantics"] = dict(payload.truth_surface_semantics)
         except Exception as exc:
             payload.outward_truth = {
                 "compiled_at": time.time(),
@@ -621,6 +765,12 @@ class UnifiedPanelAggregationService:
                     "core.android_device_state_store.get_device_ecosystem_summary",
                 ],
             }
+            payload.truth_surface_semantics = self._build_truth_surface_semantics(
+                mixed_source=True,
+                fallback_used=True,
+                source_path="core.outward_runtime_truth.compile_outward_truth",
+            )
+            payload.outward_truth["truth_surface_semantics"] = dict(payload.truth_surface_semantics)
 
     def _fill_from_operator_snapshot(self, payload: UnifiedPanelPayload) -> None:
         """Fill operator/control-plane and shell/presence fields from OperatorSnapshot."""
