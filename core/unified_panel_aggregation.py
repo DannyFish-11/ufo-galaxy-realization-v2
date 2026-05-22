@@ -116,6 +116,12 @@ PANEL_FINGERPRINT_SUPPORTING_PATHS: List[str] = [
     "core.android_device_state_store.get_device_ecosystem_summary",
     "core.projection.build_runtime_projection",
 ]
+TRUTH_COMPILATION_EVIDENCE_REQUIRED_KEYS = (
+    "primary_path",
+    "assembly_mode",
+    "mixed_source",
+    "fallback_used",
+)
 
 # ---------------------------------------------------------------------------
 # UnifiedPanelPayload
@@ -327,12 +333,12 @@ class UnifiedPanelPayload:
     authority_source_fingerprint: Dict[str, Any] = field(
         default_factory=lambda: build_authority_source_fingerprint(
             surface_path="/api/v1/panel/unified",
-            primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
+            primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
             source_roles={
                 SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
                 SOURCE_KIND_CANONICAL_TRUTH: "supporting",
-                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
-                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "primary",
+                SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "expected_primary_pending",
                 SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
             },
         ),
@@ -645,27 +651,45 @@ class UnifiedPanelAggregationService:
         evidence = payload.truth_compilation_evidence
         if not isinstance(evidence, dict):
             evidence = {}
-        required_keys = ("primary_path", "assembly_mode", "mixed_source", "fallback_used")
-        missing = [k for k in required_keys if k not in evidence]
+        missing = [k for k in TRUTH_COMPILATION_EVIDENCE_REQUIRED_KEYS if k not in evidence]
+        issues = list(evidence.get("discipline_issues") or [])
         if missing:
             evidence.setdefault("primary_path", "core.outward_runtime_truth.compile_outward_truth")
-            evidence.setdefault("assembly_mode", "mixed_source_fallback")
-            evidence.setdefault("mixed_source", True)
-            evidence.setdefault("fallback_used", True)
-            issues = list(evidence.get("discipline_issues") or [])
-            issues.append(f"missing_truth_compilation_evidence_keys:{','.join(sorted(missing))}")
-            evidence["discipline_issues"] = issues
+            evidence.setdefault("mixed_source", False)
+            evidence.setdefault("fallback_used", False)
+            evidence.setdefault(
+                "assembly_mode",
+                "mixed_source_fallback"
+                if bool(evidence.get("mixed_source", False)) or bool(evidence.get("fallback_used", False))
+                else "compiled_outward_truth_primary",
+            )
+            critical_keys_missing = "primary_path" in missing or "assembly_mode" in missing
+            if critical_keys_missing:
+                evidence["mixed_source"] = True
+                evidence["fallback_used"] = True
+                evidence["assembly_mode"] = "mixed_source_fallback"
+            issues.append(
+                {
+                    "issue": "missing_truth_compilation_evidence_keys",
+                    "missing_keys": sorted(missing),
+                }
+            )
         mixed_source = bool(evidence.get("mixed_source", False))
         fallback_used = bool(evidence.get("fallback_used", False))
         expected_primary_path = "core.outward_runtime_truth.compile_outward_truth"
         if str(evidence.get("primary_path") or "") != expected_primary_path:
-            issues = list(evidence.get("discipline_issues") or [])
-            issues.append("unexpected_primary_path")
-            evidence["discipline_issues"] = issues
+            issues.append(
+                {
+                    "issue": "unexpected_primary_path",
+                    "actual_primary_path": str(evidence.get("primary_path") or ""),
+                    "expected_primary_path": expected_primary_path,
+                }
+            )
             mixed_source = True
             fallback_used = True
             evidence["mixed_source"] = True
             evidence["fallback_used"] = True
+        evidence["discipline_issues"] = issues
 
         semantics = self._build_truth_surface_semantics(
             mixed_source=mixed_source,

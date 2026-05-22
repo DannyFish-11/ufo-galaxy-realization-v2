@@ -267,7 +267,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
     def test_B07_truth_surface_semantics_marks_mixed_compiled_truth_non_canonical(self):
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
-        class _FakeOutwardTruth:
+        class StubOutwardTruth:
             def to_dict(self):
                 return {
                     "compiled_at": time.time(),
@@ -283,7 +283,7 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
         svc = UnifiedPanelAggregationService()
         with patch(
             "core.outward_runtime_truth.compile_outward_truth",
-            return_value=_FakeOutwardTruth(),
+            return_value=StubOutwardTruth(),
         ):
             result = svc.build_payload()
 
@@ -305,7 +305,13 @@ class TestUnifiedPanelAggregationServiceSources(unittest.TestCase):
 
         evidence = payload.truth_compilation_evidence
         self.assertIn("discipline_issues", evidence)
-        self.assertIn("missing_truth_compilation_evidence_keys", ",".join(evidence["discipline_issues"]))
+        self.assertTrue(
+            any(
+                isinstance(issue, dict)
+                and issue.get("issue") == "missing_truth_compilation_evidence_keys"
+                for issue in evidence["discipline_issues"]
+            )
+        )
         semantics = payload.truth_surface_semantics
         self.assertIs(semantics.get("is_canonical_truth_surface"), False)
         self.assertEqual(semantics.get("truth_source_class"), "runtime_visible_fallback")
