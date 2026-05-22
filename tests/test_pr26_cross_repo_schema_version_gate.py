@@ -7,6 +7,7 @@ from contracts.cross_repo_schema_version_gate import (
     ANDROID_AIP_MODELS_ANCHOR,
     ANDROID_AIP_MODELS_SOURCE_SHA,
     ANDROID_AUDITED_REF,
+    ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION,
     ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION,
     ANDROID_COMPLETION_CLOSURE_ANCHOR,
     ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA,
@@ -14,6 +15,7 @@ from contracts.cross_repo_schema_version_gate import (
     REQUIRED_AIP_MESSAGE_TYPES,
     build_cross_repo_schema_gate_manifest,
     build_projection_schema_gate_metadata,
+    evaluate_android_uplink_dedupe_contract,
     evaluate_android_uplink_schema_gate,
     verify_cross_repo_schema_gate,
 )
@@ -34,17 +36,29 @@ def _read_message_type_wire_values() -> set[str]:
 def test_cross_repo_schema_gate_manifest_is_versioned_and_anchored() -> None:
     manifest = build_cross_repo_schema_gate_manifest()
     assert manifest["gate_version"] == CROSS_REPO_SCHEMA_GATE_VERSION
+    assert manifest["android_canonical_dedupe_contract_version"] == ANDROID_CANONICAL_DEDUPE_CONTRACT_VERSION
     assert manifest["android_audited_ref"] == ANDROID_AUDITED_REF
     assert manifest["android_aip_models_source_sha"] == ANDROID_AIP_MODELS_SOURCE_SHA
     assert manifest["android_completion_closure_source_sha"] == ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA
     assert manifest["android_anchors"]["aip_models"] == ANDROID_AIP_MODELS_ANCHOR
-    assert (
-        manifest["android_anchors"]["completion_closure_uplink_contract"]
-        == ANDROID_COMPLETION_CLOSURE_ANCHOR
-    )
+    assert manifest["android_anchors"]["completion_closure_uplink_contract"] == ANDROID_COMPLETION_CLOSURE_ANCHOR
     assert len(ANDROID_AUDITED_REF) == 40
     assert len(ANDROID_AIP_MODELS_SOURCE_SHA) == 40
     assert len(ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA) == 40
+
+
+def test_cross_repo_schema_gate_manifest_exposes_android_dedupe_contracts() -> None:
+    manifest = build_cross_repo_schema_gate_manifest()
+    contracts = manifest["android_dedupe_contracts"]
+    assert set(contracts) == {"result", "reconciliation", "replay"}
+    assert "goal_execution_result" in contracts["result"]["message_types"]
+    assert contracts["result"]["dedup_key"]["enforced"] is True
+    assert "reconciliation_signal" in contracts["reconciliation"]["message_types"]
+    assert contracts["replay"]["dedup_key"]["fields"] == [
+        "replay_session_id",
+        "replay_item_id",
+        "replay_seq",
+    ]
 
 
 def test_required_aip_message_types_are_present_in_v2_enum() -> None:
@@ -136,3 +150,70 @@ def test_runtime_schema_gate_accepts_matching_uplink_schema_version() -> None:
     assert decision is not None
     assert decision.action == "accept"
     assert decision.reason == "schema_version_gate_matched"
+
+
+def test_android_result_dedupe_contract_accepts_canonical_fields() -> None:
+    decision = evaluate_android_uplink_dedupe_contract(
+        message_type="goal_execution_result",
+        message={
+            "version": "3.0",
+            "type": "goal_execution_result",
+            "payload": {
+                "task_id": "task-1",
+                "idempotency_key": "goal_execution_result:task-1",
+                "completion_emission_id": "emit-1",
+            },
+        },
+    )
+    assert decision is not None
+    assert decision.action == "accept"
+    assert decision.contract_class == "result"
+
+
+def test_android_result_dedupe_contract_degrades_missing_stable_identity() -> None:
+    decision = evaluate_android_uplink_dedupe_contract(
+        message_type="task_result",
+        message={
+            "version": "3.0",
+            "type": "task_result",
+            "payload": {"task_id": "task-1"},
+        },
+    )
+    assert decision is not None
+    assert decision.action == "degrade"
+    assert decision.reason == "missing_canonical_result_dedupe_fields"
+    assert "idempotency_key" in decision.evidence["missing_fields"]
+    assert "completion_emission_id" in decision.evidence["missing_fields"]
+
+
+def test_android_reconciliation_dedupe_contract_accepts_scope_and_signal_identity() -> None:
+    decision = evaluate_android_uplink_dedupe_contract(
+        message_type="reconciliation_signal",
+        message={
+            "version": "3.0",
+            "type": "reconciliation_signal",
+            "payload": {
+                "contract_id": "contract-1",
+                "reconciliation_id": "recon-7",
+            },
+        },
+    )
+    assert decision is not None
+    assert decision.action == "accept"
+    assert decision.contract_class == "reconciliation"
+
+
+def test_android_reconciliation_dedupe_contract_degrades_missing_identity() -> None:
+    decision = evaluate_android_uplink_dedupe_contract(
+        message_type="device_execution_event",
+        message={
+            "version": "3.0",
+            "type": "device_execution_event",
+            "payload": {"runtime_session_id": "session-1"},
+        },
+    )
+    assert decision is not None
+    assert decision.action == "degrade"
+    assert decision.reason == "missing_canonical_reconciliation_dedupe_fields"
+    assert decision.evidence["subject_identity_present"] is True
+    assert decision.evidence["reconciliation_identity_present"] is False

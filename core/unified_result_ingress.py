@@ -88,10 +88,12 @@ logger = logging.getLogger("Galaxy.UnifiedResultIngress")
 EVIDENCE_CLOSURE_BLOCKING_VERDICTS = frozenset({"quarantine", "reject"})
 
 # Replay ordering decisions that block canonical closure.
-REPLAY_ORDERING_BLOCKING_DECISIONS = frozenset({
-    "reject_out_of_order",
-    "reject_stale",
-})
+REPLAY_ORDERING_BLOCKING_DECISIONS = frozenset(
+    {
+        "reject_out_of_order",
+        "reject_stale",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Authority sentinels
@@ -437,6 +439,12 @@ class UnifiedResultIngressOutcome:
     joint_idempotency_evidence: Dict[str, Any] = field(default_factory=dict)
     """Structured evidence describing the joint result-id and task-lineage
     idempotency decision for this ingress event."""
+    dedupe_contract_action: str = ""
+    """Cross-repo Android dedupe contract outcome (``accept``/``degrade``/``reject``)."""
+    dedupe_contract_reason: str = ""
+    """Reason explaining why canonical duplicate guarantees were degraded or rejected."""
+    dedupe_contract_evidence: Dict[str, Any] = field(default_factory=dict)
+    """Structured evidence attached to cross-repo dedupe contract evaluation."""
     continuity_adjudication_classification: str = ""
     """Unified continuity adjudication classification for this ingress decision."""
     continuity_adjudication_evidence: Dict[str, Any] = field(default_factory=dict)
@@ -628,9 +636,7 @@ class UnifiedResultIngress:
             outcome.replay_ordering_verdict = _replay_verdict
             outcome.replay_ordering_evidence = _replay_evidence
             if _replay_blocked:
-                outcome.incomplete_reason = (
-                    f"replay_ordering_rejected:{_replay_decision}"
-                )
+                outcome.incomplete_reason = f"replay_ordering_rejected:{_replay_decision}"
                 logger.warning(
                     "unified_result_ingress: replay ordering gate blocked result "
                     "task_id=%r decision=%r verdict=%r device_id=%r",
@@ -641,6 +647,39 @@ class UnifiedResultIngress:
                 )
                 self._record_last_closure_outcome(event, outcome)
                 return outcome
+            if _replay_decision == "ambiguous_authority":
+                outcome.dedupe_contract_action = "degrade"
+                outcome.dedupe_contract_reason = "replay_ordering_ambiguous_authority"
+                outcome.dedupe_contract_evidence = {
+                    "contract_class": "replay",
+                    "replay_ordering": dict(_replay_evidence or {}),
+                }
+
+        (
+            _dedupe_contract_action,
+            _dedupe_contract_reason,
+            _dedupe_contract_evidence,
+        ) = self._evaluate_cross_repo_dedupe_contract(event)
+        if _dedupe_contract_action == "reject":
+            outcome.dedupe_contract_action = "reject"
+            outcome.dedupe_contract_reason = _dedupe_contract_reason
+            outcome.dedupe_contract_evidence = dict(_dedupe_contract_evidence or {})
+            outcome.incomplete_reason = f"dedupe_contract_rejected:{_dedupe_contract_reason}"
+            logger.warning(
+                "unified_result_ingress: cross-repo dedupe contract rejected " "task_id=%r source=%s reason=%s",
+                event.task_id,
+                event.source_channel.value,
+                _dedupe_contract_reason,
+            )
+            self._record_last_closure_outcome(event, outcome)
+            return outcome
+        if _dedupe_contract_action == "degrade":
+            outcome.dedupe_contract_action = "degrade"
+            if not outcome.dedupe_contract_reason:
+                outcome.dedupe_contract_reason = _dedupe_contract_reason
+            combined_evidence = dict(outcome.dedupe_contract_evidence or {})
+            combined_evidence.update(dict(_dedupe_contract_evidence or {}))
+            outcome.dedupe_contract_evidence = combined_evidence
 
         # Step 1: idempotency
         if self._check_idempotency(event):
@@ -762,11 +801,13 @@ class UnifiedResultIngress:
         # Determine overall closure
         evidence_verdict = outcome.evidence_acceptance_verdict or ""
         evidence_gate_blocked = evidence_verdict in EVIDENCE_CLOSURE_BLOCKING_VERDICTS
+        dedupe_contract_blocked = outcome.dedupe_contract_action == "degrade"
         outcome.is_fully_closed = (
             not outcome.was_deduplicated
             and outcome.truth_chain_complete
             and outcome.completion_notified
             and not evidence_gate_blocked
+            and not dedupe_contract_blocked
         )
         if not outcome.is_fully_closed and not outcome.incomplete_reason:
             parts = []
@@ -776,6 +817,8 @@ class UnifiedResultIngress:
                 parts.append("completion_not_notified")
             if evidence_gate_blocked:
                 parts.append(f"evidence_gate:{evidence_verdict}")
+            if dedupe_contract_blocked:
+                parts.append(f"dedupe_contract:{outcome.dedupe_contract_reason or outcome.dedupe_contract_action}")
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
         outcome.problem_execution_closure = self._build_problem_execution_closure(
             event=event,
@@ -800,8 +843,7 @@ class UnifiedResultIngress:
         canonical_truth_completed = bool(
             outcome.is_fully_closed
             and outcome.truth_chain_complete
-            and str(outcome.evidence_acceptance_verdict or "").strip().lower()
-            in {"accept", "accepted"}
+            and str(outcome.evidence_acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
         )
         summary = {
             "available": True,
@@ -811,9 +853,7 @@ class UnifiedResultIngress:
             "is_fully_closed": bool(outcome.is_fully_closed),
             "truth_chain_complete": bool(outcome.truth_chain_complete),
             "canonical_truth_completed": canonical_truth_completed,
-            "mature_closure_achieved": bool(
-                canonical_truth_completed and not bool(outcome.incomplete_reason)
-            ),
+            "mature_closure_achieved": bool(canonical_truth_completed and not bool(outcome.incomplete_reason)),
             "completion_notified": bool(outcome.completion_notified),
             "problem_solved": bool(outcome.problem_solved),
             "problem_solved_via": str(outcome.problem_solved_via or ""),
@@ -822,15 +862,9 @@ class UnifiedResultIngress:
             "closure_authority": "canonical_result_ingress",
             "completion_disposition": str(outcome.completion_disposition or ""),
             "completion_lineage": dict(outcome.completion_lineage or {}),
-            "joint_idempotency_evidence": dict(
-                outcome.joint_idempotency_evidence or {}
-            ),
-            "continuity_adjudication_classification": str(
-                outcome.continuity_adjudication_classification or ""
-            ),
-            "continuity_adjudication_evidence": dict(
-                outcome.continuity_adjudication_evidence or {}
-            ),
+            "joint_idempotency_evidence": dict(outcome.joint_idempotency_evidence or {}),
+            "continuity_adjudication_classification": str(outcome.continuity_adjudication_classification or ""),
+            "continuity_adjudication_evidence": dict(outcome.continuity_adjudication_evidence or {}),
             "stale_classification": str(outcome.stale_classification or ""),
             "closure_evidence_ledger": dict(ledger_entry),
             "final_truth_provenance": dict(provenance),
@@ -838,6 +872,9 @@ class UnifiedResultIngress:
             "replay_ordering_decision": str(outcome.replay_ordering_decision or ""),
             "replay_ordering_verdict": str(outcome.replay_ordering_verdict or ""),
             "replay_ordering_evidence": dict(outcome.replay_ordering_evidence or {}),
+            "dedupe_contract_action": str(outcome.dedupe_contract_action or ""),
+            "dedupe_contract_reason": str(outcome.dedupe_contract_reason or ""),
+            "dedupe_contract_evidence": dict(outcome.dedupe_contract_evidence or {}),
             "updated_at": time.time(),
         }
         with self._lock:
@@ -882,6 +919,9 @@ class UnifiedResultIngress:
             "adjudication_evidence": dict(outcome.continuity_adjudication_evidence or {}),
             "stale_evidence": dict(outcome.stale_epoch_evidence or {}),
             "joint_idempotency_evidence": dict(outcome.joint_idempotency_evidence or {}),
+            "dedupe_contract_action": str(outcome.dedupe_contract_action or ""),
+            "dedupe_contract_reason": str(outcome.dedupe_contract_reason or ""),
+            "dedupe_contract_evidence": dict(outcome.dedupe_contract_evidence or {}),
             "recorded_at": now,
         }
 
@@ -926,9 +966,9 @@ class UnifiedResultIngress:
                         competing.append(superseded_event)
                         ledger["competing_events"] = competing[-20:]
                         summary = dict(ledger.get("competing_summary") or {})
-                        summary["superseded_by_newer_epoch_session"] = int(
-                            summary.get("superseded_by_newer_epoch_session", 0)
-                        ) + 1
+                        summary["superseded_by_newer_epoch_session"] = (
+                            int(summary.get("superseded_by_newer_epoch_session", 0)) + 1
+                        )
                         ledger["competing_summary"] = summary
                         ledger["first_accepted_completion"] = dict(event_evidence)
             else:
@@ -947,9 +987,9 @@ class UnifiedResultIngress:
                         presented_epoch = stale_ev.get("presented_epoch")
                         if isinstance(stored_epoch, int) and isinstance(presented_epoch, int):
                             if stored_epoch > presented_epoch:
-                                summary["superseded_by_newer_epoch_session"] = int(
-                                    summary.get("superseded_by_newer_epoch_session", 0)
-                                ) + 1
+                                summary["superseded_by_newer_epoch_session"] = (
+                                    int(summary.get("superseded_by_newer_epoch_session", 0)) + 1
+                                )
                 ledger["competing_summary"] = summary
 
             ledger["updated_at"] = now
@@ -1043,9 +1083,7 @@ class UnifiedResultIngress:
             raw = str(payload.get(key) or "").strip().lower()
             if raw in {"strict", "compat", "relaxed"}:
                 return raw
-        env_mode = str(
-            os.environ.get("GALAXY_RESULT_INGRESS_CONTINUITY_MODE", "compat")
-        ).strip().lower()
+        env_mode = str(os.environ.get("GALAXY_RESULT_INGRESS_CONTINUITY_MODE", "compat")).strip().lower()
         if env_mode in {"strict", "compat", "relaxed"}:
             return env_mode
         return "compat"
@@ -1093,8 +1131,7 @@ class UnifiedResultIngress:
             return report.verdict.value
         except Exception as _e:
             logger.debug(
-                "unified_result_ingress: continuity legality gate unavailable "
-                "(mode=%s): %s",
+                "unified_result_ingress: continuity legality gate unavailable " "(mode=%s): %s",
                 mode,
                 _e,
             )
@@ -1156,19 +1193,14 @@ class UnifiedResultIngress:
                     evidence["stored_epoch"] = stored_epoch
                     evidence["presented_epoch"] = event.session_epoch
                     if stored_epoch is not None and stored_epoch != event.session_epoch:
-                        is_replay = (
-                            event.source_channel == ResultSourceChannel.REPLAY
-                        )
-                        classification = (
-                            "replay_epoch_mismatch" if is_replay else "epoch_mismatch"
-                        )
+                        is_replay = event.source_channel == ResultSourceChannel.REPLAY
+                        classification = "replay_epoch_mismatch" if is_replay else "epoch_mismatch"
                         evidence["stale_trigger"] = "epoch_comparison"
                         evidence["stale_classification"] = classification
                         return True, classification, evidence
             except Exception as _lookup_err:
                 logger.debug(
-                    "unified_result_ingress: stale epoch registry lookup skipped "
-                    "(non-fatal) task_id=%r err=%s",
+                    "unified_result_ingress: stale epoch registry lookup skipped " "(non-fatal) task_id=%r err=%s",
                     event.task_id,
                     _lookup_err,
                 )
@@ -1202,9 +1234,7 @@ class UnifiedResultIngress:
         adjudication_at = time.time()
         replay_item_id = str(event.replay_item_id or "").strip()
         replay_seq = event.replay_seq  # None = missing
-        replay_session_id = str(
-            event.replay_session_id or event.runtime_session_id or ""
-        ).strip()
+        replay_session_id = str(event.replay_session_id or event.runtime_session_id or "").strip()
         session_key = f"{event.device_id or ''}:{replay_session_id}"
 
         try:
@@ -1216,8 +1246,7 @@ class UnifiedResultIngress:
             )
         except Exception as _import_err:
             logger.debug(
-                "unified_result_ingress: replay ordering contract unavailable "
-                "(non-fatal) task_id=%r err=%s",
+                "unified_result_ingress: replay ordering contract unavailable " "(non-fatal) task_id=%r err=%s",
                 event.task_id,
                 _import_err,
             )
@@ -1254,8 +1283,7 @@ class UnifiedResultIngress:
                 "adjudication_at": adjudication_at,
             }
             logger.debug(
-                "unified_result_ingress: replay ordering — missing metadata "
-                "task_id=%r device_id=%r session_key=%r",
+                "unified_result_ingress: replay ordering — missing metadata " "task_id=%r device_id=%r session_key=%r",
                 event.task_id,
                 event.device_id,
                 session_key,
@@ -1362,9 +1390,7 @@ class UnifiedResultIngress:
             if event.idempotency_key:
                 checked_keys.append(event.idempotency_key)
                 result_duplicate = check_result_idempotency(event.idempotency_key)
-            lineage_key = str(
-                completion_lineage.get("completion_lineage_key") or ""
-            ).strip()
+            lineage_key = str(completion_lineage.get("completion_lineage_key") or "").strip()
             lineage_duplicate = False
             if lineage_key:
                 # Intentional: when a legacy path omits result_id / idempotency_key,
@@ -1413,9 +1439,7 @@ class UnifiedResultIngress:
             if event.idempotency_key:
                 record_result_idempotency(event.idempotency_key)
                 recorded_keys.append(event.idempotency_key)
-            lineage_key = str(
-                completion_lineage.get("completion_lineage_key") or ""
-            ).strip()
+            lineage_key = str(completion_lineage.get("completion_lineage_key") or "").strip()
             if lineage_key:
                 # Intentional: lineage evidence remains durable even when a legacy
                 # path did not provide a separate result idempotency key.
@@ -1705,8 +1729,7 @@ class UnifiedResultIngress:
             ssot_truth = build_v2_android_truth_block(event.device_id).to_dict()
         except Exception as _ssot_err:
             logger.debug(
-                "unified_result_ingress: android truth SSOT read skipped "
-                "(non-fatal) task_id=%r err=%s",
+                "unified_result_ingress: android truth SSOT read skipped " "(non-fatal) task_id=%r err=%s",
                 event.task_id,
                 _ssot_err,
             )
@@ -1756,11 +1779,7 @@ class UnifiedResultIngress:
     @staticmethod
     def _is_valid_ssot_sources_collection(value: Any) -> bool:
         """Return True when SSOT sources indicate a usable snapshot basis."""
-        return (
-            isinstance(value, Collection)
-            and not isinstance(value, (str, bytes, bytearray, dict))
-            and len(value) > 0
-        )
+        return isinstance(value, Collection) and not isinstance(value, (str, bytes, bytearray, dict)) and len(value) > 0
 
     @staticmethod
     def _normalize_optional_context_value(value: Any) -> Optional[str]:
@@ -1840,9 +1859,7 @@ class UnifiedResultIngress:
                         get_latest_device_acceptance_evidence_dict,
                     )
 
-                    acceptance_evidence_hint = get_latest_device_acceptance_evidence_dict(
-                        event.device_id
-                    )
+                    acceptance_evidence_hint = get_latest_device_acceptance_evidence_dict(event.device_id)
                 except Exception as _acceptance_err:
                     logger.debug(
                         "unified_result_ingress: android acceptance evidence lookup skipped "
@@ -1858,13 +1875,9 @@ class UnifiedResultIngress:
                 # DEVICE_ACCEPTANCE_REPORT 映射出的 proof_class 作为权威兜底，
                 # 让 acceptance evidence 真正进入 V2 evidence gate。
                 android_proof_class = mapped_acceptance_proof_class
-                android_runtime_truth_context["proof_class_source"] = (
-                    "device_acceptance_report"
-                )
+                android_runtime_truth_context["proof_class_source"] = "device_acceptance_report"
             if acceptance_evidence_hint:
-                android_runtime_truth_context["acceptance_tag"] = (
-                    acceptance_evidence_hint.get("acceptance_tag") or ""
-                )
+                android_runtime_truth_context["acceptance_tag"] = acceptance_evidence_hint.get("acceptance_tag") or ""
                 android_runtime_truth_context["acceptance_snapshot_id"] = (
                     acceptance_evidence_hint.get("snapshot_id") or ""
                 )
@@ -1976,17 +1989,73 @@ class UnifiedResultIngress:
                 outcome.store_task_result_ran,
             )
 
+    def _looks_like_android_wire_message(self, event: NormalizedResultEvent) -> bool:
+        payload = event.payload or {}
+        raw_message = event.raw_message or {}
+        return bool(
+            raw_message.get("_cross_repo_schema_version_gate")
+            or raw_message.get("version")
+            or payload.get("version")
+            or raw_message.get("schema_version")
+            or payload.get("schema_version")
+            or raw_message.get("android_completion_closure_uplink_schema_version")
+            or payload.get("android_completion_closure_uplink_schema_version")
+        )
+
+    def _evaluate_cross_repo_dedupe_contract(
+        self,
+        event: NormalizedResultEvent,
+    ) -> tuple[str, str, Dict[str, Any]]:
+        if event.source_channel not in {
+            ResultSourceChannel.CANONICAL_WS,
+            ResultSourceChannel.COMPAT_WS,
+            ResultSourceChannel.REPLAY,
+        }:
+            return "", "", {}
+
+        if not self._looks_like_android_wire_message(event):
+            return "", "", {}
+
+        wire_message = event.raw_message or event.payload or {}
+        schema_gate_evidence = wire_message.get("_cross_repo_schema_version_gate")
+        if isinstance(schema_gate_evidence, dict):
+            gate_action = str(schema_gate_evidence.get("action") or "").strip().lower()
+            if gate_action in {"reject", "degrade"}:
+                return (
+                    gate_action,
+                    str(schema_gate_evidence.get("reason") or f"schema_gate_{gate_action}"),
+                    {"schema_gate": dict(schema_gate_evidence)},
+                )
+
+        try:
+            from contracts.cross_repo_schema_version_gate import (
+                evaluate_android_uplink_dedupe_contract,
+            )
+
+            decision = evaluate_android_uplink_dedupe_contract(
+                message_type=event.raw_message_type or event.normalized_result_kind,
+                message=wire_message,
+            )
+        except Exception as exc:
+            logger.debug(
+                "unified_result_ingress: cross-repo dedupe contract check skipped (non-fatal): %s",
+                exc,
+            )
+            return "", "", {}
+
+        if decision is None:
+            return "", "", {}
+        if decision.action == "accept":
+            return "", "", {"android_dedupe_contract": decision.to_dict()}
+        return decision.action, decision.reason, {"android_dedupe_contract": decision.to_dict()}
+
     def _build_completion_lineage(
         self,
         event: NormalizedResultEvent,
     ) -> Dict[str, Any]:
         participant_id = str(event.participant_id or event.device_id or "").strip()
         completion_emission_id = str(event.completion_emission_id or "").strip()
-        epoch_token = (
-            str(event.session_epoch)
-            if event.session_epoch is not None
-            else "unknown_epoch"
-        )
+        epoch_token = str(event.session_epoch) if event.session_epoch is not None else "unknown_epoch"
         lineage_key = (
             f"completion_lineage:{event.normalized_result_kind}:{event.task_id}:"
             f"{participant_id}:{epoch_token}:{completion_emission_id}"
