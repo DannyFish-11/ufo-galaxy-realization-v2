@@ -6206,8 +6206,9 @@ def _evaluate_visibility_closure_truth(
             evidence_provenance
             or ("v2_canonical" if canonical_confirmation_present else "unknown")
         ),
-        "advisory_evidence_only": advisory_evidence_only or (
-            canonical_confirmation_required and not canonical_confirmation_present
+        "advisory_evidence_only": (
+            advisory_evidence_only
+            or (canonical_confirmation_required and not canonical_confirmation_present)
         ),
         "canonical_confirmation_present": canonical_confirmation_present,
     }

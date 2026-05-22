@@ -551,14 +551,10 @@ def _build_truth_boundary_contract(
     closure_quality = str(
         truth_visibility.get("closure_quality")
         or board_visibility.get("closure_quality")
-        or (
-            "mature_canonical"
-            if authority_completion_truth
-            else "advisory_only"
-            if evidence_provenance == "android_advisory"
-            else "evidence_incomplete"
-            if closure_candidate_visible
-            else "open"
+        or _determine_fallback_closure_quality(
+            authority_completion_truth=authority_completion_truth,
+            evidence_provenance=evidence_provenance,
+            closure_candidate_visible=closure_candidate_visible,
         )
     )
     advisory_evidence_only = bool(
@@ -624,6 +620,21 @@ def _normalize_gate_mode(value: Any) -> str:
     if mode in CROSS_REPO_ACCEPTANCE_GATE_SUPPORTED_MODES:
         return mode
     return CROSS_REPO_ACCEPTANCE_GATE_DEFAULT_MODE
+
+
+def _determine_fallback_closure_quality(
+    *,
+    authority_completion_truth: bool,
+    evidence_provenance: str,
+    closure_candidate_visible: bool,
+) -> str:
+    if authority_completion_truth:
+        return "mature_canonical"
+    if evidence_provenance == "android_advisory":
+        return "advisory_only"
+    if closure_candidate_visible:
+        return "evidence_incomplete"
+    return "open"
 
 
 def _session_timestamp_key(value: Any) -> tuple[float, float]:

@@ -14,6 +14,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+ANDROID_ADVISORY_EVIDENCE_AUTHORITY = "android_advisory"
+UNKNOWN_EVIDENCE_COMPLETENESS = "unknown"
+ADVISORY_ONLY_CLOSURE_SIGNIFICANCE = "advisory_only"
+
 
 @dataclass(frozen=True)
 class AndroidAcceptanceEvidenceRecord:
@@ -27,9 +31,9 @@ class AndroidAcceptanceEvidenceRecord:
     mapping_reason: str = ""
     dimension_states: Dict[str, Any] = field(default_factory=dict)
     missing_dimensions: List[str] = field(default_factory=list)
-    evidence_authority: str = "android_advisory"
-    evidence_completeness: str = "unknown"
-    closure_significance: str = "advisory_only"
+    evidence_authority: str = ANDROID_ADVISORY_EVIDENCE_AUTHORITY
+    evidence_completeness: str = UNKNOWN_EVIDENCE_COMPLETENESS
+    closure_significance: str = ADVISORY_ONLY_CLOSURE_SIGNIFICANCE
     canonical_confirmation_required: bool = True
     snapshot_id: str = ""
     st_gap_reason: str = ""
@@ -167,10 +171,10 @@ def _map_acceptance_tag(
             "mapped_android_proof_class": "incomplete",
             "mapped_evidence_trust_level": "provisional",
             "mapping_reason": (
-                "android acceptance_tag indicates graduation-level readiness, but the "
+                "Android acceptance_tag indicates graduation-level readiness, but the "
                 "report remains advisory until V2 performs canonical confirmation"
             ),
-            "evidence_authority": "android_advisory",
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
             "evidence_completeness": evidence_completeness,
             "closure_significance": (
                 "advisory_candidate"
@@ -185,7 +189,7 @@ def _map_acceptance_tag(
             "mapped_android_proof_class": "degraded_conflicting",
             "mapped_evidence_trust_level": "quarantine",
             "mapping_reason": "acceptance_tag indicates rejection/conflict",
-            "evidence_authority": "android_advisory",
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
             "evidence_completeness": evidence_completeness,
             "closure_significance": "advisory_conflict",
             "canonical_confirmation_required": True,
@@ -196,7 +200,7 @@ def _map_acceptance_tag(
             "mapped_android_proof_class": "degraded_partial",
             "mapped_evidence_trust_level": "provisional",
             "mapping_reason": "acceptance_tag indicates unknown acceptance state",
-            "evidence_authority": "android_advisory",
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
             "evidence_completeness": evidence_completeness,
             "closure_significance": "advisory_unknown",
             "canonical_confirmation_required": True,
@@ -206,7 +210,7 @@ def _map_acceptance_tag(
         "mapped_android_proof_class": "",
         "mapped_evidence_trust_level": "provisional",
         "mapping_reason": "acceptance_tag unavailable or unmapped",
-        "evidence_authority": "android_advisory",
+        "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
         "evidence_completeness": evidence_completeness,
         "closure_significance": "advisory_unknown",
         "canonical_confirmation_required": True,
