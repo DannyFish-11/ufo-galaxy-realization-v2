@@ -110,6 +110,7 @@ Functions
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -658,6 +659,7 @@ class PR4OperableSurfaceSnapshot:
 _PENDING_ANDROID_ACTIONS: Dict[str, AndroidDirectedActionSpec] = {}
 _TERMINAL_ANDROID_ACTIONS: Dict[str, Dict[str, Any]] = {}
 _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS: Set[str] = set()
+_OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK = threading.Lock()
 
 _MANUAL_IDEMPOTENT_ACTION_KINDS: Set[str] = {
     "trigger_recovery",
@@ -808,12 +810,18 @@ def _build_operator_manual_action_idempotency_key(
     session_id: Optional[str],
     device_id: Optional[str],
 ) -> str:
-    identity_parts = [
-        f"task={str(task_id or '').strip()}",
-        f"flow={str(flow_id or '').strip()}",
-        f"session={str(session_id or '').strip()}",
-        f"device={str(device_id or '').strip()}",
-    ]
+    identity_parts = []
+    for label, value in (
+        ("task", task_id),
+        ("flow", flow_id),
+        ("session", session_id),
+        ("device", device_id),
+    ):
+        text = str(value or "").strip()
+        if text:
+            identity_parts.append(f"{label}={text}")
+    if not identity_parts:
+        identity_parts.append("unscoped=true")
     identity = "|".join(identity_parts)
     return f"operator_manual:{action_kind}:{identity}"
 
@@ -959,7 +967,9 @@ def _evaluate_operator_intervention_adjudication(
             device_id=device_id,
         )
         adjudication["idempotency_key"] = idempotency_key
-        if idempotency_key in _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS:
+        with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+            is_duplicate = idempotency_key in _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS
+        if is_duplicate:
             duplicate = adjudicate_duplicate_vs_first_accepted(is_duplicate=True)
             evidence = build_continuity_adjudication_evidence(
                 classification=duplicate.classification,
@@ -997,7 +1007,8 @@ def _record_operator_intervention_idempotency(
         OperatorActionOrchestrationOutcome.accepted_pending.value,
         OperatorActionOrchestrationOutcome.partial_success.value,
     }:
-        _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
+        with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+            _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
 
 
 # ---------------------------------------------------------------------------
@@ -1050,12 +1061,14 @@ def clear_operator_action_audit_log() -> None:
     """Clear the in-process audit log.  For testing only."""
     global _AUDIT_LOG
     _AUDIT_LOG = []
-    _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
 
 
 def reset_operator_intervention_adjudication_state() -> None:
     """Reset operator intervention continuity/idempotency state (testing only)."""
-    _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -1422,21 +1435,17 @@ def execute_governed_operator_action(
         action_notes=action_notes,
     )
 
-    if not intervention_adjudication.get("allow", False):
-        outcome = OperatorActionOrchestrationOutcome.policy_blocked.value
-        error = (
-            "operator intervention rejected by continuity adjudication gate: "
-            f"{intervention_adjudication.get('triggering_reason', '')}"
-        )
-        downstream_effects.append(
-            "operator_intervention_rejected:"
-            f"{intervention_adjudication.get('disposition', 'unknown')}"
-        )
-
     try:
         if not intervention_adjudication.get("allow", False):
-            # Guard pattern: adjudication already produced policy_blocked outcome.
-            # Keep outcome/error/evidence as-is and skip orchestration branches.
+            outcome = OperatorActionOrchestrationOutcome.policy_blocked.value
+            error = (
+                "operator intervention rejected by continuity adjudication gate: "
+                f"{intervention_adjudication.get('triggering_reason', '')}"
+            )
+            downstream_effects.append(
+                "operator_intervention_rejected:"
+                f"{intervention_adjudication.get('disposition', 'unknown')}"
+            )
             logger.debug(
                 "operator_intervention blocked before orchestration: action_kind=%s reason=%s",
                 action_kind,
