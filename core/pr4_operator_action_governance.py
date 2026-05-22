@@ -898,6 +898,7 @@ def _evaluate_operator_intervention_adjudication(
         "disposition": "first_accepted",
         "triggering_reason": "operator_intervention_gate_passed",
         "idempotency_key": "",
+        "idempotency_reserved": False,
         "evidence": default_evidence,
     }
     canonical_task_snapshot = _lookup_canonical_task_snapshot(task_id)
@@ -905,10 +906,14 @@ def _evaluate_operator_intervention_adjudication(
     task_session_id = canonical_task_snapshot.get("task_session_id", "")
 
     if action_kind == "reopen_closure" and task_id:
-        if task_lifecycle in _TERMINAL_TASK_LIFECYCLES and not _is_sanctioned_reopen_path(
+        is_unsanctioned_terminal_reopen = (
+            task_lifecycle in _TERMINAL_TASK_LIFECYCLES
+            and not _is_sanctioned_reopen_path(
             approval_token=approval_token,
             action_notes=action_notes,
-        ):
+            )
+        )
+        if is_unsanctioned_terminal_reopen:
             stale = adjudicate_stale_vs_current(
                 is_stale=True,
                 stale_classification="final_closed_reopen_without_sanction",
@@ -973,6 +978,9 @@ def _evaluate_operator_intervention_adjudication(
         adjudication["idempotency_key"] = idempotency_key
         with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
             is_duplicate = idempotency_key in _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS
+            if not is_duplicate:
+                _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
+                adjudication["idempotency_reserved"] = True
         if is_duplicate:
             duplicate = adjudicate_duplicate_vs_first_accepted(is_duplicate=True)
             evidence = build_continuity_adjudication_evidence(
@@ -1001,18 +1009,22 @@ def _record_operator_intervention_idempotency(
     action_kind: str,
     outcome: str,
     idempotency_key: str,
+    idempotency_reserved: bool,
 ) -> None:
     if not idempotency_key:
         return
     if action_kind not in _MANUAL_IDEMPOTENT_ACTION_KINDS:
         return
-    if outcome in {
+    accepted_outcome = outcome in {
         OperatorActionOrchestrationOutcome.success.value,
         OperatorActionOrchestrationOutcome.accepted_pending.value,
         OperatorActionOrchestrationOutcome.partial_success.value,
-    }:
-        with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+    }
+    with _OPERATOR_INTERVENTION_IDEMPOTENCY_LOCK:
+        if accepted_outcome and not idempotency_reserved:
             _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.add(idempotency_key)
+        if not accepted_outcome and idempotency_reserved:
+            _OPERATOR_INTERVENTION_IDEMPOTENCY_KEYS.discard(idempotency_key)
 
 
 # ---------------------------------------------------------------------------
@@ -1858,6 +1870,9 @@ def execute_governed_operator_action(
         action_kind=action_kind,
         outcome=outcome,
         idempotency_key=str(intervention_adjudication.get("idempotency_key") or ""),
+        idempotency_reserved=bool(
+            intervention_adjudication.get("idempotency_reserved", False)
+        ),
     )
     routed_subject_ids: List[str] = []
     routed_subject_seen: Set[str] = set()
