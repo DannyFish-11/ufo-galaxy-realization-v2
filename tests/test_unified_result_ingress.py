@@ -1609,7 +1609,7 @@ def _make_replay_event(
     replay_item_id: str = "",
     replay_session_id: str = "test-session",
     status: str = "completed",
-) -> Any:
+) -> "Any":
     """Build a NormalizedResultEvent on the REPLAY channel with ordering metadata."""
     from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel
 
@@ -1630,7 +1630,7 @@ def _make_replay_event(
     return evt
 
 
-def _make_isolated_replay_ingress():
+def _make_isolated_replay_ingress() -> "Any":
     """Return a fresh UnifiedResultIngress wired with no-op chain steps for isolation."""
     from core.unified_result_ingress import UnifiedResultIngress
 

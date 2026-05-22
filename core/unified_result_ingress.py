@@ -1178,7 +1178,7 @@ class UnifiedResultIngress:
     def _adjudicate_replay_ordering(
         self,
         event: "NormalizedResultEvent",
-    ) -> "tuple[bool, str, str, Dict[str, Any]]":
+    ) -> "tuple":
         """Adjudicate replay ordering for a REPLAY channel event.
 
         Evaluates the event against the V2-side offline replay ordering contract
@@ -1279,6 +1279,12 @@ class UnifiedResultIngress:
             max_seq_before = state["max_seq"]
             seen_ids: set = state["seen_ids"]
 
+            # Mirror the ordering logic of _evaluate_items_into_report in the
+            # offline replay ordering contract.  Stale check: item is more than
+            # STALE_SEQ_WINDOW *behind* the current session maximum
+            # (max_seq_before - seq > STALE_SEQ_WINDOW).  When seq is *ahead*
+            # of max (seq > max_seq_before), this expression is negative and the
+            # condition is False — the item is correctly not stale.
             is_dup = has_item_id and (replay_item_id in seen_ids)
             is_stale = (not is_dup) and has_seq and (max_seq_before - seq > STALE_SEQ_WINDOW)
             is_oor = (not is_dup) and (not is_stale) and has_seq and (seq < max_seq_before)
@@ -1296,14 +1302,15 @@ class UnifiedResultIngress:
                 # Has seq but no item_id → ambiguous (cannot dedup)
                 decision = OfflineReplayItemDecision.ambiguous_authority
                 verdict = OfflineReplayContractVerdict.downgraded
-                if has_seq and seq > state["max_seq"]:
-                    state["max_seq"] = seq
             else:
                 decision = OfflineReplayItemDecision.accept
                 verdict = OfflineReplayContractVerdict.authoritative_contract_defined
                 seen_ids.add(replay_item_id)
-                if has_seq and seq > state["max_seq"]:
-                    state["max_seq"] = seq
+
+            # Advance session max_seq for accepted and ambiguous items (not for
+            # rejected items whose ordering position is already behind max).
+            if not is_dup and not is_stale and not is_oor and has_seq and seq > state["max_seq"]:
+                state["max_seq"] = seq
 
             state["item_count"] += 1
 
