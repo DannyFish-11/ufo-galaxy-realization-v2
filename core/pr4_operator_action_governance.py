@@ -822,6 +822,27 @@ def _is_sanctioned_reopen_path(
     return token.startswith("sanctioned:") or "sanctioned_reopen" in notes
 
 
+def _lookup_canonical_task_snapshot(task_id: Optional[str]) -> Dict[str, str]:
+    task_id_text = str(task_id or "").strip()
+    if not task_id_text:
+        return {}
+    try:
+        from core.canonical_task import get_canonical_task_runtime
+
+        task = get_canonical_task_runtime().get_by_task_id(task_id_text)
+        if task is None:
+            return {}
+        lifecycle = getattr(task, "lifecycle", "")
+        lifecycle_text = (
+            lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
+        ).strip().lower()
+        session_text = str(getattr(task, "session_id", "") or "").strip()
+        return {"task_lifecycle": lifecycle_text, "task_session_id": session_text}
+    except Exception as exc:
+        logger.debug("operator_intervention: canonical task lookup skipped: %s", exc)
+        return {}
+
+
 def _evaluate_operator_intervention_adjudication(
     *,
     action_kind: str,
@@ -861,20 +882,11 @@ def _evaluate_operator_intervention_adjudication(
         "idempotency_key": "",
         "evidence": default_evidence,
     }
+    canonical_task_snapshot = _lookup_canonical_task_snapshot(task_id)
+    task_lifecycle = canonical_task_snapshot.get("task_lifecycle", "")
+    task_session_id = canonical_task_snapshot.get("task_session_id", "")
 
     if action_kind == "reopen_closure" and task_id:
-        task_lifecycle = ""
-        try:
-            from core.canonical_task import get_canonical_task_runtime
-
-            task = get_canonical_task_runtime().get_by_task_id(str(task_id))
-            if task is not None:
-                lifecycle = getattr(task, "lifecycle", "")
-                task_lifecycle = (
-                    lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
-                ).strip().lower()
-        except Exception as exc:
-            logger.debug("operator_intervention: task lifecycle lookup skipped: %s", exc)
         if task_lifecycle in _TERMINAL_TASK_LIFECYCLES and not _is_sanctioned_reopen_path(
             approval_token=approval_token,
             action_notes=action_notes,
@@ -904,15 +916,6 @@ def _evaluate_operator_intervention_adjudication(
             return adjudication
 
     if session_id and task_id:
-        task_session_id = ""
-        try:
-            from core.canonical_task import get_canonical_task_runtime
-
-            task = get_canonical_task_runtime().get_by_task_id(str(task_id))
-            if task is not None:
-                task_session_id = str(getattr(task, "session_id", "") or "").strip()
-        except Exception as exc:
-            logger.debug("operator_intervention: task session lookup skipped: %s", exc)
         if task_session_id and task_session_id != str(session_id).strip():
             stale = adjudicate_stale_vs_current(
                 is_stale=True,
@@ -1426,7 +1429,13 @@ def execute_governed_operator_action(
 
     try:
         if not intervention_adjudication.get("allow", False):
-            pass
+            # Guard pattern: adjudication already produced policy_blocked outcome.
+            # Keep outcome/error/evidence as-is and skip orchestration branches.
+            logger.debug(
+                "operator_intervention blocked before orchestration: action_kind=%s reason=%s",
+                action_kind,
+                intervention_adjudication.get("triggering_reason", ""),
+            )
         # ── retry_admission ───────────────────────────────────────────────
         elif action_kind == OperatorActionKind.retry_admission.value:
             if task_id:
