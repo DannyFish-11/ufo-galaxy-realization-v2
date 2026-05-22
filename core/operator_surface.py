@@ -2030,7 +2030,7 @@ class OperatorSurface:
                     operator_user_id=request.user_id or "operator",
                     device_id=request.device_id,
                     flow_id=request.flow_id,
-                    task_id=None,
+                    task_id=request.task_id,
                     session_id=request.session_id or None,
                     approval_token=request.approval_token,
                     action_notes=request.action_notes,

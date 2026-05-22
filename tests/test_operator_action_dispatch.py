@@ -365,6 +365,43 @@ class TestOperatorActionEndpoint:
         src = result.runtime_result.get("_source", "")
         assert "pr4" in src or "operator_action_layer" in src or result.accepted is True
 
+    def test_duplicate_manual_intervention_not_reported_as_canonical_acceptance(self):
+        from core.operator_surface import OperatorSurface
+        import unittest.mock as mock
+
+        surface = OperatorSurface()
+        req = OperatorActionRequest(
+            action_kind=OperatorActionKind.finalize_closure.value,
+            task_id="task_operator_surface_duplicate_001",
+            approval_token="token_duplicate_surface",
+        )
+        mock_availability = {
+            "actions": {
+                OperatorActionKind.finalize_closure.value: {
+                    "available": True,
+                    "control_mode": "approval_gated",
+                    "requires_approval": True,
+                }
+            },
+            "state_basis": {},
+        }
+        with mock.patch.object(
+            surface,
+            "get_operator_action_availability",
+            return_value=mock_availability,
+        ):
+            first = asyncio.get_event_loop().run_until_complete(
+                surface.execute_operator_action(req)
+            )
+            duplicate = asyncio.get_event_loop().run_until_complete(
+                surface.execute_operator_action(req)
+            )
+        assert first.runtime_result.get("continuity_adjudication_classification") == "current-accepted"
+        assert duplicate.accepted is False
+        assert duplicate.runtime_result.get("continuity_adjudication_classification") == "duplicate-ignored"
+        evidence = dict(duplicate.runtime_result.get("continuity_adjudication_evidence") or {})
+        assert evidence.get("intervention_status") == "duplicate_ignored_manual_action"
+
 
 class TestOperatorActionAvailabilityEndpoint:
     def test_actions_availability_endpoint_exists(self, client):

@@ -1163,6 +1163,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             Target Android device (for device_dispatch; optional for dispatch).
         ``flow_id``
             Target flow ID (required for flow_cancel).
+        ``task_id``
+            Target task ID for continuity/closure governed intervention actions.
         ``session_id``
             Operator session ID for continuity tracing.
         ``user_id``

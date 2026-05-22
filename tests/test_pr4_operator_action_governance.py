@@ -336,6 +336,87 @@ class TestExecuteGovernedOperatorAction:
         assert result["outcome"] in {"success", "accepted_pending"}
         assert "audit_id" in result
 
+    def test_stale_manual_intervention_is_rejected(self):
+        from core.canonical_task import (
+            build_canonical_task,
+            get_canonical_task_runtime,
+            reset_canonical_task_runtime,
+        )
+
+        reset_canonical_task_runtime()
+        runtime = get_canonical_task_runtime()
+        task = build_canonical_task(goal="stale-session-test")
+        task.identity.task_id = "task_stale_operator_001"
+        task.identity.session_id = "sess_current"
+        runtime.register(task)
+
+        result = self._run(
+            action_kind="reopen_closure",
+            action_id="act_stale_manual_001",
+            operator_user_id="admin",
+            task_id="task_stale_operator_001",
+            session_id="sess_old",
+            approval_token="sanctioned:allow-test",
+        )
+        assert result["outcome"] == "policy_blocked"
+        assert result["continuity_adjudication_classification"] == "stale-rejected"
+        assert result["continuity_adjudication_disposition"] == "stale_rejected"
+        evidence = dict(result.get("continuity_adjudication_evidence") or {})
+        assert evidence.get("intervention_status") == "rejected_stale_intervention"
+        assert "rejected by continuity adjudication gate" in result.get("error", "")
+
+    def test_duplicate_manual_completion_is_ignored(self):
+        first = self._run(
+            action_kind="finalize_closure",
+            action_id="act_finalize_first",
+            operator_user_id="admin",
+            task_id="task_duplicate_manual_001",
+            approval_token="token_duplicate",
+        )
+        duplicate = self._run(
+            action_kind="finalize_closure",
+            action_id="act_finalize_duplicate",
+            operator_user_id="admin",
+            task_id="task_duplicate_manual_001",
+            approval_token="token_duplicate",
+        )
+        assert first["continuity_adjudication_classification"] == "current-accepted"
+        assert duplicate["outcome"] == "policy_blocked"
+        assert duplicate["continuity_adjudication_classification"] == "duplicate-ignored"
+        assert duplicate["continuity_adjudication_disposition"] == "duplicate_ignored"
+        evidence = dict(duplicate.get("continuity_adjudication_evidence") or {})
+        assert evidence.get("intervention_status") == "duplicate_ignored_manual_action"
+
+    def test_sanctioned_reopen_has_explicit_evidence(self):
+        from core.canonical_task import (
+            build_canonical_task,
+            get_canonical_task_runtime,
+            reset_canonical_task_runtime,
+            TaskLifecycle,
+        )
+
+        reset_canonical_task_runtime()
+        runtime = get_canonical_task_runtime()
+        task = build_canonical_task(goal="sanctioned-reopen-test")
+        task.identity.task_id = "task_sanctioned_reopen_001"
+        task.identity.session_id = "sess_reopen"
+        task.advance_lifecycle(TaskLifecycle.COMPLETED)
+        runtime.register(task)
+
+        result = self._run(
+            action_kind="reopen_closure",
+            action_id="act_sanctioned_reopen_001",
+            operator_user_id="admin",
+            task_id="task_sanctioned_reopen_001",
+            session_id="sess_reopen",
+            approval_token="sanctioned:explicit-reopen",
+            action_notes="sanctioned_reopen",
+        )
+        assert result["outcome"] == "success"
+        assert result["continuity_adjudication_classification"] == "current-accepted"
+        evidence = dict(result.get("continuity_adjudication_evidence") or {})
+        assert evidence.get("intervention_status") == "sanctioned_operator_intervention"
+
     def test_reopen_closure_with_task(self):
         result = self._run(
             action_kind="reopen_closure",
