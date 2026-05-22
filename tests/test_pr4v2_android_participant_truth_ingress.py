@@ -42,11 +42,13 @@ Group Q — ingest_android_participant_truth_message: convenience wrapper e2e (A
 Group R — core.runtime re-exports: all PR-4V2 symbols accessible (AC1).
 Group S — Authority boundary documentation: policy sentinels prove V2 wins (AC4).
 Group T — AndroidParticipantReconcileOutcome: fields, is_accepted(), to_dict().
+Group U — Non-closure truth barrier hardening: closure spoof prevention.
 """
 
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
@@ -1018,3 +1020,74 @@ class TestGroupT_ReconcileOutcome:
         assert "tracking_record_phase" in d
         assert "recovery_state_routing" in d
         assert "envelope" in d
+
+
+# ---------------------------------------------------------------------------
+# Group U — Non-closure truth barrier hardening
+# ---------------------------------------------------------------------------
+
+
+@_SKIP_MODULE
+class TestGroupU_NonClosureTruthBarrier:
+    def test_u1_readiness_payload_cannot_carry_result_or_phase_fields(self) -> None:
+        env = extract_participant_truth_envelope(
+            {
+                "truth_kind": "readiness_assessment",
+                "payload": {
+                    "phase": "completed",
+                    "success": True,
+                    "result": {"spoof": "attempt"},
+                },
+            }
+        )
+        assert env.truth_kind == AndroidParticipantTruthKind.readiness_assessment
+        assert env.task_phase_value == ""
+        assert env.result_success is None
+        assert env.result_payload == {}
+
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="tracker unavailable")
+    def test_u2_status_cannot_be_promoted_to_terminal_closure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import core.android_participant_truth_ingress as _ingress
+
+        rt, _ = _make_runtime(contract_id="cid-u2", initial_phase="in_progress")
+
+        def _fake_apply(*_args: Any, **_kwargs: Any) -> Any:
+            return SimpleNamespace(phase="completed")
+
+        monkeypatch.setattr(_ingress, "apply_acknowledgment_signal", _fake_apply)
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.status,
+            contract_id="cid-u2",
+        )
+        outcome = reconcile_android_participant_truth(env, runtime=rt)
+        assert not outcome.was_reconciled
+        assert outcome.canonical_update == ""
+        assert outcome.tracking_record_phase == ""
+        assert "non_closure_truth_kind_blocked:status" in outcome.reject_reason
+
+    def test_u3_recovery_router_fallback_remains_non_closure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import core.android_participant_truth_ingress as _ingress
+
+        monkeypatch.setattr(_ingress, "_RECOVERY_STATE_ROUTER_AVAILABLE", False)
+        monkeypatch.setattr(_ingress, "_route_recovery_state_from_payload", None)
+
+        env = extract_participant_truth_envelope(
+            {
+                "truth_kind": "recovery_state",
+                "payload": {
+                    "recovery_phase": "recovered_inflight",
+                    "phase": "completed",
+                    "success": True,
+                    "result": {"spoof": "attempt"},
+                },
+            }
+        )
+        assert env.task_phase_value == ""
+        assert env.result_success is None
+        assert env.result_payload == {}
+
+        outcome = reconcile_android_participant_truth(env)
+        assert not outcome.was_reconciled
+        assert outcome.canonical_update == ""
+        assert outcome.tracking_record_phase == ""
+        assert "recovery_state_router_unavailable" in outcome.reject_reason
