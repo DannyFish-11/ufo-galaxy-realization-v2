@@ -696,6 +696,12 @@ class UnifiedResultIngress:
         provenance = self._build_final_truth_provenance(ledger_entry)
         outcome.closure_evidence_ledger = dict(ledger_entry)
         outcome.final_truth_provenance = dict(provenance)
+        canonical_truth_completed = bool(
+            outcome.is_fully_closed
+            and outcome.truth_chain_complete
+            and str(outcome.evidence_acceptance_verdict or "").strip().lower()
+            in {"accept", "accepted"}
+        )
         summary = {
             "available": True,
             "task_id": event.task_id,
@@ -703,16 +709,9 @@ class UnifiedResultIngress:
             "normalized_status": outcome.normalized_status,
             "is_fully_closed": bool(outcome.is_fully_closed),
             "truth_chain_complete": bool(outcome.truth_chain_complete),
-            "canonical_truth_completed": bool(
-                outcome.is_fully_closed
-                and outcome.truth_chain_complete
-                and str(outcome.evidence_acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
-            ),
+            "canonical_truth_completed": canonical_truth_completed,
             "mature_closure_achieved": bool(
-                outcome.is_fully_closed
-                and outcome.truth_chain_complete
-                and str(outcome.evidence_acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
-                and not bool(outcome.incomplete_reason)
+                canonical_truth_completed and not bool(outcome.incomplete_reason)
             ),
             "completion_notified": bool(outcome.completion_notified),
             "problem_solved": bool(outcome.problem_solved),

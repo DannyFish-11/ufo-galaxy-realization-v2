@@ -169,7 +169,13 @@ def _build_android_nl_lineage(
     }
 
 
-def _is_lineage_quality_non_canonical(lineage_quality: str) -> bool:
+def _is_non_canonical_lineage_quality(lineage_quality: str) -> bool:
+    """Return whether lineage quality is explicitly non-canonical.
+
+    These values represent replay/recovery/compat/fallback/degraded/blocked
+    paths that cannot be promoted to V2 canonical mature closure even when
+    transport and reconciliation steps completed.
+    """
     q = str(lineage_quality or "").strip().lower()
     return q in {
         _LINEAGE_QUALITY_REPLAY_ASSISTED,
@@ -187,7 +193,15 @@ def _derive_canonical_closure_flags(
     truth_chain_complete: bool,
     acceptance_verdict: str,
     lineage_quality: str,
-) -> Tuple[bool, bool]:
+) -> tuple[bool, bool]:
+    """Derive canonical and mature closure flags for Android-originated lineage.
+
+    ``canonical_truth_completed`` requires authoritative V2 closure evidence
+    (full close + truth chain complete + acceptance verdict "accept").
+    ``mature_closure_achieved`` is stricter: canonical truth must be complete
+    and the lineage quality itself must remain canonical (not replay/fallback/
+    degraded/provisional class).
+    """
     verdict = str(acceptance_verdict or "").strip().lower()
     canonical_truth_completed = (
         bool(is_fully_closed)
@@ -196,7 +210,7 @@ def _derive_canonical_closure_flags(
     )
     mature_closure_achieved = (
         canonical_truth_completed
-        and not _is_lineage_quality_non_canonical(lineage_quality)
+        and not _is_non_canonical_lineage_quality(lineage_quality)
     )
     return canonical_truth_completed, mature_closure_achieved
 
@@ -1178,8 +1192,8 @@ async def handle_goal_execution_result(
         elif _ger_ingress_outcome.is_fully_closed:
             _ger_ingress_closed = True
             result_lineage["reconciliation_lineage"] = "unified_ingress_closed"
-            _acceptance_verdict = (
-                getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", "") or ""
+            _acceptance_verdict = getattr(
+                _ger_ingress_outcome, "evidence_acceptance_verdict", ""
             )
             if str(_acceptance_verdict).strip().lower() in {"accept_provisional", "accepted_provisional"}:
                 result_lineage["closure_lineage"] = "unified_ingress_provisional_non_canonical"

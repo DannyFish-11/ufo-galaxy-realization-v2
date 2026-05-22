@@ -357,6 +357,30 @@ def _compute_closure_state(
     return ClosureState.PARTIAL
 
 
+def _derive_closure_truth_flags(
+    *,
+    acceptance_verdict: str,
+    truth_chain_complete: bool,
+    is_fully_closed: bool,
+    normalized_status: str,
+) -> tuple[bool, bool]:
+    """Derive closure truth flags for closure-registry projections.
+
+    This registry-level projection has no lineage-quality input, so
+    ``mature_closure_achieved`` is constrained to canonical truth completion
+    plus a canonical terminal task status (``completed``).
+    """
+    canonical_truth_completed = (
+        bool(is_fully_closed)
+        and bool(truth_chain_complete)
+        and str(acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
+    )
+    mature_closure_achieved = (
+        canonical_truth_completed and str(normalized_status or "").strip().lower() == "completed"
+    )
+    return canonical_truth_completed, mature_closure_achieved
+
+
 # ---------------------------------------------------------------------------
 # 公共写入函数
 # ---------------------------------------------------------------------------
@@ -405,12 +429,12 @@ def record_local_chain_closure(
         acceptance_verdict = str(ingress_outcome.get("evidence_acceptance_verdict") or "")
         truth_chain_complete = bool(ingress_outcome.get("truth_chain_complete"))
         is_fully_closed = bool(ingress_outcome.get("is_fully_closed"))
-        canonical_truth_completed = (
-            is_fully_closed
-            and truth_chain_complete
-            and acceptance_verdict.lower() in {"accept", "accepted"}
+        canonical_truth_completed, mature_closure_achieved = _derive_closure_truth_flags(
+            acceptance_verdict=acceptance_verdict,
+            truth_chain_complete=truth_chain_complete,
+            is_fully_closed=is_fully_closed,
+            normalized_status=normalized_status,
         )
-        mature_closure_achieved = canonical_truth_completed and (normalized_status == "completed")
         incomplete_reason = str(ingress_outcome.get("incomplete_reason") or "")
 
     record = ChainClosureRecord(
@@ -483,12 +507,12 @@ def record_cross_device_chain_closure(
         acceptance_verdict = str(ingress_outcome.get("evidence_acceptance_verdict") or "")
         truth_chain_complete = bool(ingress_outcome.get("truth_chain_complete"))
         is_fully_closed = bool(ingress_outcome.get("is_fully_closed"))
-        canonical_truth_completed = (
-            is_fully_closed
-            and truth_chain_complete
-            and acceptance_verdict.lower() in {"accept", "accepted"}
+        canonical_truth_completed, mature_closure_achieved = _derive_closure_truth_flags(
+            acceptance_verdict=acceptance_verdict,
+            truth_chain_complete=truth_chain_complete,
+            is_fully_closed=is_fully_closed,
+            normalized_status=normalized_status,
         )
-        mature_closure_achieved = canonical_truth_completed and (normalized_status == "completed")
         incomplete_reason = str(ingress_outcome.get("incomplete_reason") or "")
 
     record = ChainClosureRecord(

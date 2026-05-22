@@ -93,6 +93,15 @@ def test_canonical_closure_flags_require_authoritative_acceptance() -> None:
     assert canonical is True
     assert mature is True
 
+    canonical, mature = ge._derive_canonical_closure_flags(
+        is_fully_closed=True,
+        truth_chain_complete=True,
+        acceptance_verdict="",
+        lineage_quality="canonical_success",
+    )
+    assert canonical is False
+    assert mature is False
+
 
 def test_goal_execution_blocked_when_main_chain_ingress_not_accepted() -> None:
     msg = _build_goal_execution_message(task_id="task-2b")
