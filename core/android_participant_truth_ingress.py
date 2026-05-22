@@ -480,6 +480,17 @@ class AndroidParticipantTruthKind(str, Enum):
             AndroidParticipantTruthKind.governance_artifact,
         )
 
+    def is_non_closure_signal(self) -> bool:
+        """Return True iff this kind must never assert canonical task closure."""
+        return self in (
+            AndroidParticipantTruthKind.session_snapshot,
+            AndroidParticipantTruthKind.readiness_assessment,
+            AndroidParticipantTruthKind.runtime_state,
+            AndroidParticipantTruthKind.status,
+            AndroidParticipantTruthKind.recovery_state,
+            AndroidParticipantTruthKind.unknown,
+        )
+
 
 # ---------------------------------------------------------------------------
 # AndroidParticipantTruthEnvelope dataclass
@@ -698,6 +709,20 @@ def extract_participant_truth_envelope(
     if isinstance(raw_result, dict):
         result_payload = raw_result
 
+    # Closure-bearing extraction fields are kind-gated to make non-closure
+    # semantics machine-obvious and resilient to future refactors.
+    if truth_kind not in (
+        AndroidParticipantTruthKind.task_phase,
+        AndroidParticipantTruthKind.unknown,
+    ):
+        task_phase_value = ""
+    if truth_kind not in (
+        AndroidParticipantTruthKind.result,
+        AndroidParticipantTruthKind.unknown,
+    ):
+        result_success = None
+        result_payload = {}
+
     return AndroidParticipantTruthEnvelope(
         truth_kind=truth_kind,
         device_id=device_id,
@@ -724,6 +749,59 @@ _TERMINAL_TRUTH_KINDS = frozenset(
         AndroidParticipantTruthKind.reconciliation_signal.value,
     }
 )
+
+_NON_CLOSURE_TRUTH_KINDS = frozenset(
+    {
+        AndroidParticipantTruthKind.session_snapshot.value,
+        AndroidParticipantTruthKind.readiness_assessment.value,
+        AndroidParticipantTruthKind.runtime_state.value,
+        AndroidParticipantTruthKind.status.value,
+        AndroidParticipantTruthKind.recovery_state.value,
+        AndroidParticipantTruthKind.unknown.value,
+    }
+)
+
+_TERMINAL_TRACKING_PHASES = frozenset(
+    {
+        "completed",
+        "failed",
+        "cancelled",
+        "canceled",
+        "timeout",
+        "timed_out",
+        "error",
+    }
+)
+
+
+def _enforce_non_closure_truth_barrier(
+    *,
+    kind: AndroidParticipantTruthKind,
+    was_reconciled: bool,
+    canonical_update: str,
+    reject_reason: str,
+    tracking_record_phase: str,
+) -> Tuple[bool, str, str, str]:
+    """Block non-closure truth kinds from ever claiming terminal closure."""
+    if kind.value not in _NON_CLOSURE_TRUTH_KINDS:
+        return was_reconciled, canonical_update, reject_reason, tracking_record_phase
+
+    phase = (tracking_record_phase or "").strip().lower()
+    update_lower = (canonical_update or "").strip().lower()
+    claims_terminal_phase = phase in _TERMINAL_TRACKING_PHASES
+    claims_closure = any(
+        marker in update_lower
+        for marker in ("closure", "final_result", "tracking_record_completed", "→v2_phase=completed")
+    )
+    if not claims_terminal_phase and not claims_closure:
+        return was_reconciled, canonical_update, reject_reason, tracking_record_phase
+
+    reason = reject_reason or f"non_closure_truth_kind_blocked:{kind.value}"
+    if claims_terminal_phase:
+        reason = f"{reason}:terminal_phase={phase}"
+    if claims_closure:
+        reason = f"{reason}:closure_claim_detected"
+    return False, "", reason, ""
 
 
 def _emit_audit_event(
@@ -992,6 +1070,19 @@ def reconcile_android_participant_truth(
         local_only = True
         canonical_update = ""
         reject_reason = ""
+
+    (
+        was_reconciled,
+        canonical_update,
+        reject_reason,
+        tracking_record_phase,
+    ) = _enforce_non_closure_truth_barrier(
+        kind=kind,
+        was_reconciled=was_reconciled,
+        canonical_update=canonical_update,
+        reject_reason=reject_reason,
+        tracking_record_phase=tracking_record_phase,
+    )
 
     # ------------------------------------------------------------------
     # Emit ReplayFoundation audit event (always)
