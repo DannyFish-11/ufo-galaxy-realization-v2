@@ -345,22 +345,30 @@ class AndroidOriginatedIngressResult:
     """
 
     accepted: bool
+    ingress_transport_accepted: bool
+    policy_admitted: bool
     lineage: ExecutionLineageKind
     gap_types: List[str]
     authority_source: str
     is_main_chain_accepted: bool
     mature_closure_blocked: bool
+    canonical_truth_completed: bool
+    mature_closure_achieved: bool
     blocking_reason: str
     context: AndroidOriginatedIngressContext
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "accepted": self.accepted,
+            "ingress_transport_accepted": self.ingress_transport_accepted,
+            "policy_admitted": self.policy_admitted,
             "lineage": self.lineage.value,
             "gap_types": list(self.gap_types),
             "authority_source": self.authority_source,
             "is_main_chain_accepted": self.is_main_chain_accepted,
             "mature_closure_blocked": self.mature_closure_blocked,
+            "canonical_truth_completed": self.canonical_truth_completed,
+            "mature_closure_achieved": self.mature_closure_achieved,
             "blocking_reason": self.blocking_reason,
             "context": self.context.to_dict(),
             "_sentinel": ANDROID_ORIGINATED_MAIN_CHAIN_INGRESS_SENTINEL,
@@ -613,11 +621,15 @@ def accept_android_originated_nl_into_main_chain(
 
     return AndroidOriginatedIngressResult(
         accepted=True,  # Always accept for ingress; gaps inform closure quality
+        ingress_transport_accepted=True,
+        policy_admitted=True,
         lineage=lineage,
         gap_types=gap_types,
         authority_source=authority_source,
         is_main_chain_accepted=main_chain_accepted,
         mature_closure_blocked=mature_closure_blocked,
+        canonical_truth_completed=False,
+        mature_closure_achieved=False,
         blocking_reason=blocking_reason,
         context=ctx,
     )
@@ -668,10 +680,14 @@ def build_android_originated_governance_context(
         "device_id": device_id,
         "android_originated": True,
         "lineage": ingress_result.lineage.value,
+        "ingress_transport_accepted": ingress_result.ingress_transport_accepted,
+        "policy_admitted": ingress_result.policy_admitted,
         "is_main_chain_accepted": ingress_result.is_main_chain_accepted,
         "authority_source": ingress_result.authority_source,
         "gap_types": list(ingress_result.gap_types),
         "mature_closure_blocked": ingress_result.mature_closure_blocked,
+        "canonical_truth_completed": ingress_result.canonical_truth_completed,
+        "mature_closure_achieved": ingress_result.mature_closure_achieved,
         "blocking_reason": ingress_result.blocking_reason,
         "ingress_context": ingress_result.context.to_dict(),
         "_sentinel": ANDROID_ORIGINATED_MAIN_CHAIN_INGRESS_SENTINEL,
