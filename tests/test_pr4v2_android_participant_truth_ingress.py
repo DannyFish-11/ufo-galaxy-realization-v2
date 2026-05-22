@@ -1016,4 +1016,5 @@ class TestGroupT_ReconcileOutcome:
         assert "reject_reason" in d
         assert "replay_event_emitted" in d
         assert "tracking_record_phase" in d
+        assert "recovery_state_routing" in d
         assert "envelope" in d
