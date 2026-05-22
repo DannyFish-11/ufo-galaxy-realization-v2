@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 ANDROID_ADVISORY_EVIDENCE_AUTHORITY = "android_advisory"
 UNKNOWN_EVIDENCE_COMPLETENESS = "unknown"
 ADVISORY_ONLY_CLOSURE_SIGNIFICANCE = "advisory_only"
+ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS = "advisory_pending_confirmation"
 
 
 @dataclass(frozen=True)
@@ -168,7 +169,7 @@ def _map_acceptance_tag(
     if tag in {"device_accepted_for_graduation", "accepted_for_graduation"}:
         return {
             "acceptance_class": "accepted_advisory",
-            "mapped_android_proof_class": "incomplete",
+            "mapped_android_proof_class": ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS,
             "mapped_evidence_trust_level": "provisional",
             "mapping_reason": (
                 "Android acceptance_tag indicates graduation-level readiness, but the "
@@ -223,6 +224,15 @@ def _classify_evidence_completeness(
     dimension_states: Dict[str, Any],
     snapshot_id: str,
 ) -> str:
+    """Classify evidence completeness with conservative precedence.
+
+    Precedence is intentional:
+    1. Any declared missing dimension means the evidence is incomplete, even if
+       other structure is present.
+    2. A dimension-state map plus snapshot_id is treated as complete.
+    3. Partial structure without both signals remains partial.
+    4. No structure is unknown.
+    """
     if missing_dimensions:
         return "incomplete"
     if dimension_states and snapshot_id:

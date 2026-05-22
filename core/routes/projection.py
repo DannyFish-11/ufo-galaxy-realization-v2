@@ -6096,6 +6096,9 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     authority_completion_truth = closure_truth["authority_completion_truth"]
     acceptance_completion_truth = closure_truth["acceptance_completion_truth"]
     if result_closure_established and not acceptance_completion_truth:
+        # A closure-like surface signal is visible, but the evidence boundary did
+        # not confirm mature canonical closure.  Downgrade the outward state so
+        # advisory or incomplete truth cannot masquerade as "closed".
         completion_state = "incomplete"
         surface_execution_stage = "executing"
     summary_parts = [

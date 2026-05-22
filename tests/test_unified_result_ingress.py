@@ -746,7 +746,7 @@ class TestCompletionIngressNotify:
                 "core.android_acceptance_evidence_store.get_latest_device_acceptance_evidence_dict",
                 return_value={
                     "acceptance_tag": "device_accepted_for_graduation",
-                    "mapped_android_proof_class": "incomplete",
+                    "mapped_android_proof_class": "advisory_pending_confirmation",
                     "mapped_evidence_trust_level": "provisional",
                     "snapshot_id": "accept-snap-02",
                     "dimension_states": {"governance": "pass"},
@@ -762,7 +762,7 @@ class TestCompletionIngressNotify:
             outcome = ingress.process(_make_event(_make_task_id(), channel="canonical_ws"))
 
         assert outcome.evidence_acceptance_verdict == "accept_provisional"
-        assert outcome.effective_android_proof_class == "incomplete"
+        assert outcome.effective_android_proof_class == "advisory_pending_confirmation"
         assert outcome.android_evidence_resolution == "acceptance_report_advisory_hint"
         assert outcome.android_evidence_runtime_context["acceptance_tag"] == "device_accepted_for_graduation"
         assert outcome.android_evidence_runtime_context["acceptance_evidence_authority"] == "android_advisory"
