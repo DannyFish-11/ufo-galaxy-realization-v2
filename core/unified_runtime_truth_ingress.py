@@ -175,6 +175,18 @@ CONTINUITY_GATE_PRECEDES_ROUTING_POLICY: str = (
     "Per ONLINE_EXECUTION_SUBMITS_TO_SAME_AUTHORITY_POLICY."
 )
 
+SINGLE_INGRESS_BYPASS_GUARD_POLICY: str = (
+    "POLICY::SINGLE_INGRESS_BYPASS_GUARD: "
+    "Any write to V2 canonical Android runtime/participant/session truth state "
+    "that does NOT route through ingest_android_runtime_state_update() is a "
+    "protocol violation.  Non-ingress write attempts MUST be surfaced via "
+    "high-severity telemetry (record_non_ingress_participant_truth_write) so "
+    "that bypass is detectable and non-silent.  Callers that previously called "
+    "android_participant_truth_ingress directly MUST migrate to "
+    "ingest_android_runtime_state_update() to preserve continuity-gate and "
+    "routing-ambiguity enforcement."
+)
+
 # ---------------------------------------------------------------------------
 # Sub-path routing constants
 # ---------------------------------------------------------------------------
@@ -450,6 +462,50 @@ def _resolve_runtime_session_id(message: Dict[str, Any], payload: Dict[str, Any]
         message.get("session_id"),
         payload.get("session_id"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Bypass guard — telemetry for non-ingress write attempts
+# ---------------------------------------------------------------------------
+
+_bypass_attempt_count: int = 0
+
+
+def record_non_ingress_participant_truth_write(
+    message_type: str = "",
+    caller: str = "",
+) -> None:
+    """Surface a non-canonical participant-truth write attempt as high-severity telemetry.
+
+    Call this function when Android-originated runtime/participant/session truth
+    is written directly to a sub-ingress module instead of routing through
+    :func:`ingest_android_runtime_state_update`.  The attempt is counted and
+    emitted at WARNING level so bypass is detectable and non-silent.
+
+    Parameters
+    ----------
+    message_type:
+        The ``type`` field of the bypassing message (for diagnostics).
+    caller:
+        Human-readable label identifying the bypassing code path.
+    """
+    global _bypass_attempt_count  # noqa: PLW0603
+    _bypass_attempt_count += 1
+    logger.warning(
+        "SINGLE_INGRESS_BYPASS_GUARD: non-canonical participant truth write detected "
+        "(total=%d) message_type=%r caller=%r — "
+        "this write bypassed ingest_android_runtime_state_update(); "
+        "continuity-gate and routing-ambiguity enforcement were NOT applied. "
+        "Migrate this caller to ingest_android_runtime_state_update().",
+        _bypass_attempt_count,
+        message_type,
+        caller,
+    )
+
+
+def get_bypass_attempt_count() -> int:
+    """Return the cumulative count of detected non-ingress bypass write attempts."""
+    return _bypass_attempt_count
 
 
 # ---------------------------------------------------------------------------
@@ -748,9 +804,12 @@ __all__ = [
     "INGRESS_FAIL_CLOSED_ON_UNKNOWN_TYPE_POLICY",
     "INGRESS_IS_GRACEFUL_ON_SUBMODULE_UNAVAILABILITY_POLICY",
     "CONTINUITY_GATE_PRECEDES_ROUTING_POLICY",
+    "SINGLE_INGRESS_BYPASS_GUARD_POLICY",
     # Dataclass
     "RuntimeTruthIngressOutcome",
     # Functions
     "get_session_authority",
     "ingest_android_runtime_state_update",
+    "record_non_ingress_participant_truth_write",
+    "get_bypass_attempt_count",
 ]
