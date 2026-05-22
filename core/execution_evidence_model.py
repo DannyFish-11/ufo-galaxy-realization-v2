@@ -859,11 +859,12 @@ def _resolve_android_evidence_resolution(
     )
     if android_proof_class:
         if merged_context.get("proof_class_source") == "device_acceptance_report":
-            # acceptance report 已给出结构化接受结论并被映射为 proof_class，
-            # 因此这里不再叠加 runtime inference strength，避免双重语义。
+            # Android acceptance evidence is advisory-only.  A mapped proof_class
+            # may downgrade/annotate evidence, but it must not masquerade as
+            # canonical V2 confirmation.
             return {
                 "effective_android_proof_class": android_proof_class,
-                "android_evidence_resolution": "acceptance_report_mapped_proof_class",
+                "android_evidence_resolution": "acceptance_report_advisory_hint",
                 "android_inferred_evidence_strength": "",
                 "android_evidence_runtime_context": merged_context,
             }
@@ -954,6 +955,10 @@ def _build_android_evidence_runtime_context(
         "acceptance_missing_dimensions",
         "acceptance_dimension_states",
         "acceptance_mapping_reason",
+        "acceptance_evidence_authority",
+        "acceptance_evidence_completeness",
+        "acceptance_closure_significance",
+        "acceptance_canonical_confirmation_required",
     ):
         supplemental_value = _pick_context_value(
             supplemental_field,

@@ -177,3 +177,46 @@ def test_dispatch_semantics_exposes_planning_fields():
     assert "planned_mode" in semantics
     assert "planning_ready" in semantics
     assert "planning_readiness_notes" in semantics
+
+
+def test_shared_execution_visibility_marks_advisory_android_closure_as_incomplete():
+    from core.routes.projection import _derive_shared_execution_visibility
+
+    payload = {
+        "operational_state_board": {
+            "task_execution_visibility": {
+                "task_initiated": True,
+                "result_closure_established": True,
+            },
+            "dependencies_and_blockers": {
+                "blocked": False,
+                "incomplete": False,
+                "waiting_dependencies": [],
+            },
+        },
+        "runtime_decision_reasoning": {
+            "closure_basis": {
+                "acceptance_verdict": "accept",
+                "is_fully_closed": True,
+                "truth_chain_complete": True,
+            },
+            "evidence_summary": {
+                "trust_level": "provisional",
+                "evidence_state": "android_delegated",
+                "android_evidence_resolution": "acceptance_report_advisory_hint",
+                "android_evidence_runtime_context": {
+                    "acceptance_evidence_authority": "android_advisory",
+                    "acceptance_evidence_completeness": "partial",
+                    "acceptance_canonical_confirmation_required": True,
+                },
+            },
+        },
+    }
+
+    visibility = _derive_shared_execution_visibility(payload)
+
+    assert visibility["completion_state"] == "incomplete"
+    assert visibility["acceptance_completion_truth"] is False
+    assert visibility["authority_completion_truth"] is False
+    assert visibility["closure_quality"] == "advisory_only"
+    assert visibility["advisory_evidence_only"] is True

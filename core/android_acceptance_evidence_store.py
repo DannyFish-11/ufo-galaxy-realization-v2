@@ -14,6 +14,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+ANDROID_ADVISORY_EVIDENCE_AUTHORITY = "android_advisory"
+EVIDENCE_COMPLETENESS_INCOMPLETE = "incomplete"
+EVIDENCE_COMPLETENESS_COMPLETE = "complete"
+EVIDENCE_COMPLETENESS_PARTIAL = "partial"
+UNKNOWN_EVIDENCE_COMPLETENESS = "unknown"
+ADVISORY_ONLY_CLOSURE_SIGNIFICANCE = "advisory_only"
+ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS = "advisory_pending_confirmation"
+
 
 @dataclass(frozen=True)
 class AndroidAcceptanceEvidenceRecord:
@@ -27,6 +35,10 @@ class AndroidAcceptanceEvidenceRecord:
     mapping_reason: str = ""
     dimension_states: Dict[str, Any] = field(default_factory=dict)
     missing_dimensions: List[str] = field(default_factory=list)
+    evidence_authority: str = ANDROID_ADVISORY_EVIDENCE_AUTHORITY
+    evidence_completeness: str = UNKNOWN_EVIDENCE_COMPLETENESS
+    closure_significance: str = ADVISORY_ONLY_CLOSURE_SIGNIFICANCE
+    canonical_confirmation_required: bool = True
     snapshot_id: str = ""
     st_gap_reason: str = ""
     message_id: str = ""
@@ -42,6 +54,10 @@ class AndroidAcceptanceEvidenceRecord:
             "mapping_reason": self.mapping_reason,
             "dimension_states": dict(self.dimension_states),
             "missing_dimensions": list(self.missing_dimensions),
+            "evidence_authority": self.evidence_authority,
+            "evidence_completeness": self.evidence_completeness,
+            "closure_significance": self.closure_significance,
+            "canonical_confirmation_required": self.canonical_confirmation_required,
             "snapshot_id": self.snapshot_id,
             "st_gap_reason": self.st_gap_reason,
             "message_id": self.message_id,
@@ -83,7 +99,12 @@ def ingest_device_acceptance_report(
         normalized_payload.get("st_gap_reason")
         or normalized_payload.get("stGapReason")
     )
-    mapped = _map_acceptance_tag(acceptance_tag)
+    mapped = _map_acceptance_tag(
+        acceptance_tag,
+        missing_dimensions=missing_dimensions,
+        dimension_states=dimension_states,
+        snapshot_id=snapshot_id,
+    )
     record = AndroidAcceptanceEvidenceRecord(
         device_id=str(device_id or ""),
         acceptance_tag=acceptance_tag,
@@ -93,6 +114,12 @@ def ingest_device_acceptance_report(
         mapping_reason=mapped["mapping_reason"],
         dimension_states=dimension_states,
         missing_dimensions=missing_dimensions,
+        evidence_authority=mapped["evidence_authority"],
+        evidence_completeness=mapped["evidence_completeness"],
+        closure_significance=mapped["closure_significance"],
+        canonical_confirmation_required=bool(
+            mapped["canonical_confirmation_required"]
+        ),
         snapshot_id=snapshot_id,
         st_gap_reason=st_gap_reason,
         message_id=_coerce_text(message_id),
@@ -127,14 +154,38 @@ def clear_device_acceptance_evidence(device_id: Optional[str] = None) -> None:
         _latest_by_device.pop(str(device_id or ""), None)
 
 
-def _map_acceptance_tag(acceptance_tag: str) -> Dict[str, str]:
+def _map_acceptance_tag(
+    acceptance_tag: str,
+    *,
+    missing_dimensions: Optional[List[str]] = None,
+    dimension_states: Optional[Dict[str, Any]] = None,
+    snapshot_id: str = "",
+) -> Dict[str, Any]:
     tag = (acceptance_tag or "").strip().lower()
+    missing_dimensions = list(missing_dimensions or [])
+    dimension_states = dict(dimension_states or {})
+    evidence_completeness = _classify_evidence_completeness(
+        missing_dimensions=missing_dimensions,
+        dimension_states=dimension_states,
+        snapshot_id=snapshot_id,
+    )
     if tag in {"device_accepted_for_graduation", "accepted_for_graduation"}:
         return {
-            "acceptance_class": "accepted",
-            "mapped_android_proof_class": "confirmed_strong",
-            "mapped_evidence_trust_level": "trusted",
-            "mapping_reason": "acceptance_tag indicates graduation-level acceptance",
+            "acceptance_class": "advisory_accepted",
+            "mapped_android_proof_class": ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS,
+            "mapped_evidence_trust_level": "provisional",
+            "mapping_reason": (
+                "Android acceptance_tag indicates graduation-level readiness, but the "
+                "report remains advisory until V2 performs canonical confirmation"
+            ),
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
+            "evidence_completeness": evidence_completeness,
+            "closure_significance": (
+                "advisory_candidate"
+                if evidence_completeness == EVIDENCE_COMPLETENESS_COMPLETE
+                else "advisory_incomplete"
+            ),
+            "canonical_confirmation_required": True,
         }
     if "rejected" in tag or tag in {"reject", "rejected"}:
         return {
@@ -142,6 +193,10 @@ def _map_acceptance_tag(acceptance_tag: str) -> Dict[str, str]:
             "mapped_android_proof_class": "degraded_conflicting",
             "mapped_evidence_trust_level": "quarantine",
             "mapping_reason": "acceptance_tag indicates rejection/conflict",
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
+            "evidence_completeness": evidence_completeness,
+            "closure_significance": "advisory_conflict",
+            "canonical_confirmation_required": True,
         }
     if "unknown" in tag:
         return {
@@ -149,13 +204,48 @@ def _map_acceptance_tag(acceptance_tag: str) -> Dict[str, str]:
             "mapped_android_proof_class": "degraded_partial",
             "mapped_evidence_trust_level": "provisional",
             "mapping_reason": "acceptance_tag indicates unknown acceptance state",
+            "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
+            "evidence_completeness": evidence_completeness,
+            "closure_significance": "advisory_unknown",
+            "canonical_confirmation_required": True,
         }
     return {
         "acceptance_class": "unknown",
         "mapped_android_proof_class": "",
         "mapped_evidence_trust_level": "provisional",
         "mapping_reason": "acceptance_tag unavailable or unmapped",
+        "evidence_authority": ANDROID_ADVISORY_EVIDENCE_AUTHORITY,
+        "evidence_completeness": evidence_completeness,
+        "closure_significance": "advisory_unknown",
+        "canonical_confirmation_required": True,
     }
+
+
+def _classify_evidence_completeness(
+    *,
+    missing_dimensions: List[str],
+    dimension_states: Dict[str, Any],
+    snapshot_id: str,
+) -> str:
+    """Classify evidence completeness with conservative precedence.
+
+    Precedence is intentional:
+    1. Any declared missing dimension means the evidence is incomplete, even if
+       other structure is present.
+    2. A dimension-state map plus snapshot_id is treated as complete.
+    3. Partial structure without both signals remains partial.
+    4. No structure is unknown.
+
+    This conservative ordering ensures incomplete Android evidence cannot be
+    mistaken for closure-grade complete evidence.
+    """
+    if missing_dimensions:
+        return EVIDENCE_COMPLETENESS_INCOMPLETE
+    if dimension_states and snapshot_id:
+        return EVIDENCE_COMPLETENESS_COMPLETE
+    if dimension_states or snapshot_id:
+        return EVIDENCE_COMPLETENESS_PARTIAL
+    return UNKNOWN_EVIDENCE_COMPLETENESS
 
 
 def _coerce_text(value: Any) -> str:

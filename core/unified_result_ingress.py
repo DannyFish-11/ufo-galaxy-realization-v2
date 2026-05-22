@@ -1890,6 +1890,18 @@ class UnifiedResultIngress:
                 android_runtime_truth_context["acceptance_mapping_reason"] = (
                     acceptance_evidence_hint.get("mapping_reason") or ""
                 )
+                android_runtime_truth_context["acceptance_evidence_authority"] = (
+                    acceptance_evidence_hint.get("evidence_authority") or ""
+                )
+                android_runtime_truth_context["acceptance_evidence_completeness"] = (
+                    acceptance_evidence_hint.get("evidence_completeness") or ""
+                )
+                android_runtime_truth_context["acceptance_closure_significance"] = (
+                    acceptance_evidence_hint.get("closure_significance") or ""
+                )
+                android_runtime_truth_context["acceptance_canonical_confirmation_required"] = bool(
+                    acceptance_evidence_hint.get("canonical_confirmation_required")
+                )
 
             evidence_record = build_execution_evidence_record(
                 task_id=event.task_id,

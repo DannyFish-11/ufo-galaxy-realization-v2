@@ -746,21 +746,27 @@ class TestCompletionIngressNotify:
                 "core.android_acceptance_evidence_store.get_latest_device_acceptance_evidence_dict",
                 return_value={
                     "acceptance_tag": "device_accepted_for_graduation",
-                    "mapped_android_proof_class": "confirmed_strong",
-                    "mapped_evidence_trust_level": "trusted",
+                    "mapped_android_proof_class": "advisory_pending_confirmation",
+                    "mapped_evidence_trust_level": "provisional",
                     "snapshot_id": "accept-snap-02",
                     "dimension_states": {"governance": "pass"},
                     "missing_dimensions": [],
-                    "mapping_reason": "acceptance_tag indicates graduation-level acceptance",
+                    "mapping_reason": "android acceptance report remains advisory until V2 confirms it",
+                    "evidence_authority": "android_advisory",
+                    "evidence_completeness": "partial",
+                    "closure_significance": "advisory_incomplete",
+                    "canonical_confirmation_required": True,
                 },
             ),
         ):
             outcome = ingress.process(_make_event(_make_task_id(), channel="canonical_ws"))
 
-        assert outcome.evidence_acceptance_verdict == "accept"
-        assert outcome.effective_android_proof_class == "confirmed_strong"
-        assert outcome.android_evidence_resolution == "acceptance_report_mapped_proof_class"
+        assert outcome.evidence_acceptance_verdict == "accept_provisional"
+        assert outcome.effective_android_proof_class == "advisory_pending_confirmation"
+        assert outcome.android_evidence_resolution == "acceptance_report_advisory_hint"
         assert outcome.android_evidence_runtime_context["acceptance_tag"] == "device_accepted_for_graduation"
+        assert outcome.android_evidence_runtime_context["acceptance_evidence_authority"] == "android_advisory"
+        assert outcome.android_evidence_runtime_context["acceptance_canonical_confirmation_required"] is True
         assert "runtime_truth:acceptance_tag" in outcome.android_evidence_runtime_context.get("context_sources", [])
 
     def test_E10_android_truth_stamp_prefers_result_payload_over_ssot(self):
