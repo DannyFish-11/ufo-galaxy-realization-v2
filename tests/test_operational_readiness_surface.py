@@ -470,6 +470,7 @@ def test_operational_readiness_endpoint_returns_report_and_route_context():
     payload = response.json()
     assert payload["authority"] == "test-authority"
     assert payload["route_surface_authority"]
+    assert payload["device_ingress_surfaces"]["core_compat_device_ingress_policy"]
     assert payload["state_contract"]["authority"] == "test-state-contract"
     passed_paths = builder.call_args.kwargs["route_paths"]
     assert "/api/v1/projection/operational-readiness" in passed_paths

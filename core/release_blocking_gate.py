@@ -97,6 +97,7 @@ __all__ = [
     "CAPABILITY_STATE_MISMATCH_IS_BLOCKING_POLICY",
     "PROTOCOL_DRIFT_IS_BLOCKING_POLICY",
     "RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY",
+    "PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY",
     # Exceptions
     "ReleaseBlockingGateError",
     # Data classes
@@ -157,6 +158,13 @@ RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY: str = (
     "(core.runtime_readiness_matrix) MUST block the release.  "
     "The readiness matrix is the canonical automated posture summary; "
     "its BLOCKED verdict is a hard gate, not a warning."
+)
+
+PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY: str = (
+    "POLICY::PROTECTED_COMPAT_INGRESS_IS_BLOCKING_V1: "
+    "Protected cross-device releases MUST fail when the core-direct compatibility "
+    "websocket ingress is requested without an explicit override.  Canonical "
+    "gateway ingress authority must remain the default production transport path."
 )
 
 
@@ -452,6 +460,28 @@ def _crit_mainline_enforcement_callsite() -> Tuple[CriterionStatus, str]:
     return CriterionStatus.PASSED, "Enforcement call site present in openclawd.py."
 
 
+def _crit_protected_compat_ingress_policy() -> Tuple[CriterionStatus, str]:
+    """Protected mode must not quietly enable the core compat websocket ingress."""
+    try:
+        from core.api_routes import get_core_compat_device_ingress_policy
+
+        policy = get_core_compat_device_ingress_policy()
+    except Exception as exc:
+        return CriterionStatus.UNKNOWN, f"Compat ingress policy evaluation error: {exc}"
+
+    if policy.get("blocked_by_protected_mode"):
+        return CriterionStatus.FAILED, str(policy.get("reason") or "Protected compat ingress violation.")
+
+    if policy.get("effective_enabled"):
+        return CriterionStatus.PASSED, (
+            f"Compat ingress explicitly enabled under policy_state={policy.get('policy_state')}."
+        )
+
+    return CriterionStatus.PASSED, (
+        f"Compat ingress not active in release posture (policy_state={policy.get('policy_state')})."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Gate definition
 # ---------------------------------------------------------------------------
@@ -486,6 +516,12 @@ _CRITERIA_DEFS = [
         "Mainline Enforcement Call Site (openclawd.py)",
         True,
         _crit_mainline_enforcement_callsite,
+    ),
+    (
+        "protected_compat_ingress_policy",
+        "Protected Compat Ingress Policy (Canonical Production Path Guard)",
+        True,
+        _crit_protected_compat_ingress_policy,
     ),
 ]
 

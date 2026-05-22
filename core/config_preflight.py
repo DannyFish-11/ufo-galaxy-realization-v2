@@ -464,6 +464,55 @@ def _adjust_findings_for_token_policy(findings: List[Finding]) -> List[Finding]:
     return out
 
 
+def _build_protected_compat_ws_policy_finding() -> Optional[Finding]:
+    """Return a CRITICAL finding when protected mode requests compat WS ingress."""
+    try:
+        from core.api_routes import (
+            PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,
+            get_core_compat_device_ingress_policy,
+        )
+    except Exception:
+        return None
+
+    policy = get_core_compat_device_ingress_policy()
+    if not policy.get("blocked_by_protected_mode"):
+        return None
+
+    return Finding(
+        check=EnvCheck(
+            var="GALAXY_ENABLE_CORE_COMPAT_WS",
+            severity=Severity.CRITICAL,
+            description=(
+                "Core compatibility websocket ingress cannot be activated in protected "
+                "cross-device mode without an explicit override."
+            ),
+            hint=(
+                "Unset GALAXY_ENABLE_CORE_COMPAT_WS and use the canonical gateway ingress "
+                "/ws/device/{device_id} for production/cross-device operation.\n"
+                f"Only set {PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV}=true for explicitly "
+                "controlled migration/debug fallback sessions."
+            ),
+            groups=["gateway", "android", "all"],
+            allow_placeholder=False,
+        ),
+        present=False,
+    )
+
+
+def _augment_findings_with_compat_ws_policy(
+    findings: List[Finding],
+    groups: Sequence[str],
+) -> List[Finding]:
+    """Append protected-mode compat WS policy violations as CRITICAL findings."""
+    if not any(group in {"gateway", "android", "all"} for group in groups):
+        return findings
+
+    policy_finding = _build_protected_compat_ws_policy_finding()
+    if policy_finding is None:
+        return findings
+    return [*findings, policy_finding]
+
+
 def run_preflight(
     dry_run: bool = False,
     fail_fast: bool = True,
@@ -507,6 +556,7 @@ def run_preflight(
         findings.append(Finding(check=check, present=present, value_hint=hint))
 
     findings = _adjust_findings_for_token_policy(findings)
+    findings = _augment_findings_with_compat_ws_policy(findings, groups)
 
     report = PreflightReport(findings=findings, mode=mode)
 
