@@ -808,7 +808,13 @@ def _build_operator_manual_action_idempotency_key(
     session_id: Optional[str],
     device_id: Optional[str],
 ) -> str:
-    identity = str(task_id or flow_id or session_id or device_id or "").strip()
+    identity_parts = [
+        f"task={str(task_id or '').strip()}",
+        f"flow={str(flow_id or '').strip()}",
+        f"session={str(session_id or '').strip()}",
+        f"device={str(device_id or '').strip()}",
+    ]
+    identity = "|".join(identity_parts)
     return f"operator_manual:{action_kind}:{identity}"
 
 
@@ -836,8 +842,8 @@ def _lookup_canonical_task_snapshot(task_id: Optional[str]) -> Dict[str, str]:
         lifecycle_text = (
             lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
         ).strip().lower()
-        session_text = str(getattr(task, "session_id", "") or "").strip()
-        return {"task_lifecycle": lifecycle_text, "task_session_id": session_text}
+        task_session_text = str(getattr(task, "session_id", "") or "").strip()
+        return {"task_lifecycle": lifecycle_text, "task_session_id": task_session_text}
     except Exception as exc:
         logger.debug("operator_intervention: canonical task lookup skipped: %s", exc)
         return {}
