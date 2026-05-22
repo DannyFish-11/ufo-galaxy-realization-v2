@@ -468,7 +468,11 @@ def _adjust_findings_for_token_policy(findings: List[Finding]) -> List[Finding]:
 
 
 def _build_protected_compat_ws_policy_finding() -> Optional[Finding]:
-    """Return a CRITICAL finding when protected mode requests compat WS ingress."""
+    """Return a CRITICAL finding only for protected-mode compat WS policy violations.
+
+    Returns ``None`` when the compat ingress policy is not violated or when the
+    policy helper cannot be imported/evaluated.
+    """
     try:
         from core.api_routes import (
             PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,

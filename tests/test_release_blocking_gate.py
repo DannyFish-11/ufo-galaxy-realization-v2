@@ -293,8 +293,10 @@ class TestGroupC_ExitCode:
                 )
             ],
         ):
-            with pytest.raises(ReleaseBlockingGateError):
+            with pytest.raises(ReleaseBlockingGateError) as exc_info:
                 _rbg.evaluate_release_gate(raise_on_failure=True)
+        assert exc_info.value.failed_criteria == ["synthetic_block"]
+        assert isinstance(exc_info.value.decision, ReleaseGateDecision)
 
     def test_C04_error_has_failed_criteria(self):
         """ReleaseBlockingGateError.failed_criteria must be a non-empty list."""

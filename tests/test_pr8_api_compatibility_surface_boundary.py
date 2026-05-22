@@ -1,5 +1,7 @@
 """PR-8: API compatibility surface boundary containment checks."""
 
+import pytest
+
 from core.api_routes import (
     API_COMPATIBILITY_SURFACE_BOUNDARY_POLICY,
     API_COMPATIBILITY_SURFACE_BOUNDARY_PR8_SENTINEL,
@@ -12,6 +14,7 @@ from core.api_routes import (
 )
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 
 def test_pr8_compatibility_boundary_sentinels_present() -> None:
@@ -93,3 +96,6 @@ def test_core_compat_websocket_rejects_protected_cross_device_mode(monkeypatch) 
             assert payload["type"] == "compat_ws_blocked_protected_mode"
             assert payload["policy_state"] == "blocked_protected_mode"
             assert payload["override_env_var"] == PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                websocket.receive_json()
+            assert exc_info.value.code == 1008
