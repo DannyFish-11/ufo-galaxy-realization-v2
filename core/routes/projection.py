@@ -6190,6 +6190,9 @@ def _evaluate_visibility_closure_truth(
         evidence_provenance == "android_advisory"
         and evidence_resolution == "acceptance_report_advisory_hint"
     )
+    awaiting_canonical_confirmation = (
+        canonical_confirmation_required and not canonical_confirmation_present
+    )
     if canonical_confirmation_present:
         closure_quality = "mature_canonical"
     elif acceptance_verdict == "accept" and is_fully_closed and not truth_chain_complete:
@@ -6211,7 +6214,7 @@ def _evaluate_visibility_closure_truth(
         ),
         "advisory_evidence_only": (
             advisory_evidence_only
-            or (canonical_confirmation_required and not canonical_confirmation_present)
+            or awaiting_canonical_confirmation
         ),
         "canonical_confirmation_present": canonical_confirmation_present,
     }

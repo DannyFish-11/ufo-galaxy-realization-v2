@@ -168,7 +168,7 @@ def _map_acceptance_tag(
     )
     if tag in {"device_accepted_for_graduation", "accepted_for_graduation"}:
         return {
-            "acceptance_class": "accepted_advisory",
+            "acceptance_class": "advisory_accepted",
             "mapped_android_proof_class": ADVISORY_PENDING_CONFIRMATION_PROOF_CLASS,
             "mapped_evidence_trust_level": "provisional",
             "mapping_reason": (
@@ -232,6 +232,9 @@ def _classify_evidence_completeness(
     2. A dimension-state map plus snapshot_id is treated as complete.
     3. Partial structure without both signals remains partial.
     4. No structure is unknown.
+
+    This conservative ordering ensures incomplete Android evidence cannot be
+    mistaken for closure-grade complete evidence.
     """
     if missing_dimensions:
         return "incomplete"
