@@ -6051,6 +6051,7 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     blockers = board.get("dependencies_and_blockers") or {}
     reasoning = truth_payload.get("runtime_decision_reasoning") or {}
     closure_basis = reasoning.get("closure_basis") or {}
+    evidence_summary = reasoning.get("evidence_summary") or {}
 
     task_initiated = bool(
         task_visibility.get("task_initiated")
@@ -6084,23 +6085,33 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
     else:
         surface_execution_stage = None
 
+    acceptance_verdict = closure_basis.get("acceptance_verdict")
+    acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
+    closure_truth = _evaluate_visibility_closure_truth(
+        acceptance_verdict=acceptance_verdict_normalized,
+        closure_basis=closure_basis,
+        evidence_summary=evidence_summary,
+        result_closure_established=result_closure_established,
+    )
+    authority_completion_truth = closure_truth["authority_completion_truth"]
+    acceptance_completion_truth = closure_truth["acceptance_completion_truth"]
+    if result_closure_established and not acceptance_completion_truth:
+        completion_state = "incomplete"
+        surface_execution_stage = "executing"
     summary_parts = [
         f"completion={completion_state}",
         f"task_initiated={task_initiated}",
         f"result_closed={result_closure_established}",
     ]
-    acceptance_verdict = closure_basis.get("acceptance_verdict")
-    acceptance_verdict_normalized = str(acceptance_verdict or "").strip().lower()
-    authority_completion_truth = (
-        acceptance_verdict_normalized == "accept"
-        and bool(closure_basis.get("is_fully_closed"))
-    )
-    acceptance_completion_truth = acceptance_verdict_normalized == "accept"
     repo_mutation_completion_truth = closure_basis.get("repo_mutation_completion_truth")
     if repo_mutation_completion_truth in (None, ""):
         repo_mutation_completion_truth = "unknown"
     if acceptance_verdict not in (None, ""):
         summary_parts.append(f"acceptance={acceptance_verdict}")
+    if closure_truth["closure_quality"]:
+        summary_parts.append(f"closure_quality={closure_truth['closure_quality']}")
+    if closure_truth["evidence_provenance"]:
+        summary_parts.append(f"provenance={closure_truth['evidence_provenance']}")
     if waiting_dependencies:
         summary_parts.append(f"waiting={len(waiting_dependencies)}")
 
@@ -6114,6 +6125,11 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
         "is_fully_closed": bool(closure_basis.get("is_fully_closed")),
         "authority_completion_truth": authority_completion_truth,
         "acceptance_completion_truth": acceptance_completion_truth,
+        "closure_quality": closure_truth["closure_quality"],
+        "evidence_completeness": closure_truth["evidence_completeness"],
+        "evidence_provenance": closure_truth["evidence_provenance"],
+        "advisory_evidence_only": closure_truth["advisory_evidence_only"],
+        "canonical_confirmation_present": closure_truth["canonical_confirmation_present"],
         "repo_mutation_completion_truth": repo_mutation_completion_truth,
         "closure_candidate_state": completion_state,
         "completion_state": completion_state,
@@ -6125,6 +6141,75 @@ def _derive_shared_execution_visibility(truth_payload: Dict[str, Any]) -> Dict[s
             "operational_state_board.task_execution_visibility",
             "runtime_decision_reasoning.closure_basis",
         ],
+    }
+
+
+def _evaluate_visibility_closure_truth(
+    *,
+    acceptance_verdict: str,
+    closure_basis: Dict[str, Any],
+    evidence_summary: Dict[str, Any],
+    result_closure_established: bool,
+) -> Dict[str, Any]:
+    runtime_context = dict(evidence_summary.get("android_evidence_runtime_context") or {})
+    trust_level = str(evidence_summary.get("trust_level") or "").strip().lower()
+    evidence_state = str(evidence_summary.get("evidence_state") or "").strip().lower()
+    evidence_provenance = str(
+        runtime_context.get("acceptance_evidence_authority")
+        or evidence_summary.get("acceptance_evidence_authority")
+        or ""
+    ).strip().lower()
+    evidence_completeness = str(
+        runtime_context.get("acceptance_evidence_completeness")
+        or evidence_summary.get("acceptance_evidence_completeness")
+        or ""
+    ).strip().lower()
+    canonical_confirmation_required = bool(
+        runtime_context.get("acceptance_canonical_confirmation_required")
+        or evidence_summary.get("acceptance_canonical_confirmation_required")
+    )
+    evidence_resolution = str(evidence_summary.get("android_evidence_resolution") or "").strip().lower()
+    truth_chain_complete = bool(closure_basis.get("truth_chain_complete"))
+    is_fully_closed = bool(closure_basis.get("is_fully_closed"))
+    if not evidence_summary:
+        canonical_confirmation_present = acceptance_verdict == "accept" and is_fully_closed
+    else:
+        canonical_confirmation_present = (
+            acceptance_verdict == "accept"
+            and is_fully_closed
+            and truth_chain_complete
+            and (
+                trust_level == "trusted"
+                or evidence_state == "locally_executed"
+            )
+        )
+    advisory_evidence_only = (
+        evidence_provenance == "android_advisory"
+        and evidence_resolution == "acceptance_report_advisory_hint"
+    )
+    if canonical_confirmation_present:
+        closure_quality = "mature_canonical"
+    elif acceptance_verdict == "accept" and is_fully_closed and not truth_chain_complete:
+        closure_quality = "degraded_truth_chain"
+    elif advisory_evidence_only:
+        closure_quality = "advisory_only"
+    elif result_closure_established:
+        closure_quality = "evidence_incomplete"
+    else:
+        closure_quality = "open"
+    return {
+        "authority_completion_truth": canonical_confirmation_present,
+        "acceptance_completion_truth": canonical_confirmation_present,
+        "closure_quality": closure_quality,
+        "evidence_completeness": evidence_completeness or "unknown",
+        "evidence_provenance": (
+            evidence_provenance
+            or ("v2_canonical" if canonical_confirmation_present else "unknown")
+        ),
+        "advisory_evidence_only": advisory_evidence_only or (
+            canonical_confirmation_required and not canonical_confirmation_present
+        ),
+        "canonical_confirmation_present": canonical_confirmation_present,
     }
 
 
@@ -6700,7 +6785,14 @@ def _build_truth_acceptance_closure_contract(
             **dict(chain_contract.get("acceptance_closure_truth") or {}),
             "acceptance_verdict": acceptance_verdict,
             "authority_completion_truth": authority_completion_truth,
-            "acceptance_completion_truth": acceptance_verdict_normalized == "accept",
+            "acceptance_completion_truth": bool(shared_visibility.get("acceptance_completion_truth")),
+            "closure_quality": shared_visibility.get("closure_quality"),
+            "evidence_completeness": shared_visibility.get("evidence_completeness"),
+            "evidence_provenance": shared_visibility.get("evidence_provenance"),
+            "advisory_evidence_only": bool(shared_visibility.get("advisory_evidence_only")),
+            "canonical_confirmation_present": bool(
+                shared_visibility.get("canonical_confirmation_present")
+            ),
             "closure_candidate_state": shared_visibility.get("closure_candidate_state")
             or shared_visibility.get("completion_state"),
             "repo_mutation_completion_truth": shared_visibility.get(

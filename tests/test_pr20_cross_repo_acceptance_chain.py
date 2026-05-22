@@ -318,6 +318,9 @@ class TestCrossRepoAcceptanceChain:
         assert "closure_candidate_visible" in boundary["acceptance_closure_truth"]
         assert "authority_completion_truth" in boundary["acceptance_closure_truth"]
         assert "acceptance_completion_truth" in boundary["acceptance_closure_truth"]
+        assert "closure_quality" in boundary["acceptance_closure_truth"]
+        assert "evidence_completeness" in boundary["acceptance_closure_truth"]
+        assert "evidence_provenance" in boundary["acceptance_closure_truth"]
         assert boundary["diagnostics_snapshot"]["is_authoritative_truth"] is False
         assert boundary["diagnostics_snapshot"]["is_audit_artifact"] is True
         assert boundary["diagnostics_snapshot"]["source"] == "cross_repo_acceptance_chain.stages"
@@ -327,6 +330,52 @@ class TestCrossRepoAcceptanceChain:
             == "operator_visible_interpretation_only"
         )
         assert "canonical_inputs" in boundary["outward_projection_truth"]
+
+    def test_advisory_android_acceptance_evidence_does_not_claim_canonical_closure(self):
+        from core.android_acceptance_evidence_store import ingest_device_acceptance_report
+        from core.cross_repo_acceptance_chain import build_cross_repo_acceptance_chain
+
+        device_id = f"pr20-advisory-{uuid.uuid4().hex[:8]}"
+        ingest_device_acceptance_report(
+            device_id=device_id,
+            payload={
+                "acceptance_tag": "device_accepted_for_graduation",
+                "dimension_states": {"governance": "pass"},
+            },
+            message_id="msg-advisory",
+        )
+        truth_payload = _build_truth_payload(device_id)
+        truth_payload["runtime_decision_reasoning"]["evidence_summary"] = {
+            "trust_level": "provisional",
+            "evidence_state": "android_delegated",
+            "android_evidence_resolution": "acceptance_report_advisory_hint",
+            "android_evidence_runtime_context": {
+                "acceptance_evidence_authority": "android_advisory",
+                "acceptance_evidence_completeness": "partial",
+                "acceptance_canonical_confirmation_required": True,
+            },
+        }
+        truth_payload["shared_execution_visibility"] = __import__(
+            "core.routes.projection", fromlist=["_derive_shared_execution_visibility"]
+        )._derive_shared_execution_visibility(truth_payload)
+        board_payload = {
+            "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
+            "participation_truth_consumption": dict(
+                truth_payload["participation_truth_consumption"]
+            ),
+        }
+
+        snapshot = build_cross_repo_acceptance_chain(
+            device_id=device_id,
+            truth_payload=truth_payload,
+            board_payload=board_payload,
+        )
+
+        closure_truth = snapshot["truth_boundary_contract"]["acceptance_closure_truth"]
+        assert closure_truth["acceptance_completion_truth"] is False
+        assert closure_truth["authority_completion_truth"] is False
+        assert closure_truth["closure_quality"] == "advisory_only"
+        assert closure_truth["evidence_provenance"] == "android_advisory"
 
     def test_enforced_gate_can_allow_specific_failure_boundaries(self):
         from core.android_acceptance_evidence_store import ingest_device_acceptance_report

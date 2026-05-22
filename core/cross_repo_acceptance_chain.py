@@ -285,6 +285,12 @@ def _build_result_backflow_stage(device_id: Optional[str]) -> Dict[str, Any]:
             "acceptance_tag": evidence.get("acceptance_tag"),
             "mapped_android_proof_class": evidence.get("mapped_android_proof_class"),
             "mapped_evidence_trust_level": evidence.get("mapped_evidence_trust_level"),
+            "evidence_authority": evidence.get("evidence_authority"),
+            "evidence_completeness": evidence.get("evidence_completeness"),
+            "closure_significance": evidence.get("closure_significance"),
+            "canonical_confirmation_required": bool(
+                evidence.get("canonical_confirmation_required")
+            ),
             "message_id": evidence.get("message_id"),
             "snapshot_id": evidence.get("snapshot_id"),
         },
@@ -525,6 +531,49 @@ def _build_truth_boundary_contract(
             truth_visibility.get("is_fully_closed")
             or board_visibility.get("is_fully_closed")
         )
+    result_backflow_stage = next(
+        (stage for stage in stages if stage.get("stage") == "result_backflow"),
+        {},
+    )
+    result_backflow_details = _ensure_dict(result_backflow_stage.get("details"))
+    evidence_provenance = str(
+        truth_visibility.get("evidence_provenance")
+        or board_visibility.get("evidence_provenance")
+        or result_backflow_details.get("evidence_authority")
+        or "unknown"
+    )
+    evidence_completeness = str(
+        truth_visibility.get("evidence_completeness")
+        or board_visibility.get("evidence_completeness")
+        or result_backflow_details.get("evidence_completeness")
+        or "unknown"
+    )
+    closure_quality = str(
+        truth_visibility.get("closure_quality")
+        or board_visibility.get("closure_quality")
+        or (
+            "mature_canonical"
+            if authority_completion_truth
+            else "advisory_only"
+            if evidence_provenance == "android_advisory"
+            else "evidence_incomplete"
+            if closure_candidate_visible
+            else "open"
+        )
+    )
+    advisory_evidence_only = bool(
+        truth_visibility.get("advisory_evidence_only")
+        or board_visibility.get("advisory_evidence_only")
+        or (
+            result_backflow_details.get("canonical_confirmation_required")
+            and not authority_completion_truth
+        )
+    )
+    canonical_confirmation_present = bool(
+        truth_visibility.get("canonical_confirmation_present")
+        or board_visibility.get("canonical_confirmation_present")
+        or authority_completion_truth
+    )
     return {
         "authority_truth_source": {
             "runtime_truth_output_chain": "core.runtime_truth_output_chain.build_output_chain_snapshot",
@@ -536,9 +585,14 @@ def _build_truth_boundary_contract(
             "overall_status": overall_status,
             "result_closure_visible": closure_candidate_visible,
             "closure_candidate_visible": closure_candidate_visible,
-            "authority_completion_truth": authority_completion_truth,
-            "acceptance_completion_truth": acceptance_verdict_normalized == "accept",
+            "authority_completion_truth": canonical_confirmation_present,
+            "acceptance_completion_truth": canonical_confirmation_present,
             "acceptance_verdict": acceptance_verdict,
+            "closure_quality": closure_quality,
+            "evidence_completeness": evidence_completeness,
+            "evidence_provenance": evidence_provenance,
+            "advisory_evidence_only": advisory_evidence_only,
+            "canonical_confirmation_present": canonical_confirmation_present,
             "gate_verdict": gate.get("verdict"),
             "gate_mode": gate.get("mode"),
             "required_stage_ids": list(gate.get("required_stage_ids") or []),
