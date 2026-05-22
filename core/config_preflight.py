@@ -50,10 +50,13 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
+import logging
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
+
+logger = logging.getLogger("Galaxy.ConfigPreflight")
 
 
 # ---------------------------------------------------------------------------
@@ -471,10 +474,14 @@ def _build_protected_compat_ws_policy_finding() -> Optional[Finding]:
             PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV,
             get_core_compat_device_ingress_policy,
         )
-    except Exception:
+    except ImportError:
         return None
 
-    policy = get_core_compat_device_ingress_policy()
+    try:
+        policy = get_core_compat_device_ingress_policy()
+    except Exception as exc:
+        logger.warning("Compat WS policy preflight probe failed: %s", exc)
+        return None
     if not policy.get("blocked_by_protected_mode"):
         return None
 

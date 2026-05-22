@@ -464,8 +464,13 @@ def _crit_protected_compat_ingress_policy() -> Tuple[CriterionStatus, str]:
     """Protected mode must not quietly enable the core compat websocket ingress."""
     try:
         from core.api_routes import get_core_compat_device_ingress_policy
+    except ImportError as exc:
+        return CriterionStatus.UNKNOWN, f"Compat ingress policy import error: {exc}"
 
+    try:
         policy = get_core_compat_device_ingress_policy()
+    except AttributeError as exc:
+        return CriterionStatus.UNKNOWN, f"Compat ingress policy attribute error: {exc}"
     except Exception as exc:
         return CriterionStatus.UNKNOWN, f"Compat ingress policy evaluation error: {exc}"
 

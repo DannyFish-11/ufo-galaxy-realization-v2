@@ -217,7 +217,7 @@ def get_core_compat_device_ingress_policy(
     return {
         "authority": CORE_COMPAT_DEVICE_INGRESS_POLICY_AUTHORITY,
         "compatibility_surface": "/ws/device/{device_id}",
-        "compatibility_surface_module": "core.api_routes.create_websocket_routes",
+        "compatibility_surface_factory": "core.api_routes.create_websocket_routes",
         "classification": "compatibility-only",
         "canonical_device_ingress": "/ws/device/{device_id}",
         "canonical_device_ingress_module": "galaxy_gateway.routes.websocket",
