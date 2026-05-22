@@ -200,6 +200,21 @@ except ImportError:  # pragma: no cover
     _FlowTruthAlignmentContext = None  # type: ignore[assignment,misc]
     _align_and_record = None  # type: ignore[assignment]
 
+# PR-4V2-Recovery: Android continuity recovery-state router.
+# When a recovery_state truth kind arrives we route the recovery phase to an
+# explicit V2 canonical handling path using the recovery-state router.
+try:
+    from core.android_continuity_recovery_state_router import (
+        RecoveryStateRoutingDecision as _RecoveryStateRoutingDecision,
+        route_recovery_state_from_payload as _route_recovery_state_from_payload,
+    )
+
+    _RECOVERY_STATE_ROUTER_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _RECOVERY_STATE_ROUTER_AVAILABLE = False
+    _RecoveryStateRoutingDecision = None  # type: ignore[assignment,misc]
+    _route_recovery_state_from_payload = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -343,6 +358,20 @@ GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY: str = (
     "PR-4V2-GOV: wire Android evaluator artifacts into canonical readiness/governance flow."
 )
 
+RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY: str = (
+    "POLICY::RECOVERY_STATE_EXPLICIT_ROUTING_PR4V2_RECOVERY: "
+    "Android-originated recovery_state truth kind MUST be routed through the "
+    "android_continuity_recovery_state_router rather than treated as generic "
+    "metadata.  Each recovery phase category maps to an explicit V2 canonical "
+    "handling route: reject_stale_artifact, trigger_reconciliation, "
+    "require_closure_review, accept_advisory_evidence, or mark_recovery_pending. "
+    "Advisory recovered_inflight evidence MUST NOT directly produce canonical "
+    "closure.  Stale recovery artifacts MUST be rejected.  V2 remains the "
+    "canonical closure authority throughout.  "
+    "PR-4V2-Recovery: close the gap between Android recovery-state semantics "
+    "and explicit V2 canonical consumption."
+)
+
 _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
     ANDROID_TRUTH_IS_ADVISORY_FOR_DEVICE_SCOPE_POLICY,
@@ -358,6 +387,7 @@ _ALL_POLICY_SENTINELS: Tuple[str, ...] = (
     IDENTITY_FIELDS_ARE_VERBATIM_POLICY,
     RECONCILIATION_SIGNAL_DISTINCT_FROM_DELEGATED_POLICY,
     GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY,
+    RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY,
 )
 
 # ---------------------------------------------------------------------------
@@ -415,6 +445,7 @@ class AndroidParticipantTruthKind(str, Enum):
     result = "result"
     reconciliation_signal = "reconciliation_signal"
     governance_artifact = "governance_artifact"
+    recovery_state = "recovery_state"
     unknown = "unknown"
 
     @classmethod
@@ -911,6 +942,16 @@ def reconcile_android_participant_truth(
             _reconcile_governance_artifact(envelope)
         )
 
+    elif kind == AndroidParticipantTruthKind.recovery_state:
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
+            _reconcile_recovery_state(envelope)
+        )
+        # Advisory and pending routes are local-only (no canonical state mutation).
+        # Rejected and reconciliation-required routes are NOT local_only — they
+        # surface as explicit reject_reason for the caller to act on.
+        if not reject_reason:
+            local_only = True
+
     elif kind in (
         AndroidParticipantTruthKind.readiness_assessment,
         AndroidParticipantTruthKind.runtime_state,
@@ -1326,6 +1367,99 @@ def _reconcile_governance_artifact(
         return False, "", f"governance_artifact_align_error:{exc}", ""
 
 
+def _reconcile_recovery_state(
+    envelope: AndroidParticipantTruthEnvelope,
+) -> Tuple[bool, str, str, str]:
+    """Route an Android recovery_state truth kind through the recovery-state router.
+
+    This handler implements explicit routing for Android continuity recovery-state
+    semantics.  It calls ``route_recovery_state_from_payload()`` from
+    :mod:`~core.android_continuity_recovery_state_router` to map the Android
+    recovery phase to an explicit V2 canonical handling route.
+
+    Routing outcomes per recovery phase
+    ------------------------------------
+    - ``reconnect_initiated`` / ``recovery_in_progress`` →
+      ``mark_recovery_pending``: advisory/pending, local_only=True, no canonical
+      state mutation.
+    - ``recovered_inflight`` →
+      ``accept_advisory_evidence``: advisory evidence only, local_only=True.
+      MUST NOT directly produce canonical closure.
+    - ``stale_recovery_artifact`` →
+      ``reject_stale_artifact``: rejected outright, was_reconciled=False,
+      reject_reason set.
+    - ``reconciliation_required`` →
+      ``trigger_reconciliation``: was_reconciled=False (reconciliation path must
+      be invoked by the caller), reject_reason=reconciliation_path_required.
+    - ``lost_inflight`` →
+      ``require_closure_review``: was_reconciled=False, reject_reason set,
+      closure review required.
+    - ``unknown`` →
+      ``accept_advisory_evidence`` (degraded): advisory, local_only=True.
+
+    Policy: RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY.
+
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    """
+    if not _RECOVERY_STATE_ROUTER_AVAILABLE or _route_recovery_state_from_payload is None:
+        # Router unavailable — fall back to advisory-only handling
+        return (
+            False,
+            "",
+            "recovery_state_router_unavailable:treated_as_advisory",
+            "",
+        )
+
+    try:
+        decision = _route_recovery_state_from_payload(
+            envelope.payload,
+            device_id=envelope.device_id or "",
+            session_id=envelope.session_id or "",
+            task_id=envelope.task_id or "",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, "", f"recovery_state_routing_error:{exc}", ""
+
+    route_value = decision.v2_route.value
+
+    if route_value == "reject_stale_artifact":
+        return (
+            False,
+            "",
+            f"recovery_state_rejected:stale_recovery_artifact:"
+            f"phase={decision.recovery_phase.value}",
+            "",
+        )
+
+    if route_value == "trigger_reconciliation":
+        return (
+            False,
+            "",
+            f"recovery_state_reconciliation_path_required:"
+            f"phase={decision.recovery_phase.value}",
+            "",
+        )
+
+    if route_value == "require_closure_review":
+        return (
+            False,
+            "",
+            f"recovery_state_closure_review_required:"
+            f"phase={decision.recovery_phase.value}:lost_inflight",
+            "",
+        )
+
+    # mark_recovery_pending or accept_advisory_evidence — advisory/local-only
+    # was_reconciled=False, local_only handled by caller (advisory branch)
+    canonical_update = (
+        f"recovery_state_advisory_routed:"
+        f"phase={decision.recovery_phase.value}"
+        f"→route={route_value}"
+        f"→degraded={decision.is_degraded}"
+    )
+    return False, canonical_update, "", ""
+
+
 def ingest_android_participant_truth_message(
     message: Dict[str, Any],
     *,
@@ -1445,6 +1579,7 @@ __all__ = [
     "RECONCILE_EMITS_AUDIT_EVENT_ALWAYS_POLICY",
     "IDENTITY_FIELDS_ARE_VERBATIM_POLICY",
     "GOVERNANCE_ARTIFACT_IS_CANONICAL_GATE_INPUT_POLICY",
+    "RECOVERY_STATE_MUST_BE_EXPLICITLY_ROUTED_POLICY",
     # Enums
     "AndroidParticipantTruthKind",
     # Dataclasses
