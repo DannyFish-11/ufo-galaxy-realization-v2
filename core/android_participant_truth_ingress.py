@@ -1151,7 +1151,8 @@ def _reconcile_status_signal(
 ) -> Tuple[bool, str, str, str]:
     """Reconcile an Android status (progress) signal.
 
-    Returns (was_reconciled, canonical_update, reject_reason, phase_str).
+    Returns (was_reconciled, canonical_update, reject_reason, phase_str,
+    recovery_state_routing_dict).
     """
     if not envelope.has_lookup_key():
         return False, "", "missing_lookup_key", ""
@@ -1450,7 +1451,7 @@ def _reconcile_recovery_state(
     except Exception as exc:  # noqa: BLE001
         return False, "", f"recovery_state_routing_error:{exc}", "", {}
 
-    decision_dict = decision.to_dict()
+    routing_decision = decision.to_dict()
 
     route_value = decision.v2_route.value
 
@@ -1461,7 +1462,7 @@ def _reconcile_recovery_state(
             f"recovery_state_rejected:stale_recovery_artifact:"
             f"phase={decision.recovery_phase.value}",
             "",
-            decision_dict,
+            routing_decision,
         )
 
     if route_value == "trigger_reconciliation":
@@ -1471,7 +1472,7 @@ def _reconcile_recovery_state(
             f"recovery_state_reconciliation_path_required:"
             f"phase={decision.recovery_phase.value}",
             "",
-            decision_dict,
+            routing_decision,
         )
 
     if route_value == "require_closure_review":
@@ -1481,7 +1482,7 @@ def _reconcile_recovery_state(
             f"recovery_state_closure_review_required:"
             f"phase={decision.recovery_phase.value}:lost_inflight",
             "",
-            decision_dict,
+            routing_decision,
         )
 
     # mark_recovery_pending or accept_advisory_evidence — advisory/local-only
@@ -1492,7 +1493,7 @@ def _reconcile_recovery_state(
         f"→route={route_value}"
         f"→degraded={decision.is_degraded}"
     )
-    return False, canonical_update, "", "", decision_dict
+    return False, canonical_update, "", "", routing_decision
 
 
 def ingest_android_participant_truth_message(
