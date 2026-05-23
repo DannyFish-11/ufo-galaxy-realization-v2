@@ -381,6 +381,41 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v -m "not slow and not manual"
 
+  android-v2-contract-compatibility:
+    # Cross-repo Android ↔ V2 schema/contract drift gate.
+    # Fails PRs when required message classes, schema fields, replay/recovery,
+    # dedupe, readiness, or diagnostics contract surfaces drift out of alignment.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Override via repository/org variable ANDROID_REPO_FULL_NAME for forks.
+      ANDROID_REPO_FULL_NAME: ${{ vars.ANDROID_REPO_FULL_NAME || 'DannyFish-11/ufo-galaxy-android' }}
+    steps:
+      - name: Checkout V2 repository
+        uses: actions/checkout@v4
+      - name: Checkout Android repository snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ANDROID_REPO_FULL_NAME }}
+          path: android_repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run cross-repo contract compatibility regression suite
+        env:
+          ANDROID_REPO_ROOT: ${{ github.workspace }}/android_repo
+        run: |
+          python -m pytest \
+            tests/test_pr26_cross_repo_schema_version_gate.py \
+            tests/test_pr46_schema_version_gate_runtime_enforcement.py \
+            tests/test_android_cross_repo_dedupe_contract.py \
+            tests/test_cross_repo_android_repo_contract_snapshot.py \
+            -v --tb=short
+          echo "✅ Android ↔ V2 contract compatibility gate passed."
+
   test-placement-guard:
     # Structural guardrail: test files must live under tests/, not inside
     # source packages (core/, galaxy_gateway/, nodes/, enhancements/, etc.).

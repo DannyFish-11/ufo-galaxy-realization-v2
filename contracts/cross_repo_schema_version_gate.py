@@ -76,6 +76,66 @@ REQUIRED_ACCEPTANCE_CLOSURE_FIELDS: FrozenSet[str] = frozenset(
     }
 )
 
+REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "acceptance_verdict",
+        "closure_quality",
+        "evidence_completeness",
+        "evidence_provenance",
+        "advisory_evidence_only",
+        "canonical_confirmation_present",
+        "repo_mutation_completion_truth",
+        "is_fully_closed",
+    }
+)
+
+REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "completion_state",
+        "closure_candidate_state",
+        "authority_completion_truth",
+        "acceptance_completion_truth",
+        "advisory_evidence_only",
+        "canonical_confirmation_present",
+        "evidence_provenance",
+        "evidence_completeness",
+        "surface_execution_stage",
+    }
+)
+
+REQUIRED_STARTUP_READINESS_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "ready_to_route",
+        "readiness_notes",
+    }
+)
+
+REQUIRED_PARTICIPATION_TRUTH_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "participation_tier",
+        "device_lifecycle_stage",
+        "all_device_participation_matrix",
+        "completion_state",
+    }
+)
+
+REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "chain_overall_status",
+        "failure_boundaries",
+    }
+)
+
+REQUIRED_SCHEMA_GATE_METADATA_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "authority",
+        "gate_version",
+        "android_completion_closure_uplink_schema_version",
+        "android_aip_models_source_sha",
+        "android_completion_closure_source_sha",
+    }
+)
+
 
 @dataclass
 class CrossRepoSchemaGateReport:
@@ -459,24 +519,72 @@ def verify_cross_repo_schema_gate(
     if missing_top_level:
         issues.append(f"runtime-truth projection is missing required top-level fields: {missing_top_level}.")
 
+    startup_readiness = payload.get("startup_readiness")
+    if not isinstance(startup_readiness, Mapping):
+        issues.append("startup_readiness must be a mapping.")
+    else:
+        missing_startup_readiness = sorted(k for k in REQUIRED_STARTUP_READINESS_FIELDS if k not in startup_readiness)
+        if missing_startup_readiness:
+            issues.append(f"startup_readiness is missing required fields: {missing_startup_readiness}.")
+
+    shared_visibility = payload.get("shared_execution_visibility")
+    if not isinstance(shared_visibility, Mapping):
+        issues.append("shared_execution_visibility must be a mapping.")
+    else:
+        missing_shared_visibility_fields = sorted(
+            k for k in REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS if k not in shared_visibility
+        )
+        if missing_shared_visibility_fields:
+            issues.append(
+                f"shared_execution_visibility is missing required fields: {missing_shared_visibility_fields}."
+            )
+
+    participation_truth = payload.get("participation_truth_consumption")
+    if not isinstance(participation_truth, Mapping):
+        issues.append("participation_truth_consumption must be a mapping.")
+    else:
+        missing_participation_truth = sorted(k for k in REQUIRED_PARTICIPATION_TRUTH_FIELDS if k not in participation_truth)
+        if missing_participation_truth:
+            issues.append(f"participation_truth_consumption is missing required fields: {missing_participation_truth}.")
+
     contract = payload.get("truth_acceptance_closure_contract")
     if not isinstance(contract, Mapping):
         issues.append("truth_acceptance_closure_contract must be a mapping.")
     else:
         missing_contract = sorted(k for k in REQUIRED_TRUTH_ACCEPTANCE_CONTRACT_FIELDS if k not in contract)
         if missing_contract:
-            issues.append("truth_acceptance_closure_contract is missing required fields: " f"{missing_contract}.")
+            issues.append(f"truth_acceptance_closure_contract is missing required fields: {missing_contract}.")
 
         acceptance = contract.get("acceptance_closure_truth")
         if isinstance(acceptance, Mapping):
             missing_acceptance = sorted(k for k in REQUIRED_ACCEPTANCE_CLOSURE_FIELDS if k not in acceptance)
             if missing_acceptance:
-                issues.append("acceptance_closure_truth is missing required fields: " f"{missing_acceptance}.")
+                issues.append(f"acceptance_closure_truth is missing required fields: {missing_acceptance}.")
+            missing_acceptance_semantics = sorted(
+                k for k in REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS if k not in acceptance
+            )
+            if missing_acceptance_semantics:
+                issues.append(f"acceptance_closure_truth is missing required semantic fields: {missing_acceptance_semantics}.")
         else:
             issues.append("acceptance_closure_truth must be a mapping.")
 
+        diagnostics_snapshot = contract.get("diagnostics_snapshot")
+        if not isinstance(diagnostics_snapshot, Mapping):
+            issues.append("truth_acceptance_closure_contract.diagnostics_snapshot must be a mapping.")
+        else:
+            missing_diagnostics = sorted(k for k in REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS if k not in diagnostics_snapshot)
+            if missing_diagnostics:
+                issues.append(f"diagnostics_snapshot is missing required fields: {missing_diagnostics}.")
+
+        gate_candidate = contract.get("gate_candidate")
+        if not isinstance(gate_candidate, Mapping):
+            issues.append("truth_acceptance_closure_contract.gate_candidate must be a mapping.")
+
         schema_gate = contract.get("schema_gate")
         if isinstance(schema_gate, Mapping):
+            missing_schema_gate_fields = sorted(k for k in REQUIRED_SCHEMA_GATE_METADATA_FIELDS if k not in schema_gate)
+            if missing_schema_gate_fields:
+                issues.append(f"schema_gate is missing required metadata fields: {missing_schema_gate_fields}.")
             observed_gate_version = str(schema_gate.get("gate_version") or "")
             if observed_gate_version != CROSS_REPO_SCHEMA_GATE_VERSION:
                 issues.append(
@@ -491,6 +599,18 @@ def verify_cross_repo_schema_gate(
                     "schema_gate.android_completion_closure_uplink_schema_version drift detected: "
                     f"expected {ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION!r}, "
                     f"got {observed_android_schema_version!r}."
+                )
+            observed_aip_models_sha = str(schema_gate.get("android_aip_models_source_sha") or "")
+            if observed_aip_models_sha != ANDROID_AIP_MODELS_SOURCE_SHA:
+                issues.append(
+                    "schema_gate.android_aip_models_source_sha drift detected: "
+                    f"expected {ANDROID_AIP_MODELS_SOURCE_SHA!r}, got {observed_aip_models_sha!r}."
+                )
+            observed_closure_sha = str(schema_gate.get("android_completion_closure_source_sha") or "")
+            if observed_closure_sha != ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA:
+                issues.append(
+                    "schema_gate.android_completion_closure_source_sha drift detected: "
+                    f"expected {ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA!r}, got {observed_closure_sha!r}."
                 )
         else:
             issues.append("truth_acceptance_closure_contract.schema_gate must be a mapping.")
@@ -528,5 +648,11 @@ def build_cross_repo_schema_gate_manifest() -> Dict[str, Any]:
         "required_runtime_truth_top_level_fields": sorted(REQUIRED_RUNTIME_TRUTH_TOP_LEVEL_FIELDS),
         "required_truth_acceptance_contract_fields": sorted(REQUIRED_TRUTH_ACCEPTANCE_CONTRACT_FIELDS),
         "required_acceptance_closure_fields": sorted(REQUIRED_ACCEPTANCE_CLOSURE_FIELDS),
+        "required_acceptance_closure_semantic_fields": sorted(REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS),
+        "required_shared_execution_visibility_fields": sorted(REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS),
+        "required_startup_readiness_fields": sorted(REQUIRED_STARTUP_READINESS_FIELDS),
+        "required_participation_truth_fields": sorted(REQUIRED_PARTICIPATION_TRUTH_FIELDS),
+        "required_diagnostics_snapshot_fields": sorted(REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS),
+        "required_schema_gate_metadata_fields": sorted(REQUIRED_SCHEMA_GATE_METADATA_FIELDS),
         "projection_schema_gate_metadata": build_projection_schema_gate_metadata(),
     }

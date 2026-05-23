@@ -12,6 +12,11 @@ from contracts.cross_repo_schema_version_gate import (
     ANDROID_COMPLETION_CLOSURE_ANCHOR,
     ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA,
     CROSS_REPO_SCHEMA_GATE_VERSION,
+    REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS,
+    REQUIRED_PARTICIPATION_TRUTH_FIELDS,
+    REQUIRED_SCHEMA_GATE_METADATA_FIELDS,
+    REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS,
+    REQUIRED_STARTUP_READINESS_FIELDS,
     REQUIRED_AIP_MESSAGE_TYPES,
     build_cross_repo_schema_gate_manifest,
     build_projection_schema_gate_metadata,
@@ -59,6 +64,11 @@ def test_cross_repo_schema_gate_manifest_exposes_android_dedupe_contracts() -> N
         "replay_item_id",
         "replay_seq",
     ]
+    assert REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS.issubset(set(manifest["required_shared_execution_visibility_fields"]))
+    assert REQUIRED_STARTUP_READINESS_FIELDS.issubset(set(manifest["required_startup_readiness_fields"]))
+    assert REQUIRED_PARTICIPATION_TRUTH_FIELDS.issubset(set(manifest["required_participation_truth_fields"]))
+    assert REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS.issubset(set(manifest["required_diagnostics_snapshot_fields"]))
+    assert REQUIRED_SCHEMA_GATE_METADATA_FIELDS.issubset(set(manifest["required_schema_gate_metadata_fields"]))
 
 
 def test_required_aip_message_types_are_present_in_v2_enum() -> None:
@@ -70,20 +80,49 @@ def test_verify_cross_repo_schema_gate_passes_for_minimal_valid_payload() -> Non
     runtime_truth_payload = {
         "outward_truth": {},
         "task_truth": {},
-        "startup_readiness": {},
+        "startup_readiness": {
+            "ready_to_route": False,
+            "readiness_notes": ["contract-test"],
+        },
         "runtime_decision_reasoning": {},
-        "shared_execution_visibility": {"completion_state": "not_started"},
-        "participation_truth_consumption": {},
+        "shared_execution_visibility": {
+            "completion_state": "not_started",
+            "closure_candidate_state": "not_started",
+            "authority_completion_truth": False,
+            "acceptance_completion_truth": False,
+            "advisory_evidence_only": True,
+            "canonical_confirmation_present": False,
+            "evidence_provenance": "unknown",
+            "evidence_completeness": "unknown",
+            "surface_execution_stage": None,
+        },
+        "participation_truth_consumption": {
+            "participation_tier": "runtime_present",
+            "device_lifecycle_stage": None,
+            "all_device_participation_matrix": {},
+            "completion_state": "not_started",
+        },
         "truth_acceptance_closure_contract": {
             "authority_truth_source": {},
             "acceptance_closure_truth": {
                 "authority_completion_truth": False,
                 "acceptance_completion_truth": False,
+                "acceptance_verdict": "pending",
+                "closure_quality": "open",
+                "evidence_completeness": "unknown",
+                "evidence_provenance": "unknown",
+                "advisory_evidence_only": True,
+                "canonical_confirmation_present": False,
+                "repo_mutation_completion_truth": "unknown",
                 "closure_candidate_state": "not_started",
                 "completion_state": "not_started",
+                "is_fully_closed": False,
             },
             "outward_projection_truth": {},
-            "diagnostics_snapshot": {},
+            "diagnostics_snapshot": {
+                "chain_overall_status": "open",
+                "failure_boundaries": [],
+            },
             "gate_candidate": {},
             "schema_gate": build_projection_schema_gate_metadata(),
         },
@@ -93,6 +132,102 @@ def test_verify_cross_repo_schema_gate_passes_for_minimal_valid_payload() -> Non
         runtime_truth_payload=runtime_truth_payload,
     )
     assert report.passed, report.issues
+
+
+def test_verify_cross_repo_schema_gate_rejects_missing_shared_execution_contract_fields() -> None:
+    report = verify_cross_repo_schema_gate(
+        message_type_values=_read_message_type_wire_values(),
+        runtime_truth_payload={
+            "outward_truth": {},
+            "task_truth": {},
+            "startup_readiness": {"ready_to_route": True, "readiness_notes": []},
+            "runtime_decision_reasoning": {},
+            "shared_execution_visibility": {"completion_state": "in_progress"},
+            "participation_truth_consumption": {
+                "participation_tier": "runtime_present",
+                "device_lifecycle_stage": None,
+                "all_device_participation_matrix": {},
+                "completion_state": "in_progress",
+            },
+            "truth_acceptance_closure_contract": {
+                "authority_truth_source": {},
+                "acceptance_closure_truth": {
+                    "authority_completion_truth": False,
+                    "acceptance_completion_truth": False,
+                    "acceptance_verdict": "pending",
+                    "closure_quality": "open",
+                    "evidence_completeness": "unknown",
+                    "evidence_provenance": "unknown",
+                    "advisory_evidence_only": True,
+                    "canonical_confirmation_present": False,
+                    "repo_mutation_completion_truth": "unknown",
+                    "closure_candidate_state": "in_progress",
+                    "completion_state": "in_progress",
+                    "is_fully_closed": False,
+                },
+                "outward_projection_truth": {},
+                "diagnostics_snapshot": {"chain_overall_status": "open", "failure_boundaries": []},
+                "gate_candidate": {},
+                "schema_gate": build_projection_schema_gate_metadata(),
+            },
+        },
+    )
+    assert report.passed is False
+    assert any("shared_execution_visibility is missing required fields:" in issue for issue in report.issues)
+
+
+def test_verify_cross_repo_schema_gate_rejects_schema_gate_sha_drift() -> None:
+    metadata = build_projection_schema_gate_metadata()
+    metadata["android_aip_models_source_sha"] = "0" * 40
+    report = verify_cross_repo_schema_gate(
+        message_type_values=_read_message_type_wire_values(),
+        runtime_truth_payload={
+            "outward_truth": {},
+            "task_truth": {},
+            "startup_readiness": {"ready_to_route": False, "readiness_notes": []},
+            "runtime_decision_reasoning": {},
+            "shared_execution_visibility": {
+                "completion_state": "not_started",
+                "closure_candidate_state": "not_started",
+                "authority_completion_truth": False,
+                "acceptance_completion_truth": False,
+                "advisory_evidence_only": True,
+                "canonical_confirmation_present": False,
+                "evidence_provenance": "unknown",
+                "evidence_completeness": "unknown",
+                "surface_execution_stage": None,
+            },
+            "participation_truth_consumption": {
+                "participation_tier": "runtime_present",
+                "device_lifecycle_stage": None,
+                "all_device_participation_matrix": {},
+                "completion_state": "not_started",
+            },
+            "truth_acceptance_closure_contract": {
+                "authority_truth_source": {},
+                "acceptance_closure_truth": {
+                    "authority_completion_truth": False,
+                    "acceptance_completion_truth": False,
+                    "acceptance_verdict": "pending",
+                    "closure_quality": "open",
+                    "evidence_completeness": "unknown",
+                    "evidence_provenance": "unknown",
+                    "advisory_evidence_only": True,
+                    "canonical_confirmation_present": False,
+                    "repo_mutation_completion_truth": "unknown",
+                    "closure_candidate_state": "not_started",
+                    "completion_state": "not_started",
+                    "is_fully_closed": False,
+                },
+                "outward_projection_truth": {},
+                "diagnostics_snapshot": {"chain_overall_status": "open", "failure_boundaries": []},
+                "gate_candidate": {},
+                "schema_gate": metadata,
+            },
+        },
+    )
+    assert report.passed is False
+    assert any("schema_gate.android_aip_models_source_sha drift detected:" in issue for issue in report.issues)
 
 
 def test_runtime_schema_gate_rejects_completion_uplink_without_schema_version() -> None:
