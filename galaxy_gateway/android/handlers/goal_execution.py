@@ -1065,10 +1065,10 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
         message.get("replay_sequence"),
     )
     replay_seq = _normalize_optional_int(_raw_replay_seq)
-    # ``queue_item_id`` is a legacy Android offline-queue alias for the newer
-    # canonical ``replay_item_id`` field. Accept both so replayed terminal
-    # deliveries still carry queue identity into UnifiedResultIngress.
     replay_item_id = str(
+        # ``queue_item_id`` is a legacy Android offline-queue alias for the
+        # newer canonical ``replay_item_id`` field. Accept both so replayed
+        # terminal deliveries still carry queue identity into ingress.
         payload.get("replay_item_id")
         or message.get("replay_item_id")
         or payload.get("queue_item_id")
@@ -1237,7 +1237,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             _ger_prechecked_duplicate = True
             logger.debug(
                 "GOAL_EXECUTION_RESULT: duplicate observed in durable store; "
-                "routing through unified ingress for truthful closure classification: "
+                "routing through unified ingress for accurate closure classification: "
                 "task_id=%s device_id=%s",
                 task_id,
                 device_id,
