@@ -340,7 +340,7 @@ class GalaxyCore:
             p = params or {}
             if p.get("_distributed") or p.get("target_worker_id"):
                 try:
-                    result = await self._master_brain.dispatch_task({
+                    result = await self._master_brain.execute_distributed_task({
                         "task_type": capability,
                         "target_worker_id": p.get("target_worker_id", ""),
                         "target_device_type": p.get("device_type", "unknown"),

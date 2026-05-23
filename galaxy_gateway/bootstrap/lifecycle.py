@@ -271,6 +271,15 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         except Exception:
             pass
 
+    try:
+        from core.master_brain import get_master_brain
+
+        brain = get_master_brain()
+        if brain is not None:
+            await brain.stop()
+    except Exception:
+        pass
+
     if app.state.nats_adapter is not None:
         try:
             await app.state.nats_adapter.stop()
