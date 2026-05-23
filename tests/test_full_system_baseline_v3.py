@@ -359,11 +359,13 @@ class TestGroupD_BaselineReport:
 
     def test_D15_open_questions_expose_actionable_scope_metadata(self) -> None:
         report = build_v3_baseline_report()
+        actionable_prefixes = ("run ", "verify ", "confirm ", "produce ")
         for question in report.open_questions:
             assert question.closure_scope in {"repo_local", "cross_repo", "runtime_proof"}
             assert question.execution_priority in {"high", "medium", "low"}
             assert isinstance(question.next_action_hint, str)
             assert len(question.next_action_hint) > 0
+            assert question.next_action_hint.lower().startswith(actionable_prefixes)
 
     def test_D16_scorecard_reports_scope_breakdown_for_closure_driving(self) -> None:
         report = build_v3_baseline_report()

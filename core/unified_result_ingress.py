@@ -2091,7 +2091,13 @@ class UnifiedResultIngress:
         return decision.action, decision.reason, {"android_dedupe_contract": decision.to_dict()}
 
     @staticmethod
-    def _extract_cross_repo_text_field(wire_message: Dict[str, Any], *field_names: str) -> str:
+    def _extract_wire_message_field(wire_message: Dict[str, Any], *field_names: str) -> str:
+        """Extract a field value from a wire message.
+
+        Search order is top-level ``wire_message`` → nested ``payload`` →
+        nested ``payload.schema_gate``.  The first non-empty value among
+        ``field_names`` wins.
+        """
         payload = wire_message.get("payload")
         payload_mapping = payload if isinstance(payload, dict) else {}
         schema_gate = payload_mapping.get("schema_gate")
@@ -2102,8 +2108,10 @@ class UnifiedResultIngress:
                 payload_mapping.get(field_name),
                 schema_gate_mapping.get(field_name),
             ):
-                if candidate is not None and str(candidate).strip():
-                    return str(candidate).strip()
+                if candidate is not None:
+                    normalized_candidate = str(candidate).strip()
+                    if normalized_candidate:
+                        return normalized_candidate
         return ""
 
     def _evaluate_cross_repo_dedupe_contract_fallback(
@@ -2113,6 +2121,24 @@ class UnifiedResultIngress:
         wire_message: Dict[str, Any],
         error: str,
     ) -> tuple[str, str, Dict[str, Any]]:
+        """Fallback Android dedupe contract evaluator.
+
+        Parameters
+        ----------
+        message_type:
+            Normalized wire message type to evaluate.
+        wire_message:
+            Raw or normalized message payload.
+        error:
+            Stringified import/evaluation error from the canonical contract path.
+
+        Returns
+        -------
+        tuple[str, str, Dict[str, Any]]
+            ``(action, reason, evidence)`` where action is ``"degrade"`` or
+            empty string, reason is the machine-readable gate reason, and
+            evidence contains fallback provenance and contract diagnostics.
+        """
         normalized_type = str(message_type or "").strip().lower()
         fallback_evidence = {
             "fallback": {
@@ -2122,9 +2148,9 @@ class UnifiedResultIngress:
             }
         }
         if normalized_type in ANDROID_RESULT_DEDUPE_MESSAGE_TYPES:
-            task_id = self._extract_cross_repo_text_field(wire_message, "task_id", "goal_id")
-            idempotency_key = self._extract_cross_repo_text_field(wire_message, "idempotency_key")
-            completion_emission_id = self._extract_cross_repo_text_field(
+            task_id = self._extract_wire_message_field(wire_message, "task_id", "goal_id")
+            idempotency_key = self._extract_wire_message_field(wire_message, "idempotency_key")
+            completion_emission_id = self._extract_wire_message_field(
                 wire_message,
                 "completion_emission_id",
                 "emission_id",
@@ -2155,13 +2181,13 @@ class UnifiedResultIngress:
             return action, reason if action else "", fallback_evidence
 
         if normalized_type in ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES:
-            subject_identity = self._extract_cross_repo_text_field(
+            subject_identity = self._extract_wire_message_field(
                 wire_message,
                 "contract_id",
                 "session_id",
                 "runtime_session_id",
             )
-            reconciliation_identity = self._extract_cross_repo_text_field(
+            reconciliation_identity = self._extract_wire_message_field(
                 wire_message,
                 "reconciliation_id",
                 "signal_id",

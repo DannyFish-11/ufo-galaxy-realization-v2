@@ -1384,6 +1384,7 @@ class FullSystemBaselineV3Evaluator:
 
     @staticmethod
     def _text_signals_runtime_proof_gap(value: Any) -> bool:
+        """Heuristic keyword detector for runtime-proof/non-trivial execution gaps."""
         normalized = str(value or "").lower()
         return any(
             token in normalized
@@ -1403,13 +1404,23 @@ class FullSystemBaselineV3Evaluator:
         )
 
     def _classify_closure_scope(self, text: Any, *, requires_android_repo: bool = False) -> str:
-        if requires_android_repo or self._text_signals_cross_repo_gap(text):
-            return "cross_repo"
+        """Classify closure scope with precedence runtime_proof > cross_repo > repo_local.
+
+        ``requires_android_repo=True`` forces ``cross_repo`` for non-runtime-proof
+        text, because ownership cannot be repo-local when Android changes are
+        mandatory.
+        """
         if self._text_signals_runtime_proof_gap(text):
             return "runtime_proof"
+        # requires_android_repo is authoritative within non-runtime-proof cases:
+        # if Android repo changes are required, classify as cross_repo even when
+        # the wording itself is generic.
+        if requires_android_repo or self._text_signals_cross_repo_gap(text):
+            return "cross_repo"
         return "repo_local"
 
     def _classify_blocker(self, text: Any) -> str:
+        """Classify blocker text into canonical categories for closure-driving outputs."""
         normalized = str(text or "").lower()
         if "authority" in normalized:
             return "authority_gap"
@@ -1424,21 +1435,41 @@ class FullSystemBaselineV3Evaluator:
         return "closure_gap"
 
     def _classify_priority(self, scope: str, blocker_classification: str) -> str:
-        if blocker_classification in {"authority_gap", "freshness_gap"}:
-            return "high"
-        if scope in {"cross_repo", "runtime_proof"}:
+        """Derive execution priority from scope and blocker type."""
+        if blocker_classification in {"authority_gap", "freshness_gap"} or scope in {"cross_repo", "runtime_proof"}:
             return "high"
         if blocker_classification in {"contract_gap", "implementation_gap"}:
             return "medium"
         return "low"
 
-    def _annotate_blocking_gap(self, gap: BlockingGap) -> BlockingGap:
-        scope = self._classify_closure_scope(gap.description, requires_android_repo=gap.requires_android_repo)
-        blocker_classification = self._classify_blocker(gap.description)
-        gap.closure_scope = scope
-        gap.blocker_classification = blocker_classification
-        gap.execution_priority = self._classify_priority(scope, blocker_classification)
-        return gap
+    def _derive_closure_annotation(self, text: Any, *, requires_android_repo: bool = False) -> Dict[str, str]:
+        """Build combined closure metadata.
+
+        Returns a dict with keys: ``closure_scope``, ``blocker_classification``,
+        and ``execution_priority``.
+        """
+        scope = self._classify_closure_scope(text, requires_android_repo=requires_android_repo)
+        blocker_classification = self._classify_blocker(text)
+        execution_priority = self._classify_priority(scope, blocker_classification)
+        return {
+            "closure_scope": scope,
+            "blocker_classification": blocker_classification,
+            "execution_priority": execution_priority,
+        }
+
+    def _annotate_blocking_gap(self, gap: BlockingGap) -> None:
+        """Mutate *gap* in place with closure-driving classification metadata."""
+        annotation = self._derive_closure_annotation(gap.description, requires_android_repo=gap.requires_android_repo)
+        gap.closure_scope = annotation["closure_scope"]
+        gap.blocker_classification = annotation["blocker_classification"]
+        gap.execution_priority = annotation["execution_priority"]
+
+    def _annotate_open_question(self, question: OpenQuestion) -> None:
+        """Mutate *question* in place with closure-driving classification metadata."""
+        annotation = self._derive_closure_annotation(question.question)
+        question.closure_scope = annotation["closure_scope"]
+        question.blocker_classification = annotation["blocker_classification"]
+        question.execution_priority = annotation["execution_priority"]
 
     @staticmethod
     def _derive_android_evidence_state(
@@ -1713,7 +1744,9 @@ class FullSystemBaselineV3Evaluator:
                     )
                 )
 
-        return [self._annotate_blocking_gap(gap) for gap in gaps]
+        for gap in gaps:
+            self._annotate_blocking_gap(gap)
+        return gaps
 
     # ------------------------------------------------------------------
     # Open question synthesis
@@ -1731,7 +1764,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
                 currently_answerable=android_detected,
-                next_action_hint="Run Android protected CI and verify canonical evidence artifact delivery into V2.",
+                next_action_hint="Run Android protected CI and verify canonical evidence artifact delivery into V2 ingress.",
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1777,11 +1810,7 @@ class FullSystemBaselineV3Evaluator:
             ),
         ]
         for question in questions:
-            scope = self._classify_closure_scope(question.question)
-            blocker_classification = self._classify_blocker(question.question)
-            question.closure_scope = scope
-            question.blocker_classification = blocker_classification
-            question.execution_priority = self._classify_priority(scope, blocker_classification)
+            self._annotate_open_question(question)
         return questions
 
     # ------------------------------------------------------------------
