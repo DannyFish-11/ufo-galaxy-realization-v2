@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
     env:
+      # repository_dispatch is the protected cross-repo path and must not silently skip evidence.
       DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION: ${{ github.event_name == 'repository_dispatch' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
