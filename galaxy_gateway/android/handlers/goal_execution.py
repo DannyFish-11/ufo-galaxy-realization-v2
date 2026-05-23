@@ -1259,7 +1259,8 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             _ger_android_payload_grade = _AIPGrade.COMPAT_DEGRADED.value
     except Exception as _grade_err:
         logger.debug(
-            "handle_goal_execution_result: closure-grade assessment skipped (non-fatal): %s",
+            "handle_goal_execution_result: closure-grade assessment failed; "
+            "defaulting to closure_grade_eligible=True for backward compatibility: %s",
             _grade_err,
         )
         _ger_closure_grade_eligible = True

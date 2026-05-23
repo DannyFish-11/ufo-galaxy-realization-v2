@@ -645,7 +645,7 @@ class UnifiedResultIngress:
         if not event.closure_grade_eligible:
             grade = event.android_payload_grade or AndroidIngressPayloadGrade.UNCLASSIFIED.value
             outcome.closure_grade_ineligible_reason = (
-                f"android_payload_grade:{grade}"
+                f"Payload not eligible for canonical closure due to grade: {grade}"
             )
         completion_lineage = self._build_completion_lineage(event)
         outcome.completion_lineage = dict(completion_lineage)
