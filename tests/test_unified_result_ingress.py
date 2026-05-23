@@ -1814,6 +1814,21 @@ class TestReplayOrderingAdjudication:
         assert outcome.is_fully_closed is False
         assert "android_dedupe_contract" in outcome.dedupe_contract_evidence
 
+    def test_K07c_inline_fallback_dedupe_contract_produces_machine_readable_evidence(self):
+        ingress = _make_isolated_replay_ingress()
+        action, reason, evidence = ingress._evaluate_cross_repo_dedupe_contract_fallback(
+            message_type="task_result",
+            wire_message={"type": "task_result", "payload": {"task_id": "t-1"}},
+            error="simulated_contract_import_error",
+        )
+
+        assert action == "degrade"
+        assert reason == "missing_canonical_result_dedupe_fields"
+        assert evidence["fallback"]["used"] is True
+        assert "contract_error" in evidence["fallback"]
+        assert evidence["android_dedupe_contract"]["contract_class"] == "result"
+        assert evidence["android_dedupe_contract"]["evidence"]["idempotency_key_present"] is False
+
     def test_K08_non_replay_channel_not_adjudicated(self):
         """Non-REPLAY channel events must NOT have replay ordering adjudication run."""
         ingress = _make_isolated_replay_ingress()

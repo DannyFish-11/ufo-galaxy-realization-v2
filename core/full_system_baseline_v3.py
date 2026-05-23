@@ -436,6 +436,9 @@ class BlockingGap:
     description: str = ""
     affected_subsystems: List[str] = field(default_factory=list)
     requires_android_repo: bool = False
+    closure_scope: str = "repo_local"
+    blocker_classification: str = ""
+    execution_priority: str = "medium"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -443,6 +446,9 @@ class BlockingGap:
             "description": self.description,
             "affected_subsystems": list(self.affected_subsystems),
             "requires_android_repo": self.requires_android_repo,
+            "closure_scope": self.closure_scope,
+            "blocker_classification": self.blocker_classification,
+            "execution_priority": self.execution_priority,
         }
 
 
@@ -468,6 +474,10 @@ class OpenQuestion:
     question: str = ""
     signal_source: str = ""
     currently_answerable: bool = False
+    closure_scope: str = "repo_local"
+    blocker_classification: str = ""
+    execution_priority: str = "medium"
+    next_action_hint: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -475,6 +485,10 @@ class OpenQuestion:
             "question": self.question,
             "signal_source": self.signal_source,
             "currently_answerable": self.currently_answerable,
+            "closure_scope": self.closure_scope,
+            "blocker_classification": self.blocker_classification,
+            "execution_priority": self.execution_priority,
+            "next_action_hint": self.next_action_hint,
         }
 
 
@@ -1273,11 +1287,17 @@ class FullSystemBaselineV3Evaluator:
                         if status:
                             status_counts[status] = status_counts.get(status, 0) + 1
                 unresolved_risks = report_dict.get("unresolved_risk_summary", [])
+                unresolved_scope_counts = {"repo_local": 0, "cross_repo": 0, "runtime_proof": 0}
+                if isinstance(unresolved_risks, list):
+                    for risk in unresolved_risks:
+                        scope = self._classify_closure_scope(risk)
+                        unresolved_scope_counts[scope] = unresolved_scope_counts.get(scope, 0) + 1
                 grounding = {
                     "acceptance_verdict": str(report_dict.get("verdict", "")),
                     "is_fully_operational": bool(report_dict.get("is_fully_operational", False)),
                     "dimension_status_counts": status_counts,
                     "unresolved_risk_count": len(unresolved_risks) if isinstance(unresolved_risks, list) else 0,
+                    "unresolved_scope_counts": unresolved_scope_counts,
                     "cross_repo_blocked": any(
                         self._text_signals_cross_repo_gap(risk)
                         for risk in (unresolved_risks if isinstance(unresolved_risks, list) else [])
@@ -1361,6 +1381,64 @@ class FullSystemBaselineV3Evaluator:
                 "android repo",
             )
         )
+
+    @staticmethod
+    def _text_signals_runtime_proof_gap(value: Any) -> bool:
+        normalized = str(value or "").lower()
+        return any(
+            token in normalized
+            for token in (
+                "runtime proof",
+                "staging",
+                "real transport",
+                "nats",
+                "fabric",
+                "distributed",
+                "multi-node",
+                "reconnect",
+                "recovery",
+                "end-to-end",
+                "harness",
+            )
+        )
+
+    def _classify_closure_scope(self, text: Any, *, requires_android_repo: bool = False) -> str:
+        if requires_android_repo or self._text_signals_cross_repo_gap(text):
+            return "cross_repo"
+        if self._text_signals_runtime_proof_gap(text):
+            return "runtime_proof"
+        return "repo_local"
+
+    def _classify_blocker(self, text: Any) -> str:
+        normalized = str(text or "").lower()
+        if "authority" in normalized:
+            return "authority_gap"
+        if "fresh" in normalized or "stale" in normalized:
+            return "freshness_gap"
+        if "contract" in normalized or "schema" in normalized:
+            return "contract_gap"
+        if self._text_signals_runtime_proof_gap(normalized):
+            return "runtime_proof_gap"
+        if "not importable" in normalized or "missing" in normalized or "absent" in normalized:
+            return "implementation_gap"
+        return "closure_gap"
+
+    def _classify_priority(self, scope: str, blocker_classification: str) -> str:
+        if blocker_classification in {"authority_gap", "freshness_gap"}:
+            return "high"
+        if scope in {"cross_repo", "runtime_proof"}:
+            return "high"
+        if blocker_classification in {"contract_gap", "implementation_gap"}:
+            return "medium"
+        return "low"
+
+    def _annotate_blocking_gap(self, gap: BlockingGap) -> BlockingGap:
+        scope = self._classify_closure_scope(gap.description, requires_android_repo=gap.requires_android_repo)
+        blocker_classification = self._classify_blocker(gap.description)
+        gap.closure_scope = scope
+        gap.blocker_classification = blocker_classification
+        gap.execution_priority = self._classify_priority(scope, blocker_classification)
+        return gap
 
     @staticmethod
     def _derive_android_evidence_state(
@@ -1457,6 +1535,8 @@ class FullSystemBaselineV3Evaluator:
         subsystems: List[SubsystemEntry],
         verdict: V3BaselineVerdict,
         android_evidence_state: Dict[str, Any],
+        blocking_gaps: List[BlockingGap],
+        open_questions: List[OpenQuestion],
     ) -> Dict[str, Any]:
         subsystem_scorecard: Dict[str, Any] = {}
         totals = {
@@ -1485,11 +1565,23 @@ class FullSystemBaselineV3Evaluator:
             if stage["blocked_by_missing_cross_repo_evidence"]:
                 totals["blocked_by_missing_cross_repo_evidence_count"] += 1
             subsystem_scorecard[entry.subsystem_id] = stage
+        blocker_scope_counts = {"repo_local": 0, "cross_repo": 0, "runtime_proof": 0}
+        for gap in blocking_gaps:
+            scope = str(gap.closure_scope or "repo_local")
+            blocker_scope_counts[scope] = blocker_scope_counts.get(scope, 0) + 1
+
+        open_question_scope_counts = {"repo_local": 0, "cross_repo": 0, "runtime_proof": 0}
+        for question in open_questions:
+            scope = str(question.closure_scope or "repo_local")
+            open_question_scope_counts[scope] = open_question_scope_counts.get(scope, 0) + 1
+
         return {
             "overall": {
                 "verdict": verdict.value,
                 "android_evidence_present": bool(android_evidence_state.get("detected", False)),
                 "android_evidence_state": dict(android_evidence_state),
+                "blocking_gap_scope_counts": blocker_scope_counts,
+                "open_question_scope_counts": open_question_scope_counts,
                 **totals,
             },
             "subsystems": subsystem_scorecard,
@@ -1621,7 +1713,7 @@ class FullSystemBaselineV3Evaluator:
                     )
                 )
 
-        return gaps
+        return [self._annotate_blocking_gap(gap) for gap in gaps]
 
     # ------------------------------------------------------------------
     # Open question synthesis
@@ -1629,7 +1721,7 @@ class FullSystemBaselineV3Evaluator:
 
     def _build_open_questions(self, android_evidence_state: Dict[str, Any]) -> List[OpenQuestion]:
         android_detected = bool(android_evidence_state.get("detected", False))
-        return [
+        questions = [
             OpenQuestion(
                 question_id="android_runtime_signal_flow_active",
                 question=(
@@ -1639,6 +1731,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
                 currently_answerable=android_detected,
+                next_action_hint="Run Android protected CI and verify canonical evidence artifact delivery into V2.",
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1650,6 +1743,7 @@ class FullSystemBaselineV3Evaluator:
                     "core.distributed_release_gate_skeleton " "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
                 ),
                 currently_answerable=self._try_import("core.distributed_release_gate_skeleton") is not None,
+                next_action_hint="Verify release_blocking_gate workflow blocks merges when critical gate dimensions fail.",
             ),
             OpenQuestion(
                 question_id="recovery_reconnect_e2e_proven",
@@ -1659,6 +1753,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=("tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"),
                 currently_answerable=False,
+                next_action_hint="Run dual-runtime cross-repo harness against induced reconnect/replay failure scenarios.",
             ),
             OpenQuestion(
                 question_id="nats_distributed_runtime_real",
@@ -1668,6 +1763,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.agent_bus_fabric or NATS runtime logs",
                 currently_answerable=False,
+                next_action_hint="Produce runtime proof artifact from real NATS/fabric execution path before claiming closure.",
             ),
             OpenQuestion(
                 question_id="dual_repo_ci_gate_enforced",
@@ -1677,8 +1773,16 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=".github/workflows/dual_repo_reality_audit.yml",
                 currently_answerable=False,
+                next_action_hint="Confirm CI protected branch enforcement from dual-repo reality audit checks.",
             ),
         ]
+        for question in questions:
+            scope = self._classify_closure_scope(question.question)
+            blocker_classification = self._classify_blocker(question.question)
+            question.closure_scope = scope
+            question.blocker_classification = blocker_classification
+            question.execution_priority = self._classify_priority(scope, blocker_classification)
+        return questions
 
     # ------------------------------------------------------------------
     # Top-level verdict derivation
@@ -1773,6 +1877,11 @@ class FullSystemBaselineV3Evaluator:
             "cross_repo_blocked="
             f"{overall_scorecard.get('blocked_by_missing_cross_repo_evidence_count', 0)}"
         )
+        lines.append(
+            "Closure scope breakdown: "
+            f"gaps={overall_scorecard.get('blocking_gap_scope_counts', {})}, "
+            f"questions={overall_scorecard.get('open_question_scope_counts', {})}"
+        )
         lines.append(f"Blocking gaps: {len(blocking_gaps)}")
         if blocking_gaps:
             lines.append("Top blocking gaps:")
@@ -1818,7 +1927,13 @@ class FullSystemBaselineV3Evaluator:
         if cross_report:
             evidence_linkage["cross_repo_evidence_pipeline_report"] = cross_report
         evidence_linkage["android_evidence_state"] = dict(android_evidence_state)
-        scorecard = self._build_scorecard(subsystems, verdict, android_evidence_state)
+        scorecard = self._build_scorecard(
+            subsystems,
+            verdict,
+            android_evidence_state,
+            blocking_gaps,
+            open_questions,
+        )
         summary = self._build_summary(
             verdict,
             subsystems,

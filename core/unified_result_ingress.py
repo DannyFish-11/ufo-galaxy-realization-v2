@@ -95,6 +95,25 @@ REPLAY_ORDERING_BLOCKING_DECISIONS = frozenset(
     }
 )
 
+ANDROID_RESULT_DEDUPE_MESSAGE_TYPES = frozenset(
+    {
+        "task_result",
+        "goal_result",
+        "goal_execution_result",
+    }
+)
+
+ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES = frozenset(
+    {
+        "reconciliation_signal",
+        "handoff_result",
+        "handoff_failure",
+        "handoff_envelope_v2_result",
+        "device_state_snapshot",
+        "device_execution_event",
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -2050,16 +2069,132 @@ class UnifiedResultIngress:
             )
         except Exception as exc:
             logger.debug(
-                "unified_result_ingress: cross-repo dedupe contract check skipped (non-fatal): %s",
+                "unified_result_ingress: cross-repo dedupe contract import/eval failed, using inline fallback: %s",
                 exc,
             )
-            return "", "", {}
+            action, reason, evidence = self._evaluate_cross_repo_dedupe_contract_fallback(
+                message_type=event.raw_message_type or event.normalized_result_kind,
+                wire_message=wire_message,
+                error=str(exc),
+            )
+            return action, reason, evidence
 
         if decision is None:
-            return "", "", {}
+            action, reason, evidence = self._evaluate_cross_repo_dedupe_contract_fallback(
+                message_type=event.raw_message_type or event.normalized_result_kind,
+                wire_message=wire_message,
+                error="contract_returned_none",
+            )
+            return action, reason, evidence
         if decision.action == "accept":
             return "", "", {"android_dedupe_contract": decision.to_dict()}
         return decision.action, decision.reason, {"android_dedupe_contract": decision.to_dict()}
+
+    @staticmethod
+    def _extract_cross_repo_text_field(wire_message: Dict[str, Any], *field_names: str) -> str:
+        payload = wire_message.get("payload")
+        payload_mapping = payload if isinstance(payload, dict) else {}
+        schema_gate = payload_mapping.get("schema_gate")
+        schema_gate_mapping = schema_gate if isinstance(schema_gate, dict) else {}
+        for field_name in field_names:
+            for candidate in (
+                wire_message.get(field_name),
+                payload_mapping.get(field_name),
+                schema_gate_mapping.get(field_name),
+            ):
+                if candidate is not None and str(candidate).strip():
+                    return str(candidate).strip()
+        return ""
+
+    def _evaluate_cross_repo_dedupe_contract_fallback(
+        self,
+        *,
+        message_type: str,
+        wire_message: Dict[str, Any],
+        error: str,
+    ) -> tuple[str, str, Dict[str, Any]]:
+        normalized_type = str(message_type or "").strip().lower()
+        fallback_evidence = {
+            "fallback": {
+                "used": True,
+                "reason": "inline_unified_result_ingress_fallback",
+                "contract_error": str(error or ""),
+            }
+        }
+        if normalized_type in ANDROID_RESULT_DEDUPE_MESSAGE_TYPES:
+            task_id = self._extract_cross_repo_text_field(wire_message, "task_id", "goal_id")
+            idempotency_key = self._extract_cross_repo_text_field(wire_message, "idempotency_key")
+            completion_emission_id = self._extract_cross_repo_text_field(
+                wire_message,
+                "completion_emission_id",
+                "emission_id",
+                "completion_id",
+                "result_id",
+            )
+            missing_fields = []
+            if not task_id:
+                missing_fields.append("task_id")
+            if not idempotency_key:
+                missing_fields.append("idempotency_key")
+            if not completion_emission_id:
+                missing_fields.append("completion_emission_id")
+            reason = "canonical_dedupe_contract_satisfied" if not missing_fields else "missing_canonical_result_dedupe_fields"
+            action = "" if not missing_fields else "degrade"
+            fallback_evidence["android_dedupe_contract"] = {
+                "action": "accept" if not missing_fields else "degrade",
+                "message_type": normalized_type,
+                "contract_class": "result",
+                "reason": reason,
+                "evidence": {
+                    "task_id_present": bool(task_id),
+                    "idempotency_key_present": bool(idempotency_key),
+                    "completion_emission_id_present": bool(completion_emission_id),
+                    "missing_fields": missing_fields,
+                },
+            }
+            return action, reason if action else "", fallback_evidence
+
+        if normalized_type in ANDROID_RECONCILIATION_DEDUPE_MESSAGE_TYPES:
+            subject_identity = self._extract_cross_repo_text_field(
+                wire_message,
+                "contract_id",
+                "session_id",
+                "runtime_session_id",
+            )
+            reconciliation_identity = self._extract_cross_repo_text_field(
+                wire_message,
+                "reconciliation_id",
+                "signal_id",
+                "handoff_id",
+                "event_id",
+                "result_id",
+                "completion_emission_id",
+            )
+            missing_fields = []
+            if not subject_identity:
+                missing_fields.append("contract_id|session_id")
+            if not reconciliation_identity:
+                missing_fields.append("reconciliation_id|signal_id|handoff_id")
+            reason = (
+                "canonical_dedupe_contract_satisfied"
+                if not missing_fields
+                else "missing_canonical_reconciliation_dedupe_fields"
+            )
+            action = "" if not missing_fields else "degrade"
+            fallback_evidence["android_dedupe_contract"] = {
+                "action": "accept" if not missing_fields else "degrade",
+                "message_type": normalized_type,
+                "contract_class": "reconciliation",
+                "reason": reason,
+                "evidence": {
+                    "subject_identity_present": bool(subject_identity),
+                    "reconciliation_identity_present": bool(reconciliation_identity),
+                    "missing_fields": missing_fields,
+                },
+            }
+            return action, reason if action else "", fallback_evidence
+
+        return "", "", {}
 
     def _build_completion_lineage(
         self,
