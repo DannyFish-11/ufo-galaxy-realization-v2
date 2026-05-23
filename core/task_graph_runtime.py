@@ -199,6 +199,18 @@ GRAPH_RUNTIME_CONVERGENCE_AUTHORITY: str = "GRAPH_RUNTIME_CONVERGENCE_V1"
 #: contribution, and lineage queries are all backed by real runtime writes.
 TASK_GRAPH_RUNTIME_REALIZATION_AUTHORITY: str = "TASK_GRAPH_RUNTIME_REALIZATION_V1"
 
+#: Stage 10 sentinel: register_node_raw() convenience method added so that
+#: lightweight callers (WakeRouter, etc.) can register task-graph nodes without
+#: importing or constructing GraphNode directly.
+#: Also: register_canonical_task() now reads intent.requested_action as a
+#: fallback when intent.tool_name is absent, fixing CanonicalTask tool_name
+#: propagation into the task graph.
+TASK_GRAPH_STAGE10_CONVERGENCE: str = (
+    "TASK_GRAPH_STAGE10_V1: register_node_raw() added; "
+    "register_canonical_task() reads requested_action fallback for tool_name; "
+    "WakeRouter routing decisions now registered in TaskGraphRuntime."
+)
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -762,6 +774,50 @@ class TaskGraphRuntime:
         )
         return node
 
+    def register_node_raw(
+        self,
+        task_id: str,
+        *,
+        tool_name: str = "",
+        trace_id: str = "",
+        session_id: str = "",
+        device_id: str = "",
+        contributor: "WorkflowContributorKind" = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> GraphNode:
+        """Convenience wrapper: build a ``GraphNode`` from raw fields and register it.
+
+        Stage 10: Added to allow lightweight callers (e.g. WakeRouter) to register
+        a task-graph node without importing or constructing ``GraphNode`` directly.
+        Idempotent: if a node for *task_id* already exists, the existing node is
+        returned unchanged.
+
+        Args:
+            task_id:     Unique task identifier.
+            tool_name:   Tool / command / event type name.
+            trace_id:    Distributed trace id.
+            session_id:  Session correlation id.
+            device_id:   Target device id (empty = unassigned).
+            contributor: Which orchestration layer is registering the node.
+            metadata:    Optional dict of extra metadata.
+
+        Returns:
+            The registered (or pre-existing) ``GraphNode``.
+        """
+        if contributor is None:
+            contributor = WorkflowContributorKind.UNKNOWN
+        node = GraphNode(
+            task_id=task_id,
+            trace_id=trace_id,
+            session_id=session_id,
+            tool_name=tool_name,
+            device_id=device_id,
+            state=GraphNodeState.QUEUED,
+            contributor=contributor,
+            metadata=dict(metadata or {}),
+        )
+        return self.register_node(node)
+
     def get_node_by_task_id(self, task_id: str) -> Optional[GraphNode]:
         """Return the node registered for the given ``task_id``, or ``None``."""
         return self._nodes.get(task_id)
@@ -1031,7 +1087,16 @@ class TaskGraphRuntime:
         session_id = getattr(canonical_task, "session_id", "") or ""
 
         intent = getattr(canonical_task, "intent", None)
-        tool_name = getattr(intent, "tool_name", "") or "" if intent else ""
+        # TaskIntent uses 'requested_action' as the action/tool field.
+        # Fall back from tool_name → requested_action to handle both
+        # TaskEnvelope-like objects and proper CanonicalTask instances.
+        tool_name = ""
+        if intent is not None:
+            tool_name = (
+                getattr(intent, "tool_name", "") or
+                getattr(intent, "requested_action", "") or
+                ""
+            )
 
         routing = getattr(canonical_task, "routing", None)
         device_id = getattr(routing, "selected_device_id", "") or "" if routing else ""
