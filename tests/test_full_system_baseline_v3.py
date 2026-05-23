@@ -176,6 +176,7 @@ class TestGroupB_DataClassRoundTrips:
             scorecard={"overall": {"code_present_count": 1}},
             summary="test summary",
             generated_at="2026-01-01T00:00:00+00:00",
+            android_evidence_state={"detected": True, "complete": False},
         )
         d = report.to_dict()
         recovered = V3BaselineReport.from_dict(d)
@@ -185,6 +186,7 @@ class TestGroupB_DataClassRoundTrips:
         assert len(recovered.blocking_gaps) == 1
         assert len(recovered.open_questions) == 1
         assert recovered.scorecard == report.scorecard
+        assert recovered.android_evidence_state == report.android_evidence_state
 
     def test_B03_v3_baseline_report_to_json_valid(self) -> None:
         report = V3BaselineReport(overall_verdict=V3BaselineVerdict.insufficient_evidence_to_conclude)
@@ -332,6 +334,21 @@ class TestGroupD_BaselineReport:
                 f"Subsystem {entry.subsystem_id!r} in blocking_subsystems " f"but state {entry.state!r} is not blocking"
             )
 
+    def test_D13_android_evidence_state_exposes_precise_closure_dimensions(self) -> None:
+        report = build_v3_baseline_report()
+        state = report.android_evidence_state
+        required = {
+            "detected",
+            "complete",
+            "fresh",
+            "authority_clear",
+            "routine_cross_repo_delivery",
+            "closure_grade",
+            "pipeline_verdict",
+            "closure_blocking_reasons",
+        }
+        assert required.issubset(set(state.keys()))
+
 
 # ---------------------------------------------------------------------------
 # Group E — Evidence closure gate
@@ -404,6 +421,63 @@ class TestGroupE_EvidenceClosureGate:
         assert "closure_level" in parsed
         assert "verdict" in parsed
         assert "fail_reasons" in parsed
+
+    def test_E06_standard_gate_fails_when_android_evidence_detected_but_not_closure_grade(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+        import core.full_system_baseline_v3 as baseline_mod
+
+        synthetic = V3BaselineReport(
+            overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,
+            subsystems=_make_subsystems([SubsystemState.implemented_but_not_closed] * 12),
+            android_evidence_present=True,
+            android_evidence_state={
+                "detected": True,
+                "complete": False,
+                "fresh": True,
+                "authority_clear": True,
+                "routine_cross_repo_delivery": True,
+                "closure_grade": False,
+                "closure_blocking_reasons": ["android_evidence_not_complete"],
+            },
+        )
+        monkeypatch.setattr(baseline_mod, "build_v3_baseline_report", lambda: synthetic)
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        assert result.gate_passed is False
+        assert any("closure-grade" in reason for reason in result.fail_reasons)
+
+    def test_E07_standard_gate_passes_for_closure_grade_android_evidence(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+        import core.full_system_baseline_v3 as baseline_mod
+
+        synthetic = V3BaselineReport(
+            overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,
+            subsystems=_make_subsystems([SubsystemState.implemented_but_not_closed] * 12),
+            android_evidence_present=True,
+            android_evidence_state={
+                "detected": True,
+                "complete": True,
+                "fresh": True,
+                "authority_clear": True,
+                "routine_cross_repo_delivery": True,
+                "closure_grade": True,
+                "closure_blocking_reasons": [],
+            },
+        )
+        monkeypatch.setattr(baseline_mod, "build_v3_baseline_report", lambda: synthetic)
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        assert result.gate_passed is True
 
 
 # ---------------------------------------------------------------------------

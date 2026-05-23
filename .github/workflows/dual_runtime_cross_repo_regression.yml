@@ -74,6 +74,25 @@ jobs:
 
           out_path = Path(".dual_runtime_cross_repo_evidence.json")
           out_path.write_text(json.dumps(payload), encoding="utf-8")
+
+          participant_payload = payload.get("android_participant_evidence")
+          if not isinstance(participant_payload, dict):
+              participant_payload = payload
+          participant_path = Path(".android_participant_evidence.json")
+          participant_path.write_text(
+              json.dumps(participant_payload),
+              encoding="utf-8",
+          )
+
+          android_evaluator_artifacts_bundle = payload.get("android_evaluator_artifacts")
+          if android_evaluator_artifacts_bundle is None:
+              android_evaluator_artifacts_bundle = payload.get("evaluator_artifacts")
+          if isinstance(android_evaluator_artifacts_bundle, list):
+              evaluator_path = Path(".android_evaluator_artifacts.json")
+              evaluator_path.write_text(json.dumps(android_evaluator_artifacts_bundle), encoding="utf-8")
+          else:
+              evaluator_path = None
+
           github_env = os.environ.get("GITHUB_ENV")
           if github_env:
               with open(github_env, "a", encoding="utf-8") as f:
@@ -81,23 +100,61 @@ jobs:
                       "DUAL_RUNTIME_CROSS_REPO_EVIDENCE_PATH="
                       f"{out_path.resolve()}\n"
                   )
+                  f.write(
+                      "ANDROID_PARTICIPANT_EVIDENCE_PATH="
+                      f"{participant_path.resolve()}\n"
+                  )
+                  if evaluator_path is not None:
+                      f.write(
+                          "ANDROID_EVALUATOR_ARTIFACTS_PATH="
+                          f"{evaluator_path.resolve()}\n"
+                      )
           print(f"Materialized cross-repo evidence: {out_path.resolve()}")
+          print(f"Materialized participant evidence: {participant_path.resolve()}")
+          if evaluator_path is not None:
+              print(f"Materialized evaluator artifact bundle: {evaluator_path.resolve()}")
           PY
       - name: Build machine-readable dual-runtime evidence report
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
+          from core.canonical_cross_repo_evidence_pipeline import (
+              build_canonical_cross_repo_evidence_report,
+          )
+          from core.android_evaluator_artifact_ingress import (
+              ingest_android_evaluator_artifact,
+          )
           from tests.integration._dual_runtime_cross_repo_harness import (
               build_dual_runtime_cross_repo_evidence_report_from_environment,
           )
+
+          evaluator_artifacts_path = os.environ.get("ANDROID_EVALUATOR_ARTIFACTS_PATH", "").strip()
+          if evaluator_artifacts_path and Path(evaluator_artifacts_path).is_file():
+              try:
+                  artifacts = json.loads(Path(evaluator_artifacts_path).read_text(encoding="utf-8"))
+              except Exception as exc:
+                  print(f"Warning: unable to parse ANDROID_EVALUATOR_ARTIFACTS_PATH: {exc}")
+                  artifacts = []
+              if isinstance(artifacts, list):
+                  for item in artifacts:
+                      if isinstance(item, dict):
+                          ingest_android_evaluator_artifact(item)
 
           report = build_dual_runtime_cross_repo_evidence_report_from_environment()
           out_path = Path("dual_runtime_cross_repo_evidence_report.json")
           out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
           print(f"Evidence report state: {report.get('overall_state')}")
           print(f"Evidence report written: {out_path.resolve()}")
+
+          canonical = build_canonical_cross_repo_evidence_report()
+          canonical_dict = canonical.to_dict()
+          canonical_path = Path("canonical_cross_repo_evidence_report.json")
+          canonical_path.write_text(json.dumps(canonical_dict, indent=2), encoding="utf-8")
+          print(f"Canonical pipeline verdict: {canonical_dict.get('pipeline_verdict')}")
+          print(f"Canonical report written: {canonical_path.resolve()}")
           PY
       - name: Run dual-runtime cross-repo regression entry points
         env:
@@ -124,13 +181,51 @@ jobs:
 
           report = json.loads(report_path.read_text(encoding="utf-8"))
           overall_state = str(report.get("overall_state", "")).strip().lower()
+          canonical_report_path = Path("canonical_cross_repo_evidence_report.json")
+          if not canonical_report_path.is_file():
+              raise SystemExit("Missing canonical_cross_repo_evidence_report.json")
+          canonical_report = json.loads(canonical_report_path.read_text(encoding="utf-8"))
+          sources = canonical_report.get("sources", [])
+          if not isinstance(sources, list):
+              sources = []
+
+          def source_status(source_id: str) -> str:
+              for source in sources:
+                  if isinstance(source, dict) and str(source.get("source_id", "")).strip().lower() == source_id:
+                      return str(source.get("status", "")).strip().lower()
+              return ""
+
+          android_evidence_state = {
+              "detected": any(
+                  source_status(source_id) in {"present", "stale", "partial", "conflicting"}
+                  for source_id in ("real_device_verification", "readiness_evidence")
+              ),
+              "complete": bool(canonical_report.get("primary_sources_complete", False))
+              and str(canonical_report.get("pipeline_verdict", "")).strip().lower() == "complete",
+              "fresh": bool(canonical_report.get("primary_sources_fresh", False)),
+              "authority_clear": len(canonical_report.get("authority_unclear_sources", []) or []) == 0,
+              "routine_cross_repo_delivery": all(
+                  source_status(source_id) == "present"
+                  for source_id in ("participant_lifecycle_truth", "task_result_runtime")
+              ),
+          }
+          android_evidence_state["closure_grade"] = all(android_evidence_state.values())
+          state_out = Path("android_cross_repo_closure_state.json")
+          state_out.write_text(json.dumps(android_evidence_state, indent=2), encoding="utf-8")
+
           print(f"Protected mode: {protected}")
           print(f"Dual-runtime evidence state: {overall_state}")
+          print(f"Android closure state: {android_evidence_state}")
 
           if protected and overall_state != "evidenced":
               raise SystemExit(
                   "Protected dual-runtime verification requires overall_state=evidenced; "
                   f"got {overall_state!r}."
+              )
+          if protected and not android_evidence_state["closure_grade"]:
+              raise SystemExit(
+                  "Protected dual-runtime verification requires closure-grade Android evidence "
+                  "(detected+complete+fresh+authority_clear+routine_cross_repo_delivery)."
               )
           PY
       - name: Upload dual-runtime cross-repo evidence artifacts
@@ -140,6 +235,10 @@ jobs:
           name: dual-runtime-cross-repo-evidence
           path: |
             .dual_runtime_cross_repo_evidence.json
+            .android_participant_evidence.json
+            .android_evaluator_artifacts.json
             dual_runtime_cross_repo_evidence_report.json
+            canonical_cross_repo_evidence_report.json
+            android_cross_repo_closure_state.json
           if-no-files-found: warn
           retention-days: 30
