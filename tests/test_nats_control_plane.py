@@ -855,6 +855,27 @@ class TestNATSConnected:
         assert topology["worker-down-01"]["shutdown_reason"] == "graceful_shutdown"
 
     @pytest.mark.asyncio
+    async def test_master_brain_handle_worker_shutdown_updates_existing_topology(self):
+        """Direct shutdown handling updates topology to offline state."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import WorkerRegistrationModel, WorkerShutdownModel
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus)
+        await brain.register_worker(WorkerRegistrationModel(worker_id="worker-down-02", device_type="linux"))
+
+        result = await brain.handle_worker_shutdown(
+            WorkerShutdownModel(worker_id="worker-down-02", reason="maintenance", drain_timeout_s=15)
+        )
+        topology = brain.get_worker_topology()
+
+        assert result.get("success") is True
+        assert topology["worker-down-02"]["status"] == "offline"
+        assert topology["worker-down-02"]["shutdown_reason"] == "maintenance"
+        assert topology["worker-down-02"]["drain_timeout_s"] == 15
+        assert topology["worker-down-02"]["alive"] is False
+
+    @pytest.mark.asyncio
     async def test_master_brain_dispatch_rejects_noop_publish_success(self):
         """MasterBrain dispatch must not report distributed success when publish is noop."""
         from core.master_brain import MasterBrain

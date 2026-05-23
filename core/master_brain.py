@@ -302,6 +302,7 @@ class MasterBrain:
             "status": "idle",
             "last_heartbeat": time.time(),
             "registered_at": datetime.now().isoformat(),
+            "force_offline": False,
         }
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
         logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
@@ -312,24 +313,27 @@ class MasterBrain:
         wid = shutdown.worker_id
         now_iso = datetime.now().isoformat()
         existing = self._workers.get(wid, {})
-        self._workers[wid] = {
-            "worker_id": wid,
-            "hostname": existing.get("hostname", ""),
-            "device_type": existing.get("device_type", "unknown"),
-            "platform": existing.get("platform", ""),
-            "capabilities": existing.get("capabilities", []),
-            "supported_languages": existing.get("supported_languages", []),
-            "has_docker": existing.get("has_docker", False),
-            "has_gpu": existing.get("has_gpu", False),
-            "memory_total_mb": existing.get("memory_total_mb", 0),
-            "cpu_cores": existing.get("cpu_cores", 0),
+        entry = dict(existing)
+        entry.setdefault("worker_id", wid)
+        entry.setdefault("hostname", "")
+        entry.setdefault("device_type", "unknown")
+        entry.setdefault("platform", "")
+        entry.setdefault("capabilities", [])
+        entry.setdefault("supported_languages", [])
+        entry.setdefault("has_docker", False)
+        entry.setdefault("has_gpu", False)
+        entry.setdefault("memory_total_mb", 0)
+        entry.setdefault("cpu_cores", 0)
+        entry.setdefault("last_heartbeat", 0.0)
+        entry.setdefault("registered_at", now_iso)
+        entry.update({
             "status": "offline",
-            "last_heartbeat": 0.0,
-            "registered_at": existing.get("registered_at", now_iso),
+            "force_offline": True,
             "shutdown_reason": shutdown.reason,
             "shutdown_at": now_iso,
             "drain_timeout_s": shutdown.drain_timeout_s,
-        }
+        })
+        self._workers[wid] = entry
         _try_emit_event(
             "WORKER_SHUTDOWN",
             {"worker_id": wid, "reason": shutdown.reason, "drain_timeout_s": shutdown.drain_timeout_s},
@@ -349,6 +353,7 @@ class MasterBrain:
             "active_tasks": heartbeat.active_tasks,
             "cpu_usage_percent": heartbeat.cpu_usage_percent,
             "memory_usage_percent": heartbeat.memory_usage_percent,
+            "force_offline": False,
         })
         return {"success": True}
 
@@ -358,8 +363,10 @@ class MasterBrain:
         topology = {}
         for wid, info in self._workers.items():
             alive = (now - info.get("last_heartbeat", 0)) < _HEARTBEAT_TIMEOUT_S
+            if info.get("force_offline"):
+                alive = False
             topology[wid] = {**info, "alive": alive}
-            if not alive and info.get("status") != "dead":
+            if not alive and info.get("status") not in ("dead", "offline"):
                 info["status"] = "dead"
                 _try_emit_event("WORKER_DEAD", {"worker_id": wid})
         return topology
@@ -445,21 +452,34 @@ class MasterBrain:
         if not isinstance(data, dict):
             return None
 
-        if "worker_id" in data and direct_required_key in data:
+        if MasterBrain._has_required_lifecycle_fields(data, direct_required_key=direct_required_key):
             return data
         if isinstance(data.get(payload_key), dict):
-            return data[payload_key]
+            nested = data[payload_key]
+            if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                return nested
 
         payload = data.get("payload")
         if isinstance(payload, dict):
-            if "worker_id" in payload and direct_required_key in payload:
+            if MasterBrain._has_required_lifecycle_fields(payload, direct_required_key=direct_required_key):
                 return payload
             if isinstance(payload.get(payload_key), dict):
-                return payload[payload_key]
+                nested = payload[payload_key]
+                if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                    return nested
 
         if data.get("type") == event_type and isinstance(data.get(payload_key), dict):
-            return data[payload_key]
+            nested = data[payload_key]
+            if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                return nested
         return None
+
+    @staticmethod
+    def _has_required_lifecycle_fields(data: dict, *, direct_required_key: str) -> bool:
+        """Validate minimal worker lifecycle payload required fields."""
+        worker_id = data.get("worker_id")
+        required = data.get(direct_required_key)
+        return bool(worker_id) and required not in (None, "")
 
     # ── Health / Status (constraint C8) ─────────────────────────────────────
 
