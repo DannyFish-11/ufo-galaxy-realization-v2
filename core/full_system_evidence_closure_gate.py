@@ -194,15 +194,18 @@ def evaluate_evidence_closure_gate(
     # --- Android evidence check ---
     android_state = dict(getattr(report, "android_evidence_state", {}) or {})
     if not android_state:
+        detected = bool(report.android_evidence_present)
         android_state = {
-            "detected": bool(report.android_evidence_present),
-            "complete": bool(report.android_evidence_present),
-            "fresh": bool(report.android_evidence_present),
-            "authority_clear": bool(report.android_evidence_present),
-            "routine_cross_repo_delivery": bool(report.android_evidence_present),
-            "closure_grade": bool(report.android_evidence_present),
+            "detected": detected,
+            "complete": False,
+            "fresh": False,
+            "authority_clear": False,
+            "routine_cross_repo_delivery": False,
+            "closure_grade": False,
             "closure_blocking_reasons": (
-                [] if bool(report.android_evidence_present) else ["android_evidence_not_detected"]
+                ["android_evidence_not_closure_grade_fallback_projection"]
+                if detected
+                else ["android_evidence_not_detected"]
             ),
         }
     android_present = bool(android_state.get("detected", False))

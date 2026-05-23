@@ -1372,13 +1372,16 @@ class FullSystemBaselineV3Evaluator:
         if not isinstance(sources, list):
             sources = []
 
+        status_by_source_id: Dict[str, str] = {}
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            source_id = str(source.get("source_id", "")).strip().lower()
+            if source_id:
+                status_by_source_id[source_id] = str(source.get("status", "")).strip().lower()
+
         def _source_status(source_id: str) -> str:
-            for source in sources:
-                if not isinstance(source, dict):
-                    continue
-                if str(source.get("source_id", "")).strip().lower() == source_id:
-                    return str(source.get("status", "")).strip().lower()
-            return ""
+            return status_by_source_id.get(source_id, "")
 
         primary_statuses = [
             _source_status("real_device_verification"),
@@ -1386,6 +1389,8 @@ class FullSystemBaselineV3Evaluator:
         ]
         detected = any(status in {"present", "stale", "partial", "conflicting"} for status in primary_statuses)
         if not detected:
+            # If the upstream report asserts all PRIMARY sources complete, evidence
+            # must have been observed even when per-source entries are unavailable.
             detected = bool(report_dict.get("primary_sources_complete", False))
 
         complete = bool(report_dict.get("primary_sources_complete", False)) and bool(

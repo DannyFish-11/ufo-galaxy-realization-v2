@@ -84,12 +84,12 @@ jobs:
               encoding="utf-8",
           )
 
-          evaluator_artifacts = payload.get("android_evaluator_artifacts")
-          if evaluator_artifacts is None:
-              evaluator_artifacts = payload.get("evaluator_artifacts")
-          if isinstance(evaluator_artifacts, list):
+          android_evaluator_artifacts_bundle = payload.get("android_evaluator_artifacts")
+          if android_evaluator_artifacts_bundle is None:
+              android_evaluator_artifacts_bundle = payload.get("evaluator_artifacts")
+          if isinstance(android_evaluator_artifacts_bundle, list):
               evaluator_path = Path(".android_evaluator_artifacts.json")
-              evaluator_path.write_text(json.dumps(evaluator_artifacts), encoding="utf-8")
+              evaluator_path.write_text(json.dumps(android_evaluator_artifacts_bundle), encoding="utf-8")
           else:
               evaluator_path = None
 
