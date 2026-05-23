@@ -979,8 +979,9 @@ def _can_degrade_missing_goal_execution_schema_gate(
 
     ``goal_execution_result`` messages with no explicit schema metadata still
     carry enough canonical identity to enter the single truth chain safely when
-    they at least provide task identity and a terminal status.  Explicit schema
-    mismatches remain hard rejects; only missing-schema legacy envelopes are
+    they at least provide task identity and a terminal status. This compat path
+    is intentionally narrow: explicit schema mismatches remain hard rejects, and
+    only legacy missing-schema envelopes with canonical task/status fields are
     downgraded here.
     """
     if gate_reason != "missing_schema_version_metadata":

@@ -1303,17 +1303,23 @@ class FullSystemBaselineV3Evaluator:
 
     @staticmethod
     def _text_signals_cross_repo_gap(value: Any) -> bool:
-        """Return True when *value* text points at a cross-repo evidence gap."""
+        """Return True when *value* text looks like a cross-repo evidence gap.
+
+        This is a fallback heuristic for older subsystem entries that do not yet
+        expose an explicit ``cross_repo_blocked`` grounding signal. Structured
+        grounding data remains the preferred source of truth.
+        """
         normalized = str(value or "").lower()
         return any(
             token in normalized
             for token in (
-                "android",
                 "cross-repo",
                 "dual-repo",
                 "repository_dispatch",
                 "real_device_verification",
                 "readiness_evidence",
+                "android participant",
+                "android repo",
             )
         )
 
