@@ -790,7 +790,8 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         brain = MasterBrain(nats=mock_bus)
         brain._temporal_client = MagicMock()
-        brain._temporal_worker_task = asyncio.create_task(asyncio.sleep(60))
+        brain._temporal_worker = _FakeTemporalWorker()
+        brain._temporal_worker_task = asyncio.create_task(brain._temporal_worker.run())
 
         handle = MagicMock()
         handle.id = "wf-stage9-01"
@@ -820,9 +821,7 @@ class TestNATSConnected:
         brain._temporal_client.start_workflow.assert_awaited_once()
         mock_bus.publish_task_dispatch.assert_not_awaited()
 
-        brain._temporal_worker_task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await brain._temporal_worker_task
+        await brain.stop()
 
     @pytest.mark.asyncio
     async def test_nats_bus_stats_reflect_connected_state(self):
@@ -1350,7 +1349,6 @@ class TestNATSConnected:
             "lifecycle_state": "succeeded",
             "temporal_workflow_type": "code_execution",
         })
-        master_brain.dispatch_task = AsyncMock()
         envelope = TaskEnvelope(
             task_id="stage7-route-01",
             trace_id="trace-stage7-route",

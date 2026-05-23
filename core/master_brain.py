@@ -232,9 +232,11 @@ class MasterBrain:
 
         if worker is not None and hasattr(worker, "shutdown"):
             try:
-                shutdown_result = worker.shutdown()
-                if asyncio.iscoroutine(shutdown_result):
-                    await shutdown_result
+                shutdown = worker.shutdown
+                if asyncio.iscoroutinefunction(shutdown):
+                    await shutdown()
+                else:
+                    shutdown()
             except Exception as exc:
                 logger.warning("MasterBrain: Temporal worker shutdown failed: %s", exc)
 
@@ -1079,6 +1081,7 @@ class MasterBrain:
         try:
             status_enum = status if isinstance(status, TaskStatus) else TaskStatus(str(status))
         except ValueError:
+            logger.warning("MasterBrain: invalid Temporal workflow status %r for task %s", status, task_id)
             status_enum = TaskStatus.FAILED
         completion_state, lifecycle_state, closure_complete, task_success = self._classify_task_result(status_enum)
         snapshot = self._update_task_record(

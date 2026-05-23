@@ -2936,8 +2936,7 @@ class CommandRouter:
                 "target_worker_id": envelope.target,
                 "timeout": envelope.timeout,
             }
-            submit_task = getattr(mb, "execute_distributed_task", mb.dispatch_task)
-            raw = await submit_task(raw_task)
+            raw = await mb.execute_distributed_task(raw_task)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             result = {
                 "request_id": request_id,
