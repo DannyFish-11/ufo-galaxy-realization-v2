@@ -172,13 +172,11 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 FULL_SYSTEM_BASELINE_V3_AUTHORITY: str = (
-    "FULL_SYSTEM_BASELINE_V3_AUTHORITY::"
-    "V3-DUAL-REPO-FULL-SYSTEM-BASELINE::2026-V3"
+    "FULL_SYSTEM_BASELINE_V3_AUTHORITY::" "V3-DUAL-REPO-FULL-SYSTEM-BASELINE::2026-V3"
 )
 
 FULL_SYSTEM_BASELINE_V3_SENTINEL: str = (
-    "FULL_SYSTEM_BASELINE_V3_SENTINEL::"
-    "THIS-MODULE-IS-THE-CANONICAL-V3-BASELINE-SUMMARY"
+    "FULL_SYSTEM_BASELINE_V3_SENTINEL::" "THIS-MODULE-IS-THE-CANONICAL-V3-BASELINE-SUMMARY"
 )
 
 ANDROID_EVIDENCE_ABSENCE_DOWNGRADES_VERDICT_POLICY: str = (
@@ -202,6 +200,7 @@ DECLARED_NOT_PROVEN_BLOCKS_CLOSED_VERDICT_POLICY: str = (
 # ---------------------------------------------------------------------------
 # SubsystemState
 # ---------------------------------------------------------------------------
+
 
 class SubsystemState(str, Enum):
     """Five-state classification for each V3 subsystem entry.
@@ -270,6 +269,7 @@ class SubsystemState(str, Enum):
 # V3SubsystemId
 # ---------------------------------------------------------------------------
 
+
 class V3SubsystemId(str, Enum):
     """Twelve named subsystems covering the full dual-repo architecture.
 
@@ -308,6 +308,7 @@ class V3SubsystemId(str, Enum):
 # ---------------------------------------------------------------------------
 # V3BaselineVerdict
 # ---------------------------------------------------------------------------
+
 
 class V3BaselineVerdict(str, Enum):
     """Four possible top-level verdicts for the V3 full-system baseline.
@@ -363,6 +364,7 @@ class V3BaselineVerdict(str, Enum):
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SubsystemEntry:
     """Per-subsystem V3 state record.
@@ -390,6 +392,7 @@ class SubsystemEntry:
     rationale: str = ""
     evidence_module: str = ""
     known_gaps: List[str] = field(default_factory=list)
+    grounding_signals: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -398,6 +401,7 @@ class SubsystemEntry:
             "rationale": self.rationale,
             "evidence_module": self.evidence_module,
             "known_gaps": list(self.known_gaps),
+            "grounding_signals": dict(self.grounding_signals),
         }
 
     @classmethod
@@ -408,6 +412,7 @@ class SubsystemEntry:
             rationale=str(data.get("rationale", "")),
             evidence_module=str(data.get("evidence_module", "")),
             known_gaps=list(data.get("known_gaps", [])),
+            grounding_signals=dict(data.get("grounding_signals", {})),
         )
 
 
@@ -494,6 +499,9 @@ class V3BaselineReport:
     evidence_linkage:
         Dict mapping subsystem / mechanism names to their source reports.
         Provides traceability back to the underlying evaluators.
+    scorecard:
+        Machine-readable subsystem maturity breakdown distinguishing
+        code-present, code-wired, code-evidenced, and cross-repo-blocked.
     summary:
         Human-readable summary paragraph (consistent with machine fields).
     generated_at:
@@ -505,13 +513,12 @@ class V3BaselineReport:
         A False value always produces a non-closed verdict per policy.
     """
 
-    overall_verdict: V3BaselineVerdict = (
-        V3BaselineVerdict.insufficient_evidence_to_conclude
-    )
+    overall_verdict: V3BaselineVerdict = V3BaselineVerdict.insufficient_evidence_to_conclude
     subsystems: List[SubsystemEntry] = field(default_factory=list)
     blocking_gaps: List[BlockingGap] = field(default_factory=list)
     open_questions: List[OpenQuestion] = field(default_factory=list)
     evidence_linkage: Dict[str, Any] = field(default_factory=dict)
+    scorecard: Dict[str, Any] = field(default_factory=dict)
     summary: str = ""
     generated_at: str = ""
     authority: str = FULL_SYSTEM_BASELINE_V3_AUTHORITY
@@ -525,6 +532,7 @@ class V3BaselineReport:
             "blocking_gaps": [g.to_dict() for g in self.blocking_gaps],
             "open_questions": [q.to_dict() for q in self.open_questions],
             "evidence_linkage": dict(self.evidence_linkage),
+            "scorecard": dict(self.scorecard),
             "summary": self.summary,
             "generated_at": self.generated_at,
             "authority": self.authority,
@@ -537,19 +545,12 @@ class V3BaselineReport:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "V3BaselineReport":
         return cls(
-            overall_verdict=V3BaselineVerdict.from_string(
-                str(data.get("overall_verdict", ""))
-            ),
-            subsystems=[
-                SubsystemEntry.from_dict(s) for s in data.get("subsystems", [])
-            ],
-            blocking_gaps=[
-                BlockingGap(**g) for g in data.get("blocking_gaps", [])
-            ],
-            open_questions=[
-                OpenQuestion(**q) for q in data.get("open_questions", [])
-            ],
+            overall_verdict=V3BaselineVerdict.from_string(str(data.get("overall_verdict", ""))),
+            subsystems=[SubsystemEntry.from_dict(s) for s in data.get("subsystems", [])],
+            blocking_gaps=[BlockingGap(**g) for g in data.get("blocking_gaps", [])],
+            open_questions=[OpenQuestion(**q) for q in data.get("open_questions", [])],
             evidence_linkage=dict(data.get("evidence_linkage", {})),
+            scorecard=dict(data.get("scorecard", {})),
             summary=str(data.get("summary", "")),
             generated_at=str(data.get("generated_at", "")),
             authority=str(data.get("authority", FULL_SYSTEM_BASELINE_V3_AUTHORITY)),
@@ -573,6 +574,7 @@ class V3BaselineReport:
 # ---------------------------------------------------------------------------
 # FullSystemBaselineV3Evaluator
 # ---------------------------------------------------------------------------
+
 
 class FullSystemBaselineV3Evaluator:
     """Evaluator that aggregates all major existing evaluators into a single
@@ -688,9 +690,7 @@ class FullSystemBaselineV3Evaluator:
     def _eval_v2_capability_routing_gate(self) -> SubsystemEntry:
         sid = V3SubsystemId.v2_capability_routing_gate.value
         mod = self._try_import("core.capability_routing_gate")
-        enforcement_mod = self._try_import(
-            "core.gateway_capability_default_enforcement"
-        )
+        enforcement_mod = self._try_import("core.gateway_capability_default_enforcement")
         if mod is None:
             return SubsystemEntry(
                 subsystem_id=sid,
@@ -709,8 +709,9 @@ class FullSystemBaselineV3Evaluator:
                     "gate is defined but default enforcement wire is missing."
                 ),
                 evidence_module="core.capability_routing_gate",
-                known_gaps=["gateway_capability_default_enforcement not importable; "
-                            "gate may not be enforced by default"],
+                known_gaps=[
+                    "gateway_capability_default_enforcement not importable; " "gate may not be enforced by default"
+                ],
             )
         return SubsystemEntry(
             subsystem_id=sid,
@@ -727,12 +728,8 @@ class FullSystemBaselineV3Evaluator:
     def _eval_v2_recovery_redispatch(self) -> SubsystemEntry:
         sid = V3SubsystemId.v2_recovery_redispatch.value
         mods = {
-            "core.delegated_flow_recovery_coordinator": self._try_import(
-                "core.delegated_flow_recovery_coordinator"
-            ),
-            "core.attached_runtime_recovery_readiness": self._try_import(
-                "core.attached_runtime_recovery_readiness"
-            ),
+            "core.delegated_flow_recovery_coordinator": self._try_import("core.delegated_flow_recovery_coordinator"),
+            "core.attached_runtime_recovery_readiness": self._try_import("core.attached_runtime_recovery_readiness"),
         }
         present = [k for k, v in mods.items() if v is not None]
         if len(present) == 2:
@@ -773,34 +770,74 @@ class FullSystemBaselineV3Evaluator:
         sid = V3SubsystemId.v2_governance_readiness_gate.value
         gate_mod = self._try_import("core.delegated_flow_readiness_gate")
         governance_mod = self._try_import("core.governance_validation_gate")
+        grounding: Dict[str, Any] = {
+            "governance_module_present": governance_mod is not None,
+        }
+        readiness_report: Dict[str, Any] = {}
+        if gate_mod is not None:
+            gate_cls = self._try_get_attr(gate_mod, "DelegatedFlowReadinessGate")
+            if gate_cls is not None:
+                try:
+                    report = gate_cls().evaluate()
+                    readiness_report = (
+                        report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("V3Baseline: readiness gate probe failed: %s", exc)
+                    readiness_report = {"probe_error": str(exc)}
+        readiness_gaps = readiness_report.get("gaps", [])
+        grounding.update(
+            {
+                "readiness_verdict": str(readiness_report.get("verdict", "")),
+                "readiness_is_ready_for_release": bool(readiness_report.get("is_ready_for_release", False)),
+                "readiness_gap_count": len(readiness_gaps) if isinstance(readiness_gaps, list) else 0,
+                "cross_repo_blocked": any(
+                    self._text_signals_cross_repo_gap(gap.get("gap_description", "") if isinstance(gap, dict) else gap)
+                    for gap in (readiness_gaps if isinstance(readiness_gaps, list) else [])
+                ),
+            }
+        )
         if gate_mod is not None and governance_mod is not None:
+            if grounding["readiness_is_ready_for_release"]:
+                return SubsystemEntry(
+                    subsystem_id=sid,
+                    state=SubsystemState.implemented_and_evidenced,
+                    rationale=(
+                        "DelegatedFlowReadinessGate produced a ready_for_release verdict "
+                        "and governance_validation_gate is importable."
+                    ),
+                    evidence_module="core.delegated_flow_readiness_gate",
+                    known_gaps=[],
+                    grounding_signals=grounding,
+                )
             return SubsystemEntry(
                 subsystem_id=sid,
-                state=SubsystemState.implemented_and_evidenced,
+                state=SubsystemState.implemented_but_not_closed,
                 rationale=(
-                    "core.delegated_flow_readiness_gate (PR-9V2) and "
-                    "core.governance_validation_gate both importable.  "
-                    "Readiness / governance gates are present and covered by tests."
+                    "DelegatedFlowReadinessGate and governance_validation_gate are both "
+                    "present, but the live readiness verdict is not ready_for_release "
+                    f"({grounding['readiness_verdict'] or 'unknown'})."
                 ),
                 evidence_module="core.delegated_flow_readiness_gate",
-                known_gaps=[],
+                known_gaps=[
+                    str(gap.get("gap_description") if isinstance(gap, dict) else gap)
+                    for gap in (readiness_gaps if isinstance(readiness_gaps, list) else [])
+                ],
+                grounding_signals=grounding,
             )
         missing = []
         if gate_mod is None:
             missing.append("delegated_flow_readiness_gate")
         if governance_mod is None:
             missing.append("governance_validation_gate")
-        state = (
-            SubsystemState.implemented_but_not_closed
-            if len(missing) == 1
-            else SubsystemState.declared_not_proven
-        )
+        state = SubsystemState.implemented_but_not_closed if len(missing) == 1 else SubsystemState.declared_not_proven
         return SubsystemEntry(
             subsystem_id=sid,
             state=state,
             rationale=f"Missing modules: {missing}",
             evidence_module=("core.delegated_flow_readiness_gate" if gate_mod else ""),
             known_gaps=[f"{m} not importable" for m in missing],
+            grounding_signals=grounding,
         )
 
     def _eval_v2_release_gate(self) -> SubsystemEntry:
@@ -814,8 +851,24 @@ class FullSystemBaselineV3Evaluator:
                 evidence_module="",
                 known_gaps=["distributed_release_gate_skeleton not importable"],
             )
-        # Check that the gate class is present and evaluate() is callable
+        evaluate_fn = self._try_get_attr(mod, "evaluate_distributed_release_gate")
         gate_cls = self._try_get_attr(mod, "DistributedReleaseGateSkeleton")
+        release_report: Dict[str, Any] = {}
+        if callable(evaluate_fn):
+            try:
+                report = evaluate_fn()
+                release_report = (
+                    report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
+                )
+            except Exception as exc:  # noqa: BLE001
+                release_report = {"probe_error": str(exc)}
+        grounding = {
+            "release_gate_overall_verdict": str(release_report.get("overall_verdict", "")),
+            "release_gate_is_enforcing": bool(release_report.get("is_enforcing", False)),
+            "release_gate_blocked_gate_worthy_count": int(release_report.get("blocked_gate_worthy_count", 0) or 0),
+            "release_gate_gate_worthy_count": int(release_report.get("gate_worthy_count", 0) or 0),
+            "cross_repo_blocked": bool(release_report.get("blocked_gate_worthy_count", 0)),
+        }
         if gate_cls is None:
             return SubsystemEntry(
                 subsystem_id=sid,
@@ -827,45 +880,45 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 evidence_module="core.distributed_release_gate_skeleton",
                 known_gaps=["DistributedReleaseGateSkeleton class not found"],
+                grounding_signals=grounding,
             )
-        # Module + class present; check enforcing flag
-        is_enforcing_sentinel = self._try_get_attr(
-            mod, "GATE_IS_NOW_CI_ENFORCING_AUTHORITY"
-        )
-        if is_enforcing_sentinel:
+        if grounding["release_gate_is_enforcing"] and grounding["release_gate_overall_verdict"] == "open":
             return SubsystemEntry(
                 subsystem_id=sid,
                 state=SubsystemState.implemented_and_evidenced,
                 rationale=(
-                    "core.distributed_release_gate_skeleton: DistributedReleaseGateSkeleton "
-                    "class present and GATE_IS_NOW_CI_ENFORCING_AUTHORITY sentinel found — "
-                    "gate is CI-enforcing."
+                    "evaluate_distributed_release_gate() produced an open enforcing gate "
+                    "verdict, so the release gate is both wired and currently passing."
                 ),
                 evidence_module="core.distributed_release_gate_skeleton",
                 known_gaps=[],
+                grounding_signals=grounding,
             )
         return SubsystemEntry(
             subsystem_id=sid,
             state=SubsystemState.implemented_but_not_closed,
             rationale=(
-                "core.distributed_release_gate_skeleton: gate class present but "
-                "GATE_IS_NOW_CI_ENFORCING_AUTHORITY sentinel absent — "
-                "gate enforcement posture is unclear."
+                "evaluate_distributed_release_gate() produced a non-open release "
+                f"verdict ({grounding['release_gate_overall_verdict'] or 'unknown'}), "
+                "so the gate exists but is not closed."
             ),
             evidence_module="core.distributed_release_gate_skeleton",
-            known_gaps=["GATE_IS_NOW_CI_ENFORCING_AUTHORITY sentinel not found; "
-                        "CI enforcement status uncertain"],
+            known_gaps=[
+                f"release gate overall_verdict={grounding['release_gate_overall_verdict'] or 'unknown'}",
+                (
+                    "release gate is not enforcing"
+                    if not grounding["release_gate_is_enforcing"]
+                    else "release gate still has blocked gate-worthy categories"
+                ),
+            ],
+            grounding_signals=grounding,
         )
 
     def _eval_android_participant_ingress(self) -> SubsystemEntry:
         sid = V3SubsystemId.android_participant_ingress.value
         mods = {
-            "core.android_participant_truth_ingress": self._try_import(
-                "core.android_participant_truth_ingress"
-            ),
-            "core.android_delegated_signal_ingress": self._try_import(
-                "core.android_delegated_signal_ingress"
-            ),
+            "core.android_participant_truth_ingress": self._try_import("core.android_participant_truth_ingress"),
+            "core.android_delegated_signal_ingress": self._try_import("core.android_delegated_signal_ingress"),
             "core.android_originated_main_chain_ingress": self._try_import(
                 "core.android_originated_main_chain_ingress"
             ),
@@ -934,11 +987,7 @@ class FullSystemBaselineV3Evaluator:
             missing.append("android_evaluator_artifact_ingress")
         if evidence_mod is None:
             missing.append("android_participant_evidence_ingress")
-        state = (
-            SubsystemState.implemented_but_not_closed
-            if len(missing) == 1
-            else SubsystemState.declared_not_proven
-        )
+        state = SubsystemState.implemented_but_not_closed if len(missing) == 1 else SubsystemState.declared_not_proven
         return SubsystemEntry(
             subsystem_id=sid,
             state=state,
@@ -967,14 +1016,14 @@ class FullSystemBaselineV3Evaluator:
             return entry, False, {}
 
         # Try to build the pipeline report (read-only, fail-graceful)
-        build_fn = self._try_get_attr(mod, "build_cross_repo_evidence_report")
+        build_fn = self._try_get_attr(mod, "build_canonical_cross_repo_evidence_report")
         if build_fn is None:
-            # Older API: try CanonicalCrossRepoEvidencePipeline
-            build_fn = self._try_get_attr(mod, "CanonicalCrossRepoEvidencePipeline")
+            build_fn = self._try_get_attr(mod, "get_canonical_cross_repo_evidence_report")
 
         report_dict: Dict[str, Any] = {}
         android_present = False
         pipeline_verdict_str = "unknown"
+        is_complete = False
 
         if build_fn is not None and callable(build_fn):
             try:
@@ -982,17 +1031,13 @@ class FullSystemBaselineV3Evaluator:
                 if hasattr(report, "to_dict"):
                     report_dict = report.to_dict()
                 elif hasattr(report, "__dict__"):
-                    report_dict = {
-                        k: str(v) for k, v in report.__dict__.items()
-                    }
+                    report_dict = {k: str(v) for k, v in report.__dict__.items()}
                 # Determine android evidence presence from pipeline verdict
                 pv = getattr(report, "pipeline_verdict", None)
                 if pv is not None:
-                    pipeline_verdict_str = str(
-                        pv.value if hasattr(pv, "value") else pv
-                    )
-                    # "complete" or "partial" verdict means some evidence present
-                    android_present = pipeline_verdict_str in ("complete", "partial")
+                    pipeline_verdict_str = str(pv.value if hasattr(pv, "value") else pv)
+                is_complete = bool(getattr(report, "is_complete", False))
+                android_present = pipeline_verdict_str in ("complete", "partial")
             except (AttributeError, TypeError, RuntimeError, ValueError) as exc:
                 logger.debug("V3Baseline: cross_repo_evidence_pipeline probe failed: %s", exc)
                 report_dict = {"probe_error": str(exc)}
@@ -1002,30 +1047,32 @@ class FullSystemBaselineV3Evaluator:
         else:
             # Module importable but no build function; structure present, not callable
             report_dict = {"note": "build function not found in module"}
+        grounding = {
+            "pipeline_verdict": pipeline_verdict_str,
+            "is_complete": bool(report_dict.get("is_complete", is_complete)),
+            "primary_sources_complete": bool(report_dict.get("primary_sources_complete", False)),
+            "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
+            "missing_sources": list(report_dict.get("missing_sources", [])),
+            "stale_sources": list(report_dict.get("stale_sources", [])),
+            "cross_repo_blocked": pipeline_verdict_str != "complete",
+        }
 
-        if android_present:
-            state = SubsystemState.implemented_but_not_closed
+        if grounding["is_complete"]:
+            state = SubsystemState.implemented_and_evidenced
             rationale = (
-                f"core.canonical_cross_repo_evidence_pipeline importable; "
-                f"pipeline_verdict={pipeline_verdict_str!r} (partial Android evidence present). "
-                "Full closure requires complete Android evidence (all PRIMARY sources fresh "
-                "and verified)."
+                "build_canonical_cross_repo_evidence_report() returned a complete "
+                "cross-repo evidence chain with all PRIMARY sources present and fresh."
             )
-            gaps = [
-                "Pipeline verdict is partial, not complete — some Android evidence sources missing or stale",
-            ]
+            gaps: List[str] = []
         else:
             state = SubsystemState.implemented_but_not_closed
             rationale = (
-                "core.canonical_cross_repo_evidence_pipeline is importable and the "
-                "V2-side ingress structure is present.  However, no Android participant "
-                "evidence was found at runtime — pipeline verdict is absent/stale/missing. "
-                "This is the primary V3 closure blocker."
+                "build_canonical_cross_repo_evidence_report() produced a non-complete "
+                f"pipeline verdict ({pipeline_verdict_str!r}), so the V2-side evidence "
+                "chain is wired but not fully closed."
             )
-            gaps = [
-                "No Android participant evidence found at runtime "
-                "(pipeline_verdict != complete/partial)",
-                "Android repo must push real evidence artifacts for this gate to pass",
+            gaps = list(report_dict.get("downgrade_reasons", [])) or [
+                "Cross-repo evidence pipeline not complete",
             ]
 
         entry = SubsystemEntry(
@@ -1034,46 +1081,74 @@ class FullSystemBaselineV3Evaluator:
             rationale=rationale,
             evidence_module="core.canonical_cross_repo_evidence_pipeline",
             known_gaps=gaps,
+            grounding_signals=grounding,
         )
         return entry, android_present, report_dict
 
     def _eval_cross_repo_contract_schema_gate(self) -> SubsystemEntry:
         sid = V3SubsystemId.cross_repo_contract_schema_gate.value
-        schema_mod = self._try_import("core.android_nl_semantic_chain_contract")
-        continuity_mod = self._try_import("core.android_v2_continuity_contract")
-        if schema_mod is not None and continuity_mod is not None:
+        schema_mod = self._try_import("contracts.cross_repo_schema_version_gate")
+        if schema_mod is None:
+            return SubsystemEntry(
+                subsystem_id=sid,
+                state=SubsystemState.declared_not_proven,
+                rationale="contracts.cross_repo_schema_version_gate not importable.",
+                evidence_module="",
+                known_gaps=["cross_repo_schema_version_gate not importable"],
+            )
+        gate_fn = self._try_get_attr(schema_mod, "evaluate_android_uplink_schema_gate")
+        dedupe_fn = self._try_get_attr(schema_mod, "evaluate_android_uplink_dedupe_contract")
+        metadata_fn = self._try_get_attr(schema_mod, "build_projection_schema_gate_metadata")
+        metadata = metadata_fn() if callable(metadata_fn) else {}
+        required_metadata = {
+            "authority",
+            "gate_version",
+            "android_completion_closure_uplink_schema_version",
+            "android_aip_models_source_sha",
+            "android_completion_closure_source_sha",
+        }
+        grounding = {
+            "schema_gate_authority": str(metadata.get("authority", "")),
+            "schema_gate_version": str(metadata.get("gate_version", "")),
+            "projection_metadata_complete": required_metadata.issubset(set(metadata.keys())),
+            "uplink_gate_callable": callable(gate_fn),
+            "dedupe_gate_callable": callable(dedupe_fn),
+            "cross_repo_blocked": False,
+        }
+        if callable(gate_fn) and callable(dedupe_fn) and grounding["projection_metadata_complete"]:
             return SubsystemEntry(
                 subsystem_id=sid,
                 state=SubsystemState.implemented_and_evidenced,
                 rationale=(
-                    "core.android_nl_semantic_chain_contract and "
-                    "core.android_v2_continuity_contract are both importable.  "
-                    "Cross-repo contract/schema gate is defined and covered by tests."
+                    "contracts.cross_repo_schema_version_gate exposes the canonical "
+                    "uplink schema gate, dedupe contract gate, and projection metadata."
                 ),
-                evidence_module="core.android_nl_semantic_chain_contract",
+                evidence_module="contracts.cross_repo_schema_version_gate",
                 known_gaps=[],
+                grounding_signals=grounding,
             )
         missing = []
-        if schema_mod is None:
-            missing.append("android_nl_semantic_chain_contract")
-        if continuity_mod is None:
-            missing.append("android_v2_continuity_contract")
-        state = (
-            SubsystemState.contract_only
-            if len(missing) < 2
-            else SubsystemState.declared_not_proven
-        )
+        if not callable(gate_fn):
+            missing.append("evaluate_android_uplink_schema_gate")
+        if not callable(dedupe_fn):
+            missing.append("evaluate_android_uplink_dedupe_contract")
+        if not grounding["projection_metadata_complete"]:
+            missing.append("projection_schema_gate_metadata")
+        state = SubsystemState.implemented_but_not_closed if len(missing) < 3 else SubsystemState.contract_only
         return SubsystemEntry(
             subsystem_id=sid,
             state=state,
-            rationale=f"Missing contract modules: {missing}",
-            evidence_module="",
-            known_gaps=[f"{m} not importable" for m in missing],
+            rationale=f"Missing canonical contract gate pieces: {missing}",
+            evidence_module="contracts.cross_repo_schema_version_gate",
+            known_gaps=[f"{m} not available" for m in missing],
+            grounding_signals=grounding,
         )
 
     def _eval_dual_repo_reality_audit(self) -> SubsystemEntry:
         sid = V3SubsystemId.dual_repo_reality_audit.value
-        mod = self._try_import("core.dual_repo_system_reality_audit")
+        mod = self._try_import("core.audit_layer.dual_repo_system_reality_audit")
+        if mod is None:
+            mod = self._try_import("core.dual_repo_system_reality_audit")
         if mod is None:
             return SubsystemEntry(
                 subsystem_id=sid,
@@ -1088,19 +1163,50 @@ class FullSystemBaselineV3Evaluator:
                 subsystem_id=sid,
                 state=SubsystemState.contract_only,
                 rationale="Module importable but build_dual_repo_reality_audit function absent.",
-                evidence_module="core.dual_repo_system_reality_audit",
+                evidence_module="core.audit_layer.dual_repo_system_reality_audit",
                 known_gaps=["build_dual_repo_reality_audit not found"],
             )
+        try:
+            report = build_fn()
+            report_dict = report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
+        except Exception as exc:  # noqa: BLE001
+            return SubsystemEntry(
+                subsystem_id=sid,
+                state=SubsystemState.implemented_but_not_closed,
+                rationale=f"Reality audit callable exists but runtime probe failed: {exc}",
+                evidence_module="core.audit_layer.dual_repo_system_reality_audit",
+                known_gaps=[str(exc)],
+                grounding_signals={"probe_error": str(exc), "cross_repo_blocked": True},
+            )
+        dimension_counts: Dict[str, int] = {}
+        for dim in report_dict.get("dimensions", []):
+            maturity = str(dim.get("maturity", "")) if isinstance(dim, dict) else ""
+            if maturity:
+                dimension_counts[maturity] = dimension_counts.get(maturity, 0) + 1
+        system_verdict = str(report_dict.get("system_verdict", ""))
+        grounding = {
+            "system_verdict": system_verdict,
+            "dimension_maturity_counts": dimension_counts,
+            "blocking_gap_count": len(report_dict.get("unresolved_blocking_gaps", [])),
+            "cross_repo_blocked": any(
+                self._text_signals_cross_repo_gap(gap) for gap in report_dict.get("unresolved_blocking_gaps", [])
+            ),
+        }
+        state = (
+            SubsystemState.implemented_and_evidenced
+            if system_verdict == "platform_baseline_established"
+            else SubsystemState.implemented_but_not_closed
+        )
         return SubsystemEntry(
             subsystem_id=sid,
-            state=SubsystemState.implemented_and_evidenced,
+            state=state,
             rationale=(
-                "core.dual_repo_system_reality_audit is importable and "
-                "build_dual_repo_reality_audit is present.  "
-                "Covered by tests/test_pr537_dual_repo_system_reality_audit.py."
+                "build_dual_repo_reality_audit() produced a live reality report with "
+                f"system_verdict={system_verdict or 'unknown'}."
             ),
-            evidence_module="core.dual_repo_system_reality_audit",
-            known_gaps=[],
+            evidence_module="core.audit_layer.dual_repo_system_reality_audit",
+            known_gaps=list(report_dict.get("unresolved_blocking_gaps", [])),
+            grounding_signals=grounding,
         )
 
     def _eval_system_final_acceptance_verdict(self) -> SubsystemEntry:
@@ -1114,20 +1220,74 @@ class FullSystemBaselineV3Evaluator:
                 evidence_module="",
                 known_gaps=["system_final_acceptance_verdict not importable"],
             )
+        evaluate_fn = self._try_get_attr(mod, "evaluate_system_acceptance")
+        if callable(evaluate_fn):
+            try:
+                report = evaluate_fn()
+                report_dict = report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
+                checklist = report_dict.get("checklist", {})
+                status_counts: Dict[str, int] = {}
+                checklist_iter = checklist.values() if isinstance(checklist, dict) else checklist
+                for item in checklist_iter:
+                    if isinstance(item, dict):
+                        status = str(item.get("status", ""))
+                        if status:
+                            status_counts[status] = status_counts.get(status, 0) + 1
+                unresolved_risks = report_dict.get("unresolved_risk_summary", [])
+                grounding = {
+                    "acceptance_verdict": str(report_dict.get("verdict", "")),
+                    "is_fully_operational": bool(report_dict.get("is_fully_operational", False)),
+                    "dimension_status_counts": status_counts,
+                    "unresolved_risk_count": len(unresolved_risks) if isinstance(unresolved_risks, list) else 0,
+                    "cross_repo_blocked": any(
+                        self._text_signals_cross_repo_gap(risk)
+                        for risk in (unresolved_risks if isinstance(unresolved_risks, list) else [])
+                    ),
+                }
+                if grounding["is_fully_operational"]:
+                    return SubsystemEntry(
+                        subsystem_id=sid,
+                        state=SubsystemState.implemented_and_evidenced,
+                        rationale=(
+                            "evaluate_system_acceptance() returned a fully_operational "
+                            "verdict, so the acceptance surface is closed."
+                        ),
+                        evidence_module="core.system_final_acceptance_verdict",
+                        known_gaps=[],
+                        grounding_signals=grounding,
+                    )
+                return SubsystemEntry(
+                    subsystem_id=sid,
+                    state=SubsystemState.implemented_but_not_closed,
+                    rationale=(
+                        "evaluate_system_acceptance() produced a non-closed acceptance "
+                        f"verdict ({grounding['acceptance_verdict'] or 'unknown'})."
+                    ),
+                    evidence_module="core.system_final_acceptance_verdict",
+                    known_gaps=[
+                        str(risk.get("gap_description") if isinstance(risk, dict) else risk)
+                        for risk in (unresolved_risks if isinstance(unresolved_risks, list) else [])
+                    ],
+                    grounding_signals=grounding,
+                )
+            except Exception as exc:  # noqa: BLE001
+                return SubsystemEntry(
+                    subsystem_id=sid,
+                    state=SubsystemState.implemented_but_not_closed,
+                    rationale=f"evaluate_system_acceptance() failed at runtime: {exc}",
+                    evidence_module="core.system_final_acceptance_verdict",
+                    known_gaps=[str(exc)],
+                    grounding_signals={"probe_error": str(exc)},
+                )
         evaluator_cls = self._try_get_attr(mod, "SystemFinalAcceptanceEvaluator")
         report_cls = self._try_get_attr(mod, "SystemAcceptanceReport")
         if evaluator_cls is not None and report_cls is not None:
             return SubsystemEntry(
                 subsystem_id=sid,
-                state=SubsystemState.implemented_and_evidenced,
-                rationale=(
-                    "core.system_final_acceptance_verdict (PR-17V2): "
-                    "SystemFinalAcceptanceEvaluator and SystemAcceptanceReport "
-                    "are both present.  This is the existing acceptance gate; "
-                    "V3 consumes it as one of five input signals."
-                ),
+                state=SubsystemState.implemented_but_not_closed,
+                rationale="Acceptance module importable but callable evaluate_system_acceptance missing.",
                 evidence_module="core.system_final_acceptance_verdict",
-                known_gaps=[],
+                known_gaps=["evaluate_system_acceptance not found"],
             )
         return SubsystemEntry(
             subsystem_id=sid,
@@ -1141,17 +1301,83 @@ class FullSystemBaselineV3Evaluator:
     # Evidence linkage helpers
     # ------------------------------------------------------------------
 
-    def _build_evidence_linkage(self, cross_repo_report: Dict[str, Any]) -> Dict[str, Any]:
-        linkage: Dict[str, Any] = {
-            "system_final_acceptance_verdict": "core.system_final_acceptance_verdict",
-            "dual_repo_reality_audit": "core.dual_repo_system_reality_audit",
-            "canonical_cross_repo_evidence_pipeline": "core.canonical_cross_repo_evidence_pipeline",
-            "dual_repo_completeness_review": "core.dual_repo_system_completeness_review",
-            "distributed_release_gate_skeleton": "core.distributed_release_gate_skeleton",
-        }
-        if cross_repo_report:
-            linkage["cross_repo_evidence_pipeline_report"] = cross_repo_report
+    @staticmethod
+    def _text_signals_cross_repo_gap(value: Any) -> bool:
+        """Return True when *value* text looks like a cross-repo evidence gap.
+
+        This is a fallback heuristic for older subsystem entries that do not yet
+        expose an explicit ``cross_repo_blocked`` grounding signal. Structured
+        grounding data remains the preferred source of truth.
+        """
+        normalized = str(value or "").lower()
+        return any(
+            token in normalized
+            for token in (
+                "cross-repo",
+                "dual-repo",
+                "repository_dispatch",
+                "real_device_verification",
+                "readiness_evidence",
+                "android participant",
+                "android repo",
+            )
+        )
+
+    def _build_evidence_linkage(self, subsystems: List[SubsystemEntry]) -> Dict[str, Any]:
+        linkage: Dict[str, Any] = {}
+        for entry in subsystems:
+            grounding = dict(entry.grounding_signals or {})
+            if not grounding and not entry.evidence_module:
+                continue
+            linkage[entry.subsystem_id] = {
+                "state": entry.state.value,
+                "evidence_module": entry.evidence_module,
+                "known_gaps": list(entry.known_gaps),
+                "grounding_signals": grounding,
+            }
         return linkage
+
+    def _build_scorecard(
+        self,
+        subsystems: List[SubsystemEntry],
+        verdict: V3BaselineVerdict,
+        android_evidence_present: bool,
+    ) -> Dict[str, Any]:
+        subsystem_scorecard: Dict[str, Any] = {}
+        totals = {
+            "code_present_count": 0,
+            "code_wired_count": 0,
+            "code_evidenced_count": 0,
+            "blocked_by_missing_cross_repo_evidence_count": 0,
+        }
+        for entry in subsystems:
+            stage = {
+                "state": entry.state.value,
+                "code_present": entry.state != SubsystemState.declared_not_proven,
+                "code_wired": entry.state.ordinal() >= SubsystemState.implemented_but_not_closed.ordinal(),
+                "code_evidenced": entry.state == SubsystemState.implemented_and_evidenced,
+                "blocked_by_missing_cross_repo_evidence": bool(entry.grounding_signals.get("cross_repo_blocked", False))
+                or any(self._text_signals_cross_repo_gap(gap) for gap in entry.known_gaps),
+                "evidence_module": entry.evidence_module,
+                "grounding_signals": dict(entry.grounding_signals or {}),
+            }
+            if stage["code_present"]:
+                totals["code_present_count"] += 1
+            if stage["code_wired"]:
+                totals["code_wired_count"] += 1
+            if stage["code_evidenced"]:
+                totals["code_evidenced_count"] += 1
+            if stage["blocked_by_missing_cross_repo_evidence"]:
+                totals["blocked_by_missing_cross_repo_evidence_count"] += 1
+            subsystem_scorecard[entry.subsystem_id] = stage
+        return {
+            "overall": {
+                "verdict": verdict.value,
+                "android_evidence_present": android_evidence_present,
+                **totals,
+            },
+            "subsystems": subsystem_scorecard,
+        }
 
     # ------------------------------------------------------------------
     # Blocking gap synthesis
@@ -1166,49 +1392,51 @@ class FullSystemBaselineV3Evaluator:
 
         # Android evidence absence is always a blocking gap when evidence is missing
         if not android_evidence_present:
-            gaps.append(BlockingGap(
-                gap_id="android_cross_repo_evidence_absent",
-                description=(
-                    "No Android participant evidence was found in the canonical cross-repo "
-                    "evidence pipeline at evaluation time.  The pipeline requires real evidence "
-                    "artifacts pushed from the Android repository (via repository_dispatch or "
-                    "file-based JSON artifact).  V2 cannot self-certify cross-repo closure.  "
-                    "Policy: ANDROID_EVIDENCE_ABSENCE_DOWNGRADES_VERDICT_POLICY."
-                ),
-                affected_subsystems=[
-                    V3SubsystemId.cross_repo_evidence_pipeline.value,
-                    V3SubsystemId.android_participant_ingress.value,
-                    V3SubsystemId.android_evaluator_artifact_ingress.value,
-                    V3SubsystemId.system_final_acceptance_verdict.value,
-                ],
-                requires_android_repo=True,
-            ))
+            gaps.append(
+                BlockingGap(
+                    gap_id="android_cross_repo_evidence_absent",
+                    description=(
+                        "No Android participant evidence was found in the canonical cross-repo "
+                        "evidence pipeline at evaluation time.  The pipeline requires real evidence "
+                        "artifacts pushed from the Android repository (via repository_dispatch or "
+                        "file-based JSON artifact).  V2 cannot self-certify cross-repo closure.  "
+                        "Policy: ANDROID_EVIDENCE_ABSENCE_DOWNGRADES_VERDICT_POLICY."
+                    ),
+                    affected_subsystems=[
+                        V3SubsystemId.cross_repo_evidence_pipeline.value,
+                        V3SubsystemId.android_participant_ingress.value,
+                        V3SubsystemId.android_evaluator_artifact_ingress.value,
+                        V3SubsystemId.system_final_acceptance_verdict.value,
+                    ],
+                    requires_android_repo=True,
+                )
+            )
 
         # Subsystem-level gaps
         for entry in subsystems:
             if entry.state == SubsystemState.declared_not_proven:
-                gaps.append(BlockingGap(
-                    gap_id=f"{entry.subsystem_id}_declared_not_proven",
-                    description=(
-                        f"Subsystem '{entry.subsystem_id}' is in declared_not_proven state: "
-                        f"{entry.rationale}"
-                    ),
-                    affected_subsystems=[entry.subsystem_id],
-                    requires_android_repo=(
-                        "android" in entry.subsystem_id
-                        or "cross_repo" in entry.subsystem_id
-                    ),
-                ))
+                gaps.append(
+                    BlockingGap(
+                        gap_id=f"{entry.subsystem_id}_declared_not_proven",
+                        description=(
+                            f"Subsystem '{entry.subsystem_id}' is in declared_not_proven state: " f"{entry.rationale}"
+                        ),
+                        affected_subsystems=[entry.subsystem_id],
+                        requires_android_repo=("android" in entry.subsystem_id or "cross_repo" in entry.subsystem_id),
+                    )
+                )
             elif entry.state == SubsystemState.contract_only:
-                gaps.append(BlockingGap(
-                    gap_id=f"{entry.subsystem_id}_contract_only",
-                    description=(
-                        f"Subsystem '{entry.subsystem_id}' has contracts defined but "
-                        f"no runtime implementation: {entry.rationale}"
-                    ),
-                    affected_subsystems=[entry.subsystem_id],
-                    requires_android_repo=False,
-                ))
+                gaps.append(
+                    BlockingGap(
+                        gap_id=f"{entry.subsystem_id}_contract_only",
+                        description=(
+                            f"Subsystem '{entry.subsystem_id}' has contracts defined but "
+                            f"no runtime implementation: {entry.rationale}"
+                        ),
+                        affected_subsystems=[entry.subsystem_id],
+                        requires_android_repo=False,
+                    )
+                )
 
         return gaps
 
@@ -1216,9 +1444,7 @@ class FullSystemBaselineV3Evaluator:
     # Open question synthesis
     # ------------------------------------------------------------------
 
-    def _build_open_questions(
-        self, android_evidence_present: bool
-    ) -> List[OpenQuestion]:
+    def _build_open_questions(self, android_evidence_present: bool) -> List[OpenQuestion]:
         return [
             OpenQuestion(
                 question_id="android_runtime_signal_flow_active",
@@ -1237,12 +1463,9 @@ class FullSystemBaselineV3Evaluator:
                     "(not just advisory) on all gated dimensions, including cross-repo evidence?"
                 ),
                 signal_source=(
-                    "core.distributed_release_gate_skeleton "
-                    "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
+                    "core.distributed_release_gate_skeleton " "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
                 ),
-                currently_answerable=self._try_import(
-                    "core.distributed_release_gate_skeleton"
-                ) is not None,
+                currently_answerable=self._try_import("core.distributed_release_gate_skeleton") is not None,
             ),
             OpenQuestion(
                 question_id="recovery_reconnect_e2e_proven",
@@ -1250,9 +1473,7 @@ class FullSystemBaselineV3Evaluator:
                     "Has the reconnect / recovery / redispatch path been exercised in a "
                     "cross-repo end-to-end test (not just unit-level)?"
                 ),
-                signal_source=(
-                    "tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"
-                ),
+                signal_source=("tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"),
                 currently_answerable=False,
             ),
             OpenQuestion(
@@ -1305,15 +1526,10 @@ class FullSystemBaselineV3Evaluator:
         android_gap = not android_evidence_present
 
         # Rule 2: declared_not_proven or contract_only blocks closed
-        has_blocking = any(
-            s in (SubsystemState.declared_not_proven, SubsystemState.contract_only)
-            for s in states
-        )
+        has_blocking = any(s in (SubsystemState.declared_not_proven, SubsystemState.contract_only) for s in states)
 
         # Rule 3: all evidenced + android present → closed
-        all_evidenced = all(
-            s == SubsystemState.implemented_and_evidenced for s in states
-        )
+        all_evidenced = all(s == SubsystemState.implemented_and_evidenced for s in states)
         if all_evidenced and not android_gap:
             return V3BaselineVerdict.closed_and_evidenced
 
@@ -1338,6 +1554,7 @@ class FullSystemBaselineV3Evaluator:
         subsystems: List[SubsystemEntry],
         blocking_gaps: List[BlockingGap],
         android_evidence_present: bool,
+        scorecard: Dict[str, Any],
     ) -> str:
         counts: Dict[str, int] = {}
         for s in subsystems:
@@ -1351,8 +1568,15 @@ class FullSystemBaselineV3Evaluator:
         for state_val, count in sorted(counts.items()):
             lines.append(f"  {state_val}: {count}")
         lines.append("")
+        lines.append(f"Android cross-repo evidence present: {android_evidence_present}")
+        overall_scorecard = scorecard.get("overall", {}) if isinstance(scorecard, dict) else {}
         lines.append(
-            f"Android cross-repo evidence present: {android_evidence_present}"
+            "Scorecard: "
+            f"present={overall_scorecard.get('code_present_count', 0)}, "
+            f"wired={overall_scorecard.get('code_wired_count', 0)}, "
+            f"evidenced={overall_scorecard.get('code_evidenced_count', 0)}, "
+            "cross_repo_blocked="
+            f"{overall_scorecard.get('blocked_by_missing_cross_repo_evidence_count', 0)}"
         )
         lines.append(f"Blocking gaps: {len(blocking_gaps)}")
         if blocking_gaps:
@@ -1374,9 +1598,7 @@ class FullSystemBaselineV3Evaluator:
         ts = datetime.now(timezone.utc).isoformat()
 
         # Evaluate all subsystems
-        cross_entry, android_present, cross_report = (
-            self._eval_cross_repo_evidence_pipeline()
-        )
+        cross_entry, android_present, cross_report = self._eval_cross_repo_evidence_pipeline()
 
         subsystems: List[SubsystemEntry] = [
             self._eval_v2_canonical_truth_ingress(),
@@ -1396,8 +1618,17 @@ class FullSystemBaselineV3Evaluator:
         blocking_gaps = self._build_blocking_gaps(subsystems, android_present)
         open_questions = self._build_open_questions(android_present)
         verdict = self._derive_verdict(subsystems, android_present)
-        evidence_linkage = self._build_evidence_linkage(cross_report)
-        summary = self._build_summary(verdict, subsystems, blocking_gaps, android_present)
+        evidence_linkage = self._build_evidence_linkage(subsystems)
+        if cross_report:
+            evidence_linkage["cross_repo_evidence_pipeline_report"] = cross_report
+        scorecard = self._build_scorecard(subsystems, verdict, android_present)
+        summary = self._build_summary(
+            verdict,
+            subsystems,
+            blocking_gaps,
+            android_present,
+            scorecard,
+        )
 
         return V3BaselineReport(
             overall_verdict=verdict,
@@ -1405,6 +1636,7 @@ class FullSystemBaselineV3Evaluator:
             blocking_gaps=blocking_gaps,
             open_questions=open_questions,
             evidence_linkage=evidence_linkage,
+            scorecard=scorecard,
             summary=summary,
             generated_at=ts,
             authority=FULL_SYSTEM_BASELINE_V3_AUTHORITY,

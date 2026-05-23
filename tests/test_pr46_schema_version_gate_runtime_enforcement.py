@@ -31,10 +31,10 @@ from contracts.cross_repo_schema_version_gate import (
     evaluate_android_uplink_schema_gate,
 )
 
-
 # ---------------------------------------------------------------------------
 # Gate module: task_result is now in the strict set
 # ---------------------------------------------------------------------------
+
 
 class TestGateModuleTaskResultStrict:
     def test_task_result_in_strict_gate_message_types(self) -> None:
@@ -84,14 +84,18 @@ class TestGateModuleTaskResultStrict:
 # Gate module: completion/closure types strict enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestGateModuleCompletionClosureStrict:
-    @pytest.mark.parametrize("msg_type", [
-        "handoff_result",
-        "handoff_failure",
-        "handoff_envelope_v2_result",
-        "goal_execution_result",
-        "goal_result",
-    ])
+    @pytest.mark.parametrize(
+        "msg_type",
+        [
+            "handoff_result",
+            "handoff_failure",
+            "handoff_envelope_v2_result",
+            "goal_execution_result",
+            "goal_result",
+        ],
+    )
     def test_strict_type_missing_schema_rejected(self, msg_type: str) -> None:
         decision = evaluate_android_uplink_schema_gate(
             message_type=msg_type,
@@ -149,12 +153,16 @@ class TestGateModuleCompletionClosureStrict:
 # Gate module: compat types degrade on old version
 # ---------------------------------------------------------------------------
 
+
 class TestGateModuleCompatTypes:
-    @pytest.mark.parametrize("msg_type", [
-        "device_state_snapshot",
-        "device_execution_event",
-        "reconciliation_signal",
-    ])
+    @pytest.mark.parametrize(
+        "msg_type",
+        [
+            "device_state_snapshot",
+            "device_execution_event",
+            "reconciliation_signal",
+        ],
+    )
     def test_compat_type_missing_schema_degrades(self, msg_type: str) -> None:
         decision = evaluate_android_uplink_schema_gate(
             message_type=msg_type,
@@ -164,11 +172,14 @@ class TestGateModuleCompatTypes:
         assert decision.action == "degrade"
         assert decision.reason == "missing_schema_version_metadata"
 
-    @pytest.mark.parametrize("msg_type", [
-        "device_state_snapshot",
-        "device_execution_event",
-        "reconciliation_signal",
-    ])
+    @pytest.mark.parametrize(
+        "msg_type",
+        [
+            "device_state_snapshot",
+            "device_execution_event",
+            "reconciliation_signal",
+        ],
+    )
     def test_compat_type_old_schema_degrades(self, msg_type: str) -> None:
         decision = evaluate_android_uplink_schema_gate(
             message_type=msg_type,
@@ -180,11 +191,14 @@ class TestGateModuleCompatTypes:
         assert decision is not None
         assert decision.action == "degrade"
 
-    @pytest.mark.parametrize("msg_type", [
-        "device_state_snapshot",
-        "device_execution_event",
-        "reconciliation_signal",
-    ])
+    @pytest.mark.parametrize(
+        "msg_type",
+        [
+            "device_state_snapshot",
+            "device_execution_event",
+            "reconciliation_signal",
+        ],
+    )
     def test_compat_type_matching_schema_accepts(self, msg_type: str) -> None:
         decision = evaluate_android_uplink_schema_gate(
             message_type=msg_type,
@@ -207,6 +221,7 @@ class TestGateModuleCompatTypes:
 # ---------------------------------------------------------------------------
 # Handler: handoff_v2_result — gate wired to reject mismatches
 # ---------------------------------------------------------------------------
+
 
 def _make_bridge() -> MagicMock:
     bridge = MagicMock()
@@ -312,6 +327,7 @@ class TestHandoffV2ResultGateEnforcement:
 # Handler: task_lifecycle — handle_task_result gate enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestTaskResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
         return asyncio.get_event_loop().run_until_complete(coro)
@@ -389,15 +405,19 @@ class TestTaskResultGateEnforcement:
 
         # Patch the durable idempotency check to always allow (avoid disk state
         # from previous test runs interfering with the schema gate test).
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
-            _fake_truth_chain,
-        ), patch(
-            "core.durable_result_idempotency.check_result_idempotency",
-            return_value=False,
-        ), patch(
-            "core.durable_result_idempotency.record_result_idempotency",
-            return_value=None,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
+                _fake_truth_chain,
+            ),
+            patch(
+                "core.durable_result_idempotency.check_result_idempotency",
+                return_value=False,
+            ),
+            patch(
+                "core.durable_result_idempotency.record_result_idempotency",
+                return_value=None,
+            ),
         ):
             self._run(handle_task_result(bridge, _make_websocket(), message))
 
@@ -408,6 +428,7 @@ class TestTaskResultGateEnforcement:
 # ---------------------------------------------------------------------------
 # Handler: device_state_snapshot — gate evidence in ACK for mismatches
 # ---------------------------------------------------------------------------
+
 
 class TestDeviceStateSnapshotGateEnforcement:
     def _run(self, coro: Any) -> Any:
@@ -478,6 +499,7 @@ class TestDeviceStateSnapshotGateEnforcement:
 # ---------------------------------------------------------------------------
 # Handler: reconciliation_signal — gate evidence in ACK for mismatches
 # ---------------------------------------------------------------------------
+
 
 class TestReconciliationSignalGateEnforcement:
     def _run(self, coro: Any) -> Any:
@@ -556,11 +578,12 @@ class TestReconciliationSignalGateEnforcement:
 # Handler: goal_execution_result — gate wired to reject mismatches
 # ---------------------------------------------------------------------------
 
+
 class TestGoalExecutionResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
         return asyncio.get_event_loop().run_until_complete(coro)
 
-    def test_goal_execution_result_missing_schema_blocked(self) -> None:
+    def test_goal_execution_result_missing_schema_degrades_to_truth_chain(self) -> None:
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
 
         bridge = _make_bridge()
@@ -572,20 +595,43 @@ class TestGoalExecutionResultGateEnforcement:
                 "status": "success",
             },
         }
-        truth_chain_called = []
+        ingress_calls = []
 
-        def _fake_truth_chain(msg: Any, *, task_id: Any, result_status: Any) -> Any:
-            truth_chain_called.append(True)
-            return MagicMock(is_truth_chain_complete=True)
+        async def _fake_ingest_async(event: Any, *, store_fn: Any = None, bridge: Any = None) -> Any:
+            ingress_calls.append((event.task_id, event.normalized_status))
+            return MagicMock(
+                is_fully_closed=False,
+                was_deduplicated=False,
+                truth_chain_complete=True,
+                incomplete_reason="completion_not_notified",
+                evidence_acceptance_verdict="degrade",
+                evidence_trust_level="legacy_compat",
+                task_completed=True,
+                problem_solved=False,
+                completion_notified=False,
+                pending_response_resolved=False,
+                dedupe_contract_action="degrade",
+                dedupe_contract_reason="legacy_goal_execution_result_missing_schema_version_compat",
+            )
 
-        with patch(
-            "galaxy_gateway.android.handlers.goal_execution._run_task_result_truth_chain",
-            _fake_truth_chain,
+        with (
+            patch(
+                "core.unified_result_ingress.ingest_result_async",
+                side_effect=_fake_ingest_async,
+            ),
+            patch(
+                "core.durable_result_idempotency.check_result_idempotency",
+                return_value=False,
+            ),
         ):
             self._run(handle_goal_execution_result(bridge, _make_websocket(), message))
 
-        # strict reject: truth chain should not have run
-        assert not truth_chain_called
+        assert ingress_calls == [("ger1", "completed")]
+        evidence = message.get("_cross_repo_schema_version_gate")
+        assert isinstance(evidence, dict)
+        assert evidence.get("action") == "degrade"
+        assert evidence.get("original_action") == "reject"
+        assert evidence.get("reason") == "legacy_goal_execution_result_missing_schema_version_compat"
 
     def test_goal_execution_result_old_android_version_blocked(self) -> None:
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
@@ -647,9 +693,12 @@ class TestGoalExecutionResultGateEnforcement:
                 gate_rejected.append(decision)
             return decision
 
-        with patch.object(_gate_mod, "evaluate_android_uplink_schema_gate", _spy_gate), patch(
-            "galaxy_gateway.android.handlers.goal_execution.store_task_result",
-            None,
+        with (
+            patch.object(_gate_mod, "evaluate_android_uplink_schema_gate", _spy_gate),
+            patch(
+                "galaxy_gateway.android.handlers.goal_execution.store_task_result",
+                None,
+            ),
         ):
             self._run(handle_goal_execution_result(bridge, _make_websocket(), message))
 
@@ -660,6 +709,7 @@ class TestGoalExecutionResultGateEnforcement:
 # ---------------------------------------------------------------------------
 # Gate decision to_dict contains required evidence fields
 # ---------------------------------------------------------------------------
+
 
 class TestGateDecisionEvidenceStructure:
     def test_reject_decision_to_dict_has_gate_metadata(self) -> None:

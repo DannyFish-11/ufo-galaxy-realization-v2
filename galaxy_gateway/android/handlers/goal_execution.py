@@ -81,6 +81,7 @@ try:
         evaluate_execution_governance as _evaluate_execution_governance,
         notify_execution_completed as _notify_execution_completed,
     )
+
     _GOVERNANCE_AVAILABLE = True
 except ImportError:
     _ExecutionType = None  # type: ignore[assignment]
@@ -206,14 +207,9 @@ def _derive_canonical_closure_flags(
     """
     verdict = str(acceptance_verdict or "").strip().lower()
     canonical_truth_completed = (
-        bool(is_fully_closed)
-        and bool(truth_chain_complete)
-        and verdict in {"accept", "accepted"}
+        bool(is_fully_closed) and bool(truth_chain_complete) and verdict in {"accept", "accepted"}
     )
-    mature_closure_achieved = (
-        canonical_truth_completed
-        and not _is_non_canonical_lineage_quality(lineage_quality)
-    )
+    mature_closure_achieved = canonical_truth_completed and not _is_non_canonical_lineage_quality(lineage_quality)
     return canonical_truth_completed, mature_closure_achieved
 
 
@@ -366,8 +362,7 @@ def _try_ingest_goal_result_truth(message: Dict[str, Any]) -> None:
             )
         elif outcome.reject_reason:
             logger.debug(
-                "PR-8V2 goal_execution_result participant truth skipped: "
-                "reason=%r",
+                "PR-8V2 goal_execution_result participant truth skipped: " "reason=%r",
                 outcome.reject_reason,
             )
     except Exception as exc:
@@ -443,7 +438,9 @@ async def handle_goal_execution(
             logger.warning(
                 "GOAL_EXECUTION blocked by unified governance: task_id=%s device_id=%s "
                 "reason=%r conflict=%s active_type=%s",
-                task_id, device_id, _gov_verdict.rejection_reason,
+                task_id,
+                device_id,
+                _gov_verdict.rejection_reason,
                 _gov_verdict.conflict,
                 _gov_verdict.active_conflicting_type.value if _gov_verdict.active_conflicting_type else None,
             )
@@ -472,12 +469,16 @@ async def handle_goal_execution(
 
     logger.info(
         "GOAL_EXECUTION received: task_id=%s device_id=%s group_id=%s goal=%r",
-        task_id, device_id, payload.get("group_id"), goal[:80],
+        task_id,
+        device_id,
+        payload.get("group_id"),
+        goal[:80],
     )
 
     result: Dict[str, Any] = {"success": False, "response": ""}
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         # source="android_goal_execution" correctly identifies the carrier as Android.
         # V2's OpenClawd + AgentKernel + MultiLLMRouter remains the semantic authority;
@@ -494,7 +495,9 @@ async def handle_goal_execution(
     except Exception as runtime_err:
         logger.error(
             "GOAL_EXECUTION: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
-            task_id, runtime_err, exc_info=True,
+            task_id,
+            runtime_err,
+            exc_info=True,
         )
         return MessageBuilder.error(
             device_id,
@@ -570,7 +573,8 @@ async def handle_goal_execution(
 
     logger.info(
         "GOAL_EXECUTION → task_assign: task_id=%s goal=%r",
-        task_id, response_text[:80] if response_text else goal[:80],
+        task_id,
+        response_text[:80] if response_text else goal[:80],
     )
 
     return MessageBuilder.task_assign(
@@ -653,7 +657,9 @@ async def handle_parallel_subtask(
             logger.warning(
                 "PARALLEL_SUBTASK blocked by unified governance: task_id=%s device_id=%s "
                 "reason=%r conflict=%s active_type=%s",
-                task_id, device_id, _gov_verdict.rejection_reason,
+                task_id,
+                device_id,
+                _gov_verdict.rejection_reason,
                 _gov_verdict.conflict,
                 _gov_verdict.active_conflicting_type.value if _gov_verdict.active_conflicting_type else None,
             )
@@ -682,7 +688,10 @@ async def handle_parallel_subtask(
 
     logger.info(
         "PARALLEL_SUBTASK received: task_id=%s device_id=%s group_id=%s goal=%r",
-        task_id, device_id, group_id, goal[:80],
+        task_id,
+        device_id,
+        group_id,
+        goal[:80],
     )
 
     # ── Step 1: 通过 DesktopPresenceRuntime 规范化 goal ──────────────
@@ -691,6 +700,7 @@ async def handle_parallel_subtask(
     result: Dict[str, Any] = {"success": False, "response": ""}
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         result = await runtime.handle_request(
             message=goal,
@@ -703,7 +713,9 @@ async def handle_parallel_subtask(
     except Exception as runtime_err:
         logger.error(
             "PARALLEL_SUBTASK: DesktopPresenceRuntime 处理失败 | task_id=%s error=%s",
-            task_id, runtime_err, exc_info=True,
+            task_id,
+            runtime_err,
+            exc_info=True,
         )
         return MessageBuilder.error(
             device_id,
@@ -756,6 +768,7 @@ async def handle_parallel_subtask(
     all_device_ids: List[str] = []
     try:
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         all_device_ids = [
             did
@@ -787,6 +800,7 @@ async def handle_parallel_subtask(
             ExecutionMode,
             evaluate_orchestration_request,
         )
+
         if candidate_device_ids:
             _orch_request = OrchestrationRequest(
                 execution_mode=ExecutionMode.PARALLEL_FANOUT.value,
@@ -800,8 +814,7 @@ async def handle_parallel_subtask(
             _spine_blocked_count = len(_orch_decision.blocked_slots)
             if _spine_blocked_count > 0:
                 logger.info(
-                    "PARALLEL_SUBTASK: orchestration spine blocked %d/%d devices "
-                    "| task_id=%s ready=%s blocked=%s",
+                    "PARALLEL_SUBTASK: orchestration spine blocked %d/%d devices " "| task_id=%s ready=%s blocked=%s",
                     _spine_blocked_count,
                     len(candidate_device_ids),
                     task_id,
@@ -811,8 +824,7 @@ async def handle_parallel_subtask(
     except Exception as _spine_err:
         # Spine unavailable — degrade gracefully and proceed with candidate list
         logger.debug(
-            "PARALLEL_SUBTASK: unified orchestration spine unavailable "
-            "(non-fatal, using candidate device list): %s",
+            "PARALLEL_SUBTASK: unified orchestration spine unavailable " "(non-fatal, using candidate device list): %s",
             _spine_err,
         )
 
@@ -860,7 +872,9 @@ async def handle_parallel_subtask(
     if fanout_summary["fanout"] > 0:
         logger.info(
             "PARALLEL_SUBTASK → fan-out 成功: task_id=%s fanout=%s devices=%s",
-            task_id, fanout_summary["fanout"], fanout_summary["device_ids"],
+            task_id,
+            fanout_summary["fanout"],
+            fanout_summary["device_ids"],
         )
         return MessageBuilder.goal_execution_result(
             device_id=device_id,
@@ -921,7 +935,8 @@ async def handle_parallel_subtask(
 
         logger.info(
             "PARALLEL_SUBTASK → task_assign(fallback): task_id=%s goal=%r",
-            task_id, response_text[:80] if response_text else goal[:80],
+            task_id,
+            response_text[:80] if response_text else goal[:80],
         )
 
         return MessageBuilder.task_assign(
@@ -955,9 +970,35 @@ def _normalize_android_goal_status(raw_status: str) -> str:
     return "completed"
 
 
-async def handle_goal_execution_result(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> None:
+def _can_degrade_missing_goal_execution_schema_gate(
+    message: Dict[str, Any],
+    *,
+    gate_reason: str,
+) -> bool:
+    """Return True when a goal result gate reject is a safe compat degrade.
+
+    ``goal_execution_result`` messages with no explicit schema metadata still
+    carry enough canonical identity to enter the single truth chain safely when
+    they at least provide task identity and a terminal status. This compat path
+    is intentionally narrow: explicit schema mismatches remain hard rejects, and
+    only legacy missing-schema envelopes with canonical task/status fields are
+    downgraded here.
+    """
+    if gate_reason != "missing_schema_version_metadata":
+        return False
+
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, dict) else {}
+    task_id = payload_mapping.get("task_id") or message.get("correlation_id") or message.get("task_id")
+    raw_status = payload_mapping.get("status") or message.get("status")
+    if not str(task_id or "").strip():
+        return False
+    if not str(raw_status or "").strip():
+        return False
+    return True
+
+
+async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> None:
     """处理 GOAL_EXECUTION_RESULT — Android/设备执行结果回传。
 
     Android 执行完 goal_execution 或 parallel_subtask 后发送此消息。
@@ -979,22 +1020,48 @@ async def handle_goal_execution_result(
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
         )
+
         _ger_gate_decision = _evaluate_schema_gate(
             message_type="goal_execution_result",
             message=message,
         )
         if _ger_gate_decision is not None:
+            _ger_gate_evidence = _ger_gate_decision.to_dict()
             if _ger_gate_decision.action == "reject":
-                logger.warning(
-                    "handle_goal_execution_result: schema/version gate REJECTED ingress "
-                    "reason=%s observed_schema=%r task_id=%r device_id=%r "
-                    "— blocking before canonical truth chain",
-                    _ger_gate_decision.reason,
-                    _ger_gate_decision.observed_schema_version,
-                    task_id,
-                    device_id,
-                )
-                return
+                if _can_degrade_missing_goal_execution_schema_gate(
+                    message,
+                    gate_reason=_ger_gate_decision.reason,
+                ):
+                    _ger_gate_evidence.update(
+                        {
+                            "action": "degrade",
+                            "original_action": "reject",
+                            "reason": "legacy_goal_execution_result_missing_schema_version_compat",
+                        }
+                    )
+                    message["_cross_repo_schema_version_gate"] = _ger_gate_evidence
+                    logger.warning(
+                        "handle_goal_execution_result: schema/version gate downgraded "
+                        "legacy compat ingress reason=%s task_id=%r device_id=%r "
+                        "— continuing through canonical truth chain in degraded mode",
+                        _ger_gate_decision.reason,
+                        task_id,
+                        device_id,
+                    )
+                else:
+                    message["_cross_repo_schema_version_gate"] = _ger_gate_evidence
+                    logger.warning(
+                        "handle_goal_execution_result: schema/version gate REJECTED ingress "
+                        "reason=%s observed_schema=%r task_id=%r device_id=%r "
+                        "— blocking before canonical truth chain",
+                        _ger_gate_decision.reason,
+                        _ger_gate_decision.observed_schema_version,
+                        task_id,
+                        device_id,
+                    )
+                    return
+            else:
+                message["_cross_repo_schema_version_gate"] = _ger_gate_evidence
             if _ger_gate_decision.action == "degrade":
                 logger.warning(
                     "handle_goal_execution_result: schema/version gate DEGRADED ingress "
@@ -1061,11 +1128,12 @@ async def handle_goal_execution_result(
         from core.durable_result_idempotency import (
             check_result_idempotency as _check_ger_idem,
         )
+
         if _check_ger_idem(_ger_idem_key):
             logger.debug(
-                "GOAL_EXECUTION_RESULT: duplicate suppressed (durable store): "
-                "task_id=%s device_id=%s",
-                task_id, device_id,
+                "GOAL_EXECUTION_RESULT: duplicate suppressed (durable store): " "task_id=%s device_id=%s",
+                task_id,
+                device_id,
             )
             return
     except Exception as _ger_idem_err:
@@ -1078,7 +1146,13 @@ async def handle_goal_execution_result(
         "GOAL_EXECUTION_RESULT received: task_id=%s device_id=%s "
         "raw_status=%s canonical_status=%s "
         "group_id=%s subtask_index=%s latency=%sms",
-        task_id, device_id, _raw_status, status, group_id, subtask_index, latency_ms,
+        task_id,
+        device_id,
+        _raw_status,
+        status,
+        group_id,
+        subtask_index,
+        latency_ms,
     )
 
     # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
@@ -1103,12 +1177,14 @@ async def handle_goal_execution_result(
                 session_id=payload.get("session_id"),
             )
             logger.debug(
-                "GOAL_EXECUTION_RESULT: task_memory 写入成功 task_id=%s", task_id,
+                "GOAL_EXECUTION_RESULT: task_memory 写入成功 task_id=%s",
+                task_id,
             )
         except Exception as mem_err:
             logger.warning(
                 "GOAL_EXECUTION_RESULT: task_memory 写入失败（非致命）task_id=%s error=%s",
-                task_id, mem_err,
+                task_id,
+                mem_err,
             )
     else:
         logger.debug(
@@ -1119,6 +1195,7 @@ async def handle_goal_execution_result(
     # ── 触发 OpenClawd 反馈（如果有对应会话）────────────────────────
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         if hasattr(runtime, "on_goal_execution_result"):
             await runtime.on_goal_execution_result(
@@ -1131,7 +1208,8 @@ async def handle_goal_execution_result(
     except Exception as feedback_err:
         logger.debug(
             "GOAL_EXECUTION_RESULT: OpenClawd 反馈失败（非致命）task_id=%s error=%s",
-            task_id, feedback_err,
+            task_id,
+            feedback_err,
         )
 
     # PR-CLOSURE: 通过统一结果入口（UnifiedResultIngress）处理跨设备执行结果，
@@ -1155,6 +1233,7 @@ async def handle_goal_execution_result(
             ResultSourceChannel as _RSCv2,
             ingest_result_async as _ingest_ger_async,
         )
+
         _ger_event = _NREV2(
             task_id=task_id,
             device_id=device_id,
@@ -1190,9 +1269,7 @@ async def handle_goal_execution_result(
         elif _ger_ingress_outcome.is_fully_closed:
             _ger_ingress_closed = True
             result_lineage["reconciliation_lineage"] = "unified_ingress_closed"
-            _acceptance_verdict = getattr(
-                _ger_ingress_outcome, "evidence_acceptance_verdict", ""
-            )
+            _acceptance_verdict = getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", "")
             if str(_acceptance_verdict).strip().lower() in {"accept_provisional", "accepted_provisional"}:
                 result_lineage["closure_lineage"] = "unified_ingress_provisional_non_canonical"
                 if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
@@ -1216,8 +1293,7 @@ async def handle_goal_execution_result(
             result_lineage["canonical_truth_completed"] = _canonical_completed
             result_lineage["mature_closure_achieved"] = _mature_closure
             logger.debug(
-                "handle_goal_execution_result: unified ingress fully closed task_id=%r "
-                "acceptance=%s truth_chain=%s",
+                "handle_goal_execution_result: unified ingress fully closed task_id=%r " "acceptance=%s truth_chain=%s",
                 task_id,
                 _ger_ingress_outcome.evidence_acceptance_verdict,
                 _ger_ingress_outcome.truth_chain_complete,
@@ -1225,9 +1301,7 @@ async def handle_goal_execution_result(
         else:
             # 部分闭环：UnifiedResultIngress 运行了但未完全关闭
             result_lineage["reconciliation_lineage"] = "unified_ingress_partial"
-            result_lineage["closure_lineage"] = (
-                f"unified_ingress_incomplete:{_ger_ingress_outcome.incomplete_reason}"
-            )
+            result_lineage["closure_lineage"] = f"unified_ingress_incomplete:{_ger_ingress_outcome.incomplete_reason}"
             result_lineage["audit_lineage"] = "unified_ingress_partial"
             if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
                 result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
@@ -1237,8 +1311,7 @@ async def handle_goal_execution_result(
             result_lineage["canonical_truth_completed"] = False
             result_lineage["mature_closure_achieved"] = False
             logger.warning(
-                "handle_goal_execution_result: unified ingress partial for task_id=%r "
-                "reason=%s truth_chain=%s",
+                "handle_goal_execution_result: unified ingress partial for task_id=%r " "reason=%s truth_chain=%s",
                 task_id,
                 _ger_ingress_outcome.incomplete_reason,
                 _ger_ingress_outcome.truth_chain_complete,
@@ -1267,8 +1340,7 @@ async def handle_goal_execution_result(
                 result_lineage["canonical_truth_completed"] = False
                 result_lineage["mature_closure_achieved"] = False
                 logger.warning(
-                    "handle_goal_execution_result: truth chain fallback incomplete "
-                    "for task_id=%r: %s",
+                    "handle_goal_execution_result: truth chain fallback incomplete " "for task_id=%r: %s",
                     task_id,
                     _ger_ttc_outcome.incomplete_reason,
                 )
@@ -1296,16 +1368,13 @@ async def handle_goal_execution_result(
                     _rec_outcome = _reconcile_goal_result(message)
                     if _rec_outcome.was_updated:
                         logger.debug(
-                            "goal_execution_result legacy reconcile: "
-                            "signal=%s contract_id=%r → phase=%s",
+                            "goal_execution_result legacy reconcile: " "signal=%s contract_id=%r → phase=%s",
                             _rec_outcome.envelope.signal_kind.value if _rec_outcome.envelope else "?",
                             _rec_outcome.envelope.contract_id if _rec_outcome.envelope else "",
                             _rec_outcome.record.phase.value if _rec_outcome.record else "?",
                         )
                 except Exception as rec_err:
-                    logger.debug(
-                        "goal_execution_result legacy reconcile failed (non-fatal): %s", rec_err
-                    )
+                    logger.debug("goal_execution_result legacy reconcile failed (non-fatal): %s", rec_err)
             _try_ingest_goal_result_truth(message)
             result_lineage["reconciliation_lineage"] = "legacy_fallback_reconcile"
             result_lineage["closure_lineage"] = "legacy_fallback_completion"
@@ -1318,19 +1387,20 @@ async def handle_goal_execution_result(
             # 遗留完成通知
             try:
                 from core.canonical_completion_ingress import get_canonical_completion_ingress as _get_cci_fb
-                _get_cci_fb().notify(_make_completion_envelope(
-                    task_id=task_id,
-                    handoff_id=payload.get("handoff_id") or "",
-                ))
+
+                _get_cci_fb().notify(
+                    _make_completion_envelope(
+                        task_id=task_id,
+                        handoff_id=payload.get("handoff_id") or "",
+                    )
+                )
                 logger.debug(
-                    "GOAL_EXECUTION_RESULT: legacy fallback CanonicalCompletionIngress "
-                    "notified task_id=%s",
+                    "GOAL_EXECUTION_RESULT: legacy fallback CanonicalCompletionIngress " "notified task_id=%s",
                     task_id,
                 )
             except Exception as _cci_fb_err:
                 logger.debug(
-                    "GOAL_EXECUTION_RESULT: legacy fallback completion ingress notify "
-                    "failed (non-fatal): %s",
+                    "GOAL_EXECUTION_RESULT: legacy fallback completion ingress notify " "failed (non-fatal): %s",
                     _cci_fb_err,
                 )
 
@@ -1338,6 +1408,7 @@ async def handle_goal_execution_result(
     # 将跨设备链路验收状态记录到全局闭环注册表，供操作员面板和审计消费。
     try:
         from core.execution_chain_closure import record_cross_device_chain_closure as _record_cdcc
+
         _ingress_outcome_for_closure: Optional[Dict[str, Any]] = None
         if _ger_ingress_outcome is not None:
             _ingress_outcome_for_closure = {
@@ -1355,8 +1426,7 @@ async def handle_goal_execution_result(
         )
     except Exception as _cdcc_err:
         logger.debug(
-            "GOAL_EXECUTION_RESULT: execution_chain_closure 写入失败（非致命）"
-            "task_id=%s err=%s",
+            "GOAL_EXECUTION_RESULT: execution_chain_closure 写入失败（非致命）" "task_id=%s err=%s",
             task_id,
             _cdcc_err,
         )
@@ -1378,8 +1448,7 @@ async def handle_goal_execution_result(
             )
             if group_state is not None and group_state.all_done:
                 logger.info(
-                    "GOAL_EXECUTION_RESULT: group COMPLETE | group_id=%s "
-                    "completed=%d/%d success=%d failure=%d",
+                    "GOAL_EXECUTION_RESULT: group COMPLETE | group_id=%s " "completed=%d/%d success=%d failure=%d",
                     group_id,
                     group_state.completed_count,
                     group_state.expected_count or group_state.completed_count,
@@ -1390,6 +1459,7 @@ async def handle_goal_execution_result(
                 # can be updated with the aggregated result.
                 try:
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                     _runtime = get_desktop_presence_runtime()
                     if hasattr(_runtime, "on_goal_execution_result"):
                         await _runtime.on_goal_execution_result(
@@ -1412,7 +1482,8 @@ async def handle_goal_execution_result(
                     )
         except Exception as agg_err:
             logger.debug(
-                "GOAL_EXECUTION_RESULT: group aggregator update failed (non-fatal): %s", agg_err,
+                "GOAL_EXECUTION_RESULT: group aggregator update failed (non-fatal): %s",
+                agg_err,
             )
 
     # GOAL_EXECUTION_RESULT 是最终回传（fire-and-forget），返回 None
@@ -1425,21 +1496,21 @@ async def handle_goal_execution_result(
             if _pending is not None and task_id in _pending:
                 _future = _pending.pop(task_id, None)
                 if _future is not None and not _future.done():
-                    _future.set_result({
-                        "status": status,
-                        "task_id": task_id,
-                        "result": result_text,
-                        "source": "canonical_ws",
-                    })
+                    _future.set_result(
+                        {
+                            "status": status,
+                            "task_id": task_id,
+                            "result": result_text,
+                            "source": "canonical_ws",
+                        }
+                    )
                     logger.debug(
-                        "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution "
-                        "task_id=%s",
+                        "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution " "task_id=%s",
                         task_id,
                     )
         except Exception as _pr_err:
             logger.debug(
-                "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution failed "
-                "(non-fatal): %s",
+                "GOAL_EXECUTION_RESULT: _pending_responses fallback resolution failed " "(non-fatal): %s",
                 _pr_err,
             )
 
