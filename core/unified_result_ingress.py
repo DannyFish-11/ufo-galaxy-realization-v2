@@ -73,7 +73,7 @@ import threading
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, FrozenSet, Optional
 
 from core.continuity_adjudication import (
     adjudicate_continuity_legality_gate,
@@ -139,6 +139,69 @@ UNIFIED_RESULT_INGRESS_REPLAY_ORDERING_POLICY: str = (
     "Missing ordering metadata produces visible evidence rather than silent acceptance.  "
     "Non-REPLAY channels are not subject to replay ordering adjudication."
 )
+
+ANDROID_CLOSURE_GRADE_ELIGIBILITY_POLICY: str = (
+    "ANDROID_CLOSURE_GRADE_ELIGIBILITY_V1: "
+    "Only Android runtime payloads that (1) pass the strict uplink schema/contract "
+    "gate (action='accept'), (2) carry all closure-critical identity fields "
+    "(task_id, device_id), and (3) carry a canonical terminal normalized_status "
+    "are eligible for closure-grade canonical credit.  Payloads that enter via the "
+    "compat/degrade path (AndroidIngressPayloadGrade.COMPAT_DEGRADED) or that are "
+    "hard-rejected (AndroidIngressPayloadGrade.NOT_CLOSURE_GRADE) MUST have "
+    "closure_grade_eligible=False in both NormalizedResultEvent and "
+    "UnifiedResultIngressOutcome.  Such payloads MUST NOT be promoted to "
+    "is_fully_closed=True.  The degrade path exists for operational compatibility "
+    "only and does not confer canonical closure truthfulness."
+)
+
+CLOSURE_CRITICAL_ANDROID_IDENTITY_FIELDS: FrozenSet[str] = frozenset(
+    {
+        "task_id",
+        "device_id",
+    }
+)
+"""Minimum identity fields that must be non-empty for an Android runtime result
+to be considered closure-grade eligible.  Absence of any field in this set
+implies the payload cannot be attributed to a specific canonical task+device
+pair and therefore must not be credited as canonical closure."""
+
+
+class AndroidIngressPayloadGrade(str, Enum):
+    """Closure-grade classification for Android-originated ingress payloads.
+
+    Explicitly distinguishes the quality tier of an inbound Android result
+    payload so that downstream processing and closure adjudication can make
+    truthful decisions based on real payload quality rather than permissive
+    compat acceptance alone.
+
+    This enum is the canonical vocabulary for the ``android_payload_grade``
+    field on :class:`NormalizedResultEvent` and
+    :class:`UnifiedResultIngressOutcome`.
+    """
+
+    CANONICAL = "canonical"
+    """Payload passed the strict schema gate (action='accept') and carries all
+    closure-critical identity fields.  Eligible for full canonical closure."""
+
+    COMPAT_DEGRADED = "compat_degraded"
+    """Payload was accepted via the compat/degrade path (e.g. missing schema
+    metadata, legacy format, or degraded dedupe contract).  Ineligible for
+    closure-grade canonical credit; MUST NOT be treated as full canonical
+    closure (is_fully_closed must remain False)."""
+
+    WEAK_IDENTITY = "weak_identity"
+    """Schema gate passed but one or more closure-critical identity fields are
+    absent (e.g. missing task_id or device_id).  Ineligible for closure-grade
+    canonical credit."""
+
+    NOT_CLOSURE_GRADE = "not_closure_grade"
+    """Payload was explicitly classified as not eligible for closure-grade
+    handling (e.g. hard gate reject, absent terminal status)."""
+
+    UNCLASSIFIED = "unclassified"
+    """No closure-grade classification has been applied.  Used when the Android
+    ingress gate assessment was unavailable or not performed.  Payloads in this
+    state are treated as closure-grade eligible by default (backward compat)."""
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +353,30 @@ class NormalizedResultEvent:
     When absent, the ordering contract cannot apply duplicate-avoidance and
     classifies the item as ``ambiguous_authority``.
     Android callers MUST populate this from ``OfflineTaskQueue`` item id."""
+
+    # ── Closure-grade eligibility ─────────────────────────────────────────────
+    closure_grade_eligible: bool = True
+    """Whether this payload is eligible for closure-grade canonical credit.
+
+    Defaults to ``True`` for backward compatibility with callers that do not
+    perform an explicit Android ingress gate assessment.
+
+    Android gateway handlers (e.g. ``handle_goal_execution_result``) MUST set
+    this to ``False`` when the uplink schema gate decision is ``action='degrade'``
+    or ``action='reject'``, or when the payload is missing closure-critical
+    identity fields per ``CLOSURE_CRITICAL_ANDROID_IDENTITY_FIELDS``.
+
+    When ``False``, :class:`UnifiedResultIngress` will not set
+    ``is_fully_closed=True`` even if all other processing steps succeed.
+    Per ``ANDROID_CLOSURE_GRADE_ELIGIBILITY_POLICY``."""
+
+    android_payload_grade: str = ""
+    """Closure-grade classification string from :class:`AndroidIngressPayloadGrade`.
+
+    Set by Android gateway handlers to record how the uplink schema gate
+    classified this payload.  Empty string means no explicit grade assessment
+    was performed (treated as :attr:`AndroidIngressPayloadGrade.UNCLASSIFIED`
+    for logging, but does not affect ``closure_grade_eligible``)."""
 
     @staticmethod
     def _first_available_text(*values: Any) -> str:
@@ -472,6 +559,23 @@ class UnifiedResultIngressOutcome:
     """Per-task closure adjudication evidence ledger snapshot."""
     final_truth_provenance: Dict[str, Any] = field(default_factory=dict)
     """Final-truth provenance derived from closure evidence ledger."""
+    # Closure-grade eligibility (Stage 1 Android ingress hardening)
+    closure_grade_eligible: bool = True
+    """Whether the Android payload that produced this outcome was eligible for
+    closure-grade canonical credit.
+
+    Propagated directly from :attr:`NormalizedResultEvent.closure_grade_eligible`.
+    When ``False``, ``is_fully_closed`` will also be ``False`` regardless of
+    whether the truth chain and completion notification steps succeeded.
+
+    Per ``ANDROID_CLOSURE_GRADE_ELIGIBILITY_POLICY``."""
+    closure_grade_ineligible_reason: str = ""
+    """Human-readable reason explaining why ``closure_grade_eligible`` is False.
+    Empty when ``closure_grade_eligible`` is True or when no reason was recorded."""
+    android_payload_grade: str = ""
+    """Closure-grade classification string from :class:`AndroidIngressPayloadGrade`.
+    Propagated from :attr:`NormalizedResultEvent.android_payload_grade`.
+    Empty string means no explicit grade assessment was performed."""
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +637,16 @@ class UnifiedResultIngress:
             task_id=event.task_id,
             normalized_status=event.normalized_status,
         )
+        # Propagate closure-grade fields from the event immediately so that
+        # all early-return paths (continuity reject, stale, replay ordering
+        # reject, dedupe) also carry the correct closure-grade classification.
+        outcome.closure_grade_eligible = event.closure_grade_eligible
+        outcome.android_payload_grade = event.android_payload_grade
+        if not event.closure_grade_eligible:
+            grade = event.android_payload_grade or AndroidIngressPayloadGrade.UNCLASSIFIED.value
+            outcome.closure_grade_ineligible_reason = (
+                f"Payload not eligible for canonical closure due to grade: {grade}"
+            )
         completion_lineage = self._build_completion_lineage(event)
         outcome.completion_lineage = dict(completion_lineage)
 
@@ -821,12 +935,14 @@ class UnifiedResultIngress:
         evidence_verdict = outcome.evidence_acceptance_verdict or ""
         evidence_gate_blocked = evidence_verdict in EVIDENCE_CLOSURE_BLOCKING_VERDICTS
         dedupe_contract_blocked = outcome.dedupe_contract_action == "degrade"
+        closure_grade_blocked = not outcome.closure_grade_eligible
         outcome.is_fully_closed = (
             not outcome.was_deduplicated
             and outcome.truth_chain_complete
             and outcome.completion_notified
             and not evidence_gate_blocked
             and not dedupe_contract_blocked
+            and not closure_grade_blocked
         )
         if not outcome.is_fully_closed and not outcome.incomplete_reason:
             parts = []
@@ -838,6 +954,10 @@ class UnifiedResultIngress:
                 parts.append(f"evidence_gate:{evidence_verdict}")
             if dedupe_contract_blocked:
                 parts.append(f"dedupe_contract:{outcome.dedupe_contract_reason or outcome.dedupe_contract_action}")
+            if closure_grade_blocked:
+                parts.append(
+                    f"closure_grade_ineligible:{outcome.closure_grade_ineligible_reason or outcome.android_payload_grade or 'unclassified'}"
+                )
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
         outcome.problem_execution_closure = self._build_problem_execution_closure(
             event=event,
@@ -894,6 +1014,10 @@ class UnifiedResultIngress:
             "dedupe_contract_action": str(outcome.dedupe_contract_action or ""),
             "dedupe_contract_reason": str(outcome.dedupe_contract_reason or ""),
             "dedupe_contract_evidence": dict(outcome.dedupe_contract_evidence or {}),
+            # Stage 1: closure-grade eligibility
+            "closure_grade_eligible": bool(outcome.closure_grade_eligible),
+            "closure_grade_ineligible_reason": str(outcome.closure_grade_ineligible_reason or ""),
+            "android_payload_grade": str(outcome.android_payload_grade or ""),
             "updated_at": time.time(),
         }
         with self._lock:

@@ -17,6 +17,16 @@ CROSS_REPO_SCHEMA_GATE_AUTHORITY: str = (
 )
 CROSS_REPO_SCHEMA_GATE_VERSION: str = "1.0.0"
 
+CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_POLICY: str = (
+    "CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_V1: "
+    "Only Android runtime payloads whose uplink schema gate decision is action='accept' "
+    "are eligible for closure-grade canonical credit.  Payloads with action='degrade' "
+    "(compat/legacy path) or action='reject' MUST have closure_grade_eligible=False and "
+    "MUST NOT be promoted to is_fully_closed=True in the unified result ingress.  "
+    "The degrade path exists for operational compatibility only; it does not confer "
+    "the same canonical truthfulness as a strict schema-validated accept."
+)
+
 ANDROID_AUDITED_REF: str = "3258b09b25d5279773122e86a7b1945586ff470b"
 ANDROID_AIP_MODELS_SOURCE_SHA: str = "3404657c7eda895978ec672e1e176152161b8fe1"
 ANDROID_COMPLETION_CLOSURE_CONTRACT_SOURCE_SHA: str = "7838103668a19800ed74d3133f4f5e671359d65a"
@@ -165,6 +175,18 @@ class AndroidUplinkSchemaGateDecision:
     expected_contract_version: str = ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION
     evidence: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def closure_grade_eligible(self) -> bool:
+        """True iff this payload may be credited as closure-grade canonical.
+
+        Only gate decisions with ``action='accept'`` are closure-grade eligible.
+        Payloads that entered via the compat/degrade path (``action='degrade'``)
+        or were hard-rejected (``action='reject'``) are NOT eligible for
+        closure-grade canonical credit per
+        ``CLOSURE_GRADE_REQUIRES_CANONICAL_SCHEMA_GATE_POLICY``.
+        """
+        return self.action == "accept"
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "action": self.action,
@@ -175,6 +197,7 @@ class AndroidUplinkSchemaGateDecision:
             "expected_contract_version": self.expected_contract_version,
             "reason": self.reason,
             "original_action": self.original_action,
+            "closure_grade_eligible": self.closure_grade_eligible,
             "evidence": dict(self.evidence),
             "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
             "gate_version": CROSS_REPO_SCHEMA_GATE_VERSION,
