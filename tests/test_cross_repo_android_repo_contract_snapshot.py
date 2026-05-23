@@ -35,7 +35,7 @@ def _extract_android_msg_type_wire_values(aip_models_source: str) -> set[str]:
     # app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt:
     # enum class MsgType(val value: String) { ... }
     enum_match = re.search(
-        r"enum class MsgType\(val value: String\)\s*\{(.*?)\n\}",
+        r"enum class MsgType\(val value: String\)\s*\{(.*?)\}",
         aip_models_source,
         flags=re.DOTALL,
     )

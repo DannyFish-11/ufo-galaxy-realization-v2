@@ -389,6 +389,7 @@ jobs:
     permissions:
       contents: read
     env:
+      # Override via repository/org variable ANDROID_REPO_FULL_NAME for forks.
       ANDROID_REPO_FULL_NAME: ${{ vars.ANDROID_REPO_FULL_NAME || 'DannyFish-11/ufo-galaxy-android' }}
     steps:
       - name: Checkout V2 repository
