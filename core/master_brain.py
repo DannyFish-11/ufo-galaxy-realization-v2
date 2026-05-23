@@ -100,10 +100,59 @@ class MasterBrain:
             logger.warning("MasterBrain: NATS connection failed, operating in local-only mode")
 
         # Subscribe to worker lifecycle events
-        if self._nats.is_connected():
-            await self._nats.subscribe_heartbeats(self._on_heartbeat)
-            await self._nats.subscribe_task_results(self._on_task_result)
-            await self._nats.subscribe_events("worker_registered", self._on_worker_event)
+        nats_connected = self._nats.is_connected()
+        subscriptions_ok = True
+        if nats_connected:
+            subscription_calls: list[tuple[str, Callable[..., Any], Callable[[dict], None]]] = [
+                ("heartbeats", self._nats.subscribe_heartbeats, self._on_heartbeat),
+                ("task_results", self._nats.subscribe_task_results, self._on_task_result),
+            ]
+            if hasattr(self._nats, "subscribe_worker_registrations"):
+                subscription_calls.append((
+                    "worker_registrations",
+                    self._nats.subscribe_worker_registrations,
+                    self._on_worker_event,
+                ))
+            else:
+                subscriptions_ok = False
+                logger.warning(
+                    "MasterBrain: NATS bus missing subscribe_worker_registrations; "
+                    "worker registration subject consumption not active"
+                )
+
+            if hasattr(self._nats, "subscribe_worker_shutdowns"):
+                subscription_calls.append((
+                    "worker_shutdowns",
+                    self._nats.subscribe_worker_shutdowns,
+                    self._on_worker_shutdown,
+                ))
+            else:
+                subscriptions_ok = False
+                logger.warning(
+                    "MasterBrain: NATS bus missing subscribe_worker_shutdowns; "
+                    "worker shutdown visibility not active"
+                )
+
+            # Legacy compatibility: still accept event bus wrappers if published.
+            if hasattr(self._nats, "subscribe_events"):
+                subscription_calls.append((
+                    "worker_registered_event",
+                    lambda cb: self._nats.subscribe_events("worker_registered", cb),
+                    self._on_worker_event,
+                ))
+                subscription_calls.append((
+                    "worker_shutdown_event",
+                    lambda cb: self._nats.subscribe_events("worker_shutdown", cb),
+                    self._on_worker_shutdown,
+                ))
+
+            for name, subscribe_fn, callback in subscription_calls:
+                result = await subscribe_fn(callback)
+                if not result.get("success"):
+                    subscriptions_ok = False
+                    logger.warning("MasterBrain: failed to subscribe to %s: %s", name, result)
+        else:
+            logger.warning("MasterBrain: NATS not connected, distributed lifecycle subscriptions inactive")
 
         # Try connecting to Temporal
         try:
@@ -115,7 +164,11 @@ class MasterBrain:
 
         self._started = True
         logger.info(f"MasterBrain: started (NATS={self._nats.is_connected()}, Temporal={self._temporal_client is not None})")
-        return {"success": True}
+        return {
+            "success": True,
+            "nats_connected": nats_connected,
+            "distributed_ready": bool(nats_connected and subscriptions_ok),
+        }
 
     # ── Task Dispatch ───────────────────────────────────────────────────────
 
@@ -141,6 +194,27 @@ class MasterBrain:
 
         # Publish to NATS
         result = await self._nats.publish_task_dispatch(target, task)
+        if result.get("noop"):
+            return {
+                "success": False,
+                "error": "distributed_transport_unavailable:nats_noop_transport",
+                "task_id": task.task_id,
+                "worker_id": target,
+                "distributed_dispatch": False,
+                "execution_path": "distributed_unavailable",
+                "nats_publish_state": result,
+            }
+        if not result.get("success"):
+            return {
+                "success": False,
+                "error": result.get("error", "nats_publish_failed"),
+                "task_id": task.task_id,
+                "worker_id": target,
+                "distributed_dispatch": False,
+                "execution_path": "distributed_unavailable",
+                "nats_publish_state": result,
+            }
+
         if result.get("success"):
             self._task_log[task.task_id] = {
                 "task_id": task.task_id,
@@ -154,6 +228,8 @@ class MasterBrain:
                 "task_type": task.task_type.value,
             })
             result["task_id"] = task.task_id
+            result.setdefault("distributed_dispatch", True)
+            result.setdefault("execution_path", "nats_distributed")
 
         return result
 
@@ -226,10 +302,44 @@ class MasterBrain:
             "status": "idle",
             "last_heartbeat": time.time(),
             "registered_at": datetime.now().isoformat(),
+            "force_offline": False,
         }
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
         logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
         return {"success": True, "worker_id": wid}
+
+    async def handle_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
+        """Reflect an explicit worker shutdown into topology state."""
+        wid = shutdown.worker_id
+        now_iso = datetime.now().isoformat()
+        existing = self._workers.get(wid, {})
+        entry = dict(existing)
+        entry.setdefault("worker_id", wid)
+        entry.setdefault("hostname", "")
+        entry.setdefault("device_type", "unknown")
+        entry.setdefault("platform", "")
+        entry.setdefault("capabilities", [])
+        entry.setdefault("supported_languages", [])
+        entry.setdefault("has_docker", False)
+        entry.setdefault("has_gpu", False)
+        entry.setdefault("memory_total_mb", 0)
+        entry.setdefault("cpu_cores", 0)
+        entry.setdefault("last_heartbeat", 0.0)
+        entry.setdefault("registered_at", now_iso)
+        entry.update({
+            "status": "offline",
+            "force_offline": True,
+            "shutdown_reason": shutdown.reason,
+            "shutdown_at": now_iso,
+            "drain_timeout_s": shutdown.drain_timeout_s,
+        })
+        self._workers[wid] = entry
+        _try_emit_event(
+            "WORKER_SHUTDOWN",
+            {"worker_id": wid, "reason": shutdown.reason, "drain_timeout_s": shutdown.drain_timeout_s},
+        )
+        logger.info("MasterBrain: worker shutdown — %s (reason=%s)", wid, shutdown.reason)
+        return {"success": True, "worker_id": wid, "status": "offline"}
 
     async def handle_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
         """Update worker status from heartbeat."""
@@ -243,6 +353,7 @@ class MasterBrain:
             "active_tasks": heartbeat.active_tasks,
             "cpu_usage_percent": heartbeat.cpu_usage_percent,
             "memory_usage_percent": heartbeat.memory_usage_percent,
+            "force_offline": False,
         })
         return {"success": True}
 
@@ -252,8 +363,10 @@ class MasterBrain:
         topology = {}
         for wid, info in self._workers.items():
             alive = (now - info.get("last_heartbeat", 0)) < _HEARTBEAT_TIMEOUT_S
+            if info.get("force_offline"):
+                alive = False
             topology[wid] = {**info, "alive": alive}
-            if not alive and info.get("status") != "dead":
+            if not alive and info.get("status") not in ("dead", "offline"):
                 info["status"] = "dead"
                 _try_emit_event("WORKER_DEAD", {"worker_id": wid})
         return topology
@@ -296,11 +409,77 @@ class MasterBrain:
             logger.error(f"MasterBrain: task result handling error — {exc}")
 
     async def _on_worker_event(self, data: dict) -> None:
+        payload = self._extract_lifecycle_payload(
+            data,
+            payload_key="worker_register",
+            event_type="worker_register",
+            direct_required_key="device_type",
+        )
+        if payload is None:
+            logger.warning("MasterBrain: unrecognized worker registration payload: %s", data)
+            return
         try:
-            reg = WorkerRegistrationModel.model_validate(data)
+            reg = WorkerRegistrationModel.model_validate(payload)
             await self.register_worker(reg)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("MasterBrain: worker registration parse error — %s", exc)
+
+    async def _on_worker_shutdown(self, data: dict) -> None:
+        payload = self._extract_lifecycle_payload(
+            data,
+            payload_key="worker_shutdown",
+            event_type="worker_shutdown",
+            direct_required_key="reason",
+        )
+        if payload is None:
+            logger.warning("MasterBrain: unrecognized worker shutdown payload: %s", data)
+            return
+        try:
+            shutdown = WorkerShutdownModel.model_validate(payload)
+            await self.handle_worker_shutdown(shutdown)
+        except Exception as exc:
+            logger.warning("MasterBrain: worker shutdown parse error — %s", exc)
+
+    @staticmethod
+    def _extract_lifecycle_payload(
+        data: dict,
+        *,
+        payload_key: str,
+        event_type: str,
+        direct_required_key: str,
+    ) -> Optional[dict]:
+        """Extract worker lifecycle payload from direct or wrapped envelopes."""
+        if not isinstance(data, dict):
+            return None
+
+        if MasterBrain._has_required_lifecycle_fields(data, direct_required_key=direct_required_key):
+            return data
+        if isinstance(data.get(payload_key), dict):
+            nested = data[payload_key]
+            if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                return nested
+
+        payload = data.get("payload")
+        if isinstance(payload, dict):
+            if MasterBrain._has_required_lifecycle_fields(payload, direct_required_key=direct_required_key):
+                return payload
+            if isinstance(payload.get(payload_key), dict):
+                nested = payload[payload_key]
+                if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                    return nested
+
+        if data.get("type") == event_type and isinstance(data.get(payload_key), dict):
+            nested = data[payload_key]
+            if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
+                return nested
+        return None
+
+    @staticmethod
+    def _has_required_lifecycle_fields(data: dict, *, direct_required_key: str) -> bool:
+        """Validate minimal worker lifecycle payload required fields."""
+        worker_id = data.get("worker_id")
+        required = data.get(direct_required_key)
+        return bool(worker_id) and required not in (None, "")
 
     # ── Health / Status (constraint C8) ─────────────────────────────────────
 
