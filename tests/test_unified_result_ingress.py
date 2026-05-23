@@ -1869,8 +1869,9 @@ class TestReplayOrderingAdjudication:
             replay_session_id="session-dup",
         )
         ingress.process(evt1)
+        truth_chain_calls.clear()
 
-        # Same item_id again → reject_duplicate (not hard-blocked)
+        # Same item_id again → reject_duplicate and must not be re-credited
         evt2 = _make_replay_event(
             task_id=_make_task_id(),
             replay_seq=2,
