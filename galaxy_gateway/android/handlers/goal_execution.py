@@ -1013,6 +1013,10 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
 
+    # Initialized to None; set inside the schema gate try block.
+    # Used later for closure-grade assessment.
+    _ger_gate_decision = None
+
     # PR-46: Cross-repo schema/version gate enforcement (STRICT mode).
     # goal_execution_result is a strict-reject type: schema/contract mismatches
     # block the message before any canonical truth chain step.
@@ -1225,6 +1229,42 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     #
     # 如果 UnifiedResultIngress 不可用，回退到直接调用 run_task_result_truth_chain，
     # 以保留现有行为。
+
+    # Stage 1: Compute closure-grade eligibility from schema gate decision and
+    # lineage quality before constructing NormalizedResultEvent so that
+    # UnifiedResultIngress receives truthful closure-grade classification.
+    # Per ANDROID_CLOSURE_GRADE_ELIGIBILITY_POLICY:
+    #   - Gate action='accept'               → canonical / closure_grade_eligible=True
+    #   - Gate action='degrade'              → compat_degraded / closure_grade_eligible=False
+    #   - Gate action='reject' (downgraded)  → compat_degraded / closure_grade_eligible=False
+    #   - Gate unavailable / not applicable  → unclassified / closure_grade_eligible=True (compat)
+    # NOTE: If gate action is 'reject' and we reach this point (i.e., the
+    # function did not return early), the reject was downgraded to compat/degrade.
+    # Both native degrade and downgraded reject yield closure_grade_eligible=False.
+    try:
+        from core.unified_result_ingress import AndroidIngressPayloadGrade as _AIPGrade
+
+        if _ger_gate_decision is None:
+            # Gate was not applicable or module unavailable — preserve compat default.
+            _ger_closure_grade_eligible = True
+            _ger_android_payload_grade = _AIPGrade.UNCLASSIFIED.value
+        elif _ger_gate_decision.action == "accept":
+            _ger_closure_grade_eligible = True
+            _ger_android_payload_grade = _AIPGrade.CANONICAL.value
+        else:
+            # action='degrade' or action='reject' that was downgraded by
+            # _can_degrade_missing_goal_execution_schema_gate (any reject that
+            # reached this path was downgraded; undowngraded rejects return early).
+            _ger_closure_grade_eligible = False
+            _ger_android_payload_grade = _AIPGrade.COMPAT_DEGRADED.value
+    except Exception as _grade_err:
+        logger.debug(
+            "handle_goal_execution_result: closure-grade assessment skipped (non-fatal): %s",
+            _grade_err,
+        )
+        _ger_closure_grade_eligible = True
+        _ger_android_payload_grade = ""
+
     _ger_ingress_closed = False
     _ger_ingress_outcome = None  # type: ignore[assignment]
     try:
@@ -1248,6 +1288,10 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             # 使用与外层幂等性保护相同的 key；UnifiedResultIngress 在此处记录该
             # key，外层的 pre-check 在下一次重放时会提前拦截重复消息。
             idempotency_key=_ger_idem_key,
+            # Stage 1: pass closure-grade classification so UnifiedResultIngress
+            # can enforce is_fully_closed=False for non-canonical payloads.
+            closure_grade_eligible=_ger_closure_grade_eligible,
+            android_payload_grade=_ger_android_payload_grade,
         )
         _ger_ingress_outcome = await _ingest_ger_async(_ger_event, bridge=bridge)
         if _ger_ingress_outcome.was_deduplicated:
