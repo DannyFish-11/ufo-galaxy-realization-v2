@@ -198,7 +198,10 @@ def build_dual_runtime_cross_repo_evidence_report(evidence: Dict[str, Any]) -> D
     execution_payload = _extract_execution_payload(evidence)
     execution_phase = str(execution_payload.get("phase", "")).strip().lower()
     # Prefer explicit closure flag when present; phase inference is backward-compatible fallback.
-    closure_complete = evidence.get("closure_complete") is True or execution_phase in _TERMINAL_EXECUTION_PHASES
+    if "closure_complete" in evidence:
+        closure_complete = evidence.get("closure_complete") is True
+    else:
+        closure_complete = execution_phase in _TERMINAL_EXECUTION_PHASES
 
     behavior_checks = {
         "replay_ordering": {"status": replay_status, "detail": replay_detail},

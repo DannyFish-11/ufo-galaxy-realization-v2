@@ -90,6 +90,19 @@ def test_build_report_marks_evidenced_when_all_behaviors_present() -> None:
     assert report["overall_state"] == "evidenced"
 
 
+def test_build_report_honors_explicit_closure_incomplete_flag() -> None:
+    messages = _base_messages()
+    messages[3]["payload"] = {"phase": "succeeded"}
+    report = build_dual_runtime_cross_repo_evidence_report(
+        {
+            "is_real_device_e2e_verified": True,
+            "messages": messages,
+            "closure_complete": False,
+        }
+    )
+    assert report["behavior_checks"]["closure_completeness"]["status"] == "not_evidenced"
+
+
 def test_build_report_from_environment_includes_evidence_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     evidence_path = tmp_path / "evidence.json"
     evidence_path.write_text(
