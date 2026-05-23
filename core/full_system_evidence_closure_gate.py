@@ -123,6 +123,16 @@ class ClosureGateResult:
         Per-subsystem dict entries for subsystems that failed the gate.
     android_evidence_present:
         Mirrors the value from the underlying baseline report.
+    scorecard_summary:
+        Condensed overall counts from the V3 baseline scorecard: present,
+        wired, exercised, evidenced, and blocker counts.  Allows the gate
+        consumer to understand the maturity distribution without re-running
+        the full baseline.
+    open_question_categories:
+        Count of open questions per category (``repo_local``,
+        ``cross_repo``, ``runtime_proof``).  Helps the gate consumer
+        distinguish questions that are locally actionable from those that
+        require cross-repo coordination or actual runtime evidence.
     """
 
     gate_passed: bool = False
@@ -132,6 +142,8 @@ class ClosureGateResult:
     subsystem_failures: List[Dict[str, Any]] = field(default_factory=list)
     android_evidence_present: bool = False
     android_evidence_state: Dict[str, Any] = field(default_factory=dict)
+    scorecard_summary: Dict[str, Any] = field(default_factory=dict)
+    open_question_categories: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -142,6 +154,8 @@ class ClosureGateResult:
             "subsystem_failures": list(self.subsystem_failures),
             "android_evidence_present": self.android_evidence_present,
             "android_evidence_state": dict(self.android_evidence_state),
+            "scorecard_summary": dict(self.scorecard_summary),
+            "open_question_categories": dict(self.open_question_categories),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -251,6 +265,32 @@ def evaluate_evidence_closure_gate(
 
     gate_passed = len(fail_reasons) == 0
 
+    # --- Scorecard summary ---
+    # report.scorecard is always a dict (V3BaselineReport guarantees this), but
+    # we use .get defensively to handle empty reports built during early gate
+    # failures (where report.scorecard may be an empty dict with no "overall" key).
+    scorecard_overall = dict((report.scorecard or {}).get("overall", {}))
+    scorecard_summary = {
+        k: scorecard_overall[k]
+        for k in (
+            "code_present_count",
+            "code_wired_count",
+            "code_exercised_count",
+            "code_evidenced_count",
+            "blocked_by_missing_cross_repo_evidence_count",
+            "blocked_by_dependency_count",
+            "blocked_by_runtime_gap_count",
+        )
+        if k in scorecard_overall
+    }
+
+    # --- Open question categories ---
+    # All elements of report.open_questions are OpenQuestion instances with to_dict().
+    open_question_categories: Dict[str, int] = {}
+    for q in report.open_questions:
+        cat = q.to_dict().get("category", "repo_local")
+        open_question_categories[cat] = open_question_categories.get(cat, 0) + 1
+
     return ClosureGateResult(
         gate_passed=gate_passed,
         closure_level=level.value,
@@ -259,4 +299,6 @@ def evaluate_evidence_closure_gate(
         subsystem_failures=subsystem_failures,
         android_evidence_present=android_present,
         android_evidence_state=android_state,
+        scorecard_summary=scorecard_summary,
+        open_question_categories=open_question_categories,
     )

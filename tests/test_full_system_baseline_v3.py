@@ -499,3 +499,191 @@ class TestGroupF_Singleton:
         r2 = get_v3_baseline_report()
         # After reset a new instance is returned (not the same object)
         assert r1 is not r2
+
+
+# ---------------------------------------------------------------------------
+# Group G — Enhanced scorecard fields (code_exercised, blocked_by_*)
+# ---------------------------------------------------------------------------
+
+
+class TestGroupG_EnhancedScorecard:
+    def test_G01_scorecard_has_code_exercised_per_subsystem(self) -> None:
+        report = build_v3_baseline_report()
+        for sid, entry in report.scorecard.get("subsystems", {}).items():
+            assert "code_exercised" in entry, (
+                f"Subsystem {sid!r} scorecard entry is missing 'code_exercised'"
+            )
+            assert isinstance(entry["code_exercised"], bool)
+
+    def test_G02_scorecard_has_blocked_by_dependency_per_subsystem(self) -> None:
+        report = build_v3_baseline_report()
+        for sid, entry in report.scorecard.get("subsystems", {}).items():
+            assert "blocked_by_dependency" in entry, (
+                f"Subsystem {sid!r} scorecard entry is missing 'blocked_by_dependency'"
+            )
+            assert isinstance(entry["blocked_by_dependency"], bool)
+
+    def test_G03_scorecard_has_blocked_by_runtime_gap_per_subsystem(self) -> None:
+        report = build_v3_baseline_report()
+        for sid, entry in report.scorecard.get("subsystems", {}).items():
+            assert "blocked_by_runtime_gap" in entry, (
+                f"Subsystem {sid!r} scorecard entry is missing 'blocked_by_runtime_gap'"
+            )
+            assert isinstance(entry["blocked_by_runtime_gap"], bool)
+
+    def test_G04_scorecard_overall_has_exercised_count(self) -> None:
+        report = build_v3_baseline_report()
+        overall = report.scorecard.get("overall", {})
+        assert "code_exercised_count" in overall
+        assert isinstance(overall["code_exercised_count"], int)
+        assert overall["code_exercised_count"] >= 0
+
+    def test_G05_scorecard_overall_has_dependency_and_runtime_gap_counts(self) -> None:
+        report = build_v3_baseline_report()
+        overall = report.scorecard.get("overall", {})
+        assert "blocked_by_dependency_count" in overall
+        assert "blocked_by_runtime_gap_count" in overall
+        assert isinstance(overall["blocked_by_dependency_count"], int)
+        assert isinstance(overall["blocked_by_runtime_gap_count"], int)
+
+    def test_G06_code_exercised_implies_code_wired(self) -> None:
+        """exercised ⊆ wired: an exercised subsystem must also be wired."""
+        report = build_v3_baseline_report()
+        for sid, entry in report.scorecard.get("subsystems", {}).items():
+            if entry["code_exercised"]:
+                assert entry["code_wired"], (
+                    f"Subsystem {sid!r} is code_exercised but NOT code_wired — inconsistent"
+                )
+
+    def test_G07_code_evidenced_implies_code_exercised_or_wired(self) -> None:
+        """evidenced ⊆ wired (not necessarily exercised by live probe, but at minimum wired)."""
+        report = build_v3_baseline_report()
+        for sid, entry in report.scorecard.get("subsystems", {}).items():
+            if entry["code_evidenced"]:
+                assert entry["code_wired"], (
+                    f"Subsystem {sid!r} is code_evidenced but NOT code_wired — inconsistent"
+                )
+
+    def test_G08_exercised_count_consistent_with_subsystems(self) -> None:
+        report = build_v3_baseline_report()
+        overall = report.scorecard.get("overall", {})
+        subsystems = report.scorecard.get("subsystems", {})
+        actual_exercised = sum(1 for e in subsystems.values() if e.get("code_exercised"))
+        assert overall["code_exercised_count"] == actual_exercised
+
+
+# ---------------------------------------------------------------------------
+# Group H — Open question categories
+# ---------------------------------------------------------------------------
+
+_VALID_QUESTION_CATEGORIES = {"repo_local", "cross_repo", "runtime_proof"}
+
+
+class TestGroupH_OpenQuestionCategories:
+    def test_H01_all_open_questions_have_category_field(self) -> None:
+        report = build_v3_baseline_report()
+        for q in report.open_questions:
+            d = q.to_dict()
+            assert "category" in d, f"OpenQuestion {q.question_id!r} missing 'category' in to_dict()"
+            assert d["category"] in _VALID_QUESTION_CATEGORIES, (
+                f"OpenQuestion {q.question_id!r} has invalid category {d['category']!r}"
+            )
+
+    def test_H02_open_questions_cover_all_three_categories(self) -> None:
+        report = build_v3_baseline_report()
+        categories = {q.to_dict().get("category") for q in report.open_questions}
+        assert "repo_local" in categories, "No repo_local question found"
+        assert "cross_repo" in categories, "No cross_repo question found"
+        assert "runtime_proof" in categories, "No runtime_proof question found"
+
+    def test_H03_open_question_category_survives_round_trip(self) -> None:
+        from core.full_system_baseline_v3 import OpenQuestion
+
+        q = OpenQuestion(
+            question_id="test_q",
+            question="Is it done?",
+            signal_source="core.foo",
+            currently_answerable=False,
+            category="cross_repo",
+        )
+        d = q.to_dict()
+        assert d["category"] == "cross_repo"
+        # Default category
+        q2 = OpenQuestion(question_id="q2", question="q?")
+        assert q2.to_dict()["category"] == "repo_local"
+
+    def test_H04_open_question_category_in_json_output(self) -> None:
+        report = build_v3_baseline_report()
+        import json as _json
+        parsed = _json.loads(report.to_json())
+        for q_dict in parsed.get("open_questions", []):
+            assert "category" in q_dict
+            assert q_dict["category"] in _VALID_QUESTION_CATEGORIES
+
+
+# ---------------------------------------------------------------------------
+# Group I — Closure gate enhanced fields
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not _GATE_AVAILABLE,
+    reason="core.full_system_evidence_closure_gate not importable",
+)
+class TestGroupI_GateEnhancedFields:
+    def test_I01_gate_result_has_scorecard_summary(self) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        assert hasattr(result, "scorecard_summary")
+        assert isinstance(result.scorecard_summary, dict)
+
+    def test_I02_scorecard_summary_has_exercised_count(self) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        assert "code_exercised_count" in result.scorecard_summary
+
+    def test_I03_gate_result_has_open_question_categories(self) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        assert hasattr(result, "open_question_categories")
+        assert isinstance(result.open_question_categories, dict)
+
+    def test_I04_open_question_categories_cover_expected_types(self) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        cats = result.open_question_categories
+        # All known categories must be valid
+        for cat in cats:
+            assert cat in _VALID_QUESTION_CATEGORIES
+        # Sum must equal total open questions
+        report = build_v3_baseline_report()
+        assert sum(cats.values()) == len(report.open_questions)
+
+    def test_I05_gate_result_json_includes_new_fields(self) -> None:
+        from core.full_system_evidence_closure_gate import (
+            evaluate_evidence_closure_gate,
+            ClosureLevel,
+        )
+        import json as _json
+
+        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
+        parsed = _json.loads(result.to_json())
+        assert "scorecard_summary" in parsed
+        assert "open_question_categories" in parsed
+

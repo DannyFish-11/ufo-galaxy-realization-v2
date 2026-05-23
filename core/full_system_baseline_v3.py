@@ -462,12 +462,20 @@ class OpenQuestion:
     currently_answerable:
         True if the signal source is available and the question can be
         answered from current code / CI; False if the signal is missing.
+    category:
+        One of three question scopes:
+        ``repo_local``  — answerable from V2 code and CI alone.
+        ``cross_repo``  — requires Android repository participation or
+                          cross-repo CI signal to answer.
+        ``runtime_proof`` — cannot be answered by code alone; requires
+                            actual runtime execution or staging evidence.
     """
 
     question_id: str = ""
     question: str = ""
     signal_source: str = ""
     currently_answerable: bool = False
+    category: str = "repo_local"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -475,6 +483,7 @@ class OpenQuestion:
             "question": self.question,
             "signal_source": self.signal_source,
             "currently_answerable": self.currently_answerable,
+            "category": self.category,
         }
 
 
@@ -501,7 +510,8 @@ class V3BaselineReport:
         Provides traceability back to the underlying evaluators.
     scorecard:
         Machine-readable subsystem maturity breakdown distinguishing
-        code-present, code-wired, code-evidenced, and cross-repo-blocked.
+        code-present, code-wired, code-exercised, code-evidenced,
+        cross-repo-blocked, dependency-blocked, and runtime-gap-blocked.
     summary:
         Human-readable summary paragraph (consistent with machine fields).
     generated_at:
@@ -1452,6 +1462,89 @@ class FullSystemBaselineV3Evaluator:
             }
         return linkage
 
+    # Signals that indicate the evaluator made a live probe call (not just
+    # importability checks).  Presence of any of these keys in grounding_signals
+    # means the subsystem evaluator exercised a real function and captured its
+    # structured output.
+    _LIVE_VERDICT_SIGNALS: frozenset[str] = frozenset(
+        {
+            "readiness_is_ready_for_release",
+            "release_gate_overall_verdict",
+            "acceptance_verdict",
+            "system_verdict",
+            "pipeline_verdict",
+        }
+    )
+
+    # Gap text tokens that indicate a missing Python package or library
+    # dependency blocks the subsystem.
+    _DEPENDENCY_KEYWORDS: tuple[str, ...] = (
+        "pytest-asyncio",
+        "websockets",
+        "depends on pytest",
+        "depends on websocket",
+        "missing library",
+        "missing package",
+        "not installed",
+        "missing dependency",
+    )
+
+    # Gap text tokens that indicate the subsystem is wired but requires
+    # cross-repo runtime participation to prove closure.
+    _RUNTIME_GAP_KEYWORDS: tuple[str, ...] = (
+        "android participant",
+        "cross-repo",
+        "cross repo",
+        "end-to-end",
+        "android repo",
+        "real android",
+        "actual runtime",
+        "runtime evidence",
+        "live android",
+    )
+
+    @classmethod
+    def _compute_code_exercised(cls, entry: SubsystemEntry) -> bool:
+        """Return True if the evaluator made a live probe call with structured output.
+
+        A subsystem is considered *exercised* when its evaluator called an
+        underlying function (not just probed importability) and received a
+        structured verdict — for example by calling
+        ``DelegatedFlowReadinessGate().evaluate()``, ``evaluate_system_acceptance()``,
+        or ``build_canonical_cross_repo_evidence_report()``.  A probe error or
+        an entry with no grounding signals means the live call did not succeed.
+        """
+        if entry.state.ordinal() < SubsystemState.implemented_but_not_closed.ordinal():
+            return False
+        grounding = entry.grounding_signals or {}
+        if grounding.get("probe_error"):
+            return False
+        return any(key in grounding for key in cls._LIVE_VERDICT_SIGNALS)
+
+    @classmethod
+    def _compute_blocked_by_dependency(cls, entry: SubsystemEntry) -> bool:
+        """Return True if any known gap names a missing Python library dependency."""
+        return any(
+            any(kw in gap.lower() for kw in cls._DEPENDENCY_KEYWORDS)
+            for gap in entry.known_gaps
+        )
+
+    @classmethod
+    def _compute_blocked_by_runtime_gap(cls, entry: SubsystemEntry) -> bool:
+        """Return True if the code is wired but blocked by a cross-repo runtime gap.
+
+        This is distinct from ``blocked_by_missing_cross_repo_evidence``: it
+        indicates the gap is not merely a missing schema/contract wire but
+        requires actual runtime participation from the Android side or a real
+        end-to-end execution environment to produce evidence.
+        """
+        if entry.state.ordinal() < SubsystemState.implemented_but_not_closed.ordinal():
+            return False
+        return any(
+            any(kw in gap.lower() for kw in cls._RUNTIME_GAP_KEYWORDS)
+            for gap in entry.known_gaps
+        )
+
     def _build_scorecard(
         self,
         subsystems: List[SubsystemEntry],
@@ -1462,28 +1555,48 @@ class FullSystemBaselineV3Evaluator:
         totals = {
             "code_present_count": 0,
             "code_wired_count": 0,
+            "code_exercised_count": 0,
             "code_evidenced_count": 0,
             "blocked_by_missing_cross_repo_evidence_count": 0,
+            "blocked_by_dependency_count": 0,
+            "blocked_by_runtime_gap_count": 0,
         }
         for entry in subsystems:
+            code_present = entry.state != SubsystemState.declared_not_proven
+            code_wired = entry.state.ordinal() >= SubsystemState.implemented_but_not_closed.ordinal()
+            code_exercised = self._compute_code_exercised(entry)
+            code_evidenced = entry.state == SubsystemState.implemented_and_evidenced
+            blocked_by_cross_repo = bool(
+                entry.grounding_signals.get("cross_repo_blocked", False)
+            ) or any(self._text_signals_cross_repo_gap(gap) for gap in entry.known_gaps)
+            blocked_by_dependency = self._compute_blocked_by_dependency(entry)
+            blocked_by_runtime_gap = self._compute_blocked_by_runtime_gap(entry)
             stage = {
                 "state": entry.state.value,
-                "code_present": entry.state != SubsystemState.declared_not_proven,
-                "code_wired": entry.state.ordinal() >= SubsystemState.implemented_but_not_closed.ordinal(),
-                "code_evidenced": entry.state == SubsystemState.implemented_and_evidenced,
-                "blocked_by_missing_cross_repo_evidence": bool(entry.grounding_signals.get("cross_repo_blocked", False))
-                or any(self._text_signals_cross_repo_gap(gap) for gap in entry.known_gaps),
+                "code_present": code_present,
+                "code_wired": code_wired,
+                "code_exercised": code_exercised,
+                "code_evidenced": code_evidenced,
+                "blocked_by_missing_cross_repo_evidence": blocked_by_cross_repo,
+                "blocked_by_dependency": blocked_by_dependency,
+                "blocked_by_runtime_gap": blocked_by_runtime_gap,
                 "evidence_module": entry.evidence_module,
                 "grounding_signals": dict(entry.grounding_signals or {}),
             }
-            if stage["code_present"]:
+            if code_present:
                 totals["code_present_count"] += 1
-            if stage["code_wired"]:
+            if code_wired:
                 totals["code_wired_count"] += 1
-            if stage["code_evidenced"]:
+            if code_exercised:
+                totals["code_exercised_count"] += 1
+            if code_evidenced:
                 totals["code_evidenced_count"] += 1
-            if stage["blocked_by_missing_cross_repo_evidence"]:
+            if blocked_by_cross_repo:
                 totals["blocked_by_missing_cross_repo_evidence_count"] += 1
+            if blocked_by_dependency:
+                totals["blocked_by_dependency_count"] += 1
+            if blocked_by_runtime_gap:
+                totals["blocked_by_runtime_gap_count"] += 1
             subsystem_scorecard[entry.subsystem_id] = stage
         return {
             "overall": {
@@ -1639,6 +1752,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
                 currently_answerable=android_detected,
+                category="cross_repo",
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1647,9 +1761,11 @@ class FullSystemBaselineV3Evaluator:
                     "(not just advisory) on all gated dimensions, including cross-repo evidence?"
                 ),
                 signal_source=(
-                    "core.distributed_release_gate_skeleton " "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
+                    "core.distributed_release_gate_skeleton "
+                    "(GATE_IS_NOW_CI_ENFORCING_AUTHORITY + CI workflow logs)"
                 ),
                 currently_answerable=self._try_import("core.distributed_release_gate_skeleton") is not None,
+                category="repo_local",
             ),
             OpenQuestion(
                 question_id="recovery_reconnect_e2e_proven",
@@ -1659,6 +1775,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=("tests/integration/test_dual_runtime_cross_repo_harness_reporting.py"),
                 currently_answerable=False,
+                category="runtime_proof",
             ),
             OpenQuestion(
                 question_id="nats_distributed_runtime_real",
@@ -1668,6 +1785,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source="core.agent_bus_fabric or NATS runtime logs",
                 currently_answerable=False,
+                category="runtime_proof",
             ),
             OpenQuestion(
                 question_id="dual_repo_ci_gate_enforced",
@@ -1677,6 +1795,7 @@ class FullSystemBaselineV3Evaluator:
                 ),
                 signal_source=".github/workflows/dual_repo_reality_audit.yml",
                 currently_answerable=False,
+                category="cross_repo",
             ),
         ]
 
@@ -1769,9 +1888,14 @@ class FullSystemBaselineV3Evaluator:
             "Scorecard: "
             f"present={overall_scorecard.get('code_present_count', 0)}, "
             f"wired={overall_scorecard.get('code_wired_count', 0)}, "
+            f"exercised={overall_scorecard.get('code_exercised_count', 0)}, "
             f"evidenced={overall_scorecard.get('code_evidenced_count', 0)}, "
             "cross_repo_blocked="
-            f"{overall_scorecard.get('blocked_by_missing_cross_repo_evidence_count', 0)}"
+            f"{overall_scorecard.get('blocked_by_missing_cross_repo_evidence_count', 0)}, "
+            "dep_blocked="
+            f"{overall_scorecard.get('blocked_by_dependency_count', 0)}, "
+            "runtime_gap="
+            f"{overall_scorecard.get('blocked_by_runtime_gap_count', 0)}"
         )
         lines.append(f"Blocking gaps: {len(blocking_gaps)}")
         if blocking_gaps:
