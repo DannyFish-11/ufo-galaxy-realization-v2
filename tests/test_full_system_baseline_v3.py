@@ -349,6 +349,33 @@ class TestGroupD_BaselineReport:
         }
         assert required.issubset(set(state.keys()))
 
+    def test_D14_blocking_gaps_expose_closure_scope_and_priority(self) -> None:
+        report = build_v3_baseline_report()
+        if report.blocking_gaps:
+            for gap in report.blocking_gaps:
+                assert gap.closure_scope in {"repo_local", "cross_repo", "runtime_proof"}
+                assert gap.execution_priority in {"high", "medium", "low"}
+                assert isinstance(gap.blocker_classification, str)
+
+    def test_D15_open_questions_expose_actionable_scope_metadata(self) -> None:
+        report = build_v3_baseline_report()
+        actionable_prefixes = ("run ", "verify ", "confirm ", "produce ")
+        for question in report.open_questions:
+            assert question.closure_scope in {"repo_local", "cross_repo", "runtime_proof"}
+            assert question.execution_priority in {"high", "medium", "low"}
+            assert isinstance(question.next_action_hint, str)
+            assert len(question.next_action_hint) > 0
+            assert question.next_action_hint.lower().startswith(actionable_prefixes)
+
+    def test_D16_scorecard_reports_scope_breakdown_for_closure_driving(self) -> None:
+        report = build_v3_baseline_report()
+        overall = report.scorecard.get("overall", {})
+        gap_scope_counts = overall.get("blocking_gap_scope_counts", {})
+        question_scope_counts = overall.get("open_question_scope_counts", {})
+        for key in ("repo_local", "cross_repo", "runtime_proof"):
+            assert key in gap_scope_counts
+            assert key in question_scope_counts
+
 
 # ---------------------------------------------------------------------------
 # Group E — Evidence closure gate
