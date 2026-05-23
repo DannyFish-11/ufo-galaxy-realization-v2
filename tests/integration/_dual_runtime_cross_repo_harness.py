@@ -221,9 +221,9 @@ def build_dual_runtime_cross_repo_evidence_report(evidence: Dict[str, Any]) -> D
 
     has_failed = any(v["status"] == "failed" for v in behavior_checks.values())
     all_evidenced = all(v["status"] == "evidenced" for v in behavior_checks.values())
-    dual_runtime_declared = evidence_declares_real_android_runtime(
-        evidence
-    ) and evidence_declares_v2_runtime_participation(evidence)
+    android_runtime_declared = evidence_declares_real_android_runtime(evidence)
+    v2_runtime_declared = evidence_declares_v2_runtime_participation(evidence)
+    dual_runtime_declared = android_runtime_declared and v2_runtime_declared
 
     if has_failed:
         overall_state = "failed"
@@ -236,8 +236,8 @@ def build_dual_runtime_cross_repo_evidence_report(evidence: Dict[str, Any]) -> D
         "schema_version": "1.0",
         "overall_state": overall_state,
         "dual_runtime_declared": dual_runtime_declared,
-        "android_runtime_declared": evidence_declares_real_android_runtime(evidence),
-        "v2_runtime_declared": evidence_declares_v2_runtime_participation(evidence),
+        "android_runtime_declared": android_runtime_declared,
+        "v2_runtime_declared": v2_runtime_declared,
         "behavior_checks": behavior_checks,
         "message_counts": {"total_messages": len(messages), "unique_types": sorted(set(types))},
     }
