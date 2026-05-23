@@ -50,6 +50,8 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
     bus._subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe_task_results = AsyncMock(return_value={"success": True})
+    bus.subscribe_worker_registrations = AsyncMock(return_value={"success": True})
+    bus.subscribe_worker_shutdowns = AsyncMock(return_value={"success": True})
     bus.connect = AsyncMock(return_value={"success": True})
     bus.disconnect = AsyncMock(return_value={"success": True})
     return bus
@@ -577,6 +579,25 @@ class TestNATSURLMissing:
         assert result.get("success") is True
 
     @pytest.mark.asyncio
+    async def test_publish_noop_is_not_reported_as_success(self):
+        """No-op transport publish must not return success=True."""
+        import core.nats_bus as _nb_mod
+
+        bus = _nb_mod.NATSBus.__new__(_nb_mod.NATSBus)
+        bus._url = ""
+        bus._nc = None
+        bus._js = None
+        bus._connected = False
+        bus._noop = True
+        bus._subscriptions = []
+        bus._stats = {"published": 0, "received": 0, "errors": 0, "reconnects": 0}
+
+        result = await bus._publish("galaxy.tasks.dispatch.worker-01", {"task_id": "t1"})
+        assert result.get("noop") is True
+        assert result.get("success") is False
+        assert result.get("error") == "nats_noop_transport"
+
+    @pytest.mark.asyncio
     async def test_master_brain_logs_warning_when_nats_noop(self, caplog):
         """MasterBrain logs a warning when NATS connection returns noop."""
         import logging
@@ -716,6 +737,8 @@ class TestNATSConnected:
         assert brain._started is True
         mock_bus.subscribe_heartbeats.assert_awaited_once()
         mock_bus.subscribe_task_results.assert_awaited_once()
+        mock_bus.subscribe_worker_registrations.assert_awaited_once()
+        mock_bus.subscribe_worker_shutdowns.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_nats_bus_stats_reflect_connected_state(self):
@@ -785,6 +808,81 @@ class TestNATSConnected:
 
         assert result.get("success") is True
         assert executor._stats["nats_dispatched"] == 1
+
+    @pytest.mark.asyncio
+    async def test_master_brain_consumes_worker_registration_on_workers_subject(self):
+        """MasterBrain accepts wrapped worker_register payloads from worker subjects."""
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus)
+
+        await brain._on_worker_event({
+            "type": "worker_register",
+            "worker_register": {
+                "worker_id": "worker-reg-01",
+                "device_type": "linux",
+                "platform": "linux",
+            },
+        })
+
+        topology = brain.get_worker_topology()
+        assert "worker-reg-01" in topology
+        assert topology["worker-reg-01"]["device_type"] == "linux"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_consumes_worker_shutdown_on_workers_subject(self):
+        """MasterBrain marks worker offline when shutdown event arrives."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import WorkerRegistrationModel
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus)
+
+        await brain.register_worker(WorkerRegistrationModel(worker_id="worker-down-01", device_type="linux"))
+        await brain._on_worker_shutdown({
+            "type": "worker_shutdown",
+            "worker_shutdown": {
+                "worker_id": "worker-down-01",
+                "reason": "graceful_shutdown",
+                "drain_timeout_s": 30,
+            },
+        })
+
+        topology = brain.get_worker_topology()
+        assert topology["worker-down-01"]["status"] == "offline"
+        assert topology["worker-down-01"]["alive"] is False
+        assert topology["worker-down-01"]["shutdown_reason"] == "graceful_shutdown"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_dispatch_rejects_noop_publish_success(self):
+        """MasterBrain dispatch must not report distributed success when publish is noop."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            TaskDispatchModel,
+            TaskType,
+            DeviceCommandPayloadModel,
+        )
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": False, "noop": True})
+        brain = MasterBrain(nats=mock_bus)
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="noop-dispatch-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-01",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-01"),
+            ),
+        })
+
+        result = await brain.dispatch_task({"task_id": "noop-dispatch-01"})
+
+        assert result.get("success") is False
+        assert result.get("distributed_dispatch") is False
+        assert result.get("execution_path") == "distributed_unavailable"
+        assert result.get("nats_publish_state", {}).get("noop") is True
 
 
 # ===========================================================================

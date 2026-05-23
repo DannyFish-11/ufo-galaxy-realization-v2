@@ -524,6 +524,22 @@ class NATSBus:
         """Subscribe to worker heartbeats."""
         return await self._subscribe("galaxy.workers.heartbeat", callback, durable="brain-heartbeats")
 
+    async def subscribe_worker_registrations(self, callback: Callable) -> dict:
+        """Subscribe to worker registration lifecycle messages."""
+        return await self._subscribe(
+            "galaxy.workers.register",
+            callback,
+            durable="brain-worker-register",
+        )
+
+    async def subscribe_worker_shutdowns(self, callback: Callable) -> dict:
+        """Subscribe to worker shutdown lifecycle messages."""
+        return await self._subscribe(
+            "galaxy.workers.shutdown",
+            callback,
+            durable="brain-worker-shutdown",
+        )
+
     async def subscribe_events(self, event_type: str, callback: Callable) -> dict:
         """Subscribe to events of a specific type."""
         subject = f"galaxy.events.{event_type}" if event_type != "*" else "galaxy.events.>"
@@ -569,7 +585,12 @@ class NATSBus:
                 )
             except Exception:
                 pass
-            return {"success": True, "noop": True}
+            return {
+                "success": False,
+                "noop": True,
+                "error": "nats_noop_transport",
+                "subject": subject,
+            }
         if not self._connected or self._js is None:
             return {"success": False, "error": "Not connected to NATS"}
 
