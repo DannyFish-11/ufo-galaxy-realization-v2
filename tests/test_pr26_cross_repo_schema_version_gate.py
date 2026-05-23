@@ -64,13 +64,11 @@ def test_cross_repo_schema_gate_manifest_exposes_android_dedupe_contracts() -> N
         "replay_item_id",
         "replay_seq",
     ]
-    assert set(REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS).issubset(
-        set(manifest["required_shared_execution_visibility_fields"])
-    )
-    assert set(REQUIRED_STARTUP_READINESS_FIELDS).issubset(set(manifest["required_startup_readiness_fields"]))
-    assert set(REQUIRED_PARTICIPATION_TRUTH_FIELDS).issubset(set(manifest["required_participation_truth_fields"]))
-    assert set(REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS).issubset(set(manifest["required_diagnostics_snapshot_fields"]))
-    assert set(REQUIRED_SCHEMA_GATE_METADATA_FIELDS).issubset(set(manifest["required_schema_gate_metadata_fields"]))
+    assert REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS.issubset(set(manifest["required_shared_execution_visibility_fields"]))
+    assert REQUIRED_STARTUP_READINESS_FIELDS.issubset(set(manifest["required_startup_readiness_fields"]))
+    assert REQUIRED_PARTICIPATION_TRUTH_FIELDS.issubset(set(manifest["required_participation_truth_fields"]))
+    assert REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS.issubset(set(manifest["required_diagnostics_snapshot_fields"]))
+    assert REQUIRED_SCHEMA_GATE_METADATA_FIELDS.issubset(set(manifest["required_schema_gate_metadata_fields"]))
 
 
 def test_required_aip_message_types_are_present_in_v2_enum() -> None:

@@ -525,7 +525,7 @@ def verify_cross_repo_schema_gate(
     else:
         missing_startup_readiness = sorted(k for k in REQUIRED_STARTUP_READINESS_FIELDS if k not in startup_readiness)
         if missing_startup_readiness:
-            issues.append("startup_readiness is missing required fields: " f"{missing_startup_readiness}.")
+            issues.append(f"startup_readiness is missing required fields: {missing_startup_readiness}.")
 
     shared_visibility = payload.get("shared_execution_visibility")
     if not isinstance(shared_visibility, Mapping):
@@ -533,7 +533,7 @@ def verify_cross_repo_schema_gate(
     else:
         missing_shared_visibility = sorted(k for k in REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS if k not in shared_visibility)
         if missing_shared_visibility:
-            issues.append("shared_execution_visibility is missing required fields: " f"{missing_shared_visibility}.")
+            issues.append(f"shared_execution_visibility is missing required fields: {missing_shared_visibility}.")
 
     participation_truth = payload.get("participation_truth_consumption")
     if not isinstance(participation_truth, Mapping):
@@ -541,7 +541,7 @@ def verify_cross_repo_schema_gate(
     else:
         missing_participation_truth = sorted(k for k in REQUIRED_PARTICIPATION_TRUTH_FIELDS if k not in participation_truth)
         if missing_participation_truth:
-            issues.append("participation_truth_consumption is missing required fields: " f"{missing_participation_truth}.")
+            issues.append(f"participation_truth_consumption is missing required fields: {missing_participation_truth}.")
 
     contract = payload.get("truth_acceptance_closure_contract")
     if not isinstance(contract, Mapping):
@@ -555,7 +555,7 @@ def verify_cross_repo_schema_gate(
         if isinstance(acceptance, Mapping):
             missing_acceptance = sorted(k for k in REQUIRED_ACCEPTANCE_CLOSURE_FIELDS if k not in acceptance)
             if missing_acceptance:
-                issues.append("acceptance_closure_truth is missing required fields: " f"{missing_acceptance}.")
+                issues.append(f"acceptance_closure_truth is missing required fields: {missing_acceptance}.")
             missing_acceptance_semantics = sorted(
                 k for k in REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS if k not in acceptance
             )
@@ -573,7 +573,7 @@ def verify_cross_repo_schema_gate(
         else:
             missing_diagnostics = sorted(k for k in REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS if k not in diagnostics_snapshot)
             if missing_diagnostics:
-                issues.append("diagnostics_snapshot is missing required fields: " f"{missing_diagnostics}.")
+                issues.append(f"diagnostics_snapshot is missing required fields: {missing_diagnostics}.")
 
         gate_candidate = contract.get("gate_candidate")
         if not isinstance(gate_candidate, Mapping):
@@ -583,7 +583,7 @@ def verify_cross_repo_schema_gate(
         if isinstance(schema_gate, Mapping):
             missing_schema_gate_fields = sorted(k for k in REQUIRED_SCHEMA_GATE_METADATA_FIELDS if k not in schema_gate)
             if missing_schema_gate_fields:
-                issues.append("schema_gate is missing required metadata fields: " f"{missing_schema_gate_fields}.")
+                issues.append(f"schema_gate is missing required metadata fields: {missing_schema_gate_fields}.")
             observed_gate_version = str(schema_gate.get("gate_version") or "")
             if observed_gate_version != CROSS_REPO_SCHEMA_GATE_VERSION:
                 issues.append(

@@ -54,13 +54,16 @@ def test_android_schema_and_dedupe_tokens_for_v2_contract_are_present() -> None:
     root = _android_repo_root()
     aip_models_source = _read_android_file("app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt")
     msg_type_values = _extract_android_msg_type_wire_values(aip_models_source)
-    kotlin_sources = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in root.rglob("*.kt")
-    )
+    kotlin_paths = list(root.rglob("*.kt"))
+
+    def _contains_token(token: str) -> bool:
+        for path in kotlin_paths:
+            if token in path.read_text(encoding="utf-8"):
+                return True
+        return False
 
     def _assert_any(tokens: list[str], category: str) -> None:
-        assert any(token in kotlin_sources for token in tokens), (
+        assert any(_contains_token(token) for token in tokens), (
             f"Android repository is missing required {category} token(s): {tokens}. "
             "This can break V2 replay/recovery/dedupe compatibility."
         )
@@ -75,7 +78,7 @@ def test_android_schema_and_dedupe_tokens_for_v2_contract_are_present() -> None:
 
     if "offline_replay_result" in msg_type_values:
         for replay_token in ["replay_session_id", "replay_item_id", "replay_seq"]:
-            assert replay_token in kotlin_sources, (
+            assert _contains_token(replay_token), (
                 f"Android replay contract token {replay_token!r} missing while "
                 "offline_replay_result is declared."
             )
