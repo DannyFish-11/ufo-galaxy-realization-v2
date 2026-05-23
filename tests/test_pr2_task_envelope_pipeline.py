@@ -23,6 +23,7 @@ import uuid
 import pytest
 from unittest.mock import patch
 
+from core.command_router import GatewayErrorCode
 from core.schemas.task_envelope import TaskEnvelope
 
 
@@ -136,6 +137,36 @@ class TestRouteEnvelopePrimaryPath:
         # PR-2: _galaxy_task_id and _galaxy_trace_id must be injected
         assert call_params.get("_galaxy_task_id") == "meta-task"
         assert call_params.get("_galaxy_trace_id") == "meta-trace"
+
+    @pytest.mark.asyncio
+    async def test_route_envelope_executor_explicit_failure_is_not_marked_success(self):
+        """Executor-reported failure must remain failure in route_envelope result."""
+        from core.command_router import CommandRouter
+
+        async def _failing_executor(target: str, command: str, params: dict):
+            return {
+                "success": False,
+                "error": "nats_executor_no_result:nats_noop_transport",
+                "execution_path": "distributed_unavailable",
+                "distributed_dispatch": False,
+            }
+
+        router = CommandRouter(executor=_failing_executor)
+        envelope = TaskEnvelope(
+            task_id="te-task-fail",
+            trace_id="te-trace-fail",
+            source="test",
+            targets=["device_fail"],
+            tool_name="ping",
+            args={},
+        )
+        with _patch_v3_slot_gate(["device_fail"]):
+            result = await router.route_envelope(envelope)
+
+        assert result["success"] is False
+        assert result["error_code"] == GatewayErrorCode.EXECUTOR_ERROR.value
+        assert result.get("execution_path") == "distributed_unavailable"
+        assert result.get("distributed_dispatch") is False
 
 
 # ---------------------------------------------------------------------------

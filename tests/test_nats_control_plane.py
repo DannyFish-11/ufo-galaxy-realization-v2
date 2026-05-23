@@ -327,6 +327,9 @@ class TestNATSExecutor:
             result = await executor("device-01", "tap", {"x": 100, "y": 200})
 
         assert result.get("success") is True
+        assert result.get("distributed_dispatch") is True
+        assert result.get("execution_path") == "nats_distributed"
+        assert result.get("fallback_used") is False
 
     @pytest.mark.asyncio
     async def test_falls_back_when_nats_disconnected(self):
@@ -347,6 +350,34 @@ class TestNATSExecutor:
 
         assert fallback_called.get("called") is True
         assert result.get("source") == "fallback"
+        assert result.get("distributed_dispatch") is False
+        assert result.get("execution_path") == "local_fallback"
+        assert result.get("fallback_used") is True
+        assert result.get("fallback_reason") == "nats_not_connected"
+
+    @pytest.mark.asyncio
+    async def test_noop_publish_does_not_count_as_distributed_dispatch(self):
+        """NATS noop publish cannot masquerade as distributed dispatch success."""
+        from core.command_router import NATSExecutor
+
+        async def fallback(target, command, params):
+            return {"success": True, "source": "fallback-local"}
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_envelope = AsyncMock(return_value={"success": True, "noop": True})
+        executor = NATSExecutor(fallback_executor=fallback, fallback_enabled=True, timeout_s=0.2)
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await executor("device-noop", "tap", {"x": 1})
+
+        assert result.get("success") is True
+        assert result.get("source") == "fallback-local"
+        assert result.get("distributed_dispatch") is False
+        assert result.get("execution_path") == "local_fallback"
+        assert result.get("fallback_used") is True
+        assert result.get("fallback_reason") == "nats_noop_transport"
+        assert result.get("nats_publish_state", {}).get("noop") is True
+        assert executor.get_stats()["nats_dispatched"] == 0
 
     @pytest.mark.asyncio
     async def test_on_task_result_resolves_pending_future(self):

@@ -3784,6 +3784,44 @@ class CommandRouter:
     # Phase 5: inner dispatch helper + retry device picker
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _evaluate_executor_result(raw_result: Any) -> tuple[bool, str]:
+        """Evaluate executor return payload into canonical success/error semantics."""
+        if not isinstance(raw_result, dict):
+            return raw_result is not None, ""
+
+        if "success" in raw_result:
+            success = bool(raw_result.get("success"))
+        else:
+            success = not bool(
+                raw_result.get("error")
+                or raw_result.get("error_message")
+                or raw_result.get("error_code")
+            )
+
+        error_message = str(
+            raw_result.get("error")
+            or raw_result.get("error_message")
+            or raw_result.get("message")
+            or ""
+        )
+        return success, error_message
+
+    @staticmethod
+    def _copy_execution_truth_fields(result: dict, raw_result: Any) -> None:
+        """Propagate distributed-runtime truth markers from executor payload."""
+        if not isinstance(raw_result, dict):
+            return
+        for marker_field in (
+            "distributed_dispatch",
+            "execution_path",
+            "fallback_used",
+            "fallback_reason",
+            "nats_publish_state",
+        ):
+            if marker_field in raw_result:
+                result[marker_field] = raw_result[marker_field]
+
     async def _dispatch_to_device(
         self,
         device_id: str,
@@ -3815,35 +3853,49 @@ class CommandRouter:
                     timeout=timeout,
                 )
                 latency_ms = (time.monotonic() - t0) * 1000
+                raw_success, raw_error_message = self._evaluate_executor_result(raw_result)
                 result = {
                     **trace_base,
-                    "success": True,
+                    "success": raw_success,
                     "result": raw_result,
-                    "error_code": None,
-                    "error_message": None,
+                    "error_code": None if raw_success else GatewayErrorCode.EXECUTOR_ERROR.value,
+                    "error_message": None if raw_success else (raw_error_message or "Executor returned failure"),
                     "latency_ms": round(latency_ms, 1),
                 }
+                self._copy_execution_truth_fields(result, raw_result)
                 _get_gateway_trace_store().record(result)
-                logger.info(
-                    "CommandRouter._dispatch_to_device done | " "trace_id=%s command_id=%s device=%s latency=%.1fms",
-                    trace_id,
-                    command_id,
-                    device_id,
-                    latency_ms,
-                )
-                try:
-                    from core.control_plane.audit_ledger import EventType as _EvC
-
-                    self._emit_audit(
-                        _EvC.TASK_COMPLETED,
-                        trace_id=trace_id,
-                        task_id=task_id,
-                        device_id=device_id,
-                        message=f"Command '{command}' completed on '{device_id}'",
-                        payload={"latency_ms": round(latency_ms, 1)},
+                if raw_success:
+                    self._stats["total_success"] = self._stats.get("total_success", 0) + 1
+                    logger.info(
+                        "CommandRouter._dispatch_to_device done | " "trace_id=%s command_id=%s device=%s latency=%.1fms",
+                        trace_id,
+                        command_id,
+                        device_id,
+                        latency_ms,
                     )
-                except Exception:
-                    pass
+                    try:
+                        from core.control_plane.audit_ledger import EventType as _EvC
+
+                        self._emit_audit(
+                            _EvC.TASK_COMPLETED,
+                            trace_id=trace_id,
+                            task_id=task_id,
+                            device_id=device_id,
+                            message=f"Command '{command}' completed on '{device_id}'",
+                            payload={"latency_ms": round(latency_ms, 1)},
+                        )
+                    except Exception:
+                        pass
+                else:
+                    self._stats["total_failed"] = self._stats.get("total_failed", 0) + 1
+                    logger.warning(
+                        "CommandRouter._dispatch_to_device executor returned failure | "
+                        "trace_id=%s command_id=%s device=%s error=%s",
+                        trace_id,
+                        command_id,
+                        device_id,
+                        result["error_message"],
+                    )
                 return result
 
             except asyncio.TimeoutError:
@@ -4838,6 +4890,15 @@ class NATSExecutor:
                 )
                 pub_result = await nats_bus.publish_task_dispatch(target, task)
 
+            if pub_result.get("noop"):
+                return await self._use_fallback(
+                    target,
+                    command,
+                    params,
+                    reason="nats_noop_transport",
+                    publish_state=pub_result,
+                )
+
             if not pub_result.get("success"):
                 return await self._use_fallback(target, command, params, reason="publish_failed")
 
@@ -4846,6 +4907,13 @@ class NATSExecutor:
             try:
                 result = await asyncio.wait_for(asyncio.shield(fut), timeout=self._timeout_s)
                 self._stats["nats_resolved"] += 1
+                if isinstance(result, dict):
+                    self._apply_execution_markers(
+                        result,
+                        distributed_dispatch=True,
+                        execution_path="nats_distributed",
+                        fallback_used=False,
+                    )
                 return result
             except asyncio.TimeoutError:
                 self._stats["nats_timeout"] += 1
@@ -4891,9 +4959,38 @@ class NATSExecutor:
                 "error": error,
                 "task_id": task_id,
             }
+            self._apply_execution_markers(
+                result,
+                distributed_dispatch=True,
+                execution_path="nats_distributed",
+                fallback_used=False,
+            )
             fut.set_result(result)
 
-    async def _use_fallback(self, target: str, command: str, params: dict, reason: str) -> dict:
+    @staticmethod
+    def _apply_execution_markers(
+        payload: dict,
+        *,
+        distributed_dispatch: bool,
+        execution_path: str,
+        fallback_used: bool,
+        fallback_reason: str = "",
+    ) -> dict:
+        payload.setdefault("distributed_dispatch", distributed_dispatch)
+        payload.setdefault("execution_path", execution_path)
+        payload.setdefault("fallback_used", fallback_used)
+        if fallback_reason:
+            payload.setdefault("fallback_reason", fallback_reason)
+        return payload
+
+    async def _use_fallback(
+        self,
+        target: str,
+        command: str,
+        params: dict,
+        reason: str,
+        publish_state: Optional[dict] = None,
+    ) -> dict:
         if self._fallback and self._fallback_enabled:
             self._stats["fallback_used"] += 1
             logger.warning(
@@ -4902,13 +4999,40 @@ class NATSExecutor:
                 command,
                 reason,
             )
-            return await self._fallback(target, command, params)
-        return {
+            fallback_result = await self._fallback(target, command, params)
+            if isinstance(fallback_result, dict):
+                out = dict(fallback_result)
+            else:
+                fallback_success = (
+                    fallback_result if isinstance(fallback_result, bool) else (fallback_result is not None)
+                )
+                out = {"success": fallback_success, "result": fallback_result}
+            self._apply_execution_markers(
+                out,
+                distributed_dispatch=False,
+                execution_path="local_fallback",
+                fallback_used=True,
+                fallback_reason=reason,
+            )
+            if publish_state is not None and "nats_publish_state" not in out:
+                out["nats_publish_state"] = publish_state
+            return out
+        out = {
             "success": False,
             "error": f"nats_executor_no_result:{reason}",
             "target": target,
             "command": command,
         }
+        self._apply_execution_markers(
+            out,
+            distributed_dispatch=False,
+            execution_path="distributed_unavailable",
+            fallback_used=False,
+            fallback_reason=reason,
+        )
+        if publish_state is not None:
+            out["nats_publish_state"] = publish_state
+        return out
 
     def get_stats(self) -> dict:
         return {**self._stats, "pending": len(self._pending), "started": self._started}
