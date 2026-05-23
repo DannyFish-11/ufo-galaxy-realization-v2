@@ -1030,13 +1030,9 @@ class UnifiedResultIngress:
             if dedupe_contract_blocked:
                 parts.append(f"dedupe_contract:{outcome.dedupe_contract_reason or outcome.dedupe_contract_action}")
             if closure_grade_blocked:
-                closure_grade_reason = (
-                    outcome.closure_grade_ineligible_reason
-                    or outcome.android_payload_grade
-                    or "unclassified"
-                )
                 parts.append(
-                    f"closure_grade_ineligible:{closure_grade_reason}"
+                    "closure_grade_ineligible:"
+                    f"{outcome.closure_grade_ineligible_reason or outcome.android_payload_grade or 'unclassified'}"
                 )
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
         outcome.problem_execution_closure = self._build_problem_execution_closure(
@@ -2368,11 +2364,10 @@ class UnifiedResultIngress:
                 missing_fields.append("idempotency_key")
             if not completion_emission_id:
                 missing_fields.append("completion_emission_id")
-            reason = (
-                "canonical_dedupe_contract_satisfied"
-                if not missing_fields
-                else "missing_canonical_result_dedupe_fields"
-            )
+            if not missing_fields:
+                reason = "canonical_dedupe_contract_satisfied"
+            else:
+                reason = "missing_canonical_result_dedupe_fields"
             action = "" if not missing_fields else "degrade"
             fallback_evidence["android_dedupe_contract"] = {
                 "action": "accept" if not missing_fields else "degrade",

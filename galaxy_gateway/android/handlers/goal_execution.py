@@ -1031,7 +1031,8 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
         else message.get("continuity_epoch")
     )
     if _raw_session_epoch is None:
-        _raw_session_epoch = payload.get("session_epoch") if payload.get("session_epoch") is not None else message.get(
+        _payload_session_epoch = payload.get("session_epoch")
+        _raw_session_epoch = _payload_session_epoch if _payload_session_epoch is not None else message.get(
             "session_epoch"
         )
     try:
@@ -1048,7 +1049,8 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
         else payload.get("replay_sequence")
     )
     if _raw_replay_seq is None:
-        _raw_replay_seq = message.get("replay_seq") if message.get("replay_seq") is not None else message.get(
+        _message_replay_seq = message.get("replay_seq")
+        _raw_replay_seq = _message_replay_seq if _message_replay_seq is not None else message.get(
             "replay_sequence"
         )
     try:
