@@ -401,6 +401,20 @@ _CATEGORY_DIMENSION_IDS: Dict[GateCategory, List[str]] = {
     GateCategory.deferred_ci_enforcement: [],
 }
 
+_CATEGORY_BLOCKING_CONDITION_TYPE: Dict[GateCategory, str] = {
+    GateCategory.canonical_runtime_lifecycle: "continuity_risk",
+    GateCategory.canonical_graduation_acceptance: "closure_quality_insufficiency",
+    GateCategory.canonical_post_graduation_governance: "closure_quality_insufficiency",
+    GateCategory.canonical_continuity_recovery: "replay_or_recovery_risk",
+    GateCategory.canonical_takeover_correctness: "continuity_risk",
+    GateCategory.canonical_compat_blocking: "schema_or_contract_compatibility_violation",
+    GateCategory.companion_android: "cross_repo_evidence_failure",
+    GateCategory.advisory_audit_records: "advisory_observation",
+    GateCategory.advisory_participant_session: "advisory_observation",
+    GateCategory.deferred_rollout_promotion: "deferred_scope",
+    GateCategory.deferred_ci_enforcement: "deferred_scope",
+}
+
 
 # ---------------------------------------------------------------------------
 # ReleaseGateVerdict
@@ -476,6 +490,8 @@ class GateCategoryEvaluation:
     summary: str = ""
     gap_description: str = ""
     notes: str = ""
+    blocking_condition_type: str = ""
+    failure_state: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -487,6 +503,8 @@ class GateCategoryEvaluation:
             "summary": self.summary,
             "gap_description": self.gap_description,
             "notes": self.notes,
+            "blocking_condition_type": self.blocking_condition_type,
+            "failure_state": self.failure_state,
         }
 
     @classmethod
@@ -500,6 +518,8 @@ class GateCategoryEvaluation:
             summary=d.get("summary", ""),
             gap_description=d.get("gap_description", ""),
             notes=d.get("notes", ""),
+            blocking_condition_type=d.get("blocking_condition_type", ""),
+            failure_state=d.get("failure_state", ""),
         )
 
 
@@ -727,6 +747,7 @@ class DistributedReleaseGateSkeleton:
         """Evaluate one :class:`GateCategory` against the evidence surface."""
         strength = _CATEGORY_STRENGTH[category]
         dim_ids = _CATEGORY_DIMENSION_IDS[category]
+        blocking_condition_type = _CATEGORY_BLOCKING_CONDITION_TYPE[category]
 
         # Deferred categories always return a deferred verdict without
         # consulting the evidence surface.
@@ -742,6 +763,8 @@ class DistributedReleaseGateSkeleton:
                     "See DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY and "
                     "GATE_SKELETON_IS_NON_ENFORCING_POLICY."
                 ),
+                blocking_condition_type=blocking_condition_type,
+                failure_state="deferred_scope",
             )
 
         if not dim_ids:
@@ -756,6 +779,8 @@ class DistributedReleaseGateSkeleton:
                     f"Category '{category.value}' has no evidence dimension mapping; "
                     "cannot evaluate."
                 ),
+                blocking_condition_type=blocking_condition_type,
+                failure_state="mapping_missing",
             )
 
         # Aggregate evidence status across all mapped dimension IDs
@@ -777,6 +802,7 @@ class DistributedReleaseGateSkeleton:
         if agg_status == "present":
             verdict = ReleaseGateVerdict.open.value
             gap = ""
+            failure_state = "none"
             summary = (
                 f"Category '{category.value}' evidence is present "
                 f"(dims: {dim_ids})."
@@ -787,21 +813,33 @@ class DistributedReleaseGateSkeleton:
                 if strength == GateCategoryStrength.gate_worthy
                 else ReleaseGateVerdict.deferred.value
             )
+            failure_state = "evidence_absent"
             gap = (
                 f"Evidence absent for category '{category.value}' "
                 f"(dims: {dim_ids}).  "
-                + ("Gate would block release once enforcement is enabled."
+                + ("Protected release/deploy path is blocked until this evidence is restored."
                    if strength == GateCategoryStrength.gate_worthy
                    else "Advisory gap; does not block release.")
             )
             summary = f"Category '{category.value}' evidence absent."
         else:
-            verdict = ReleaseGateVerdict.deferred.value
-            gap = ""
-            summary = (
-                f"Category '{category.value}' evidence unavailable "
-                f"(dims: {dim_ids}); verdict deferred."
-            )
+            if strength == GateCategoryStrength.gate_worthy:
+                verdict = ReleaseGateVerdict.blocked.value
+                failure_state = "evidence_unavailable"
+                gap = (
+                   f"Evidence unavailable for gate_worthy category '{category.value}' "
+                   f"(dims: {dim_ids}).  Protected release/deploy path is blocked "
+                   "until evidence becomes measurable."
+                )
+                summary = f"Category '{category.value}' evidence unavailable (blocking)."
+            else:
+                verdict = ReleaseGateVerdict.deferred.value
+                failure_state = "evidence_unavailable"
+                gap = ""
+                summary = (
+                   f"Category '{category.value}' evidence unavailable "
+                   f"(dims: {dim_ids}); verdict deferred."
+                )
 
         notes = ""
         if strength == GateCategoryStrength.advisory:
@@ -826,6 +864,8 @@ class DistributedReleaseGateSkeleton:
             summary=summary,
             gap_description=gap,
             notes=notes,
+            blocking_condition_type=blocking_condition_type,
+            failure_state=failure_state,
         )
 
     def _build_report(
@@ -899,6 +939,8 @@ class DistributedReleaseGateSkeleton:
                 evidence_status="unknown",
                 evidence_dimension_ids=list(_CATEGORY_DIMENSION_IDS[category]),
                 summary=f"Evidence surface unavailable: {reason}",
+                blocking_condition_type=_CATEGORY_BLOCKING_CONDITION_TYPE[category],
+                failure_state="surface_unavailable",
             )
             for category in GateCategory
         ]

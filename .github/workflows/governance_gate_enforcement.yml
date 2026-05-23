@@ -67,6 +67,7 @@ jobs:
         id: governance
         run: |
           python -m core.governance_validation_gate \
+            --strict \
             --output governance_verdict.json
         env:
           PYTHONPATH: ${{ github.workspace }}
