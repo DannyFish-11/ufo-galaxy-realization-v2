@@ -43,7 +43,17 @@ class TestGateModuleTaskResultStrict:
     def test_task_result_not_in_compat_set(self) -> None:
         assert "task_result" not in COMPAT_ANDROID_UPLINK_SCHEMA_GATE_MESSAGE_TYPES
 
-    def test_task_result_missing_schema_version_rejected(self) -> None:
+    def test_task_result_missing_schema_version_degrades_when_legacy_safe_identity_present(self) -> None:
+        decision = evaluate_android_uplink_schema_gate(
+            message_type="task_result",
+            message={"type": "task_result", "task_id": "t1", "status": "success"},
+        )
+        assert decision is not None
+        assert decision.action == "degrade"
+        assert decision.original_action == "reject"
+        assert decision.reason == "legacy_task_result_missing_schema_version_compat"
+
+    def test_task_result_missing_schema_version_rejected_without_terminal_status(self) -> None:
         decision = evaluate_android_uplink_schema_gate(
             message_type="task_result",
             message={"type": "task_result", "task_id": "t1"},
@@ -332,7 +342,7 @@ class TestTaskResultGateEnforcement:
     def _run(self, coro: Any) -> Any:
         return asyncio.get_event_loop().run_until_complete(coro)
 
-    def test_task_result_missing_schema_version_blocked(self) -> None:
+    def test_task_result_missing_schema_version_degrades_to_truth_chain(self) -> None:
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result
 
         bridge = _make_bridge()
@@ -350,14 +360,28 @@ class TestTaskResultGateEnforcement:
             truth_chain_called.append(True)
             return MagicMock(is_truth_chain_complete=True)
 
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
-            _fake_truth_chain,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
+                _fake_truth_chain,
+            ),
+            patch(
+                "core.durable_result_idempotency.check_result_idempotency",
+                return_value=False,
+            ),
+            patch(
+                "core.durable_result_idempotency.record_result_idempotency",
+                return_value=None,
+            ),
         ):
             self._run(handle_task_result(bridge, _make_websocket(), message))
 
-        # schema gate must have blocked before truth chain
-        assert not truth_chain_called
+        assert truth_chain_called
+        evidence = message.get("_cross_repo_schema_version_gate")
+        assert isinstance(evidence, dict)
+        assert evidence.get("action") == "degrade"
+        assert evidence.get("original_action") == "reject"
+        assert evidence.get("reason") == "legacy_task_result_missing_schema_version_compat"
 
     def test_task_result_old_schema_blocked(self) -> None:
         from galaxy_gateway.android.handlers.task_lifecycle import handle_task_result

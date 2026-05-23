@@ -544,6 +544,7 @@ class AndroidParticipantTruthEnvelope:
     envelope_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     received_at: float = field(default_factory=time.time)
     payload: Dict[str, Any] = field(default_factory=dict)
+    schema_gate_evidence: Dict[str, Any] = field(default_factory=dict)
     task_phase_value: str = ""
     result_success: Optional[bool] = None
     result_payload: Dict[str, Any] = field(default_factory=dict)
@@ -563,6 +564,7 @@ class AndroidParticipantTruthEnvelope:
             "envelope_id": self.envelope_id,
             "received_at": self.received_at,
             "payload": dict(self.payload),
+            "schema_gate_evidence": dict(self.schema_gate_evidence),
             "task_phase_value": self.task_phase_value,
             "result_success": self.result_success,
             "result_payload": dict(self.result_payload),
@@ -608,6 +610,7 @@ class AndroidParticipantReconcileOutcome:
     replay_event_emitted: bool = False
     tracking_record_phase: str = ""
     recovery_state_routing: Dict[str, Any] = field(default_factory=dict)
+    schema_gate_evidence: Dict[str, Any] = field(default_factory=dict)
 
     def is_accepted(self) -> bool:
         return self.was_reconciled and not self.reject_reason
@@ -621,6 +624,7 @@ class AndroidParticipantReconcileOutcome:
             "replay_event_emitted": self.replay_event_emitted,
             "tracking_record_phase": self.tracking_record_phase,
             "recovery_state_routing": dict(self.recovery_state_routing),
+            "schema_gate_evidence": dict(self.schema_gate_evidence),
             "envelope": self.envelope.to_dict() if self.envelope else None,
         }
 
@@ -644,6 +648,28 @@ def _extract_str(
         if v and isinstance(v, str):
             return v.strip()
     return default
+
+
+def _extract_schema_gate_evidence(message: Dict[str, Any]) -> Dict[str, Any]:
+    """Return stamped cross-repo schema gate evidence from the richest known location.
+
+    Precedence is top-level internal stamping first (``_cross_repo_schema_version_gate``),
+    then response-style top-level aliasing (``schema_version_gate``), then the same keys
+    inside ``payload`` for callers that forwarded a nested envelope. This keeps degraded
+    compat evidence attached even when messages cross handler, bridge, and wrapper
+    boundaries before entering canonical participant truth ingress.
+    """
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, dict) else {}
+    for candidate in (
+        message.get("_cross_repo_schema_version_gate"),
+        message.get("schema_version_gate"),
+        payload_mapping.get("_cross_repo_schema_version_gate"),
+        payload_mapping.get("schema_version_gate"),
+    ):
+        if isinstance(candidate, dict):
+            return dict(candidate)
+    return {}
 
 
 def extract_participant_truth_envelope(
@@ -731,6 +757,7 @@ def extract_participant_truth_envelope(
         task_id=task_id,
         trace_id=trace_id,
         payload=dict(payload),
+        schema_gate_evidence=_extract_schema_gate_evidence(message),
         task_phase_value=task_phase_value,
         result_success=result_success,
         result_payload=result_payload,
@@ -1133,6 +1160,7 @@ def reconcile_android_participant_truth(
         replay_event_emitted=replay_event_emitted,
         tracking_record_phase=tracking_record_phase,
         recovery_state_routing=recovery_state_routing,
+        schema_gate_evidence=dict(envelope.schema_gate_evidence),
     )
     # PR-10: Record the outcome for the operator review surface.
     _record_last_reconciliation_outcome(outcome)
@@ -1678,6 +1706,7 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
             "task_id": envelope.task_id if envelope else None,
             "reject_reason": outcome.reject_reason,
             "recovery_state_routing": dict(outcome.recovery_state_routing),
+            "schema_gate_evidence": dict(outcome.schema_gate_evidence),
         }
         with _last_reconciliation_lock:
             _last_reconciliation_outcome = snapshot

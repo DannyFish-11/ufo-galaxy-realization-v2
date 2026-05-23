@@ -160,6 +160,7 @@ class AndroidUplinkSchemaGateDecision:
     observed_schema_version: str = ""
     observed_contract_version: str = ""
     reason: str = ""
+    original_action: str = ""
     expected_schema_version: str = ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION
     expected_contract_version: str = ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION
     evidence: Dict[str, Any] = field(default_factory=dict)
@@ -173,6 +174,7 @@ class AndroidUplinkSchemaGateDecision:
             "expected_schema_version": self.expected_schema_version,
             "expected_contract_version": self.expected_contract_version,
             "reason": self.reason,
+            "original_action": self.original_action,
             "evidence": dict(self.evidence),
             "authority": CROSS_REPO_SCHEMA_GATE_AUTHORITY,
             "gate_version": CROSS_REPO_SCHEMA_GATE_VERSION,
@@ -207,6 +209,28 @@ COMPLETION_CONTRACT_ENFORCED_MESSAGE_TYPES: FrozenSet[str] = frozenset(
 )
 
 _LEGACY_COMPAT_SCHEMA_VERSIONS: FrozenSet[str] = frozenset({"0"})
+
+_LEGACY_SAFE_RESULT_COMPAT_MESSAGE_TYPES: FrozenSet[str] = frozenset(
+    {
+        "goal_execution_result",
+        "goal_result",
+        "task_result",
+    }
+)
+
+_LEGACY_SAFE_RESULT_STATUS_VALUES: FrozenSet[str] = frozenset(
+    {
+        # Accept both spellings because Android/runtime surfaces have emitted both
+        # variants historically and this compat path is intentionally narrow.
+        "cancelled",
+        "canceled",
+        "completed",
+        "degraded",
+        "error",
+        "failed",
+        "success",
+    }
+)
 
 ANDROID_RESULT_DEDUPE_MESSAGE_TYPES: FrozenSet[str] = frozenset(
     {
@@ -314,6 +338,63 @@ def _to_int_or_none(raw: str) -> Optional[int]:
         return None
 
 
+def _build_legacy_safe_result_identity(
+    normalized_type: str,
+    message: Mapping[str, Any],
+) -> Dict[str, Any]:
+    payload = message.get("payload")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    raw_task_id = _extract_text_field(message, "task_id", "goal_id")
+    if not raw_task_id and normalized_type == "goal_execution_result":
+        raw_task_id = _extract_text_field(message, "correlation_id")
+    raw_status = _extract_text_field(message, "status", "result_kind")
+    normalized_status = str(raw_status or "").strip().lower()
+    return {
+        "task_id": str(raw_task_id or "").strip(),
+        "status": normalized_status,
+        "device_id": _extract_text_field(message, "device_id"),
+        "trace_id": _extract_text_field(message, "trace_id"),
+        "payload_present": isinstance(payload_mapping, Mapping),
+    }
+
+
+def _can_degrade_missing_schema_for_legacy_result(
+    normalized_type: str,
+    message: Mapping[str, Any],
+) -> bool:
+    if normalized_type not in _LEGACY_SAFE_RESULT_COMPAT_MESSAGE_TYPES:
+        return False
+    identity = _build_legacy_safe_result_identity(normalized_type, message)
+    return bool(identity["task_id"] and identity["status"] in _LEGACY_SAFE_RESULT_STATUS_VALUES)
+
+
+def _build_legacy_safe_result_degrade_decision(
+    *,
+    normalized_type: str,
+    message: Mapping[str, Any],
+    observed_contract_version: str,
+    evidence: Mapping[str, Any],
+) -> AndroidUplinkSchemaGateDecision:
+    identity = _build_legacy_safe_result_identity(normalized_type, message)
+    compat_evidence = dict(evidence)
+    compat_evidence.update(
+        {
+            "compat_degrade_path": "legacy_safe_result_missing_schema_version",
+            "legacy_safe_result_envelope": True,
+            "canonical_identity": identity,
+        }
+    )
+    return AndroidUplinkSchemaGateDecision(
+        action="degrade",
+        original_action="reject",
+        message_type=normalized_type,
+        observed_schema_version="",
+        observed_contract_version=observed_contract_version,
+        reason=f"legacy_{normalized_type}_missing_schema_version_compat",
+        evidence=compat_evidence,
+    )
+
+
 def evaluate_android_uplink_schema_gate(
     *,
     message_type: str,
@@ -335,6 +416,16 @@ def evaluate_android_uplink_schema_gate(
     }
 
     if not observed_schema_version:
+        if (
+            compatibility_mode == "strict_reject"
+            and _can_degrade_missing_schema_for_legacy_result(normalized_type, message)
+        ):
+            return _build_legacy_safe_result_degrade_decision(
+                normalized_type=normalized_type,
+                message=message,
+                observed_contract_version=observed_contract_version,
+                evidence=evidence,
+            )
         action = "reject" if compatibility_mode == "strict_reject" else "degrade"
         return AndroidUplinkSchemaGateDecision(
             action=action,

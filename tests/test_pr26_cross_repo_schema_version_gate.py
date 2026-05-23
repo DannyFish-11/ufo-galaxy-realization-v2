@@ -245,6 +245,24 @@ def test_runtime_schema_gate_rejects_completion_uplink_without_schema_version() 
     assert decision.reason == "missing_schema_version_metadata"
 
 
+def test_runtime_schema_gate_degrades_safe_legacy_task_result_missing_schema_version() -> None:
+    decision = evaluate_android_uplink_schema_gate(
+        message_type="task_result",
+        message={
+            "type": "task_result",
+            "task_id": "task-legacy-1",
+            "status": "success",
+        },
+    )
+    assert decision is not None
+    assert decision.action == "degrade"
+    assert decision.original_action == "reject"
+    assert decision.reason == "legacy_task_result_missing_schema_version_compat"
+    assert decision.evidence["legacy_safe_result_envelope"] is True
+    assert decision.evidence["canonical_identity"]["task_id"] == "task-legacy-1"
+    assert decision.evidence["canonical_identity"]["status"] == "success"
+
+
 def test_runtime_schema_gate_degrades_old_reconciliation_uplink_schema_version() -> None:
     decision = evaluate_android_uplink_schema_gate(
         message_type="reconciliation_signal",
