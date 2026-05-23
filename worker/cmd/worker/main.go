@@ -254,7 +254,8 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	w.publishResult(task.TaskID, running)
 
 	// Keep a separate result object for terminal publication so the already-published
-	// running update is not mutated while later execution details and the final result_id are added.
+	// running update is not mutated when execution_output/error fields, the terminal
+	// status, and the final result_id are attached for the closing publish.
 	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, "running")
 	result.StartedAt = startedAt
 
