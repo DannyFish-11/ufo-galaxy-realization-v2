@@ -252,9 +252,15 @@ def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> s
     5) degraded-success
     6) canonical-success (default)
     """
-    if payload.get("replay") or payload.get("replay_sequence"):
+    if (
+        payload.get("replay")
+        or payload.get("replay_sequence")
+        or payload.get("replay_seq")
+        or payload.get("replay_item_id")
+        or payload.get("replay_session_id")
+    ):
         return _LINEAGE_QUALITY_REPLAY_ASSISTED
-    if payload.get("recovered") or payload.get("recovery"):
+    if payload.get("recovered") or payload.get("recovery") or payload.get("resumed") or payload.get("resume"):
         return _LINEAGE_QUALITY_RECOVERY_ASSISTED
     if str(payload.get("route_mode") or "").strip().lower().startswith("compat"):
         return _LINEAGE_QUALITY_COMPAT_SUCCESS
@@ -263,6 +269,28 @@ def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> s
     if status == "degraded":
         return _LINEAGE_QUALITY_DEGRADED_SUCCESS
     return _LINEAGE_QUALITY_CANONICAL_SUCCESS
+
+
+def _first_present_value(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_optional_int(value: Any) -> Optional[int]:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _downgrade_lineage_quality_if_canonical(result_lineage: Dict[str, Any]) -> None:
+    if result_lineage.get("lineage_quality") in (
+        _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
+        _LINEAGE_QUALITY_CANONICAL_SUCCESS,
+    ):
+        result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
 
 
 def _evaluate_main_chain_ingress(
@@ -1012,6 +1040,65 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
+    runtime_session_id = payload.get("session_id") or message.get("session_id") or ""
+    runtime_attachment_session_id = (
+        payload.get("runtime_attachment_session_id")
+        or message.get("runtime_attachment_session_id")
+        or ""
+    )
+    durable_session_id = payload.get("durable_session_id") or message.get("durable_session_id") or ""
+    _raw_session_epoch = _first_present_value(
+        payload.get("continuity_epoch"),
+        message.get("continuity_epoch"),
+        payload.get("session_epoch"),
+        message.get("session_epoch"),
+    )
+    session_epoch = _normalize_optional_int(_raw_session_epoch)
+    is_stale_delivery = bool(
+        payload.get("is_stale", False) or message.get("is_stale", False) or payload.get("stale", False)
+    )
+    stale_reason = str(payload.get("stale_reason") or message.get("stale_reason") or "")
+    _raw_replay_seq = _first_present_value(
+        payload.get("replay_seq"),
+        payload.get("replay_sequence"),
+        message.get("replay_seq"),
+        message.get("replay_sequence"),
+    )
+    replay_seq = _normalize_optional_int(_raw_replay_seq)
+    replay_item_id = str(
+        # ``queue_item_id`` is a legacy Android offline-queue alias for the
+        # newer canonical ``replay_item_id`` field. Accept both so replayed
+        # terminal deliveries still carry queue identity into ingress.
+        payload.get("replay_item_id")
+        or message.get("replay_item_id")
+        or payload.get("queue_item_id")
+        or message.get("queue_item_id")
+        or ""
+    ).strip()
+    replay_session_id = str(
+        payload.get("replay_session_id")
+        or message.get("replay_session_id")
+        or runtime_session_id
+        or ""
+    ).strip()
+    is_replay_delivery = bool(
+        payload.get("replay")
+        or message.get("replay")
+        or replay_seq is not None
+        or replay_item_id
+    )
+    is_recovered_delivery = bool(
+        payload.get("recovered")
+        or payload.get("recovery")
+        or message.get("recovered")
+        or message.get("recovery")
+    )
+    is_resumed_delivery = bool(
+        payload.get("resumed")
+        or payload.get("resume")
+        or message.get("resumed")
+        or message.get("resume")
+    )
 
     # Initialized to None; set inside the schema gate try block.
     # Used later for closure-grade assessment.
@@ -1099,6 +1186,8 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     result_lineage.setdefault("task_id", task_id)
     result_lineage.setdefault("session_id", payload.get("session_id") or message.get("session_id") or "")
     result_lineage.setdefault("trace_id", trace_id)
+    result_lineage.setdefault("runtime_session_id", runtime_session_id)
+    result_lineage.setdefault("runtime_attachment_session_id", runtime_attachment_session_id)
     result_lineage.setdefault("protocol_lineage", "aip_v3_goal_execution_result")
     result_lineage.setdefault("routing_lineage", "task_result_canonical_truth_chain")
     result_lineage.setdefault("dispatch_lineage", "android_execution_completed")
@@ -1119,6 +1208,16 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     result_lineage.setdefault("canonical_truth_completed", False)
     result_lineage.setdefault("mature_closure_achieved", False)
     result_lineage.setdefault("canonical_authority", "v2")
+    result_lineage.setdefault("result_observed", True)
+    result_lineage.setdefault("result_terminal", True)
+    result_lineage.setdefault("result_accepted", False)
+    result_lineage.setdefault("closure_grade_complete", False)
+    result_lineage.setdefault("newly_complete", False)
+    result_lineage.setdefault("duplicate_terminal_delivery", False)
+    result_lineage.setdefault("replay_delivery", is_replay_delivery)
+    result_lineage.setdefault("recovered_delivery", is_recovered_delivery)
+    result_lineage.setdefault("resumed_delivery", is_resumed_delivery)
+    result_lineage.setdefault("terminal_delivery_disposition", "observed")
 
     # ── Durable idempotency guard ─────────────────────────────────────────
     # Android's OfflineTaskQueue drains goal_execution_result messages on
@@ -1128,18 +1227,21 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     # the same idempotency key internally so that the outer pre-check catches
     # replays on subsequent calls after the first successful ingestion.
     _ger_idem_key = f"goal_execution_result:{task_id}"
+    _ger_prechecked_duplicate = False
     try:
         from core.durable_result_idempotency import (
             check_result_idempotency as _check_ger_idem,
         )
 
         if _check_ger_idem(_ger_idem_key):
+            _ger_prechecked_duplicate = True
             logger.debug(
-                "GOAL_EXECUTION_RESULT: duplicate suppressed (durable store): " "task_id=%s device_id=%s",
+                "GOAL_EXECUTION_RESULT: duplicate observed in durable store; "
+                "routing through unified ingress for accurate closure classification: "
+                "task_id=%s device_id=%s",
                 task_id,
                 device_id,
             )
-            return
     except Exception as _ger_idem_err:
         logger.debug(
             "GOAL_EXECUTION_RESULT: idempotency check skipped (non-fatal): %s",
@@ -1160,7 +1262,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     )
 
     # ── 持久化到 TaskMemory（容错保护）─────────────────────────────
-    if store_task_result is not None:
+    if store_task_result is not None and not _ger_prechecked_duplicate:
         try:
             result_dict: Dict[str, Any] = {
                 "status": status,
@@ -1190,30 +1292,41 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
                 task_id,
                 mem_err,
             )
-    else:
+    elif store_task_result is None:
         logger.debug(
             "GOAL_EXECUTION_RESULT: store_task_result 不可用，跳过内存回流 task_id=%s",
             task_id,
         )
+    else:
+        logger.debug(
+            "GOAL_EXECUTION_RESULT: duplicate terminal pre-check — skipping memory backflow task_id=%s",
+            task_id,
+        )
 
     # ── 触发 OpenClawd 反馈（如果有对应会话）────────────────────────
-    try:
-        from core.desktop_presence_runtime import get_desktop_presence_runtime
+    if not _ger_prechecked_duplicate:
+        try:
+            from core.desktop_presence_runtime import get_desktop_presence_runtime
 
-        runtime = get_desktop_presence_runtime()
-        if hasattr(runtime, "on_goal_execution_result"):
-            await runtime.on_goal_execution_result(
-                task_id=task_id,
-                device_id=device_id,
-                status=status,
-                result=result_text,
-                trace_id=trace_id,
+            runtime = get_desktop_presence_runtime()
+            if hasattr(runtime, "on_goal_execution_result"):
+                await runtime.on_goal_execution_result(
+                    task_id=task_id,
+                    device_id=device_id,
+                    status=status,
+                    result=result_text,
+                    trace_id=trace_id,
+                )
+        except Exception as feedback_err:
+            logger.debug(
+                "GOAL_EXECUTION_RESULT: OpenClawd 反馈失败（非致命）task_id=%s error=%s",
+                task_id,
+                feedback_err,
             )
-    except Exception as feedback_err:
+    else:
         logger.debug(
-            "GOAL_EXECUTION_RESULT: OpenClawd 反馈失败（非致命）task_id=%s error=%s",
+            "GOAL_EXECUTION_RESULT: duplicate terminal pre-check — skipping runtime feedback task_id=%s",
             task_id,
-            feedback_err,
         )
 
     # PR-CLOSURE: 通过统一结果入口（UnifiedResultIngress）处理跨设备执行结果，
@@ -1281,11 +1394,19 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             raw_message_type="goal_execution_result",
             normalized_result_kind="goal_execution_result",
             normalized_status=status,
-            source_channel=_RSCv2.CANONICAL_WS,
+            source_channel=_RSCv2.REPLAY if is_replay_delivery else _RSCv2.CANONICAL_WS,
             payload=payload,
             trace_id=trace_id,
             raw_message=message,
-            runtime_session_id=payload.get("session_id") or message.get("session_id") or "",
+            runtime_session_id=runtime_session_id,
+            runtime_attachment_session_id=runtime_attachment_session_id,
+            durable_session_id=durable_session_id,
+            session_epoch=session_epoch,
+            is_stale=is_stale_delivery,
+            stale_reason=stale_reason,
+            replay_seq=replay_seq,
+            replay_item_id=replay_item_id,
+            replay_session_id=replay_session_id,
             # 使用与外层幂等性保护相同的 key；UnifiedResultIngress 在此处记录该
             # key，外层的 pre-check 在下一次重放时会提前拦截重复消息。
             idempotency_key=_ger_idem_key,
@@ -1295,10 +1416,45 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             android_payload_grade=_ger_android_payload_grade,
         )
         _ger_ingress_outcome = await _ingest_ger_async(_ger_event, bridge=bridge)
+        result_lineage["result_accepted"] = bool(
+            getattr(_ger_ingress_outcome, "truth_chain_complete", False)
+            and not getattr(_ger_ingress_outcome, "continuity_rejected", False)
+            and not getattr(_ger_ingress_outcome, "stale_epoch_rejected", False)
+            and getattr(_ger_ingress_outcome, "dedupe_contract_action", "") != "reject"
+            and getattr(_ger_ingress_outcome, "completion_disposition", "") == "first_accepted"
+        )
+        result_lineage["closure_grade_complete"] = bool(
+            getattr(_ger_ingress_outcome, "is_fully_closed", False)
+            and getattr(_ger_ingress_outcome, "closure_grade_eligible", True)
+        )
+        result_lineage["newly_complete"] = bool(
+            getattr(_ger_ingress_outcome, "is_fully_closed", False)
+            and getattr(_ger_ingress_outcome, "completion_disposition", "") == "first_accepted"
+        )
+        result_lineage["duplicate_terminal_delivery"] = bool(
+            _ger_prechecked_duplicate
+            or getattr(_ger_ingress_outcome, "completion_disposition", "") == "duplicate_ignored"
+            or getattr(_ger_ingress_outcome, "replay_ordering_decision", "") == "reject_duplicate"
+        )
+        result_lineage["terminal_delivery_disposition"] = (
+            str(getattr(_ger_ingress_outcome, "completion_disposition", "") or "").strip() or "observed"
+        )
+        result_lineage["continuity_adjudication_classification"] = str(
+            getattr(_ger_ingress_outcome, "continuity_adjudication_classification", "") or ""
+        )
+        result_lineage["stale_classification"] = str(getattr(_ger_ingress_outcome, "stale_classification", "") or "")
+        result_lineage["replay_ordering_decision"] = str(
+            getattr(_ger_ingress_outcome, "replay_ordering_decision", "") or ""
+        )
+        result_lineage["closure_grade_eligible"] = bool(
+            getattr(_ger_ingress_outcome, "closure_grade_eligible", _ger_closure_grade_eligible)
+        )
         if _ger_ingress_outcome.was_deduplicated:
             # 已由 UnifiedResultIngress 幂等性保护拦截
-            result_lineage["closure_lineage"] = "unified_ingress_deduplicated"
+            result_lineage["closure_lineage"] = "unified_ingress_duplicate_terminal"
+            result_lineage["audit_lineage"] = "unified_ingress_duplicate_terminal"
             result_lineage["reconciliation_acknowledged"] = True
+            _downgrade_lineage_quality_if_canonical(result_lineage)
             _canonical_completed, _mature_closure = _derive_canonical_closure_flags(
                 is_fully_closed=getattr(_ger_ingress_outcome, "is_fully_closed", False),
                 truth_chain_complete=getattr(_ger_ingress_outcome, "truth_chain_complete", False),
@@ -1348,8 +1504,13 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             result_lineage["reconciliation_lineage"] = "unified_ingress_partial"
             result_lineage["closure_lineage"] = f"unified_ingress_incomplete:{_ger_ingress_outcome.incomplete_reason}"
             result_lineage["audit_lineage"] = "unified_ingress_partial"
-            if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
-                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+            if getattr(_ger_ingress_outcome, "completion_disposition", "") == "duplicate_ignored":
+                result_lineage["closure_lineage"] = "unified_ingress_duplicate_terminal"
+                result_lineage["audit_lineage"] = "unified_ingress_duplicate_terminal"
+            elif getattr(_ger_ingress_outcome, "completion_disposition", "") == "stale_rejected":
+                result_lineage["closure_lineage"] = "unified_ingress_stale_terminal"
+                result_lineage["audit_lineage"] = "unified_ingress_stale_terminal"
+            _downgrade_lineage_quality_if_canonical(result_lineage)
             result_lineage["reconciliation_acknowledged"] = bool(
                 getattr(_ger_ingress_outcome, "truth_chain_complete", False)
             )
@@ -1462,6 +1623,17 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
                 "truth_chain_complete": getattr(_ger_ingress_outcome, "truth_chain_complete", False),
                 "evidence_acceptance_verdict": getattr(_ger_ingress_outcome, "evidence_acceptance_verdict", ""),
                 "incomplete_reason": getattr(_ger_ingress_outcome, "incomplete_reason", ""),
+                "completion_disposition": getattr(_ger_ingress_outcome, "completion_disposition", ""),
+                "continuity_adjudication_classification": getattr(
+                    _ger_ingress_outcome,
+                    "continuity_adjudication_classification",
+                    "",
+                ),
+                "stale_epoch_rejected": getattr(_ger_ingress_outcome, "stale_epoch_rejected", False),
+                "stale_classification": getattr(_ger_ingress_outcome, "stale_classification", ""),
+                "replay_ordering_decision": getattr(_ger_ingress_outcome, "replay_ordering_decision", ""),
+                "dedupe_contract_action": getattr(_ger_ingress_outcome, "dedupe_contract_action", ""),
+                "closure_grade_eligible": getattr(_ger_ingress_outcome, "closure_grade_eligible", True),
             }
         _record_cdcc(
             task_id=task_id,
