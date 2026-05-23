@@ -748,7 +748,22 @@ def test_G03_blocked_verdict_does_not_raise():
 
 
 @_skip_if_unavailable
-def test_G04_overall_verdict_deterministic():
+def test_G04_gate_worthy_unavailable_evidence_is_blocking():
+    from core.distributed_release_gate_skeleton import DistributedReleaseGateSkeleton
+    skeleton = DistributedReleaseGateSkeleton()
+    fake_dim_index = {
+        "delegated_flow_readiness": type("FakeDim", (), {"evidence_status": "unavailable"})(),
+    }
+    eval_result = skeleton._evaluate_category(
+        GateCategory.canonical_runtime_lifecycle, fake_dim_index
+    )
+    assert eval_result.verdict == ReleaseGateVerdict.blocked.value
+    assert eval_result.failure_state == "evidence_unavailable"
+    assert eval_result.blocking_condition_type == "continuity_risk"
+
+
+@_skip_if_unavailable
+def test_G05_overall_verdict_deterministic():
     report1 = evaluate_distributed_release_gate()
     report2 = evaluate_distributed_release_gate()
     assert report1.overall_verdict == report2.overall_verdict

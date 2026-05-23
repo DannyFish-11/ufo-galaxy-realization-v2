@@ -540,10 +540,21 @@ class GovernanceValidationGate:
 
                 if release_gate_verdict == "blocked":
                     fail_reasons.append(ValidationFailReason.governance_blocked)
-                    details["blocked_categories"] = [
-                        e.category
-                        for e in gate_report.category_evaluations
+                    blocked_evals = [
+                        e for e in gate_report.category_evaluations
                         if e.verdict == "blocked"
+                    ]
+                    details["blocked_categories"] = [e.category for e in blocked_evals]
+                    details["blocked_category_states"] = [
+                        {
+                            "category": e.category,
+                            "blocking_condition_type": e.blocking_condition_type,
+                            "failure_state": e.failure_state,
+                            "evidence_status": e.evidence_status,
+                            "evidence_dimension_ids": list(e.evidence_dimension_ids),
+                            "gap_description": e.gap_description,
+                        }
+                        for e in blocked_evals
                     ]
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -834,6 +845,13 @@ def run_governance_verdict_ci(
     verdict_dict["advisory_fail_reasons"] = [
         r for r in verdict_dict["fail_reasons"] if r in CI_ADVISORY_DIMENSIONS
     ]
+    blocked_category_states = list(result.details.get("blocked_category_states") or [])
+    verdict_dict["blocked_category_states"] = blocked_category_states
+    verdict_dict["blocked_condition_types"] = sorted({
+        str(item.get("blocking_condition_type") or "")
+        for item in blocked_category_states
+        if item.get("blocking_condition_type")
+    })
 
     verdict_json = _json.dumps(verdict_dict, indent=2)
 
@@ -849,6 +867,8 @@ def run_governance_verdict_ci(
         f"  fail_reasons     : {[r.value for r in result.fail_reasons]}",
         f"  blocking_reasons : {verdict_dict['blocking_fail_reasons']}",
         f"  advisory_reasons : {verdict_dict['advisory_fail_reasons']}",
+        f"  blocked_types    : {verdict_dict['blocked_condition_types']}",
+        f"  blocked_states   : {blocked_category_states}",
         f"  summary          : {result.summary}",
     ]:
         print(line)
@@ -911,4 +931,3 @@ if __name__ == "__main__":
             check_delegated_readiness=_args.delegated,
         )
     )
-

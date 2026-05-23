@@ -378,6 +378,52 @@ def test_B07_json_verdict_has_blocking_and_advisory_classifications():
         assert "advisory_fail_reasons" in data
 
 
+@_skip_gov
+def test_B08_json_verdict_includes_blocked_category_states():
+    """Blocked governance verdicts must include structured blocked category states."""
+    mock_result = ValidationResult(
+        result_id="test-fail-structured",
+        generated_at=1.0,
+        outcome=ValidationOutcome.FAIL,
+        fail_reasons=[ValidationFailReason.governance_blocked],
+        summary="Governance blocked.",
+        release_gate_verdict="blocked",
+        readiness_status="ready",
+        delegated_readiness_verdict=None,
+        blocked_gate_worthy_count=1,
+        capability_tier=None,
+        enforce_mode=False,
+        details={
+            "blocked_category_states": [
+                {
+                    "category": "canonical_continuity_recovery",
+                    "blocking_condition_type": "replay_or_recovery_risk",
+                    "failure_state": "evidence_unavailable",
+                    "evidence_status": "unavailable",
+                    "evidence_dimension_ids": ["continuity_recovery_closure"],
+                    "gap_description": "continuity/recovery evidence unavailable",
+                }
+            ]
+        },
+    )
+
+    with patch.object(
+        GovernanceValidationGate,
+        "validate",
+        return_value=mock_result,
+    ):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "verdict.json")
+            code = run_governance_verdict_ci(output_path=output_path)
+            assert code == 1
+            with open(output_path) as f:
+                data = json.load(f)
+
+    assert data["blocked_condition_types"] == ["replay_or_recovery_risk"]
+    assert len(data["blocked_category_states"]) == 1
+    assert data["blocked_category_states"][0]["category"] == "canonical_continuity_recovery"
+
+
 # ===========================================================================
 # Group C — Cross-repo consistency gate enforcement
 # ===========================================================================
