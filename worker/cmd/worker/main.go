@@ -106,6 +106,32 @@ type Worker struct {
 	mu            sync.Mutex
 }
 
+func (w *Worker) buildLifecycleResult(task *TaskDispatch, status string) *executor.TaskResult {
+	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, status)
+	w.decorateResultMetadata(task, result)
+	return result
+}
+
+func (w *Worker) decorateResultMetadata(task *TaskDispatch, result *executor.TaskResult) {
+	if result == nil || task == nil {
+		return
+	}
+	if result.Metadata == nil {
+		result.Metadata = make(map[string]string)
+	}
+	if traceID := task.Context["trace_id"]; traceID != "" {
+		result.Metadata["trace_id"] = traceID
+	}
+	if correlationID := task.Context["correlation_id"]; correlationID != "" {
+		result.Metadata["correlation_id"] = correlationID
+	}
+	if task.TargetWorkerID != "" {
+		result.Metadata["target_worker_id"] = task.TargetWorkerID
+	}
+	result.Metadata["result_phase"] = result.Status
+	result.Metadata["result_id"] = fmt.Sprintf("%s:%s:%d", task.TaskID, result.Status, time.Now().UnixNano())
+}
+
 func main() {
 	cfg := config.Load()
 	log.Printf("[Worker] starting (id=%s, type=%s, nats=%s)", cfg.WorkerID, cfg.DeviceType, cfg.NATSURL)
@@ -220,6 +246,13 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	defer atomic.AddInt32(&w.activeTasks, -1)
 
 	startedAt := executor.NowTimestamp()
+	accepted := w.buildLifecycleResult(&task, "dispatched")
+	w.publishResult(task.TaskID, accepted)
+
+	running := w.buildLifecycleResult(&task, "running")
+	running.StartedAt = startedAt
+	w.publishResult(task.TaskID, running)
+
 	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, "running")
 	result.StartedAt = startedAt
 
@@ -235,6 +268,7 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 				Source:  "worker.lsp",
 			}
 			result.CompletedAt = executor.NowTimestamp()
+			w.decorateResultMetadata(&task, result)
 			w.publishResult(task.TaskID, result)
 			atomic.AddInt64(&w.failedTotal, 1)
 			return

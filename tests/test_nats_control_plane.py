@@ -905,6 +905,215 @@ class TestNATSConnected:
         assert result.get("execution_path") == "distributed_unavailable"
         assert result.get("nats_publish_state", {}).get("noop") is True
 
+    @pytest.mark.asyncio
+    async def test_master_brain_dispatch_waits_for_terminal_result(self):
+        """dispatch_task() returns terminal worker completion, not just publish success."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskResultModel,
+            TaskStatus,
+            TaskType,
+            TimestampModel,
+        )
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus)
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage7-terminal-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-42",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-42"),
+                context={"trace_id": "trace-stage7-terminal"},
+                timeout_ms=1_000,
+            ),
+        })
+
+        async def _publish_and_complete(*_args, **_kwargs):
+            async def _emit_statuses():
+                await asyncio.sleep(0)
+                await brain.handle_task_result(TaskResultModel(
+                    task_id="stage7-terminal-01",
+                    worker_id="worker-42",
+                    status=TaskStatus.DISPATCHED,
+                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-dispatched"},
+                ))
+                await brain.handle_task_result(TaskResultModel(
+                    task_id="stage7-terminal-01",
+                    worker_id="worker-42",
+                    status=TaskStatus.RUNNING,
+                    started_at=TimestampModel(seconds=1, nanos=0),
+                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-running"},
+                ))
+                await brain.handle_task_result(TaskResultModel(
+                    task_id="stage7-terminal-01",
+                    worker_id="worker-42",
+                    status=TaskStatus.SUCCESS,
+                    started_at=TimestampModel(seconds=1, nanos=0),
+                    completed_at=TimestampModel(seconds=2, nanos=0),
+                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-success"},
+                ))
+
+            asyncio.create_task(_emit_statuses())
+            return {"success": True, "seq": 7}
+
+        mock_bus.publish_task_dispatch = AsyncMock(side_effect=_publish_and_complete)
+
+        result = await brain.dispatch_task({"task_id": "stage7-terminal-01"})
+
+        assert result.get("success") is True
+        assert result.get("status") == "success"
+        assert result.get("completion_state") == "execution_completed"
+        assert result.get("dispatch_attempted") is True
+        assert result.get("dispatch_accepted") is True
+        assert result.get("execution_started") is True
+        assert result.get("result_received") is True
+        assert result.get("closure_complete") is True
+        assert result.get("task_outcome_known") is True
+        assert result.get("lifecycle_state") == "succeeded"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_fire_and_observe_status_is_non_terminal_until_result_closes(self):
+        """Fire-and-observe callers can inspect truthful non-terminal distributed state."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskResultModel,
+            TaskStatus,
+            TaskType,
+            TimestampModel,
+        )
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 11})
+        brain = MasterBrain(nats=mock_bus)
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage7-observe-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-7",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-7"),
+                context={"trace_id": "trace-stage7-observe"},
+                timeout_ms=1_000,
+            ),
+        })
+
+        dispatch_result = await brain.dispatch_task({"task_id": "stage7-observe-01", "wait_for_completion": False})
+        running_result = await brain.handle_task_result(TaskResultModel(
+            task_id="stage7-observe-01",
+            worker_id="worker-7",
+            status=TaskStatus.RUNNING,
+            started_at=TimestampModel(seconds=3, nanos=0),
+            metadata={"trace_id": "trace-stage7-observe", "result_id": "res-running-01"},
+        ))
+        observed = brain.get_task_status("stage7-observe-01")
+
+        assert dispatch_result.get("success") is True
+        assert dispatch_result.get("closure_complete") is False
+        assert dispatch_result.get("completion_state") == "dispatch_accepted"
+        assert running_result.get("success") is False
+        assert running_result.get("closure_complete") is False
+        assert running_result.get("completion_state") == "execution_started"
+        assert observed is not None
+        assert observed.get("execution_started") is True
+        assert observed.get("result_received") is True
+        assert observed.get("result_pending_closure") is True
+        assert observed.get("task_outcome_known") is False
+        assert observed.get("closure_complete") is False
+        assert observed.get("lifecycle_state") == "running"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_rejects_result_correlation_mismatch(self):
+        """Mismatched worker results must not close an unrelated distributed dispatch."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskResultModel,
+            TaskStatus,
+            TaskType,
+        )
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 12})
+        brain = MasterBrain(nats=mock_bus)
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage7-mismatch-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-expected",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-expected"),
+                context={"trace_id": "trace-stage7-mismatch"},
+                timeout_ms=1_000,
+            ),
+        })
+
+        await brain.dispatch_task({"task_id": "stage7-mismatch-01", "wait_for_completion": False})
+        mismatch = await brain.handle_task_result(TaskResultModel(
+            task_id="stage7-mismatch-01",
+            worker_id="worker-other",
+            status=TaskStatus.SUCCESS,
+            metadata={"trace_id": "trace-stage7-mismatch", "result_id": "res-mismatch-01"},
+        ))
+        observed = brain.get_task_status("stage7-mismatch-01")
+
+        assert mismatch.get("success") is False
+        assert "result_worker_id_mismatch" in mismatch.get("error", "")
+        assert observed is not None
+        assert observed.get("closure_complete") is False
+        assert observed.get("task_outcome_known") is False
+        assert observed.get("correlation_valid") is False
+
+    @pytest.mark.asyncio
+    async def test_route_worker_envelope_copies_completion_truth_from_master_brain(self):
+        """CommandRouter exposes distributed completion truth returned by MasterBrain."""
+        from core.command_router import CommandRouter
+        from core.schemas.remote_execution import ExecutorTargetType
+        from core.schemas.task_envelope import TaskEnvelope
+
+        router = CommandRouter()
+        master_brain = MagicMock()
+        master_brain.dispatch_task = AsyncMock(return_value={
+            "success": True,
+            "distributed_dispatch": True,
+            "execution_path": "nats_distributed",
+            "completion_state": "execution_completed",
+            "closure_complete": True,
+            "dispatch_attempted": True,
+            "dispatch_accepted": True,
+            "execution_started": True,
+            "result_received": True,
+            "result_pending_closure": False,
+            "task_outcome_known": True,
+            "lifecycle_state": "succeeded",
+        })
+        envelope = TaskEnvelope(
+            task_id="stage7-route-01",
+            trace_id="trace-stage7-route",
+            source="test",
+            targets=["worker-route-1"],
+            tool_name="run",
+            args={"k": "v"},
+            executor_target_type=ExecutorTargetType.go_worker,
+        )
+
+        with patch("core.master_brain.get_master_brain", return_value=master_brain):
+            result = await router._route_worker_envelope(envelope, command_id="cmd-stage7-route", request_id="req-stage7-route")
+
+        assert result["success"] is True
+        assert result["completion_state"] == "execution_completed"
+        assert result["closure_complete"] is True
+        assert result["dispatch_accepted"] is True
+        assert result["execution_started"] is True
+        assert result["task_outcome_known"] is True
+        assert result["lifecycle_state"] == "succeeded"
+
 
 # ===========================================================================
 # PR-3 — NATS × TaskEnvelope alignment

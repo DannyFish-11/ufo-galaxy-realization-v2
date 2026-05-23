@@ -94,7 +94,6 @@ func NewTaskResult(taskID, workerID, status string) *TaskResult {
 		WorkerID:      workerID,
 		Status:        status,
 		AttemptNumber: 1,
-		CompletedAt:   NowTimestamp(),
 		Metadata:      make(map[string]string),
 	}
 }

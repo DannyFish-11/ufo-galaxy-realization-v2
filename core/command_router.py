@@ -2938,7 +2938,7 @@ class CommandRouter:
             }
             raw = await mb.dispatch_task(raw_task)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
-            return {
+            result = {
                 "request_id": request_id,
                 "task_id": envelope.task_id,
                 "trace_id": envelope.trace_id,
@@ -2952,6 +2952,8 @@ class CommandRouter:
                 "error_message": raw.get("error"),
                 "latency_ms": round(_latency_ms, 1),
             }
+            self._copy_execution_truth_fields(result, raw)
+            return result
         except Exception as _exc:
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             logger.error(
@@ -3818,6 +3820,15 @@ class CommandRouter:
             "fallback_used",
             "fallback_reason",
             "nats_publish_state",
+            "completion_state",
+            "closure_complete",
+            "dispatch_attempted",
+            "dispatch_accepted",
+            "execution_started",
+            "result_received",
+            "result_pending_closure",
+            "task_outcome_known",
+            "lifecycle_state",
         ):
             if marker_field in raw_result:
                 result[marker_field] = raw_result[marker_field]

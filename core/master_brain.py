@@ -21,6 +21,7 @@ import logging
 import os
 import time
 import uuid
+import asyncio
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -78,6 +79,7 @@ class MasterBrain:
         self._acl = acl_layer or acl
         self._workers: Dict[str, Dict[str, Any]] = {}
         self._task_log: Dict[str, Dict[str, Any]] = {}
+        self._task_waiters: Dict[str, asyncio.Future] = {}
         self._temporal_client: Any = None
         self._started = False
 
@@ -192,9 +194,47 @@ class MasterBrain:
                 return {"success": False, "error": "No available worker for device type: " + task.target_device_type}
             task.target_worker_id = target
 
+        trace_id = task.context.get("trace_id") or raw_task.get("trace_id", "")
+        wait_for_completion = bool(raw_task.get("wait_for_completion", True))
+        timeout_s = self._resolve_task_timeout_s(raw_task, task)
+        record = self._upsert_task_record(
+            task_id=task.task_id,
+            worker_id=target,
+            trace_id=trace_id,
+            status="dispatching",
+            completion_state="dispatch_attempted",
+            lifecycle_state="dispatching",
+            success=False,
+            error="",
+            closure_complete=False,
+            task_outcome_known=False,
+            dispatch_attempted=True,
+            dispatch_accepted=False,
+            execution_started=False,
+            result_received=False,
+            distributed_dispatch=False,
+            execution_path="dispatch_in_progress",
+            nats_publish_state=None,
+        )
+        record.setdefault("dispatched_at", datetime.now().isoformat())
+        self._ensure_task_waiter(task.task_id)
+
         # Publish to NATS
         result = await self._nats.publish_task_dispatch(target, task)
         if result.get("noop"):
+            failure = self._update_task_record(
+                task.task_id,
+                status="dispatch_failed",
+                completion_state="dispatch_failed",
+                lifecycle_state="failed",
+                success=False,
+                error="distributed_transport_unavailable:nats_noop_transport",
+                closure_complete=True,
+                task_outcome_known=True,
+                distributed_dispatch=False,
+                execution_path="distributed_unavailable",
+                nats_publish_state=result,
+            )
             return {
                 "success": False,
                 "error": "distributed_transport_unavailable:nats_noop_transport",
@@ -203,8 +243,23 @@ class MasterBrain:
                 "distributed_dispatch": False,
                 "execution_path": "distributed_unavailable",
                 "nats_publish_state": result,
+                "completion_state": failure.get("completion_state"),
+                "closure_complete": failure.get("closure_complete"),
             }
         if not result.get("success"):
+            failure = self._update_task_record(
+                task.task_id,
+                status="dispatch_failed",
+                completion_state="dispatch_failed",
+                lifecycle_state="failed",
+                success=False,
+                error=result.get("error", "nats_publish_failed"),
+                closure_complete=True,
+                task_outcome_known=True,
+                distributed_dispatch=False,
+                execution_path="distributed_unavailable",
+                nats_publish_state=result,
+            )
             return {
                 "success": False,
                 "error": result.get("error", "nats_publish_failed"),
@@ -213,41 +268,166 @@ class MasterBrain:
                 "distributed_dispatch": False,
                 "execution_path": "distributed_unavailable",
                 "nats_publish_state": result,
+                "completion_state": failure.get("completion_state"),
+                "closure_complete": failure.get("closure_complete"),
             }
 
         if result.get("success"):
-            self._task_log[task.task_id] = {
-                "task_id": task.task_id,
-                "worker_id": target,
-                "status": "dispatched",
-                "dispatched_at": datetime.now().isoformat(),
-            }
+            dispatch_snapshot = self._update_task_record(
+                task.task_id,
+                status=TaskStatus.DISPATCHED.value,
+                completion_state="dispatch_accepted",
+                lifecycle_state="waiting_remote",
+                success=not wait_for_completion,
+                error="",
+                closure_complete=False,
+                task_outcome_known=False,
+                dispatch_accepted=True,
+                distributed_dispatch=True,
+                execution_path="nats_distributed",
+                nats_publish_state=result,
+                dispatch_accepted_at=datetime.now().isoformat(),
+            )
             _try_emit_event("TASK_DISPATCHED", {
                 "task_id": task.task_id,
                 "worker_id": target,
                 "task_type": task.task_type.value,
             })
-            result["task_id"] = task.task_id
-            result.setdefault("distributed_dispatch", True)
-            result.setdefault("execution_path", "nats_distributed")
+            if not wait_for_completion:
+                return {
+                    "success": True,
+                    "task_id": task.task_id,
+                    "worker_id": target,
+                    "trace_id": trace_id,
+                    "distributed_dispatch": True,
+                    "execution_path": "nats_distributed",
+                    "dispatch_attempted": True,
+                    "dispatch_accepted": True,
+                    "execution_started": False,
+                    "result_received": False,
+                    "result_pending_closure": False,
+                    "closure_complete": False,
+                    "task_outcome_known": False,
+                    "completion_state": dispatch_snapshot.get("completion_state"),
+                    "status": dispatch_snapshot.get("status"),
+                    "lifecycle_state": dispatch_snapshot.get("lifecycle_state"),
+                    "nats_publish_state": result,
+                }
 
-        return result
+        return await self.wait_for_task_result(task.task_id, timeout_s=timeout_s)
 
     async def handle_task_result(self, result: TaskResultModel) -> dict:
-        """Process worker result, update task log, emit event."""
+        """Process worker result, update task state, and complete waiting callers."""
         task_id = result.task_id
-        if task_id in self._task_log:
-            self._task_log[task_id]["status"] = result.status.value
-            self._task_log[task_id]["completed_at"] = datetime.now().isoformat()
+        status = result.status.value
+        record = self._task_log.get(task_id)
+        if record is None:
+            record = self._upsert_task_record(
+                task_id=task_id,
+                worker_id=result.worker_id,
+                trace_id=(result.metadata or {}).get("trace_id", ""),
+                status=status,
+                completion_state="result_received_pending_closure",
+                lifecycle_state="waiting_remote",
+                success=False,
+                error="",
+                closure_complete=False,
+                task_outcome_known=False,
+                dispatch_attempted=False,
+                dispatch_accepted=False,
+                execution_started=False,
+                result_received=True,
+                distributed_dispatch=True,
+                execution_path="nats_distributed",
+                nats_publish_state=None,
+            )
+
+        correlation_error = self._validate_result_correlation(record, result)
+        if correlation_error:
+            mismatch = self._update_task_record(
+                task_id,
+                error=correlation_error,
+                correlation_valid=False,
+                last_result_at=datetime.now().isoformat(),
+            )
+            return {
+                "success": False,
+                "task_id": task_id,
+                "status": mismatch.get("status"),
+                "error": correlation_error,
+                "completion_state": mismatch.get("completion_state"),
+            }
+
+        result_id = (result.metadata or {}).get("result_id", "")
+        seen_result_ids = record.setdefault("_result_ids", set())
+        if result_id and result_id in seen_result_ids:
+            return self.get_task_status(task_id)
+        if result_id:
+            seen_result_ids.add(result_id)
+
+        result_dump = result.model_dump(mode="json", exclude_none=True)
+        completion_state, lifecycle_state, closure_complete, task_success = self._classify_task_result(result.status)
+        updates = {
+            "worker_id": result.worker_id or record.get("worker_id", ""),
+            "trace_id": record.get("trace_id") or (result.metadata or {}).get("trace_id", ""),
+            "status": status,
+            "completion_state": completion_state,
+            "lifecycle_state": lifecycle_state,
+            "success": task_success if closure_complete else False,
+            "error": self._extract_task_error(result_dump),
+            "closure_complete": closure_complete,
+            "task_outcome_known": closure_complete,
+            "dispatch_accepted": record.get("dispatch_accepted", False) or status in (
+                TaskStatus.DISPATCHED.value,
+                TaskStatus.RUNNING.value,
+                TaskStatus.SUCCESS.value,
+                TaskStatus.FAILED.value,
+                TaskStatus.TIMEOUT.value,
+                TaskStatus.CANCELLED.value,
+                TaskStatus.LSP_FAILED.value,
+            ),
+            "execution_started": record.get("execution_started", False) or status in (
+                TaskStatus.RUNNING.value,
+                TaskStatus.SUCCESS.value,
+                TaskStatus.FAILED.value,
+                TaskStatus.TIMEOUT.value,
+                TaskStatus.CANCELLED.value,
+                TaskStatus.LSP_FAILED.value,
+            ),
+            "result_received": True,
+            "result_pending_closure": not closure_complete,
+            "last_result_at": datetime.now().isoformat(),
+            "last_result_id": result_id,
+            "result": result_dump,
+            "correlation_valid": True,
+        }
+        if status == TaskStatus.DISPATCHED.value:
+            updates.setdefault("dispatch_accepted_at", datetime.now().isoformat())
+        if status == TaskStatus.RUNNING.value:
+            updates["started_at"] = self._timestamp_to_iso(result.started_at) or record.get("started_at") or datetime.now().isoformat()
+        if closure_complete:
+            updates["completed_at"] = self._timestamp_to_iso(result.completed_at) or datetime.now().isoformat()
+        snapshot = self._update_task_record(task_id, **updates)
 
         _try_emit_event("TASK_RESULT_RECEIVED", {
             "task_id": task_id,
             "worker_id": result.worker_id,
-            "status": result.status.value,
+            "status": status,
         })
 
-        logger.info(f"MasterBrain: task {task_id} completed with status {result.status.value}")
-        return {"success": True, "task_id": task_id, "status": result.status.value}
+        if closure_complete:
+            waiter = self._task_waiters.get(task_id)
+            if waiter is not None and not waiter.done():
+                waiter.set_result(snapshot)
+
+        logger.info("MasterBrain: task %s result status=%s completion=%s", task_id, status, snapshot.get("completion_state"))
+        return {
+            "success": closure_complete and task_success,
+            "task_id": task_id,
+            "status": status,
+            "completion_state": snapshot.get("completion_state"),
+            "closure_complete": snapshot.get("closure_complete"),
+        }
 
     # ── Workflow launch ─────────────────────────────────────────────────────
 
@@ -391,6 +571,38 @@ class MasterBrain:
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
 
+    async def wait_for_task_result(self, task_id: str, timeout_s: Optional[float] = None) -> dict:
+        """Wait for a distributed task to reach a terminal state."""
+        snapshot = self.get_task_status(task_id)
+        if not snapshot:
+            return {"success": False, "error": "unknown_task_id", "task_id": task_id}
+        if snapshot.get("closure_complete"):
+            return snapshot
+
+        waiter = self._ensure_task_waiter(task_id)
+        try:
+            result = await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout_s)
+            return result if isinstance(result, dict) else self.get_task_status(task_id)
+        except asyncio.TimeoutError:
+            timed_out = self._update_task_record(
+                task_id,
+                success=False,
+                error=f"task_result_timeout:{timeout_s}",
+                completion_state="result_pending_timeout",
+                result_pending_closure=True,
+                closure_complete=False,
+                task_outcome_known=False,
+            )
+            timed_out["error"] = f"task_result_timeout:{timeout_s}"
+            return timed_out
+
+    def get_task_status(self, task_id: str) -> Optional[dict]:
+        """Return the current distributed execution snapshot for *task_id*."""
+        record = self._task_log.get(task_id)
+        if record is None:
+            return None
+        return {k: v for k, v in record.items() if not k.startswith("_")}
+
     # ── NATS callbacks ──────────────────────────────────────────────────────
 
     async def _on_heartbeat(self, data: dict) -> None:
@@ -496,6 +708,121 @@ class MasterBrain:
             "tasks_tracked": len(self._task_log),
             "timestamp": datetime.now().isoformat(),
         }
+
+    def _ensure_task_waiter(self, task_id: str) -> asyncio.Future:
+        waiter = self._task_waiters.get(task_id)
+        if waiter is None or waiter.cancelled():
+            waiter = asyncio.get_event_loop().create_future()
+            self._task_waiters[task_id] = waiter
+        return waiter
+
+    def _upsert_task_record(
+        self,
+        *,
+        task_id: str,
+        worker_id: str,
+        trace_id: str,
+        status: str,
+        completion_state: str,
+        lifecycle_state: str,
+        success: bool,
+        error: str,
+        closure_complete: bool,
+        task_outcome_known: bool,
+        dispatch_attempted: bool,
+        dispatch_accepted: bool,
+        execution_started: bool,
+        result_received: bool,
+        distributed_dispatch: bool,
+        execution_path: str,
+        nats_publish_state: Optional[dict],
+    ) -> dict:
+        record = self._task_log.setdefault(task_id, {})
+        record.update({
+            "task_id": task_id,
+            "worker_id": worker_id,
+            "trace_id": trace_id,
+            "status": status,
+            "success": success,
+            "error": error,
+            "distributed_dispatch": distributed_dispatch,
+            "execution_path": execution_path,
+            "dispatch_attempted": dispatch_attempted,
+            "dispatch_accepted": dispatch_accepted,
+            "execution_started": execution_started,
+            "result_received": result_received,
+            "result_pending_closure": result_received and not closure_complete,
+            "closure_complete": closure_complete,
+            "task_outcome_known": task_outcome_known,
+            "completion_state": completion_state,
+            "lifecycle_state": lifecycle_state,
+            "nats_publish_state": nats_publish_state,
+            "correlation_valid": True,
+        })
+        record.setdefault("_result_ids", set())
+        return record
+
+    def _update_task_record(self, task_id: str, **updates: Any) -> dict:
+        record = self._task_log.setdefault(task_id, {"task_id": task_id, "_result_ids": set()})
+        record.update({k: v for k, v in updates.items() if v is not None})
+        if "closure_complete" in updates and "result_received" not in updates:
+            record["result_pending_closure"] = bool(record.get("result_received")) and not bool(record.get("closure_complete"))
+        return self.get_task_status(task_id) or {}
+
+    @staticmethod
+    def _resolve_task_timeout_s(raw_task: dict, task: TaskDispatchModel) -> float:
+        raw_timeout = raw_task.get("timeout")
+        if isinstance(raw_timeout, (int, float)) and raw_timeout > 0:
+            return float(raw_timeout)
+        timeout_ms = getattr(task, "timeout_ms", 0) or 0
+        return max(float(timeout_ms) / 1000.0, 0.1)
+
+    @staticmethod
+    def _timestamp_to_iso(timestamp: Any) -> str:
+        if timestamp is None:
+            return ""
+        seconds = getattr(timestamp, "seconds", None)
+        nanos = getattr(timestamp, "nanos", 0) or 0
+        if seconds is None:
+            return ""
+        return datetime.fromtimestamp(seconds + (nanos / 1_000_000_000)).isoformat()
+
+    @staticmethod
+    def _extract_task_error(result_dump: dict) -> str:
+        error = result_dump.get("error")
+        if isinstance(error, dict):
+            return error.get("message", "") or error.get("code", "")
+        if isinstance(error, str):
+            return error
+        return ""
+
+    @staticmethod
+    def _classify_task_result(status: TaskStatus) -> tuple[str, str, bool, bool]:
+        status_value = status.value
+        if status_value == TaskStatus.DISPATCHED.value:
+            return "dispatch_accepted", "waiting_remote", False, False
+        if status_value == TaskStatus.RUNNING.value:
+            return "execution_started", "running", False, False
+        if status_value == TaskStatus.SUCCESS.value:
+            return "execution_completed", "succeeded", True, True
+        if status_value in (TaskStatus.FAILED.value, TaskStatus.LSP_FAILED.value):
+            return "execution_failed", "failed", True, False
+        if status_value == TaskStatus.TIMEOUT.value:
+            return "execution_failed", "timed_out", True, False
+        if status_value == TaskStatus.CANCELLED.value:
+            return "execution_failed", "cancelled", True, False
+        return "result_received_pending_closure", "waiting_remote", False, False
+
+    @staticmethod
+    def _validate_result_correlation(record: dict, result: TaskResultModel) -> str:
+        expected_worker_id = record.get("worker_id", "")
+        if expected_worker_id and result.worker_id and expected_worker_id != result.worker_id:
+            return f"result_worker_id_mismatch:{expected_worker_id}!={result.worker_id}"
+        expected_trace_id = record.get("trace_id", "")
+        actual_trace_id = (result.metadata or {}).get("trace_id", "")
+        if expected_trace_id and actual_trace_id and expected_trace_id != actual_trace_id:
+            return f"result_trace_id_mismatch:{expected_trace_id}!={actual_trace_id}"
+        return ""
 
 
 # ── Module-level singleton (constraint C1 — lazy, depends on env) ──────────
