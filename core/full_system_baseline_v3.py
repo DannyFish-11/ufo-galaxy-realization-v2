@@ -511,6 +511,10 @@ class V3BaselineReport:
     android_evidence_present:
         True only if cross-repo Android evidence was found and is not stale.
         A False value always produces a non-closed verdict per policy.
+    android_evidence_state:
+        Structured Android evidence closure-state projection derived from the
+        canonical cross-repo evidence pipeline report.  Distinguishes detected,
+        complete, fresh, authority_clear, and routine_cross_repo_delivery.
     """
 
     overall_verdict: V3BaselineVerdict = V3BaselineVerdict.insufficient_evidence_to_conclude
@@ -523,6 +527,7 @@ class V3BaselineReport:
     generated_at: str = ""
     authority: str = FULL_SYSTEM_BASELINE_V3_AUTHORITY
     android_evidence_present: bool = False
+    android_evidence_state: Dict[str, Any] = field(default_factory=dict)
 
     # -------------------------------------------------------------------
     def to_dict(self) -> Dict[str, Any]:
@@ -537,6 +542,7 @@ class V3BaselineReport:
             "generated_at": self.generated_at,
             "authority": self.authority,
             "android_evidence_present": self.android_evidence_present,
+            "android_evidence_state": dict(self.android_evidence_state),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -555,6 +561,7 @@ class V3BaselineReport:
             generated_at=str(data.get("generated_at", "")),
             authority=str(data.get("authority", FULL_SYSTEM_BASELINE_V3_AUTHORITY)),
             android_evidence_present=bool(data.get("android_evidence_present", False)),
+            android_evidence_state=dict(data.get("android_evidence_state", {})),
         )
 
     # -------------------------------------------------------------------
@@ -998,22 +1005,33 @@ class FullSystemBaselineV3Evaluator:
 
     def _eval_cross_repo_evidence_pipeline(
         self,
-    ) -> tuple[SubsystemEntry, bool, Dict[str, Any]]:
+    ) -> tuple[SubsystemEntry, Dict[str, Any], Dict[str, Any]]:
         """Evaluate cross-repo evidence pipeline.
 
-        Returns (SubsystemEntry, android_evidence_present, linkage_dict).
+        Returns (SubsystemEntry, android_evidence_state, linkage_dict).
         """
         sid = V3SubsystemId.cross_repo_evidence_pipeline.value
         mod = self._try_import("core.canonical_cross_repo_evidence_pipeline")
         if mod is None:
+            android_state = {
+                "detected": False,
+                "complete": False,
+                "fresh": False,
+                "authority_clear": False,
+                "routine_cross_repo_delivery": False,
+                "closure_grade": False,
+                "pipeline_verdict": "missing",
+                "closure_blocking_reasons": ["canonical_cross_repo_evidence_pipeline_not_importable"],
+            }
             entry = SubsystemEntry(
                 subsystem_id=sid,
                 state=SubsystemState.declared_not_proven,
                 rationale="core.canonical_cross_repo_evidence_pipeline not importable.",
                 evidence_module="",
                 known_gaps=["canonical_cross_repo_evidence_pipeline not importable"],
+                grounding_signals=dict(android_state),
             )
-            return entry, False, {}
+            return entry, android_state, {}
 
         # Try to build the pipeline report (read-only, fail-graceful)
         build_fn = self._try_get_attr(mod, "build_canonical_cross_repo_evidence_report")
@@ -1021,7 +1039,16 @@ class FullSystemBaselineV3Evaluator:
             build_fn = self._try_get_attr(mod, "get_canonical_cross_repo_evidence_report")
 
         report_dict: Dict[str, Any] = {}
-        android_present = False
+        android_state = {
+            "detected": False,
+            "complete": False,
+            "fresh": False,
+            "authority_clear": False,
+            "routine_cross_repo_delivery": False,
+            "closure_grade": False,
+            "pipeline_verdict": "unknown",
+            "closure_blocking_reasons": [],
+        }
         pipeline_verdict_str = "unknown"
         is_complete = False
 
@@ -1037,7 +1064,6 @@ class FullSystemBaselineV3Evaluator:
                 if pv is not None:
                     pipeline_verdict_str = str(pv.value if hasattr(pv, "value") else pv)
                 is_complete = bool(getattr(report, "is_complete", False))
-                android_present = pipeline_verdict_str in ("complete", "partial")
             except (AttributeError, TypeError, RuntimeError, ValueError) as exc:
                 logger.debug("V3Baseline: cross_repo_evidence_pipeline probe failed: %s", exc)
                 report_dict = {"probe_error": str(exc)}
@@ -1047,6 +1073,11 @@ class FullSystemBaselineV3Evaluator:
         else:
             # Module importable but no build function; structure present, not callable
             report_dict = {"note": "build function not found in module"}
+        android_state = self._derive_android_evidence_state(
+            report_dict=report_dict,
+            pipeline_verdict_str=pipeline_verdict_str,
+            is_complete=is_complete,
+        )
         grounding = {
             "pipeline_verdict": pipeline_verdict_str,
             "is_complete": bool(report_dict.get("is_complete", is_complete)),
@@ -1054,6 +1085,14 @@ class FullSystemBaselineV3Evaluator:
             "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
             "missing_sources": list(report_dict.get("missing_sources", [])),
             "stale_sources": list(report_dict.get("stale_sources", [])),
+            "authority_unclear_sources": list(report_dict.get("authority_unclear_sources", [])),
+            "detected": bool(android_state.get("detected", False)),
+            "complete": bool(android_state.get("complete", False)),
+            "fresh": bool(android_state.get("fresh", False)),
+            "authority_clear": bool(android_state.get("authority_clear", False)),
+            "routine_cross_repo_delivery": bool(android_state.get("routine_cross_repo_delivery", False)),
+            "closure_grade": bool(android_state.get("closure_grade", False)),
+            "closure_blocking_reasons": list(android_state.get("closure_blocking_reasons", [])),
             "cross_repo_blocked": pipeline_verdict_str != "complete",
         }
 
@@ -1083,7 +1122,7 @@ class FullSystemBaselineV3Evaluator:
             known_gaps=gaps,
             grounding_signals=grounding,
         )
-        return entry, android_present, report_dict
+        return entry, android_state, report_dict
 
     def _eval_cross_repo_contract_schema_gate(self) -> SubsystemEntry:
         sid = V3SubsystemId.cross_repo_contract_schema_gate.value
@@ -1323,6 +1362,77 @@ class FullSystemBaselineV3Evaluator:
             )
         )
 
+    @staticmethod
+    def _derive_android_evidence_state(
+        report_dict: Dict[str, Any],
+        pipeline_verdict_str: str,
+        is_complete: bool,
+    ) -> Dict[str, Any]:
+        sources = report_dict.get("sources", [])
+        if not isinstance(sources, list):
+            sources = []
+
+        def _source_status(source_id: str) -> str:
+            for source in sources:
+                if not isinstance(source, dict):
+                    continue
+                if str(source.get("source_id", "")).strip().lower() == source_id:
+                    return str(source.get("status", "")).strip().lower()
+            return ""
+
+        primary_statuses = [
+            _source_status("real_device_verification"),
+            _source_status("readiness_evidence"),
+        ]
+        detected = any(status in {"present", "stale", "partial", "conflicting"} for status in primary_statuses)
+        if not detected:
+            detected = bool(report_dict.get("primary_sources_complete", False))
+
+        complete = bool(report_dict.get("primary_sources_complete", False)) and bool(
+            report_dict.get("is_complete", is_complete)
+        )
+        fresh = bool(report_dict.get("primary_sources_fresh", False))
+        authority_unclear_sources = list(report_dict.get("authority_unclear_sources", []))
+        authority_clear = len(authority_unclear_sources) == 0 and pipeline_verdict_str != "authority_unclear"
+
+        routine_cross_repo_delivery = all(
+            _source_status(source_id) == "present"
+            for source_id in ("participant_lifecycle_truth", "task_result_runtime")
+        )
+
+        closure_grade = all(
+            (
+                detected,
+                complete,
+                fresh,
+                authority_clear,
+                routine_cross_repo_delivery,
+            )
+        )
+
+        closure_blocking_reasons: List[str] = []
+        if not detected:
+            closure_blocking_reasons.append("android_evidence_not_detected")
+        if not complete:
+            closure_blocking_reasons.append("android_evidence_not_complete")
+        if not fresh:
+            closure_blocking_reasons.append("android_evidence_not_fresh")
+        if not authority_clear:
+            closure_blocking_reasons.append("android_evidence_authority_unclear")
+        if not routine_cross_repo_delivery:
+            closure_blocking_reasons.append("routine_cross_repo_delivery_not_evidenced")
+
+        return {
+            "detected": detected,
+            "complete": complete,
+            "fresh": fresh,
+            "authority_clear": authority_clear,
+            "routine_cross_repo_delivery": routine_cross_repo_delivery,
+            "closure_grade": closure_grade,
+            "pipeline_verdict": pipeline_verdict_str,
+            "closure_blocking_reasons": closure_blocking_reasons,
+        }
+
     def _build_evidence_linkage(self, subsystems: List[SubsystemEntry]) -> Dict[str, Any]:
         linkage: Dict[str, Any] = {}
         for entry in subsystems:
@@ -1341,7 +1451,7 @@ class FullSystemBaselineV3Evaluator:
         self,
         subsystems: List[SubsystemEntry],
         verdict: V3BaselineVerdict,
-        android_evidence_present: bool,
+        android_evidence_state: Dict[str, Any],
     ) -> Dict[str, Any]:
         subsystem_scorecard: Dict[str, Any] = {}
         totals = {
@@ -1373,7 +1483,8 @@ class FullSystemBaselineV3Evaluator:
         return {
             "overall": {
                 "verdict": verdict.value,
-                "android_evidence_present": android_evidence_present,
+                "android_evidence_present": bool(android_evidence_state.get("detected", False)),
+                "android_evidence_state": dict(android_evidence_state),
                 **totals,
             },
             "subsystems": subsystem_scorecard,
@@ -1386,12 +1497,17 @@ class FullSystemBaselineV3Evaluator:
     def _build_blocking_gaps(
         self,
         subsystems: List[SubsystemEntry],
-        android_evidence_present: bool,
+        android_evidence_state: Dict[str, Any],
     ) -> List[BlockingGap]:
         gaps: List[BlockingGap] = []
+        android_detected = bool(android_evidence_state.get("detected", False))
+        android_complete = bool(android_evidence_state.get("complete", False))
+        android_fresh = bool(android_evidence_state.get("fresh", False))
+        android_authority_clear = bool(android_evidence_state.get("authority_clear", False))
+        android_routine_delivery = bool(android_evidence_state.get("routine_cross_repo_delivery", False))
 
         # Android evidence absence is always a blocking gap when evidence is missing
-        if not android_evidence_present:
+        if not android_detected:
             gaps.append(
                 BlockingGap(
                     gap_id="android_cross_repo_evidence_absent",
@@ -1406,6 +1522,68 @@ class FullSystemBaselineV3Evaluator:
                         V3SubsystemId.cross_repo_evidence_pipeline.value,
                         V3SubsystemId.android_participant_ingress.value,
                         V3SubsystemId.android_evaluator_artifact_ingress.value,
+                        V3SubsystemId.system_final_acceptance_verdict.value,
+                    ],
+                    requires_android_repo=True,
+                )
+            )
+        if android_detected and not android_complete:
+            gaps.append(
+                BlockingGap(
+                    gap_id="android_cross_repo_evidence_incomplete",
+                    description=(
+                        "Android evidence is detected but not complete enough for closure-grade "
+                        "cross-repo verification. Partial evidence must not be treated as closed."
+                    ),
+                    affected_subsystems=[
+                        V3SubsystemId.cross_repo_evidence_pipeline.value,
+                        V3SubsystemId.system_final_acceptance_verdict.value,
+                    ],
+                    requires_android_repo=True,
+                )
+            )
+        if android_detected and not android_fresh:
+            gaps.append(
+                BlockingGap(
+                    gap_id="android_cross_repo_evidence_stale",
+                    description=(
+                        "Android evidence exists but freshness requirements are not met in the "
+                        "canonical cross-repo evidence pipeline."
+                    ),
+                    affected_subsystems=[
+                        V3SubsystemId.cross_repo_evidence_pipeline.value,
+                        V3SubsystemId.system_final_acceptance_verdict.value,
+                    ],
+                    requires_android_repo=True,
+                )
+            )
+        if android_detected and not android_authority_clear:
+            gaps.append(
+                BlockingGap(
+                    gap_id="android_cross_repo_authority_unclear",
+                    description=(
+                        "Android evidence authority is unclear. Protected closure requires an "
+                        "unambiguous authority chain from canonical Android evidence producers."
+                    ),
+                    affected_subsystems=[
+                        V3SubsystemId.cross_repo_evidence_pipeline.value,
+                        V3SubsystemId.cross_repo_contract_schema_gate.value,
+                        V3SubsystemId.system_final_acceptance_verdict.value,
+                    ],
+                    requires_android_repo=True,
+                )
+            )
+        if android_detected and not android_routine_delivery:
+            gaps.append(
+                BlockingGap(
+                    gap_id="android_cross_repo_routine_delivery_not_evidenced",
+                    description=(
+                        "Routine Android→V2 cross-repo delivery (participant lifecycle and task "
+                        "runtime channels) is not evidenced as present."
+                    ),
+                    affected_subsystems=[
+                        V3SubsystemId.cross_repo_evidence_pipeline.value,
+                        V3SubsystemId.android_participant_ingress.value,
                         V3SubsystemId.system_final_acceptance_verdict.value,
                     ],
                     requires_android_repo=True,
@@ -1444,7 +1622,8 @@ class FullSystemBaselineV3Evaluator:
     # Open question synthesis
     # ------------------------------------------------------------------
 
-    def _build_open_questions(self, android_evidence_present: bool) -> List[OpenQuestion]:
+    def _build_open_questions(self, android_evidence_state: Dict[str, Any]) -> List[OpenQuestion]:
+        android_detected = bool(android_evidence_state.get("detected", False))
         return [
             OpenQuestion(
                 question_id="android_runtime_signal_flow_active",
@@ -1454,7 +1633,7 @@ class FullSystemBaselineV3Evaluator:
                     "android_delegated_signal_ingress) at runtime?"
                 ),
                 signal_source="core.canonical_cross_repo_evidence_pipeline (pipeline_verdict)",
-                currently_answerable=android_evidence_present,
+                currently_answerable=android_detected,
             ),
             OpenQuestion(
                 question_id="release_gate_truly_blocking",
@@ -1504,6 +1683,7 @@ class FullSystemBaselineV3Evaluator:
     def _derive_verdict(
         subsystems: List[SubsystemEntry],
         android_evidence_present: bool,
+        android_evidence_state: Optional[Dict[str, Any]] = None,
     ) -> V3BaselineVerdict:
         """Derive the overall V3 verdict from subsystem states.
 
@@ -1522,8 +1702,10 @@ class FullSystemBaselineV3Evaluator:
 
         min_state = min(states, key=lambda s: s.ordinal())
 
-        # Rule 1: android evidence absence forces partial at best
+        # Rule 1: android evidence absence or non-closure-grade state forces partial at best
         android_gap = not android_evidence_present
+        if isinstance(android_evidence_state, dict):
+            android_gap = not bool(android_evidence_state.get("closure_grade", False))
 
         # Rule 2: declared_not_proven or contract_only blocks closed
         has_blocking = any(s in (SubsystemState.declared_not_proven, SubsystemState.contract_only) for s in states)
@@ -1553,7 +1735,7 @@ class FullSystemBaselineV3Evaluator:
         verdict: V3BaselineVerdict,
         subsystems: List[SubsystemEntry],
         blocking_gaps: List[BlockingGap],
-        android_evidence_present: bool,
+        android_evidence_state: Dict[str, Any],
         scorecard: Dict[str, Any],
     ) -> str:
         counts: Dict[str, int] = {}
@@ -1568,7 +1750,15 @@ class FullSystemBaselineV3Evaluator:
         for state_val, count in sorted(counts.items()):
             lines.append(f"  {state_val}: {count}")
         lines.append("")
-        lines.append(f"Android cross-repo evidence present: {android_evidence_present}")
+        lines.append(
+            "Android cross-repo evidence state: "
+            f"detected={bool(android_evidence_state.get('detected', False))}, "
+            f"complete={bool(android_evidence_state.get('complete', False))}, "
+            f"fresh={bool(android_evidence_state.get('fresh', False))}, "
+            f"authority_clear={bool(android_evidence_state.get('authority_clear', False))}, "
+            f"routine_delivery={bool(android_evidence_state.get('routine_cross_repo_delivery', False))}, "
+            f"closure_grade={bool(android_evidence_state.get('closure_grade', False))}"
+        )
         overall_scorecard = scorecard.get("overall", {}) if isinstance(scorecard, dict) else {}
         lines.append(
             "Scorecard: "
@@ -1598,7 +1788,8 @@ class FullSystemBaselineV3Evaluator:
         ts = datetime.now(timezone.utc).isoformat()
 
         # Evaluate all subsystems
-        cross_entry, android_present, cross_report = self._eval_cross_repo_evidence_pipeline()
+        cross_entry, android_evidence_state, cross_report = self._eval_cross_repo_evidence_pipeline()
+        android_present = bool(android_evidence_state.get("detected", False))
 
         subsystems: List[SubsystemEntry] = [
             self._eval_v2_canonical_truth_ingress(),
@@ -1615,18 +1806,19 @@ class FullSystemBaselineV3Evaluator:
             self._eval_system_final_acceptance_verdict(),
         ]
 
-        blocking_gaps = self._build_blocking_gaps(subsystems, android_present)
-        open_questions = self._build_open_questions(android_present)
-        verdict = self._derive_verdict(subsystems, android_present)
+        blocking_gaps = self._build_blocking_gaps(subsystems, android_evidence_state)
+        open_questions = self._build_open_questions(android_evidence_state)
+        verdict = self._derive_verdict(subsystems, android_present, android_evidence_state)
         evidence_linkage = self._build_evidence_linkage(subsystems)
         if cross_report:
             evidence_linkage["cross_repo_evidence_pipeline_report"] = cross_report
-        scorecard = self._build_scorecard(subsystems, verdict, android_present)
+        evidence_linkage["android_evidence_state"] = dict(android_evidence_state)
+        scorecard = self._build_scorecard(subsystems, verdict, android_evidence_state)
         summary = self._build_summary(
             verdict,
             subsystems,
             blocking_gaps,
-            android_present,
+            android_evidence_state,
             scorecard,
         )
 
@@ -1641,6 +1833,7 @@ class FullSystemBaselineV3Evaluator:
             generated_at=ts,
             authority=FULL_SYSTEM_BASELINE_V3_AUTHORITY,
             android_evidence_present=android_present,
+            android_evidence_state=android_evidence_state,
         )
 
 

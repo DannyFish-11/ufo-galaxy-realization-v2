@@ -131,6 +131,7 @@ class ClosureGateResult:
     fail_reasons: List[str] = field(default_factory=list)
     subsystem_failures: List[Dict[str, Any]] = field(default_factory=list)
     android_evidence_present: bool = False
+    android_evidence_state: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -140,6 +141,7 @@ class ClosureGateResult:
             "fail_reasons": list(self.fail_reasons),
             "subsystem_failures": list(self.subsystem_failures),
             "android_evidence_present": self.android_evidence_present,
+            "android_evidence_state": dict(self.android_evidence_state),
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -190,12 +192,35 @@ def evaluate_evidence_closure_gate(
     subsystem_failures: List[Dict[str, Any]] = []
 
     # --- Android evidence check ---
-    android_present = report.android_evidence_present
+    android_state = dict(getattr(report, "android_evidence_state", {}) or {})
+    if not android_state:
+        android_state = {
+            "detected": bool(report.android_evidence_present),
+            "complete": bool(report.android_evidence_present),
+            "fresh": bool(report.android_evidence_present),
+            "authority_clear": bool(report.android_evidence_present),
+            "routine_cross_repo_delivery": bool(report.android_evidence_present),
+            "closure_grade": bool(report.android_evidence_present),
+            "closure_blocking_reasons": (
+                [] if bool(report.android_evidence_present) else ["android_evidence_not_detected"]
+            ),
+        }
+    android_present = bool(android_state.get("detected", False))
     if level in (ClosureLevel.standard, ClosureLevel.strict) and not android_present:
         fail_reasons.append(
             "Android cross-repo evidence is absent or stale "
             "(policy: ANDROID_EVIDENCE_ABSENCE_DOWNGRADES_VERDICT_POLICY)"
         )
+    if level in (ClosureLevel.standard, ClosureLevel.strict):
+        closure_grade = bool(android_state.get("closure_grade", False))
+        if not closure_grade:
+            blocking_reasons = list(android_state.get("closure_blocking_reasons", []))
+            if not blocking_reasons:
+                blocking_reasons = ["android_evidence_not_closure_grade"]
+            fail_reasons.append(
+                "Android evidence is detected but not closure-grade: "
+                + ", ".join(str(reason) for reason in blocking_reasons)
+            )
 
     # --- Subsystem state checks ---
     if level == ClosureLevel.minimum:
@@ -230,4 +255,5 @@ def evaluate_evidence_closure_gate(
         fail_reasons=fail_reasons,
         subsystem_failures=subsystem_failures,
         android_evidence_present=android_present,
+        android_evidence_state=android_state,
     )

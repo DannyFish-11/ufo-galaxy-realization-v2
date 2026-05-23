@@ -27,6 +27,8 @@ name: Dual-Repo System Reality Audit (PR-537)
 # =============================================================================
 
 on:
+  repository_dispatch:
+    types: [android-protected-reality-audit]
   push:
     branches: [main]
     paths:
@@ -41,6 +43,11 @@ on:
       - ".github/workflows/dual_repo_reality_audit.yml"
   # Allow manual dispatch for on-demand audit runs
   workflow_dispatch:
+    inputs:
+      evidence_json:
+        description: "Android runtime evidence JSON bundle (raw JSON or base64-encoded JSON)"
+        required: false
+        type: string
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -195,6 +202,10 @@ jobs:
           pip install -r requirements-dev.txt 2>/dev/null || pip install pytest 2>/dev/null || true
 
       - name: Validate audit correctness and fail-conservative policy
+        env:
+          DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION: ${{ github.event_name == 'repository_dispatch' && '1' || '0' }}
+          DISPATCH_EVIDENCE_JSON: ${{ github.event.client_payload.evidence_json }}
+          MANUAL_EVIDENCE_JSON: ${{ inputs.evidence_json }}
         run: |
           python - <<'EOF'
           """
@@ -211,9 +222,11 @@ jobs:
           5. Honest gap reporting — unresolved_blocking_gaps non-empty
              when any dimension has gaps.
           """
+          import base64
           import json
           import sys
           import os
+          from pathlib import Path
 
           sys.path.insert(0, os.getcwd())
 
@@ -223,6 +236,31 @@ jobs:
               MaturityLabel,
               SystemRealityVerdict,
           )
+          from core.full_system_baseline_v3 import build_v3_baseline_report
+
+          raw_evidence = (
+              os.environ.get("DISPATCH_EVIDENCE_JSON", "").strip()
+              or os.environ.get("MANUAL_EVIDENCE_JSON", "").strip()
+          )
+          if raw_evidence:
+              payload = None
+              try:
+                  payload = json.loads(raw_evidence)
+              except Exception:
+                  try:
+                      payload = json.loads(base64.b64decode(raw_evidence).decode("utf-8"))
+                  except Exception:
+                      payload = None
+              if isinstance(payload, dict):
+                  participant_payload = payload.get("android_participant_evidence")
+                  if not isinstance(participant_payload, dict):
+                      participant_payload = payload
+                  participant_path = Path(".android_participant_evidence.json")
+                  participant_path.write_text(
+                      json.dumps(participant_payload),
+                      encoding="utf-8",
+                  )
+                  os.environ["ANDROID_PARTICIPANT_EVIDENCE_PATH"] = str(participant_path.resolve())
 
           report = build_dual_repo_reality_audit()
           errors = []
@@ -325,6 +363,22 @@ jobs:
                   "The audit environment may be severely broken."
               )
               sys.exit(1)
+
+          protected = os.environ.get(
+              "DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION",
+              "",
+          ).strip().lower() in {"1", "true", "yes", "on"}
+          if protected:
+              baseline = build_v3_baseline_report()
+              android_state = dict(getattr(baseline, "android_evidence_state", {}) or {})
+              if not bool(android_state.get("closure_grade", False)):
+                  print()
+                  print(
+                      "❌ PROTECTED REALITY AUDIT: Android evidence is not closure-grade "
+                      "(detected+complete+fresh+authority_clear+routine_cross_repo_delivery)."
+                  )
+                  print(f"   android_evidence_state={android_state}")
+                  sys.exit(1)
 
           EOF
         env:
