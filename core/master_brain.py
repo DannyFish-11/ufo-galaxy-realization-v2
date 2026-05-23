@@ -362,6 +362,7 @@ class MasterBrain:
         result_id = (result.metadata or {}).get("result_id", "")
         seen_result_ids = record.setdefault("_result_ids", set())
         if result_id and result_id in seen_result_ids:
+            logger.debug("MasterBrain: duplicate task result ignored task_id=%s result_id=%s", task_id, result_id)
             return self.get_task_status(task_id)
         if result_id:
             seen_result_ids.add(result_id)
@@ -583,7 +584,8 @@ class MasterBrain:
         waiter = self._ensure_task_waiter(task_id)
         try:
             # shield() prevents wait_for() from cancelling the shared waiter on
-            # timeout so later callers can still observe the eventual result.
+            # timeout, so the distributed task can continue and later callers
+            # can still observe the eventual result even after one timeout.
             result = await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout_s)
             return result if isinstance(result, dict) else self.get_task_status(task_id)
         except asyncio.TimeoutError:
