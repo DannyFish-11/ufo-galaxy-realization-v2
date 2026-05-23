@@ -225,10 +225,6 @@ class MasterBrain:
         """Stop MasterBrain runtime integrations owned by this process."""
         worker = self._temporal_worker
         worker_task = self._temporal_worker_task
-        self._temporal_worker = None
-        self._temporal_worker_task = None
-        self._temporal_client = None
-        self._started = False
 
         if worker is not None and hasattr(worker, "shutdown"):
             try:
@@ -249,6 +245,10 @@ class MasterBrain:
             except Exception as exc:
                 logger.warning("MasterBrain: Temporal worker task stop failed: %s", exc)
 
+        self._temporal_worker = None
+        self._temporal_worker_task = None
+        self._temporal_client = None
+        self._started = False
         return {"success": True}
 
     # ── Task Dispatch ───────────────────────────────────────────────────────
@@ -570,6 +570,9 @@ class MasterBrain:
             wait_for_completion=True,
         )
         if not started.get("success"):
+            waiter = self._task_waiters.pop(task_id, None)
+            if waiter is not None and not waiter.done():
+                waiter.cancel()
             failure = self._update_task_record(
                 task_id,
                 status="dispatch_failed",
@@ -604,6 +607,9 @@ class MasterBrain:
             temporal_workflow_type="code_execution",
             temporal_worker_active=self._temporal_worker_active(),
         )
+        # Yield once so the MasterBrain NATS result subscriber can publish the
+        # same terminal snapshot into task state before we decide whether a
+        # synthetic workflow-derived fallback snapshot is needed.
         await asyncio.sleep(0)
         snapshot = self.get_task_status(task_id)
         if snapshot is None or not snapshot.get("closure_complete"):
@@ -1046,7 +1052,7 @@ class MasterBrain:
     def _on_temporal_worker_exit(self, task: asyncio.Task[Any]) -> None:
         if self._temporal_worker_task is task:
             self._temporal_worker_task = None
-        self._temporal_worker = None
+            self._temporal_worker = None
         if task.cancelled():
             logger.info("MasterBrain: Temporal worker stopped")
             return
