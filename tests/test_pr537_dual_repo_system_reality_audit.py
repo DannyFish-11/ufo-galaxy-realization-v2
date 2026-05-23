@@ -920,6 +920,24 @@ class TestFailConservativePolicy:
             )
             reset_dual_repo_reality_audit()
 
+    def test_G08_file_presence_without_importability_scores_partially_implemented(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        import core.audit_layer.dual_repo_system_reality_audit as strict_mod
+
+        def _fake_try_import(module_path: str) -> bool:
+            return False
+
+        def _fake_module_file_exists(module_path: str) -> bool:
+            return module_path.startswith("core.") or module_path.startswith("galaxy_gateway.")
+
+        monkeypatch.setattr(strict_mod, "_try_import", _fake_try_import)
+        monkeypatch.setattr(strict_mod, "_module_file_exists", _fake_module_file_exists)
+        monkeypatch.setattr(strict_mod, "_file_exists", lambda _path: False)
+
+        entry = strict_mod.DualRepoSystemRealityAuditor()._audit_main_chain_authenticity()
+        assert entry.maturity == MaturityLabel.partially_implemented
+
 
 # ===========================================================================
 # Group H — Policy sentinel assertions

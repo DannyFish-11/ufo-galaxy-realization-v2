@@ -2455,13 +2455,13 @@ class SystemFinalAcceptanceEvaluator:
             # the formal taxonomy is available and correctly wired.
             return AcceptanceChecklistItem(
                 dimension=dimension,
-                status=DimensionStatus.pending,
+                status=DimensionStatus.unresolved,
                 evidence_summary=(
                     "ConversationContinuityTruth (PR-12) contract is wired and "
-                    "correctly produces conservative verdicts.  "
+                    "correctly produces conservative verdicts, but the runtime "
+                    "continuity restoration evidence is not present.  "
                     f"Baseline probe class: {continuity_class}.  "
-                    "Live recovery evidence has not been ingested in this "
-                    "process instance (expected in non-recovery baseline context)."
+                    "Structural probe success is not credited as acceptance closure."
                 ),
                 evidence_linkage={
                     "module": signal_source,
@@ -2474,9 +2474,8 @@ class SystemFinalAcceptanceEvaluator:
                     "Conversation continuity taxonomy is formally available "
                     "(PR-12), but no active live recovery session evidence has "
                     "been fed to the contract in this process instance.  "
-                    "This is expected in non-recovery baseline contexts.  "
-                    "Production recovery paths should feed evidence from the "
-                    "session manager and rebind layer."
+                    "Runtime continuity remains unproven, so this dimension "
+                    "stays unresolved until real recovery evidence participates."
                 ),
                 signal_source=signal_source,
             )
@@ -2592,13 +2591,13 @@ class SystemFinalAcceptanceEvaluator:
             # the formal taxonomy is available and correctly wired.
             return AcceptanceChecklistItem(
                 dimension=dimension,
-                status=DimensionStatus.pending,
+                status=DimensionStatus.unresolved,
                 evidence_summary=(
                     "InFlightTaskContinuityTaxonomy (PR-06) contract is wired and "
-                    "correctly produces conservative verdicts.  "
+                    "correctly produces conservative verdicts, but runtime "
+                    "task continuity evidence is not present.  "
                     f"Baseline probe class: {continuity_class}.  "
-                    "Live recovery evidence has not been ingested in this "
-                    "process instance (expected in non-recovery baseline context)."
+                    "Structural probe success is not credited as acceptance closure."
                 ),
                 evidence_linkage={
                     "module": signal_source,
@@ -2610,9 +2609,9 @@ class SystemFinalAcceptanceEvaluator:
                 gap_description=(
                     "In-flight task continuity taxonomy is formally available "
                     "(PR-06), but no active live recovery evidence has been fed "
-                    "to the contract in this process instance.  "
-                    "This is expected in non-recovery baseline contexts.  "
-                    "Production recovery paths should feed evidence from the "
+                    "to the contract in this process instance.  Runtime in-flight "
+                    "task continuity remains unproven and unresolved until "
+                    "production recovery paths feed evidence from the "
                     "RuntimeRestartRecoveryCoordinator and InFlightTaskContinuityContract "
                     "via build_task_continuity_verdict_from_report()."
                 ),
@@ -2726,14 +2725,13 @@ class SystemFinalAcceptanceEvaluator:
             # confirms the formal taxonomy is available and correctly wired.
             return AcceptanceChecklistItem(
                 dimension=dimension,
-                status=DimensionStatus.pending,
+                status=DimensionStatus.unresolved,
                 evidence_summary=(
                     "HumanInterventionTaxonomy (PR-08) contract is wired and "
-                    "correctly produces conservative verdicts.  "
+                    "correctly produces conservative verdicts, but runtime "
+                    "human-intervention evidence is not present.  "
                     f"Zero-evidence probe class: {intervention_class}.  "
-                    "Live intervention evidence has not been ingested in this "
-                    "process instance (expected in non-intervention baseline "
-                    "context)."
+                    "Structural probe success is not credited as acceptance closure."
                 ),
                 evidence_linkage={
                     "module": signal_source,
@@ -2747,9 +2745,8 @@ class SystemFinalAcceptanceEvaluator:
                 gap_description=(
                     "Human intervention taxonomy is formally available (PR-08), "
                     "but no live intervention evidence has been fed to the "
-                    "contract in this process instance.  "
-                    "This is expected in non-intervention baseline contexts.  "
-                    "Production paths should feed evidence from operator action "
+                    "contract in this process instance.  Runtime intervention "
+                    "truth remains unresolved until production paths feed evidence from operator action "
                     "signals, manual override events, escalation state, and "
                     "human confirmation events via "
                     "build_human_intervention_verdict()."
@@ -3553,14 +3550,13 @@ class SystemFinalAcceptanceEvaluator:
             # the formal taxonomy is available and correctly wired.
             return AcceptanceChecklistItem(
                 dimension=dimension,
-                status=DimensionStatus.pending,
+                status=DimensionStatus.unresolved,
                 evidence_summary=(
                     "TemporalSemanticsContract (PR-14) contract is wired "
-                    "and correctly produces conservative verdicts.  "
+                    "and correctly produces conservative verdicts, but runtime "
+                    "temporal evidence is not present.  "
                     f"Zero-evidence probe class: {temporal_class}.  "
-                    "Live temporal evidence has not been ingested in this "
-                    "process instance (expected in non-temporal-monitor "
-                    "baseline context)."
+                    "Structural probe success is not credited as acceptance closure."
                 ),
                 evidence_linkage={
                     "module": signal_source,
@@ -3576,9 +3572,9 @@ class SystemFinalAcceptanceEvaluator:
                 gap_description=(
                     "Temporal semantics taxonomy is formally available "
                     "(PR-14), but no live temporal evidence has been fed "
-                    "to the contract in this process instance.  This is "
-                    "expected in non-temporal-monitor baseline contexts.  "
-                    "Production paths should feed evidence from timestamp "
+                    "to the contract in this process instance.  Temporal "
+                    "runtime truth remains unresolved until production paths "
+                    "feed evidence from timestamp "
                     "sources, heartbeat monitors, lag measurement systems, "
                     "deadline trackers, and clock integrity verifiers "
                     "via build_temporal_verdict()."

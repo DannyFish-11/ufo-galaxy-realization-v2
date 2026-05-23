@@ -847,10 +847,6 @@ class DualRepoSystemRealityAuditor:
             if m not in importable and m not in file_present_not_importable
         ]
 
-        # Only truly importable modules go into code_references.
-        all_available = importable
-        all_present = importable + file_present_not_importable
-
         # Test and workflow evidence
         test_refs: List[str] = []
         if _file_exists("tests/test_pr001_canonical_dispatcher.py"):
@@ -870,39 +866,34 @@ class DualRepoSystemRealityAuditor:
                 f"Module file present but not importable (dependency gap): {m}"
             )
 
-        # Maturity determination — use all_present count (both importable and
-        # file-present) as the evidence count.
+        # Maturity determination — importable modules are required for
+        # implementation credit. File presence is tracked as a gap signal only.
         total = len(all_expected)
-        found = len(all_present)
+        found = len(importable)
 
         if found == 0:
-            maturity = MaturityLabel.nominally_present_not_closed
+            maturity = (
+                MaturityLabel.partially_implemented
+                if len(file_present_not_importable) > 0
+                else MaturityLabel.nominally_present_not_closed
+            )
             rationale = (
-                "No main-chain module file found on disk.  The chain exists "
-                "only nominally."
+                "Main-chain module files may exist, but none are importable in "
+                "this environment. Ensure dependencies are installed or modules "
+                "are properly configured. Structural presence alone is not "
+                "credited as a runtime-backed chain."
             )
         elif found < total // 2:
             maturity = MaturityLabel.partially_implemented
             rationale = (
-                f"Only {found}/{total} main-chain module files present; "
+                f"Only {found}/{total} main-chain modules are importable; "
                 "chain is incomplete."
             )
-        elif genuinely_absent:
+        elif found < total:
             maturity = MaturityLabel.implemented
             rationale = (
-                f"{found}/{total} main-chain module files present; "
-                f"{len(genuinely_absent)} genuinely absent: "
-                f"{genuinely_absent!r}"
-            )
-        elif file_present_not_importable:
-            # All files exist but some can't be imported in this environment;
-            # real code is present — this is mainchained with a dependency gap
-            maturity = MaturityLabel.mainchained
-            rationale = (
-                f"All {total} main-chain module files present on disk; "
-                f"{len(file_present_not_importable)} require full dependency "
-                "install (pydantic/fastapi) to import.  Code is real; env gap "
-                "noted in gaps list."
+                f"{found}/{total} main-chain modules are importable; "
+                "remaining modules are absent or not importable."
             )
         elif test_refs:
             # All importable and test/CI evidence exists
@@ -930,7 +921,7 @@ class DualRepoSystemRealityAuditor:
             dimension=dim,
             maturity=maturity,
             evidence_summary=evidence_summary,
-            code_references=all_available,
+            code_references=importable,
             test_references=test_refs,
             gaps=gaps,
             verdict_rationale=rationale,

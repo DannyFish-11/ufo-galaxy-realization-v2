@@ -1073,3 +1073,87 @@ class TestFailConservative:
                 f"Dimension '{dim_id.value}' was accepted despite absent module — "
                 "fail-conservative policy violated."
             )
+
+
+class TestStructuralProbeDoesNotCountAsRuntimeAcceptance:
+    def test_conversation_continuity_zero_evidence_probe_is_unresolved(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _FakeClass:
+            value = "continuity_lost"
+
+        class _FakeVerdict:
+            continuity_class = _FakeClass()
+            is_authoritative = False
+            requires_rebind = True
+
+            def to_dict(self) -> Dict[str, Any]:
+                return {"continuity_class": "continuity_lost"}
+
+        class _FakeEvidence:
+            pass
+
+        monkeypatch.setattr(_mod, "_CONVERSATION_CONTINUITY_AVAILABLE", True)
+        monkeypatch.setattr(_mod, "_ConversationContinuityEvidence", _FakeEvidence)
+        monkeypatch.setattr(
+            _mod,
+            "_build_conversation_continuity_verdict",
+            lambda _evidence: _FakeVerdict(),
+        )
+
+        item = SystemFinalAcceptanceEvaluator()._evaluate_conversation_continuity()
+        assert item.status == DimensionStatus.unresolved
+
+    def test_human_intervention_zero_evidence_probe_is_unresolved(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _FakeClass:
+            value = "escalation_required"
+
+        class _FakeVerdict:
+            intervention_class = _FakeClass()
+            is_autonomous = False
+            is_positive_closure = False
+
+            def to_dict(self) -> Dict[str, Any]:
+                return {"intervention_class": "escalation_required"}
+
+        class _FakeEvidence:
+            pass
+
+        monkeypatch.setattr(_mod, "_HUMAN_INTERVENTION_TAXONOMY_AVAILABLE", True)
+        monkeypatch.setattr(_mod, "_HumanInterventionEvidence", _FakeEvidence)
+        monkeypatch.setattr(_mod, "_HumanInterventionClass", None)
+        monkeypatch.setattr(
+            _mod,
+            "_build_human_intervention_verdict",
+            lambda _evidence: _FakeVerdict(),
+        )
+
+        item = SystemFinalAcceptanceEvaluator()._evaluate_human_intervention()
+        assert item.status == DimensionStatus.unresolved
+
+    def test_temporal_semantics_zero_evidence_probe_is_unresolved(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _FakeClass:
+            value = "temporally_unreliable"
+
+        class _FakeVerdict:
+            temporal_class = _FakeClass()
+            is_timely_authoritative = False
+            is_temporally_unreliable = True
+
+            def to_dict(self) -> Dict[str, Any]:
+                return {"temporal_class": "temporally_unreliable"}
+
+        monkeypatch.setattr(_mod, "_TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE", True)
+        monkeypatch.setattr(_mod, "_TemporalClass", None)
+        monkeypatch.setattr(
+            _mod,
+            "_build_baseline_temporal_verdict",
+            lambda: _FakeVerdict(),
+        )
+
+        item = SystemFinalAcceptanceEvaluator()._evaluate_temporal_semantics()
+        assert item.status == DimensionStatus.unresolved

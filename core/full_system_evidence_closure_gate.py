@@ -242,6 +242,13 @@ def evaluate_evidence_closure_gate(
             subsystem_failures.append(entry.to_dict())
 
     # --- Verdict check for strict ---
+    if level == ClosureLevel.standard:
+        if report.overall_verdict != V3BaselineVerdict.closed_and_evidenced:
+            fail_reasons.append(
+                f"Overall verdict is {report.overall_verdict.value!r}; "
+                "standard level requires closure-grade baseline verdict"
+            )
+
     if level == ClosureLevel.strict:
         if report.overall_verdict != V3BaselineVerdict.closed_and_evidenced:
             fail_reasons.append(
