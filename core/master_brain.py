@@ -712,7 +712,7 @@ class MasterBrain:
     def _ensure_task_waiter(self, task_id: str) -> asyncio.Future:
         waiter = self._task_waiters.get(task_id)
         if waiter is None or waiter.cancelled():
-            waiter = asyncio.get_event_loop().create_future()
+            waiter = asyncio.get_running_loop().create_future()
             self._task_waiters[task_id] = waiter
         return waiter
 

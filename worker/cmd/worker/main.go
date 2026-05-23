@@ -253,6 +253,8 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	running.StartedAt = startedAt
 	w.publishResult(task.TaskID, running)
 
+	// Keep a separate final result object so the already-published running update
+	// is not mutated while later execution details and the terminal result_id are added.
 	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, "running")
 	result.StartedAt = startedAt
 

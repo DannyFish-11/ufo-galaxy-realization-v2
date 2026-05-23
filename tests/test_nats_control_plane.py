@@ -1016,6 +1016,8 @@ class TestNATSConnected:
         assert dispatch_result.get("success") is True
         assert dispatch_result.get("closure_complete") is False
         assert dispatch_result.get("completion_state") == "dispatch_accepted"
+        # RUNNING is a non-terminal progress update, so success stays false
+        # until a terminal worker result closes the loop.
         assert running_result.get("success") is False
         assert running_result.get("closure_complete") is False
         assert running_result.get("completion_state") == "execution_started"
