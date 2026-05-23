@@ -377,7 +377,7 @@ class TestNATSExecutor:
         assert result.get("fallback_used") is True
         assert result.get("fallback_reason") == "nats_noop_transport"
         assert result.get("nats_publish_state", {}).get("noop") is True
-        assert executor._stats["nats_dispatched"] == 0
+        assert executor.get_stats()["nats_dispatched"] == 0
 
     @pytest.mark.asyncio
     async def test_on_task_result_resolves_pending_future(self):

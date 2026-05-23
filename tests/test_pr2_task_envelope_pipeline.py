@@ -23,6 +23,7 @@ import uuid
 import pytest
 from unittest.mock import patch
 
+from core.command_router import GatewayErrorCode
 from core.schemas.task_envelope import TaskEnvelope
 
 
@@ -163,7 +164,7 @@ class TestRouteEnvelopePrimaryPath:
             result = await router.route_envelope(envelope)
 
         assert result["success"] is False
-        assert result["error_code"] is not None
+        assert result["error_code"] == GatewayErrorCode.EXECUTOR_ERROR.value
         assert result.get("execution_path") == "distributed_unavailable"
         assert result.get("distributed_dispatch") is False
 
