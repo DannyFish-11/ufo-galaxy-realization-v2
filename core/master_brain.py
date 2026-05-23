@@ -85,6 +85,9 @@ class MasterBrain:
         self._task_log: Dict[str, Dict[str, Any]] = {}
         self._task_waiters: Dict[str, asyncio.Future] = {}
         self._temporal_client: Any = None
+        self._temporal_worker: Any = None
+        self._temporal_worker_task: Optional[asyncio.Task[Any]] = None
+        self._temporal_last_error: str = ""
         self._started = False
         self._state_path = Path(
             state_path
@@ -181,20 +184,70 @@ class MasterBrain:
             logger.warning("MasterBrain: NATS not connected, distributed lifecycle subscriptions inactive")
 
         # Try connecting to Temporal
+        self._temporal_last_error = ""
         try:
-            from core.temporal_workflows import get_temporal_client
+            from core.temporal_workflows import get_temporal_client, start_temporal_worker
 
             self._temporal_client = await get_temporal_client()
-        except Exception:
-            logger.debug("MasterBrain: Temporal unavailable, workflow features disabled")
+            if self._temporal_client is not None:
+                self._temporal_worker = await start_temporal_worker(self._temporal_client)
+                if self._temporal_worker is not None:
+                    self._temporal_worker_task = asyncio.create_task(
+                        self._temporal_worker.run(),
+                        name="galaxy-temporal-worker",
+                    )
+                    self._temporal_worker_task.add_done_callback(self._on_temporal_worker_exit)
+                else:
+                    self._temporal_last_error = "temporal_worker_not_started"
+            else:
+                self._temporal_last_error = "temporal_client_unavailable"
+        except Exception as exc:
+            self._temporal_last_error = str(exc)
+            logger.debug("MasterBrain: Temporal unavailable, workflow features disabled: %s", exc)
 
         self._started = True
-        logger.info(f"MasterBrain: started (NATS={self._nats.is_connected()}, Temporal={self._temporal_client is not None})")
+        logger.info(
+            "MasterBrain: started (NATS=%s, Temporal client=%s, worker=%s)",
+            self._nats.is_connected(),
+            self._temporal_client is not None,
+            self._temporal_worker_active(),
+        )
         return {
             "success": True,
             "nats_connected": nats_connected,
             "distributed_ready": bool(nats_connected and subscriptions_ok),
+            "temporal_client_connected": self._temporal_client is not None,
+            "temporal_worker_active": self._temporal_worker_active(),
+            "temporal_runtime_available": self.is_temporal_runtime_available(),
         }
+
+    async def stop(self) -> dict:
+        """Stop MasterBrain runtime integrations owned by this process."""
+        worker = self._temporal_worker
+        worker_task = self._temporal_worker_task
+        self._temporal_worker = None
+        self._temporal_worker_task = None
+        self._temporal_client = None
+        self._started = False
+
+        if worker is not None and hasattr(worker, "shutdown"):
+            try:
+                shutdown_result = worker.shutdown()
+                if asyncio.iscoroutine(shutdown_result):
+                    await shutdown_result
+            except Exception as exc:
+                logger.warning("MasterBrain: Temporal worker shutdown failed: %s", exc)
+
+        if worker_task is not None and not worker_task.done():
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning("MasterBrain: Temporal worker task stop failed: %s", exc)
+
+        return {"success": True}
 
     # ── Task Dispatch ───────────────────────────────────────────────────────
 
@@ -480,13 +533,115 @@ class MasterBrain:
 
     # ── Workflow launch ─────────────────────────────────────────────────────
 
-    async def start_workflow(self, workflow_type: str, params: dict) -> dict:
+    async def execute_distributed_task(self, raw_task: dict) -> dict:
+        """Dispatch via Temporal when the local workflow runtime is truly active."""
+        if not self._should_use_temporal_workflow(raw_task):
+            return await self.dispatch_task(raw_task)
+
+        task_id = str(raw_task.get("task_id", "")).strip()
+        worker_id = str(raw_task.get("target_worker_id", "")).strip()
+        trace_id = str(raw_task.get("trace_id", "")).strip()
+        self._upsert_task_record(
+            task_id=task_id,
+            worker_id=worker_id,
+            trace_id=trace_id,
+            status=TaskStatus.QUEUED.value,
+            completion_state="workflow_accepted",
+            lifecycle_state="workflow_pending",
+            success=False,
+            error="",
+            closure_complete=False,
+            task_outcome_known=False,
+            dispatch_attempted=True,
+            dispatch_accepted=False,
+            execution_started=False,
+            result_received=False,
+            distributed_dispatch=True,
+            execution_path="temporal_workflow",
+            nats_publish_state=None,
+        )
+        self._ensure_task_waiter(task_id)
+
+        started = await self.start_workflow(
+            "code_execution",
+            raw_task,
+            wait_for_completion=True,
+        )
+        if not started.get("success"):
+            failure = self._update_task_record(
+                task_id,
+                status="dispatch_failed",
+                completion_state="dispatch_failed",
+                lifecycle_state="failed",
+                success=False,
+                error=started.get("error", "temporal_workflow_start_failed"),
+                closure_complete=True,
+                task_outcome_known=True,
+                workflow_id=started.get("workflow_id", ""),
+                workflow_run_id=started.get("run_id", ""),
+                temporal_workflow_type="code_execution",
+                temporal_worker_active=self._temporal_worker_active(),
+            )
+            return {
+                "success": False,
+                "error": started.get("error", "temporal_workflow_start_failed"),
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "distributed_dispatch": False,
+                "execution_path": "temporal_unavailable",
+                "temporal_workflow_type": "code_execution",
+                "temporal_worker_active": self._temporal_worker_active(),
+                "completion_state": failure.get("completion_state"),
+                "closure_complete": failure.get("closure_complete"),
+            }
+
+        self._update_task_record(
+            task_id,
+            workflow_id=started.get("workflow_id", ""),
+            workflow_run_id=started.get("run_id", ""),
+            temporal_workflow_type="code_execution",
+            temporal_worker_active=self._temporal_worker_active(),
+        )
+        await asyncio.sleep(0)
+        snapshot = self.get_task_status(task_id)
+        if snapshot is None or not snapshot.get("closure_complete"):
+            snapshot = self._finalize_temporal_workflow_result(
+                task_id=task_id,
+                worker_id=worker_id,
+                trace_id=trace_id,
+                workflow_result=started.get("workflow_result", {}),
+                workflow_id=started.get("workflow_id", ""),
+                workflow_run_id=started.get("run_id", ""),
+            )
+
+        return {
+            **snapshot,
+            "workflow_id": started.get("workflow_id", ""),
+            "run_id": started.get("run_id", ""),
+            "distributed_dispatch": True,
+            "execution_path": "temporal_workflow",
+            "temporal_workflow_type": "code_execution",
+            "temporal_worker_active": self._temporal_worker_active(),
+        }
+
+    async def start_workflow(
+        self,
+        workflow_type: str,
+        params: dict,
+        *,
+        wait_for_completion: bool = False,
+    ) -> dict:
         """Launch a Temporal workflow.
 
         Supported workflow types: ``code_execution``, ``multi_device``, ``tool_discovery``.
         """
-        if self._temporal_client is None:
-            return {"success": False, "error": "Temporal not available"}
+        if not self.is_temporal_runtime_available():
+            return {
+                "success": False,
+                "error": "Temporal runtime not active",
+                "temporal_client_connected": self._temporal_client is not None,
+                "temporal_worker_active": self._temporal_worker_active(),
+            }
 
         _workflow_map = {
             "code_execution": "CodeExecutionWorkflow",
@@ -506,8 +661,32 @@ class MasterBrain:
                 id=f"galaxy-{workflow_type}-{run_id}",
                 task_queue="galaxy-tasks",
             )
-            logger.info(f"MasterBrain: started workflow {wf_name} (run={run_id})")
-            return {"success": True, "workflow_id": handle.id, "run_id": run_id}
+            workflow_id = getattr(handle, "id", f"galaxy-{workflow_type}-{run_id}")
+            if not isinstance(workflow_id, str) or not workflow_id:
+                workflow_id = f"galaxy-{workflow_type}-{run_id}"
+            workflow_run_id = run_id
+            for candidate in (
+                getattr(handle, "result_run_id", None),
+                getattr(handle, "first_execution_run_id", None),
+            ):
+                if isinstance(candidate, str) and candidate:
+                    workflow_run_id = candidate
+                    break
+            logger.info(
+                "MasterBrain: started workflow %s (workflow_id=%s, run=%s)",
+                wf_name,
+                workflow_id,
+                workflow_run_id,
+            )
+            result = {
+                "success": True,
+                "workflow_id": workflow_id,
+                "run_id": workflow_run_id,
+                "temporal_worker_active": self._temporal_worker_active(),
+            }
+            if wait_for_completion:
+                result["workflow_result"] = await handle.result()
+            return result
         except Exception as exc:
             logger.error(f"MasterBrain: workflow start failed — {exc}")
             return {"success": False, "error": str(exc)}
@@ -837,7 +1016,11 @@ class MasterBrain:
         return {
             "started": self._started,
             "nats_connected": self._nats.is_connected(),
-            "temporal_connected": self._temporal_client is not None,
+            "temporal_connected": self.is_temporal_runtime_available(),
+            "temporal_client_connected": self._temporal_client is not None,
+            "temporal_worker_active": self._temporal_worker_active(),
+            "temporal_runtime_available": self.is_temporal_runtime_available(),
+            "temporal_last_error": self._temporal_last_error,
             "workers_total": len(self._workers),
             "workers_alive": alive_count,
             "tasks_tracked": len(self._task_log),
@@ -850,6 +1033,106 @@ class MasterBrain:
             waiter = asyncio.get_running_loop().create_future()
             self._task_waiters[task_id] = waiter
         return waiter
+
+    def _temporal_worker_active(self) -> bool:
+        task = self._temporal_worker_task
+        return bool(task is not None and not task.done())
+
+    def is_temporal_runtime_available(self) -> bool:
+        return self._temporal_client is not None and self._temporal_worker_active()
+
+    def _on_temporal_worker_exit(self, task: asyncio.Task[Any]) -> None:
+        if self._temporal_worker_task is task:
+            self._temporal_worker_task = None
+        self._temporal_worker = None
+        if task.cancelled():
+            logger.info("MasterBrain: Temporal worker stopped")
+            return
+        exc = task.exception()
+        if exc is None:
+            self._temporal_last_error = "temporal_worker_stopped"
+            logger.warning("MasterBrain: Temporal worker exited")
+            return
+        self._temporal_last_error = str(exc)
+        logger.error("MasterBrain: Temporal worker exited with error: %s", exc)
+
+    def _should_use_temporal_workflow(self, raw_task: dict) -> bool:
+        return (
+            self.is_temporal_runtime_available()
+            and bool(raw_task.get("wait_for_completion", True))
+            and bool(raw_task.get("task_id"))
+            and bool(raw_task.get("target_worker_id"))
+        )
+
+    def _finalize_temporal_workflow_result(
+        self,
+        *,
+        task_id: str,
+        worker_id: str,
+        trace_id: str,
+        workflow_result: dict,
+        workflow_id: str,
+        workflow_run_id: str,
+    ) -> dict:
+        task_data = workflow_result.get("data", {}) if isinstance(workflow_result, dict) else {}
+        status = self._infer_temporal_workflow_status(workflow_result)
+        try:
+            status_enum = status if isinstance(status, TaskStatus) else TaskStatus(str(status))
+        except ValueError:
+            status_enum = TaskStatus.FAILED
+        completion_state, lifecycle_state, closure_complete, task_success = self._classify_task_result(status_enum)
+        snapshot = self._update_task_record(
+            task_id,
+            worker_id=worker_id,
+            trace_id=trace_id,
+            status=status_enum.value,
+            completion_state=completion_state,
+            lifecycle_state=lifecycle_state,
+            success=task_success if closure_complete else False,
+            error=self._extract_temporal_workflow_error(workflow_result),
+            closure_complete=closure_complete,
+            task_outcome_known=closure_complete,
+            dispatch_accepted=bool(workflow_result.get("success")),
+            execution_started=bool(workflow_result.get("success")),
+            result_received=bool(workflow_result),
+            result_pending_closure=not closure_complete,
+            result=task_data or workflow_result,
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
+            temporal_workflow_type="code_execution",
+            temporal_worker_active=self._temporal_worker_active(),
+            distributed_dispatch=True,
+            execution_path="temporal_workflow",
+            completed_at=datetime.now().isoformat() if closure_complete else None,
+        )
+        waiter = self._task_waiters.get(task_id)
+        if waiter is not None and not waiter.done() and closure_complete:
+            waiter.set_result(snapshot)
+        return snapshot
+
+    @staticmethod
+    def _infer_temporal_workflow_status(workflow_result: dict) -> str:
+        if not isinstance(workflow_result, dict):
+            return TaskStatus.FAILED.value
+        task_data = workflow_result.get("data")
+        if isinstance(task_data, dict) and task_data.get("status"):
+            return str(task_data.get("status"))
+        if workflow_result.get("error") == "timeout":
+            return TaskStatus.TIMEOUT.value
+        if workflow_result.get("success"):
+            return TaskStatus.SUCCESS.value
+        return TaskStatus.FAILED.value
+
+    @staticmethod
+    def _extract_temporal_workflow_error(workflow_result: dict) -> str:
+        if not isinstance(workflow_result, dict):
+            return "temporal_workflow_failed"
+        if workflow_result.get("error"):
+            return str(workflow_result.get("error"))
+        test_result = workflow_result.get("test_result")
+        if isinstance(test_result, dict) and test_result.get("error"):
+            return str(test_result.get("error"))
+        return ""
 
     def _upsert_task_record(
         self,

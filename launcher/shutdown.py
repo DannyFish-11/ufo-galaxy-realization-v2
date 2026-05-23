@@ -40,6 +40,15 @@ async def async_shutdown() -> None:
         logger.warning("async_shutdown: lifecycle snapshot persist failed — %s", exc)
 
     try:
+        from core.master_brain import get_master_brain
+
+        brain = get_master_brain()
+        if brain is not None:
+            await brain.stop()
+    except Exception as exc:
+        logger.warning("MasterBrain 关闭异常: %s", exc)
+
+    try:
         from core.startup import shutdown_subsystems
         await shutdown_subsystems()
     except Exception as exc:

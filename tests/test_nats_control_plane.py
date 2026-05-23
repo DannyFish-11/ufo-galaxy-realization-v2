@@ -49,13 +49,24 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_heartbeat = AsyncMock(return_value={"success": True, "seq": 3})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
     bus._subscribe = AsyncMock(return_value={"success": True})
+    bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
     bus.subscribe_task_results = AsyncMock(return_value={"success": True})
     bus.subscribe_worker_registrations = AsyncMock(return_value={"success": True})
     bus.subscribe_worker_shutdowns = AsyncMock(return_value={"success": True})
     bus.subscribe_task_deadletters = AsyncMock(return_value={"success": True})
+    bus.subscribe_events = AsyncMock(return_value={"success": True})
     bus.connect = AsyncMock(return_value={"success": True})
     bus.disconnect = AsyncMock(return_value={"success": True})
     return bus
+
+
+class _FakeTemporalWorker:
+    def __init__(self) -> None:
+        self._stopped = asyncio.Event()
+        self.shutdown = AsyncMock(side_effect=self._stopped.set)
+
+    async def run(self) -> None:
+        await self._stopped.wait()
 
 
 # ===========================================================================
@@ -743,6 +754,77 @@ class TestNATSConnected:
         mock_bus.subscribe_task_deadletters.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_master_brain_starts_temporal_worker_in_runtime_lifecycle(self):
+        """MasterBrain.start() activates the Temporal worker when the client is available."""
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        fake_worker = _FakeTemporalWorker()
+        brain = MasterBrain(nats=mock_bus)
+
+        with patch(
+            "core.temporal_workflows.get_temporal_client",
+            AsyncMock(return_value=object()),
+        ), patch(
+            "core.temporal_workflows.start_temporal_worker",
+            AsyncMock(return_value=fake_worker),
+        ):
+            result = await brain.start()
+            status = brain.get_status()
+
+        assert result.get("temporal_client_connected") is True
+        assert result.get("temporal_worker_active") is True
+        assert result.get("temporal_runtime_available") is True
+        assert status["temporal_connected"] is True
+        assert status["temporal_worker_active"] is True
+        assert status["temporal_runtime_available"] is True
+
+        await brain.stop()
+
+    @pytest.mark.asyncio
+    async def test_master_brain_execute_distributed_task_prefers_temporal_workflow_when_active(self):
+        """Real distributed execution uses the Temporal workflow path when the runtime is active."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import TaskStatus
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus)
+        brain._temporal_client = MagicMock()
+        brain._temporal_worker_task = asyncio.create_task(asyncio.sleep(60))
+
+        handle = MagicMock()
+        handle.id = "wf-stage9-01"
+        handle.result_run_id = None
+        handle.first_execution_run_id = None
+        handle.result = AsyncMock(return_value={
+            "success": True,
+            "data": {
+                "task_id": "stage9-temporal-01",
+                "worker_id": "worker-temporal-01",
+                "status": TaskStatus.SUCCESS.value,
+            },
+            "attempts": 1,
+        })
+        brain._temporal_client.start_workflow = AsyncMock(return_value=handle)
+
+        result = await brain.execute_distributed_task({
+            "task_id": "stage9-temporal-01",
+            "target_worker_id": "worker-temporal-01",
+            "trace_id": "trace-stage9-temporal-01",
+        })
+
+        assert result["success"] is True
+        assert result["execution_path"] == "temporal_workflow"
+        assert result["temporal_workflow_type"] == "code_execution"
+        assert result["workflow_id"] == "wf-stage9-01"
+        brain._temporal_client.start_workflow.assert_awaited_once()
+        mock_bus.publish_task_dispatch.assert_not_awaited()
+
+        brain._temporal_worker_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await brain._temporal_worker_task
+
+    @pytest.mark.asyncio
     async def test_nats_bus_stats_reflect_connected_state(self):
         """get_stats() shows connected=True and noop_mode=False when connected."""
         mock_bus = _make_mock_nats_bus(connected=True)
@@ -1253,10 +1335,10 @@ class TestNATSConnected:
 
         router = CommandRouter()
         master_brain = MagicMock()
-        master_brain.dispatch_task = AsyncMock(return_value={
+        master_brain.execute_distributed_task = AsyncMock(return_value={
             "success": True,
             "distributed_dispatch": True,
-            "execution_path": "nats_distributed",
+            "execution_path": "temporal_workflow",
             "completion_state": "execution_completed",
             "closure_complete": True,
             "dispatch_attempted": True,
@@ -1266,7 +1348,9 @@ class TestNATSConnected:
             "result_pending_closure": False,
             "task_outcome_known": True,
             "lifecycle_state": "succeeded",
+            "temporal_workflow_type": "code_execution",
         })
+        master_brain.dispatch_task = AsyncMock()
         envelope = TaskEnvelope(
             task_id="stage7-route-01",
             trace_id="trace-stage7-route",
@@ -1281,12 +1365,14 @@ class TestNATSConnected:
             result = await router._route_worker_envelope(envelope, command_id="cmd-stage7-route", request_id="req-stage7-route")
 
         assert result["success"] is True
+        assert result["execution_path"] == "temporal_workflow"
         assert result["completion_state"] == "execution_completed"
         assert result["closure_complete"] is True
         assert result["dispatch_accepted"] is True
         assert result["execution_started"] is True
         assert result["task_outcome_known"] is True
         assert result["lifecycle_state"] == "succeeded"
+        master_brain.execute_distributed_task.assert_awaited_once()
 
 
 # ===========================================================================
