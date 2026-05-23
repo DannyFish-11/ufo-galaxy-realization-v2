@@ -651,14 +651,16 @@ class FullSystemBaselineV3Evaluator:
         if mod is not None and mod2 is not None:
             return SubsystemEntry(
                 subsystem_id=sid,
-                state=SubsystemState.implemented_and_evidenced,
+                state=SubsystemState.implemented_but_not_closed,
                 rationale=(
                     "core.canonical_session_truth and core.canonical_completion_ingress "
-                    "are importable.  V2 canonical truth ingress is present, mainchained, "
-                    "and covered by tests (test_pr2_unified_runtime_truth_closure.py)."
+                    "are importable.  This proves implementation presence, but import "
+                    "success alone is not treated as runtime-evidenced closure."
                 ),
                 evidence_module="core.canonical_session_truth",
-                known_gaps=[],
+                known_gaps=[
+                    "Runtime-exercised canonical truth ingress evidence is required for implemented_and_evidenced",
+                ],
             )
         if mod is not None or mod2 is not None:
             return SubsystemEntry(
@@ -698,14 +700,16 @@ class FullSystemBaselineV3Evaluator:
             )
         return SubsystemEntry(
             subsystem_id=sid,
-            state=SubsystemState.implemented_and_evidenced,
+            state=SubsystemState.implemented_but_not_closed,
             rationale=(
                 "core.unified_result_ingress is importable and UnifiedResultIngress "
-                "class is present.  Covered by extensive test suite "
-                "(tests/test_unified_result_ingress.py, Group K replay ordering, etc.)."
+                "class is present.  Structural availability and import success are "
+                "not treated as equivalent to runtime-evidenced closure."
             ),
             evidence_module="core.unified_result_ingress",
-            known_gaps=[],
+            known_gaps=[
+                "Runtime-ingress participation evidence is required for implemented_and_evidenced",
+            ],
         )
 
     def _eval_v2_capability_routing_gate(self) -> SubsystemEntry:
@@ -736,14 +740,17 @@ class FullSystemBaselineV3Evaluator:
             )
         return SubsystemEntry(
             subsystem_id=sid,
-            state=SubsystemState.implemented_and_evidenced,
+            state=SubsystemState.implemented_but_not_closed,
             rationale=(
                 "core.capability_routing_gate and "
                 "core.gateway_capability_default_enforcement are both importable. "
-                "Gate is defined and default-enforcement wire exists."
+                "Gate is defined and default-enforcement wire exists, but this does "
+                "not by itself prove runtime-enforced participation."
             ),
             evidence_module="core.capability_routing_gate",
-            known_gaps=[],
+            known_gaps=[
+                "Runtime-enforced capability routing evidence is required for implemented_and_evidenced",
+            ],
         )
 
     def _eval_v2_recovery_redispatch(self) -> SubsystemEntry:
@@ -1110,7 +1117,7 @@ class FullSystemBaselineV3Evaluator:
             "cross_repo_blocked": pipeline_verdict_str != "complete",
         }
 
-        if grounding["is_complete"]:
+        if grounding["is_complete"] and pipeline_verdict_str == "complete" and grounding["closure_grade"]:
             state = SubsystemState.implemented_and_evidenced
             rationale = (
                 "build_canonical_cross_repo_evidence_report() returned a complete "
@@ -1245,9 +1252,13 @@ class FullSystemBaselineV3Evaluator:
                 self._text_signals_cross_repo_gap(gap) for gap in report_dict.get("unresolved_blocking_gaps", [])
             ),
         }
+        no_structural_gaps = dimension_counts.get("nominally_present_not_closed", 0) == 0 and dimension_counts.get(
+            "partially_implemented", 0
+        ) == 0
+        runtime_verified = dimension_counts.get("automated_verified", 0) > 0
         state = (
             SubsystemState.implemented_and_evidenced
-            if system_verdict == "platform_baseline_established"
+            if system_verdict == "platform_baseline_established" and no_structural_gaps and runtime_verified
             else SubsystemState.implemented_but_not_closed
         )
         return SubsystemEntry(
@@ -1303,13 +1314,14 @@ class FullSystemBaselineV3Evaluator:
                         for risk in (unresolved_risks if isinstance(unresolved_risks, list) else [])
                     ),
                 }
-                if grounding["is_fully_operational"]:
+                no_pending_or_unresolved = status_counts.get("pending", 0) == 0 and status_counts.get("unresolved", 0) == 0
+                if grounding["is_fully_operational"] and no_pending_or_unresolved and grounding["unresolved_risk_count"] == 0:
                     return SubsystemEntry(
                         subsystem_id=sid,
                         state=SubsystemState.implemented_and_evidenced,
                         rationale=(
                             "evaluate_system_acceptance() returned a fully_operational "
-                            "verdict, so the acceptance surface is closed."
+                            "verdict with no pending or unresolved dimensions."
                         ),
                         evidence_module="core.system_final_acceptance_verdict",
                         known_gaps=[],

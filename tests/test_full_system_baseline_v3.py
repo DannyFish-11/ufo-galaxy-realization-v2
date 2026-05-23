@@ -478,7 +478,7 @@ class TestGroupE_EvidenceClosureGate:
         assert result.gate_passed is False
         assert any("closure-grade" in reason for reason in result.fail_reasons)
 
-    def test_E07_standard_gate_passes_for_closure_grade_android_evidence(
+    def test_E07_standard_gate_fails_when_overall_verdict_not_closure_grade(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -504,7 +504,8 @@ class TestGroupE_EvidenceClosureGate:
         )
         monkeypatch.setattr(baseline_mod, "build_v3_baseline_report", lambda: synthetic)
         result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-        assert result.gate_passed is True
+        assert result.gate_passed is False
+        assert any("standard level requires closure-grade baseline verdict" in reason for reason in result.fail_reasons)
 
 
 # ---------------------------------------------------------------------------
