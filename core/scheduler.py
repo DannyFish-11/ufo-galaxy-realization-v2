@@ -81,6 +81,16 @@ SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY: str = (
     "legacy mcp_/skill_/call_ prefixes are compat aliases only."
 )
 
+# Stage 10: Broadcast path task-graph convergence.
+# _exec_broadcast() now registers its root CanonicalTask in TaskGraphRuntime
+# before delegating per-device calls to _exec_send_to_device(), closing the
+# gap that existed vs. _exec_relay() and _exec_mesh_send() (PR-513/GAP-512-002).
+SCHEDULER_BROADCAST_TASK_GRAPH_INTEGRATED: str = (
+    "SCHEDULER_BROADCAST_TASK_GRAPH_V1: core/scheduler.py _exec_broadcast() "
+    "registers CanonicalTask in TaskGraphRuntime before per-device dispatch "
+    "(Stage 10 convergence — mirrors relay/mesh_send graph registration)."
+)
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -935,20 +945,71 @@ CROSS-DEVICE:
         })
 
     async def _exec_broadcast(self, args: Dict, context: Dict) -> str:
-        """广播到所有设备"""
+        """广播到所有设备
+
+        Stage 10: CanonicalTask is registered in TaskGraphRuntime for the
+        broadcast-level task so that broadcast execution paths participate in
+        task-graph tracking (closing the gap vs _exec_relay and _exec_mesh_send
+        which already register in TaskGraphRuntime).
+        Ingress also recorded in execution spine log for observability.
+        """
+        import uuid as _uuid_bc
         task_type = args.get("task_type", "")
         payload = args.get("payload", {})
         devices = context.get("devices", {}) if context else {}
 
+        # Stage 10: Record ingress in execution spine log.
+        try:
+            from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+            record_legacy_ingress(
+                ExecutionIngressSource.SCHEDULER,
+                args,
+                reason="scheduler._exec_broadcast → canonical spine",
+            )
+        except Exception:
+            pass
+
+        # Stage 10: Register broadcast task in TaskGraphRuntime so broadcast
+        # execution is visible to the task graph (mirrors relay/mesh_send paths).
+        _bc_task_id = args.get("task_id") or f"broadcast_{_uuid_bc.uuid4().hex[:16]}"
+        try:
+            from core.task_adapter import adapt_to_canonical_task as _adapt_bc
+            from core.canonical_task import TaskOrigin as _TO_bc
+            _bc_canonical = _adapt_bc(
+                {
+                    "task_id": _bc_task_id,
+                    "trace_id": args.get("trace_id") or "",
+                    "tool_name": task_type or "broadcast",
+                    "targets": list(devices.keys()),
+                    "args": args,
+                },
+                origin=_TO_bc.SCHEDULER,
+            )
+            _bc_task_id = _bc_canonical.identity.task_id
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_bc,
+                WorkflowContributorKind as _WCK_bc,
+            )
+            # Use register_canonical_task (not register_envelope) so that
+            # CanonicalTask's intent.tool_name is read correctly.
+            _get_tgr_bc().register_canonical_task(
+                _bc_canonical,
+                contributor=_WCK_bc.COMMAND_ROUTER,
+            )
+        except Exception as _bc_tgr_err:
+            logger.debug(
+                "_exec_broadcast: TaskGraphRuntime registration skipped: %s", _bc_tgr_err
+            )
+
         results = {}
         for did in devices:
             r = await self._exec_send_to_device(
-                {"device_id": did, "task_type": task_type, "payload": payload},
+                {"device_id": did, "task_id": _bc_task_id, "task_type": task_type, "payload": payload},
                 context,
             )
             results[did] = r
 
-        return json.dumps({"broadcast_results": results}, ensure_ascii=False)
+        return json.dumps({"broadcast_results": results, "broadcast_task_id": _bc_task_id}, ensure_ascii=False)
 
     async def _exec_relay(self, args: Dict, context: Dict) -> str:
         """设备间中继转发

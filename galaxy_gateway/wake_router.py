@@ -8,13 +8,33 @@ Wake Router - 智能唤醒路由器
 - 注意力焦点评分：屏幕亮着的设备 > 屏幕灭的设备；最近有用户交互的设备优先
 - 唤醒事件去重：多设备同时检测到唤醒词时只选择一个设备响应
 
+Stage 10: Scoring and task-graph convergence
+- Device scoring now delegates to DeviceScoringEngine (core.control_plane.smart_scheduler)
+  as the primary scoring authority, falling back to the local heuristic only when the
+  engine is unavailable.  This aligns WakeRouter selection with the canonical scheduling
+  scoring path used by SwarmCoordinator and the rest of the orchestration layer.
+- Routing decisions are registered in TaskGraphRuntime so that wake-initiated task paths
+  participate in graph tracking rather than remaining invisible to the runtime.
+
 Author: UFO Galaxy Team
-Version: 1.0
 """
+
+# Stage 10 sentinels — importable by tests and monitoring tooling.
+WAKE_ROUTER_USES_CANONICAL_SCORING: str = (
+    "WAKE_ROUTER_CANONICAL_SCORING_V1: WakeRouter delegates device selection to "
+    "DeviceScoringEngine (core.control_plane.smart_scheduler) as primary authority; "
+    "local heuristic is used only as fallback when engine is unavailable."
+)
+WAKE_ROUTER_TASK_GRAPH_REGISTERED: str = (
+    "WAKE_ROUTER_TASK_GRAPH_V1: WakeRouter.route() registers routing decisions in "
+    "TaskGraphRuntime so that wake-initiated execution paths are tracked in the "
+    "canonical task graph."
+)
 
 import asyncio
 import logging
 import time
+import uuid as _uuid_mod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -120,6 +140,11 @@ class WakeRouter:
         """
         处理唤醒事件并路由到最合适的设备
 
+        Stage 10: Uses DeviceScoringEngine as the primary device scoring authority
+        (canonical scheduling path) and registers the routing decision in
+        TaskGraphRuntime so that wake-initiated task paths are tracked in the
+        canonical task graph.
+
         Args:
             wake_event: 唤醒事件
 
@@ -146,17 +171,93 @@ class WakeRouter:
             logger.warning("[WakeRouter] 没有可用设备，无法路由唤醒事件")
             return None
 
-        # 对每个设备评分
-        scored = []
-        for device_id, device_info in devices.items():
-            score, reason_parts = self._score_device(
-                device_id, device_info, wake_event
-            )
-            scored.append((device_id, score, " | ".join(reason_parts)))
+        # Stage 10: Attempt canonical device scoring via DeviceScoringEngine.
+        # The engine provides the same capability/latency/load/health scoring
+        # used by SwarmCoordinator and the orchestration layer, converging the
+        # WakeRouter onto the canonical selection path.
+        best_device_id: Optional[str] = None
+        best_score: float = 0.0
+        best_reason: str = ""
+        _canonical_scoring_used = False
 
-        # 按分数降序排列
-        scored.sort(key=lambda x: x[1], reverse=True)
-        best_device_id, best_score, best_reason = scored[0]
+        try:
+            from core.control_plane.smart_scheduler import (
+                DeviceScoreInput,
+                DeviceScoringEngine,
+            )
+
+            # Map task_type → required capability hints for the scoring engine.
+            _required_caps: List[str] = []
+            if wake_event.task_type == WakeTaskType.VOICE:
+                _required_caps = ["speaker"]
+            elif wake_event.task_type == WakeTaskType.VISUAL:
+                _required_caps = ["screen"]
+
+            _candidates = []
+            for device_id, device_info in devices.items():
+                _now = time.time()
+                _last_active = max(
+                    device_info.get("last_heartbeat", 0),
+                    device_info.get("last_message", 0),
+                )
+                _elapsed = _now - _last_active
+                # Map device recency (seconds since last seen) to a synthetic
+                # ping latency in milliseconds for DeviceScoringEngine.
+                # Scale factor 10×: 1 second idle ≈ 10 ms latency proxy, so a
+                # device silent for 200 s hits the 2 000 ms ceiling and scores 0.
+                _synthetic_ping_ms = min(_elapsed * 10.0, 2000.0)
+                # Map screen_on + last_interaction to a synthetic load proxy.
+                # Screen-on devices are assumed less loaded (−30 pp).
+                # Devices with a very recent interaction (within 30 s) get up to
+                # an additional −50 pp, proportional to how recent the interaction
+                # was.  Combined floor is 0 (minimum synthetic load).
+                _screen_on = device_info.get("screen_on", False)
+                _last_interaction = device_info.get("last_interaction", 0)
+                _interaction_recency = max(0.0, 30.0 - (_now - _last_interaction)) if _last_interaction > 0 else 0.0
+                _load_pct = max(0.0, 100.0 - (_interaction_recency / 30.0) * 50.0 - (30.0 if _screen_on else 0.0))
+
+                _candidates.append(
+                    DeviceScoreInput(
+                        device_id=device_id,
+                        ping_latency_ms=_synthetic_ping_ms,
+                        load_pct=_load_pct,
+                        capabilities=list(device_info.get("capabilities", [])),
+                        health_score=max(0.0, 100.0 - _elapsed),
+                    )
+                )
+
+            _engine = DeviceScoringEngine(require_all_capabilities=False)
+            _best = _engine.select_best_device(_candidates, _required_caps or None)
+            if _best is not None:
+                best_device_id = _best.device_id
+                best_score = _best.total
+                best_reason = (
+                    f"canonical_scoring: cap={_best.capability_score:.2f} "
+                    f"latency={_best.latency_score:.2f} "
+                    f"load={_best.load_score:.2f} "
+                    f"health={_best.health_score:.2f}"
+                )
+                _canonical_scoring_used = True
+                logger.debug(
+                    "[WakeRouter] canonical DeviceScoringEngine selected device=%s score=%.3f",
+                    best_device_id, best_score,
+                )
+        except Exception as _scoring_err:
+            logger.debug(
+                "[WakeRouter] canonical scoring unavailable (%s); falling back to local heuristic",
+                _scoring_err,
+            )
+
+        # Fallback: use local heuristic scoring when canonical engine is unavailable.
+        if best_device_id is None:
+            scored = []
+            for device_id, device_info in devices.items():
+                score, reason_parts = self._score_device(
+                    device_id, device_info, wake_event
+                )
+                scored.append((device_id, score, " | ".join(reason_parts)))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            best_device_id, best_score, best_reason = scored[0]
 
         decision = RouteDecision(
             selected_device_id=best_device_id,
@@ -171,9 +272,34 @@ class WakeRouter:
             self._route_history = self._route_history[-self._max_history:]
 
         logger.info(
-            f"[WakeRouter] 路由决策: device={best_device_id} "
-            f"score={best_score:.2f} reason='{best_reason}'"
+            "[WakeRouter] 路由决策: device=%s score=%.2f reason='%s' canonical_scoring=%s",
+            best_device_id, best_score, best_reason, _canonical_scoring_used,
         )
+
+        # Stage 10: Register routing decision in TaskGraphRuntime so that
+        # wake-initiated task paths are tracked in the canonical task graph.
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr,
+                WorkflowContributorKind as _WCK,
+            )
+            _task_id = f"wake_{_uuid_mod.uuid4().hex[:16]}"
+            _get_tgr().register_node_raw(
+                task_id=_task_id,
+                tool_name="wake_route",
+                session_id="",
+                trace_id=wake_event.event_id,
+                device_id=best_device_id,
+                contributor=_WCK.COMMAND_ROUTER,
+            )
+            logger.debug(
+                "[WakeRouter] registered wake routing in TaskGraphRuntime task_id=%s device=%s",
+                _task_id, best_device_id,
+            )
+        except Exception as _tgr_err:
+            logger.debug(
+                "[WakeRouter] TaskGraphRuntime registration skipped: %s", _tgr_err
+            )
 
         # 触发回调
         if self._on_decision:
