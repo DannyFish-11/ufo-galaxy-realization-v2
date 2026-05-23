@@ -56,11 +56,11 @@ import importlib
 import pytest
 from typing import List
 
-
 # ---------------------------------------------------------------------------
 # Skip guard — skip all tests if the module cannot be imported (should not
 # happen in a healthy repo, but protects against unrelated import errors).
 # ---------------------------------------------------------------------------
+
 
 def _can_import(name: str) -> bool:
     try:
@@ -101,10 +101,10 @@ from core.full_system_baseline_v3 import (  # noqa: E402
     reset_v3_baseline_report,
 )
 
-
 # ---------------------------------------------------------------------------
 # Group A — Module-level imports, sentinels, enums
 # ---------------------------------------------------------------------------
+
 
 class TestGroupA_ModuleLevel:
     def test_A01_module_importable_sentinels_present(self) -> None:
@@ -141,6 +141,7 @@ class TestGroupA_ModuleLevel:
 # Group B — Data class round-trips
 # ---------------------------------------------------------------------------
 
+
 class TestGroupB_DataClassRoundTrips:
     def test_B01_subsystem_entry_round_trip(self) -> None:
         entry = SubsystemEntry(
@@ -149,6 +150,7 @@ class TestGroupB_DataClassRoundTrips:
             rationale="test rationale",
             evidence_module="core.foo",
             known_gaps=["gap1"],
+            grounding_signals={"overall_verdict": "open"},
         )
         d = entry.to_dict()
         recovered = SubsystemEntry.from_dict(d)
@@ -157,6 +159,7 @@ class TestGroupB_DataClassRoundTrips:
         assert recovered.rationale == entry.rationale
         assert recovered.evidence_module == entry.evidence_module
         assert recovered.known_gaps == entry.known_gaps
+        assert recovered.grounding_signals == entry.grounding_signals
 
     def test_B02_v3_baseline_report_round_trip(self) -> None:
         report = V3BaselineReport(
@@ -167,13 +170,10 @@ class TestGroupB_DataClassRoundTrips:
                     state=SubsystemState.implemented_but_not_closed,
                 )
             ],
-            blocking_gaps=[
-                BlockingGap(gap_id="g1", description="test gap")
-            ],
-            open_questions=[
-                OpenQuestion(question_id="q1", question="is it done?")
-            ],
+            blocking_gaps=[BlockingGap(gap_id="g1", description="test gap")],
+            open_questions=[OpenQuestion(question_id="q1", question="is it done?")],
             evidence_linkage={"foo": "bar"},
+            scorecard={"overall": {"code_present_count": 1}},
             summary="test summary",
             generated_at="2026-01-01T00:00:00+00:00",
         )
@@ -184,17 +184,17 @@ class TestGroupB_DataClassRoundTrips:
         assert recovered.subsystems[0].subsystem_id == "v2_release_gate"
         assert len(recovered.blocking_gaps) == 1
         assert len(recovered.open_questions) == 1
+        assert recovered.scorecard == report.scorecard
 
     def test_B03_v3_baseline_report_to_json_valid(self) -> None:
-        report = V3BaselineReport(
-            overall_verdict=V3BaselineVerdict.insufficient_evidence_to_conclude
-        )
+        report = V3BaselineReport(overall_verdict=V3BaselineVerdict.insufficient_evidence_to_conclude)
         j = report.to_json()
         parsed = json.loads(j)
         assert "overall_verdict" in parsed
         assert "subsystems" in parsed
         assert "blocking_gaps" in parsed
         assert "open_questions" in parsed
+        assert "scorecard" in parsed
 
     def test_B04_report_subsystem_lookup(self) -> None:
         report = V3BaselineReport(
@@ -213,11 +213,9 @@ class TestGroupB_DataClassRoundTrips:
 # Group C — Verdict derivation (unit-level)
 # ---------------------------------------------------------------------------
 
+
 def _make_subsystems(states: List[SubsystemState]) -> List[SubsystemEntry]:
-    return [
-        SubsystemEntry(subsystem_id=f"s{i}", state=s)
-        for i, s in enumerate(states)
-    ]
+    return [SubsystemEntry(subsystem_id=f"s{i}", state=s) for i, s in enumerate(states)]
 
 
 class TestGroupC_VerdictDerivation:
@@ -235,17 +233,13 @@ class TestGroupC_VerdictDerivation:
 
     def test_C03_declared_not_proven_forces_partial(self) -> None:
         subsystems = _make_subsystems(
-            [SubsystemState.implemented_and_evidenced] * 11
-            + [SubsystemState.declared_not_proven]
+            [SubsystemState.implemented_and_evidenced] * 11 + [SubsystemState.declared_not_proven]
         )
         verdict = FullSystemBaselineV3Evaluator._derive_verdict(subsystems, android_evidence_present=True)
         assert verdict == V3BaselineVerdict.partially_closed_blocking_gaps
 
     def test_C04_contract_only_forces_partial(self) -> None:
-        subsystems = _make_subsystems(
-            [SubsystemState.implemented_and_evidenced] * 11
-            + [SubsystemState.contract_only]
-        )
+        subsystems = _make_subsystems([SubsystemState.implemented_and_evidenced] * 11 + [SubsystemState.contract_only])
         verdict = FullSystemBaselineV3Evaluator._derive_verdict(subsystems, android_evidence_present=True)
         assert verdict == V3BaselineVerdict.partially_closed_blocking_gaps
 
@@ -257,6 +251,7 @@ class TestGroupC_VerdictDerivation:
 # ---------------------------------------------------------------------------
 # Group D — Baseline report construction
 # ---------------------------------------------------------------------------
+
 
 class TestGroupD_BaselineReport:
     def test_D01_build_returns_v3_baseline_report(self) -> None:
@@ -292,34 +287,56 @@ class TestGroupD_BaselineReport:
         report = build_v3_baseline_report()
         assert len(report.evidence_linkage) > 0
 
-    def test_D08_all_subsystems_have_valid_state(self) -> None:
+    def test_D08_scorecard_distinguishes_present_wired_evidenced(self) -> None:
+        report = build_v3_baseline_report()
+        scorecard = report.scorecard
+        assert "overall" in scorecard
+        assert "subsystems" in scorecard
+        assert report.subsystems[0].subsystem_id in scorecard["subsystems"]
+        sample = scorecard["subsystems"][report.subsystems[0].subsystem_id]
+        assert "code_present" in sample
+        assert "code_wired" in sample
+        assert "code_evidenced" in sample
+        assert "blocked_by_missing_cross_repo_evidence" in sample
+
+    def test_D09_structured_evidence_linkage_contains_underlying_verdicts(self) -> None:
+        report = build_v3_baseline_report()
+        acceptance = report.evidence_linkage.get("system_final_acceptance_verdict", {})
+        cross_repo = report.evidence_linkage.get("cross_repo_evidence_pipeline", {})
+        assert isinstance(acceptance, dict)
+        assert isinstance(cross_repo, dict)
+        assert "grounding_signals" in acceptance
+        assert "acceptance_verdict" in acceptance["grounding_signals"]
+        assert "pipeline_verdict" in cross_repo["grounding_signals"]
+
+    def test_D10_all_subsystems_have_valid_state(self) -> None:
         valid_states = {s.value for s in SubsystemState}
         report = build_v3_baseline_report()
         for entry in report.subsystems:
-            assert entry.state.value in valid_states, (
-                f"Subsystem {entry.subsystem_id!r} has invalid state {entry.state!r}"
-            )
+            assert (
+                entry.state.value in valid_states
+            ), f"Subsystem {entry.subsystem_id!r} has invalid state {entry.state!r}"
 
-    def test_D09_report_is_json_serialisable(self) -> None:
+    def test_D11_report_is_json_serialisable(self) -> None:
         report = build_v3_baseline_report()
         j = report.to_json()
         parsed = json.loads(j)
         assert parsed["overall_verdict"] == report.overall_verdict.value
         assert len(parsed["subsystems"]) == 12
 
-    def test_D10_blocking_subsystems_property_consistent(self) -> None:
+    def test_D12_blocking_subsystems_property_consistent(self) -> None:
         report = build_v3_baseline_report()
         blocking = report.blocking_subsystems
         for entry in blocking:
             assert entry.state.is_blocking(), (
-                f"Subsystem {entry.subsystem_id!r} in blocking_subsystems "
-                f"but state {entry.state!r} is not blocking"
+                f"Subsystem {entry.subsystem_id!r} in blocking_subsystems " f"but state {entry.state!r} is not blocking"
             )
 
 
 # ---------------------------------------------------------------------------
 # Group E — Evidence closure gate
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not _GATE_AVAILABLE,
@@ -332,6 +349,7 @@ class TestGroupE_EvidenceClosureGate:
             ClosureGateResult,
             ClosureLevel,
         )
+
         result = evaluate_evidence_closure_gate(ClosureLevel.standard)
         assert isinstance(result, ClosureGateResult)
 
@@ -340,15 +358,13 @@ class TestGroupE_EvidenceClosureGate:
             evaluate_evidence_closure_gate,
             ClosureLevel,
         )
+
         report = build_v3_baseline_report()
         if not report.android_evidence_present:
             result = evaluate_evidence_closure_gate(ClosureLevel.standard)
             assert result.gate_passed is False
             # At least one fail reason must mention android
-            assert any(
-                "android" in r.lower() or "cross-repo" in r.lower()
-                for r in result.fail_reasons
-            )
+            assert any("android" in r.lower() or "cross-repo" in r.lower() for r in result.fail_reasons)
 
     def test_E03_minimum_gate_does_not_fail_on_android_absence_alone(self) -> None:
         """minimum level: android evidence absence alone should not be a fail reason.
@@ -357,13 +373,11 @@ class TestGroupE_EvidenceClosureGate:
             evaluate_evidence_closure_gate,
             ClosureLevel,
         )
+
         report = build_v3_baseline_report()
         result = evaluate_evidence_closure_gate(ClosureLevel.minimum)
         # At minimum level, android absence should not be a fail reason
-        android_fail = any(
-            "android" in r.lower() and "evidence" in r.lower()
-            for r in result.fail_reasons
-        )
+        android_fail = any("android" in r.lower() and "evidence" in r.lower() for r in result.fail_reasons)
         assert not android_fail
 
     def test_E04_strict_gate_fails_when_verdict_not_closed(self) -> None:
@@ -371,6 +385,7 @@ class TestGroupE_EvidenceClosureGate:
             evaluate_evidence_closure_gate,
             ClosureLevel,
         )
+
         report = build_v3_baseline_report()
         if report.overall_verdict.value != "closed_and_evidenced":
             result = evaluate_evidence_closure_gate(ClosureLevel.strict)
@@ -381,6 +396,7 @@ class TestGroupE_EvidenceClosureGate:
             evaluate_evidence_closure_gate,
             ClosureLevel,
         )
+
         result = evaluate_evidence_closure_gate(ClosureLevel.standard)
         j = result.to_json()
         parsed = json.loads(j)
@@ -393,6 +409,7 @@ class TestGroupE_EvidenceClosureGate:
 # ---------------------------------------------------------------------------
 # Group F — Singleton behaviour
 # ---------------------------------------------------------------------------
+
 
 class TestGroupF_Singleton:
     def test_F01_get_returns_same_instance(self) -> None:
