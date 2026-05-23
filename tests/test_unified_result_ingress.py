@@ -1597,6 +1597,122 @@ class TestCanonicalGoalExecutionResultCompletion:
                 f"{received_statuses!r} instead of [{expected!r}]"
             )
 
+    @pytest.mark.asyncio
+    async def test_J04_handle_goal_execution_result_forwards_replay_and_continuity_metadata(self):
+        from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
+        from core.unified_result_ingress import ResultSourceChannel
+
+        received = {}
+
+        class _FakeIngressOutcome:
+            is_fully_closed = False
+            was_deduplicated = False
+            truth_chain_complete = False
+            incomplete_reason = "replay_ordering_rejected:reject_stale"
+            evidence_acceptance_verdict = "accept"
+            completion_notified = False
+            completion_disposition = "stale_rejected"
+            continuity_adjudication_classification = "stale-rejected"
+            stale_classification = "explicit_stale"
+            replay_ordering_decision = "reject_stale"
+            closure_grade_eligible = True
+
+        async def _fake_ingest_async(event, *, store_fn=None, bridge=None):
+            received["source_channel"] = event.source_channel
+            received["runtime_attachment_session_id"] = event.runtime_attachment_session_id
+            received["durable_session_id"] = event.durable_session_id
+            received["session_epoch"] = event.session_epoch
+            received["is_stale"] = event.is_stale
+            received["stale_reason"] = event.stale_reason
+            received["replay_seq"] = event.replay_seq
+            received["replay_item_id"] = event.replay_item_id
+            received["replay_session_id"] = event.replay_session_id
+            return _FakeIngressOutcome()
+
+        bridge = MagicMock()
+        bridge._pending_responses = {}
+        ws = MagicMock()
+        tid = _make_task_id()
+        msg = {
+            "type": "goal_execution_result",
+            "device_id": "test-device",
+            "runtime_attachment_session_id": "attach-123",
+            "payload": {
+                "task_id": tid,
+                "status": "success",
+                "result": "done",
+                "session_id": "runtime-123",
+                "durable_session_id": "durable-123",
+                "session_epoch": 7,
+                "is_stale": True,
+                "stale_reason": "resumed_delivery_is_old",
+                "replay": True,
+                "replay_seq": 22,
+                "replay_item_id": "queue-item-22",
+                "replay_session_id": "replay-session-22",
+            },
+        }
+
+        with (
+            patch("core.durable_result_idempotency.check_result_idempotency", return_value=False),
+            patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest_async),
+        ):
+            await handle_goal_execution_result(bridge, ws, msg)
+
+        assert received["source_channel"] == ResultSourceChannel.REPLAY
+        assert received["runtime_attachment_session_id"] == "attach-123"
+        assert received["durable_session_id"] == "durable-123"
+        assert received["session_epoch"] == 7
+        assert received["is_stale"] is True
+        assert received["stale_reason"] == "resumed_delivery_is_old"
+        assert received["replay_seq"] == 22
+        assert received["replay_item_id"] == "queue-item-22"
+        assert received["replay_session_id"] == "replay-session-22"
+
+    @pytest.mark.asyncio
+    async def test_J05_handle_goal_execution_result_duplicate_precheck_still_routes_to_unified_ingress(self):
+        from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
+
+        ingress_calls = []
+        store_calls = AsyncMock()
+
+        class _FakeIngressOutcome:
+            is_fully_closed = False
+            was_deduplicated = True
+            truth_chain_complete = False
+            incomplete_reason = "deduplicated"
+            evidence_acceptance_verdict = "accept"
+            completion_notified = False
+            completion_disposition = "duplicate_ignored"
+            continuity_adjudication_classification = "duplicate-ignored"
+            stale_classification = ""
+            replay_ordering_decision = ""
+            closure_grade_eligible = True
+
+        async def _fake_ingest_async(event, *, store_fn=None, bridge=None):
+            ingress_calls.append(event)
+            return _FakeIngressOutcome()
+
+        bridge = MagicMock()
+        bridge._pending_responses = {}
+        ws = MagicMock()
+        tid = _make_task_id()
+        msg = {
+            "type": "goal_execution_result",
+            "device_id": "test-device",
+            "payload": {"task_id": tid, "status": "success", "result": "done"},
+        }
+
+        with (
+            patch("core.durable_result_idempotency.check_result_idempotency", return_value=True),
+            patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest_async),
+            patch("galaxy_gateway.android.handlers.goal_execution.store_task_result", store_calls),
+        ):
+            await handle_goal_execution_result(bridge, ws, msg)
+
+        assert len(ingress_calls) == 1, "Duplicate terminal pre-check should still reach unified ingress"
+        store_calls.assert_not_awaited()
+
 
 # ===========================================================================
 # Group K — Replay ordering adjudication (Step 0.75)
@@ -1737,14 +1853,14 @@ class TestReplayOrderingAdjudication:
         assert outcome.is_fully_closed is False
         assert "replay_ordering_rejected" in outcome.incomplete_reason
 
-    def test_K06_duplicate_replay_decision_not_hard_blocked(self):
-        """REPLAY event with duplicate item_id is reject_duplicate but not hard-blocked.
+    def test_K06_duplicate_replay_terminal_is_ignored_before_truth_chain(self):
+        """REPLAY duplicate terminal delivery must not be treated as fresh closure."""
+        from core.unified_result_ingress import UnifiedResultIngress
 
-        The idempotency gate (Step 1) handles true duplicates.
-        reject_duplicate in replay ordering does not block — it is not in
-        REPLAY_ORDERING_BLOCKING_DECISIONS.
-        """
+        truth_chain_calls: list[str] = []
+
         ingress = _make_isolated_replay_ingress()
+        ingress._run_truth_chain = lambda _e: truth_chain_calls.append("called") or True  # type: ignore[method-assign]
         ingress.reset_replay_session_state()
 
         evt1 = _make_replay_event(
@@ -1765,8 +1881,12 @@ class TestReplayOrderingAdjudication:
 
         assert outcome.replay_ordering_adjudicated is True
         assert outcome.replay_ordering_decision == "reject_duplicate"
-        # Not hard-blocked by replay ordering (idempotency handles this)
-        assert "replay_ordering_rejected" not in (outcome.incomplete_reason or "")
+        assert outcome.was_deduplicated is True
+        assert outcome.completion_disposition == "duplicate_ignored"
+        assert outcome.continuity_adjudication_classification == "duplicate-ignored"
+        assert outcome.incomplete_reason == "replay_duplicate_ignored"
+        assert outcome.is_fully_closed is False
+        assert truth_chain_calls == [], "Replay duplicate terminals must not reach truth chain"
 
     def test_K07_missing_ordering_metadata_produces_ambiguous_not_blocked(self):
         """REPLAY event with no replay_seq and no replay_item_id → ambiguous_authority.

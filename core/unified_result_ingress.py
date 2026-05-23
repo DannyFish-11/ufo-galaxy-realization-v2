@@ -769,6 +769,39 @@ class UnifiedResultIngress:
             outcome.replay_ordering_verdict = _replay_verdict
             outcome.replay_ordering_evidence = _replay_evidence
             if _replay_blocked:
+                stale_policy = adjudicate_stale_vs_current(
+                    is_stale=True,
+                    stale_classification=_replay_decision,
+                    stale_reason=f"replay_ordering:{_replay_decision}",
+                )
+                outcome.completion_disposition = stale_policy.completion_disposition
+                outcome.continuity_adjudication_classification = stale_policy.classification
+                outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+                    classification=outcome.continuity_adjudication_classification,
+                    triggering_reason=stale_policy.triggering_reason,
+                    epoch_session_basis={
+                        "session_epoch": event.session_epoch,
+                        "runtime_session_id": event.runtime_session_id,
+                        "runtime_attachment_session_id": event.runtime_attachment_session_id,
+                        "replay_seq": event.replay_seq,
+                        "replay_session_id": event.replay_session_id,
+                    },
+                    related_identity={
+                        "task_id": event.task_id,
+                        "device_id": event.device_id,
+                        "result_id": event.idempotency_key,
+                        "completion_emission_id": event.completion_emission_id,
+                        "completion_lineage_key": completion_lineage.get("completion_lineage_key"),
+                        "replay_item_id": event.replay_item_id,
+                    },
+                    decision_point="unified_result_ingress.replay_ordering_gate",
+                )
+                outcome.joint_idempotency_evidence = self._fallback_joint_idempotency_evidence(
+                    event,
+                    completion_lineage=completion_lineage,
+                    decision="stale_rejected",
+                    stale_classification=_replay_decision,
+                )
                 outcome.incomplete_reason = f"replay_ordering_rejected:{_replay_decision}"
                 logger.warning(
                     "unified_result_ingress: replay ordering gate blocked result "
@@ -776,6 +809,48 @@ class UnifiedResultIngress:
                     event.task_id,
                     _replay_decision,
                     _replay_verdict,
+                    event.device_id,
+                )
+                self._record_last_closure_outcome(event, outcome)
+                return outcome
+            if _replay_decision == "reject_duplicate":
+                duplicate_policy = adjudicate_duplicate_vs_first_accepted(
+                    is_duplicate=True,
+                )
+                outcome.was_deduplicated = True
+                outcome.completion_disposition = duplicate_policy.completion_disposition
+                outcome.continuity_adjudication_classification = duplicate_policy.classification
+                outcome.continuity_adjudication_evidence = build_continuity_adjudication_evidence(
+                    classification=outcome.continuity_adjudication_classification,
+                    triggering_reason="replay_duplicate_terminal_delivery",
+                    epoch_session_basis={
+                        "session_epoch": event.session_epoch,
+                        "runtime_session_id": event.runtime_session_id,
+                        "runtime_attachment_session_id": event.runtime_attachment_session_id,
+                        "replay_seq": event.replay_seq,
+                        "replay_session_id": event.replay_session_id,
+                    },
+                    related_identity={
+                        "task_id": event.task_id,
+                        "device_id": event.device_id,
+                        "result_id": event.idempotency_key,
+                        "completion_emission_id": event.completion_emission_id,
+                        "completion_lineage_key": completion_lineage.get("completion_lineage_key"),
+                        "replay_item_id": event.replay_item_id,
+                    },
+                    decision_point="unified_result_ingress.replay_duplicate_gate",
+                )
+                outcome.joint_idempotency_evidence = self._fallback_joint_idempotency_evidence(
+                    event,
+                    completion_lineage=completion_lineage,
+                    decision="duplicate_ignored",
+                )
+                outcome.incomplete_reason = "replay_duplicate_ignored"
+                logger.debug(
+                    "unified_result_ingress: replay duplicate terminal ignored "
+                    "task_id=%r replay_item_id=%r device_id=%r",
+                    event.task_id,
+                    event.replay_item_id,
                     event.device_id,
                 )
                 self._record_last_closure_outcome(event, outcome)
