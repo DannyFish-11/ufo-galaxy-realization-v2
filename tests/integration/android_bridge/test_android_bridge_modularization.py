@@ -558,6 +558,42 @@ class TestAndroidBridgeDispatch:
         }
 
     @pytest.mark.asyncio
+    async def test_dispatch_task_result_missing_schema_is_legacy_compat_degraded(self):
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+
+        bridge = self._make_bridge()
+        ws = _make_ws()
+        handler_calls = []
+
+        async def _fake_task_result_handler(_ws: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+            handler_calls.append(message.get("task_id"))
+            return {
+                "version": "3.0",
+                "type": "task_result_ack",
+                "message_id": "ack-task-result-schema-compat",
+                "device_id": message["device_id"],
+                "status": "acknowledged",
+            }
+
+        bridge._message_handlers[MessageType.TASK_RESULT] = _fake_task_result_handler
+        msg = {
+            "version": "3.0",
+            "type": "task_result",
+            "device_id": "dev_task_result_schema_missing",
+            "message_id": "msg_task_result_schema_missing",
+            "timestamp": int(time.time() * 1000),
+            "task_id": "task-bridge-legacy",
+            "status": "success",
+        }
+        resp = await bridge.handle_message(ws, msg)
+        assert resp is not None
+        assert handler_calls == ["task-bridge-legacy"]
+        assert resp["type"] == "task_result_ack"
+        assert resp["schema_version_gate"]["action"] == "degrade"
+        assert resp["schema_version_gate"]["original_action"] == "reject"
+        assert resp["schema_version_gate"]["reason"] == "legacy_task_result_missing_schema_version_compat"
+
+    @pytest.mark.asyncio
     async def test_dispatch_device_snapshot_matching_schema_is_accepted_by_gate(self):
         bridge = self._make_bridge()
         ws = _make_ws()

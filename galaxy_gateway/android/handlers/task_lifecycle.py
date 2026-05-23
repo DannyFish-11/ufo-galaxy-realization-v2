@@ -74,6 +74,7 @@ def get_result_ingestion_error_counts() -> dict:
         ),
     }
 
+
 # OpenClawd memory backflow — top-level import so tests can patch() it.
 try:
     from core.openclawd_memory_backflow import store_task_result
@@ -414,6 +415,7 @@ def _try_reconcile(message: Dict[str, Any]) -> None:
             exc,
         )
 
+
 def _try_ingest_participant_truth(message: Dict[str, Any], truth_kind: str) -> None:
     """Best-effort ingest *message* as Android participant truth into V2 canonical state.
 
@@ -577,6 +579,7 @@ async def handle_task_result(
             message=message,
         )
         if _tl_gate_decision is not None:
+            message["_cross_repo_schema_version_gate"] = _tl_gate_decision.to_dict()
             if _tl_gate_decision.action == "reject":
                 logger.warning(
                     "handle_task_result: schema/version gate REJECTED ingress "

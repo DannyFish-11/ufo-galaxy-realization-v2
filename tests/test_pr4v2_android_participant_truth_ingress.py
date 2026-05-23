@@ -900,6 +900,25 @@ class TestGroupQ_ConvenienceWrapper:
         outcome = ingest_android_participant_truth_message(msg)
         assert isinstance(outcome, AndroidParticipantReconcileOutcome)
 
+    def test_q4_ingest_preserves_schema_gate_evidence_for_degraded_recovery_ingress(self) -> None:
+        msg = {
+            "truth_kind": "recovery_state",
+            "_cross_repo_schema_version_gate": {
+                "action": "degrade",
+                "original_action": "reject",
+                "reason": "legacy_recovery_state_missing_schema_version_compat",
+            },
+            "payload": {
+                "recovery_phase": "recovered_inflight",
+            },
+        }
+        outcome = ingest_android_participant_truth_message(msg)
+        assert outcome.schema_gate_evidence["action"] == "degrade"
+        assert outcome.envelope is not None
+        assert outcome.envelope.schema_gate_evidence["reason"] == (
+            "legacy_recovery_state_missing_schema_version_compat"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Group R — core.runtime re-exports
@@ -1019,6 +1038,7 @@ class TestGroupT_ReconcileOutcome:
         assert "replay_event_emitted" in d
         assert "tracking_record_phase" in d
         assert "recovery_state_routing" in d
+        assert "schema_gate_evidence" in d
         assert "envelope" in d
 
 
