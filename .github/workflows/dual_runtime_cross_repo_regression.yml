@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION: ${{ github.event_name == 'repository_dispatch' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,7 +53,10 @@ jobs:
                   raise SystemExit(
                       "repository_dispatch requires client_payload.evidence_json"
                   )
-              print("No external evidence payload provided. Tests will use skip-safe mode.")
+              print(
+                  "No external evidence payload provided. "
+                  "Protected evidence state will be reported as not_run."
+              )
               raise SystemExit(0)
 
           payload = None
@@ -77,6 +82,22 @@ jobs:
                   )
           print(f"Materialized cross-repo evidence: {out_path.resolve()}")
           PY
+      - name: Build machine-readable dual-runtime evidence report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from tests.integration._dual_runtime_cross_repo_harness import (
+              build_dual_runtime_cross_repo_evidence_report_from_environment,
+          )
+
+          report = build_dual_runtime_cross_repo_evidence_report_from_environment()
+          out_path = Path("dual_runtime_cross_repo_evidence_report.json")
+          out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+          print(f"Evidence report state: {report.get('overall_state')}")
+          print(f"Evidence report written: {out_path.resolve()}")
+          PY
       - name: Run dual-runtime cross-repo regression entry points
         env:
           REAL_ANDROID_GOVERNANCE_EVIDENCE_PATH: ${{ env.DUAL_RUNTIME_CROSS_REPO_EVIDENCE_PATH }}
@@ -85,3 +106,39 @@ jobs:
             tests/integration/test_pr13a_dual_runtime_cross_repo_regression.py \
             tests/integration/test_pr6a_real_android_execution_governance_regression.py \
             -v --tb=short -p no:warnings
+      - name: Enforce protected dual-runtime evidence completeness
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          protected = os.environ.get(
+              "DUAL_RUNTIME_CROSS_REPO_PROTECTED_VERIFICATION", ""
+          ).strip().lower() in {"1", "true", "yes", "on"}
+          report_path = Path("dual_runtime_cross_repo_evidence_report.json")
+          if not report_path.is_file():
+              raise SystemExit("Missing dual_runtime_cross_repo_evidence_report.json")
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          overall_state = str(report.get("overall_state", "")).strip().lower()
+          print(f"Protected mode: {protected}")
+          print(f"Dual-runtime evidence state: {overall_state}")
+
+          if protected and overall_state != "evidenced":
+              raise SystemExit(
+                  "Protected dual-runtime verification requires overall_state=evidenced; "
+                  f"got {overall_state!r}."
+              )
+          PY
+      - name: Upload dual-runtime cross-repo evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dual-runtime-cross-repo-evidence
+          path: |
+            .dual_runtime_cross_repo_evidence.json
+            dual_runtime_cross_repo_evidence_report.json
+          if-no-files-found: warn
+          retention-days: 30
