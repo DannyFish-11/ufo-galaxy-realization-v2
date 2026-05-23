@@ -662,7 +662,11 @@ def _extract_schema_gate_evidence(message: Dict[str, Any]) -> Dict[str, Any]:
     payload = message.get("payload")
     payload_mapping = payload if isinstance(payload, dict) else {}
     for candidate in (
+        # Internal handler/bridge stamping is the canonical copy because it
+        # preserves the original gate verdict before any response wrapping.
         message.get("_cross_repo_schema_version_gate"),
+        # Response-style aliasing is accepted next so already-wrapped ingress
+        # messages can still carry degraded compat evidence into truth ingress.
         message.get("schema_version_gate"),
         payload_mapping.get("_cross_repo_schema_version_gate"),
         payload_mapping.get("schema_version_gate"),

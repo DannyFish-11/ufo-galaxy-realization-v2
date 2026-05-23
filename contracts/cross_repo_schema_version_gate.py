@@ -346,6 +346,8 @@ def _build_legacy_safe_result_identity(
     payload_mapping = payload if isinstance(payload, Mapping) else {}
     raw_task_id = _extract_text_field(message, "task_id", "goal_id")
     if not raw_task_id and normalized_type == "goal_execution_result":
+        # Legacy Android goal_execution_result uplinks often carried the canonical
+        # task identity in correlation_id before task_id became mandatory.
         raw_task_id = _extract_text_field(message, "correlation_id")
     raw_status = _extract_text_field(message, "status", "result_kind")
     normalized_status = str(raw_status or "").strip().lower()
