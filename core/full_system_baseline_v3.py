@@ -1117,7 +1117,17 @@ class FullSystemBaselineV3Evaluator:
             "cross_repo_blocked": pipeline_verdict_str != "complete",
         }
 
-        if grounding["is_complete"] and pipeline_verdict_str == "complete" and grounding["closure_grade"]:
+        # Require all three signals to avoid over-crediting inconsistent or
+        # partially injected reports:
+        # - is_complete: report-level completion flag
+        # - pipeline_verdict == "complete": canonical verdict classification
+        # - closure_grade: strict android evidence closure criteria
+        is_closure_grade_complete = (
+            grounding["is_complete"]
+            and pipeline_verdict_str == "complete"
+            and grounding["closure_grade"]
+        )
+        if is_closure_grade_complete:
             state = SubsystemState.implemented_and_evidenced
             rationale = (
                 "build_canonical_cross_repo_evidence_report() returned a complete "
@@ -1252,13 +1262,19 @@ class FullSystemBaselineV3Evaluator:
                 self._text_signals_cross_repo_gap(gap) for gap in report_dict.get("unresolved_blocking_gaps", [])
             ),
         }
-        no_structural_gaps = dimension_counts.get("nominally_present_not_closed", 0) == 0 and dimension_counts.get(
-            "partially_implemented", 0
-        ) == 0
+        no_structural_gaps = (
+            dimension_counts.get("nominally_present_not_closed", 0) == 0
+            and dimension_counts.get("partially_implemented", 0) == 0
+        )
         runtime_verified = dimension_counts.get("automated_verified", 0) > 0
+        audit_report_closure_grade = (
+            system_verdict == "platform_baseline_established"
+            and no_structural_gaps
+            and runtime_verified
+        )
         state = (
             SubsystemState.implemented_and_evidenced
-            if system_verdict == "platform_baseline_established" and no_structural_gaps and runtime_verified
+            if audit_report_closure_grade
             else SubsystemState.implemented_but_not_closed
         )
         return SubsystemEntry(
@@ -1314,8 +1330,15 @@ class FullSystemBaselineV3Evaluator:
                         for risk in (unresolved_risks if isinstance(unresolved_risks, list) else [])
                     ),
                 }
-                no_pending_or_unresolved = status_counts.get("pending", 0) == 0 and status_counts.get("unresolved", 0) == 0
-                if grounding["is_fully_operational"] and no_pending_or_unresolved and grounding["unresolved_risk_count"] == 0:
+                all_dimensions_resolved = (
+                    status_counts.get("pending", 0) == 0
+                    and status_counts.get("unresolved", 0) == 0
+                )
+                if (
+                    grounding["is_fully_operational"]
+                    and all_dimensions_resolved
+                    and grounding["unresolved_risk_count"] == 0
+                ):
                     return SubsystemEntry(
                         subsystem_id=sid,
                         state=SubsystemState.implemented_and_evidenced,

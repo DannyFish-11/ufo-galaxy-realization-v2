@@ -2458,7 +2458,7 @@ class SystemFinalAcceptanceEvaluator:
                 status=DimensionStatus.unresolved,
                 evidence_summary=(
                     "ConversationContinuityTruth (PR-12) contract is wired and "
-                    "correctly produces conservative verdicts, but runtime "
+                    "correctly produces conservative verdicts, but the runtime "
                     "continuity restoration evidence is not present.  "
                     f"Baseline probe class: {continuity_class}.  "
                     "Structural probe success is not credited as acceptance closure."

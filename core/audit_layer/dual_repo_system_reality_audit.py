@@ -847,9 +847,6 @@ class DualRepoSystemRealityAuditor:
             if m not in importable and m not in file_present_not_importable
         ]
 
-        # Only truly importable modules go into code_references.
-        all_available = importable
-
         # Test and workflow evidence
         test_refs: List[str] = []
         if _file_exists("tests/test_pr001_canonical_dispatcher.py"):
@@ -877,13 +874,14 @@ class DualRepoSystemRealityAuditor:
         if found == 0:
             maturity = (
                 MaturityLabel.partially_implemented
-                if file_present_not_importable
+                if len(file_present_not_importable) > 0
                 else MaturityLabel.nominally_present_not_closed
             )
             rationale = (
                 "Main-chain module files may exist, but none are importable in "
-                "this environment. Structural presence is not credited as a "
-                "runtime-backed chain."
+                "this environment. Ensure dependencies are installed or modules "
+                "are properly configured. Structural presence alone is not "
+                "credited as a runtime-backed chain."
             )
         elif found < total // 2:
             maturity = MaturityLabel.partially_implemented
@@ -923,7 +921,7 @@ class DualRepoSystemRealityAuditor:
             dimension=dim,
             maturity=maturity,
             evidence_summary=evidence_summary,
-            code_references=all_available,
+            code_references=importable,
             test_references=test_refs,
             gaps=gaps,
             verdict_rationale=rationale,

@@ -920,7 +920,7 @@ class TestFailConservativePolicy:
             )
             reset_dual_repo_reality_audit()
 
-    def test_G08_file_presence_without_importability_does_not_score_mainchained(
+    def test_G08_file_presence_without_importability_scores_partially_implemented(
         self, monkeypatch: pytest.MonkeyPatch
     ):
         import core.audit_layer.dual_repo_system_reality_audit as strict_mod
