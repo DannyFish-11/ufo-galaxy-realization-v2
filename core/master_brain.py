@@ -22,7 +22,10 @@ import os
 import time
 import uuid
 import asyncio
-from datetime import datetime
+import json
+import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("master_brain")
@@ -74,6 +77,7 @@ class MasterBrain:
         self,
         nats: NATSBus | None = None,
         acl_layer: AntiCorruptionLayer | None = None,
+        state_path: str | os.PathLike[str] | None = None,
     ) -> None:
         self._nats = nats or nats_bus
         self._acl = acl_layer or acl
@@ -82,6 +86,13 @@ class MasterBrain:
         self._task_waiters: Dict[str, asyncio.Future] = {}
         self._temporal_client: Any = None
         self._started = False
+        self._state_path = Path(
+            state_path
+            or os.environ.get("GALAXY_MASTER_BRAIN_STATE_PATH")
+            or (Path(tempfile.gettempdir()) / "galaxy_master_brain_state.json")
+        )
+        self._load_state()
+        self._recover_incomplete_state()
 
     @classmethod
     def get_instance(cls) -> MasterBrain:
@@ -133,6 +144,19 @@ class MasterBrain:
                 logger.warning(
                     "MasterBrain: NATS bus missing subscribe_worker_shutdowns; "
                     "worker shutdown visibility not active"
+                )
+
+            if hasattr(self._nats, "subscribe_task_deadletters"):
+                subscription_calls.append((
+                    "task_deadletters",
+                    self._nats.subscribe_task_deadletters,
+                    self._on_deadletter,
+                ))
+            else:
+                subscriptions_ok = False
+                logger.warning(
+                    "MasterBrain: NATS bus missing subscribe_task_deadletters; "
+                    "dead-letter recovery not active"
                 )
 
             # Legacy compatibility: still accept event bus wrappers if published.
@@ -217,8 +241,12 @@ class MasterBrain:
             execution_path="dispatch_in_progress",
             nats_publish_state=None,
         )
-        record.setdefault("dispatched_at", datetime.now().isoformat())
+        dispatched_at = datetime.now().isoformat()
+        record["dispatched_at"] = dispatched_at
+        record["timeout_s"] = timeout_s
+        record["deadline_at"] = (datetime.fromisoformat(dispatched_at) + timedelta(seconds=timeout_s)).isoformat()
         self._ensure_task_waiter(task.task_id)
+        self._persist_state()
 
         # Publish to NATS
         result = await self._nats.publish_task_dispatch(target, task)
@@ -343,6 +371,26 @@ class MasterBrain:
                 nats_publish_state=None,
             )
 
+        result_dump = result.model_dump(mode="json", exclude_none=True)
+        if record.get("closure_complete") and record.get("completion_state") in {
+            "dead_lettered",
+            "execution_abandoned",
+            "execution_timed_out",
+        }:
+            late = self._update_task_record(
+                task_id,
+                late_result=result_dump,
+                late_result_at=datetime.now().isoformat(),
+            )
+            return {
+                "success": False,
+                "task_id": task_id,
+                "status": late.get("status"),
+                "error": late.get("error", ""),
+                "completion_state": late.get("completion_state"),
+                "late_result_ignored": True,
+            }
+
         correlation_error = self._validate_result_correlation(record, result)
         if correlation_error:
             mismatch = self._update_task_record(
@@ -367,7 +415,6 @@ class MasterBrain:
         if result_id:
             seen_result_ids.add(result_id)
 
-        result_dump = result.model_dump(mode="json", exclude_none=True)
         completion_state, lifecycle_state, closure_complete, task_success = self._classify_task_result(result.status)
         updates = {
             "worker_id": result.worker_id or record.get("worker_id", ""),
@@ -486,6 +533,7 @@ class MasterBrain:
             "registered_at": datetime.now().isoformat(),
             "force_offline": False,
         }
+        self._persist_state()
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
         logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
         return {"success": True, "worker_id": wid}
@@ -516,12 +564,17 @@ class MasterBrain:
             "drain_timeout_s": shutdown.drain_timeout_s,
         })
         self._workers[wid] = entry
+        affected_tasks = self._mark_inflight_tasks_for_worker(
+            wid,
+            error=f"worker_shutdown:{shutdown.reason or 'unspecified'}",
+        )
+        self._persist_state()
         _try_emit_event(
             "WORKER_SHUTDOWN",
             {"worker_id": wid, "reason": shutdown.reason, "drain_timeout_s": shutdown.drain_timeout_s},
         )
         logger.info("MasterBrain: worker shutdown — %s (reason=%s)", wid, shutdown.reason)
-        return {"success": True, "worker_id": wid, "status": "offline"}
+        return {"success": True, "worker_id": wid, "status": "offline", "affected_tasks": affected_tasks}
 
     async def handle_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
         """Update worker status from heartbeat."""
@@ -537,20 +590,27 @@ class MasterBrain:
             "memory_usage_percent": heartbeat.memory_usage_percent,
             "force_offline": False,
         })
+        self._persist_state()
         return {"success": True}
 
     def get_worker_topology(self) -> dict:
         """Return current worker topology with liveness info."""
         now = time.time()
         topology = {}
+        state_changed = False
         for wid, info in self._workers.items():
             alive = (now - info.get("last_heartbeat", 0)) < _HEARTBEAT_TIMEOUT_S
             if info.get("force_offline"):
                 alive = False
-            topology[wid] = {**info, "alive": alive}
             if not alive and info.get("status") not in ("dead", "offline"):
                 info["status"] = "dead"
+                info["dead_at"] = datetime.now().isoformat()
+                self._mark_inflight_tasks_for_worker(wid, error=f"worker_lost:{wid}")
+                state_changed = True
                 _try_emit_event("WORKER_DEAD", {"worker_id": wid})
+            topology[wid] = {**info, "alive": alive}
+        if state_changed:
+            self._persist_state()
         return topology
 
     # ── Worker selection (load balancing) ───────────────────────────────────
@@ -575,6 +635,7 @@ class MasterBrain:
 
     async def wait_for_task_result(self, task_id: str, timeout_s: Optional[float] = None) -> dict:
         """Wait for a distributed task to reach a terminal state."""
+        self._recover_incomplete_state(task_id=task_id)
         snapshot = self.get_task_status(task_id)
         if not snapshot:
             return {"success": False, "error": "unknown_task_id", "task_id": task_id}
@@ -589,24 +650,34 @@ class MasterBrain:
             result = await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout_s)
             return result if isinstance(result, dict) else self.get_task_status(task_id)
         except asyncio.TimeoutError:
-            timed_out = self._update_task_record(
-                task_id,
-                success=False,
-                error=f"task_result_timeout:{timeout_s}",
-                completion_state="result_pending_timeout",
-                result_pending_closure=True,
-                closure_complete=False,
-                task_outcome_known=False,
-            )
+            if self._task_deadline_expired(self._task_log.get(task_id, {})):
+                timed_out = self._mark_task_terminal(
+                    task_id,
+                    status=TaskStatus.TIMEOUT.value,
+                    completion_state="execution_timed_out",
+                    lifecycle_state="timed_out",
+                    error=f"task_result_timeout:{timeout_s}",
+                )
+            else:
+                timed_out = self._update_task_record(
+                    task_id,
+                    success=False,
+                    error=f"task_result_timeout:{timeout_s}",
+                    completion_state="result_pending_timeout",
+                    result_pending_closure=True,
+                    closure_complete=False,
+                    task_outcome_known=False,
+                )
             timed_out["error"] = f"task_result_timeout:{timeout_s}"
             return timed_out
 
     def get_task_status(self, task_id: str) -> Optional[dict]:
         """Return the current distributed execution snapshot for *task_id*."""
+        self._recover_incomplete_state(task_id=task_id)
         record = self._task_log.get(task_id)
         if record is None:
             return None
-        return {k: v for k, v in record.items() if not k.startswith("_")}
+        return self._public_task_record(record)
 
     # ── NATS callbacks ──────────────────────────────────────────────────────
 
@@ -657,6 +728,50 @@ class MasterBrain:
         except Exception as exc:
             logger.warning("MasterBrain: worker shutdown parse error — %s", exc)
 
+    async def _on_deadletter(self, data: dict) -> None:
+        payload = self._extract_deadletter_payload(data)
+        if payload is None:
+            logger.warning("MasterBrain: unrecognized dead-letter payload: %s", data)
+            return
+        task_id = str(payload.get("task_id") or "")
+        if not task_id:
+            logger.warning("MasterBrain: dead-letter payload missing task_id: %s", data)
+            return
+
+        original = payload.get("original") if isinstance(payload.get("original"), dict) else {}
+        worker_id = (
+            payload.get("worker_id")
+            or original.get("target_worker_id")
+            or original.get("target_device_id")
+            or ""
+        )
+        trace_id = (
+            payload.get("trace_id")
+            or (original.get("context") or {}).get("trace_id", "")
+            or original.get("trace_id", "")
+        )
+        reason = str(payload.get("reason") or "dead_lettered")
+        snapshot = self._mark_task_terminal(
+            task_id,
+            status=TaskStatus.TIMEOUT.value if reason == "timeout" else TaskStatus.FAILED.value,
+            completion_state="dead_lettered",
+            lifecycle_state="dead_lettered",
+            error=f"dead_letter:{reason}",
+            worker_id=worker_id,
+            trace_id=trace_id,
+            dead_lettered=True,
+            dead_letter_reason=reason,
+            dead_letter_payload=payload,
+            dead_lettered_at=datetime.now().isoformat(),
+            distributed_dispatch=True,
+        )
+        logger.warning(
+            "MasterBrain: task %s marked dead-lettered (reason=%s state=%s)",
+            task_id,
+            reason,
+            snapshot.get("completion_state"),
+        )
+
     @staticmethod
     def _extract_lifecycle_payload(
         data: dict,
@@ -689,6 +804,21 @@ class MasterBrain:
             nested = data[payload_key]
             if MasterBrain._has_required_lifecycle_fields(nested, direct_required_key=direct_required_key):
                 return nested
+        return None
+
+    @staticmethod
+    def _extract_deadletter_payload(data: dict) -> Optional[dict]:
+        """Extract task dead-letter payload from direct or wrapped envelopes."""
+        if not isinstance(data, dict):
+            return None
+        if data.get("task_id"):
+            return data
+        payload = data.get("payload")
+        if isinstance(payload, dict) and payload.get("task_id"):
+            return payload
+        deadletter = data.get("deadletter")
+        if isinstance(deadletter, dict) and deadletter.get("task_id"):
+            return deadletter
         return None
 
     @staticmethod
@@ -743,6 +873,22 @@ class MasterBrain:
         nats_publish_state: Optional[dict],
     ) -> dict:
         record = self._task_log.setdefault(task_id, self._default_task_record(task_id))
+        if dispatch_attempted and status == "dispatching":
+            record["_result_ids"] = set()
+            for reset_key in (
+                "started_at",
+                "completed_at",
+                "result",
+                "last_result_at",
+                "last_result_id",
+                "late_result",
+                "late_result_at",
+                "dead_letter_payload",
+                "dead_lettered_at",
+            ):
+                record.pop(reset_key, None)
+            record["dead_lettered"] = False
+            record["dead_letter_reason"] = ""
         record.update({
             "task_id": task_id,
             "worker_id": worker_id,
@@ -766,13 +912,15 @@ class MasterBrain:
         })
         record.setdefault("_result_ids", set())
         self._refresh_task_derived_fields(record)
+        self._persist_state()
         return record
 
     def _update_task_record(self, task_id: str, **updates: Any) -> dict:
         record = self._task_log.setdefault(task_id, self._default_task_record(task_id))
         record.update({k: v for k, v in updates.items() if v is not None})
         self._refresh_task_derived_fields(record)
-        return self.get_task_status(task_id) or {}
+        self._persist_state()
+        return self._public_task_record(record)
 
     @staticmethod
     def _default_task_record(task_id: str) -> dict:
@@ -796,6 +944,10 @@ class MasterBrain:
             "lifecycle_state": "",
             "nats_publish_state": None,
             "correlation_valid": True,
+            "dead_lettered": False,
+            "dead_letter_reason": "",
+            "timeout_s": 0.0,
+            "deadline_at": "",
             "_result_ids": set(),
         }
 
@@ -846,9 +998,9 @@ class MasterBrain:
         if status_value in (TaskStatus.FAILED.value, TaskStatus.LSP_FAILED.value):
             return "execution_failed", "failed", True, False
         if status_value == TaskStatus.TIMEOUT.value:
-            return "execution_failed", "timed_out", True, False
+            return "execution_timed_out", "timed_out", True, False
         if status_value == TaskStatus.CANCELLED.value:
-            return "execution_failed", "cancelled", True, False
+            return "execution_cancelled", "cancelled", True, False
         return "result_received_pending_closure", "waiting_remote", False, False
 
     @staticmethod
@@ -861,6 +1013,163 @@ class MasterBrain:
         if expected_trace_id and actual_trace_id and expected_trace_id != actual_trace_id:
             return f"result_trace_id_mismatch:{expected_trace_id}!={actual_trace_id}"
         return ""
+
+    def _mark_inflight_tasks_for_worker(self, worker_id: str, *, error: str) -> list[str]:
+        affected: list[str] = []
+        for task_id, record in list(self._task_log.items()):
+            if record.get("worker_id") != worker_id or record.get("closure_complete"):
+                continue
+            self._mark_task_terminal(
+                task_id,
+                status=TaskStatus.FAILED.value,
+                completion_state="execution_abandoned",
+                lifecycle_state="abandoned",
+                error=error,
+            )
+            affected.append(task_id)
+        return affected
+
+    def _mark_task_terminal(
+        self,
+        task_id: str,
+        *,
+        status: str,
+        completion_state: str,
+        lifecycle_state: str,
+        error: str,
+        worker_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        **extra_updates: Any,
+    ) -> dict:
+        record = self._task_log.setdefault(task_id, self._default_task_record(task_id))
+        updates = {
+            "status": status,
+            "completion_state": completion_state,
+            "lifecycle_state": lifecycle_state,
+            "success": False,
+            "error": error,
+            "closure_complete": True,
+            "task_outcome_known": True,
+            "result_pending_closure": False,
+            "completed_at": datetime.now().isoformat(),
+        }
+        if worker_id:
+            updates["worker_id"] = worker_id
+        if trace_id:
+            updates["trace_id"] = trace_id
+        updates.update(extra_updates)
+        snapshot = self._update_task_record(task_id, **updates)
+        waiter = self._task_waiters.get(task_id)
+        if waiter is not None and not waiter.done():
+            waiter.set_result(snapshot)
+        return snapshot
+
+    def _recover_incomplete_state(self, task_id: Optional[str] = None) -> None:
+        target_records = (
+            [(task_id, self._task_log[task_id])]
+            if task_id and task_id in self._task_log
+            else list(self._task_log.items())
+        )
+        state_changed = False
+        now_iso = datetime.now().isoformat()
+
+        for worker_id, info in self._workers.items():
+            alive = (time.time() - info.get("last_heartbeat", 0)) < _HEARTBEAT_TIMEOUT_S
+            if info.get("force_offline"):
+                alive = False
+            if not alive and info.get("status") not in ("dead", "offline"):
+                info["status"] = "dead"
+                info.setdefault("dead_at", now_iso)
+                self._mark_inflight_tasks_for_worker(worker_id, error=f"worker_lost:{worker_id}")
+                state_changed = True
+
+        for current_task_id, record in target_records:
+            if record.get("closure_complete"):
+                continue
+            if self._task_deadline_expired(record):
+                self._mark_task_terminal(
+                    current_task_id,
+                    status=TaskStatus.TIMEOUT.value,
+                    completion_state="execution_timed_out",
+                    lifecycle_state="timed_out",
+                    error=record.get("error") or "task_deadline_exceeded",
+                )
+                state_changed = True
+
+        if state_changed:
+            self._persist_state()
+
+    @staticmethod
+    def _task_deadline_expired(record: dict) -> bool:
+        deadline_at = record.get("deadline_at")
+        if not deadline_at:
+            return False
+        try:
+            return datetime.now() >= datetime.fromisoformat(deadline_at)
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _public_task_record(record: dict) -> dict:
+        return {k: v for k, v in record.items() if not k.startswith("_")}
+
+    def _persist_state(self) -> None:
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._state_path.with_suffix(self._state_path.suffix + ".tmp")
+            payload = {
+                "version": 1,
+                "saved_at": datetime.now().isoformat(),
+                "workers": self._workers,
+                "tasks": {
+                    task_id: self._serialize_task_record(record)
+                    for task_id, record in self._task_log.items()
+                },
+            }
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            tmp_path.replace(self._state_path)
+        except Exception as exc:
+            logger.warning("MasterBrain: failed to persist state to %s: %s", self._state_path, exc)
+
+    def _load_state(self) -> None:
+        if not self._state_path.exists():
+            return
+        try:
+            payload = json.loads(self._state_path.read_text(encoding="utf-8"))
+            workers = payload.get("workers")
+            tasks = payload.get("tasks")
+            if isinstance(workers, dict):
+                self._workers = {
+                    str(worker_id): dict(worker_state)
+                    for worker_id, worker_state in workers.items()
+                    if isinstance(worker_state, dict)
+                }
+            if isinstance(tasks, dict):
+                self._task_log = {
+                    str(task_id): self._deserialize_task_record(record)
+                    for task_id, record in tasks.items()
+                    if isinstance(record, dict)
+                }
+        except Exception as exc:
+            logger.warning("MasterBrain: failed to load persisted state from %s: %s", self._state_path, exc)
+
+    @staticmethod
+    def _serialize_task_record(record: dict) -> dict:
+        serialized = dict(record)
+        result_ids = serialized.get("_result_ids")
+        if isinstance(result_ids, set):
+            serialized["_result_ids"] = sorted(result_ids)
+        return serialized
+
+    @staticmethod
+    def _deserialize_task_record(record: dict) -> dict:
+        restored = dict(record)
+        result_ids = restored.get("_result_ids")
+        if isinstance(result_ids, list):
+            restored["_result_ids"] = set(result_ids)
+        else:
+            restored["_result_ids"] = set()
+        return restored
 
 
 # ── Module-level singleton (constraint C1 — lazy, depends on env) ──────────

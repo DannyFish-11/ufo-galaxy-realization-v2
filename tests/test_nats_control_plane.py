@@ -52,6 +52,7 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.subscribe_task_results = AsyncMock(return_value={"success": True})
     bus.subscribe_worker_registrations = AsyncMock(return_value={"success": True})
     bus.subscribe_worker_shutdowns = AsyncMock(return_value={"success": True})
+    bus.subscribe_task_deadletters = AsyncMock(return_value={"success": True})
     bus.connect = AsyncMock(return_value={"success": True})
     bus.disconnect = AsyncMock(return_value={"success": True})
     return bus
@@ -118,7 +119,7 @@ class TestGatewayNATSAdapter:
         adapter = GatewayNATSAdapter(task_timeout=5.0)
 
         # Patch device routing to immediately return success
-        async def _fast_forward(task_id, target, task_type, payload):
+        async def _fast_forward(task_id, target, task_type, payload, **_kwargs):
             return {"success": True, "data": "device_output"}
 
         adapter._forward_to_device = _fast_forward
@@ -149,7 +150,7 @@ class TestGatewayNATSAdapter:
         mock_bus = _make_mock_nats_bus(connected=True)
         adapter = GatewayNATSAdapter(task_timeout=0.01, max_retries=0)
 
-        async def _slow_forward(task_id, target, task_type, payload):
+        async def _slow_forward(task_id, target, task_type, payload, **_kwargs):
             await asyncio.sleep(10)  # simulate timeout
             return {}
 
@@ -739,6 +740,7 @@ class TestNATSConnected:
         mock_bus.subscribe_task_results.assert_awaited_once()
         mock_bus.subscribe_worker_registrations.assert_awaited_once()
         mock_bus.subscribe_worker_shutdowns.assert_awaited_once()
+        mock_bus.subscribe_task_deadletters.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_nats_bus_stats_reflect_connected_state(self):
@@ -874,6 +876,176 @@ class TestNATSConnected:
         assert topology["worker-down-02"]["shutdown_reason"] == "maintenance"
         assert topology["worker-down-02"]["drain_timeout_s"] == 15
         assert topology["worker-down-02"]["alive"] is False
+
+    @pytest.mark.asyncio
+    async def test_master_brain_worker_shutdown_abandons_inflight_task(self, tmp_path):
+        """Explicit worker shutdown closes in-flight distributed work as abandoned."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskType,
+            WorkerRegistrationModel,
+            WorkerShutdownModel,
+        )
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 13})
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        await brain.register_worker(WorkerRegistrationModel(worker_id="worker-shutdown-01", device_type="linux"))
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage8-shutdown-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-shutdown-01",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-shutdown-01"),
+                context={"trace_id": "trace-stage8-shutdown"},
+                timeout_ms=5_000,
+            ),
+        })
+
+        await brain.dispatch_task({"task_id": "stage8-shutdown-01", "wait_for_completion": False})
+        shutdown_result = await brain.handle_worker_shutdown(
+            WorkerShutdownModel(worker_id="worker-shutdown-01", reason="maintenance", drain_timeout_s=15)
+        )
+        observed = brain.get_task_status("stage8-shutdown-01")
+
+        assert shutdown_result.get("success") is True
+        assert shutdown_result.get("affected_tasks") == ["stage8-shutdown-01"]
+        assert observed is not None
+        assert observed.get("closure_complete") is True
+        assert observed.get("task_outcome_known") is True
+        assert observed.get("completion_state") == "execution_abandoned"
+        assert observed.get("lifecycle_state") == "abandoned"
+        assert observed.get("error") == "worker_shutdown:maintenance"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_recovers_persisted_task_and_worker_state(self, tmp_path):
+        """Persisted distributed state survives MasterBrain process replacement."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskResultModel,
+            TaskStatus,
+            TaskType,
+            TimestampModel,
+            WorkerRegistrationModel,
+        )
+
+        state_path = tmp_path / "brain-state.json"
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 14})
+        brain = MasterBrain(nats=mock_bus, state_path=state_path)
+        await brain.register_worker(WorkerRegistrationModel(worker_id="worker-recover-01", device_type="linux"))
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage8-recover-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-recover-01",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-recover-01"),
+                context={"trace_id": "trace-stage8-recover"},
+                timeout_ms=5_000,
+            ),
+        })
+
+        await brain.dispatch_task({"task_id": "stage8-recover-01", "wait_for_completion": False})
+        await brain.handle_task_result(TaskResultModel(
+            task_id="stage8-recover-01",
+            worker_id="worker-recover-01",
+            status=TaskStatus.RUNNING,
+            started_at=TimestampModel(seconds=10, nanos=0),
+            metadata={"trace_id": "trace-stage8-recover", "result_id": "res-stage8-running"},
+        ))
+
+        recovered = MasterBrain(nats=mock_bus, state_path=state_path)
+        topology = recovered.get_worker_topology()
+        observed = recovered.get_task_status("stage8-recover-01")
+
+        assert "worker-recover-01" in topology
+        assert topology["worker-recover-01"]["device_type"] == "linux"
+        assert observed is not None
+        assert observed.get("worker_id") == "worker-recover-01"
+        assert observed.get("completion_state") == "execution_started"
+        assert observed.get("closure_complete") is False
+        assert observed.get("result_received") is True
+
+    @pytest.mark.asyncio
+    async def test_master_brain_reconciles_overdue_task_after_restart(self, tmp_path):
+        """Persisted in-flight work is marked timed out when its deadline has already expired."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import DeviceCommandPayloadModel, TaskDispatchModel, TaskType
+
+        state_path = tmp_path / "brain-state.json"
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 15})
+        brain = MasterBrain(nats=mock_bus, state_path=state_path)
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage8-timeout-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-timeout-01",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-timeout-01"),
+                context={"trace_id": "trace-stage8-timeout"},
+                timeout_ms=10,
+            ),
+        })
+
+        await brain.dispatch_task({"task_id": "stage8-timeout-01", "wait_for_completion": False})
+        await asyncio.sleep(0.15)
+
+        recovered = MasterBrain(nats=mock_bus, state_path=state_path)
+        observed = recovered.get_task_status("stage8-timeout-01")
+
+        assert observed is not None
+        assert observed.get("status") == "timeout"
+        assert observed.get("completion_state") == "execution_timed_out"
+        assert observed.get("closure_complete") is True
+        assert observed.get("task_outcome_known") is True
+
+    @pytest.mark.asyncio
+    async def test_master_brain_deadletter_consumption_marks_terminal_failure(self, tmp_path):
+        """Dead-letter messages are consumed as a real recovery path for unresolved work."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import DeviceCommandPayloadModel, TaskDispatchModel, TaskType
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 16})
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage8-dlq-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_worker_id="worker-dlq-01",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-dlq-01"),
+                context={"trace_id": "trace-stage8-dlq"},
+                timeout_ms=5_000,
+            ),
+        })
+
+        await brain.dispatch_task({"task_id": "stage8-dlq-01", "wait_for_completion": False})
+        waiter = asyncio.create_task(brain.wait_for_task_result("stage8-dlq-01", timeout_s=1.0))
+        await asyncio.sleep(0)
+        await brain._on_deadletter({
+            "task_id": "stage8-dlq-01",
+            "reason": "timeout",
+            "original": {
+                "target_worker_id": "worker-dlq-01",
+                "context": {"trace_id": "trace-stage8-dlq"},
+            },
+        })
+        observed = await waiter
+
+        assert observed.get("status") == "timeout"
+        assert observed.get("completion_state") == "dead_lettered"
+        assert observed.get("closure_complete") is True
+        assert observed.get("task_outcome_known") is True
+        assert observed.get("dead_lettered") is True
+        assert observed.get("dead_letter_reason") == "timeout"
 
     @pytest.mark.asyncio
     async def test_master_brain_dispatch_rejects_noop_publish_success(self):
@@ -1239,7 +1411,7 @@ class TestPR3NATSEnvelopeAlignment:
 
         received = {}
 
-        async def _capture_forward(task_id, target, task_type, payload):
+        async def _capture_forward(task_id, target, task_type, payload, **_kwargs):
             received["task_id"] = task_id
             received["target"] = target
             received["tool_name"] = task_type
@@ -1280,7 +1452,7 @@ class TestPR3NATSEnvelopeAlignment:
 
         received = {}
 
-        async def _capture_forward(task_id, target, task_type, payload):
+        async def _capture_forward(task_id, target, task_type, payload, **_kwargs):
             received["task_id"] = task_id
             received["target"] = target
             return {"success": True}
