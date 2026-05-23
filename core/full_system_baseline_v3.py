@@ -783,6 +783,7 @@ class FullSystemBaselineV3Evaluator:
                         report.to_dict() if hasattr(report, "to_dict") else dict(getattr(report, "__dict__", {}))
                     )
                 except Exception as exc:  # noqa: BLE001
+                    logger.debug("V3Baseline: readiness gate probe failed: %s", exc)
                     readiness_report = {"probe_error": str(exc)}
         readiness_gaps = readiness_report.get("gaps", [])
         grounding.update(
@@ -1302,6 +1303,7 @@ class FullSystemBaselineV3Evaluator:
 
     @staticmethod
     def _text_signals_cross_repo_gap(value: Any) -> bool:
+        """Return True when *value* text points at a cross-repo evidence gap."""
         normalized = str(value or "").lower()
         return any(
             token in normalized

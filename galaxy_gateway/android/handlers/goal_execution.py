@@ -1061,9 +1061,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
                     return
             else:
                 message["_cross_repo_schema_version_gate"] = _ger_gate_evidence
-            if _ger_gate_decision.action == "reject":
-                pass
-            elif _ger_gate_decision.action == "degrade":
+            if _ger_gate_decision.action == "degrade":
                 logger.warning(
                     "handle_goal_execution_result: schema/version gate DEGRADED ingress "
                     "reason=%s observed_schema=%r task_id=%r device_id=%r "
