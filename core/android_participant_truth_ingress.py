@@ -651,6 +651,14 @@ def _extract_str(
 
 
 def _extract_schema_gate_evidence(message: Dict[str, Any]) -> Dict[str, Any]:
+    """Return stamped cross-repo schema gate evidence from the richest known location.
+
+    Precedence is top-level internal stamping first (``_cross_repo_schema_version_gate``),
+    then response-style top-level aliasing (``schema_version_gate``), then the same keys
+    inside ``payload`` for callers that forwarded a nested envelope. This keeps degraded
+    compat evidence attached even when messages cross handler, bridge, and wrapper
+    boundaries before entering canonical participant truth ingress.
+    """
     payload = message.get("payload")
     payload_mapping = payload if isinstance(payload, dict) else {}
     for candidate in (

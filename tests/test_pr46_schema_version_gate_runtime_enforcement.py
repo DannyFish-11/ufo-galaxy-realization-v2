@@ -360,9 +360,19 @@ class TestTaskResultGateEnforcement:
             truth_chain_called.append(True)
             return MagicMock(is_truth_chain_complete=True)
 
-        with patch(
-            "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
-            _fake_truth_chain,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.task_lifecycle._run_task_result_truth_chain",
+                _fake_truth_chain,
+            ),
+            patch(
+                "core.durable_result_idempotency.check_result_idempotency",
+                return_value=False,
+            ),
+            patch(
+                "core.durable_result_idempotency.record_result_idempotency",
+                return_value=None,
+            ),
         ):
             self._run(handle_task_result(bridge, _make_websocket(), message))
 

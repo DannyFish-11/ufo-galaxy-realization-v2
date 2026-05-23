@@ -220,6 +220,8 @@ _LEGACY_SAFE_RESULT_COMPAT_MESSAGE_TYPES: FrozenSet[str] = frozenset(
 
 _LEGACY_SAFE_RESULT_STATUS_VALUES: FrozenSet[str] = frozenset(
     {
+        # Accept both spellings because Android/runtime surfaces have emitted both
+        # variants historically and this compat path is intentionally narrow.
         "cancelled",
         "canceled",
         "completed",
@@ -339,7 +341,7 @@ def _to_int_or_none(raw: str) -> Optional[int]:
 def _build_legacy_safe_result_identity(
     normalized_type: str,
     message: Mapping[str, Any],
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     payload = message.get("payload")
     payload_mapping = payload if isinstance(payload, Mapping) else {}
     raw_task_id = _extract_text_field(message, "task_id", "goal_id")
@@ -352,7 +354,7 @@ def _build_legacy_safe_result_identity(
         "status": normalized_status,
         "device_id": _extract_text_field(message, "device_id"),
         "trace_id": _extract_text_field(message, "trace_id"),
-        "payload_present": "true" if isinstance(payload_mapping, Mapping) else "false",
+        "payload_present": isinstance(payload_mapping, Mapping),
     }
 
 
