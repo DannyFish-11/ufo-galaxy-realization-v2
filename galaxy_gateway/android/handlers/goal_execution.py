@@ -271,6 +271,28 @@ def _determine_result_lineage_quality(payload: Dict[str, Any], status: str) -> s
     return _LINEAGE_QUALITY_CANONICAL_SUCCESS
 
 
+def _first_present_value(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_optional_int(value: Any) -> Optional[int]:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _downgrade_lineage_quality_if_canonical(result_lineage: Dict[str, Any]) -> None:
+    if result_lineage.get("lineage_quality") in (
+        _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
+        _LINEAGE_QUALITY_CANONICAL_SUCCESS,
+    ):
+        result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+
+
 def _evaluate_main_chain_ingress(
     *,
     task_id: str,
@@ -1025,38 +1047,27 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
         or ""
     )
     durable_session_id = payload.get("durable_session_id") or message.get("durable_session_id") or ""
-    _raw_session_epoch = (
-        payload.get("continuity_epoch")
-        if payload.get("continuity_epoch") is not None
-        else message.get("continuity_epoch")
+    _raw_session_epoch = _first_present_value(
+        payload.get("continuity_epoch"),
+        message.get("continuity_epoch"),
+        payload.get("session_epoch"),
+        message.get("session_epoch"),
     )
-    if _raw_session_epoch is None:
-        _payload_session_epoch = payload.get("session_epoch")
-        _raw_session_epoch = _payload_session_epoch if _payload_session_epoch is not None else message.get(
-            "session_epoch"
-        )
-    try:
-        session_epoch = int(_raw_session_epoch) if _raw_session_epoch is not None else None
-    except (TypeError, ValueError):
-        session_epoch = None
+    session_epoch = _normalize_optional_int(_raw_session_epoch)
     is_stale_delivery = bool(
         payload.get("is_stale", False) or message.get("is_stale", False) or payload.get("stale", False)
     )
     stale_reason = str(payload.get("stale_reason") or message.get("stale_reason") or "")
-    _raw_replay_seq = (
-        payload.get("replay_seq")
-        if payload.get("replay_seq") is not None
-        else payload.get("replay_sequence")
+    _raw_replay_seq = _first_present_value(
+        payload.get("replay_seq"),
+        payload.get("replay_sequence"),
+        message.get("replay_seq"),
+        message.get("replay_sequence"),
     )
-    if _raw_replay_seq is None:
-        _message_replay_seq = message.get("replay_seq")
-        _raw_replay_seq = _message_replay_seq if _message_replay_seq is not None else message.get(
-            "replay_sequence"
-        )
-    try:
-        replay_seq = int(_raw_replay_seq) if _raw_replay_seq is not None else None
-    except (TypeError, ValueError):
-        replay_seq = None
+    replay_seq = _normalize_optional_int(_raw_replay_seq)
+    # ``queue_item_id`` is a legacy Android offline-queue alias for the newer
+    # canonical ``replay_item_id`` field. Accept both so replayed terminal
+    # deliveries still carry queue identity into UnifiedResultIngress.
     replay_item_id = str(
         payload.get("replay_item_id")
         or message.get("replay_item_id")
@@ -1443,11 +1454,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             result_lineage["closure_lineage"] = "unified_ingress_duplicate_terminal"
             result_lineage["audit_lineage"] = "unified_ingress_duplicate_terminal"
             result_lineage["reconciliation_acknowledged"] = True
-            if result_lineage.get("lineage_quality") in (
-                _LINEAGE_QUALITY_CANONICAL_CANDIDATE,
-                _LINEAGE_QUALITY_CANONICAL_SUCCESS,
-            ):
-                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+            _downgrade_lineage_quality_if_canonical(result_lineage)
             _canonical_completed, _mature_closure = _derive_canonical_closure_flags(
                 is_fully_closed=getattr(_ger_ingress_outcome, "is_fully_closed", False),
                 truth_chain_complete=getattr(_ger_ingress_outcome, "truth_chain_complete", False),
@@ -1503,8 +1510,7 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
             elif getattr(_ger_ingress_outcome, "completion_disposition", "") == "stale_rejected":
                 result_lineage["closure_lineage"] = "unified_ingress_stale_terminal"
                 result_lineage["audit_lineage"] = "unified_ingress_stale_terminal"
-            if result_lineage.get("lineage_quality") == _LINEAGE_QUALITY_CANONICAL_SUCCESS:
-                result_lineage["lineage_quality"] = _LINEAGE_QUALITY_DEGRADED_SUCCESS
+            _downgrade_lineage_quality_if_canonical(result_lineage)
             result_lineage["reconciliation_acknowledged"] = bool(
                 getattr(_ger_ingress_outcome, "truth_chain_complete", False)
             )

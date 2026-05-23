@@ -1031,7 +1031,7 @@ class UnifiedResultIngress:
                 parts.append(f"dedupe_contract:{outcome.dedupe_contract_reason or outcome.dedupe_contract_action}")
             if closure_grade_blocked:
                 parts.append(
-                    "closure_grade_ineligible:"
+                    f"closure_grade_ineligible:"
                     f"{outcome.closure_grade_ineligible_reason or outcome.android_payload_grade or 'unclassified'}"
                 )
             outcome.incomplete_reason = "; ".join(parts) if parts else "unknown"
