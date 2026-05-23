@@ -388,13 +388,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      ANDROID_REPO_FULL_NAME: ${{ vars.ANDROID_REPO_FULL_NAME || 'DannyFish-11/ufo-galaxy-android' }}
     steps:
       - name: Checkout V2 repository
         uses: actions/checkout@v4
       - name: Checkout Android repository snapshot
         uses: actions/checkout@v4
         with:
-          repository: DannyFish-11/ufo-galaxy-android
+          repository: ${{ env.ANDROID_REPO_FULL_NAME }}
           path: android_repo
       - uses: actions/setup-python@v5
         with:

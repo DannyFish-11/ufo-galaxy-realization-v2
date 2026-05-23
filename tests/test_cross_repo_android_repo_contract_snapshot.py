@@ -31,6 +31,9 @@ def _read_android_file(relative_path: str) -> str:
 
 
 def _extract_android_msg_type_wire_values(aip_models_source: str) -> set[str]:
+    # Keep this extraction scoped to the stable MsgType enum shape used in
+    # app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt:
+    # enum class MsgType(val value: String) { ... }
     enum_match = re.search(
         r"enum class MsgType\(val value: String\)\s*\{(.*?)\n\}",
         aip_models_source,

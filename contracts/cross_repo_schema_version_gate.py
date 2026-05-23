@@ -549,7 +549,7 @@ def verify_cross_repo_schema_gate(
     else:
         missing_contract = sorted(k for k in REQUIRED_TRUTH_ACCEPTANCE_CONTRACT_FIELDS if k not in contract)
         if missing_contract:
-            issues.append("truth_acceptance_closure_contract is missing required fields: " f"{missing_contract}.")
+            issues.append(f"truth_acceptance_closure_contract is missing required fields: {missing_contract}.")
 
         acceptance = contract.get("acceptance_closure_truth")
         if isinstance(acceptance, Mapping):
@@ -560,10 +560,7 @@ def verify_cross_repo_schema_gate(
                 k for k in REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS if k not in acceptance
             )
             if missing_acceptance_semantics:
-                issues.append(
-                    "acceptance_closure_truth is missing required semantic fields: "
-                    f"{missing_acceptance_semantics}."
-                )
+                issues.append(f"acceptance_closure_truth is missing required semantic fields: {missing_acceptance_semantics}.")
         else:
             issues.append("acceptance_closure_truth must be a mapping.")
 
