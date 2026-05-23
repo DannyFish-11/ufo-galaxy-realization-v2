@@ -782,7 +782,7 @@ class TaskGraphRuntime:
         trace_id: str = "",
         session_id: str = "",
         device_id: str = "",
-        contributor: "WorkflowContributorKind" = None,
+        contributor: Optional[WorkflowContributorKind] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> GraphNode:
         """Convenience wrapper: build a ``GraphNode`` from raw fields and register it.

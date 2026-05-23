@@ -201,14 +201,19 @@ class WakeRouter:
                     device_info.get("last_message", 0),
                 )
                 _elapsed = _now - _last_active
-                # Map recency → approximate latency (ms) for the engine's
-                # latency_score: devices unseen for >60 s get a high penalty.
+                # Map device recency (seconds since last seen) to a synthetic
+                # ping latency in milliseconds for DeviceScoringEngine.
+                # Scale factor 10×: 1 second idle ≈ 10 ms latency proxy, so a
+                # device silent for 200 s hits the 2 000 ms ceiling and scores 0.
                 _synthetic_ping_ms = min(_elapsed * 10.0, 2000.0)
-                # Map screen_on + last_interaction → load proxy (lower is better).
+                # Map screen_on + last_interaction to a synthetic load proxy.
+                # Screen-on devices are assumed less loaded (−30 pp).
+                # Devices with a very recent interaction (within 30 s) get up to
+                # an additional −50 pp, proportional to how recent the interaction
+                # was.  Combined floor is 0 (minimum synthetic load).
                 _screen_on = device_info.get("screen_on", False)
                 _last_interaction = device_info.get("last_interaction", 0)
                 _interaction_recency = max(0.0, 30.0 - (_now - _last_interaction)) if _last_interaction > 0 else 0.0
-                # Devices that are active and have recent interaction get lower load.
                 _load_pct = max(0.0, 100.0 - (_interaction_recency / 30.0) * 50.0 - (30.0 if _screen_on else 0.0))
 
                 _candidates.append(

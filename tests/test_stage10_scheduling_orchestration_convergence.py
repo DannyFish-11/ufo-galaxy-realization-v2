@@ -97,15 +97,22 @@ class TestTaskGraphRuntimeRegisterNodeRaw(unittest.TestCase):
         self.assertEqual(node.tool_name, "wake_route")
         self.assertEqual(node.device_id, "dev_x")
         self.assertEqual(node.trace_id, "trace_abc")
+        # Newly registered nodes should start in QUEUED state
+        try:
+            from core.task_graph_runtime import GraphNodeState
+            self.assertEqual(node.state, GraphNodeState.QUEUED)
+        except ImportError:
+            pass
 
     def test_register_node_raw_is_idempotent(self):
         rt = self._get_runtime()
         node1 = rt.register_node_raw(task_id="test_raw_idem", tool_name="tool_a")
         node2 = rt.register_node_raw(task_id="test_raw_idem", tool_name="tool_b")
-        # Should return the same node (first registration wins)
+        # Both calls should refer to the same task_id
         self.assertEqual(node1.task_id, node2.task_id)
         # Second call should not overwrite the first registration
         self.assertEqual(node1.tool_name, "tool_a")
+        self.assertEqual(node2.tool_name, "tool_a")
 
     def test_register_node_raw_node_tracked_in_runtime(self):
         rt = self._get_runtime()
