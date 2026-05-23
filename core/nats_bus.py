@@ -540,6 +540,11 @@ class NATSBus:
             durable="brain-worker-shutdown",
         )
 
+    async def subscribe_task_deadletters(self, callback: Callable) -> dict:
+        """Subscribe to task dead-letter messages."""
+        subject = os.environ.get("GALAXY_GW_ADAPTER_DLQ_SUBJECT", "galaxy.tasks.deadletter")
+        return await self._subscribe(subject, callback, durable="brain-task-deadletter")
+
     async def subscribe_events(self, event_type: str, callback: Callable) -> dict:
         """Subscribe to events of a specific type."""
         subject = f"galaxy.events.{event_type}" if event_type != "*" else "galaxy.events.>"
