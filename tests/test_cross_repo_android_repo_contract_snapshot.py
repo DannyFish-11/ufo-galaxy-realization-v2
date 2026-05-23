@@ -34,6 +34,8 @@ def _extract_android_msg_type_wire_values(aip_models_source: str) -> set[str]:
     # Keep this extraction scoped to the stable MsgType enum shape used in
     # app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt:
     # enum class MsgType(val value: String) { ... }
+    # If Android changes MsgType declaration syntax materially, update this
+    # parser together with the cross-repo compatibility tests.
     enum_match = re.search(
         r"enum class MsgType\(val value: String\)\s*\{(.*?)\}",
         aip_models_source,
@@ -58,10 +60,15 @@ def test_android_schema_and_dedupe_tokens_for_v2_contract_are_present() -> None:
     aip_models_source = _read_android_file("app/src/main/java/com/ufo/galaxy/protocol/AipModels.kt")
     msg_type_values = _extract_android_msg_type_wire_values(aip_models_source)
     kotlin_paths = list(root.rglob("*.kt"))
+    file_cache: dict[Path, str] = {}
 
     def _contains_token(token: str) -> bool:
         for path in kotlin_paths:
-            if token in path.read_text(encoding="utf-8"):
+            content = file_cache.get(path)
+            if content is None:
+                content = path.read_text(encoding="utf-8")
+                file_cache[path] = content
+            if token in content:
                 return True
         return False
 

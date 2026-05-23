@@ -531,9 +531,13 @@ def verify_cross_repo_schema_gate(
     if not isinstance(shared_visibility, Mapping):
         issues.append("shared_execution_visibility must be a mapping.")
     else:
-        missing_shared_visibility = sorted(k for k in REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS if k not in shared_visibility)
-        if missing_shared_visibility:
-            issues.append(f"shared_execution_visibility is missing required fields: {missing_shared_visibility}.")
+        missing_shared_visibility_fields = sorted(
+            k for k in REQUIRED_SHARED_EXECUTION_VISIBILITY_FIELDS if k not in shared_visibility
+        )
+        if missing_shared_visibility_fields:
+            issues.append(
+                f"shared_execution_visibility is missing required fields: {missing_shared_visibility_fields}."
+            )
 
     participation_truth = payload.get("participation_truth_consumption")
     if not isinstance(participation_truth, Mapping):
