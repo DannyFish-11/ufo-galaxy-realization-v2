@@ -253,10 +253,10 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	running.StartedAt = startedAt
 	w.publishResult(task.TaskID, running)
 
-	// Keep a separate result object for terminal publication so the already-published
-	// running update is not mutated when execution_output/error fields, the terminal
-	// status, and the final result_id are attached for the closing publish.
-	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, "running")
+	// Keep a separate base result object for the closing publish so the
+	// already-published running update is not mutated when execution_output/error
+	// fields, the terminal status, and the final result_id are attached.
+	result := executor.NewTaskResult(task.TaskID, w.cfg.WorkerID, "")
 	result.StartedAt = startedAt
 
 	// Step 1: LSP check (if required and code payload present)

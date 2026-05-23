@@ -194,7 +194,8 @@ class MasterBrain:
                 return {"success": False, "error": "No available worker for device type: " + task.target_device_type}
             task.target_worker_id = target
 
-        trace_id = task.context.get("trace_id") or raw_task.get("trace_id", "")
+        task_trace_id = task.context.get("trace_id")
+        trace_id = raw_task.get("trace_id", "") if task_trace_id in (None, "") else task_trace_id
         wait_for_completion = bool(raw_task.get("wait_for_completion", True))
         timeout_s = self._resolve_task_timeout_s(raw_task, task)
         record = self._upsert_task_record(
@@ -581,8 +582,8 @@ class MasterBrain:
 
         waiter = self._ensure_task_waiter(task_id)
         try:
-            # Keep the shared waiter alive when an individual caller times out so
-            # later callers can still observe the eventual distributed result.
+            # shield() prevents wait_for() from cancelling the shared waiter on
+            # timeout so later callers can still observe the eventual result.
             result = await asyncio.wait_for(asyncio.shield(waiter), timeout=timeout_s)
             return result if isinstance(result, dict) else self.get_task_status(task_id)
         except asyncio.TimeoutError:
@@ -762,13 +763,13 @@ class MasterBrain:
             "correlation_valid": True,
         })
         record.setdefault("_result_ids", set())
-        record["result_pending_closure"] = self._derive_result_pending_closure(record)
+        self._refresh_task_derived_fields(record)
         return record
 
     def _update_task_record(self, task_id: str, **updates: Any) -> dict:
         record = self._task_log.setdefault(task_id, self._default_task_record(task_id))
         record.update({k: v for k, v in updates.items() if v is not None})
-        record["result_pending_closure"] = self._derive_result_pending_closure(record)
+        self._refresh_task_derived_fields(record)
         return self.get_task_status(task_id) or {}
 
     @staticmethod
@@ -799,6 +800,10 @@ class MasterBrain:
     @staticmethod
     def _derive_result_pending_closure(record: dict) -> bool:
         return bool(record.get("result_received")) and not bool(record.get("closure_complete"))
+
+    @classmethod
+    def _refresh_task_derived_fields(cls, record: dict) -> None:
+        record["result_pending_closure"] = cls._derive_result_pending_closure(record)
 
     @staticmethod
     def _resolve_task_timeout_s(raw_task: dict, task: TaskDispatchModel) -> float:
