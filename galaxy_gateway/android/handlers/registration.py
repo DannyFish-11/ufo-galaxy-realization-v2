@@ -411,6 +411,121 @@ def _extract_durable_continuity_fields(message: Dict[str, Any]) -> tuple:
     return durable_session_id, continuity_epoch
 
 
+def _evaluate_conversation_continuity_runtime_gate(
+    *,
+    message: Dict[str, Any],
+    reconnect_outcome: str,
+    runtime_attachment_session_id: str,
+    registry_entry: Any,
+    registration_gaps: List[str],
+) -> Dict[str, Any]:
+    """Evaluate conversation continuity and optionally gate reconnect resume."""
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+    signal_keys = (
+        "conversation_session_id",
+        "session_confirmed",
+        "history_visible",
+        "state_present",
+        "rebind_completed",
+        "task_continuity_ok",
+        "process_death_observed",
+        "partial_recovery_only",
+    )
+    signal_present = any((message.get(k) is not None) or (payload.get(k) is not None) for k in signal_keys)
+    if not signal_present:
+        return {
+            "applied": False,
+            "continuity_outcome": reconnect_outcome,
+            "verdict": None,
+        }
+
+    try:
+        from core.conversation_continuity_truth import (
+            ConversationContinuityClass,
+            ConversationContinuityEvidence,
+            build_conversation_continuity_verdict,
+        )
+
+        conversation_session_id = str(
+            message.get("conversation_session_id")
+            or payload.get("conversation_session_id")
+            or message.get("session_id")
+            or ""
+        ).strip()
+
+        history_visible = bool(message.get("history_visible", payload.get("history_visible", False)))
+        if not history_visible and conversation_session_id:
+            try:
+                from core.session_manager import get_session_manager
+
+                session = get_session_manager().get_session(conversation_session_id)
+                history_visible = bool(session and getattr(session, "history", []))
+            except Exception:
+                history_visible = False
+
+        evidence = ConversationContinuityEvidence(
+            session_confirmed=bool(
+                message.get("session_confirmed", payload.get("session_confirmed", False))
+            ) or (
+                reconnect_outcome == "continuity_resume" and registry_entry is not None
+            ),
+            history_visible=history_visible,
+            state_present=bool(
+                message.get("state_present", payload.get("state_present", False))
+            ) or (
+                reconnect_outcome == "continuity_resume" or registry_entry is not None
+            ),
+            rebind_completed=bool(
+                message.get("rebind_completed", payload.get("rebind_completed", False))
+            ) or (
+                reconnect_outcome == "continuity_resume"
+                and bool(runtime_attachment_session_id)
+            ),
+            task_continuity_ok=bool(
+                message.get("task_continuity_ok", payload.get("task_continuity_ok", False))
+            ),
+            process_death_observed=bool(
+                message.get("process_death_observed", payload.get("process_death_observed", False))
+            ),
+            partial_recovery_only=bool(
+                message.get("partial_recovery_only", payload.get("partial_recovery_only", False))
+            ) or bool(registration_gaps),
+            conversation_session_id=conversation_session_id,
+            evaluated_context="android_device_register",
+        )
+        verdict = build_conversation_continuity_verdict(evidence)
+        effective_outcome = reconnect_outcome
+        if (
+            reconnect_outcome == "continuity_resume"
+            and verdict.continuity_class
+            in {
+                ConversationContinuityClass.continuity_lost,
+                ConversationContinuityClass.state_restored_rebind_required,
+            }
+        ):
+            effective_outcome = "new_attachment"
+
+        return {
+            "applied": True,
+            "continuity_outcome": effective_outcome,
+            "verdict": verdict.to_dict(),
+            "evidence": evidence.to_dict(),
+            "outcome_overridden": effective_outcome != reconnect_outcome,
+        }
+    except Exception as exc:
+        logger.debug(
+            "conversation continuity runtime gate unavailable: device_id=%s error=%s",
+            message.get("device_id"),
+            exc,
+        )
+        return {
+            "applied": False,
+            "continuity_outcome": reconnect_outcome,
+            "verdict": None,
+            "error": str(exc),
+        }
+
+
 def _normalize_assimilation_capabilities(raw_capabilities: Any) -> List[str]:
     """Normalize Android capability payloads into canonical capability names."""
     if raw_capabilities is None:
@@ -976,6 +1091,17 @@ async def handle_device_register(
                 device_id, _gaps,
             )
 
+        _conversation_continuity = _evaluate_conversation_continuity_runtime_gate(
+            message=message,
+            reconnect_outcome=_reconnect_outcome,
+            runtime_attachment_session_id=inbound_attachment_id,
+            registry_entry=_reg_entry,
+            registration_gaps=_gaps,
+        )
+        _reconnect_outcome = str(
+            _conversation_continuity.get("continuity_outcome", _reconnect_outcome)
+        )
+
         _recovery_replay_buffered_count = 0
         _recovery_replay_scheduled = False
         if _reconnect_outcome == "continuity_resume":
@@ -1014,6 +1140,15 @@ async def handle_device_register(
         # new attachment ("new_attachment").  This is the server-side canonical
         # answer to "is this a reconnect or a brand-new connection?".
         ack["continuity_outcome"] = _reconnect_outcome
+        if _conversation_continuity.get("applied"):
+            ack["conversation_continuity_runtime_gate"] = {
+                "applied": True,
+                "outcome_overridden": bool(
+                    _conversation_continuity.get("outcome_overridden")
+                ),
+                "evidence": _conversation_continuity.get("evidence") or {},
+                "verdict": _conversation_continuity.get("verdict") or {},
+            }
         ack["source_runtime_posture"] = _inbound_runtime_posture
         # ``_reg_entry`` is produced by guarded registry calls above; keep this
         # defensive lookup so ack construction still degrades safely if a

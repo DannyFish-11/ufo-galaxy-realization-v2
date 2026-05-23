@@ -171,6 +171,41 @@ class TestReconnectPendingLifecycleClosure:
         assert record.metadata["reconnect_lifecycle_decision"] == "resume_existing_execution"
 
     @pytest.mark.asyncio
+    async def test_process_death_signal_downgrades_resume_to_new_attachment(self) -> None:
+        from core.attached_runtime_session_registry import register_session
+        from galaxy_gateway.android_bridge import AndroidBridge
+
+        device_id = "reconnect-process-death-dev"
+        attachment_id = "attach-process-death-1"
+        register_session(
+            device_id,
+            posture="join_runtime",
+            runtime_attachment_session_id=attachment_id,
+        )
+        _inject_pending_record(
+            task_id="process-death-task",
+            device_id=device_id,
+            owner="device_dispatch",
+        )
+
+        bridge = AndroidBridge()
+        ack = await bridge._handle_device_register(
+            _make_websocket(),
+            _make_registration_message(
+                device_id,
+                runtime_attachment_session_id=attachment_id,
+                process_death_observed=True,
+            ),
+        )
+
+        assert ack["continuity_outcome"] == "new_attachment"
+        runtime_gate = ack["conversation_continuity_runtime_gate"]
+        assert runtime_gate["applied"] is True
+        assert runtime_gate["outcome_overridden"] is True
+        assert runtime_gate["verdict"]["continuity_class"] == "continuity_lost"
+        assert ack["pending_lifecycle_decision_summary"]["trigger_failover"] == 1
+
+    @pytest.mark.asyncio
     async def test_reconnect_does_not_resume_result_completion_pending_record(self) -> None:
         from core.attached_runtime_session_registry import register_session
         from core.task_envelope_lifecycle_registry import get_lifecycle_registry
