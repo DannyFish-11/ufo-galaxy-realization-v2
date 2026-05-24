@@ -1372,6 +1372,84 @@ class TestNATSConnected:
         assert result["lifecycle_state"] == "succeeded"
         master_brain.execute_distributed_task.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_route_worker_envelope_reports_unavailable_when_master_brain_missing(self):
+        """go_worker dispatch must return explicit unavailable truth when MasterBrain is absent."""
+        from core.command_router import CommandRouter
+        from core.schemas.remote_execution import ExecutorTargetType
+        from core.schemas.task_envelope import TaskEnvelope
+
+        router = CommandRouter()
+        envelope = TaskEnvelope(
+            task_id="stage10-route-unavailable-01",
+            trace_id="trace-stage10-route-unavailable",
+            source="test",
+            targets=["worker-route-missing"],
+            tool_name="run",
+            args={"k": "v"},
+            executor_target_type=ExecutorTargetType.go_worker,
+        )
+
+        with patch("core.master_brain.get_master_brain", return_value=None):
+            result = await router._route_worker_envelope(
+                envelope,
+                command_id="cmd-stage10-route-unavailable",
+                request_id="req-stage10-route-unavailable",
+            )
+
+        assert result["success"] is False
+        assert result["error_code"] == "WORKER_DISPATCH_UNAVAILABLE"
+        assert result["error_message"] == "distributed_control_plane_disabled_or_unavailable"
+        assert result["execution_path"] == "distributed_unavailable"
+        assert result["completion_state"] == "dispatch_unavailable"
+        assert result["closure_complete"] is True
+        assert result["task_outcome_known"] is True
+        assert result["dispatch_attempted"] is False
+        assert result["dispatch_accepted"] is False
+        assert result["execution_started"] is False
+        assert result["result_received"] is False
+        assert result["result_pending_closure"] is False
+
+    @pytest.mark.asyncio
+    async def test_route_worker_envelope_uses_selected_worker_from_master_brain(self):
+        """CommandRouter should report worker/device identity from MasterBrain terminal snapshot."""
+        from core.command_router import CommandRouter
+        from core.schemas.remote_execution import ExecutorTargetType
+        from core.schemas.task_envelope import TaskEnvelope
+
+        router = CommandRouter()
+        master_brain = MagicMock()
+        master_brain.execute_distributed_task = AsyncMock(return_value={
+            "success": True,
+            "worker_id": "worker-selected-by-masterbrain",
+            "distributed_dispatch": True,
+            "execution_path": "nats_distributed",
+            "completion_state": "execution_completed",
+            "closure_complete": True,
+            "temporal_worker_active": False,
+        })
+        envelope = TaskEnvelope(
+            task_id="stage10-route-worker-id-01",
+            trace_id="trace-stage10-route-worker-id",
+            source="test",
+            targets=["worker-requested-in-envelope"],
+            tool_name="run",
+            args={"k": "v"},
+            executor_target_type=ExecutorTargetType.go_worker,
+        )
+
+        with patch("core.master_brain.get_master_brain", return_value=master_brain):
+            result = await router._route_worker_envelope(
+                envelope,
+                command_id="cmd-stage10-route-worker-id",
+                request_id="req-stage10-route-worker-id",
+            )
+
+        assert result["success"] is True
+        assert result["device_id"] == "worker-selected-by-masterbrain"
+        assert result["worker_id"] == "worker-selected-by-masterbrain"
+        assert result["temporal_worker_active"] is False
+
 
 # ===========================================================================
 # PR-3 — NATS × TaskEnvelope alignment
