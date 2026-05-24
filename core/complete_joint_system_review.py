@@ -76,7 +76,9 @@ REVIEW_SUPERSEDES = [
 ]
 
 # Android repository commit audited when compiling this review.
-ANDROID_AUDITED_REF = "478e3f8f3cd3cb85b5a20999c9fca22a0f44ef8d"
+# Updated in dual-repo joint cognitive review PR (2026) to reflect
+# the current Android HEAD at the time of the Stage 6-10 review pass.
+ANDROID_AUDITED_REF = "be9aeb91057bfa3fb648834e5f0997d019e34542"
 
 # Android-side code anchors referenced throughout this module.
 ANDROID_ANCHOR_MESH_CONTRACT = (
