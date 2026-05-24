@@ -84,7 +84,7 @@ REVIEW_METHODOLOGY: str = (
 
 
 class JointCognitiveAreaId(str, Enum):
-    """The seven认知区域 covered by this joint review."""
+    """The seven cognitive areas covered by this joint review."""
 
     v2_real_main_path = "v2_real_main_path"
     nats_distributed_activation = "nats_distributed_activation"
@@ -766,7 +766,12 @@ def _probe_stage10_scheduling_convergence() -> JointCognitiveAreaResult:
 
 
 def build_joint_cognitive_review() -> JointCognitiveReport:
-    """Run all code-grounded probes and return the complete joint cognitive report.
+    """Run all code-grounded structural probes and return the joint cognitive report.
+
+    Each probe performs import-based structural verification (module importability
+    and attribute existence) against live implementation code.  These are
+    structural checks — not behavioral/runtime tests — confirming that the
+    implementation code is present and correctly shaped.
 
     This is the authoritative single-call entry point for the dual-repo
     joint cognitive review 2026.  It covers V2 main path, NATS/Temporal

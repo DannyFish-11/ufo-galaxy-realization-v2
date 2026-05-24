@@ -188,7 +188,7 @@ class TestPerAreaProbeResults:
     review's code-grounded claims verifiable by the test suite.
     """
 
-    def _get_area(self, report: JointCognitiveReport, area_id: str) -> "JointCognitiveAreaResult":  # noqa: F821
+    def _get_area(self, report: JointCognitiveReport, area_id: str) -> JointCognitiveAreaResult:
         for area in report.areas:
             if area.area_id == area_id:
                 return area
