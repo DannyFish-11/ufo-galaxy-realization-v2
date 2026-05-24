@@ -1399,6 +1399,7 @@ class TestNATSConnected:
 
         assert result["success"] is False
         assert result["error_code"] == "WORKER_DISPATCH_UNAVAILABLE"
+        assert result["error_message"] == "distributed_control_plane_disabled_or_unavailable"
         assert result["execution_path"] == "distributed_unavailable"
         assert result["completion_state"] == "dispatch_unavailable"
         assert result["closure_complete"] is True

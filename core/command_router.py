@@ -2965,7 +2965,13 @@ class CommandRouter:
             }
             raw = await mb.execute_distributed_task(raw_task)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
-            selected_worker = str(raw.get("worker_id") or envelope.target or "")
+            selected_worker_raw = raw.get("worker_id")
+            selected_worker_str = selected_worker_raw.strip() if isinstance(selected_worker_raw, str) else ""
+            selected_worker = (
+                selected_worker_str
+                if selected_worker_str
+                else (envelope.target or "")
+            )
             result = {
                 "request_id": request_id,
                 "task_id": envelope.task_id,
