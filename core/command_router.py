@@ -2928,6 +2928,33 @@ class CommandRouter:
             from core.master_brain import get_master_brain
 
             mb = get_master_brain()
+            if mb is None:
+                _latency_ms = (_time_m.monotonic() - _t0) * 1000
+                return {
+                    "request_id": request_id,
+                    "task_id": envelope.task_id,
+                    "trace_id": envelope.trace_id,
+                    "command_id": command_id,
+                    "device_id": envelope.target,
+                    "command": envelope.tool_name,
+                    "via": "command_router.worker_masterbrain",
+                    "success": False,
+                    "result": None,
+                    "error_code": "WORKER_DISPATCH_UNAVAILABLE",
+                    "error_message": "distributed_control_plane_disabled_or_unavailable",
+                    "latency_ms": round(_latency_ms, 1),
+                    "distributed_dispatch": False,
+                    "execution_path": "distributed_unavailable",
+                    "completion_state": "dispatch_unavailable",
+                    "closure_complete": True,
+                    "dispatch_attempted": False,
+                    "dispatch_accepted": False,
+                    "execution_started": False,
+                    "result_received": False,
+                    "result_pending_closure": False,
+                    "task_outcome_known": True,
+                    "lifecycle_state": "not_started",
+                }
             raw_task: Dict[str, Any] = {
                 "task_id": envelope.task_id,
                 "trace_id": envelope.trace_id,
@@ -2938,12 +2965,14 @@ class CommandRouter:
             }
             raw = await mb.execute_distributed_task(raw_task)
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
+            selected_worker = str(raw.get("worker_id") or envelope.target or "")
             result = {
                 "request_id": request_id,
                 "task_id": envelope.task_id,
                 "trace_id": envelope.trace_id,
                 "command_id": command_id,
-                "device_id": envelope.target,
+                "device_id": selected_worker,
+                "worker_id": selected_worker,
                 "command": envelope.tool_name,
                 "via": "command_router.worker_masterbrain",
                 "success": bool(raw.get("success")),
@@ -3829,6 +3858,13 @@ class CommandRouter:
             "result_pending_closure",
             "task_outcome_known",
             "lifecycle_state",
+            "temporal_worker_active",
+            "temporal_runtime_available",
+            "temporal_client_connected",
+            "temporal_workflow_type",
+            "workflow_id",
+            "run_id",
+            "worker_id",
         ):
             if marker_field in raw_result:
                 result[marker_field] = raw_result[marker_field]
