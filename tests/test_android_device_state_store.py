@@ -19,6 +19,7 @@ Tests:
 """
 from __future__ import annotations
 
+import json
 import time
 
 import pytest
@@ -39,6 +40,7 @@ from core.android_device_state_store import (
     get_device_ecosystem_summary,
     get_device_state_snapshot,
     invalidate_device_state_snapshot,
+    list_recent_execution_events,
     list_device_state_snapshots,
     reset_android_device_state_store,
 )
@@ -608,3 +610,42 @@ def test_reset_clears_all_state():
     reset_android_device_state_store()
     assert get_device_state_snapshot("iso_dev") is None
     assert list_device_state_snapshots() == []
+
+
+def test_durable_store_restores_snapshot_and_execution_events(tmp_path, monkeypatch):
+    state_path = tmp_path / "android_store.json"
+    monkeypatch.setenv("ANDROID_DEVICE_STATE_STORE_PATH", str(state_path))
+    reset_android_device_state_store(clear_durable_state=True)
+
+    absorb_device_state_snapshot("durable_dev", {"model_ready": True, "snapshot_seq": 3})
+    absorb_device_execution_event(
+        "durable_dev",
+        {"flow_id": "flow-durable", "task_id": "task-durable", "phase": "completed"},
+    )
+
+    reset_android_device_state_store(clear_durable_state=False)
+
+    restored = get_device_state_snapshot("durable_dev")
+    assert restored is not None
+    assert restored.model_ready is True
+    events = list_recent_execution_events(device_id="durable_dev")
+    assert events
+    assert events[0].task_id == "task-durable"
+
+
+def test_durable_restore_prunes_stale_snapshots(tmp_path, monkeypatch):
+    state_path = tmp_path / "android_store.json"
+    monkeypatch.setenv("ANDROID_DEVICE_STATE_STORE_PATH", str(state_path))
+    reset_android_device_state_store(clear_durable_state=True)
+
+    absorb_device_state_snapshot("stale_restore_dev", {"model_ready": True})
+    assert state_path.exists()
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    stale_absorbed_at = time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 10
+    payload["snapshots"][0]["absorbed_at"] = stale_absorbed_at
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    reset_android_device_state_store(clear_durable_state=False)
+    assert get_device_state_snapshot("stale_restore_dev") is None
+    assert not any(s.device_id == "stale_restore_dev" for s in list_device_state_snapshots())
