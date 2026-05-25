@@ -71,6 +71,8 @@ from core.schemas.contracts import (
     TaskDispatchModel,
     TaskResultModel,
     WorkerHeartbeatModel,
+    WorkerRegistrationModel,
+    WorkerShutdownModel,
 )
 
 # NATS import — may not be installed
@@ -196,6 +198,15 @@ class NATSTopics:
         return f"{cls.CAPABILITY_REGISTERED}.{source}"
 
 
+class WorkerLifecycleSubjects:
+    """Canonical worker lifecycle subjects used by both publishers and consumers."""
+
+    REGISTER = "galaxy.workers.register"
+    HEARTBEAT = "galaxy.workers.heartbeat"
+    SHUTDOWN = "galaxy.workers.shutdown"
+    RESULT = "galaxy.tasks.result.*"
+
+
 class NATSBus:
     """NATS JetStream client for distributed task dispatch.
 
@@ -217,6 +228,7 @@ class NATSBus:
         self._connected = False
         self._noop = not self._url or not _HAS_NATS
         self._subscriptions: list = []
+        self._subscription_metadata: Dict[int, Dict[str, str]] = {}
         self._stats = {
             "published": 0,
             "received": 0,
@@ -316,6 +328,7 @@ class NATSBus:
                 except Exception:
                     pass
             self._subscriptions.clear()
+            self._subscription_metadata.clear()
             await self._nc.drain()
             self._connected = False
             # PR-509: Absorb disconnected state into the canonical
@@ -342,8 +355,22 @@ class NATSBus:
     async def publish_heartbeat(self, heartbeat: WorkerHeartbeatModel) -> dict:
         """Publish heartbeat to ``galaxy.workers.heartbeat``."""
         return await self._publish(
-            "galaxy.workers.heartbeat",
+            WorkerLifecycleSubjects.HEARTBEAT,
             heartbeat.model_dump(mode="json", exclude_none=True),
+        )
+
+    async def publish_worker_registration(self, registration: WorkerRegistrationModel) -> dict:
+        """Publish a worker registration on the canonical lifecycle subject."""
+        return await self._publish(
+            WorkerLifecycleSubjects.REGISTER,
+            registration.model_dump(mode="json", exclude_none=True),
+        )
+
+    async def publish_worker_shutdown(self, shutdown: WorkerShutdownModel) -> dict:
+        """Publish a worker shutdown on the canonical lifecycle subject."""
+        return await self._publish(
+            WorkerLifecycleSubjects.SHUTDOWN,
+            shutdown.model_dump(mode="json", exclude_none=True),
         )
 
     async def publish_event(self, event: AgentEventModel) -> dict:
@@ -516,18 +543,32 @@ class NATSBus:
         subject = f"galaxy.tasks.dispatch.{worker_id}"
         return await self._subscribe(subject, callback, durable=f"worker-{worker_id}")
 
-    async def subscribe_task_results(self, callback: Callable) -> dict:
+    async def subscribe_task_results(
+        self,
+        callback: Callable,
+        *,
+        include_subscription: bool = False,
+    ) -> dict:
         """Subscribe to all task results."""
-        return await self._subscribe("galaxy.tasks.result.*", callback, durable="brain-results")
+        return await self._subscribe(
+            WorkerLifecycleSubjects.RESULT,
+            callback,
+            durable="brain-results",
+            return_subscription=include_subscription,
+        )
 
     async def subscribe_heartbeats(self, callback: Callable) -> dict:
         """Subscribe to worker heartbeats."""
-        return await self._subscribe("galaxy.workers.heartbeat", callback, durable="brain-heartbeats")
+        return await self._subscribe(
+            WorkerLifecycleSubjects.HEARTBEAT,
+            callback,
+            durable="brain-heartbeats",
+        )
 
     async def subscribe_worker_registrations(self, callback: Callable) -> dict:
         """Subscribe to worker registration lifecycle messages."""
         return await self._subscribe(
-            "galaxy.workers.register",
+            WorkerLifecycleSubjects.REGISTER,
             callback,
             durable="brain-worker-register",
         )
@@ -535,7 +576,7 @@ class NATSBus:
     async def subscribe_worker_shutdowns(self, callback: Callable) -> dict:
         """Subscribe to worker shutdown lifecycle messages."""
         return await self._subscribe(
-            "galaxy.workers.shutdown",
+            WorkerLifecycleSubjects.SHUTDOWN,
             callback,
             durable="brain-worker-shutdown",
         )
@@ -564,11 +605,19 @@ class NATSBus:
 
     def get_stats(self) -> dict:
         """Return bus statistics."""
+        subscription_metadata = getattr(self, "_subscription_metadata", {})
         return {
             "connected": self.is_connected(),
             "noop_mode": self._noop,
             "url": self._url,
             "subscriptions": len(self._subscriptions),
+            "active_subjects": [meta["subject"] for meta in subscription_metadata.values()],
+            "canonical_worker_subjects": {
+                "register": WorkerLifecycleSubjects.REGISTER,
+                "heartbeat": WorkerLifecycleSubjects.HEARTBEAT,
+                "shutdown": WorkerLifecycleSubjects.SHUTDOWN,
+                "result": WorkerLifecycleSubjects.RESULT,
+            },
             **self._stats,
         }
 
@@ -611,11 +660,21 @@ class NATSBus:
             return {"success": False, "error": str(exc)}
 
     async def _subscribe(
-        self, subject: str, callback: Callable, durable: str = ""
+        self,
+        subject: str,
+        callback: Callable,
+        durable: str = "",
+        *,
+        return_subscription: bool = False,
     ) -> dict:
         """Create a JetStream pull/push subscription."""
         if self._noop:
-            return {"success": True, "noop": True}
+            return {
+                "success": True,
+                "noop": True,
+                "error": "nats_noop_transport",
+                "subject": subject,
+            }
         if not self._connected or self._js is None:
             return {"success": False, "error": "Not connected to NATS"}
 
@@ -639,11 +698,38 @@ class NATSBus:
                 cb=_handler,
             )
             self._subscriptions.append(sub)
+            self._subscription_metadata[id(sub)] = {"subject": subject, "durable": durable}
             logger.info(f"NATSBus: subscribed to {subject} (durable={durable})")
-            return {"success": True}
+            result = {"success": True, "subject": subject, "durable": durable}
+            if return_subscription:
+                result["subscription"] = sub
+            return result
         except Exception as exc:
             self._stats["errors"] += 1
             logger.error(f"NATSBus: subscribe failed on {subject} — {exc}")
+            return {"success": False, "error": str(exc)}
+
+    async def unsubscribe(self, subscription: Any) -> dict:
+        """Unsubscribe a tracked subscription and keep internal bookkeeping aligned.
+
+        Accepts ``None`` as a no-op, supports subscription objects whose
+        ``unsubscribe`` method is synchronous or async, and removes the
+        subscription from the tracked in-memory metadata after cleanup.
+        """
+        if subscription is None:
+            return {"success": True}
+        try:
+            unsubscribe = getattr(subscription, "unsubscribe", None)
+            if callable(unsubscribe):
+                result = unsubscribe()
+                if asyncio.iscoroutine(result):
+                    await result
+            if subscription in self._subscriptions:
+                self._subscriptions.remove(subscription)
+            self._subscription_metadata.pop(id(subscription), None)
+            return {"success": True}
+        except Exception as exc:
+            self._stats["errors"] += 1
             return {"success": False, "error": str(exc)}
 
     # ── NATS callbacks ──────────────────────────────────────────────────────

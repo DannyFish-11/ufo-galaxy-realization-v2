@@ -575,7 +575,9 @@ class GalaxyUnified:
             _nats_diag(f"初始化异常: {_nats_err}，以降级模式继续启动")
 
         try:
-            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+            from core.master_brain import master_brain_enabled
+
+            if master_brain_enabled():
                 from core.master_brain import get_master_brain
                 brain = get_master_brain()
                 if brain is not None:

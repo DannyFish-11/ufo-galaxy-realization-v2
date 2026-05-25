@@ -77,7 +77,9 @@ class GalaxyCore:
         # Agentic OS: obtain the MasterBrain reference (opt-in via GALAXY_MASTER_BRAIN_ENABLED).
         # Actual async startup (NATS connect + subscription) is deferred to startup() so
         # it can be properly awaited from a FastAPI lifespan or explicit caller.
-        if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() == "true":
+        from core.master_brain import master_brain_enabled
+
+        if master_brain_enabled():
             try:
                 from core.master_brain import get_master_brain
                 self._master_brain = get_master_brain()

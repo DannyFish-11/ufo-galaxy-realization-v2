@@ -124,10 +124,7 @@ class NodeHeartbeatSender:
                     seconds=int(datetime.now(timezone.utc).timestamp())
                 ),
             )
-            result = await nats_bus._publish(
-                "galaxy.workers.register",
-                reg.model_dump(mode="json", exclude_none=True),
-            )
+            result = await nats_bus.publish_worker_registration(reg)
             if result.get("success"):
                 logger.info(
                     "NodeHeartbeatSender[%s]: registered (device_type=%s)",
@@ -160,6 +157,19 @@ class NodeHeartbeatSender:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        try:
+            from core.nats_bus import nats_bus
+            from core.schemas.contracts import WorkerShutdownModel
+
+            if nats_bus.is_connected():
+                await nats_bus.publish_worker_shutdown(
+                    WorkerShutdownModel(
+                        worker_id=self._worker_id,
+                        reason="heartbeat_stopped",
+                    )
+                )
+        except Exception as exc:
+            logger.debug("NodeHeartbeatSender[%s]: shutdown publish skipped — %s", self._worker_id, exc)
 
     # ── Internal ─────────────────────────────────────────────────────────────
 
