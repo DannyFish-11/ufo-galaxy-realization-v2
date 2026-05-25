@@ -171,6 +171,8 @@ class RuntimeTruthSnapshot:
         "oneapi",
         "system_resource",
         "device_presence",
+        "operational_readiness",
+        "multimodal_readiness",
         "dispatch_semantics",
         "execution_path_observability",
         "compiled_at",
@@ -185,6 +187,8 @@ class RuntimeTruthSnapshot:
         oneapi: Dict[str, Any],
         system_resource: Optional[Dict[str, Any]],
         device_presence: Dict[str, Any],
+        operational_readiness: Optional[Dict[str, Any]] = None,
+        multimodal_readiness: Optional[Dict[str, Any]] = None,
         compiled_at: float,
         dispatch_semantics: Optional[Dict[str, Any]] = None,
         execution_path_observability: Optional[Dict[str, Any]] = None,
@@ -194,6 +198,8 @@ class RuntimeTruthSnapshot:
         self.oneapi = oneapi
         self.system_resource = system_resource
         self.device_presence = device_presence
+        self.operational_readiness = operational_readiness
+        self.multimodal_readiness = multimodal_readiness
         self.dispatch_semantics = dispatch_semantics
         self.execution_path_observability = execution_path_observability
         self.compiled_at = compiled_at
@@ -251,6 +257,8 @@ class RuntimeTruthSnapshot:
             "oneapi": self.oneapi,
             "system_resource": self.system_resource,
             "device_presence": self.device_presence,
+            "operational_readiness": self.operational_readiness,
+            "multimodal_readiness": self.multimodal_readiness,
             "dispatch_semantics": self.dispatch_semantics,
             "execution_path_observability": self.execution_path_observability,
             # Derived convenience flags
@@ -299,6 +307,8 @@ def compile_runtime_truth() -> RuntimeTruthSnapshot:
     oneapi = _compile_oneapi()
     system_resource = _compile_system_resource()
     device_presence = _compile_device_presence()
+    operational_readiness = _compile_operational_readiness()
+    multimodal_readiness = _compile_multimodal_readiness()
     dispatch_semantics = _compile_dispatch_semantics()
     execution_path_observability = _compile_execution_path_observability(dispatch_semantics)
 
@@ -308,6 +318,8 @@ def compile_runtime_truth() -> RuntimeTruthSnapshot:
         oneapi=oneapi,
         system_resource=system_resource,
         device_presence=device_presence,
+        operational_readiness=operational_readiness,
+        multimodal_readiness=multimodal_readiness,
         dispatch_semantics=dispatch_semantics,
         execution_path_observability=execution_path_observability,
         compiled_at=compiled_at,
@@ -493,6 +505,114 @@ def _compile_device_presence() -> Dict[str, Any]:
     except Exception as exc:
         _logger.debug("_compile_device_presence: unavailable: %s", exc)
         return {"registered": 0, "online": 0}
+
+
+def _compile_operational_readiness() -> Optional[Dict[str, Any]]:
+    """Compile operator-facing operational readiness with enabled/present/ready semantics."""
+    try:
+        from core.operational_readiness_surface import build_operational_readiness_report
+
+        report = build_operational_readiness_report()
+        chain = report.chain_state
+        runtime = report.runtime_readiness or {}
+        verdict = str(runtime.get("verdict") or "unknown")
+        blocking = bool(runtime.get("blocking", False))
+        if chain.main_chain_available and not blocking and verdict == "ready":
+            state = "ready"
+        elif chain.main_chain_available:
+            state = "degraded"
+        elif blocking:
+            state = "blocked"
+        else:
+            state = "pending"
+        return {
+            "enabled": True,
+            "present": True,
+            "operationally_ready": state == "ready",
+            "state": state,
+            "active_path": chain.active_path,
+            "success_quality": chain.success_quality,
+            "runtime_verdict": verdict,
+            "blocking": blocking,
+            "blocking_reasons": list(chain.diagnosis or []),
+            "distributed": {
+                "main_chain_available": bool(chain.main_chain_available),
+                "cross_device_available": bool(chain.cross_device_available),
+            },
+            "workflow": {
+                "worker_lifecycle_ready": verdict in {"ready", "degraded"},
+                "runtime_available": verdict != "blocked",
+            },
+        }
+    except Exception as exc:
+        _logger.debug("_compile_operational_readiness: unavailable: %s", exc)
+        return {
+            "enabled": False,
+            "present": False,
+            "operationally_ready": False,
+            "state": "unavailable",
+            "runtime_verdict": "unknown",
+            "blocking": False,
+            "blocking_reasons": [f"operational_readiness_unavailable: {exc}"],
+            "distributed": {
+                "main_chain_available": False,
+                "cross_device_available": False,
+            },
+            "workflow": {
+                "worker_lifecycle_ready": False,
+                "runtime_available": False,
+            },
+        }
+
+
+def _compile_multimodal_readiness() -> Optional[Dict[str, Any]]:
+    """Compile multimodal readiness truth (default/conditional/degraded semantics)."""
+    try:
+        from core.multimodal_runtime_profile import (
+            build_multimodal_runtime_profile_summary,
+            MultimodalRuntimeProfile,
+        )
+
+        profile = build_multimodal_runtime_profile_summary()
+        profile_name = str(profile.get("profile") or "")
+        if profile_name == MultimodalRuntimeProfile.FULL_DEPLOYMENT.value:
+            state = "ready"
+            default_usable = False
+            conditional = True
+        elif profile_name == MultimodalRuntimeProfile.DEBUG_ENHANCED.value:
+            state = "degraded"
+            default_usable = False
+            conditional = True
+        else:
+            state = "safe_default"
+            default_usable = True
+            conditional = False
+        return {
+            "state": state,
+            "profile": profile_name or "safe_default",
+            "default_usable": default_usable,
+            "conditionally_usable": conditional,
+            "degraded": state == "degraded",
+            "features": {
+                "multimodal_ingest_enabled": bool(profile.get("enable_multimodal_ingest", False)),
+                "webrtc_session_manager_enabled": bool(profile.get("enable_webrtc_session_manager", False)),
+            },
+            "rationale": profile.get("rationale", ""),
+        }
+    except Exception as exc:
+        _logger.debug("_compile_multimodal_readiness: unavailable: %s", exc)
+        return {
+            "state": "unavailable",
+            "profile": "unknown",
+            "default_usable": False,
+            "conditionally_usable": False,
+            "degraded": True,
+            "features": {
+                "multimodal_ingest_enabled": False,
+                "webrtc_session_manager_enabled": False,
+            },
+            "rationale": f"multimodal_runtime_profile_unavailable: {exc}",
+        }
 
 
 def _compile_dispatch_semantics() -> Optional[Dict[str, Any]]:

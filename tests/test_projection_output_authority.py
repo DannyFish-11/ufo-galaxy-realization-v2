@@ -298,6 +298,16 @@ class TestRuntimeTruthSnapshotSerialisation:
         d = snap.to_dict()
         assert "execution_path_observability" in d
 
+    def test_59d_to_dict_has_operational_readiness_block(self):
+        snap = self._make_snapshot()
+        d = snap.to_dict()
+        assert "operational_readiness" in d
+
+    def test_59e_to_dict_has_multimodal_readiness_block(self):
+        snap = self._make_snapshot()
+        d = snap.to_dict()
+        assert "multimodal_readiness" in d
+
     def test_60_to_dict_has_tri_state_phase(self):
         snap = self._make_snapshot()
         d = snap.to_dict()
@@ -410,6 +420,16 @@ class TestCompileRuntimeTruth:
         _, _, compile_runtime_truth = _import_runtime_truth_compiler()
         snapshot = compile_runtime_truth()
         assert hasattr(snapshot, "execution_path_observability")
+
+    def test_80d_snapshot_has_operational_readiness_attribute(self):
+        _, _, compile_runtime_truth = _import_runtime_truth_compiler()
+        snapshot = compile_runtime_truth()
+        assert hasattr(snapshot, "operational_readiness")
+
+    def test_80e_snapshot_has_multimodal_readiness_attribute(self):
+        _, _, compile_runtime_truth = _import_runtime_truth_compiler()
+        snapshot = compile_runtime_truth()
+        assert hasattr(snapshot, "multimodal_readiness")
 
     def test_81_snapshot_to_dict_is_json_serialisable(self):
         import json
