@@ -206,6 +206,20 @@ def _extract_status_value(raw_status: Any) -> str:
     return str(raw_status or "").strip().lower()
 
 
+def _first_present_value(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_optional_int(value: Any) -> Optional[int]:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _map_runtime_status_to_task_status(raw_status: Any) -> Optional[str]:
     """Map runtime/canonical lifecycle values to AIP task status values."""
     status = _extract_status_value(raw_status)
@@ -569,6 +583,7 @@ async def handle_task_result(
     # Evaluated before the V1 continuity legality check and any truth chain
     # step so that schema/contract mismatches cannot silently enter the
     # canonical truth chain.  task_result is a strict-reject type.
+    _tl_gate_decision = None
     try:
         from contracts.cross_repo_schema_version_gate import (
             evaluate_android_uplink_schema_gate as _evaluate_schema_gate,
@@ -657,8 +672,183 @@ async def handle_task_result(
                 _idem_exc,
             )
 
-    _unified_local_mode_ingress_ran = False
-    if _normalized_route_mode in {"local", "android_local", "v2_local"}:
+    _unified_result_ingress_ran = False
+    _unified_result_ingress_outcome = None
+    try:
+        from core.unified_result_ingress import (
+            AndroidIngressPayloadGrade as _AIPGrade,
+            NormalizedResultEvent,
+            ResultSourceChannel,
+            ingest_result_async,
+            normalize_status as _normalize_status,
+        )
+
+        payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+        _raw_replay_seq = _first_present_value(
+            payload.get("replay_seq"),
+            payload.get("replay_sequence"),
+            message.get("replay_seq"),
+            message.get("replay_sequence"),
+        )
+        replay_seq = _normalize_optional_int(_raw_replay_seq)
+        replay_item_id = str(
+            _first_present_value(
+                payload.get("replay_item_id"),
+                message.get("replay_item_id"),
+                payload.get("offline_result_id"),
+                message.get("offline_result_id"),
+            )
+            or ""
+        ).strip()
+        replay_session_id = str(
+            _first_present_value(
+                payload.get("replay_session_id"),
+                message.get("replay_session_id"),
+            )
+            or ""
+        ).strip()
+        is_replay_delivery = bool(
+            payload.get("replay")
+            or message.get("replay")
+            or replay_seq is not None
+            or replay_item_id
+            or replay_session_id
+            or _normalized_route_mode == "replay"
+        )
+
+        if is_replay_delivery:
+            source_channel = ResultSourceChannel.REPLAY
+        elif _normalized_route_mode in {"local", "android_local", "v2_local"}:
+            source_channel = ResultSourceChannel.LOCAL
+        elif _normalized_route_mode.startswith("compat"):
+            source_channel = ResultSourceChannel.COMPAT_WS
+        else:
+            source_channel = ResultSourceChannel.CANONICAL_WS
+
+        if _tl_gate_decision is None:
+            _closure_grade_eligible = True
+            _android_payload_grade = _AIPGrade.UNCLASSIFIED.value
+        elif _tl_gate_decision.action == "accept":
+            _closure_grade_eligible = True
+            _android_payload_grade = _AIPGrade.CANONICAL.value
+        else:
+            _closure_grade_eligible = False
+            _android_payload_grade = _AIPGrade.COMPAT_DEGRADED.value
+
+        _event = NormalizedResultEvent(
+            task_id=str(task_id or ""),
+            device_id=str(device_id or ""),
+            raw_message_type=str(message.get("type") or "task_result"),
+            normalized_result_kind="task_result",
+            normalized_status=_normalize_status(result_status),
+            source_channel=source_channel,
+            payload=dict(message),
+            runtime_session_id=str(
+                _first_present_value(
+                    message.get("runtime_session_id"),
+                    message.get("session_id"),
+                    payload.get("runtime_session_id"),
+                    payload.get("session_id"),
+                )
+                or ""
+            ),
+            runtime_attachment_session_id=str(
+                _first_present_value(
+                    message.get("runtime_attachment_session_id"),
+                    payload.get("runtime_attachment_session_id"),
+                )
+                or ""
+            ),
+            durable_session_id=str(
+                _first_present_value(
+                    message.get("durable_session_id"),
+                    payload.get("durable_session_id"),
+                )
+                or ""
+            ),
+            session_epoch=_first_present_value(
+                message.get("session_epoch"),
+                payload.get("session_epoch"),
+            ),
+            is_stale=bool(
+                _first_present_value(
+                    message.get("is_stale"),
+                    payload.get("is_stale"),
+                    False,
+                )
+            ),
+            stale_reason=str(
+                _first_present_value(
+                    message.get("stale_reason"),
+                    payload.get("stale_reason"),
+                    "",
+                )
+            ),
+            trace_id=str(
+                _first_present_value(
+                    message.get("trace_id"),
+                    payload.get("trace_id"),
+                    "",
+                )
+            ),
+            raw_message=dict(message),
+            replay_seq=replay_seq,
+            replay_item_id=replay_item_id,
+            replay_session_id=replay_session_id,
+            idempotency_key=str(
+                _first_present_value(
+                    message.get("idempotency_key"),
+                    payload.get("idempotency_key"),
+                    message.get("message_id"),
+                    payload.get("message_id"),
+                    task_id,
+                    "",
+                )
+            ),
+            closure_grade_eligible=_closure_grade_eligible,
+            android_payload_grade=_android_payload_grade,
+        )
+        _unified_result_ingress_outcome = await ingest_result_async(
+            _event,
+            store_fn=store_task_result,
+            bridge=bridge,
+        )
+        _unified_result_ingress_ran = True
+        message["completion_notified"] = bool(_unified_result_ingress_outcome.completion_notified)
+        message["is_fully_closed"] = bool(_unified_result_ingress_outcome.is_fully_closed)
+        message["completion_disposition"] = str(
+            _unified_result_ingress_outcome.completion_disposition or ""
+        )
+        message["continuity_rejected"] = bool(_unified_result_ingress_outcome.continuity_rejected)
+        message["stale_epoch_rejected"] = bool(_unified_result_ingress_outcome.stale_epoch_rejected)
+        message["stale_classification"] = str(
+            _unified_result_ingress_outcome.stale_classification or ""
+        )
+        message["replay_ordering_decision"] = str(
+            _unified_result_ingress_outcome.replay_ordering_decision or ""
+        )
+        message["evidence_acceptance_verdict"] = str(
+            _unified_result_ingress_outcome.evidence_acceptance_verdict or ""
+        )
+        if _unified_result_ingress_outcome.incomplete_reason:
+            message["incomplete_reason"] = _unified_result_ingress_outcome.incomplete_reason
+        logger.info(
+            "handle_task_result: unified ingress outcome "
+            "task_id=%s disposition=%s fully_closed=%s source=%s",
+            task_id,
+            _unified_result_ingress_outcome.completion_disposition,
+            _unified_result_ingress_outcome.is_fully_closed,
+            source_channel.value,
+        )
+    except Exception as _ingress_err:
+        logger.warning(
+            "handle_task_result: unified ingress unavailable, falling back to legacy truth chain "
+            "task_id=%s err=%s",
+            task_id,
+            _ingress_err,
+        )
+
+    if not _unified_result_ingress_ran and _normalized_route_mode in {"local", "android_local", "v2_local"}:
         try:
             from core.unified_result_ingress import (
                 NormalizedResultEvent,
@@ -691,7 +881,8 @@ async def handle_task_result(
                 store_fn=store_task_result,
                 bridge=bridge,
             )
-            _unified_local_mode_ingress_ran = True
+            _unified_result_ingress_ran = True
+            _unified_result_ingress_outcome = _local_outcome
             message["completion_notified"] = bool(_local_outcome.completion_notified)
             message["is_fully_closed"] = bool(_local_outcome.is_fully_closed)
             message["evidence_acceptance_verdict"] = str(
@@ -724,7 +915,7 @@ async def handle_task_result(
 
     # PR-TTC: Run the canonical must-run truth chain when local-mode unified
     # ingress did not handle this result path.
-    if not _unified_local_mode_ingress_ran:
+    if not _unified_result_ingress_ran:
         if _run_task_result_truth_chain is not None:
             _truth_chain_outcome = _run_task_result_truth_chain(
                 message,
@@ -755,7 +946,7 @@ async def handle_task_result(
             _try_ingest_participant_truth(message, "result")
 
     # 完成等待的 Future
-    if (not _unified_local_mode_ingress_ran) and task_id in bridge._pending_responses:
+    if (not _unified_result_ingress_ran) and task_id in bridge._pending_responses:
         future = bridge._pending_responses.pop(task_id)
         if not future.done():
             future.set_result(message)
@@ -768,13 +959,25 @@ async def handle_task_result(
     # PR-1 P0 Completion Closure: notify DeviceRouter so that any
     # dispatch_to_websocket awaiter blocked on task_events[task_id].wait()
     # is woken immediately by a real completion event rather than a timeout.
-    if task_id:
+    _notify_device_router = True
+    if _unified_result_ingress_ran and _unified_result_ingress_outcome is not None:
+        _notify_device_router = bool(
+            not _unified_result_ingress_outcome.was_deduplicated
+            and not _unified_result_ingress_outcome.continuity_rejected
+            and not _unified_result_ingress_outcome.stale_epoch_rejected
+            and str(_unified_result_ingress_outcome.completion_disposition or "") == "first_accepted"
+        )
+
+    if task_id and _notify_device_router:
         try:
             from galaxy_gateway.device_router import device_router as _device_router
 
+            _canonical_success = result_status not in ("failed", "error", "cancelled")
+            if _unified_result_ingress_ran and _unified_result_ingress_outcome is not None:
+                _canonical_success = bool(_unified_result_ingress_outcome.is_fully_closed)
             _dr_result = {
                 **message,
-                "success": result_status not in ("failed", "error", "cancelled"),
+                "success": _canonical_success,
                 "via": "task_lifecycle.handle_task_result",
             }
             await _device_router.handle_task_result(task_id, _dr_result)
@@ -792,10 +995,17 @@ async def handle_task_result(
                 task_id,
                 _dr_exc,
             )
+    elif task_id and _unified_result_ingress_ran:
+        logger.debug(
+            "handle_task_result: suppressing device_router completion notify due to "
+            "non-authoritative unified ingress disposition task_id=%r disposition=%r",
+            task_id,
+            getattr(_unified_result_ingress_outcome, "completion_disposition", ""),
+        )
 
     # OpenClawd 记忆回流
     if (
-        (not _unified_local_mode_ingress_ran)
+        (not _unified_result_ingress_ran)
         and task_id
         and device_id
         and store_task_result is not None
