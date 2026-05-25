@@ -49,12 +49,14 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field, fields
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 logger = logging.getLogger("Galaxy.AndroidDeviceStateStore")
+T = TypeVar("T")
 
 # Dispatch-authority classification for Android snapshot fields.
 # These sets are intentionally explicit so operator/panel surfaces can
@@ -89,6 +91,13 @@ ANDROID_CAPABILITY_REPORT_SEMANTICS_AUTHORITY: str = (
     "core.android_device_state_store canonically normalizes Android "
     "capability_report metadata semantics (mode/readiness/eligibility/"
     "local-inference/continuity hints) for downstream V2 consumers."
+)
+ANDROID_DEVICE_STATE_STORE_DURABILITY_AUTHORITY: str = (
+    "ANDROID_DEVICE_STATE_STORE_DURABILITY_V1: "
+    "core.android_device_state_store persists canonical Android snapshot/event "
+    "truth to a durable JSON substrate and restores it on runtime restart. "
+    "Restored state is revalidated against freshness/reconciliation rules so "
+    "stale snapshots cannot be interpreted as live canonical truth."
 )
 
 DEVICE_STATE_SNAPSHOT_MSG_TYPE: str = "device_state_snapshot"
@@ -451,6 +460,10 @@ class _AndroidDeviceStateStore:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._state_path: Optional[str] = _resolve_store_state_path()
+        self._last_persisted_at: Optional[float] = None
+        self._last_restored_at: Optional[float] = None
+        self._restored_counts: Dict[str, int] = {"snapshots": 0, "execution_events": 0}
         # Latest snapshot per device_id
         self._snapshots: Dict[str, DeviceStateSnapshot] = {}
         self._capability_report_semantics: Dict[str, Dict[str, Any]] = {}
@@ -459,6 +472,7 @@ class _AndroidDeviceStateStore:
         # Recent execution events (capped at _MAX_EVENTS)
         self._execution_events: List[DeviceExecutionEvent] = []
         self._MAX_EVENTS = 500
+        self._restore_from_disk()
 
     # ------------------------------------------------------------------
     # Ingress: absorb DEVICE_STATE_SNAPSHOT payloads
@@ -493,6 +507,7 @@ class _AndroidDeviceStateStore:
                 canonical.canonical_reconciliation_reason = str(
                     reconciliation.get("reason", "rejected_by_canonical_reconciliation")
                 )
+            self._persist_locked()
         logger.debug(
             "Absorbed DEVICE_STATE_SNAPSHOT from %s (local_loop_ready=%s, model_ready=%s, "
             "reconciliation_status=%s, applied=%s)",
@@ -513,6 +528,7 @@ class _AndroidDeviceStateStore:
         semantics = _normalize_capability_report_semantics(device_id, message)
         with self._lock:
             self._capability_report_semantics[device_id] = dict(semantics)
+            self._persist_locked()
         return dict(semantics)
 
     def invalidate_snapshot(self, device_id: str) -> None:
@@ -522,6 +538,8 @@ class _AndroidDeviceStateStore:
         with self._lock:
             self._snapshots.pop(device_id, None)
             self._capability_report_semantics.pop(device_id, None)
+            self._snapshot_reconciliation.pop(device_id, None)
+            self._persist_locked()
 
     # ------------------------------------------------------------------
     # Ingress: absorb DEVICE_EXECUTION_EVENT payloads
@@ -541,6 +559,7 @@ class _AndroidDeviceStateStore:
             self._execution_events.append(evt)
             if len(self._execution_events) > self._MAX_EVENTS:
                 self._execution_events = self._execution_events[-self._MAX_EVENTS:]
+            self._persist_locked()
 
         # Forward to FlowLevelOperatorSurface
         if evt.flow_id:
@@ -726,6 +745,120 @@ class _AndroidDeviceStateStore:
             "conflict": False,
             "ordering_basis": "none",
         }
+
+    def _restore_from_disk(self) -> None:
+        path = self._state_path
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+        except FileNotFoundError:
+            return
+        except Exception as exc:
+            logger.warning("android_device_state_store restore skipped (%s): %s", path, exc)
+            return
+
+        snapshots: Dict[str, DeviceStateSnapshot] = {}
+        for item in payload.get("snapshots", []) or []:
+            try:
+                snap = _dataclass_from_dict(DeviceStateSnapshot, item)
+            except Exception as exc:
+                logger.debug("Skipping invalid persisted snapshot entry: %s", exc)
+                continue
+            if not snap.device_id:
+                continue
+            if _is_snapshot_within_ttl(snap):
+                snapshots[snap.device_id] = snap
+
+        semantics = payload.get("capability_report_semantics", {}) or {}
+        if not isinstance(semantics, dict):
+            semantics = {}
+
+        reconciliations = payload.get("snapshot_reconciliation", {}) or {}
+        if not isinstance(reconciliations, dict):
+            reconciliations = {}
+
+        events: List[DeviceExecutionEvent] = []
+        for item in payload.get("execution_events", []) or []:
+            try:
+                evt = _dataclass_from_dict(DeviceExecutionEvent, item)
+            except Exception as exc:
+                logger.debug("Skipping invalid persisted execution event entry: %s", exc)
+                continue
+            if not evt.device_id:
+                continue
+            events.append(evt)
+        if len(events) > self._MAX_EVENTS:
+            events = events[-self._MAX_EVENTS:]
+
+        with self._lock:
+            self._snapshots = snapshots
+            self._capability_report_semantics = {
+                str(k): dict(v) for k, v in semantics.items() if isinstance(v, dict)
+            }
+            self._snapshot_reconciliation = {
+                str(k): dict(v) for k, v in reconciliations.items() if isinstance(v, dict)
+            }
+            self._execution_events = events
+            self._last_restored_at = time.time()
+            self._restored_counts = {
+                "snapshots": len(self._snapshots),
+                "execution_events": len(self._execution_events),
+            }
+
+    def _persist_locked(self) -> None:
+        path = self._state_path
+        if not path:
+            return
+        state = {
+            "contract_version": "android_device_state_store_durable_v1",
+            "persisted_at": time.time(),
+            "authority": ANDROID_DEVICE_STATE_STORE_DURABILITY_AUTHORITY,
+            "snapshots": [s.to_dict() for s in self._snapshots.values()],
+            "capability_report_semantics": dict(self._capability_report_semantics),
+            "snapshot_reconciliation": dict(self._snapshot_reconciliation),
+            "execution_events": [e.to_dict() for e in self._execution_events[-self._MAX_EVENTS:]],
+        }
+        try:
+            directory = os.path.dirname(path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            tmp_path: Optional[str] = None
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=(directory or None),
+                prefix="android-device-state-",
+                suffix=".tmp",
+                delete=False,
+            ) as fp:
+                tmp_path = fp.name
+                json.dump(state, fp, ensure_ascii=False, sort_keys=True)
+            os.replace(tmp_path, path)
+            self._last_persisted_at = state["persisted_at"]
+        except Exception as exc:
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except Exception as cleanup_exc:
+                    logger.debug(
+                        "android_device_state_store temp cleanup skipped (%s): %s",
+                        tmp_path,
+                        cleanup_exc,
+                    )
+            logger.warning("android_device_state_store persist skipped (%s): %s", path, exc)
+
+    def clear_durable_state(self) -> None:
+        path = self._state_path
+        if not path:
+            return
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            return
+        except Exception as exc:
+            logger.warning("android_device_state_store durable clear skipped (%s): %s", path, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -1134,6 +1267,26 @@ def _normalize_capability_report_semantics(
     }
 
 
+def _resolve_store_state_path() -> Optional[str]:
+    configured = os.getenv("ANDROID_DEVICE_STATE_STORE_PATH")
+    if configured is not None:
+        configured = configured.strip()
+        if configured == "":
+            return None
+        return configured
+    return os.path.join(tempfile.gettempdir(), "galaxy_android_device_state_store.json")
+
+
+def _dataclass_from_dict(cls: Type[T], payload: Dict[str, Any]) -> T:
+    if not isinstance(payload, dict):
+        payload = {}
+    kwargs: Dict[str, Any] = {}
+    for f in fields(cls):
+        if f.name in payload:
+            kwargs[f.name] = payload[f.name]
+    return cls(**kwargs)
+
+
 def _is_snapshot_within_ttl(snapshot: Optional[DeviceStateSnapshot]) -> bool:
     if snapshot is None:
         return False
@@ -1467,10 +1620,26 @@ def get_android_device_state_store() -> _AndroidDeviceStateStore:
     return _store_instance
 
 
-def reset_android_device_state_store() -> None:
+def reset_android_device_state_store(*, clear_durable_state: bool = True) -> None:
     """Reset the singleton (for test isolation only)."""
     global _store_instance
     with _store_lock:
+        if clear_durable_state:
+            if _store_instance is not None:
+                _store_instance.clear_durable_state()
+            else:
+                path = _resolve_store_state_path()
+                if path:
+                    try:
+                        os.remove(path)
+                    except FileNotFoundError:
+                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "android_device_state_store durable clear skipped (%s): %s",
+                            path,
+                            exc,
+                        )
         _store_instance = None
 
 
