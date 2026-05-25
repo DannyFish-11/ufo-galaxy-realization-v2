@@ -320,6 +320,17 @@ try:
 except ImportError:
     _get_canonical_completion_ingress = None  # type: ignore[assignment]
 
+try:
+    from core.task_graph_runtime import (
+        GraphNodeState as _GraphNodeState,
+        WorkflowContributorKind as _WorkflowContributorKind,
+        get_task_graph_runtime as _get_task_graph_runtime,
+    )
+except ImportError:
+    _GraphNodeState = None  # type: ignore[assignment]
+    _WorkflowContributorKind = None  # type: ignore[assignment]
+    _get_task_graph_runtime = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Step helpers
@@ -416,6 +427,41 @@ def _run_authority_state_update(
         updated = runtime.update_lifecycle(task_id, target_lifecycle)
         if updated is not None:
             outcome.authority_task_found = True
+        _status_lower = (result_status or "").lower()
+        try:
+            if (
+                _get_task_graph_runtime is not None
+                and _GraphNodeState is not None
+                and _WorkflowContributorKind is not None
+                and task_id
+            ):
+                graph_runtime = _get_task_graph_runtime()
+                graph_runtime.transition(
+                    task_id,
+                    _GraphNodeState.RESULT,
+                    reason=f"android_result_reported:{_status_lower or 'unknown'}",
+                    contributor=_WorkflowContributorKind.UNKNOWN,
+                )
+                if _status_lower in ("failed", "error", "timeout"):
+                    terminal_graph_state = _GraphNodeState.FAILED
+                elif _status_lower == "cancelled":
+                    terminal_graph_state = _GraphNodeState.CANCELLED
+                elif _status_lower == "degraded":
+                    terminal_graph_state = _GraphNodeState.DEGRADED
+                else:
+                    terminal_graph_state = _GraphNodeState.COMPLETED
+                graph_runtime.transition(
+                    task_id,
+                    terminal_graph_state,
+                    reason=f"android_terminal:{_status_lower or 'completed'}",
+                    contributor=_WorkflowContributorKind.UNKNOWN,
+                )
+        except Exception as graph_exc:
+            logger.debug(
+                "truth_chain step 3 (task_graph_update) skipped: task_id=%r exc=%s",
+                task_id,
+                graph_exc,
+            )
         # Even if no matching task was found (update returns None), the step
         # ran successfully — not every task_result maps to a tracked task.
         outcome.authority_update_status = StepStatus.COMPLETED

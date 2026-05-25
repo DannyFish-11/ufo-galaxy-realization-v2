@@ -1230,6 +1230,59 @@ class TestNATSConnected:
         assert node is not None
         assert node.state.value == "dispatch"
 
+    @pytest.mark.asyncio
+    async def test_master_brain_scaling_reevaluates_on_topology_change(self, tmp_path):
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import WorkerRegistrationModel
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+
+        await brain.register_worker(
+            WorkerRegistrationModel(worker_id="android-worker-01", device_type="android", platform="android")
+        )
+
+        scaling = brain.get_status().get("scaling", {})
+        assert scaling.get("trigger") == "worker_registered"
+        assert scaling.get("topology_has_android_workers") is True
+        assert scaling.get("android_workers_alive") == 1
+
+    @pytest.mark.asyncio
+    async def test_master_brain_scaling_reevaluates_on_task_result(self, tmp_path):
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import TaskResultModel, TaskStatus, TimestampModel
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        brain._task_log["scaler-task-01"] = {
+            **brain._default_task_record("scaler-task-01"),
+            "task_id": "scaler-task-01",
+            "worker_id": "worker-1",
+            "trace_id": "trace-scaler-01",
+            "dispatch_attempted": True,
+            "dispatch_accepted": True,
+            "distributed_dispatch": True,
+            "status": TaskStatus.RUNNING.value,
+            "completion_state": "execution_started",
+            "lifecycle_state": "running",
+            "execution_started": True,
+        }
+
+        await brain.handle_task_result(TaskResultModel(
+            task_id="scaler-task-01",
+            worker_id="worker-1",
+            status=TaskStatus.SUCCESS,
+            started_at=TimestampModel(seconds=1, nanos=0),
+            completed_at=TimestampModel(seconds=2, nanos=0),
+            metadata={"result_id": "res-scaler-01", "trace_id": "trace-scaler-01"},
+            output={},
+        ))
+
+        scaling = brain.get_status().get("scaling", {})
+        assert scaling.get("trigger") == "task_result"
+        assert scaling.get("reason") == TaskStatus.SUCCESS.value
+        assert "pending_tasks" in scaling
+
     @pytest.mark.parametrize("flag_value", ["1", "true", "yes", "on"])
     def test_get_master_brain_accepts_truthy_enable_flags(self, flag_value):
         """get_master_brain() normalises supported truthy enablement values consistently."""

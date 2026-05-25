@@ -669,6 +669,7 @@ class MasterBrain:
             waiter = self._task_waiters.get(task_id)
             if waiter is not None and not waiter.done():
                 waiter.set_result(snapshot)
+        self._reevaluate_scaling_state(trigger="task_result", reason=status)
 
         logger.info("MasterBrain: task %s result status=%s completion=%s", task_id, status, snapshot.get("completion_state"))
         return {
@@ -877,6 +878,7 @@ class MasterBrain:
             "registered_at": datetime.now().isoformat(),
             "force_offline": False,
         }
+        self._reevaluate_scaling_state(trigger="worker_registered", reason="topology_change")
         self._persist_state()
         _try_emit_event("WORKER_REGISTERED", {"worker_id": wid, "device_type": registration.device_type})
         logger.info(f"MasterBrain: worker registered — {wid} ({registration.device_type})")
@@ -912,6 +914,7 @@ class MasterBrain:
             wid,
             error=f"worker_shutdown:{shutdown.reason or 'unspecified'}",
         )
+        self._reevaluate_scaling_state(trigger="worker_shutdown", reason=shutdown.reason or "worker_shutdown")
         self._persist_state()
         _try_emit_event(
             "WORKER_SHUTDOWN",
@@ -934,6 +937,7 @@ class MasterBrain:
             "memory_usage_percent": heartbeat.memory_usage_percent,
             "force_offline": False,
         })
+        self._reevaluate_scaling_state(trigger="worker_heartbeat", reason=str(heartbeat.status.value))
         self._persist_state()
         return {"success": True}
 
@@ -1110,6 +1114,7 @@ class MasterBrain:
             distributed_dispatch=True,
             terminal_source="deadletter",
         )
+        self._reevaluate_scaling_state(trigger="deadletter", reason=reason)
         logger.warning(
             "MasterBrain: task %s marked dead-lettered (reason=%s state=%s)",
             task_id,
@@ -1403,18 +1408,49 @@ class MasterBrain:
         busy_workers = sum(1 for info in alive_workers if int(info.get("active_tasks", 0) or 0) > 0)
         return busy_workers / max(len(alive_workers), 1)
 
+    def _estimate_pending_work_complexity(self) -> float:
+        pending_records = [
+            record
+            for record in self._task_log.values()
+            if not bool(record.get("closure_complete"))
+        ]
+        if not pending_records:
+            return _COMPLEXITY_BASELINE
+        backlog_weight = min(len(pending_records) / 20.0, 0.4)
+        waiting_weight = min(
+            sum(1 for record in pending_records if record.get("lifecycle_state") in {"waiting_remote", "running"})
+            / max(len(pending_records), 1),
+            0.3,
+        )
+        return min(1.0, _COMPLEXITY_BASELINE + backlog_weight + waiting_weight)
+
+    @staticmethod
+    def _collect_topology_scaling_signals(topology: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        alive = [info for info in topology.values() if info.get("alive")]
+        android_alive = [
+            info
+            for info in alive
+            if "android" in str(info.get("platform", "")).lower()
+            or "android" in str(info.get("device_type", "")).lower()
+        ]
+        return {
+            "workers_alive": len(alive),
+            "android_workers_alive": len(android_alive),
+            "topology_has_android_workers": bool(android_alive),
+        }
+
     def _evaluate_scaling_state(self, *, task: TaskDispatchModel) -> dict:
         try:
             from core.control_plane.swarm_scaler import SwarmScaler
 
             topology = self.get_worker_topology()
-            alive_workers = [wid for wid, info in topology.items() if info.get("alive")]
+            topology_signals = self._collect_topology_scaling_signals(topology)
             scaler = SwarmScaler()
             complexity = self._estimate_task_complexity(task)
             load = self._estimate_worker_load()
             action = scaler.evaluate(
                 "master_brain",
-                current_worker_count=len(alive_workers),
+                current_worker_count=topology_signals["workers_alive"],
                 complexity=complexity,
                 load=load,
             )
@@ -1422,9 +1458,10 @@ class MasterBrain:
                 "action": action,
                 "reason": "runtime_dispatch_evaluation",
                 "trigger": "dispatch_task",
-                "workers_alive": len(alive_workers),
+                "evaluated_at": datetime.now().isoformat(),
                 "complexity": complexity,
                 "load": load,
+                **topology_signals,
             }
             self._last_scaling_decision = decision
             return decision
@@ -1433,6 +1470,46 @@ class MasterBrain:
                 "action": "no_change",
                 "reason": f"scaler_unavailable:{exc}",
                 "trigger": "dispatch_task",
+                "evaluated_at": datetime.now().isoformat(),
+            }
+            self._last_scaling_decision = decision
+            return decision
+
+    def _reevaluate_scaling_state(self, *, trigger: str, reason: str) -> dict:
+        try:
+            from core.control_plane.swarm_scaler import SwarmScaler
+
+            topology = self.get_worker_topology()
+            topology_signals = self._collect_topology_scaling_signals(topology)
+            scaler = SwarmScaler()
+            complexity = self._estimate_pending_work_complexity()
+            load = self._estimate_worker_load()
+            action = scaler.evaluate(
+                "master_brain",
+                current_worker_count=topology_signals["workers_alive"],
+                complexity=complexity,
+                load=load,
+            )
+            decision = {
+                "action": action,
+                "reason": str(reason or "runtime_reevaluation"),
+                "trigger": trigger,
+                "evaluated_at": datetime.now().isoformat(),
+                "complexity": complexity,
+                "load": load,
+                "pending_tasks": sum(
+                    1 for record in self._task_log.values() if not bool(record.get("closure_complete"))
+                ),
+                **topology_signals,
+            }
+            self._last_scaling_decision = decision
+            return decision
+        except Exception as exc:
+            decision = {
+                "action": "no_change",
+                "reason": f"scaler_unavailable:{exc}",
+                "trigger": trigger,
+                "evaluated_at": datetime.now().isoformat(),
             }
             self._last_scaling_decision = decision
             return decision
@@ -1774,6 +1851,7 @@ class MasterBrain:
                 state_changed = True
 
         if state_changed:
+            self._reevaluate_scaling_state(trigger="state_recovery", reason="deadline_or_worker_loss")
             self._persist_state()
 
     @staticmethod

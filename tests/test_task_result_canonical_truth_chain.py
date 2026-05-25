@@ -1035,3 +1035,33 @@ class TestGroupJ_HardenedEnforcement:
         assert exc_info.value.outcome.authority_update_status == (
             _ttc.StepStatus.SKIPPED_MODULE_UNAVAILABLE
         )
+
+
+class TestGroupK_TaskGraphCoverage:
+    def test_k1_authority_step_updates_task_graph_terminal_state(self) -> None:
+        """Android result truth chain should write result+terminal transitions into TaskGraph."""
+        from core.task_graph_runtime import GraphNodeState, WorkflowContributorKind
+
+        transitions: list[tuple[str, str]] = []
+
+        class _FakeGraphRuntime:
+            def transition(self, task_id: str, state: Any, **kwargs: Any) -> None:
+                transitions.append((task_id, getattr(state, "value", str(state))))
+
+        msg = {"task_id": "t-k1", "status": "failed"}
+        with (
+            patch.object(_ttc, "_ingest_participant_truth", _make_ingest_ok()),
+            patch.object(_ttc, "_reconcile_inbound_message", _make_reconcile_ok()),
+            patch.object(_ttc, "_get_canonical_task_runtime", _make_runtime_ok()),
+            patch.object(_ttc, "_get_canonical_completion_ingress", _make_ingress_ok()),
+            patch.object(_ttc, "_get_task_graph_runtime", return_value=_FakeGraphRuntime()),
+            patch.object(_ttc, "_GraphNodeState", GraphNodeState),
+            patch.object(_ttc, "_WorkflowContributorKind", WorkflowContributorKind),
+        ):
+            outcome = _ttc.run_task_result_truth_chain(msg)
+
+        assert outcome.is_truth_chain_complete is True
+        assert transitions == [
+            ("t-k1", GraphNodeState.RESULT.value),
+            ("t-k1", GraphNodeState.FAILED.value),
+        ]
