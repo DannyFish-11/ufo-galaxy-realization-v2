@@ -122,6 +122,11 @@ async def wait_for_result_activity(task_id: str, timeout_ms: int = 60_000) -> di
             result_id = str((data.get("metadata") or {}).get("result_id") or "")
             if result_id:
                 if result_id in seen_result_ids:
+                    logger.debug(
+                        "wait_for_result_activity: duplicate result ignored task_id=%s result_id=%s",
+                        task_id,
+                        result_id,
+                    )
                     return
                 seen_result_ids.add(result_id)
             result_holder["data"] = data

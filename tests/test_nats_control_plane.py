@@ -1230,14 +1230,15 @@ class TestNATSConnected:
         assert node is not None
         assert node.state.value == "dispatch"
 
-    def test_get_master_brain_accepts_numeric_enable_flag(self):
-        """get_master_brain() normalises 1/true-style enablement consistently."""
+    @pytest.mark.parametrize("flag_value", ["1", "true", "yes", "on"])
+    def test_get_master_brain_accepts_truthy_enable_flags(self, flag_value):
+        """get_master_brain() normalises supported truthy enablement values consistently."""
         import core.master_brain as master_brain_module
 
         old_master_brain = master_brain_module._master_brain
         old_instance = master_brain_module.MasterBrain._instance
         try:
-            with patch.dict(os.environ, {"GALAXY_MASTER_BRAIN_ENABLED": "1"}, clear=False):
+            with patch.dict(os.environ, {"GALAXY_MASTER_BRAIN_ENABLED": flag_value}, clear=False):
                 master_brain_module._master_brain = None
                 master_brain_module.MasterBrain._instance = None
                 assert master_brain_module.master_brain_enabled() is True

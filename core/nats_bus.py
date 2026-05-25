@@ -228,7 +228,7 @@ class NATSBus:
         self._connected = False
         self._noop = not self._url or not _HAS_NATS
         self._subscriptions: list = []
-        self._subscription_subjects: Dict[int, Dict[str, str]] = {}
+        self._subscription_metadata: Dict[int, Dict[str, str]] = {}
         self._stats = {
             "published": 0,
             "received": 0,
@@ -328,7 +328,7 @@ class NATSBus:
                 except Exception:
                     pass
             self._subscriptions.clear()
-            self._subscription_subjects.clear()
+            self._subscription_metadata.clear()
             await self._nc.drain()
             self._connected = False
             # PR-509: Absorb disconnected state into the canonical
@@ -605,13 +605,13 @@ class NATSBus:
 
     def get_stats(self) -> dict:
         """Return bus statistics."""
-        subscription_subjects = getattr(self, "_subscription_subjects", {})
+        subscription_metadata = getattr(self, "_subscription_metadata", {})
         return {
             "connected": self.is_connected(),
             "noop_mode": self._noop,
             "url": self._url,
             "subscriptions": len(self._subscriptions),
-            "active_subjects": [meta["subject"] for meta in subscription_subjects.values()],
+            "active_subjects": [meta["subject"] for meta in subscription_metadata.values()],
             "canonical_worker_subjects": {
                 "register": WorkerLifecycleSubjects.REGISTER,
                 "heartbeat": WorkerLifecycleSubjects.HEARTBEAT,
@@ -698,7 +698,7 @@ class NATSBus:
                 cb=_handler,
             )
             self._subscriptions.append(sub)
-            self._subscription_subjects[id(sub)] = {"subject": subject, "durable": durable}
+            self._subscription_metadata[id(sub)] = {"subject": subject, "durable": durable}
             logger.info(f"NATSBus: subscribed to {subject} (durable={durable})")
             result = {"success": True, "subject": subject, "durable": durable}
             if return_subscription:
@@ -710,7 +710,12 @@ class NATSBus:
             return {"success": False, "error": str(exc)}
 
     async def unsubscribe(self, subscription: Any) -> dict:
-        """Unsubscribe a previously created subscription and update stats."""
+        """Unsubscribe a tracked subscription and keep internal bookkeeping aligned.
+
+        Accepts ``None`` as a no-op, supports subscription objects whose
+        ``unsubscribe`` method is synchronous or async, and removes the
+        subscription from the tracked in-memory metadata after cleanup.
+        """
         if subscription is None:
             return {"success": True}
         try:
@@ -721,7 +726,7 @@ class NATSBus:
                     await result
             if subscription in self._subscriptions:
                 self._subscriptions.remove(subscription)
-            self._subscription_subjects.pop(id(subscription), None)
+            self._subscription_metadata.pop(id(subscription), None)
             return {"success": True}
         except Exception as exc:
             self._stats["errors"] += 1

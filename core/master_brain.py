@@ -59,6 +59,15 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
 
 # Heartbeat timeout: 3 missed heartbeats (10s interval × 3 = 30s)
 _HEARTBEAT_TIMEOUT_S = 30
+_COMPLEXITY_BASELINE = 0.2
+_COMPLEXITY_CODE_PAYLOAD = 0.9
+_COMPLEXITY_MCP_PAYLOAD = 0.7
+_COMPLEXITY_SHELL_PAYLOAD = 0.6
+_COMPLEXITY_DEVICE_PAYLOAD = 0.5
+_COMPLEXITY_RETRY_WEIGHT = 0.1
+_COMPLEXITY_RETRY_CAP = 0.3
+_COMPLEXITY_TIMEOUT_DIVISOR_MS = 120_000.0
+_COMPLEXITY_TIMEOUT_CAP = 0.3
 
 
 def _env_flag(name: str) -> bool:
@@ -1370,17 +1379,20 @@ class MasterBrain:
         }
 
     def _estimate_task_complexity(self, task: TaskDispatchModel) -> float:
-        payload_weight = 0.2
+        payload_weight = _COMPLEXITY_BASELINE
         if task.code_payload is not None:
-            payload_weight = 0.9
+            payload_weight = _COMPLEXITY_CODE_PAYLOAD
         elif task.mcp_payload is not None:
-            payload_weight = 0.7
+            payload_weight = _COMPLEXITY_MCP_PAYLOAD
         elif task.shell_payload is not None:
-            payload_weight = 0.6
+            payload_weight = _COMPLEXITY_SHELL_PAYLOAD
         elif task.device_payload is not None:
-            payload_weight = 0.5
-        retry_weight = min(float(task.max_retries or 0) * 0.1, 0.3)
-        timeout_weight = min(float(task.timeout_ms or 0) / 120000.0, 0.3)
+            payload_weight = _COMPLEXITY_DEVICE_PAYLOAD
+        retry_weight = min(float(task.max_retries or 0) * _COMPLEXITY_RETRY_WEIGHT, _COMPLEXITY_RETRY_CAP)
+        timeout_weight = min(
+            float(task.timeout_ms or 0) / _COMPLEXITY_TIMEOUT_DIVISOR_MS,
+            _COMPLEXITY_TIMEOUT_CAP,
+        )
         return min(1.0, payload_weight + retry_weight + timeout_weight)
 
     def _estimate_worker_load(self) -> float:
