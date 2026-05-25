@@ -1283,6 +1283,63 @@ class TestNATSConnected:
         assert scaling.get("reason") == TaskStatus.SUCCESS.value
         assert "pending_tasks" in scaling
 
+    @pytest.mark.asyncio
+    async def test_master_brain_late_result_cannot_override_terminal_closure(self, tmp_path):
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import TaskResultModel, TaskStatus, TimestampModel
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        brain._task_log["terminal-lock-01"] = {
+            **brain._default_task_record("terminal-lock-01"),
+            "task_id": "terminal-lock-01",
+            "worker_id": "worker-locked",
+            "trace_id": "trace-locked",
+            "status": TaskStatus.SUCCESS.value,
+            "completion_state": "execution_completed",
+            "lifecycle_state": "succeeded",
+            "closure_complete": True,
+            "task_outcome_known": True,
+            "terminal_source": "canonical_success",
+        }
+
+        outcome = await brain.handle_task_result(
+            TaskResultModel(
+                task_id="terminal-lock-01",
+                worker_id="worker-locked",
+                status=TaskStatus.FAILED,
+                started_at=TimestampModel(seconds=3, nanos=0),
+                completed_at=TimestampModel(seconds=4, nanos=0),
+                metadata={"result_id": "late-res-01", "trace_id": "trace-locked"},
+                error={"message": "late failure"},
+            )
+        )
+        observed = brain.get_task_status("terminal-lock-01")
+
+        assert outcome.get("canonical_terminal_locked") is True
+        assert outcome.get("precedence_decision") == "canonical_terminal_precedence"
+        assert observed is not None
+        assert observed.get("completion_state") == "execution_completed"
+        assert observed.get("status") == TaskStatus.SUCCESS.value
+        assert observed.get("late_result_reason") == "late_after_execution_completed"
+
+    @pytest.mark.asyncio
+    async def test_master_brain_periodic_scaling_monitor_runs(self, tmp_path):
+        from core.master_brain import MasterBrain
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        try:
+            with patch("core.master_brain._SCALING_REEVAL_INTERVAL_S", 0.01):
+                await brain.start()
+                await asyncio.sleep(0.03)
+                scaling = brain.get_status().get("scaling", {})
+                assert scaling.get("trigger") == "periodic_monitor"
+                assert scaling.get("reason") == "runtime_regulation_tick"
+                assert scaling.get("activity_state") == "monitoring"
+        finally:
+            await brain.stop()
+
     @pytest.mark.parametrize("flag_value", ["1", "true", "yes", "on"])
     def test_get_master_brain_accepts_truthy_enable_flags(self, flag_value):
         """get_master_brain() normalises supported truthy enablement values consistently."""

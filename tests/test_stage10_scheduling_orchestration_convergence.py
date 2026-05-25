@@ -416,5 +416,46 @@ class TestSchedulerBroadcastTaskGraph(unittest.TestCase):
         self.assertGreater(len(log), 0)
 
 
+class TestSchedulerLegacyFallbackGate(unittest.TestCase):
+    """Relay/mesh legacy fallback paths are explicitly gated by canonical ownership."""
+
+    def _make_scheduler(self):
+        try:
+            from core.scheduler import AutonomousScheduler
+        except ImportError as e:
+            self.skipTest(f"core.scheduler unavailable: {e}")
+        sched = AutonomousScheduler.__new__(AutonomousScheduler)
+        sched.nodes_dir = "/tmp"
+        sched.tools_cache = []
+        return sched
+
+    def test_relay_blocks_legacy_fallback_without_explicit_opt_in(self):
+        sched = self._make_scheduler()
+        args = {
+            "source_device": "dev-a",
+            "target_device": "dev-b",
+            "payload_type": "task",
+            "payload": {"k": "v"},
+        }
+        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")):
+            result = json.loads(_run(sched._exec_relay(args, context={})))
+        self.assertFalse(result.get("success"))
+        self.assertTrue(result.get("legacy_fallback_blocked"))
+        self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+
+    def test_mesh_blocks_legacy_fallback_without_explicit_opt_in(self):
+        sched = self._make_scheduler()
+        args = {
+            "target_device": "dev-b",
+            "payload_type": "task",
+            "payload": {"k": "v"},
+        }
+        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")):
+            result = json.loads(_run(sched._exec_mesh_send(args)))
+        self.assertFalse(result.get("success"))
+        self.assertTrue(result.get("legacy_fallback_blocked"))
+        self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+
+
 if __name__ == "__main__":
     unittest.main()

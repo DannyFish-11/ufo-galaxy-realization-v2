@@ -176,20 +176,24 @@ async def handle_handoff_v2_result(
                 _env_task_id = env.task_id if hasattr(env, "task_id") else ""
                 _is_terminal = getattr(env, "is_terminal", False)
                 if _env_task_id and _is_terminal:
+                    _response_kind = str(getattr(env, "response_kind", ""))
+                    _is_success_terminal = _response_kind.endswith("result")
+                    _completion_result = {
+                        "success": _is_success_terminal,
+                        "result": message.get("payload") or message.get("result"),
+                        "task_id": _env_task_id,
+                        "handoff_id": env.handoff_id if hasattr(env, "handoff_id") else "",
+                        "device_id": device_id,
+                        "response_kind": _response_kind,
+                        "via": "handoff_v2_result",
+                        "participant_local_completion": True,
+                        "canonical_closure_authority": "v2",
+                    }
                     try:
                         from galaxy_gateway.device_router import (
                             device_router as _device_router,
                         )
 
-                        _completion_result = {
-                            "success": str(getattr(env, "response_kind", "")).endswith("result"),
-                            "result": message.get("payload") or message.get("result"),
-                            "task_id": _env_task_id,
-                            "handoff_id": env.handoff_id if hasattr(env, "handoff_id") else "",
-                            "device_id": device_id,
-                            "response_kind": str(getattr(env, "response_kind", "")),
-                            "via": "handoff_v2_result",
-                        }
                         await _device_router.handle_task_result(_env_task_id, _completion_result)
                         logger.debug(
                             "PR-1 P0: handoff_v2 terminal → device_router.handle_task_result "
@@ -203,6 +207,70 @@ async def handle_handoff_v2_result(
                             "(non-fatal): task_id=%r exc=%s",
                             _env_task_id,
                             _dr_exc,
+                        )
+                    try:
+                        from core.task_envelope_lifecycle_registry import (
+                            LifecycleOwner,
+                            get_lifecycle_registry,
+                        )
+
+                        _registry = get_lifecycle_registry()
+                        _registry.transfer_ownership(_env_task_id, LifecycleOwner.RESULT_COMPLETION)
+                        if _is_success_terminal:
+                            _registry.complete(_env_task_id, _completion_result)
+                        else:
+                            _registry.fail(
+                                _env_task_id,
+                                f"android_handoff_terminal:{_response_kind or 'unknown'}",
+                            )
+                    except Exception as _registry_exc:
+                        logger.debug(
+                            "handoff_v2 terminal lifecycle reconciliation skipped "
+                            "(non-fatal): task_id=%r exc=%s",
+                            _env_task_id,
+                            _registry_exc,
+                        )
+                    try:
+                        from core.task_graph_runtime import (
+                            GraphNodeState,
+                            WorkflowContributorKind,
+                            get_task_graph_runtime,
+                        )
+
+                        _tgr = get_task_graph_runtime()
+                        _tgr.register_node_raw(
+                            _env_task_id,
+                            tool_name="android_handoff_v2_result",
+                            trace_id=str(getattr(env, "trace_id", "") or ""),
+                            device_id=device_id,
+                            contributor=WorkflowContributorKind.UNKNOWN,
+                            metadata={
+                                "handoff_id": str(getattr(env, "handoff_id", "") or ""),
+                                "response_kind": _response_kind,
+                                "source": "galaxy_gateway.android.handlers.handoff_v2_result",
+                            },
+                        )
+                        _terminal_state = GraphNodeState.COMPLETED
+                        if _response_kind in {"failure", "handoff_failure"}:
+                            _terminal_state = GraphNodeState.FAILED
+                        elif _response_kind in {"timeout", "handoff_timeout"}:
+                            _terminal_state = GraphNodeState.DEGRADED
+                        elif _response_kind in {"cancelled", "canceled", "handoff_cancelled"}:
+                            _terminal_state = GraphNodeState.CANCELLED
+                        _tgr.transition(
+                            _env_task_id,
+                            _terminal_state,
+                            reason=f"android_handoff_terminal:{_response_kind or 'unknown'}",
+                            contributor=WorkflowContributorKind.UNKNOWN,
+                            result_summary="android_terminal_result" if _is_success_terminal else "",
+                            error="" if _is_success_terminal else f"android_terminal:{_response_kind or 'unknown'}",
+                        )
+                    except Exception as _tgr_exc:
+                        logger.debug(
+                            "handoff_v2 terminal task-graph reconciliation skipped "
+                            "(non-fatal): task_id=%r exc=%s",
+                            _env_task_id,
+                            _tgr_exc,
                         )
                 # PR-10-V2: unified audit record.
                 if _audit_handoff_v2_result is not None:

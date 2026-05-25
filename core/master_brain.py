@@ -68,6 +68,10 @@ _COMPLEXITY_RETRY_WEIGHT = 0.1
 _COMPLEXITY_RETRY_CAP = 0.3
 _COMPLEXITY_TIMEOUT_DIVISOR_MS = 120_000.0
 _COMPLEXITY_TIMEOUT_CAP = 0.3
+_SCALING_REEVAL_INTERVAL_S = max(
+    5.0,
+    float(os.environ.get("GALAXY_MASTER_BRAIN_SCALING_REEVAL_INTERVAL_S", "15.0") or 15.0),
+)
 
 
 def _env_flag(name: str) -> bool:
@@ -106,6 +110,7 @@ class MasterBrain:
         self._temporal_client: Any = None
         self._temporal_worker: Any = None
         self._temporal_worker_task: Optional[asyncio.Task[Any]] = None
+        self._scaling_monitor_task: Optional[asyncio.Task[Any]] = None
         self._temporal_last_error: str = ""
         self._temporal_worker_state: str = "inactive"
         self._started = False
@@ -223,6 +228,7 @@ class MasterBrain:
             self._temporal_client is not None,
             self._temporal_worker_active(),
         )
+        self._ensure_scaling_monitor_started()
         return {
             "success": True,
             "nats_connected": nats_connected,
@@ -237,9 +243,47 @@ class MasterBrain:
 
     async def stop(self) -> dict:
         """Stop MasterBrain runtime integrations owned by this process."""
+        await self._stop_scaling_monitor()
         await self._stop_temporal_runtime()
         self._started = False
         return {"success": True}
+
+    def _ensure_scaling_monitor_started(self) -> None:
+        task = self._scaling_monitor_task
+        if task is not None and not task.done():
+            return
+        self._scaling_monitor_task = asyncio.create_task(
+            self._run_periodic_scaling_monitor(),
+            name="galaxy-master-brain-scaling-monitor",
+        )
+
+    async def _stop_scaling_monitor(self) -> None:
+        task = self._scaling_monitor_task
+        self._scaling_monitor_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning("MasterBrain: scaling monitor stop failed: %s", exc)
+
+    async def _run_periodic_scaling_monitor(self) -> None:
+        while self._started:
+            try:
+                await asyncio.sleep(_SCALING_REEVAL_INTERVAL_S)
+                if not self._started:
+                    break
+                self._reevaluate_scaling_state(
+                    trigger="periodic_monitor",
+                    reason="runtime_regulation_tick",
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.debug("MasterBrain: periodic scaling monitor tick skipped: %s", exc)
 
     async def _start_temporal_runtime(self) -> None:
         """Start the Temporal client + worker as a single lifecycle unit."""
@@ -559,21 +603,19 @@ class MasterBrain:
             )
 
         result_dump = result.model_dump(mode="json", exclude_none=True)
-        if record.get("closure_complete") and record.get("completion_state") in {
-            "dead_lettered",
-            "execution_abandoned",
-            "execution_timed_out",
-        }:
+        if record.get("closure_complete"):
+            locked_completion_state = str(record.get("completion_state") or "terminal_closed")
+            terminal_source = str(record.get("terminal_source") or "canonical_terminal")
             late = self._update_task_record(
                 task_id,
                 late_result=result_dump,
                 late_result_at=datetime.now().isoformat(),
-                late_result_reason=f"late_after_{record.get('completion_state')}",
+                late_result_reason=f"late_after_{locked_completion_state}",
             )
             self._transition_task_graph(
                 task_id,
                 "replayed",
-                reason=f"late_result_ignored:{record.get('completion_state')}",
+                reason=f"late_result_ignored:{locked_completion_state}",
             )
             return {
                 "success": False,
@@ -582,7 +624,9 @@ class MasterBrain:
                 "error": late.get("error", ""),
                 "completion_state": late.get("completion_state"),
                 "late_result_ignored": True,
-                "terminal_source": late.get("terminal_source", ""),
+                "terminal_source": terminal_source,
+                "precedence_decision": "canonical_terminal_precedence",
+                "canonical_terminal_locked": True,
             }
 
         correlation_error = self._validate_result_correlation(record, result)
@@ -1433,10 +1477,16 @@ class MasterBrain:
             if "android" in str(info.get("platform", "")).lower()
             or "android" in str(info.get("device_type", "")).lower()
         ]
+        worker_types_alive: Dict[str, int] = {}
+        for info in alive:
+            kind = str(info.get("device_type") or info.get("platform") or "unknown").lower()
+            worker_types_alive[kind] = worker_types_alive.get(kind, 0) + 1
         return {
             "workers_alive": len(alive),
             "android_workers_alive": len(android_alive),
             "topology_has_android_workers": bool(android_alive),
+            "worker_types_alive": worker_types_alive,
+            "heterogeneous_worker_pool": len(worker_types_alive) > 1,
         }
 
     def _evaluate_scaling_state(self, *, task: TaskDispatchModel) -> dict:
@@ -1459,6 +1509,7 @@ class MasterBrain:
                 "reason": "runtime_dispatch_evaluation",
                 "trigger": "dispatch_task",
                 "evaluated_at": datetime.now().isoformat(),
+                "activity_state": "regulating" if action != "no_change" else "monitoring",
                 "complexity": complexity,
                 "load": load,
                 **topology_signals,
@@ -1495,6 +1546,7 @@ class MasterBrain:
                 "reason": str(reason or "runtime_reevaluation"),
                 "trigger": trigger,
                 "evaluated_at": datetime.now().isoformat(),
+                "activity_state": "regulating" if action != "no_change" else "monitoring",
                 "complexity": complexity,
                 "load": load,
                 "pending_tasks": sum(
