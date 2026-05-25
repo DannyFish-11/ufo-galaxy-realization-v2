@@ -156,6 +156,8 @@ Functions::
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 import uuid
 from collections import deque
@@ -252,6 +254,28 @@ DELEGATED_RUNTIME_EXECUTION_TRACKER_PR10_SENTINEL: str = (
     "module=core.delegated_runtime_execution_tracker"
 )
 
+DELEGATED_RUNTIME_EXECUTION_TRACKER_DURABILITY_AUTHORITY: str = (
+    "DELEGATED_RUNTIME_EXECUTION_TRACKER_DURABILITY_AUTHORITY::"
+    "core.delegated_runtime_execution_tracker persists delegated-runtime "
+    "tracking truth to a durable JSON substrate and restores it on runtime "
+    "restart. Restored non-terminal records are explicitly demoted until "
+    "fresh runtime signals revalidate them."
+)
+
+RECOVERED_TRACKING_REQUIRES_REVALIDATION_POLICY: str = (
+    "POLICY::RECOVERED_TRACKING_REQUIRES_REVALIDATION: "
+    "Delegated execution tracking records restored from durable state after "
+    "process restart MUST NOT be treated as live active truth until a fresh "
+    "post-restart acknowledgment or result signal revalidates them."
+)
+
+RECOVERED_UNREVALIDATED_TRACKING_NOT_ACTIVE_POLICY: str = (
+    "POLICY::RECOVERED_UNREVALIDATED_TRACKING_NOT_ACTIVE: "
+    "A restored non-terminal delegated execution record is historical recovery "
+    "evidence, not live active execution truth. Such records are excluded from "
+    "active tracking queries and autonomy promotion until revalidated."
+)
+
 # ---------------------------------------------------------------------------
 # PR-33: Reconnect and Recovery Consistency sentinel
 # ---------------------------------------------------------------------------
@@ -274,6 +298,7 @@ TRACKER_ACTIVE_RECORDS_SURVIVE_RECONNECT_PR33_POLICY: str = (
 # Convenience tuple for iteration / projection
 _ALL_POLICY_SENTINELS = (
     DELEGATED_RUNTIME_EXECUTION_TRACKER_AUTHORITY,
+    DELEGATED_RUNTIME_EXECUTION_TRACKER_DURABILITY_AUTHORITY,
     EXECUTION_TRACKING_REQUIRES_CONTRACT_ID_POLICY,
     EXECUTION_TRACKING_REQUIRES_SESSION_ID_POLICY,
     EXECUTION_PHASE_IS_MONOTONIC_POLICY,
@@ -283,6 +308,8 @@ _ALL_POLICY_SENTINELS = (
     TERMINAL_PHASE_BLOCKS_FURTHER_SIGNALS_POLICY,
     TRACKING_RECORD_IS_CONTRACT_ANCHORED_POLICY,
     PARTIAL_RESULT_DOES_NOT_CLOSE_TRACKING_POLICY,
+    RECOVERED_TRACKING_REQUIRES_REVALIDATION_POLICY,
+    RECOVERED_UNREVALIDATED_TRACKING_NOT_ACTIVE_POLICY,
 )
 
 # ---------------------------------------------------------------------------
@@ -292,6 +319,21 @@ _ALL_POLICY_SENTINELS = (
 _POSTURE_JOIN_RUNTIME: str = "join_runtime"
 _POSTURE_CONTROL_ONLY: str = "control_only"
 _RING_BUFFER_CAPACITY: int = 128
+_TRACKER_STATE_PATH_ENV: str = "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH"
+_TRACKER_ACTIVE_RECOVERY_TTL_ENV: str = (
+    "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_ACTIVE_RECOVERY_TTL_SECONDS"
+)
+_DEFAULT_TRACKER_STATE_PATH: str = (
+    "data/runtime/delegated_runtime_execution_tracker.json"
+)
+_ACTIVE_RECOVERY_TTL_SECONDS: float = float(
+    os.getenv(_TRACKER_ACTIVE_RECOVERY_TTL_ENV, "900")
+)
+_RECOVERY_STATUS_LIVE: str = "live"
+_RECOVERY_STATUS_REVALIDATED: str = "revalidated_live"
+_RECOVERY_STATUS_RECOVERED_UNREVALIDATED: str = "recovered_unrevalidated"
+_RECOVERY_STATUS_RECOVERED_STALE: str = "recovered_stale"
+_RECOVERY_STATUS_RECOVERED_TERMINAL: str = "recovered_terminal_historical"
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -634,6 +676,9 @@ class DelegatedExecutionTrackingRecord:
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     reject_reason: str = ""
+    recovered_from_durable_state: bool = False
+    recovery_status: str = _RECOVERY_STATUS_LIVE
+    recovered_at: Optional[float] = None
 
     # Convenience accessors -------------------------------------------------
 
@@ -651,7 +696,10 @@ class DelegatedExecutionTrackingRecord:
 
     def is_active(self) -> bool:
         """Return True iff the tracking record is in a non-terminal phase."""
-        return self.phase.is_active()
+        return self.phase.is_active() and self.recovery_status not in (
+            _RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
+            _RECOVERY_STATUS_RECOVERED_STALE,
+        )
 
     def is_terminal(self) -> bool:
         """Return True iff the tracking record has reached a terminal phase."""
@@ -676,6 +724,9 @@ class DelegatedExecutionTrackingRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "reject_reason": self.reject_reason,
+            "recovered_from_durable_state": self.recovered_from_durable_state,
+            "recovery_status": self.recovery_status,
+            "recovered_at": self.recovered_at,
         }
 
     def to_json(self) -> str:
@@ -724,6 +775,18 @@ class DelegatedExecutionTrackingRecord:
             created_at=float(data.get("created_at", time.time())),
             updated_at=float(data.get("updated_at", time.time())),
             reject_reason=str(data.get("reject_reason", "")),
+            recovered_from_durable_state=bool(
+                data.get("recovered_from_durable_state", False)
+            ),
+            recovery_status=str(
+                data.get("recovery_status", _RECOVERY_STATUS_LIVE)
+                or _RECOVERY_STATUS_LIVE
+            ),
+            recovered_at=(
+                float(data["recovered_at"])
+                if data.get("recovered_at") is not None
+                else None
+            ),
         )
 
 
@@ -753,6 +816,12 @@ class DelegatedExecutionTrackingSnapshot:
     total_count: int = 0
     snapshotted_at: float = field(default_factory=time.time)
     policy_sentinels: List[str] = field(default_factory=list)
+    recovered_unrevalidated_count: int = 0
+    recovered_stale_count: int = 0
+    recovered_terminal_count: int = 0
+    durable_state_path: Optional[str] = None
+    durable_state_last_restored_at: Optional[float] = None
+    durable_state_last_persisted_at: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -762,6 +831,12 @@ class DelegatedExecutionTrackingSnapshot:
             "total_count": self.total_count,
             "snapshotted_at": self.snapshotted_at,
             "policy_sentinels": list(self.policy_sentinels),
+            "recovered_unrevalidated_count": self.recovered_unrevalidated_count,
+            "recovered_stale_count": self.recovered_stale_count,
+            "recovered_terminal_count": self.recovered_terminal_count,
+            "durable_state_path": self.durable_state_path,
+            "durable_state_last_restored_at": self.durable_state_last_restored_at,
+            "durable_state_last_persisted_at": self.durable_state_last_persisted_at,
         }
 
     def to_json(self) -> str:
@@ -783,10 +858,14 @@ class DelegatedExecutionTrackingRuntime:
 
     _CAPACITY: int = _RING_BUFFER_CAPACITY
 
-    def __init__(self) -> None:
+    def __init__(self, *, state_path: Optional[str] = None) -> None:
         self._buf: Deque[DelegatedExecutionTrackingRecord] = deque(
             maxlen=self._CAPACITY
         )
+        self._state_path: str = str(state_path or "").strip()
+        self._last_restored_at: Optional[float] = None
+        self._last_persisted_at: Optional[float] = None
+        self._restore_from_disk()
 
     @property
     def capacity(self) -> int:
@@ -799,6 +878,7 @@ class DelegatedExecutionTrackingRuntime:
     def push(self, record: DelegatedExecutionTrackingRecord) -> None:
         """Append *record* to the ring buffer, evicting the oldest if full."""
         self._buf.append(record)
+        self._persist_state()
 
     def list_all(self) -> List[DelegatedExecutionTrackingRecord]:
         """Return all records, newest-first."""
@@ -806,7 +886,7 @@ class DelegatedExecutionTrackingRuntime:
 
     def list_active(self) -> List[DelegatedExecutionTrackingRecord]:
         """Return records in a non-terminal phase, newest-first."""
-        return [r for r in reversed(self._buf) if r.phase.is_active()]
+        return [r for r in reversed(self._buf) if r.is_active()]
 
     def get_latest_for_session(
         self, session_id: str
@@ -829,6 +909,91 @@ class DelegatedExecutionTrackingRuntime:
     def clear(self) -> None:
         """Remove all records from the buffer."""
         self._buf.clear()
+        self._persist_state()
+
+    @property
+    def state_path(self) -> str:
+        return self._state_path
+
+    @property
+    def last_restored_at(self) -> Optional[float]:
+        return self._last_restored_at
+
+    @property
+    def last_persisted_at(self) -> Optional[float]:
+        return self._last_persisted_at
+
+    def clear_durable_state(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            os.remove(self._state_path)
+        except FileNotFoundError:
+            return
+
+    def _restore_from_disk(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            with open(self._state_path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+        except FileNotFoundError:
+            return
+        except Exception:
+            return
+
+        restored: List[DelegatedExecutionTrackingRecord] = []
+        restored_at = time.time()
+        for item in payload.get("records", []) or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                record = DelegatedExecutionTrackingRecord.from_dict(item)
+            except Exception:
+                continue
+            restored.append(_mark_restored_tracking_record(record, restored_at))
+
+        self._buf = deque(restored[-self._CAPACITY :], maxlen=self._CAPACITY)
+        self._last_restored_at = restored_at
+        persisted_at = payload.get("persisted_at")
+        if persisted_at is not None:
+            try:
+                self._last_persisted_at = float(persisted_at)
+            except (TypeError, ValueError):
+                self._last_persisted_at = None
+
+    def _persist_state(self) -> None:
+        if not self._state_path:
+            return
+        payload = {
+            "contract_version": "delegated_runtime_execution_tracker_durable_v1",
+            "persisted_at": time.time(),
+            "authority": DELEGATED_RUNTIME_EXECUTION_TRACKER_DURABILITY_AUTHORITY,
+            "records": [record.to_dict() for record in self._buf],
+        }
+        directory = os.path.dirname(self._state_path)
+        tmp_path: Optional[str] = None
+        try:
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=(directory or None),
+                prefix="delegated-runtime-tracker-",
+                suffix=".tmp",
+                delete=False,
+            ) as fp:
+                tmp_path = fp.name
+                json.dump(payload, fp, ensure_ascii=False, sort_keys=True)
+            os.replace(tmp_path, self._state_path)
+            self._last_persisted_at = payload["persisted_at"]
+        except Exception:
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------
@@ -842,14 +1007,59 @@ def get_execution_tracking_runtime() -> DelegatedExecutionTrackingRuntime:
     """Return the process-singleton :class:`DelegatedExecutionTrackingRuntime`."""
     global _SINGLETON_RUNTIME  # noqa: PLW0603
     if _SINGLETON_RUNTIME is None:
-        _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime()
+        _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime(
+            state_path=_resolve_runtime_state_path()
+        )
     return _SINGLETON_RUNTIME
 
 
-def reset_execution_tracking_runtime() -> None:
+def reset_execution_tracking_runtime(*, clear_durable_state: bool = True) -> None:
     """Replace the singleton with a fresh instance (test isolation helper)."""
     global _SINGLETON_RUNTIME  # noqa: PLW0603
-    _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime()
+    state_path = _resolve_runtime_state_path()
+    if clear_durable_state:
+        if _SINGLETON_RUNTIME is not None:
+            _SINGLETON_RUNTIME.clear_durable_state()
+        elif state_path:
+            try:
+                os.remove(state_path)
+            except FileNotFoundError:
+                pass
+    _SINGLETON_RUNTIME = DelegatedExecutionTrackingRuntime(state_path=state_path)
+
+
+def _resolve_runtime_state_path() -> str:
+    raw = str(os.getenv(_TRACKER_STATE_PATH_ENV, _DEFAULT_TRACKER_STATE_PATH) or "").strip()
+    return raw or _DEFAULT_TRACKER_STATE_PATH
+
+
+def _mark_restored_tracking_record(
+    record: DelegatedExecutionTrackingRecord,
+    restored_at: float,
+) -> DelegatedExecutionTrackingRecord:
+    if record.phase.is_terminal():
+        status = _RECOVERY_STATUS_RECOVERED_TERMINAL
+    else:
+        age = max(0.0, restored_at - float(record.updated_at or 0.0))
+        status = (
+            _RECOVERY_STATUS_RECOVERED_STALE
+            if age > _ACTIVE_RECOVERY_TTL_SECONDS
+            else _RECOVERY_STATUS_RECOVERED_UNREVALIDATED
+        )
+    return DelegatedExecutionTrackingRecord(
+        identity=record.identity,
+        phase=record.phase,
+        acknowledgments=list(record.acknowledgments),
+        result=record.result,
+        source_runtime_posture=record.source_runtime_posture,
+        coordination_role=record.coordination_role,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        reject_reason=record.reject_reason,
+        recovered_from_durable_state=True,
+        recovery_status=status,
+        recovered_at=restored_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -916,6 +1126,7 @@ def create_execution_tracking_record(
             reject_reason=(
                 "EXECUTION_TRACKING_REQUIRES_SESSION_ID: session_id is empty"
             ),
+            recovery_status=_RECOVERY_STATUS_LIVE,
         )
         _runtime.push(record)
         return record
@@ -935,6 +1146,7 @@ def create_execution_tracking_record(
             reject_reason=(
                 "EXECUTION_TRACKING_REQUIRES_CONTRACT_ID: contract_id is empty"
             ),
+            recovery_status=_RECOVERY_STATUS_LIVE,
         )
         _runtime.push(record)
         return record
@@ -956,6 +1168,7 @@ def create_execution_tracking_record(
         created_at=now,
         updated_at=now,
         reject_reason="",
+        recovery_status=_RECOVERY_STATUS_LIVE,
     )
     _runtime.push(record)
     return record
@@ -1020,6 +1233,17 @@ def apply_acknowledgment_signal(
         created_at=record.created_at,
         updated_at=time.time(),
         reject_reason=record.reject_reason,
+        recovered_from_durable_state=record.recovered_from_durable_state,
+        recovery_status=(
+            _RECOVERY_STATUS_REVALIDATED
+            if record.recovery_status in (
+                _RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
+                _RECOVERY_STATUS_RECOVERED_STALE,
+                _RECOVERY_STATUS_RECOVERED_TERMINAL,
+            )
+            else record.recovery_status
+        ),
+        recovered_at=record.recovered_at,
     )
     _runtime.push(updated)
     return updated
@@ -1073,6 +1297,17 @@ def apply_result(
         created_at=record.created_at,
         updated_at=time.time(),
         reject_reason=record.reject_reason,
+        recovered_from_durable_state=record.recovered_from_durable_state,
+        recovery_status=(
+            _RECOVERY_STATUS_REVALIDATED
+            if record.recovery_status in (
+                _RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
+                _RECOVERY_STATUS_RECOVERED_STALE,
+                _RECOVERY_STATUS_RECOVERED_TERMINAL,
+            )
+            else record.recovery_status
+        ),
+        recovered_at=record.recovered_at,
     )
     _runtime.push(updated)
     return updated
@@ -1120,12 +1355,28 @@ def build_execution_tracking_snapshot(
     """
     _runtime = runtime if runtime is not None else get_execution_tracking_runtime()
     all_records = _runtime.list_all()
-    active = [r for r in all_records if r.phase.is_active()]
+    active = [r for r in all_records if r.is_active()]
     return DelegatedExecutionTrackingSnapshot(
         records=all_records,
         active_count=len(active),
         total_count=len(all_records),
         policy_sentinels=list(_ALL_POLICY_SENTINELS),
+        recovered_unrevalidated_count=len(
+            [
+                r
+                for r in all_records
+                if r.recovery_status == _RECOVERY_STATUS_RECOVERED_UNREVALIDATED
+            ]
+        ),
+        recovered_stale_count=len(
+            [r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_STALE]
+        ),
+        recovered_terminal_count=len(
+            [r for r in all_records if r.recovery_status == _RECOVERY_STATUS_RECOVERED_TERMINAL]
+        ),
+        durable_state_path=_runtime.state_path,
+        durable_state_last_restored_at=_runtime.last_restored_at,
+        durable_state_last_persisted_at=_runtime.last_persisted_at,
     )
 
 
@@ -1163,4 +1414,4 @@ def get_active_execution_tracking_for_session(
     latest = _runtime.get_latest_for_session(session_id)
     if latest is None:
         return None
-    return latest if latest.phase.is_active() else None
+    return latest if latest.is_active() else None
