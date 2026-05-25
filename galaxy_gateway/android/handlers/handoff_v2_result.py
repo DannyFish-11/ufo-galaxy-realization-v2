@@ -248,6 +248,7 @@ async def handle_handoff_v2_result(
                                 "handoff_id": str(getattr(env, "handoff_id", "") or ""),
                                 "response_kind": _response_kind,
                                 "source": "galaxy_gateway.android.handlers.handoff_v2_result",
+                                "canonical_router_owner": "core.command_router.CommandRouter",
                             },
                         )
                         _terminal_state = GraphNodeState.COMPLETED
@@ -294,6 +295,7 @@ async def handle_handoff_v2_result(
                                 "source": "galaxy_gateway.android.handlers.handoff_v2_result",
                                 "non_terminal": True,
                                 "canonical_closure_authority": "v2",
+                                "canonical_router_owner": "core.command_router.CommandRouter",
                             },
                         )
                         _non_terminal_state = GraphNodeState.RUNNING

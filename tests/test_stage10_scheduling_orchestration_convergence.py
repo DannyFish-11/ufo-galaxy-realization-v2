@@ -445,7 +445,10 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
         self.assertTrue(result.get("legacy_fallback_blocked"))
         self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
         self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
-        self.assertTrue(str(result.get("task_id", "")).startswith("relay_"))
+        self.assertTrue(
+            result.get("task_id", "").startswith("relay_"),
+            "Expected task_id to start with relay_",
+        )
         self.assertEqual(graph.transition.call_count, 1)
 
     def test_mesh_blocks_legacy_fallback_without_explicit_opt_in(self):
@@ -463,7 +466,10 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
         self.assertTrue(result.get("legacy_fallback_blocked"))
         self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
         self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
-        self.assertTrue(str(result.get("task_id", "")).startswith("mesh_"))
+        self.assertTrue(
+            result.get("task_id", "").startswith("mesh_"),
+            "Expected task_id to start with mesh_",
+        )
         self.assertEqual(graph.transition.call_count, 1)
 
 

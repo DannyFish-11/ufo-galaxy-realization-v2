@@ -17,6 +17,7 @@ import re
 import json
 import logging
 import asyncio
+import uuid
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
@@ -1042,8 +1043,9 @@ CROSS-DEVICE:
             pass
         _relay_task_id = args.get("task_id")
         if not _relay_task_id:
-            import uuid as _uuid_relay_task
-            _relay_task_id = f"relay_{_uuid_relay_task.uuid4().hex[:16]}"
+            _relay_task_id = f"relay_{uuid.uuid4().hex[:16]}"
+        # Shallow copy is sufficient: this path mutates only top-level task_id
+        # and never mutates nested payload objects.
         _relay_args = dict(args)
         _relay_args["task_id"] = _relay_task_id
 
@@ -1219,8 +1221,9 @@ CROSS-DEVICE:
             pass
         _mesh_task_id = args.get("task_id")
         if not _mesh_task_id:
-            import uuid as _uuid_mesh_task
-            _mesh_task_id = f"mesh_{_uuid_mesh_task.uuid4().hex[:16]}"
+            _mesh_task_id = f"mesh_{uuid.uuid4().hex[:16]}"
+        # Shallow copy is sufficient: this path mutates only top-level task_id
+        # and never mutates nested payload objects.
         _mesh_args = dict(args)
         _mesh_args["task_id"] = _mesh_task_id
 
