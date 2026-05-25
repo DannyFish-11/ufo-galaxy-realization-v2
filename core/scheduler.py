@@ -64,6 +64,17 @@ SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE: str = (
     "ingress is normalized via core.execution_spine."
 )
 
+# Post-1290 convergence hardening:
+# Relay/Mesh legacy fallback paths are now explicitly non-canonical and blocked
+# by default unless a caller opts in via runtime flag/context.
+SCHEDULER_LEGACY_RELAY_MESH_FALLBACK_GATED: str = (
+    "SCHEDULER_LEGACY_RELAY_MESH_FALLBACK_GATED_V1: "
+    "_exec_relay()/_exec_mesh_send() require canonical CommandRouter routing by "
+    "default; ProxyRelay/MeshCoordinator fallback is blocked unless explicitly "
+    "enabled by allow_legacy_scheduler_fallback or "
+    "GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK=true."
+)
+
 # Phase-A consolidation: canonical tool naming is now the PRIMARY exposed
 # naming scheme for MCP and Skill tools injected by this scheduler.
 #
@@ -1094,6 +1105,26 @@ CROSS-DEVICE:
                     _spine_relay_err,
                 )
 
+        _allow_legacy_fallback = str(
+            args.get("allow_legacy_scheduler_fallback")
+            or (context or {}).get("allow_legacy_scheduler_fallback")
+            or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if not _allow_legacy_fallback:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": (
+                        "canonical_command_router_unavailable: relay legacy fallback blocked "
+                        "(set allow_legacy_scheduler_fallback=true to opt in)"
+                    ),
+                    "error_code": "CANONICAL_ROUTE_REQUIRED",
+                    "legacy_fallback_blocked": True,
+                    "canonical_route_required": True,
+                },
+                ensure_ascii=False,
+            )
+
         try:
             from core.proxy_relay import get_proxy_relay, RelayRequest
             relay = get_proxy_relay()
@@ -1199,6 +1230,25 @@ CROSS-DEVICE:
                     "_exec_mesh_send: spine routing failed (%s); falling back to MeshCoordinator",
                     _spine_mesh_err,
                 )
+
+        _allow_legacy_fallback = str(
+            args.get("allow_legacy_scheduler_fallback")
+            or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if not _allow_legacy_fallback:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": (
+                        "canonical_command_router_unavailable: mesh legacy fallback blocked "
+                        "(set allow_legacy_scheduler_fallback=true to opt in)"
+                    ),
+                    "error_code": "CANONICAL_ROUTE_REQUIRED",
+                    "legacy_fallback_blocked": True,
+                    "canonical_route_required": True,
+                },
+                ensure_ascii=False,
+            )
 
         try:
             from core.mesh_coordinator import get_mesh_coordinator
