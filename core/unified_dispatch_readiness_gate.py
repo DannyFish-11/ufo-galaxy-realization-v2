@@ -118,6 +118,13 @@ ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY: str = (
     "be explicit in every dispatch decision."
 )
 
+UNSUPPORTED_DEVICE_TYPE_BLOCKS_DISPATCH_POLICY: str = (
+    "POLICY::UNSUPPORTED_DEVICE_TYPE_BLOCKS_DISPATCH: "
+    "Declared or registered device classes that are not operationally supported "
+    "near-peers MUST NOT receive a DISPATCH_READY verdict. Operational support "
+    "truth is sourced from core.device_operational_support."
+)
+
 DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY: str = (
     "POLICY::DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY: "
     "Online dispatch acceptance is NOT exempt from the unified continuity legality "
@@ -170,6 +177,9 @@ class DispatchReadinessStatus(str, Enum):
         session for this device.
     BLOCKED_CROSS_DEVICE_ELIGIBILITY
         Cross-device eligibility requirements are not met for this device.
+    BLOCKED_OPERATIONAL_SUPPORT
+        Device class is declared or observable but not operationally supported
+        as a dispatch/control near-peer.
     BLOCKED_CONTINUITY_LEGALITY
         The unified continuity legality authority rejected the inbound action
         for this device.  Dispatch is blocked until continuity legality is
@@ -204,6 +214,7 @@ class DispatchReadinessStatus(str, Enum):
     BLOCKED_CAPABILITY = "blocked_capability"
     BLOCKED_SESSION_VALIDITY = "blocked_session_validity"
     BLOCKED_CROSS_DEVICE_ELIGIBILITY = "blocked_cross_device_eligibility"
+    BLOCKED_OPERATIONAL_SUPPORT = "blocked_operational_support"
     BLOCKED_CONTINUITY_LEGALITY = "blocked_continuity_legality"
     BLOCKED_EXECUTION_MODE_INELIGIBLE = "blocked_execution_mode_ineligible"
     BLOCKED_OCCUPANCY = "blocked_occupancy"
@@ -265,6 +276,9 @@ class DispatchReadinessResult:
     runtime_attachment_session_id: Optional[str] = None
     transport_alive: bool = False
     blocking_notes: List[str] = field(default_factory=list)
+    device_type: Optional[str] = None
+    operational_support_status: Optional[str] = None
+    operational_support_reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -279,6 +293,9 @@ class DispatchReadinessResult:
             "runtime_attachment_session_id": self.runtime_attachment_session_id,
             "transport_alive": self.transport_alive,
             "blocking_notes": list(self.blocking_notes),
+            "device_type": self.device_type,
+            "operational_support_status": self.operational_support_status,
+            "operational_support_reason": self.operational_support_reason,
             "authority": UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY,
         }
 
@@ -419,6 +436,24 @@ def _evaluate_impl(
             blocking_notes=notes,
         )
 
+    support_result = _check_device_operational_support(
+        device_id,
+        raw_device_type=udm_info.get("device_type"),
+    )
+    if not support_result["dispatch_target_capable"]:
+        notes.append(f"device_type={support_result['device_type']}")
+        return DispatchReadinessResult(
+            device_id=device_id,
+            dispatch_ready=False,
+            registered=True,
+            status=DispatchReadinessStatus.BLOCKED_OPERATIONAL_SUPPORT.value,
+            reason=support_result["reason"],
+            blocking_notes=notes,
+            device_type=support_result["device_type"],
+            operational_support_status=support_result["support_tier"],
+            operational_support_reason=support_result["reason"],
+        )
+
     # ----------------------------------------------------------------
     # Gate 3: Transport alive check
     # ----------------------------------------------------------------
@@ -436,6 +471,9 @@ def _evaluate_impl(
             reason="Transport is not alive (WebSocket closed or UCM absent).",
             transport_alive=False,
             blocking_notes=notes,
+            device_type=support_result["device_type"],
+            operational_support_status=support_result["support_tier"],
+            operational_support_reason=support_result["reason"],
         )
 
     # ----------------------------------------------------------------
@@ -464,6 +502,9 @@ def _evaluate_impl(
             runtime_session_id=attachment_result.get("runtime_session_id"),
             runtime_attachment_session_id=attachment_result.get("runtime_attachment_session_id"),
             blocking_notes=notes + attachment_result.get("notes", []),
+            device_type=support_result["device_type"],
+            operational_support_status=support_result["support_tier"],
+            operational_support_reason=support_result["reason"],
         )
 
     # ----------------------------------------------------------------
@@ -497,6 +538,9 @@ def _evaluate_impl(
                     "runtime_attachment_session_id"
                 ),
                 blocking_notes=notes,
+                device_type=support_result["device_type"],
+                operational_support_status=support_result["support_tier"],
+                operational_support_reason=support_result["reason"],
             )
 
     # ----------------------------------------------------------------
@@ -524,6 +568,9 @@ def _evaluate_impl(
                     "runtime_attachment_session_id"
                 ),
                 blocking_notes=notes,
+                device_type=support_result["device_type"],
+                operational_support_status=support_result["support_tier"],
+                operational_support_reason=support_result["reason"],
             )
 
     # ----------------------------------------------------------------
@@ -549,6 +596,9 @@ def _evaluate_impl(
             "runtime_attachment_session_id"
         ),
         blocking_notes=notes,
+        device_type=support_result["device_type"],
+        operational_support_status=support_result["support_tier"],
+        operational_support_reason=support_result["reason"],
     )
 
 
@@ -576,7 +626,7 @@ def _check_registration_gaps(device_id: str) -> List[str]:
 
 def _check_udm_registration(device_id: str) -> Dict[str, Any]:
     """Return dict with ``registered`` and ``online`` from UDM."""
-    result = {"registered": False, "online": False}
+    result = {"registered": False, "online": False, "device_type": None}
     try:
         from core.unified.device_manager import get_unified_device_manager
         udm = get_unified_device_manager()
@@ -584,6 +634,7 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
         if device is not None:
             result["registered"] = True
             result["online"] = bool(device.get("online", False))
+            result["device_type"] = device.get("device_type") or device.get("platform")
         return result
     except Exception:
         pass
@@ -788,6 +839,28 @@ def _check_cross_device_eligibility(device_id: str) -> bool:
         return True
 
 
+def _check_device_operational_support(
+    device_id: str,
+    *,
+    raw_device_type: Optional[str],
+) -> Dict[str, Any]:
+    try:
+        from core.device_operational_support import get_device_operational_support
+
+        verdict = get_device_operational_support(
+            device_id=device_id,
+            raw_device_type=raw_device_type,
+        ).to_dict()
+        return verdict
+    except Exception:
+        return {
+            "device_type": str(raw_device_type or "unknown"),
+            "support_tier": "unknown",
+            "dispatch_target_capable": False,
+            "reason": "Operational support classification unavailable.",
+        }
+
+
 # ---------------------------------------------------------------------------
 # Test helper
 # ---------------------------------------------------------------------------
@@ -808,6 +881,7 @@ __all__ = [
     "REGISTRATION_GAP_BLOCKS_DISPATCH_POLICY",
     "STALE_ATTACHMENT_BLOCKS_DISPATCH_POLICY",
     "ONLINE_NOT_EQUAL_DISPATCH_READY_POLICY",
+    "UNSUPPORTED_DEVICE_TYPE_BLOCKS_DISPATCH_POLICY",
     "DISPATCH_GATE_SHARES_CONTINUITY_AUTHORITY_POLICY",
     "CANONICAL_DISPATCH_SLOT_AUTHORITY_CONSUMES_THIS_GATE_POLICY",
     "DispatchReadinessStatus",

@@ -141,6 +141,7 @@ from core.delegated_runtime_execution_tracker import (
     apply_result,
     build_execution_tracking_snapshot,
     create_execution_tracking_record,
+    get_active_execution_tracking_for_session,
     get_execution_tracking_record,
     get_execution_tracking_runtime,
     list_active_execution_tracking_records,
@@ -1806,3 +1807,88 @@ def test_CO01_multiple_signals_accumulate():
     assert r3.acknowledgments[1].signal == AcknowledgmentSignal.progress
     assert r3.acknowledgments[2].signal == AcknowledgmentSignal.partial_result
     assert r3.acknowledgments[2].payload == {"part": 1}
+
+
+def test_CP01_durable_runtime_restores_terminal_record(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH",
+        str(tmp_path / "tracker-state.json"),
+    )
+    reset_execution_tracking_runtime(clear_durable_state=True)
+    record = create_execution_tracking_record(
+        session_id="sess-durable-terminal",
+        contract_id="contract-durable-terminal",
+        device_id="android-durable",
+    )
+    apply_result(
+        record,
+        DelegatedExecutionResult(success=True, result_payload={"ok": True}),
+    )
+
+    reset_execution_tracking_runtime(clear_durable_state=False)
+    restored = get_execution_tracking_record("sess-durable-terminal")
+    assert restored is not None
+    assert restored.phase == DelegatedExecutionPhase.completed
+    assert restored.recovered_from_durable_state is True
+    assert restored.recovery_status == "recovered_terminal_historical"
+
+
+def test_CQ01_recovered_nonterminal_record_requires_revalidation(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH",
+        str(tmp_path / "tracker-state.json"),
+    )
+    reset_execution_tracking_runtime(clear_durable_state=True)
+    create_execution_tracking_record(
+        session_id="sess-recover-active",
+        contract_id="contract-recover-active",
+        device_id="android-recover-active",
+    )
+
+    reset_execution_tracking_runtime(clear_durable_state=False)
+    restored = get_execution_tracking_record("sess-recover-active")
+    assert restored is not None
+    assert restored.recovery_status == "recovered_unrevalidated"
+    assert restored.is_active() is False
+    assert get_active_execution_tracking_for_session("sess-recover-active") is None
+
+    revalidated = apply_acknowledgment_signal(restored, AcknowledgmentSignal.ack)
+    assert revalidated.recovery_status == "revalidated_live"
+    assert get_active_execution_tracking_for_session("sess-recover-active") is not None
+
+
+def test_CR01_stale_recovered_nonterminal_record_is_marked_stale(tmp_path, monkeypatch):
+    state_path = tmp_path / "tracker-state.json"
+    monkeypatch.setenv(
+        "GALAXY_DELEGATED_RUNTIME_EXECUTION_TRACKER_STATE_PATH",
+        str(state_path),
+    )
+    reset_execution_tracking_runtime(clear_durable_state=True)
+    create_execution_tracking_record(
+        session_id="sess-stale-recovery",
+        contract_id="contract-stale-recovery",
+        device_id="android-stale-recovery",
+    )
+
+    with state_path.open("r", encoding="utf-8") as fp:
+        payload = json.load(fp)
+    payload["records"][0]["updated_at"] = time.time() - 901.0
+    with state_path.open("w", encoding="utf-8") as fp:
+        json.dump(payload, fp)
+
+    reset_execution_tracking_runtime(clear_durable_state=False)
+    restored = get_execution_tracking_record("sess-stale-recovery")
+    assert restored is not None
+    assert restored.recovery_status == "recovered_stale"
+    snapshot = build_execution_tracking_snapshot()
+    assert snapshot.recovered_stale_count >= 1
+
+
+def test_CS01_custom_runtime_has_no_durable_state_path():
+    runtime = DelegatedExecutionTrackingRuntime()
+    create_execution_tracking_record(
+        session_id="sess-custom-runtime",
+        contract_id="contract-custom-runtime",
+        runtime=runtime,
+    )
+    assert runtime.state_path == ""

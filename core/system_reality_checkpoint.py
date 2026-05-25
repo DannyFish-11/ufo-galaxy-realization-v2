@@ -86,10 +86,12 @@ def _build_mcp_skill_checkpoint() -> Dict[str, Any]:
 def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str, Any]:
     from core.android_device_state_store import list_device_state_snapshots
     from core.canonical_task import get_canonical_task_runtime
+    from core.delegated_runtime_execution_tracker import build_execution_tracking_snapshot
 
     snaps = list_device_state_snapshots()
     runtime = get_canonical_task_runtime()
     alloc_records = runtime.list_allocation_records(limit=1)
+    tracker_snapshot = build_execution_tracking_snapshot()
     allocation_state_path = getattr(runtime, "_allocation_state_path", None)
     latest_absorbed = max(
         [float(getattr(s, "absorbed_at", 0.0) or 0.0) for s in snaps] or [0.0]
@@ -107,6 +109,14 @@ def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str
             "freshness_markers_present": True,
             "allocation_truth_durable_path": allocation_state_path,
             "allocation_truth_recovered": bool(alloc_records),
+            "delegated_execution_tracking_durable_path": tracker_snapshot.durable_state_path,
+            "delegated_execution_tracking_restored_at": tracker_snapshot.durable_state_last_restored_at,
+            "delegated_execution_tracking_recovered_unrevalidated_count": (
+                tracker_snapshot.recovered_unrevalidated_count
+            ),
+            "delegated_execution_tracking_recovered_stale_count": (
+                tracker_snapshot.recovered_stale_count
+            ),
         },
     }
 
@@ -174,130 +184,22 @@ def _build_task_allocation_checkpoint() -> Dict[str, Any]:
 
 def _build_device_support_checkpoint() -> Dict[str, Any]:
     from core.android_device_state_store import list_device_state_snapshots
+    from core.device_operational_support import build_device_support_matrix
 
     snapshots = list_device_state_snapshots()
-    try:
-        from core.device_types import DeviceType, resolve_device_type
-
-        observed_types = sorted(
-            {
-                resolve_device_type(str(getattr(s, "device_type", "android"))).value
-                for s in snapshots
-            }
-        )
-        declared_types = sorted({t.value for t in DeviceType})
-    except Exception:
-        observed_types = sorted({str(getattr(s, "device_type", "android")).lower() for s in snapshots})
-        declared_types = sorted(
-            {
-                "android",
-                "ios",
-                "windows",
-                "macos",
-                "linux",
-                "browser",
-                "cloud",
-                "drone",
-                "printer_3d",
-                "robot",
-                "camera",
-                "sensor",
-                "actuator",
-                "display",
-                "speaker",
-                "iot",
-                "embedded",
-                "audio",
-                "serial",
-                "ble",
-                "nfc",
-                "canbus",
-                "quantum",
-                "custom",
-                "unknown",
-            }
-        )
-    operational_types = {"android", "windows", "macos", "linux", "browser", "cloud"}
-    matrix: List[Dict[str, Any]] = []
-    for d in declared_types:
-        observed = d in observed_types
-        operational = d in operational_types
-        matrix.append(
-            {
-                "device_type": d,
-                "declared": True,
-                "registered": observed,
-                "observable": observed,
-                "control_capable": operational,
-                "execution_capable": operational and d != "browser",
-                "closure_integrated": operational and d != "browser",
-                "operational": operational,
-                "unsupported_but_declared": not operational,
-                "runtime_status": "operational" if operational else "declared_non_operational",
-            }
-        )
-    return {"support_matrix": matrix, "observed_device_types": observed_types}
+    observed_types = sorted(
+        {
+            str(getattr(snapshot, "device_type", "android") or "android").lower()
+            for snapshot in snapshots
+        }
+    )
+    return build_device_support_matrix(observed_types=observed_types)
 
 
 def _build_device_autonomy_checkpoint() -> Dict[str, Any]:
-    from core.android_device_state_store import list_device_state_snapshots
-    from core.android_network_participation import get_participation_state_for_device
-    from core.canonical_task import get_canonical_task_runtime
+    from core.device_autonomy_evidence import build_device_autonomy_report
 
-    runtime = get_canonical_task_runtime()
-    allocation_records = [r.to_dict() for r in runtime.list_allocation_records(limit=1024)]
-    evidence_by_executor: Dict[str, Dict[str, int]] = {}
-    for rec in allocation_records:
-        executor = str(rec.get("selected_executor") or rec.get("execution_location") or "").strip()
-        if not executor:
-            continue
-        bucket = evidence_by_executor.setdefault(
-            executor, {"accepted": 0, "closed": 0, "fallback": 0}
-        )
-        if str(rec.get("accepted_allocation")) == "accepted":
-            bucket["accepted"] += 1
-        if bool(rec.get("canonical_closed")):
-            bucket["closed"] += 1
-        if bool(rec.get("fallback_used")):
-            bucket["fallback"] += 1
-    classes: List[Dict[str, Any]] = []
-    for snap in list_device_state_snapshots():
-        did = getattr(snap, "device_id", None)
-        if not did:
-            continue
-        state = get_participation_state_for_device(did)
-        tier = state.tier.value if hasattr(state.tier, "value") else str(state.tier)
-        evidence = evidence_by_executor.get(did, {"accepted": 0, "closed": 0, "fallback": 0})
-        eligible = bool(getattr(state, "dispatch_gate_passed", False)) and bool(
-            getattr(state, "readiness_satisfied", False)
-        )
-        if evidence["closed"] >= 3 and eligible:
-            autonomy_class = "meaningfully_autonomous_runtime_capable"
-        elif evidence["accepted"] >= 1 and eligible:
-            autonomy_class = "semi_autonomous_runtime_capable"
-        elif getattr(state, "active_session_count", 0):
-            autonomy_class = "participant_capable"
-        elif getattr(state, "websocket_connected", False):
-            autonomy_class = "observable_only"
-        else:
-            autonomy_class = "connected_only"
-        classes.append(
-            {
-                "device_id": did,
-                "tier": tier,
-                "autonomy_class": autonomy_class,
-                "evidence": {
-                    "websocket_connected": bool(getattr(state, "websocket_connected", False)),
-                    "active_session_count": int(getattr(state, "active_session_count", 0) or 0),
-                    "readiness_satisfied": bool(getattr(state, "readiness_satisfied", False)),
-                    "dispatch_gate_passed": bool(getattr(state, "dispatch_gate_passed", False)),
-                    "accepted_tasks": evidence["accepted"],
-                    "closed_tasks": evidence["closed"],
-                    "fallback_count": evidence["fallback"],
-                },
-            }
-        )
-    return {"autonomy_classification": classes}
+    return build_device_autonomy_report()
 
 
 def build_system_reality_checkpoint(*, panel_generated_at: float | None = None) -> Dict[str, Any]:

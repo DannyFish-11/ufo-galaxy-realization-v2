@@ -239,6 +239,7 @@ def get_dispatch_readiness_panel(
         "blocked_capability": 0,
         "blocked_session_validity": 0,
         "blocked_cross_device_eligibility": 0,
+        "blocked_operational_support": 0,
         "blocked_other": 0,
         "not_registered": 0,
         "gate_error": 0,
@@ -263,6 +264,8 @@ def get_dispatch_readiness_panel(
             summary["blocked_session_validity"] += 1
         elif status == "blocked_cross_device_eligibility":
             summary["blocked_cross_device_eligibility"] += 1
+        elif status == "blocked_operational_support":
+            summary["blocked_operational_support"] += 1
         elif status == "not_registered":
             summary["not_registered"] += 1
         elif status == "gate_error":

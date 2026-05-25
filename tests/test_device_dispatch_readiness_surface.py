@@ -255,7 +255,8 @@ class TestGetDispatchReadinessPanel:
             "total", "dispatch_ready", "blocked_registration_gap",
             "blocked_stale_attachment", "blocked_transport", "blocked_capability",
             "blocked_session_validity", "blocked_cross_device_eligibility",
-            "blocked_other", "not_registered", "gate_error", "total_blocked",
+            "blocked_operational_support", "blocked_other", "not_registered",
+            "gate_error", "total_blocked",
         }
         for key in expected_keys:
             assert key in summary, f"summary 缺少键: {key}"
