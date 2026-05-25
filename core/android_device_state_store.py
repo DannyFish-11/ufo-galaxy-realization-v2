@@ -53,9 +53,10 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, field, fields
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type, TypeVar
 
 logger = logging.getLogger("Galaxy.AndroidDeviceStateStore")
+T = TypeVar("T")
 
 # Dispatch-authority classification for Android snapshot fields.
 # These sets are intentionally explicit so operator/panel surfaces can
@@ -760,7 +761,11 @@ class _AndroidDeviceStateStore:
 
         snapshots: Dict[str, DeviceStateSnapshot] = {}
         for item in payload.get("snapshots", []) or []:
-            snap = _dataclass_from_dict(DeviceStateSnapshot, item)
+            try:
+                snap = _dataclass_from_dict(DeviceStateSnapshot, item)
+            except Exception as exc:
+                logger.debug("Skipping invalid persisted snapshot entry: %s", exc)
+                continue
             if not snap.device_id:
                 continue
             if _is_snapshot_within_ttl(snap):
@@ -776,7 +781,11 @@ class _AndroidDeviceStateStore:
 
         events: List[DeviceExecutionEvent] = []
         for item in payload.get("execution_events", []) or []:
-            evt = _dataclass_from_dict(DeviceExecutionEvent, item)
+            try:
+                evt = _dataclass_from_dict(DeviceExecutionEvent, item)
+            except Exception as exc:
+                logger.debug("Skipping invalid persisted execution event entry: %s", exc)
+                continue
             if not evt.device_id:
                 continue
             events.append(evt)
@@ -815,12 +824,29 @@ class _AndroidDeviceStateStore:
             directory = os.path.dirname(path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
-            tmp_path = f"{path}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as fp:
-                json.dump(state, fp, ensure_ascii=False, sort_keys=True, default=str)
+            tmp_path: Optional[str] = None
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=(directory or None),
+                prefix="android-device-state-",
+                suffix=".tmp",
+                delete=False,
+            ) as fp:
+                tmp_path = fp.name
+                json.dump(state, fp, ensure_ascii=False, sort_keys=True)
             os.replace(tmp_path, path)
             self._last_persisted_at = state["persisted_at"]
         except Exception as exc:
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except Exception as cleanup_exc:
+                    logger.debug(
+                        "android_device_state_store temp cleanup skipped (%s): %s",
+                        tmp_path,
+                        cleanup_exc,
+                    )
             logger.warning("android_device_state_store persist skipped (%s): %s", path, exc)
 
     def clear_durable_state(self) -> None:
@@ -1251,7 +1277,7 @@ def _resolve_store_state_path() -> Optional[str]:
     return os.path.join(tempfile.gettempdir(), "galaxy_android_device_state_store.json")
 
 
-def _dataclass_from_dict(cls, payload: Dict[str, Any]):
+def _dataclass_from_dict(cls: Type[T], payload: Dict[str, Any]) -> T:
     if not isinstance(payload, dict):
         payload = {}
     kwargs: Dict[str, Any] = {}

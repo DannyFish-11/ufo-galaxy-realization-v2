@@ -19,7 +19,6 @@ Tests:
 """
 from __future__ import annotations
 
-import json
 import time
 
 import pytest
@@ -47,6 +46,8 @@ from core.android_device_state_store import (
 from core.device_lifecycle_state import (
     reset_lifecycle_store,
 )
+
+_STALE_TEST_BUFFER_SECONDS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -629,7 +630,7 @@ def test_durable_store_restores_snapshot_and_execution_events(tmp_path, monkeypa
     assert restored is not None
     assert restored.model_ready is True
     events = list_recent_execution_events(device_id="durable_dev")
-    assert events
+    assert len(events) == 1
     assert events[0].task_id == "task-durable"
 
 
@@ -639,12 +640,14 @@ def test_durable_restore_prunes_stale_snapshots(tmp_path, monkeypatch):
     reset_android_device_state_store(clear_durable_state=True)
 
     absorb_device_state_snapshot("stale_restore_dev", {"model_ready": True})
+    stale_absorbed_at = (
+        time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - _STALE_TEST_BUFFER_SECONDS
+    )
+    store = get_android_device_state_store()
+    with store._lock:  # noqa: SLF001 - no public API can age snapshots; simulate natural stale-on-restart explicitly
+        store._snapshots["stale_restore_dev"].absorbed_at = stale_absorbed_at
+    absorb_capability_report_semantics("stale_restore_dev", {"metadata": {}})
     assert state_path.exists()
-
-    payload = json.loads(state_path.read_text(encoding="utf-8"))
-    stale_absorbed_at = time.time() - ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS - 10
-    payload["snapshots"][0]["absorbed_at"] = stale_absorbed_at
-    state_path.write_text(json.dumps(payload), encoding="utf-8")
 
     reset_android_device_state_store(clear_durable_state=False)
     assert get_device_state_snapshot("stale_restore_dev") is None
