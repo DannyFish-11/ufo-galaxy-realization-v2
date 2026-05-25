@@ -853,6 +853,7 @@ CROSS-DEVICE:
         except Exception:
             task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
             trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
+        _canonical = None
 
         # PR-507: Front-load CanonicalTask creation — establish task ontology
         # before recording ingress or normalizing to envelope.
@@ -904,7 +905,7 @@ CROSS-DEVICE:
                 WorkflowContributorKind as _WCK_send,
             )
             _get_tgr_send().register_canonical_task(
-                _canonical if "_canonical" in locals() else {
+                _canonical if _canonical is not None else {
                     "task_id": task_id,
                     "trace_id": trace_id,
                     "tool_name": task_type or "send_to_device",

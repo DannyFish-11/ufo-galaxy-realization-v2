@@ -577,8 +577,8 @@ def _compile_multimodal_readiness() -> Optional[Dict[str, Any]]:
         profile_name = str(profile.get("profile") or "")
         if profile_name == MultimodalRuntimeProfile.FULL_DEPLOYMENT.value:
             state = "ready"
-            default_usable = False
-            conditional = True
+            default_usable = True
+            conditional = False
         elif profile_name == MultimodalRuntimeProfile.DEBUG_ENHANCED.value:
             state = "degraded"
             default_usable = False
