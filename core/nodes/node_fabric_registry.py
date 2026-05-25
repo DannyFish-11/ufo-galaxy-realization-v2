@@ -205,6 +205,11 @@ class NodeInfo:
     last_heartbeat: float = field(default_factory=time.monotonic)
     error_count: int = 0
     heartbeat_count: int = 0
+    runtime_host: str = "v2_control_plane"
+    session_owner: str = ""
+    execution_owner: str = ""
+    participant_id: str = ""
+    device_id: str = ""
 
     # ──────────────────────────────────────────────
     # 计算属性
@@ -249,6 +254,11 @@ class NodeInfo:
             "capabilities": [c.name for c in self.capabilities],
             "dependencies": list(self.dependencies),
             "metadata": dict(self.metadata),
+            "runtime_host": self.runtime_host,
+            "session_owner": self.session_owner,
+            "execution_owner": self.execution_owner,
+            "participant_id": self.participant_id,
+            "device_id": self.device_id,
             "activation_policy": self.activation_policy,
             "registered_at": self.registered_at,
             "last_heartbeat": self.last_heartbeat,

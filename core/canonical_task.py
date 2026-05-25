@@ -704,6 +704,9 @@ class TaskAllocationRecord:
     selected_executor: str = "unknown"
     accepted_at: Optional[float] = None
     closed_at: Optional[float] = None
+    runtime_host: str = "v2_control_plane"
+    session_owner: str = ""
+    execution_owner: str = ""
     allocation_history: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -722,6 +725,9 @@ class TaskAllocationRecord:
             "selected_executor": self.selected_executor,
             "accepted_at": self.accepted_at,
             "closed_at": self.closed_at,
+            "runtime_host": self.runtime_host,
+            "session_owner": self.session_owner,
+            "execution_owner": self.execution_owner,
             "allocation_history": list(self.allocation_history),
         }
 
@@ -860,6 +866,8 @@ class CanonicalTaskRuntime:
         if not effective_path:
             effective_path = str(task.routing.transport_preference or "unknown")
         selected_executor = task.routing.selected_targets[0] if task.routing.selected_targets else "local_runtime"
+        session_owner = str(task.identity.session_id or task.metadata.get("session_owner") or "")
+        execution_owner = selected_executor
         accepted_allocation = "accepted" if bool(task.routing.selected_targets) else "pending"
         canonical_closed = lifecycle in {
             TaskLifecycle.COMPLETED.value,
@@ -885,6 +893,8 @@ class CanonicalTaskRuntime:
                 "allocation_path": effective_path,
                 "fallback_path": fallback_path,
                 "canonical_closed": canonical_closed,
+                "session_owner": session_owner,
+                "execution_owner": execution_owner,
             }
             if not history or history[-1] != transition:
                 history.append(transition)
@@ -903,6 +913,9 @@ class CanonicalTaskRuntime:
                 selected_executor=selected_executor,
                 accepted_at=accepted_at,
                 closed_at=closed_at,
+                runtime_host="v2_control_plane",
+                session_owner=session_owner,
+                execution_owner=execution_owner,
                 allocation_history=history[-64:],
             )
         self._persist_allocation_truth()
@@ -961,6 +974,9 @@ class CanonicalTaskRuntime:
                         if item.get("closed_at") is not None
                         else None
                     ),
+                    runtime_host=str(item.get("runtime_host") or "v2_control_plane"),
+                    session_owner=str(item.get("session_owner") or ""),
+                    execution_owner=str(item.get("execution_owner") or item.get("selected_executor") or "unknown"),
                     allocation_history=list(item.get("allocation_history") or [])[-64:],
                 )
         except Exception as exc:

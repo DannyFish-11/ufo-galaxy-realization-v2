@@ -15,6 +15,8 @@ Validates:
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 import unittest
 from types import SimpleNamespace
@@ -130,6 +132,7 @@ class TestUnifiedPanelPayloadStructure(unittest.TestCase):
             # governance
             "governance_state",
             "mesh_runtime_state",
+            "grounded_runtime_topology",
             "control_plane_contract",
             "truth_surface_semantics",
             "authority_source_fingerprint",
@@ -989,6 +992,47 @@ class TestSingletonManagement(unittest.TestCase):
         )
         result = build_unified_panel_payload()
         self.assertIsInstance(result, UnifiedPanelPayload)
+
+    def test_G04_payload_includes_grounded_runtime_topology(self):
+        from core.unified_panel_aggregation import build_unified_panel_payload
+
+        payload = build_unified_panel_payload()
+        self.assertIsInstance(payload.grounded_runtime_topology, dict)
+        self.assertIn("runtime_host", payload.grounded_runtime_topology)
+
+    def test_G05_last_operator_action_can_recover_from_persisted_state(self):
+        state_path = os.path.join(tempfile.gettempdir(), f"panel_action_{int(time.time()*1000)}.json")
+        try:
+            import core.unified_panel_aggregation as upa
+            from core.unified_panel_aggregation import (
+                get_last_operator_action_result,
+                record_last_operator_action_result,
+                reset_last_operator_action_result,
+            )
+            original_path = upa._LAST_OPERATOR_ACTION_STATE_PATH
+            upa._LAST_OPERATOR_ACTION_STATE_PATH = state_path
+
+            reset_last_operator_action_result()
+            record_last_operator_action_result(
+                SimpleNamespace(
+                    action_id="act-001",
+                    action_kind="refresh",
+                    accepted=True,
+                    runtime_session_id="sess-001",
+                    operator_entry_mode="panel",
+                    generated_at=time.time(),
+                )
+            )
+            reset_last_operator_action_result()
+            recovered = get_last_operator_action_result()
+            self.assertIsNotNone(recovered)
+            self.assertEqual(getattr(recovered, "action_id", None), "act-001")
+            self.assertTrue(os.path.exists(state_path))
+        finally:
+            if "upa" in locals():
+                upa._LAST_OPERATOR_ACTION_STATE_PATH = original_path
+            if os.path.exists(state_path):
+                os.remove(state_path)
 
 
 if __name__ == "__main__":

@@ -80,6 +80,7 @@ Helpers::
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -303,6 +304,7 @@ class UnifiedPanelPayload:
     android_mode_gate_state: Dict[str, Any] = field(default_factory=dict)
     governance_state: Dict[str, Any] = field(default_factory=dict)
     mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
+    grounded_runtime_topology: Dict[str, Any] = field(default_factory=dict)
 
     # ── Android participation verdict (PR-next-convergence) ───────────────
     # Authoritative Android network participation tier verdict aggregated from
@@ -390,6 +392,7 @@ class UnifiedPanelPayload:
             # unified governance semantics
             "governance_state": dict(self.governance_state),
             "mesh_runtime_state": dict(self.mesh_runtime_state),
+            "grounded_runtime_topology": dict(self.grounded_runtime_topology),
             # android participation verdict (PR-next-convergence)
             "android_participation_verdict": dict(self.android_participation_verdict),
             "runtime_decision_reasoning": dict(self.runtime_decision_reasoning),
@@ -532,13 +535,19 @@ class UnifiedPanelAggregationService:
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: control-plane contract fill failed: %s", exc)
 
-        # 14. Truth-source discipline hardening for outward-facing payload fields.
+        # 14. Grounded runtime topology (runtime host/device/provider/allocation relations).
+        try:
+            self._fill_grounded_runtime_topology(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: grounded runtime topology fill failed: %s", exc)
+
+        # 15. Truth-source discipline hardening for outward-facing payload fields.
         try:
             self._enforce_truth_surface_discipline(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: truth discipline hardening failed: %s", exc)
 
-        # 15. System reality convergence checkpoint (node/mcp/runtime/panel/model/task/device/autonomy).
+        # 16. System reality convergence checkpoint (node/mcp/runtime/panel/model/task/device/autonomy).
         try:
             self._fill_system_reality_checkpoint(payload)
         except Exception as exc:  # pragma: no cover
@@ -1215,6 +1224,15 @@ class UnifiedPanelAggregationService:
         except Exception as exc:
             logger.debug("build_payload: control-plane contract unavailable: %s", exc)
 
+    def _fill_grounded_runtime_topology(self, payload: UnifiedPanelPayload) -> None:
+        """Attach grounded runtime topology built from live runtime/state objects."""
+        try:
+            from core.network_topology_runtime import build_grounded_runtime_topology
+
+            payload.grounded_runtime_topology = build_grounded_runtime_topology().to_dict()
+        except Exception as exc:
+            logger.debug("build_payload: grounded runtime topology unavailable: %s", exc)
+
     def _fill_system_reality_checkpoint(self, payload: UnifiedPanelPayload) -> None:
         """Attach the implementation-grounded system reality checkpoint."""
         from core.system_reality_checkpoint import build_system_reality_checkpoint
@@ -1238,6 +1256,73 @@ class UnifiedPanelAggregationService:
 
 _LAST_OPERATOR_ACTION_RESULT: Optional[Any] = None
 _OPERATOR_ACTION_RESULT_LOCK = threading.Lock()
+_LAST_OPERATOR_ACTION_STATE_PATH = os.environ.get(
+    "GALAXY_LAST_OPERATOR_ACTION_STATE_PATH",
+    os.path.join(os.getcwd(), "runtime", "panel_last_operator_action.json"),
+)
+
+
+def _persist_last_operator_action_result() -> None:
+    """Persist the latest operator action result to disk for restart recovery."""
+    global _LAST_OPERATOR_ACTION_RESULT
+    result = _LAST_OPERATOR_ACTION_RESULT
+    if result is None:
+        return
+    try:
+        payload = {
+            "saved_at": time.time(),
+            "result": {
+                "action_id": getattr(result, "action_id", ""),
+                "action_kind": getattr(result, "action_kind", ""),
+                "accepted": bool(getattr(result, "accepted", False)),
+                "runtime_session_id": getattr(result, "runtime_session_id", ""),
+                "operator_entry_mode": getattr(result, "operator_entry_mode", ""),
+                "generated_at": float(getattr(result, "generated_at", time.time()) or time.time()),
+            },
+        }
+        parent = os.path.dirname(_LAST_OPERATOR_ACTION_STATE_PATH)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp_path = f"{_LAST_OPERATOR_ACTION_STATE_PATH}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            import json
+
+            json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp_path, _LAST_OPERATOR_ACTION_STATE_PATH)
+    except Exception as exc:
+        logger.debug("persist last operator action skipped: %s", exc)
+
+
+def _load_last_operator_action_result() -> Optional[Any]:
+    """Load the last operator action from disk when memory is empty."""
+    path = _LAST_OPERATOR_ACTION_STATE_PATH
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        import json
+
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh) or {}
+        res = data.get("result") or {}
+        if not isinstance(res, dict):
+            return None
+        if not res.get("action_id"):
+            return None
+        return type(
+            "RecoveredOperatorActionResult",
+            (),
+            {
+                "action_id": str(res.get("action_id") or ""),
+                "action_kind": str(res.get("action_kind") or ""),
+                "accepted": bool(res.get("accepted")),
+                "runtime_session_id": str(res.get("runtime_session_id") or ""),
+                "operator_entry_mode": str(res.get("operator_entry_mode") or ""),
+                "generated_at": float(res.get("generated_at") or time.time()),
+            },
+        )()
+    except Exception as exc:
+        logger.debug("load last operator action skipped: %s", exc)
+        return None
 
 
 def record_last_operator_action_result(result: Any) -> None:
@@ -1253,10 +1338,17 @@ def record_last_operator_action_result(result: Any) -> None:
     global _LAST_OPERATOR_ACTION_RESULT
     with _OPERATOR_ACTION_RESULT_LOCK:
         _LAST_OPERATOR_ACTION_RESULT = result
+        _persist_last_operator_action_result()
 
 
 def get_last_operator_action_result() -> Optional[Any]:
     """Return the most recent operator action result, or None."""
+    global _LAST_OPERATOR_ACTION_RESULT
+    if _LAST_OPERATOR_ACTION_RESULT is not None:
+        return _LAST_OPERATOR_ACTION_RESULT
+    recovered = _load_last_operator_action_result()
+    if recovered is not None:
+        _LAST_OPERATOR_ACTION_RESULT = recovered
     return _LAST_OPERATOR_ACTION_RESULT
 
 

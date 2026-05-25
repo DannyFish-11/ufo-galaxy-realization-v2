@@ -130,6 +130,8 @@ __all__ = [
     "TopologyRecord",
     "TopologySnapshot",
     "TransportPathInfo",
+    "GroundedTopologyRelation",
+    "GroundedRuntimeTopology",
     # Class
     "NetworkTopologyRuntime",
     # Absorption helpers
@@ -138,6 +140,7 @@ __all__ = [
     "assimilate_gateway_state",
     "assimilate_device_connectivity",
     "project_transport_path",
+    "build_grounded_runtime_topology",
     # Singleton helpers
     "get_network_topology_runtime",
     "reset_network_topology_runtime",
@@ -520,6 +523,48 @@ class TopologySnapshot:
             "preferred_edges": list(self.preferred_edges),
             "recent_records": [r.to_dict() for r in self.recent_records],
             "contract_version": NETWORK_TOPOLOGY_CONTRACT_VERSION,
+        }
+
+
+@dataclass
+class GroundedTopologyRelation:
+    """Runtime-grounded relation in the unified topology graph."""
+
+    relation_kind: str
+    source_id: str
+    target_id: str
+    evidence: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "relation_kind": self.relation_kind,
+            "source_id": self.source_id,
+            "target_id": self.target_id,
+            "evidence": dict(self.evidence),
+        }
+
+
+@dataclass
+class GroundedRuntimeTopology:
+    """Grounded runtime topology built from live runtime/state objects."""
+
+    runtime_host: str = "v2_control_plane"
+    generated_at: float = field(default_factory=time.time)
+    nodes: List[Dict[str, Any]] = field(default_factory=list)
+    relations: List[GroundedTopologyRelation] = field(default_factory=list)
+    galaxy_tree: Dict[str, Any] = field(default_factory=dict)
+    authority: str = (
+        "RUNTIME_TOPOLOGY_GROUNDED_V1::core.network_topology_runtime.build_grounded_runtime_topology"
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "runtime_host": self.runtime_host,
+            "generated_at": self.generated_at,
+            "nodes": list(self.nodes),
+            "relations": [r.to_dict() for r in self.relations],
+            "galaxy_tree": dict(self.galaxy_tree),
+            "authority": self.authority,
         }
 
 
@@ -1389,6 +1434,118 @@ def project_transport_path(
         target_id,
         transport_strategy=transport_strategy,
         fallback_used=fallback_used,
+    )
+
+
+def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> GroundedRuntimeTopology:
+    """Build a grounded runtime topology from live canonical runtime objects."""
+    now = time.time()
+    runtime = get_network_topology_runtime()
+    topology_nodes = runtime.all_nodes()
+    grounded_nodes: List[Dict[str, Any]] = [n.to_dict() for n in topology_nodes]
+    relations: List[GroundedTopologyRelation] = []
+
+    node_ids = {str(n.get("node_id") or "") for n in grounded_nodes}
+
+    try:
+        from core.nodes.node_fabric_registry import get_node_fabric_registry
+
+        for node in get_node_fabric_registry().list_nodes():
+            sid = f"fabric::{node.node_id}"
+            if sid in node_ids:
+                continue
+            grounded_nodes.append(
+                {
+                    "node_id": sid,
+                    "kind": "runtime_provider_node",
+                    "state": str(node.status.value if hasattr(node.status, "value") else node.status),
+                    "host": node.host,
+                    "port": node.port,
+                    "tags": ["node_fabric", str(node.role.value if hasattr(node.role, "value") else node.role)],
+                    "metadata": {
+                        "fabric_node_id": node.node_id,
+                        "architectural_class": str(
+                            node.architectural_class.value
+                            if hasattr(node.architectural_class, "value")
+                            else node.architectural_class
+                        ),
+                        "runtime_host": str(getattr(node, "runtime_host", "v2_control_plane")),
+                        "session_owner": str(getattr(node, "session_owner", "") or ""),
+                        "execution_owner": str(getattr(node, "execution_owner", "") or ""),
+                        "participant_id": str(getattr(node, "participant_id", "") or ""),
+                        "device_id": str(getattr(node, "device_id", "") or ""),
+                    },
+                    "registered_at": float(getattr(node, "registered_at", now) or now),
+                    "last_updated_at": float(getattr(node, "last_heartbeat", now) or now),
+                    "contract_version": NETWORK_TOPOLOGY_CONTRACT_VERSION,
+                }
+            )
+            node_ids.add(sid)
+            relations.append(
+                GroundedTopologyRelation(
+                    relation_kind="runtime_host_registers_node",
+                    source_id="v2_control_plane",
+                    target_id=sid,
+                    evidence={"node_id": node.node_id},
+                )
+            )
+    except Exception:
+        pass
+
+    try:
+        from core.canonical_task import get_canonical_task_runtime
+
+        allocation_records = get_canonical_task_runtime().list_allocation_records(
+            limit=max(1, int(max_allocation_records))
+        )
+        for rec in allocation_records:
+            owner = str(rec.execution_owner or rec.selected_executor or rec.execution_location or "").strip()
+            if not owner:
+                continue
+            relations.append(
+                GroundedTopologyRelation(
+                    relation_kind="task_allocated_to_executor",
+                    source_id=f"task::{rec.task_id}",
+                    target_id=owner,
+                    evidence={
+                        "requested_allocation": rec.requested_allocation,
+                        "accepted_allocation": rec.accepted_allocation,
+                        "fallback_used": bool(rec.fallback_used),
+                        "canonical_closed": bool(rec.canonical_closed),
+                        "session_owner": rec.session_owner,
+                        "execution_owner": rec.execution_owner,
+                        "runtime_host": rec.runtime_host,
+                        "updated_at": rec.updated_at,
+                    },
+                )
+            )
+    except Exception:
+        allocation_records = []
+
+    root_children: List[str] = []
+    for node in grounded_nodes:
+        node_id = str(node.get("node_id") or "")
+        if not node_id:
+            continue
+        kind = str(node.get("kind") or "unknown")
+        if kind in {"runtime_provider_node", "device", "gateway", "nats_fabric_endpoint"}:
+            root_children.append(node_id)
+
+    galaxy_tree = {
+        "root": "v2_control_plane",
+        "children": sorted(set(root_children)),
+        "relation_count": len(relations),
+        "allocation_relation_count": len(
+            [r for r in relations if r.relation_kind == "task_allocated_to_executor"]
+        ),
+    }
+
+    return GroundedRuntimeTopology(
+        runtime_host="v2_control_plane",
+        generated_at=now,
+        nodes=grounded_nodes,
+        relations=relations,
+        galaxy_tree=galaxy_tree,
     )
 
 
