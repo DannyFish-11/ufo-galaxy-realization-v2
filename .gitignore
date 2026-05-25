@@ -102,5 +102,7 @@ data/rag_memory/
 # Commit only the *.example.* templates in runtime/.
 runtime/config.json
 runtime/secrets.env
+runtime/task_allocation_truth.json
+data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json
