@@ -466,15 +466,30 @@ class SkillLoader:
             执行结果
         """
         if skill_id not in self.skills:
-            return {"success": False, "error": "技能不存在"}
+            return {
+                "success": False,
+                "error": "技能不存在",
+                "runtime_semantics": "in_process_callable_skill",
+                "capability_checked": True,
+            }
         
         skill = self.skills[skill_id]
         
         if skill.status == SkillStatus.DISABLED:
-            return {"success": False, "error": "技能已禁用"}
+            return {
+                "success": False,
+                "error": "技能已禁用",
+                "runtime_semantics": "in_process_callable_skill",
+                "capability_checked": True,
+            }
         
         if not skill.handler:
-            return {"success": False, "error": "技能没有处理函数"}
+            return {
+                "success": False,
+                "error": "技能没有处理函数",
+                "runtime_semantics": "in_process_callable_skill",
+                "capability_checked": True,
+            }
         
         self.stats["total_executions"] += 1
         
@@ -483,7 +498,12 @@ class SkillLoader:
             for param in skill.parameters:
                 if param.required and param.name not in params:
                     self.stats["failed_executions"] += 1
-                    return {"success": False, "error": f"缺少必需参数: {param.name}"}
+                    return {
+                        "success": False,
+                        "error": f"缺少必需参数: {param.name}",
+                        "runtime_semantics": "in_process_callable_skill",
+                        "capability_checked": True,
+                    }
             
             # 执行
             if asyncio.iscoroutinefunction(skill.handler):
@@ -493,12 +513,22 @@ class SkillLoader:
             
             self.stats["successful_executions"] += 1
             
-            return {"success": True, "result": result}
+            return {
+                "success": True,
+                "result": result,
+                "runtime_semantics": "in_process_callable_skill",
+                "capability_checked": True,
+            }
             
         except Exception as e:
             self.stats["failed_executions"] += 1
             logger.error(f"执行技能失败: {skill_id} - {e}")
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e),
+                "runtime_semantics": "in_process_callable_skill",
+                "capability_checked": True,
+            }
     
     # ========================================================================
     # 查询

@@ -12,6 +12,7 @@ from core.canonical_task import (
     reset_canonical_task_runtime,
 )
 from core.mcp_loader import MCPLoader, MCPServerInstance, MCPServerStatus, MCPTool
+from core.skill_loader import SkillInstance, SkillLoader, SkillStatus
 from core.skill_md_loader import SkillMD, SkillMDLoader
 from core.system_reality_checkpoint import (
     SYSTEM_REALITY_CHECKPOINT_AUTHORITY,
@@ -47,6 +48,9 @@ def test_checkpoint_contains_all_subproblem_surfaces():
     assert "device_autonomy_evidence" in checkpoint
     assert "final_checkpoint" in checkpoint
     assert checkpoint["task_allocation_visibility"]["allocation_record_count"] >= 1
+    assert checkpoint["task_allocation_visibility"]["history_record_count"] >= 1
+    assert checkpoint["mcp_skill_tool_capability"]["compat_wrapper_tool_count"] >= 0
+    assert checkpoint["model_topology"]["runtime_topology"]["runtime_host"] == "v2_control_plane"
 
 
 def test_unified_panel_embeds_system_reality_checkpoint():
@@ -100,3 +104,19 @@ async def test_skill_md_execute_checks_runtime_command_capability():
     assert result["results"][0]["capability_checked"] is True
     assert "运行时能力不可用" in result["results"][0]["error"]
     mock_exec.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_skill_loader_execute_marks_in_process_callable_semantics():
+    loader = SkillLoader()
+    loader.skills["callable"] = SkillInstance(
+        id="callable",
+        name="callable",
+        description="d",
+        status=SkillStatus.LOADED,
+        handler=lambda **_: {"ok": True},
+    )
+    result = await loader.execute("callable")
+    assert result["success"] is True
+    assert result["runtime_semantics"] == "in_process_callable_skill"
+    assert result["capability_checked"] is True

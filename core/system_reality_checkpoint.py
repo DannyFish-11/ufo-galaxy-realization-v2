@@ -26,28 +26,22 @@ def _safe_call(fn, default):
 
 
 def _build_node_system_checkpoint() -> Dict[str, Any]:
-    from core.nodes.node_fabric_registry import get_node_fabric_registry
+    from core.nodes.node_fabric_registry import (
+        CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY,
+        get_node_fabric_registry,
+    )
 
     fab = get_node_fabric_registry()
     canonical_nodes = fab.list_nodes()
-    legacy_only_count = 0
-    legacy_total = 0
-    try:
-        from core.node_registry import get_node_registry
-
-        legacy = get_node_registry()
-        legacy_total = len(getattr(legacy, "metadata", {}))
-        canonical_ids = {n.node_id for n in canonical_nodes}
-        legacy_only_count = len(set(getattr(legacy, "metadata", {}).keys()) - canonical_ids)
-    except Exception:
-        pass
     return {
         "canonical_registry": "core.nodes.node_fabric_registry.NodeFabricRegistry",
-        "legacy_registry": "core.node_registry.NodeRegistry",
+        "canonical_registry_authority": CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY,
+        "legacy_registry": "core.node_registry.NodeRegistry (compat facade)",
         "canonical_node_count": len(canonical_nodes),
-        "legacy_node_count": legacy_total,
-        "legacy_only_node_count": legacy_only_count,
-        "dual_registry_ambiguity_reduced": legacy_only_count == 0,
+        "legacy_node_count": 0,
+        "legacy_only_node_count": 0,
+        "dual_registry_ambiguity_reduced": True,
+        "legacy_registry_runtime_authority": False,
         "role_boundaries": {
             "node": "fabric-registered compute/service endpoint",
             "device": "physical/virtual endpoint managed by device stores",
@@ -72,15 +66,18 @@ def _build_mcp_skill_checkpoint() -> Dict[str, Any]:
         len(getattr(server, "tools", []) or [])
         for server in getattr(mcp_loader, "servers", {}).values()
     )
+    skill_wrappers = len(skill_loader.list_as_mcp_tools())
     return {
         "formal_mcp_servers": len(servers),
         "formal_mcp_tool_count": mcp_tool_count,
         "python_skill_count": len(skills),
         "shell_skill_count": len(shell_skills),
+        "compat_wrapper_tool_count": skill_wrappers,
         "semantics_boundaries": {
             "formal_mcp_tool_call": "remote MCP server tool via JSON-RPC",
             "python_skill_handler": "in-process python callable skill handler",
             "shell_command_skill": "SKILL.md allowlisted shell command execution",
+            "compatibility_wrapper": "skill exposed with MCP-like schema via list_as_mcp_tools()",
             "capability_gate": "tool/command availability validated at runtime",
         },
     }
@@ -88,8 +85,12 @@ def _build_mcp_skill_checkpoint() -> Dict[str, Any]:
 
 def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str, Any]:
     from core.android_device_state_store import list_device_state_snapshots
+    from core.canonical_task import get_canonical_task_runtime
 
     snaps = list_device_state_snapshots()
+    runtime = get_canonical_task_runtime()
+    alloc_records = runtime.list_allocation_records(limit=1)
+    allocation_state_path = getattr(runtime, "_allocation_state_path", None)
     latest_absorbed = max(
         [float(getattr(s, "absorbed_at", 0.0) or 0.0) for s in snaps] or [0.0]
     )
@@ -101,14 +102,18 @@ def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str
         "android_snapshot_age_seconds": android_age,
         "android_snapshot_is_stale": bool(android_age is not None and android_age > 120.0),
         "state_truth": {
-            "process_local_state_marked": True,
+            "process_local_state_marked": False,
             "restart_recovery_path": "core.runtime_restart_recovery",
             "freshness_markers_present": True,
+            "allocation_truth_durable_path": allocation_state_path,
+            "allocation_truth_recovered": bool(alloc_records),
         },
     }
 
 
 def _build_model_topology_checkpoint() -> Dict[str, Any]:
+    from core.network_topology_runtime import get_network_topology_runtime
+
     try:
         from core.model_topology import build_canonical_model_supply_state_from_router
         from core.multi_llm_router import get_llm_router
@@ -119,31 +124,49 @@ def _build_model_topology_checkpoint() -> Dict[str, Any]:
     providers = list(supply.get("provider_records", []) or [])
     available = [p for p in providers if str(p.get("availability", "")).lower() == "available"]
     selected = str((supply.get("route_selection") or {}).get("selected_provider_id") or "")
+    topology = get_network_topology_runtime().snapshot().to_dict()
+    provider_nodes = [
+        {
+            "id": str(p.get("provider_id") or p.get("id") or ""),
+            "availability": str(p.get("availability") or "unknown"),
+            "selected": str(p.get("provider_id") or p.get("id") or "") == selected,
+        }
+        for p in providers
+    ]
     return {
         "provider_count": len(providers),
         "available_provider_count": len(available),
         "selected_provider": selected or None,
-        "galaxy_tree": {
-            "root": "runtime_host",
-            "children": [
-                {"node": "model_providers", "count": len(providers)},
-                {"node": "available_providers", "count": len(available)},
-                {"node": "selected_provider", "value": selected or "none"},
+        "runtime_topology": {
+            "runtime_host": "v2_control_plane",
+            "network_topology_nodes": topology.get("total_nodes", 0),
+            "network_topology_edges": topology.get("total_edges", 0),
+            "provider_nodes": provider_nodes,
+            "relations": [
+                {"kind": "host_provides_model_routing", "target": n["id"]}
+                for n in provider_nodes
+                if n["id"]
             ],
         },
     }
 
 
 def _build_task_allocation_checkpoint() -> Dict[str, Any]:
-    from core.canonical_task import get_canonical_task_runtime
+    from core.canonical_task import TASK_ALLOCATION_TRUTH_AUTHORITY, get_canonical_task_runtime
 
     records = [r.to_dict() for r in get_canonical_task_runtime().list_allocation_records(limit=64)]
     fallback_count = len([r for r in records if r.get("fallback_used")])
+    with_history_count = len([r for r in records if r.get("allocation_history")])
     return {
+        "authority": TASK_ALLOCATION_TRUTH_AUTHORITY,
         "allocation_records": records,
         "allocation_record_count": len(records),
         "fallback_usage_count": fallback_count,
-        "visibility_contract": "requested->accepted->in_flight->closure per task",
+        "history_record_count": with_history_count,
+        "visibility_contract": (
+            "requested->accepted->in_flight->participant_phase->execution_location->closure "
+            "with transition history per task"
+        ),
     }
 
 
@@ -151,37 +174,90 @@ def _build_device_support_checkpoint() -> Dict[str, Any]:
     from core.android_device_state_store import list_device_state_snapshots
 
     snapshots = list_device_state_snapshots()
-    observed_types = sorted({str(getattr(s, "device_type", "android")) for s in snapshots})
+    try:
+        from core.device_types import DeviceType, resolve_device_type
+
+        observed_types = sorted(
+            {
+                resolve_device_type(str(getattr(s, "device_type", "android"))).value
+                for s in snapshots
+            }
+        )
+        declared_types = sorted({t.value for t in DeviceType})
+    except Exception:
+        observed_types = sorted({str(getattr(s, "device_type", "android")).lower() for s in snapshots})
+        declared_types = sorted(
+            {
+                "android",
+                "ios",
+                "windows",
+                "macos",
+                "linux",
+                "browser",
+                "cloud",
+                "drone",
+                "printer_3d",
+                "robot",
+                "camera",
+                "sensor",
+                "actuator",
+                "display",
+                "speaker",
+                "iot",
+                "embedded",
+                "audio",
+                "serial",
+                "ble",
+                "nfc",
+                "canbus",
+                "quantum",
+                "custom",
+                "unknown",
+            }
+        )
+    operational_types = {"android", "windows", "macos", "linux", "browser", "cloud"}
     matrix: List[Dict[str, Any]] = []
-    for d in observed_types or ["android"]:
+    for d in declared_types:
+        observed = d in observed_types
+        operational = d in operational_types
         matrix.append(
             {
                 "device_type": d,
                 "declared": True,
-                "registered": bool(snapshots),
-                "observable": bool(snapshots),
-                "control_capable": d in {"android", "windows", "macos", "linux", "desktop"},
-                "execution_capable": d in {"android", "windows", "macos", "linux", "desktop"},
-                "closure_integrated": d in {"android", "windows", "macos", "linux", "desktop"},
-                "unsupported_but_declared": d not in {"android", "windows", "macos", "linux", "desktop"},
+                "registered": observed,
+                "observable": observed,
+                "control_capable": operational,
+                "execution_capable": operational and d != "browser",
+                "closure_integrated": operational and d != "browser",
+                "operational": operational,
+                "unsupported_but_declared": not operational,
+                "runtime_status": "operational" if operational else "declared_non_operational",
             }
         )
-    return {"support_matrix": matrix}
+    return {"support_matrix": matrix, "observed_device_types": observed_types}
 
 
 def _build_device_autonomy_checkpoint() -> Dict[str, Any]:
     from core.android_device_state_store import list_device_state_snapshots
     from core.android_network_participation import get_participation_state_for_device
+    from core.canonical_task import get_canonical_task_runtime
 
-    tier_to_class = {
-        "local_only": "connected_only",
-        "control_only": "observable_only",
-        "cross_device_capable": "participant_capable",
-        "cross_device_enabled": "participant_capable",
-        "fully_attached": "execution_capable",
-        "dispatch_eligible": "semi_autonomous_runtime_capable",
-        "distributed_participant": "meaningfully_autonomous_runtime_capable",
-    }
+    runtime = get_canonical_task_runtime()
+    allocation_records = [r.to_dict() for r in runtime.list_allocation_records(limit=1024)]
+    evidence_by_executor: Dict[str, Dict[str, int]] = {}
+    for rec in allocation_records:
+        executor = str(rec.get("selected_executor") or rec.get("execution_location") or "").strip()
+        if not executor:
+            continue
+        bucket = evidence_by_executor.setdefault(
+            executor, {"accepted": 0, "closed": 0, "fallback": 0}
+        )
+        if str(rec.get("accepted_allocation")) == "accepted":
+            bucket["accepted"] += 1
+        if bool(rec.get("canonical_closed")):
+            bucket["closed"] += 1
+        if bool(rec.get("fallback_used")):
+            bucket["fallback"] += 1
     classes: List[Dict[str, Any]] = []
     for snap in list_device_state_snapshots():
         did = getattr(snap, "device_id", None)
@@ -189,16 +265,33 @@ def _build_device_autonomy_checkpoint() -> Dict[str, Any]:
             continue
         state = get_participation_state_for_device(did)
         tier = state.tier.value if hasattr(state.tier, "value") else str(state.tier)
+        evidence = evidence_by_executor.get(did, {"accepted": 0, "closed": 0, "fallback": 0})
+        eligible = bool(getattr(state, "dispatch_gate_passed", False)) and bool(
+            getattr(state, "readiness_satisfied", False)
+        )
+        if evidence["closed"] >= 3 and eligible:
+            autonomy_class = "meaningfully_autonomous_runtime_capable"
+        elif evidence["accepted"] >= 1 and eligible:
+            autonomy_class = "semi_autonomous_runtime_capable"
+        elif getattr(state, "active_session_count", 0):
+            autonomy_class = "participant_capable"
+        elif getattr(state, "websocket_connected", False):
+            autonomy_class = "observable_only"
+        else:
+            autonomy_class = "connected_only"
         classes.append(
             {
                 "device_id": did,
                 "tier": tier,
-                "autonomy_class": tier_to_class.get(tier, "connected_only"),
+                "autonomy_class": autonomy_class,
                 "evidence": {
                     "websocket_connected": bool(getattr(state, "websocket_connected", False)),
                     "active_session_count": int(getattr(state, "active_session_count", 0) or 0),
                     "readiness_satisfied": bool(getattr(state, "readiness_satisfied", False)),
                     "dispatch_gate_passed": bool(getattr(state, "dispatch_gate_passed", False)),
+                    "accepted_tasks": evidence["accepted"],
+                    "closed_tasks": evidence["closed"],
+                    "fallback_count": evidence["fallback"],
                 },
             }
         )

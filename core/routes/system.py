@@ -36,7 +36,6 @@ authority model and endpoint directory.
 
 import logging
 import os
-import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -167,8 +166,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:
             subsystems["llm_router"] = {"status": "error", "error": str(e)}
 
-        # Node Registry — read from canonical NodeFabricRegistry first,
-        # fall back to legacy NodeRegistry for registered_nodes count.
+        # Node Registry — canonical runtime authority only.
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
             fab = get_node_fabric_registry()
@@ -178,18 +176,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "registered_nodes": canonical_count,
                 "registry_authority": "canonical:NodeFabricRegistry",
             }
-        except Exception:
-            try:
-                from core.node_registry import get_node_registry
-                registry = get_node_registry()
-                meta = registry.metadata if hasattr(registry, 'metadata') else {}
-                subsystems["node_registry"] = {
-                    "status": "running",
-                    "registered_nodes": len(meta),
-                    "registry_authority": "legacy:NodeRegistry",
-                }
-            except Exception as e:
-                subsystems["node_registry"] = {"status": "error", "error": str(e)}
+        except Exception as e:
+            subsystems["node_registry"] = {"status": "error", "error": str(e)}
 
         # Monitoring
         try:
@@ -280,9 +268,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             try:
                 from core.nodes.node_fabric_registry import get_node_fabric_registry
                 fab = get_node_fabric_registry()
-                canonical_ids: set = set()
                 for n in fab.list_nodes():
-                    canonical_ids.add(n.node_id)
                     node_list.append({
                         "node_id": n.node_id,
                         "name": n.metadata.get("name", n.node_id) if isinstance(n.metadata, dict) else n.node_id,
@@ -293,30 +279,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         "health_score": round(n.health_score(), 4),
                         "source": "canonical",
                     })
-            except Exception:
-                canonical_ids = set()
-
-            # Supplement: legacy NodeRegistry metadata for nodes not in canonical registry
-            try:
-                from core.node_registry import get_node_registry
-                legacy_registry = get_node_registry()
-                meta = legacy_registry.metadata if hasattr(legacy_registry, 'metadata') else {}
-                for node_id, m in meta.items():
-                    if node_id not in canonical_ids:
-                        node_list.append({
-                            "node_id": node_id,
-                            "name": getattr(m, 'name', node_id),
-                            "status": (
-                                m.status.name.lower()
-                                if hasattr(m.status, 'name')
-                                else str(getattr(m, 'status', 'unknown'))
-                            ),
-                            "error_message": getattr(m, 'error_message', None),
-                            "version": getattr(m, 'version', None),
-                            "role": None,
-                            "health_score": None,
-                            "source": "legacy",
-                        })
             except Exception:
                 pass
 
@@ -474,7 +436,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 # 同步刷新能力编排器
                 try:
                     from core.capability_orchestrator import capability_orchestrator
-                    import asyncio
                     await capability_orchestrator.reinitialize()
                     logger.info("CapabilityOrchestrator 已重新加载")
                 except Exception as e:

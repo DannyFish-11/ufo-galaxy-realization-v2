@@ -71,6 +71,7 @@ from core.canonical_task import (
     CANONICAL_TASK_LAYER_POSITION,
     CANONICAL_TASK_ONTOLOGY_VERSION,
     CANONICAL_EXECUTION_SPINE_POLICY,
+    TASK_ALLOCATION_TRUTH_AUTHORITY,
     CanonicalTask,
     CanonicalTaskRecord,
     CanonicalTaskRuntime,
@@ -839,3 +840,45 @@ def test_AV1_snapshot_to_dict_keys():
 def test_AW1_all_exports_importable():
     for name in _mod.__all__:
         assert hasattr(_mod, name), f"{name} missing from module"
+
+
+# ===========================================================================
+# AX) allocation truth substrate
+# ===========================================================================
+
+def test_AX1_allocation_truth_contains_transition_history(reset_runtime):
+    rt = get_canonical_task_runtime()
+    task = build_canonical_task(
+        selected_targets=["android-01"],
+        route_preference="cross_device",
+        transport_preference="websocket",
+    )
+    rt.update_lifecycle(task.task_id, TaskLifecycle.RUNNING)
+    rt.update_lifecycle(task.task_id, TaskLifecycle.COMPLETED)
+    records = rt.list_allocation_records(limit=8)
+    assert records
+    rec = records[0]
+    assert rec.selected_executor == "android-01"
+    assert rec.accepted_allocation == "accepted"
+    assert rec.canonical_closed is True
+    assert isinstance(rec.allocation_history, list) and rec.allocation_history
+
+
+def test_AX2_allocation_truth_persists_and_recovers(tmp_path, monkeypatch):
+    state_path = tmp_path / "allocation_state.json"
+    monkeypatch.setenv("GALAXY_TASK_ALLOCATION_STATE_PATH", str(state_path))
+    reset_canonical_task_runtime()
+    rt = get_canonical_task_runtime()
+    task = build_canonical_task(
+        task_id="persist-task",
+        selected_targets=["android-02"],
+        route_preference="cross_device",
+    )
+    rt.update_lifecycle(task.task_id, TaskLifecycle.COMPLETED)
+    assert state_path.exists()
+    reset_canonical_task_runtime()
+    rt2 = get_canonical_task_runtime()
+    records = [r for r in rt2.list_allocation_records(limit=16) if r.task_id == "persist-task"]
+    assert len(records) == 1
+    assert records[0].execution_location == "android-02"
+    assert TASK_ALLOCATION_TRUTH_AUTHORITY.startswith("CANONICAL_TASK_ALLOCATION_TRUTH")

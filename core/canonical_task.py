@@ -85,6 +85,9 @@ Helpers::
 from __future__ import annotations
 
 import logging
+import json
+import os
+import threading
 import time
 import uuid
 from collections import deque
@@ -100,6 +103,7 @@ __all__ = [
     "CANONICAL_TASK_LAYER_POSITION",
     "CANONICAL_TASK_ONTOLOGY_VERSION",
     "CANONICAL_EXECUTION_SPINE_POLICY",
+    "TASK_ALLOCATION_TRUTH_AUTHORITY",
     # Enums
     "TaskLifecycle",
     "TaskOrigin",
@@ -151,6 +155,12 @@ CANONICAL_EXECUTION_SPINE_POLICY: str = (
     "all legacy dispatch shortcuts must be registered in LegacyDispatchRegistry."
 )
 """Policy: all system-level dispatch MUST flow through the canonical spine."""
+
+TASK_ALLOCATION_TRUTH_AUTHORITY: str = (
+    "CANONICAL_TASK_ALLOCATION_TRUTH_V1: "
+    "core.canonical_task.CanonicalTaskRuntime maintains the authoritative "
+    "per-task allocation truth substrate (state + transition history)."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -691,6 +701,10 @@ class TaskAllocationRecord:
     fallback_used: bool = False
     trace_id: str = ""
     updated_at: float = 0.0
+    selected_executor: str = "unknown"
+    accepted_at: Optional[float] = None
+    closed_at: Optional[float] = None
+    allocation_history: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -705,6 +719,10 @@ class TaskAllocationRecord:
             "fallback_used": self.fallback_used,
             "trace_id": self.trace_id,
             "updated_at": self.updated_at,
+            "selected_executor": self.selected_executor,
+            "accepted_at": self.accepted_at,
+            "closed_at": self.closed_at,
+            "allocation_history": list(self.allocation_history),
         }
 
 
@@ -728,6 +746,13 @@ class CanonicalTaskRuntime:
     def __init__(self) -> None:
         self._tasks: Dict[str, CanonicalTask] = {}
         self._ring: Deque[CanonicalTaskRecord] = deque(maxlen=self._MAX_RING)
+        self._allocation_truth: Dict[str, TaskAllocationRecord] = {}
+        self._allocation_lock = threading.Lock()
+        self._allocation_state_path = os.getenv(
+            "GALAXY_TASK_ALLOCATION_STATE_PATH",
+            os.path.join(os.getcwd(), "runtime", "task_allocation_truth.json"),
+        )
+        self._load_allocation_truth()
 
     # ── Registration ─────────────────────────────────────────────────────
 
@@ -755,6 +780,7 @@ class CanonicalTaskRuntime:
             targets=list(task.routing.selected_targets),
         )
         self._ring.append(rec)
+        self._upsert_allocation_truth(task)
         logger.debug(
             "CanonicalTaskRuntime.register | task_id=%s lifecycle=%s origin=%s",
             task.task_id, task.lifecycle.value, rec.origin,
@@ -811,50 +837,134 @@ class CanonicalTaskRuntime:
 
     def list_allocation_records(self, *, limit: int = 64) -> List[TaskAllocationRecord]:
         """Return per-task allocation truth records for operator/runtime surfaces."""
-        records: List[TaskAllocationRecord] = []
-        for task in self._tasks.values():
-            lifecycle = task.lifecycle.value if hasattr(task.lifecycle, "value") else str(task.lifecycle)
-            effective_path = str(task.routing.effective_path or "").strip()
-            fallback_of = str(task.graph.fallback_of or "").strip()
-            fallback_policy = str(task.planning.fallback_policy or "").strip()
-            fallback_used = bool(fallback_of) or lifecycle == TaskLifecycle.DEGRADED.value
-            fallback_path = "none"
-            if fallback_of:
-                fallback_path = "canonical_fallback"
-            elif fallback_policy:
-                fallback_path = "fallback_policy_declared"
-            if str(task.routing.transport_preference or "").lower().startswith("legacy"):
-                fallback_path = "legacy_bypass"
-                fallback_used = True
-            if not effective_path:
-                effective_path = str(task.routing.transport_preference or "unknown")
-            record = TaskAllocationRecord(
+        with self._allocation_lock:
+            records = list(self._allocation_truth.values())
+        records.sort(key=lambda r: r.updated_at, reverse=True)
+        return records[: max(0, int(limit))]
+
+    def _upsert_allocation_truth(self, task: CanonicalTask) -> None:
+        lifecycle = task.lifecycle.value if hasattr(task.lifecycle, "value") else str(task.lifecycle)
+        now = float(time.time())
+        effective_path = str(task.routing.effective_path or "").strip()
+        fallback_of = str(task.graph.fallback_of or "").strip()
+        fallback_policy = str(task.planning.fallback_policy or "").strip()
+        fallback_used = bool(fallback_of) or lifecycle == TaskLifecycle.DEGRADED.value
+        fallback_path = "none"
+        if fallback_of:
+            fallback_path = "canonical_fallback"
+        elif fallback_policy:
+            fallback_path = "fallback_policy_declared"
+        if str(task.routing.transport_preference or "").lower().startswith("legacy"):
+            fallback_path = "legacy_bypass"
+            fallback_used = True
+        if not effective_path:
+            effective_path = str(task.routing.transport_preference or "unknown")
+        selected_executor = task.routing.selected_targets[0] if task.routing.selected_targets else "local_runtime"
+        accepted_allocation = "accepted" if bool(task.routing.selected_targets) else "pending"
+        canonical_closed = lifecycle in {
+            TaskLifecycle.COMPLETED.value,
+            TaskLifecycle.FAILED.value,
+            TaskLifecycle.CANCELLED.value,
+            TaskLifecycle.DEGRADED.value,
+        }
+        with self._allocation_lock:
+            existing = self._allocation_truth.get(task.task_id)
+            accepted_at = existing.accepted_at if existing else None
+            if accepted_at is None and accepted_allocation == "accepted":
+                accepted_at = now
+            closed_at = existing.closed_at if existing else None
+            if closed_at is None and canonical_closed:
+                closed_at = now
+            history = list(existing.allocation_history) if existing else []
+            transition = {
+                "ts": now,
+                "lifecycle": lifecycle,
+                "requested_allocation": str(task.routing.route_preference or "unknown"),
+                "accepted_allocation": accepted_allocation,
+                "selected_executor": selected_executor,
+                "allocation_path": effective_path,
+                "fallback_path": fallback_path,
+                "canonical_closed": canonical_closed,
+            }
+            if not history or history[-1] != transition:
+                history.append(transition)
+            self._allocation_truth[task.task_id] = TaskAllocationRecord(
                 task_id=task.task_id,
                 requested_allocation=str(task.routing.route_preference or "unknown"),
-                accepted_allocation=(
-                    "accepted" if bool(task.routing.selected_targets) else "pending"
-                ),
+                accepted_allocation=accepted_allocation,
                 in_flight_owner=lifecycle,
-                execution_location=(
-                    task.routing.selected_targets[0]
-                    if task.routing.selected_targets
-                    else "local_runtime"
-                ),
+                execution_location=selected_executor,
                 participant_local_phase=lifecycle,
-                canonical_closed=lifecycle in {
-                    TaskLifecycle.COMPLETED.value,
-                    TaskLifecycle.FAILED.value,
-                    TaskLifecycle.CANCELLED.value,
-                    TaskLifecycle.DEGRADED.value,
-                },
+                canonical_closed=canonical_closed,
                 fallback_path=fallback_path,
                 fallback_used=fallback_used,
                 trace_id=task.trace_id,
-                updated_at=float(task.completed_at or task.running_at or task.created_at),
+                updated_at=float(task.completed_at or task.running_at or task.created_at or now),
+                selected_executor=selected_executor,
+                accepted_at=accepted_at,
+                closed_at=closed_at,
+                allocation_history=history[-64:],
             )
-            records.append(record)
-        records.sort(key=lambda r: r.updated_at, reverse=True)
-        return records[: max(0, int(limit))]
+        self._persist_allocation_truth()
+
+    def _persist_allocation_truth(self) -> None:
+        try:
+            dir_path = os.path.dirname(self._allocation_state_path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+            payload = {
+                "authority": TASK_ALLOCATION_TRUTH_AUTHORITY,
+                "saved_at": time.time(),
+                "records": [r.to_dict() for r in self._allocation_truth.values()],
+            }
+            tmp_path = f"{self._allocation_state_path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
+            os.replace(tmp_path, self._allocation_state_path)
+        except Exception as exc:
+            logger.debug("CanonicalTaskRuntime allocation persist skipped: %s", exc)
+
+    def _load_allocation_truth(self) -> None:
+        path = self._allocation_state_path
+        if not path or not os.path.exists(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+            records = data.get("records") or []
+            for item in records:
+                if not isinstance(item, dict):
+                    continue
+                task_id = str(item.get("task_id") or "").strip()
+                if not task_id:
+                    continue
+                self._allocation_truth[task_id] = TaskAllocationRecord(
+                    task_id=task_id,
+                    requested_allocation=str(item.get("requested_allocation") or "unknown"),
+                    accepted_allocation=str(item.get("accepted_allocation") or "pending"),
+                    in_flight_owner=str(item.get("in_flight_owner") or "unknown"),
+                    execution_location=str(item.get("execution_location") or "local_runtime"),
+                    participant_local_phase=str(item.get("participant_local_phase") or "unknown"),
+                    canonical_closed=bool(item.get("canonical_closed")),
+                    fallback_path=str(item.get("fallback_path") or "none"),
+                    fallback_used=bool(item.get("fallback_used")),
+                    trace_id=str(item.get("trace_id") or ""),
+                    updated_at=float(item.get("updated_at") or 0.0),
+                    selected_executor=str(item.get("selected_executor") or "unknown"),
+                    accepted_at=(
+                        float(item["accepted_at"])
+                        if item.get("accepted_at") is not None
+                        else None
+                    ),
+                    closed_at=(
+                        float(item["closed_at"])
+                        if item.get("closed_at") is not None
+                        else None
+                    ),
+                    allocation_history=list(item.get("allocation_history") or [])[-64:],
+                )
+        except Exception as exc:
+            logger.debug("CanonicalTaskRuntime allocation recovery skipped: %s", exc)
 
 
 # ---------------------------------------------------------------------------
