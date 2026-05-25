@@ -234,7 +234,9 @@ class TestNodeHeartbeatSender:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await sender.register()
 
-        payload = mock_bus.publish_worker_registration.call_args[0][0].model_dump(mode="json", exclude_none=True)
+        registration = mock_bus.publish_worker_registration.call_args[0][0]
+        assert hasattr(registration, "model_dump")
+        payload = registration.model_dump(mode="json", exclude_none=True)
         cap_names = [c["name"] for c in payload.get("capabilities", [])]
         assert "cap_a" in cap_names
         assert "cap_b" in cap_names

@@ -670,7 +670,7 @@ class NATSBus:
         """Create a JetStream pull/push subscription."""
         if self._noop:
             return {
-                "success": False,
+                "success": True,
                 "noop": True,
                 "error": "nats_noop_transport",
                 "subject": subject,

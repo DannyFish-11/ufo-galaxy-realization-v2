@@ -145,10 +145,8 @@ async def wait_for_result_activity(task_id: str, timeout_ms: int = 60_000) -> di
             timeout_result["last_result"] = result_holder["data"]
         return timeout_result
     except asyncio.CancelledError:
-        cancelled = {"success": False, "error": "cancelled", "task_id": task_id}
-        if result_holder.get("data"):
-            cancelled["last_result"] = result_holder["data"]
-        return cancelled
+        logger.debug("wait_for_result_activity: cancelled while waiting for %s", task_id)
+        raise
     finally:
         try:
             await nats_bus.unsubscribe(subscription)
