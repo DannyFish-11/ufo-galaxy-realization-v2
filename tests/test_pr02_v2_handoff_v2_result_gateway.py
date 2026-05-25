@@ -537,3 +537,37 @@ class TestTerminalRuntimeTruthReconciliation:
         assert registry.complete.call_count == 0
         assert registry.fail.call_count == 1
         assert graph.transition.call_count == 1
+
+    def test_L03_non_terminal_ack_updates_task_graph_without_terminal_lifecycle(self):
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
+
+        msg = _make_ack_message(handoff_id="hev2_l03", device_id="android-l03")
+        msg["schema_version"] = "1"
+        env = MagicMock(
+            response_kind="ack",
+            handoff_id="hev2_l03",
+            task_id="task-l03",
+            is_terminal=False,
+            trace_id="trace-l03",
+        )
+        outcome = MagicMock(
+            was_correlated=True,
+            callback_invoked=True,
+            envelope=env,
+            reject_reason="",
+        )
+        registry = MagicMock()
+        graph = MagicMock()
+
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome), \
+             patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None), \
+             patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry), \
+             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
+            resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
+
+        assert resp["type"] == "handoff_v2_result_ack"
+        assert registry.transfer_ownership.call_count == 0
+        assert registry.complete.call_count == 0
+        assert registry.fail.call_count == 0
+        assert graph.register_node_raw.call_count == 1
+        assert graph.transition.call_count == 1
