@@ -103,24 +103,57 @@ async def wait_for_result_activity(task_id: str, timeout_ms: int = 60_000) -> di
     or ``{"success": False, "error": "timeout"}``.
     """
     from core.nats_bus import nats_bus
+    from core.schemas.contracts import TaskStatus
 
     result_holder: dict = {}
+    seen_result_ids: set[str] = set()
     event = asyncio.Event()
+    subscription = None
+    terminal_statuses = {
+        TaskStatus.SUCCESS.value,
+        TaskStatus.FAILED.value,
+        TaskStatus.TIMEOUT.value,
+        TaskStatus.CANCELLED.value,
+        TaskStatus.LSP_FAILED.value,
+    }
 
     async def _on_result(data: dict):
         if data.get("task_id") == task_id:
+            result_id = str((data.get("metadata") or {}).get("result_id") or "")
+            if result_id:
+                if result_id in seen_result_ids:
+                    return
+                seen_result_ids.add(result_id)
             result_holder["data"] = data
-            event.set()
+            if str(data.get("status", "")) in terminal_statuses:
+                event.set()
 
-    sub_result = await nats_bus.subscribe_task_results(_on_result)
-    if not sub_result.get("success"):
-        return {"success": False, "error": f"Failed to subscribe: {sub_result.get('error', 'unknown')}"}
+    sub_result = await nats_bus.subscribe_task_results(_on_result, include_subscription=True)
+    if not sub_result.get("success") or sub_result.get("noop"):
+        error = sub_result.get("error", "unknown")
+        if sub_result.get("noop"):
+            error = f"distributed_transport_unavailable:{error}"
+        return {"success": False, "error": f"Failed to subscribe: {error}", "task_id": task_id}
+    subscription = sub_result.get("subscription")
 
     try:
         await asyncio.wait_for(event.wait(), timeout=timeout_ms / 1000)
         return {"success": True, "data": result_holder["data"]}
     except asyncio.TimeoutError:
-        return {"success": False, "error": "timeout", "task_id": task_id}
+        timeout_result = {"success": False, "error": "timeout", "task_id": task_id}
+        if result_holder.get("data"):
+            timeout_result["last_result"] = result_holder["data"]
+        return timeout_result
+    except asyncio.CancelledError:
+        cancelled = {"success": False, "error": "cancelled", "task_id": task_id}
+        if result_holder.get("data"):
+            cancelled["last_result"] = result_holder["data"]
+        return cancelled
+    finally:
+        try:
+            await nats_bus.unsubscribe(subscription)
+        except Exception as exc:
+            logger.debug("wait_for_result_activity: unsubscribe failed for %s: %s", task_id, exc)
 
 
 @activity.defn(name="generate_tool")

@@ -295,7 +295,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
         brain_status = None
         try:
-            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+            from core.master_brain import master_brain_enabled
+
+            if master_brain_enabled():
                 from core.master_brain import get_master_brain
                 brain = get_master_brain()
                 if brain is not None:
@@ -357,7 +359,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             result["bus"] = {"error": str(exc)}
 
         try:
-            if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+            from core.master_brain import master_brain_enabled
+
+            if master_brain_enabled():
                 from core.master_brain import get_master_brain
                 brain = get_master_brain()
                 if brain is not None:

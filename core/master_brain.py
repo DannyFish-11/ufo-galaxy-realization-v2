@@ -26,7 +26,7 @@ import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger("master_brain")
 
@@ -61,6 +61,16 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
 _HEARTBEAT_TIMEOUT_S = 30
 
 
+def _env_flag(name: str) -> bool:
+    """Parse common truthy environment values consistently across entry points."""
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def master_brain_enabled() -> bool:
+    """Return whether the distributed MasterBrain runtime is explicitly enabled."""
+    return _env_flag("GALAXY_MASTER_BRAIN_ENABLED")
+
+
 class MasterBrain:
     """Cloud-side orchestrator using contracts + NATS + Temporal.
 
@@ -88,7 +98,14 @@ class MasterBrain:
         self._temporal_worker: Any = None
         self._temporal_worker_task: Optional[asyncio.Task[Any]] = None
         self._temporal_last_error: str = ""
+        self._temporal_worker_state: str = "inactive"
         self._started = False
+        self._persistence_degraded = False
+        self._persistence_last_error = ""
+        self._last_scaling_decision: Dict[str, Any] = {
+            "action": "no_change",
+            "reason": "not_evaluated",
+        }
         self._state_path = Path(
             state_path
             or os.environ.get("GALAXY_MASTER_BRAIN_STATE_PATH")
@@ -108,7 +125,12 @@ class MasterBrain:
     async def start(self) -> dict:
         """Initialize MasterBrain: connect NATS, subscribe to events."""
         if self._started:
-            return {"success": True, "already_started": True}
+            return {
+                "success": True,
+                "already_started": True,
+                "temporal_runtime_available": self.is_temporal_runtime_available(),
+                "temporal_worker_state": self._temporal_worker_state,
+            }
 
         # Connect NATS
         conn_result = await self._nats.connect()
@@ -183,27 +205,7 @@ class MasterBrain:
         else:
             logger.warning("MasterBrain: NATS not connected, distributed lifecycle subscriptions inactive")
 
-        # Try connecting to Temporal
-        self._temporal_last_error = ""
-        try:
-            from core.temporal_workflows import get_temporal_client, start_temporal_worker
-
-            self._temporal_client = await get_temporal_client()
-            if self._temporal_client is not None:
-                self._temporal_worker = await start_temporal_worker(self._temporal_client)
-                if self._temporal_worker is not None:
-                    self._temporal_worker_task = asyncio.create_task(
-                        self._temporal_worker.run(),
-                        name="galaxy-temporal-worker",
-                    )
-                    self._temporal_worker_task.add_done_callback(self._on_temporal_worker_exit)
-                else:
-                    self._temporal_last_error = "temporal_worker_not_started"
-            else:
-                self._temporal_last_error = "temporal_client_unavailable"
-        except Exception as exc:
-            self._temporal_last_error = str(exc)
-            logger.debug("MasterBrain: Temporal unavailable, workflow features disabled: %s", exc)
+        await self._start_temporal_runtime()
 
         self._started = True
         logger.info(
@@ -219,16 +221,55 @@ class MasterBrain:
             "temporal_client_connected": self._temporal_client is not None,
             "temporal_worker_active": self._temporal_worker_active(),
             "temporal_runtime_available": self.is_temporal_runtime_available(),
+            "temporal_worker_state": self._temporal_worker_state,
+            "persistence_degraded": self._persistence_degraded,
+            "master_brain_enabled": master_brain_enabled(),
         }
 
     async def stop(self) -> dict:
         """Stop MasterBrain runtime integrations owned by this process."""
+        await self._stop_temporal_runtime()
+        self._started = False
+        return {"success": True}
+
+    async def _start_temporal_runtime(self) -> None:
+        """Start the Temporal client + worker as a single lifecycle unit."""
+        self._temporal_last_error = ""
+        self._temporal_worker_state = "starting"
+        try:
+            from core.temporal_workflows import get_temporal_client, start_temporal_worker
+
+            self._temporal_client = await get_temporal_client()
+            if self._temporal_client is None:
+                self._temporal_worker_state = "inactive"
+                self._temporal_last_error = "temporal_client_unavailable"
+                return
+
+            self._temporal_worker = await start_temporal_worker(self._temporal_client)
+            if self._temporal_worker is None:
+                self._temporal_worker_state = "failed"
+                self._temporal_last_error = "temporal_worker_not_started"
+                return
+
+            self._temporal_worker_task = asyncio.create_task(
+                self._temporal_worker.run(),
+                name="galaxy-temporal-worker",
+            )
+            self._temporal_worker_task.add_done_callback(self._on_temporal_worker_exit)
+            self._temporal_worker_state = "running"
+        except Exception as exc:
+            self._temporal_worker_state = "failed"
+            self._temporal_last_error = str(exc)
+            logger.debug("MasterBrain: Temporal unavailable, workflow features disabled: %s", exc)
+
+    async def _stop_temporal_runtime(self) -> None:
+        """Stop the Temporal client + worker as a single lifecycle unit."""
         worker = self._temporal_worker
         worker_task = self._temporal_worker_task
         self._temporal_worker = None
         self._temporal_worker_task = None
         self._temporal_client = None
-        self._started = False
+        self._temporal_worker_state = "inactive"
 
         if worker is not None and hasattr(worker, "shutdown"):
             try:
@@ -249,8 +290,6 @@ class MasterBrain:
             except Exception as exc:
                 logger.warning("MasterBrain: Temporal worker task stop failed: %s", exc)
 
-        return {"success": True}
-
     # ── Task Dispatch ───────────────────────────────────────────────────────
 
     async def dispatch_task(self, raw_task: dict) -> dict:
@@ -264,17 +303,54 @@ class MasterBrain:
             return validated
 
         task: TaskDispatchModel = validated["data"]
+        trace_id = str(
+            raw_task.get("trace_id", "")
+            or (task.context.get("trace_id") if isinstance(task.context, dict) else "")
+        )
+        self._register_task_graph_node(task=task, trace_id=trace_id)
+        self._transition_task_graph(
+            task.task_id,
+            "admitted",
+            reason="master_brain_validated",
+        )
 
         # Worker selection
         target = task.target_worker_id
+        selection_details = {
+            "selected_by": "explicit_target",
+            "selection_score": None,
+            "selection_reason": "",
+            "selection_fallback_reason": "",
+        }
         if not target:
-            target = self._select_worker(task.target_device_type)
+            selection_details = self._select_worker_for_task(task)
+            target = selection_details.get("worker_id", "")
             if not target:
-                return {"success": False, "error": "No available worker for device type: " + task.target_device_type}
+                self._mark_task_terminal(
+                    task.task_id,
+                    status="dispatch_failed",
+                    completion_state="dispatch_failed",
+                    lifecycle_state="failed",
+                    error="No available worker for device type: " + task.target_device_type,
+                    trace_id=trace_id,
+                    terminal_source="worker_selection",
+                    selected_by=selection_details.get("selected_by", ""),
+                    selection_fallback_reason=selection_details.get("selection_fallback_reason", ""),
+                )
+                return {
+                    "success": False,
+                    "error": "No available worker for device type: " + task.target_device_type,
+                    "task_id": task.task_id,
+                    "selected_by": selection_details.get("selected_by", ""),
+                    "selection_fallback_reason": selection_details.get("selection_fallback_reason", ""),
+                }
             task.target_worker_id = target
 
-        task_trace_id = task.context.get("trace_id")
-        trace_id = raw_task.get("trace_id", "") if task_trace_id in (None, "") else task_trace_id
+        self._transition_task_graph(
+            task.task_id,
+            "routed",
+            reason=f"master_brain_selected:{target}",
+        )
         wait_for_completion = bool(raw_task.get("wait_for_completion", True))
         timeout_s = self._resolve_task_timeout_s(raw_task, task)
         record = self._upsert_task_record(
@@ -302,6 +378,17 @@ class MasterBrain:
         record["deadline_at"] = (datetime.fromisoformat(dispatched_at) + timedelta(seconds=timeout_s)).isoformat()
         self._ensure_task_waiter(task.task_id)
         self._persist_state()
+        scaling = self._evaluate_scaling_state(task=task)
+        self._update_task_record(
+            task.task_id,
+            selected_by=selection_details.get("selected_by", ""),
+            selection_score=selection_details.get("selection_score"),
+            selection_reason=selection_details.get("selection_reason", ""),
+            selection_fallback_reason=selection_details.get("selection_fallback_reason", ""),
+            transport_state="publishing",
+            degraded_mode=False,
+            scaling_state=scaling,
+        )
 
         # Publish to NATS
         result = await self._nats.publish_task_dispatch(target, task)
@@ -318,6 +405,15 @@ class MasterBrain:
                 distributed_dispatch=False,
                 execution_path="distributed_unavailable",
                 nats_publish_state=result,
+                transport_state="noop_unavailable",
+                degraded_mode=True,
+                terminal_source="nats_noop_transport",
+            )
+            self._transition_task_graph(
+                task.task_id,
+                "degraded",
+                reason="nats_noop_transport",
+                error="distributed_transport_unavailable:nats_noop_transport",
             )
             return {
                 "success": False,
@@ -329,6 +425,9 @@ class MasterBrain:
                 "nats_publish_state": result,
                 "completion_state": failure.get("completion_state"),
                 "closure_complete": failure.get("closure_complete"),
+                "selected_by": selection_details.get("selected_by", ""),
+                "transport_state": "noop_unavailable",
+                "degraded_mode": True,
             }
         if not result.get("success"):
             failure = self._update_task_record(
@@ -343,6 +442,15 @@ class MasterBrain:
                 distributed_dispatch=False,
                 execution_path="distributed_unavailable",
                 nats_publish_state=result,
+                transport_state="publish_failed",
+                degraded_mode=True,
+                terminal_source="nats_publish_failed",
+            )
+            self._transition_task_graph(
+                task.task_id,
+                "failed",
+                reason="nats_publish_failed",
+                error=result.get("error", "nats_publish_failed"),
             )
             return {
                 "success": False,
@@ -354,6 +462,9 @@ class MasterBrain:
                 "nats_publish_state": result,
                 "completion_state": failure.get("completion_state"),
                 "closure_complete": failure.get("closure_complete"),
+                "selected_by": selection_details.get("selected_by", ""),
+                "transport_state": "publish_failed",
+                "degraded_mode": True,
             }
 
         if result.get("success"):
@@ -371,6 +482,14 @@ class MasterBrain:
                 execution_path="nats_distributed",
                 nats_publish_state=result,
                 dispatch_accepted_at=datetime.now().isoformat(),
+                transport_state="active",
+                degraded_mode=False,
+            )
+            self._transition_task_graph(
+                task.task_id,
+                "dispatch",
+                reason="nats_dispatch_accepted",
+                transport_path="nats_distributed",
             )
             _try_emit_event("TASK_DISPATCHED", {
                 "task_id": task.task_id,
@@ -396,6 +515,10 @@ class MasterBrain:
                     "status": dispatch_snapshot.get("status"),
                     "lifecycle_state": dispatch_snapshot.get("lifecycle_state"),
                     "nats_publish_state": result,
+                    "selected_by": selection_details.get("selected_by", ""),
+                    "selection_score": selection_details.get("selection_score"),
+                    "transport_state": "active",
+                    "scaling_state": scaling,
                 }
 
         return await self.wait_for_task_result(task.task_id, timeout_s=timeout_s)
@@ -436,6 +559,12 @@ class MasterBrain:
                 task_id,
                 late_result=result_dump,
                 late_result_at=datetime.now().isoformat(),
+                late_result_reason=f"late_after_{record.get('completion_state')}",
+            )
+            self._transition_task_graph(
+                task_id,
+                "replayed",
+                reason=f"late_result_ignored:{record.get('completion_state')}",
             )
             return {
                 "success": False,
@@ -444,6 +573,7 @@ class MasterBrain:
                 "error": late.get("error", ""),
                 "completion_state": late.get("completion_state"),
                 "late_result_ignored": True,
+                "terminal_source": late.get("terminal_source", ""),
             }
 
         correlation_error = self._validate_result_correlation(record, result)
@@ -466,7 +596,9 @@ class MasterBrain:
         seen_result_ids = record.setdefault("_result_ids", set())
         if result_id and result_id in seen_result_ids:
             logger.debug("MasterBrain: duplicate task result ignored task_id=%s result_id=%s", task_id, result_id)
-            return self.get_task_status(task_id)
+            duplicate = self.get_task_status(task_id) or {"task_id": task_id}
+            duplicate["duplicate_result_ignored"] = True
+            return duplicate
         if result_id:
             seen_result_ids.add(result_id)
 
@@ -508,10 +640,15 @@ class MasterBrain:
         if status == TaskStatus.DISPATCHED.value:
             updates.setdefault("dispatch_accepted_at", datetime.now().isoformat())
         if status == TaskStatus.RUNNING.value:
-            updates["started_at"] = self._timestamp_to_iso(result.started_at) or record.get("started_at") or datetime.now().isoformat()
+            updates["started_at"] = (
+                self._timestamp_to_iso(result.started_at)
+                or record.get("started_at")
+                or datetime.now().isoformat()
+            )
         if closure_complete:
             updates["completed_at"] = self._timestamp_to_iso(result.completed_at) or datetime.now().isoformat()
         snapshot = self._update_task_record(task_id, **updates)
+        self._apply_task_graph_result(task_id, status=status, completion_state=snapshot.get("completion_state", ""))
 
         _try_emit_event("TASK_RESULT_RECEIVED", {
             "task_id": task_id,
@@ -543,6 +680,12 @@ class MasterBrain:
         task_id = str(raw_task.get("task_id", "")).strip()
         worker_id = str(raw_task.get("target_worker_id", "")).strip()
         trace_id = str(raw_task.get("trace_id", "")).strip()
+        try:
+            validated = TaskDispatchModel.model_validate(raw_task)
+            self._register_task_graph_node(task=validated, trace_id=trace_id)
+        except Exception:
+            pass
+        self._transition_task_graph(task_id, "admitted", reason="temporal_workflow_requested")
         self._upsert_task_record(
             task_id=task_id,
             worker_id=worker_id,
@@ -561,6 +704,11 @@ class MasterBrain:
             distributed_dispatch=True,
             execution_path="temporal_workflow",
             nats_publish_state=None,
+        )
+        self._update_task_record(
+            task_id,
+            transport_state="temporal_runtime" if self._temporal_worker_active() else "temporal_unavailable",
+            degraded_mode=not self._temporal_worker_active(),
         )
         self._ensure_task_waiter(task_id)
 
@@ -603,6 +751,12 @@ class MasterBrain:
             workflow_run_id=started.get("run_id", ""),
             temporal_workflow_type="code_execution",
             temporal_worker_active=self._temporal_worker_active(),
+        )
+        self._transition_task_graph(
+            task_id,
+            "dispatch",
+            reason="temporal_workflow_started",
+            transport_path="temporal_workflow",
         )
         await asyncio.sleep(0)
         snapshot = self.get_task_status(task_id)
@@ -945,6 +1099,7 @@ class MasterBrain:
             dead_letter_payload=payload,
             dead_lettered_at=datetime.now().isoformat(),
             distributed_dispatch=True,
+            terminal_source="deadletter",
         )
         logger.warning(
             "MasterBrain: task %s marked dead-lettered (reason=%s state=%s)",
@@ -1015,14 +1170,21 @@ class MasterBrain:
         """Return MasterBrain status matching GalaxyCore.get_status() pattern."""
         topology = self.get_worker_topology()
         alive_count = sum(1 for w in topology.values() if w.get("alive"))
+        nats_stats = self._nats.get_stats() if hasattr(self._nats, "get_stats") else {}
         return {
             "started": self._started,
+            "master_brain_enabled": master_brain_enabled(),
             "nats_connected": self._nats.is_connected(),
+            "nats_stats": nats_stats,
             "temporal_connected": self.is_temporal_runtime_available(),
             "temporal_client_connected": self._temporal_client is not None,
             "temporal_worker_active": self._temporal_worker_active(),
+            "temporal_worker_state": self._temporal_worker_state,
             "temporal_runtime_available": self.is_temporal_runtime_available(),
             "temporal_last_error": self._temporal_last_error,
+            "persistence_degraded": self._persistence_degraded,
+            "persistence_last_error": self._persistence_last_error,
+            "scaling": dict(self._last_scaling_decision),
             "workers_total": len(self._workers),
             "workers_alive": alive_count,
             "tasks_tracked": len(self._task_log),
@@ -1048,13 +1210,16 @@ class MasterBrain:
             self._temporal_worker_task = None
         self._temporal_worker = None
         if task.cancelled():
+            self._temporal_worker_state = "stopped"
             logger.info("MasterBrain: Temporal worker stopped")
             return
         exc = task.exception()
         if exc is None:
+            self._temporal_worker_state = "stopped"
             self._temporal_last_error = "temporal_worker_stopped"
             logger.warning("MasterBrain: Temporal worker exited")
             return
+        self._temporal_worker_state = "failed"
         self._temporal_last_error = str(exc)
         logger.error("MasterBrain: Temporal worker exited with error: %s", exc)
 
@@ -1065,6 +1230,200 @@ class MasterBrain:
             and bool(raw_task.get("task_id"))
             and bool(raw_task.get("target_worker_id"))
         )
+
+    def _register_task_graph_node(self, *, task: TaskDispatchModel, trace_id: str) -> None:
+        try:
+            from core.task_graph_runtime import WorkflowContributorKind, get_task_graph_runtime
+
+            runtime = get_task_graph_runtime()
+            node = runtime.register_node_raw(
+                task.task_id,
+                tool_name=task.task_type.value,
+                trace_id=trace_id,
+                device_id=task.target_worker_id,
+                contributor=WorkflowContributorKind.MASTER_BRAIN,
+                metadata={
+                    "execution_owner": "master_brain",
+                    "target_device_type": task.target_device_type,
+                },
+            )
+            if task.target_worker_id:
+                node.device_id = task.target_worker_id
+        except Exception as exc:
+            logger.debug("MasterBrain: TaskGraph node registration skipped for %s: %s", task.task_id, exc)
+
+    def _transition_task_graph(
+        self,
+        task_id: str,
+        graph_state: str,
+        *,
+        reason: str,
+        error: str = "",
+        transport_path: str = "",
+    ) -> None:
+        try:
+            from core.task_graph_runtime import GraphNodeState, WorkflowContributorKind, get_task_graph_runtime
+
+            runtime = get_task_graph_runtime()
+            runtime.transition(
+                task_id,
+                GraphNodeState(graph_state),
+                reason=reason,
+                error=error,
+                transport_path=transport_path,
+                contributor=WorkflowContributorKind.MASTER_BRAIN,
+            )
+        except Exception as exc:
+            logger.debug("MasterBrain: TaskGraph transition skipped task_id=%s state=%s: %s", task_id, graph_state, exc)
+
+    def _apply_task_graph_result(self, task_id: str, *, status: str, completion_state: str) -> None:
+        if status == TaskStatus.DISPATCHED.value:
+            self._transition_task_graph(task_id, "dispatch", reason="worker_acknowledged_dispatch")
+            return
+        if status == TaskStatus.RUNNING.value:
+            self._transition_task_graph(task_id, "running", reason="worker_started_execution")
+            return
+
+        self._transition_task_graph(task_id, "result", reason=f"worker_reported:{status}")
+        terminal_state = "completed" if status == TaskStatus.SUCCESS.value else "failed"
+        if completion_state == "dead_lettered":
+            terminal_state = "degraded"
+        elif status == TaskStatus.CANCELLED.value:
+            terminal_state = "cancelled"
+        self._transition_task_graph(
+            task_id,
+            terminal_state,
+            reason=f"terminal:{completion_state or status}",
+        )
+
+    def _select_worker_for_task(self, task: TaskDispatchModel) -> dict:
+        """Select the best alive worker for *task* with truthful fallback metadata."""
+        candidates: list[Any] = []
+        fallback_candidates: list[tuple[str, int]] = []
+        now = time.time()
+
+        for wid, info in self._workers.items():
+            alive = (now - info.get("last_heartbeat", 0)) < _HEARTBEAT_TIMEOUT_S
+            if info.get("force_offline") or not alive:
+                continue
+            worker_device_type = info.get("device_type", "")
+            if worker_device_type != task.target_device_type and task.target_device_type != "unknown":
+                continue
+            fallback_candidates.append((wid, int(info.get("active_tasks", 0) or 0)))
+            try:
+                from core.control_plane.smart_scheduler import DeviceScoreInput, DeviceStatus, SandboxLevel
+
+                platform_name = str(info.get("platform", "")).lower()
+                device_type = str(worker_device_type).lower()
+                candidates.append(DeviceScoreInput(
+                    device_id=wid,
+                    status=DeviceStatus.DRAINING if info.get("status") == "draining" else DeviceStatus.ONLINE,
+                    ping_latency_ms=float(info.get("heartbeat_latency_ms", 0.0) or 0.0),
+                    load_pct=min(float(info.get("memory_usage_percent", 0.0) or 0.0), 100.0),
+                    sandbox_level=(
+                        SandboxLevel.STANDARD
+                        if "android" in (platform_name, device_type)
+                        else SandboxLevel.NONE
+                    ),
+                    capabilities=[str(c.get("name", c)) for c in info.get("capabilities", [])],
+                    health_score=max(
+                        0.0,
+                        100.0 - float(info.get("cpu_usage_percent", 0.0) or 0.0),
+                    ),
+                    metadata={"worker_info": dict(info)},
+                ))
+            except Exception as exc:
+                logger.debug("MasterBrain: candidate scoring input skipped for %s: %s", wid, exc)
+
+        try:
+            from core.control_plane._globals import get_scoring_engine
+
+            best = get_scoring_engine().select_best_device(candidates, required_capabilities=None)
+            if best is not None:
+                return {
+                    "worker_id": best.device_id,
+                    "selected_by": "device_scoring_engine",
+                    "selection_score": best.total,
+                    "selection_reason": "highest_eligible_score",
+                    "selection_fallback_reason": "",
+                }
+        except Exception as exc:
+            logger.debug("MasterBrain: DeviceScoringEngine unavailable, falling back to load ordering: %s", exc)
+
+        if not fallback_candidates:
+            return {
+                "worker_id": "",
+                "selected_by": "fallback_load_order",
+                "selection_score": None,
+                "selection_reason": "",
+                "selection_fallback_reason": "no_alive_worker_candidates",
+            }
+
+        fallback_candidates.sort(key=lambda item: (item[1], item[0]))
+        worker_id, active_tasks = fallback_candidates[0]
+        return {
+            "worker_id": worker_id,
+            "selected_by": "fallback_load_order",
+            "selection_score": float(active_tasks),
+            "selection_reason": "least_active_tasks",
+            "selection_fallback_reason": "device_scoring_engine_unavailable_or_ineligible",
+        }
+
+    def _estimate_task_complexity(self, task: TaskDispatchModel) -> float:
+        payload_weight = 0.2
+        if task.code_payload is not None:
+            payload_weight = 0.9
+        elif task.mcp_payload is not None:
+            payload_weight = 0.7
+        elif task.shell_payload is not None:
+            payload_weight = 0.6
+        elif task.device_payload is not None:
+            payload_weight = 0.5
+        retry_weight = min(float(task.max_retries or 0) * 0.1, 0.3)
+        timeout_weight = min(float(task.timeout_ms or 0) / 120000.0, 0.3)
+        return min(1.0, payload_weight + retry_weight + timeout_weight)
+
+    def _estimate_worker_load(self) -> float:
+        topology = self.get_worker_topology()
+        alive_workers = [info for info in topology.values() if info.get("alive")]
+        if not alive_workers:
+            return 0.0
+        busy_workers = sum(1 for info in alive_workers if int(info.get("active_tasks", 0) or 0) > 0)
+        return busy_workers / max(len(alive_workers), 1)
+
+    def _evaluate_scaling_state(self, *, task: TaskDispatchModel) -> dict:
+        try:
+            from core.control_plane.swarm_scaler import SwarmScaler
+
+            topology = self.get_worker_topology()
+            alive_workers = [wid for wid, info in topology.items() if info.get("alive")]
+            scaler = SwarmScaler()
+            complexity = self._estimate_task_complexity(task)
+            load = self._estimate_worker_load()
+            action = scaler.evaluate(
+                "master_brain",
+                current_worker_count=len(alive_workers),
+                complexity=complexity,
+                load=load,
+            )
+            decision = {
+                "action": action,
+                "reason": "runtime_dispatch_evaluation",
+                "trigger": "dispatch_task",
+                "workers_alive": len(alive_workers),
+                "complexity": complexity,
+                "load": load,
+            }
+            self._last_scaling_decision = decision
+            return decision
+        except Exception as exc:
+            decision = {
+                "action": "no_change",
+                "reason": f"scaler_unavailable:{exc}",
+                "trigger": "dispatch_task",
+            }
+            self._last_scaling_decision = decision
+            return decision
 
     def _finalize_temporal_workflow_result(
         self,
@@ -1107,6 +1466,12 @@ class MasterBrain:
             distributed_dispatch=True,
             execution_path="temporal_workflow",
             completed_at=datetime.now().isoformat() if closure_complete else None,
+            transport_state="temporal_runtime" if self._temporal_worker_active() else "temporal_unavailable",
+        )
+        self._apply_task_graph_result(
+            task_id,
+            status=status_enum.value,
+            completion_state=snapshot.get("completion_state", ""),
         )
         waiter = self._task_waiters.get(task_id)
         if waiter is not None and not waiter.done() and closure_complete:
@@ -1169,12 +1534,14 @@ class MasterBrain:
                 "last_result_id",
                 "late_result",
                 "late_result_at",
+                "late_result_reason",
                 "dead_letter_payload",
                 "dead_lettered_at",
             ):
                 record.pop(reset_key, None)
             record["dead_lettered"] = False
             record["dead_letter_reason"] = ""
+            record["terminal_source"] = ""
         record.update({
             "task_id": task_id,
             "worker_id": worker_id,
@@ -1232,6 +1599,13 @@ class MasterBrain:
             "correlation_valid": True,
             "dead_lettered": False,
             "dead_letter_reason": "",
+            "selected_by": "",
+            "selection_score": None,
+            "selection_reason": "",
+            "selection_fallback_reason": "",
+            "transport_state": "",
+            "degraded_mode": False,
+            "terminal_source": "",
             "timeout_s": 0.0,
             "deadline_at": "",
             "_result_ids": set(),
@@ -1327,7 +1701,7 @@ class MasterBrain:
         trace_id: Optional[str] = None,
         **extra_updates: Any,
     ) -> dict:
-        record = self._task_log.setdefault(task_id, self._default_task_record(task_id))
+        self._task_log.setdefault(task_id, self._default_task_record(task_id))
         updates = {
             "status": status,
             "completion_state": completion_state,
@@ -1345,6 +1719,11 @@ class MasterBrain:
             updates["trace_id"] = trace_id
         updates.update(extra_updates)
         snapshot = self._update_task_record(task_id, **updates)
+        self._apply_task_graph_result(
+            task_id,
+            status=status,
+            completion_state=completion_state,
+        )
         waiter = self._task_waiters.get(task_id)
         if waiter is not None and not waiter.done():
             waiter.set_result(snapshot)
@@ -1414,7 +1793,11 @@ class MasterBrain:
             }
             tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
             tmp_path.replace(self._state_path)
+            self._persistence_degraded = False
+            self._persistence_last_error = ""
         except Exception as exc:
+            self._persistence_degraded = True
+            self._persistence_last_error = str(exc)
             logger.warning("MasterBrain: failed to persist state to %s: %s", self._state_path, exc)
 
     def _load_state(self) -> None:
@@ -1437,6 +1820,8 @@ class MasterBrain:
                     if isinstance(record, dict)
                 }
         except Exception as exc:
+            self._persistence_degraded = True
+            self._persistence_last_error = str(exc)
             logger.warning("MasterBrain: failed to load persisted state from %s: %s", self._state_path, exc)
 
     @staticmethod
@@ -1465,8 +1850,7 @@ _master_brain: Optional[MasterBrain] = None
 def get_master_brain() -> Optional[MasterBrain]:
     """Get MasterBrain singleton.  Returns None if not enabled."""
     global _master_brain
-    enabled = os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() == "true"
-    if not enabled:
+    if not master_brain_enabled():
         return None
     if _master_brain is None:
         _master_brain = MasterBrain.get_instance()

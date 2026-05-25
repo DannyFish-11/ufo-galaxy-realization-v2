@@ -183,7 +183,9 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
         )
 
     # ── MasterBrain: cloud-side orchestrator ──
-    if os.environ.get("GALAXY_MASTER_BRAIN_ENABLED", "").lower() in ("true", "1"):
+    from core.master_brain import master_brain_enabled
+
+    if master_brain_enabled():
         try:
             from core.master_brain import get_master_brain
             brain = get_master_brain()

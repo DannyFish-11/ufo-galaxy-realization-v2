@@ -47,6 +47,8 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 1})
     bus.publish_task_result = AsyncMock(return_value={"success": True, "seq": 2})
     bus.publish_heartbeat = AsyncMock(return_value={"success": True, "seq": 3})
+    bus.publish_worker_registration = AsyncMock(return_value={"success": True, "seq": 4})
+    bus.publish_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
     bus._subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe_heartbeats = AsyncMock(return_value={"success": True})
@@ -216,9 +218,7 @@ class TestNodeHeartbeatSender:
             result = await sender.register()
 
         assert result.get("success") is True
-        mock_bus._publish.assert_awaited_once()
-        subject = mock_bus._publish.call_args[0][0]
-        assert subject == "galaxy.workers.register"
+        mock_bus.publish_worker_registration.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_register_includes_capabilities(self):
@@ -234,10 +234,26 @@ class TestNodeHeartbeatSender:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await sender.register()
 
-        payload = mock_bus._publish.call_args[0][1]
+        payload = mock_bus.publish_worker_registration.call_args[0][0].model_dump(mode="json", exclude_none=True)
         cap_names = [c["name"] for c in payload.get("capabilities", [])]
         assert "cap_a" in cap_names
         assert "cap_b" in cap_names
+
+    @pytest.mark.asyncio
+    async def test_stop_publishes_worker_shutdown(self):
+        """Stopping the heartbeat sender publishes canonical worker shutdown truth."""
+        from core.nats_heartbeat import NodeHeartbeatSender
+
+        mock_bus = _make_mock_nats_bus(connected=True)
+        sender = NodeHeartbeatSender(worker_id="node-stop-test")
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            await sender.stop()
+
+        mock_bus.publish_worker_shutdown.assert_awaited_once()
+        shutdown = mock_bus.publish_worker_shutdown.call_args[0][0]
+        assert shutdown.worker_id == "node-stop-test"
+        assert shutdown.reason == "heartbeat_stopped"
 
     @pytest.mark.asyncio
     async def test_register_noop_when_disconnected(self):
@@ -1159,6 +1175,76 @@ class TestNATSConnected:
         assert result.get("nats_publish_state", {}).get("noop") is True
 
     @pytest.mark.asyncio
+    async def test_master_brain_uses_device_scoring_and_records_graph_and_scaling(self, tmp_path):
+        """Canonical MasterBrain dispatch uses scoring, graph registration, and scaling truth."""
+        from core.master_brain import MasterBrain
+        from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
+            TaskDispatchModel,
+            TaskType,
+            WorkerRegistrationModel,
+        )
+        from core.task_graph_runtime import get_task_graph_runtime, reset_task_graph_runtime
+
+        reset_task_graph_runtime()
+        mock_bus = _make_mock_nats_bus(connected=True)
+        mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 21})
+        brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
+        await brain.register_worker(
+            WorkerRegistrationModel(worker_id="worker-busy", device_type="linux", platform="linux")
+        )
+        await brain.register_worker(
+            WorkerRegistrationModel(worker_id="worker-best", device_type="linux", platform="linux")
+        )
+        brain._workers["worker-busy"].update(
+            {"active_tasks": 4, "cpu_usage_percent": 85.0, "memory_usage_percent": 90.0}
+        )
+        brain._workers["worker-best"].update(
+            {"active_tasks": 0, "cpu_usage_percent": 5.0, "memory_usage_percent": 10.0}
+        )
+        brain._acl.validate_task_dispatch = AsyncMock(return_value={
+            "success": True,
+            "data": TaskDispatchModel(
+                task_id="stage11-scoring-01",
+                task_type=TaskType.DEVICE_CMD,
+                target_device_type="linux",
+                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-best"),
+                context={"trace_id": "trace-stage11-scoring"},
+                timeout_ms=120_000,
+                max_retries=3,
+            ),
+        })
+
+        result = await brain.dispatch_task({"task_id": "stage11-scoring-01", "wait_for_completion": False})
+        observed = brain.get_task_status("stage11-scoring-01")
+        node = get_task_graph_runtime().get_node_by_task_id("stage11-scoring-01")
+
+        assert result.get("success") is True
+        assert result.get("worker_id") == "worker-best"
+        assert observed is not None
+        assert observed.get("selected_by") == "device_scoring_engine"
+        assert observed.get("transport_state") == "active"
+        assert observed.get("scaling_state", {}).get("trigger") == "dispatch_task"
+        assert node is not None
+        assert node.state.value == "dispatch"
+
+    def test_get_master_brain_accepts_numeric_enable_flag(self):
+        """get_master_brain() normalises 1/true-style enablement consistently."""
+        import core.master_brain as master_brain_module
+
+        old_master_brain = master_brain_module._master_brain
+        old_instance = master_brain_module.MasterBrain._instance
+        try:
+            with patch.dict(os.environ, {"GALAXY_MASTER_BRAIN_ENABLED": "1"}, clear=False):
+                master_brain_module._master_brain = None
+                master_brain_module.MasterBrain._instance = None
+                assert master_brain_module.master_brain_enabled() is True
+                assert master_brain_module.get_master_brain() is not None
+        finally:
+            master_brain_module._master_brain = old_master_brain
+            master_brain_module.MasterBrain._instance = old_instance
+
+    @pytest.mark.asyncio
     async def test_master_brain_dispatch_waits_for_terminal_result(self):
         """dispatch_task() returns terminal worker completion, not just publish success."""
         from core.master_brain import MasterBrain
@@ -1749,6 +1835,79 @@ class TestPR3NATSEnvelopeAlignment:
         r = fut.result()
         assert r["success"] is True
         assert r["result"] == {"output": "legacy_ok"}
+
+
+# ===========================================================================
+# Temporal activity convergence
+# ===========================================================================
+
+
+class TestTemporalWorkflowActivities:
+    """Validate subscription lifecycle and terminal-result waiting semantics."""
+
+    @pytest.mark.asyncio
+    async def test_wait_for_result_activity_waits_for_terminal_result_and_unsubscribes(self):
+        """Temporal result wait ignores non-terminal updates and cleans up the subscription."""
+        from core.temporal_workflows import wait_for_result_activity
+
+        mock_bus = MagicMock()
+        subscription = MagicMock()
+        subscription.unsubscribe = AsyncMock(return_value=None)
+
+        async def _subscribe(callback, *, include_subscription=False):
+            async def _emit():
+                await callback({
+                    "task_id": "temporal-task-01",
+                    "status": "dispatched",
+                    "metadata": {"result_id": "res-dispatch"},
+                })
+                await callback({
+                    "task_id": "temporal-task-01",
+                    "status": "running",
+                    "metadata": {"result_id": "res-running"},
+                })
+                await callback({
+                    "task_id": "temporal-task-01",
+                    "status": "success",
+                    "metadata": {"result_id": "res-success"},
+                })
+                await callback({
+                    "task_id": "temporal-task-01",
+                    "status": "success",
+                    "metadata": {"result_id": "res-success"},
+                })
+
+            asyncio.create_task(_emit())
+            return {"success": True, "subscription": subscription}
+
+        mock_bus.subscribe_task_results = AsyncMock(side_effect=_subscribe)
+        mock_bus.unsubscribe = AsyncMock(return_value={"success": True})
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await wait_for_result_activity("temporal-task-01", timeout_ms=1000)
+
+        assert result.get("success") is True
+        assert result.get("data", {}).get("status") == "success"
+        mock_bus.unsubscribe.assert_awaited_once_with(subscription)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_result_activity_rejects_noop_subscription(self):
+        """Temporal result wait surfaces noop transport as unavailable rather than timing out."""
+        from core.temporal_workflows import wait_for_result_activity
+
+        mock_bus = MagicMock()
+        mock_bus.subscribe_task_results = AsyncMock(return_value={
+            "success": False,
+            "noop": True,
+            "error": "nats_noop_transport",
+        })
+        mock_bus.unsubscribe = AsyncMock(return_value={"success": True})
+
+        with patch("core.nats_bus.nats_bus", mock_bus):
+            result = await wait_for_result_activity("temporal-task-noop", timeout_ms=50)
+
+        assert result.get("success") is False
+        assert "distributed_transport_unavailable" in result.get("error", "")
 
 
 # ===========================================================================

@@ -302,6 +302,7 @@ class WorkflowContributorKind(str, Enum):
     OPENCLAWD             = "openclawd"
     SCHEDULER             = "scheduler"
     COMMAND_ROUTER        = "command_router"
+    MASTER_BRAIN          = "master_brain"
     UNKNOWN               = "unknown"
 
 
