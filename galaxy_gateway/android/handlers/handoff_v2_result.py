@@ -272,6 +272,46 @@ async def handle_handoff_v2_result(
                             _env_task_id,
                             _tgr_exc,
                         )
+                elif _env_task_id:
+                    _response_kind = str(getattr(env, "response_kind", ""))
+                    try:
+                        from core.task_graph_runtime import (
+                            GraphNodeState,
+                            WorkflowContributorKind,
+                            get_task_graph_runtime,
+                        )
+
+                        _tgr = get_task_graph_runtime()
+                        _tgr.register_node_raw(
+                            _env_task_id,
+                            tool_name="android_handoff_v2_result",
+                            trace_id=str(getattr(env, "trace_id", "") or ""),
+                            device_id=device_id,
+                            contributor=WorkflowContributorKind.UNKNOWN,
+                            metadata={
+                                "handoff_id": str(getattr(env, "handoff_id", "") or ""),
+                                "response_kind": _response_kind,
+                                "source": "galaxy_gateway.android.handlers.handoff_v2_result",
+                                "non_terminal": True,
+                                "canonical_closure_authority": "v2",
+                            },
+                        )
+                        _non_terminal_state = GraphNodeState.RUNNING
+                        if _response_kind in {"status", "progress", "handoff_progress"}:
+                            _non_terminal_state = GraphNodeState.PARTIAL_RESULT
+                        _tgr.transition(
+                            _env_task_id,
+                            _non_terminal_state,
+                            reason=f"android_handoff_non_terminal:{_response_kind or 'ack'}",
+                            contributor=WorkflowContributorKind.UNKNOWN,
+                        )
+                    except Exception as _tgr_non_terminal_exc:
+                        logger.debug(
+                            "handoff_v2 non-terminal task-graph reconciliation skipped "
+                            "(non-fatal): task_id=%r exc=%s",
+                            _env_task_id,
+                            _tgr_non_terminal_exc,
+                        )
                 # PR-10-V2: unified audit record.
                 if _audit_handoff_v2_result is not None:
                     try:

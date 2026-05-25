@@ -437,11 +437,16 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
             "payload_type": "task",
             "payload": {"k": "v"},
         }
-        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")):
+        graph = MagicMock()
+        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")), \
+             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
             result = json.loads(_run(sched._exec_relay(args, context={})))
         self.assertFalse(result.get("success"))
         self.assertTrue(result.get("legacy_fallback_blocked"))
         self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+        self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
+        self.assertTrue(str(result.get("task_id", "")).startswith("relay_"))
+        self.assertEqual(graph.transition.call_count, 1)
 
     def test_mesh_blocks_legacy_fallback_without_explicit_opt_in(self):
         sched = self._make_scheduler()
@@ -450,11 +455,16 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
             "payload_type": "task",
             "payload": {"k": "v"},
         }
-        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")):
+        graph = MagicMock()
+        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")), \
+             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
             result = json.loads(_run(sched._exec_mesh_send(args)))
         self.assertFalse(result.get("success"))
         self.assertTrue(result.get("legacy_fallback_blocked"))
         self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+        self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
+        self.assertTrue(str(result.get("task_id", "")).startswith("mesh_"))
+        self.assertEqual(graph.transition.call_count, 1)
 
 
 if __name__ == "__main__":

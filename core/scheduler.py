@@ -1040,19 +1040,25 @@ CROSS-DEVICE:
             )
         except Exception:
             pass
+        _relay_task_id = args.get("task_id")
+        if not _relay_task_id:
+            import uuid as _uuid_relay_task
+            _relay_task_id = f"relay_{_uuid_relay_task.uuid4().hex[:16]}"
+        _relay_args = dict(args)
+        _relay_args["task_id"] = _relay_task_id
+
         # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime
         # so that relay-path tasks are covered by task-graph realization (PR-508).
         try:
-            import uuid as _uuid_relay
             from core.task_adapter import adapt_to_canonical_task as _adapt_relay
             from core.canonical_task import TaskOrigin as _TO_relay
             _relay_canonical = _adapt_relay(
                 {
-                    "task_id": args.get("task_id") or f"relay_{_uuid_relay.uuid4().hex[:16]}",
-                    "trace_id": args.get("trace_id") or "",
+                    "task_id": _relay_task_id,
+                    "trace_id": _relay_args.get("trace_id") or "",
                     "tool_name": "relay_to_device",
-                    "targets": [args.get("target_device", "")] if args.get("target_device") else [],
-                    "args": args,
+                    "targets": [_relay_args.get("target_device", "")] if _relay_args.get("target_device") else [],
+                    "args": _relay_args,
                 },
                 origin=_TO_relay.SCHEDULER,
             )
@@ -1089,15 +1095,19 @@ CROSS-DEVICE:
                 )
                 _envelope_relay = _norm_relay(
                     {
-                        "task_id": args.get("task_id") or "",
-                        "trace_id": args.get("trace_id") or "",
+                        "task_id": _relay_task_id,
+                        "trace_id": _relay_args.get("trace_id") or "",
                         "tool_name": "relay_to_device",
-                        "targets": [args.get("target_device", "")] if args.get("target_device") else [],
-                        "args": args,
+                        "targets": [_relay_args.get("target_device", "")] if _relay_args.get("target_device") else [],
+                        "args": _relay_args,
                     },
                     source=_EIS_relay.SCHEDULER,
                 )
                 _relay_spine_result = await _cmd_router_relay.route_envelope(_envelope_relay)
+                if isinstance(_relay_spine_result, dict):
+                    _relay_spine_result.setdefault("task_id", _relay_task_id)
+                    _relay_spine_result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+                    _relay_spine_result.setdefault("routing_plane", "canonical")
                 return json.dumps(_relay_spine_result, ensure_ascii=False)
             except Exception as _spine_relay_err:
                 logger.debug(
@@ -1106,11 +1116,26 @@ CROSS-DEVICE:
                 )
 
         _allow_legacy_fallback = str(
-            args.get("allow_legacy_scheduler_fallback")
+            _relay_args.get("allow_legacy_scheduler_fallback")
             or (context or {}).get("allow_legacy_scheduler_fallback")
             or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
         ).strip().lower() in {"1", "true", "yes", "on"}
         if not _allow_legacy_fallback:
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_relay,
+                    WorkflowContributorKind as _WCK_relay_blocked,
+                    get_task_graph_runtime as _get_tgr_relay_blocked,
+                )
+                _get_tgr_relay_blocked().transition(
+                    _relay_task_id,
+                    _GraphNodeState_relay.DEGRADED,
+                    reason="relay_blocked_noncanonical_fallback",
+                    contributor=_WCK_relay_blocked.SCHEDULER,
+                    error="CANONICAL_ROUTE_REQUIRED",
+                )
+            except Exception as _relay_blocked_tgr_exc:
+                logger.debug("_exec_relay: blocked fallback graph transition skipped: %s", _relay_blocked_tgr_exc)
             return json.dumps(
                 {
                     "success": False,
@@ -1121,6 +1146,9 @@ CROSS-DEVICE:
                     "error_code": "CANONICAL_ROUTE_REQUIRED",
                     "legacy_fallback_blocked": True,
                     "canonical_route_required": True,
+                    "canonical_router_owner": "core.command_router.CommandRouter",
+                    "blocked_legacy_route": "core.proxy_relay.ProxyRelay",
+                    "task_id": _relay_task_id,
                 },
                 ensure_ascii=False,
             )
@@ -1129,13 +1157,32 @@ CROSS-DEVICE:
             from core.proxy_relay import get_proxy_relay, RelayRequest
             relay = get_proxy_relay()
             req = RelayRequest(
-                source_device=args.get("source_device", ""),
-                target_device=args.get("target_device", ""),
-                payload_type=args.get("payload_type", "task"),
-                payload=args.get("payload", {}),
+                source_device=_relay_args.get("source_device", ""),
+                target_device=_relay_args.get("target_device", ""),
+                payload_type=_relay_args.get("payload_type", "task"),
+                payload=_relay_args.get("payload", {}),
             )
             result = await relay.relay(req)
-            return json.dumps(result.to_dict(), ensure_ascii=False)
+            result_dict = result.to_dict()
+            result_dict.setdefault("task_id", _relay_task_id)
+            result_dict.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+            result_dict["routing_plane"] = "legacy_fallback"
+            result_dict["legacy_route_delegate"] = "core.proxy_relay.ProxyRelay"
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_relay_fb,
+                    WorkflowContributorKind as _WCK_relay_fb,
+                    get_task_graph_runtime as _get_tgr_relay_fb,
+                )
+                _get_tgr_relay_fb().transition(
+                    _relay_task_id,
+                    _GraphNodeState_relay_fb.ROUTED,
+                    reason="relay_via_legacy_fallback_proxy_relay",
+                    contributor=_WCK_relay_fb.SCHEDULER,
+                )
+            except Exception as _relay_fb_tgr_exc:
+                logger.debug("_exec_relay: legacy fallback graph transition skipped: %s", _relay_fb_tgr_exc)
+            return json.dumps(result_dict, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": f"Relay failed: {e}"})
 
@@ -1170,18 +1217,24 @@ CROSS-DEVICE:
             )
         except Exception:
             pass
+        _mesh_task_id = args.get("task_id")
+        if not _mesh_task_id:
+            import uuid as _uuid_mesh_task
+            _mesh_task_id = f"mesh_{_uuid_mesh_task.uuid4().hex[:16]}"
+        _mesh_args = dict(args)
+        _mesh_args["task_id"] = _mesh_task_id
+
         # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime.
         try:
-            import uuid as _uuid_mesh
             from core.task_adapter import adapt_to_canonical_task as _adapt_mesh
             from core.canonical_task import TaskOrigin as _TO_mesh
             _mesh_canonical = _adapt_mesh(
                 {
-                    "task_id": args.get("task_id") or f"mesh_{_uuid_mesh.uuid4().hex[:16]}",
-                    "trace_id": args.get("trace_id") or "",
+                    "task_id": _mesh_task_id,
+                    "trace_id": _mesh_args.get("trace_id") or "",
                     "tool_name": "mesh_send",
-                    "targets": [args.get("target_device", "")] if args.get("target_device") else [],
-                    "args": args,
+                    "targets": [_mesh_args.get("target_device", "")] if _mesh_args.get("target_device") else [],
+                    "args": _mesh_args,
                 },
                 origin=_TO_mesh.SCHEDULER,
             )
@@ -1215,15 +1268,19 @@ CROSS-DEVICE:
                 )
                 _envelope_mesh = _norm_mesh(
                     {
-                        "task_id": args.get("task_id") or "",
-                        "trace_id": args.get("trace_id") or "",
+                        "task_id": _mesh_task_id,
+                        "trace_id": _mesh_args.get("trace_id") or "",
                         "tool_name": "mesh_send",
-                        "targets": [args.get("target_device", "")] if args.get("target_device") else [],
-                        "args": args,
+                        "targets": [_mesh_args.get("target_device", "")] if _mesh_args.get("target_device") else [],
+                        "args": _mesh_args,
                     },
                     source=_EIS_mesh.SCHEDULER,
                 )
                 _mesh_spine_result = await _cmd_router_mesh.route_envelope(_envelope_mesh)
+                if isinstance(_mesh_spine_result, dict):
+                    _mesh_spine_result.setdefault("task_id", _mesh_task_id)
+                    _mesh_spine_result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+                    _mesh_spine_result.setdefault("routing_plane", "canonical")
                 return json.dumps(_mesh_spine_result, ensure_ascii=False)
             except Exception as _spine_mesh_err:
                 logger.debug(
@@ -1232,10 +1289,25 @@ CROSS-DEVICE:
                 )
 
         _allow_legacy_fallback = str(
-            args.get("allow_legacy_scheduler_fallback")
+            _mesh_args.get("allow_legacy_scheduler_fallback")
             or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
         ).strip().lower() in {"1", "true", "yes", "on"}
         if not _allow_legacy_fallback:
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_mesh_blocked,
+                    WorkflowContributorKind as _WCK_mesh_blocked,
+                    get_task_graph_runtime as _get_tgr_mesh_blocked,
+                )
+                _get_tgr_mesh_blocked().transition(
+                    _mesh_task_id,
+                    _GraphNodeState_mesh_blocked.DEGRADED,
+                    reason="mesh_blocked_noncanonical_fallback",
+                    contributor=_WCK_mesh_blocked.SCHEDULER,
+                    error="CANONICAL_ROUTE_REQUIRED",
+                )
+            except Exception as _mesh_blocked_tgr_exc:
+                logger.debug("_exec_mesh_send: blocked fallback graph transition skipped: %s", _mesh_blocked_tgr_exc)
             return json.dumps(
                 {
                     "success": False,
@@ -1246,6 +1318,9 @@ CROSS-DEVICE:
                     "error_code": "CANONICAL_ROUTE_REQUIRED",
                     "legacy_fallback_blocked": True,
                     "canonical_route_required": True,
+                    "canonical_router_owner": "core.command_router.CommandRouter",
+                    "blocked_legacy_route": "core.mesh_coordinator.MeshCoordinator",
+                    "task_id": _mesh_task_id,
                 },
                 ensure_ascii=False,
             )
@@ -1254,12 +1329,31 @@ CROSS-DEVICE:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()
             result = await mesh.send(
-                target_device=args.get("target_device", ""),
-                payload=args.get("payload", {}),
-                payload_type=args.get("payload_type", "task"),
-                source_device=args.get("source_device", ""),
+                target_device=_mesh_args.get("target_device", ""),
+                payload=_mesh_args.get("payload", {}),
+                payload_type=_mesh_args.get("payload_type", "task"),
+                source_device=_mesh_args.get("source_device", ""),
             )
-            return json.dumps(result.to_dict(), ensure_ascii=False)
+            result_dict = result.to_dict()
+            result_dict.setdefault("task_id", _mesh_task_id)
+            result_dict.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+            result_dict["routing_plane"] = "legacy_fallback"
+            result_dict["legacy_route_delegate"] = "core.mesh_coordinator.MeshCoordinator"
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_mesh_fb,
+                    WorkflowContributorKind as _WCK_mesh_fb,
+                    get_task_graph_runtime as _get_tgr_mesh_fb,
+                )
+                _get_tgr_mesh_fb().transition(
+                    _mesh_task_id,
+                    _GraphNodeState_mesh_fb.ROUTED,
+                    reason="mesh_send_via_legacy_fallback_mesh_coordinator",
+                    contributor=_WCK_mesh_fb.SCHEDULER,
+                )
+            except Exception as _mesh_fb_tgr_exc:
+                logger.debug("_exec_mesh_send: legacy fallback graph transition skipped: %s", _mesh_fb_tgr_exc)
+            return json.dumps(result_dict, ensure_ascii=False)
         except Exception as e:
             return json.dumps({"error": f"Mesh send failed: {e}"})
 
