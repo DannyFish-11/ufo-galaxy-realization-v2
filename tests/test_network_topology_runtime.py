@@ -140,7 +140,9 @@ from core.network_topology_runtime import (
     TopologyRecord,
     TransportPathInfo,
     TopologySnapshot,
+    GroundedRuntimeTopology,
     NetworkTopologyRuntime,
+    build_grounded_runtime_topology,
     get_network_topology_runtime,
     reset_network_topology_runtime,
 )
@@ -712,3 +714,45 @@ def test_o01_gateway_adapter_integration_sentinel():
     from galaxy_gateway.gateway_nats_adapter import NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
     assert isinstance(NETWORK_TOPOLOGY_RUNTIME_INTEGRATED, str)
     assert "NETWORK_TOPOLOGY_RUNTIME" in NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
+
+
+def test_o02_build_grounded_runtime_topology_returns_runtime_object():
+    rt = get_network_topology_runtime()
+    rt.register_node(TopologyNode(node_id="topo-dev-1", kind=TopologyNodeKind.DEVICE))
+    topo = build_grounded_runtime_topology()
+    assert isinstance(topo, GroundedRuntimeTopology)
+    data = topo.to_dict()
+    assert data["runtime_host"] == "v2_control_plane"
+    assert isinstance(data["nodes"], list)
+    assert isinstance(data["relations"], list)
+    assert isinstance(data["galaxy_tree"], dict)
+
+
+def test_o03_grounded_runtime_topology_includes_allocation_relations():
+    from core.canonical_task import (
+        TaskLifecycle,
+        TaskOrigin,
+        build_canonical_task,
+        get_canonical_task_runtime,
+        reset_canonical_task_runtime,
+    )
+
+    reset_canonical_task_runtime()
+    task = build_canonical_task(
+        task_id="gt_task_01",
+        session_id="sess_gt_01",
+        goal="grounded topology relation",
+        origin=TaskOrigin.API_REQUEST,
+        selected_targets=["android-topo-01"],
+        route_preference="cross_device",
+        register=False,
+    )
+    task.advance_lifecycle(TaskLifecycle.DISPATCHED)
+    get_canonical_task_runtime().register(task)
+
+    topo = build_grounded_runtime_topology(max_allocation_records=32).to_dict()
+    alloc_rels = [
+        r for r in topo["relations"]
+        if r.get("relation_kind") == "task_allocated_to_executor"
+    ]
+    assert any(r.get("source_id") == "task::gt_task_01" for r in alloc_rels)

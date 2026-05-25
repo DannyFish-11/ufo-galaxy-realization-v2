@@ -112,7 +112,10 @@ def _build_runtime_credibility_checkpoint(panel_generated_at: float) -> Dict[str
 
 
 def _build_model_topology_checkpoint() -> Dict[str, Any]:
-    from core.network_topology_runtime import get_network_topology_runtime
+    from core.network_topology_runtime import (
+        build_grounded_runtime_topology,
+        get_network_topology_runtime,
+    )
 
     try:
         from core.model_topology import build_canonical_model_supply_state_from_router
@@ -125,6 +128,7 @@ def _build_model_topology_checkpoint() -> Dict[str, Any]:
     available = [p for p in providers if str(p.get("availability", "")).lower() == "available"]
     selected = str((supply.get("route_selection") or {}).get("selected_provider_id") or "")
     topology = get_network_topology_runtime().snapshot().to_dict()
+    grounded = build_grounded_runtime_topology().to_dict()
     provider_nodes = [
         {
             "id": str(p.get("provider_id") or p.get("id") or ""),
@@ -138,15 +142,13 @@ def _build_model_topology_checkpoint() -> Dict[str, Any]:
         "available_provider_count": len(available),
         "selected_provider": selected or None,
         "runtime_topology": {
-            "runtime_host": "v2_control_plane",
+            "runtime_host": grounded.get("runtime_host", "v2_control_plane"),
             "network_topology_nodes": topology.get("total_nodes", 0),
             "network_topology_edges": topology.get("total_edges", 0),
             "provider_nodes": provider_nodes,
-            "relations": [
-                {"kind": "host_provides_model_routing", "target": n["id"]}
-                for n in provider_nodes
-                if n["id"]
-            ],
+            "relations": list(grounded.get("relations") or []),
+            "galaxy_tree": dict(grounded.get("galaxy_tree") or {}),
+            "grounded_node_count": len(list(grounded.get("nodes") or [])),
         },
     }
 

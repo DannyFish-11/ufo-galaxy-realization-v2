@@ -51,6 +51,8 @@ def test_checkpoint_contains_all_subproblem_surfaces():
     assert checkpoint["task_allocation_visibility"]["history_record_count"] >= 1
     assert checkpoint["mcp_skill_tool_capability"]["compat_wrapper_tool_count"] >= 0
     assert checkpoint["model_topology"]["runtime_topology"]["runtime_host"] == "v2_control_plane"
+    assert isinstance(checkpoint["model_topology"]["runtime_topology"]["galaxy_tree"], dict)
+    assert checkpoint["model_topology"]["runtime_topology"]["grounded_node_count"] >= 0
 
 
 def test_unified_panel_embeds_system_reality_checkpoint():
