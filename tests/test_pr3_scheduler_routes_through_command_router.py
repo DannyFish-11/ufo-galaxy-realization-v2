@@ -271,6 +271,50 @@ class TestSchedulerSpineIngress(unittest.TestCase):
         log = get_ingress_log()
         self.assertGreaterEqual(len(log), 3)
 
+    def test_21_send_to_device_can_block_legacy_fallback_when_canonical_required(self):
+        sched = self._make_scheduler()
+        with patch("core.command_router.get_command_router", side_effect=ImportError):
+            result_str = _run(
+                sched._exec_send_to_device(
+                    {
+                        "device_id": "dev_blocked",
+                        "task_type": "screenshot",
+                        "require_canonical_router": True,
+                    },
+                    {},
+                )
+            )
+        result = json.loads(result_str)
+        self.assertFalse(result.get("success"))
+        self.assertTrue(result.get("legacy_fallback_blocked"))
+        self.assertEqual(result.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+        self.assertEqual(result.get("canonical_router_owner"), "core.command_router.CommandRouter")
+
+    def test_22_send_to_device_legacy_fallback_requires_explicit_opt_in(self):
+        sched = self._make_scheduler()
+        ws_called = {}
+
+        async def fake_ws(device_id, payload):
+            ws_called["device_id"] = device_id
+            return {"status": "sent"}
+
+        with patch("core.command_router.get_command_router", side_effect=ImportError):
+            result_str = _run(
+                sched._exec_send_to_device(
+                    {
+                        "device_id": "dev_ws_optin",
+                        "task_type": "open_app",
+                        "require_canonical_router": True,
+                        "allow_legacy_scheduler_fallback": True,
+                    },
+                    {"ws_sender": fake_ws},
+                )
+            )
+        result = json.loads(result_str)
+        self.assertEqual(ws_called.get("device_id"), "dev_ws_optin")
+        self.assertEqual(result.get("routing_plane"), "legacy_fallback")
+        self.assertEqual(result.get("legacy_route_delegate"), "scheduler.ws_sender")
+
 
 if __name__ == "__main__":
     unittest.main()

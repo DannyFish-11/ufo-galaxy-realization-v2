@@ -415,6 +415,24 @@ class TestSchedulerBroadcastTaskGraph(unittest.TestCase):
         log = get_ingress_log()
         self.assertGreater(len(log), 0)
 
+    def test_broadcast_requires_canonical_router_for_fanout_by_default(self):
+        sched = self._make_scheduler()
+        context = {"devices": {"dev_bc_1": {}, "dev_bc_2": {}}}
+        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")):
+            result_str = _run(
+                sched._exec_broadcast(
+                    {"task_type": "screenshot", "task_id": "bc_canonical_required"},
+                    context,
+                )
+            )
+        result = json.loads(result_str)
+        self.assertIn("broadcast_results", result)
+        for raw in result["broadcast_results"].values():
+            item = json.loads(raw)
+            self.assertTrue(item.get("legacy_fallback_blocked"))
+            self.assertEqual(item.get("error_code"), "CANONICAL_ROUTE_REQUIRED")
+            self.assertEqual(item.get("canonical_router_owner"), "core.command_router.CommandRouter")
+
 
 class TestSchedulerLegacyFallbackGate(unittest.TestCase):
     """Relay/mesh legacy fallback paths are explicitly gated by canonical ownership."""

@@ -103,6 +103,16 @@ SCHEDULER_BROADCAST_TASK_GRAPH_INTEGRATED: str = (
     "(Stage 10 convergence — mirrors relay/mesh_send graph registration)."
 )
 
+# Post-1292 convergence hardening:
+# Broadcast fanout now enforces canonical CommandRouter ownership by default
+# and explicitly marks non-canonical fallback as opt-in only.
+SCHEDULER_SEND_TO_DEVICE_CANONICAL_GATED: str = (
+    "SCHEDULER_SEND_TO_DEVICE_CANONICAL_GATED_V1: "
+    "_exec_send_to_device() blocks non-canonical WS/ADB fallback when "
+    "require_canonical_router=true unless allow_legacy_scheduler_fallback is "
+    "explicitly enabled."
+)
+
 class ToolDefinition(BaseModel):
     name: str
     description: str
@@ -843,6 +853,7 @@ CROSS-DEVICE:
         except Exception:
             task_id = args.get("task_id") or f"task_{_uuid.uuid4().hex[:16]}"
             trace_id = args.get("trace_id") or f"trace_{_uuid.uuid4().hex[:12]}"
+        _canonical = None
 
         # PR-507: Front-load CanonicalTask creation — establish task ontology
         # before recording ingress or normalizing to envelope.
@@ -886,6 +897,37 @@ CROSS-DEVICE:
         except Exception:
             pass
 
+        # Register this dispatch task in TaskGraphRuntime before routing/fallback
+        # so lifecycle truth covers canonical and compat paths consistently.
+        try:
+            from core.task_graph_runtime import (
+                get_task_graph_runtime as _get_tgr_send,
+                WorkflowContributorKind as _WCK_send,
+            )
+            _get_tgr_send().register_canonical_task(
+                _canonical if _canonical is not None else {
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                    "tool_name": task_type or "send_to_device",
+                },
+                contributor=_WCK_send.COMMAND_ROUTER,
+            )
+        except Exception as _send_tgr_err:
+            logger.debug(
+                "_exec_send_to_device: TaskGraphRuntime registration skipped: %s",
+                _send_tgr_err,
+            )
+
+        _allow_legacy_fallback = str(
+            args.get("allow_legacy_scheduler_fallback")
+            or (context or {}).get("allow_legacy_scheduler_fallback")
+            or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        _require_canonical_router = bool(
+            args.get("require_canonical_router")
+            or (context or {}).get("require_canonical_router")
+        )
+
         # PR-3: Attempt canonical spine routing via CommandRouter when available.
         cmd_router = (context.get("command_router") if context else None)
         if cmd_router is None:
@@ -920,6 +962,43 @@ CROSS-DEVICE:
                     _spine_err,
                 )
 
+        if _require_canonical_router and not _allow_legacy_fallback:
+            try:
+                from core.task_graph_runtime import (
+                    GraphNodeState as _GraphNodeState_send_blocked,
+                    WorkflowContributorKind as _WCK_send_blocked,
+                    get_task_graph_runtime as _get_tgr_send_blocked,
+                )
+                _get_tgr_send_blocked().transition(
+                    task_id,
+                    _GraphNodeState_send_blocked.DEGRADED,
+                    reason="send_to_device_blocked_noncanonical_fallback",
+                    contributor=_WCK_send_blocked.SCHEDULER,
+                    error="CANONICAL_ROUTE_REQUIRED",
+                )
+            except Exception as _send_blocked_tgr_exc:
+                logger.debug(
+                    "_exec_send_to_device: blocked fallback graph transition skipped: %s",
+                    _send_blocked_tgr_exc,
+                )
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": (
+                        "canonical_command_router_unavailable: send_to_device legacy fallback blocked "
+                        "(set allow_legacy_scheduler_fallback=true to opt in)"
+                    ),
+                    "error_code": "CANONICAL_ROUTE_REQUIRED",
+                    "legacy_fallback_blocked": True,
+                    "canonical_route_required": True,
+                    "canonical_router_owner": "core.command_router.CommandRouter",
+                    "blocked_legacy_route": "scheduler.ws_or_adb_fallback",
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                },
+                ensure_ascii=False,
+            )
+
         # 通过 WebSocket connection_manager 发送
         ws_sender = context.get("ws_sender") if context else None
         if ws_sender:
@@ -931,6 +1010,29 @@ CROSS-DEVICE:
                     "task_type": task_type,
                     "payload": payload,
                 })
+                if isinstance(result, dict):
+                    result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+                    result.setdefault("task_id", task_id)
+                    result.setdefault("trace_id", trace_id)
+                    result["routing_plane"] = "legacy_fallback"
+                    result["legacy_route_delegate"] = "scheduler.ws_sender"
+                try:
+                    from core.task_graph_runtime import (
+                        GraphNodeState as _GraphNodeState_send_ws,
+                        WorkflowContributorKind as _WCK_send_ws,
+                        get_task_graph_runtime as _get_tgr_send_ws,
+                    )
+                    _get_tgr_send_ws().transition(
+                        task_id,
+                        _GraphNodeState_send_ws.ROUTED,
+                        reason="send_to_device_via_legacy_fallback_ws_sender",
+                        contributor=_WCK_send_ws.SCHEDULER,
+                    )
+                except Exception as _send_ws_tgr_exc:
+                    logger.debug(
+                        "_exec_send_to_device: ws fallback graph transition skipped: %s",
+                        _send_ws_tgr_exc,
+                    )
                 return json.dumps(result, ensure_ascii=False)
             except Exception as e:
                 return json.dumps({"error": f"WS send failed: {e}"})
@@ -943,6 +1045,29 @@ CROSS-DEVICE:
                     "device_id": device_id,
                     **payload,
                 })
+                if isinstance(result, dict):
+                    result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
+                    result.setdefault("task_id", task_id)
+                    result.setdefault("trace_id", trace_id)
+                    result["routing_plane"] = "legacy_fallback"
+                    result["legacy_route_delegate"] = "scheduler.executor_adb"
+                try:
+                    from core.task_graph_runtime import (
+                        GraphNodeState as _GraphNodeState_send_exec,
+                        WorkflowContributorKind as _WCK_send_exec,
+                        get_task_graph_runtime as _get_tgr_send_exec,
+                    )
+                    _get_tgr_send_exec().transition(
+                        task_id,
+                        _GraphNodeState_send_exec.ROUTED,
+                        reason="send_to_device_via_legacy_fallback_adb_executor",
+                        contributor=_WCK_send_exec.SCHEDULER,
+                    )
+                except Exception as _send_exec_tgr_exc:
+                    logger.debug(
+                        "_exec_send_to_device: executor fallback graph transition skipped: %s",
+                        _send_exec_tgr_exc,
+                    )
                 return json.dumps(result, ensure_ascii=False)
             except Exception as e:
                 return json.dumps({"error": f"ADB executor failed: {e}"})
@@ -954,6 +1079,9 @@ CROSS-DEVICE:
             "trace_id": trace_id,
             "task_type": task_type,
             "note": "Device not connected via WS, command queued",
+            "canonical_router_owner": "core.command_router.CommandRouter",
+            "routing_plane": "legacy_fallback",
+            "legacy_route_delegate": "scheduler.queue_only",
         })
 
     async def _exec_broadcast(self, args: Dict, context: Dict) -> str:
@@ -1016,7 +1144,13 @@ CROSS-DEVICE:
         results = {}
         for did in devices:
             r = await self._exec_send_to_device(
-                {"device_id": did, "task_id": _bc_task_id, "task_type": task_type, "payload": payload},
+                {
+                    "device_id": did,
+                    "task_id": _bc_task_id,
+                    "task_type": task_type,
+                    "payload": payload,
+                    "require_canonical_router": True,
+                },
                 context,
             )
             results[did] = r
