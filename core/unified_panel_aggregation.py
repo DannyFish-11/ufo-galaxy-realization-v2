@@ -330,6 +330,7 @@ class UnifiedPanelPayload:
     task_truth: Dict[str, Any] = field(default_factory=dict)
     truth_compilation_evidence: Dict[str, Any] = field(default_factory=dict)
     truth_surface_semantics: Dict[str, Any] = field(default_factory=dict)
+    system_reality_checkpoint: Dict[str, Any] = field(default_factory=dict)
     authority_source_fingerprint: Dict[str, Any] = field(
         default_factory=lambda: build_authority_source_fingerprint(
             surface_path="/api/v1/panel/unified",
@@ -399,6 +400,7 @@ class UnifiedPanelPayload:
             "task_truth": dict(self.task_truth),
             "truth_compilation_evidence": dict(self.truth_compilation_evidence),
             "truth_surface_semantics": dict(self.truth_surface_semantics),
+            "system_reality_checkpoint": dict(self.system_reality_checkpoint),
             "authority_source_fingerprint": dict(self.authority_source_fingerprint),
             # provenance
             "_source": self._source,
@@ -535,6 +537,12 @@ class UnifiedPanelAggregationService:
             self._enforce_truth_surface_discipline(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: truth discipline hardening failed: %s", exc)
+
+        # 15. System reality convergence checkpoint (node/mcp/runtime/panel/model/task/device/autonomy).
+        try:
+            self._fill_system_reality_checkpoint(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: system reality checkpoint fill failed: %s", exc)
 
         self._annotate_authority_source_fingerprint(payload)
         return payload
@@ -1206,6 +1214,14 @@ class UnifiedPanelAggregationService:
             )
         except Exception as exc:
             logger.debug("build_payload: control-plane contract unavailable: %s", exc)
+
+    def _fill_system_reality_checkpoint(self, payload: UnifiedPanelPayload) -> None:
+        """Attach the implementation-grounded system reality checkpoint."""
+        from core.system_reality_checkpoint import build_system_reality_checkpoint
+
+        payload.system_reality_checkpoint = build_system_reality_checkpoint(
+            panel_generated_at=payload.generated_at
+        )
 
 
 # ---------------------------------------------------------------------------

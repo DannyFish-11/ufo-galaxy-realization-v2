@@ -118,6 +118,7 @@ __all__ = [
     # Observability
     "CanonicalTaskRecord",
     "CanonicalTaskSnapshot",
+    "TaskAllocationRecord",
     # Runtime
     "CanonicalTaskRuntime",
     # Helpers
@@ -675,6 +676,38 @@ class CanonicalTaskSnapshot:
         }
 
 
+@dataclass
+class TaskAllocationRecord:
+    """Operator-facing allocation truth record derived from one CanonicalTask."""
+
+    task_id: str = ""
+    requested_allocation: str = "unknown"
+    accepted_allocation: str = "unknown"
+    in_flight_owner: str = "unknown"
+    execution_location: str = "unknown"
+    participant_local_phase: str = "unknown"
+    canonical_closed: bool = False
+    fallback_path: str = "none"
+    fallback_used: bool = False
+    trace_id: str = ""
+    updated_at: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "requested_allocation": self.requested_allocation,
+            "accepted_allocation": self.accepted_allocation,
+            "in_flight_owner": self.in_flight_owner,
+            "execution_location": self.execution_location,
+            "participant_local_phase": self.participant_local_phase,
+            "canonical_closed": self.canonical_closed,
+            "fallback_path": self.fallback_path,
+            "fallback_used": self.fallback_used,
+            "trace_id": self.trace_id,
+            "updated_at": self.updated_at,
+        }
+
+
 # ---------------------------------------------------------------------------
 # CanonicalTaskRuntime — singleton registry
 # ---------------------------------------------------------------------------
@@ -775,6 +808,53 @@ class CanonicalTaskRuntime:
             tasks_by_origin=by_origin,
             recent_records=[r.to_dict() for r in self._ring],
         )
+
+    def list_allocation_records(self, *, limit: int = 64) -> List[TaskAllocationRecord]:
+        """Return per-task allocation truth records for operator/runtime surfaces."""
+        records: List[TaskAllocationRecord] = []
+        for task in self._tasks.values():
+            lifecycle = task.lifecycle.value if hasattr(task.lifecycle, "value") else str(task.lifecycle)
+            effective_path = str(task.routing.effective_path or "").strip()
+            fallback_of = str(task.graph.fallback_of or "").strip()
+            fallback_policy = str(task.planning.fallback_policy or "").strip()
+            fallback_used = bool(fallback_of) or lifecycle == TaskLifecycle.DEGRADED.value
+            fallback_path = "none"
+            if fallback_of:
+                fallback_path = "canonical_fallback"
+            elif fallback_policy:
+                fallback_path = "fallback_policy_declared"
+            if str(task.routing.transport_preference or "").lower().startswith("legacy"):
+                fallback_path = "legacy_bypass"
+                fallback_used = True
+            if not effective_path:
+                effective_path = str(task.routing.transport_preference or "unknown")
+            record = TaskAllocationRecord(
+                task_id=task.task_id,
+                requested_allocation=str(task.routing.route_preference or "unknown"),
+                accepted_allocation=(
+                    "accepted" if bool(task.routing.selected_targets) else "pending"
+                ),
+                in_flight_owner=lifecycle,
+                execution_location=(
+                    task.routing.selected_targets[0]
+                    if task.routing.selected_targets
+                    else "local_runtime"
+                ),
+                participant_local_phase=lifecycle,
+                canonical_closed=lifecycle in {
+                    TaskLifecycle.COMPLETED.value,
+                    TaskLifecycle.FAILED.value,
+                    TaskLifecycle.CANCELLED.value,
+                    TaskLifecycle.DEGRADED.value,
+                },
+                fallback_path=fallback_path,
+                fallback_used=fallback_used,
+                trace_id=task.trace_id,
+                updated_at=float(task.completed_at or task.running_at or task.created_at),
+            )
+            records.append(record)
+        records.sort(key=lambda r: r.updated_at, reverse=True)
+        return records[: max(0, int(limit))]
 
 
 # ---------------------------------------------------------------------------

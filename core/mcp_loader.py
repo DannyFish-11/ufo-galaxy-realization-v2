@@ -647,6 +647,15 @@ class MCPLoader:
 
         if server.status != MCPServerStatus.RUNNING:
             return {"success": False, "error": "服务器未运行"}
+        declared_tools = {t.name for t in (server.tools or []) if getattr(t, "name", None)}
+        if declared_tools and tool_name not in declared_tools:
+            return {
+                "success": False,
+                "error": f"工具未在服务器能力集中声明: {tool_name}",
+                "isError": True,
+                "runtime_semantics": "formal_mcp_tool_call",
+                "capability_checked": True,
+            }
 
         # C阶段 2C: 守护包装（enabled=False 时直通）
         if (
@@ -668,6 +677,8 @@ class MCPLoader:
                     "isError": True,
                     "guardian_blocked": True,
                     "risk": blocked.risk,
+                    "runtime_semantics": "formal_mcp_tool_call",
+                    "capability_checked": True,
                 }
 
         return await self._raw_call_tool(server_id, tool_name, arguments)
@@ -690,7 +701,13 @@ class MCPLoader:
 
         if response:
             if response.error:
-                return {"success": False, "error": response.error, "isError": True}
+                return {
+                    "success": False,
+                    "error": response.error,
+                    "isError": True,
+                    "runtime_semantics": "formal_mcp_tool_call",
+                    "capability_checked": True,
+                }
             # 提取 MCP 标准 isError 字段（工具执行错误 vs 协议错误）
             is_error = False
             if isinstance(response.result, dict):
@@ -699,9 +716,17 @@ class MCPLoader:
                 "success": not is_error,
                 "result": response.result,
                 "isError": is_error,
+                "runtime_semantics": "formal_mcp_tool_call",
+                "capability_checked": True,
             }
 
-        return {"success": False, "error": "请求失败", "isError": True}
+        return {
+            "success": False,
+            "error": "请求失败",
+            "isError": True,
+            "runtime_semantics": "formal_mcp_tool_call",
+            "capability_checked": True,
+        }
 
     async def read_resource(
         self,

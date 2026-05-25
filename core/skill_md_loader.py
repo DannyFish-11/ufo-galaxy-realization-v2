@@ -27,6 +27,7 @@ import json
 import logging
 import asyncio
 import os
+import shutil
 import shlex
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -325,6 +326,17 @@ class SkillMDLoader:
                     })
                     continue
 
+                resolved = shutil.which(base_cmd)
+                if resolved is None and not (os.path.isabs(argv[0]) and os.path.exists(argv[0])):
+                    results.append({
+                        "command": command,
+                        "success": False,
+                        "error": f"运行时能力不可用: 找不到可执行命令 '{base_cmd}'",
+                        "runtime_semantics": "shell_command_skill",
+                        "capability_checked": True,
+                    })
+                    continue
+
                 # Execute safely — no shell; argv is explicit.
                 # Because create_subprocess_exec never invokes a shell, shell
                 # metacharacters (;, |, &, $()) in argument values are treated
@@ -345,6 +357,8 @@ class SkillMDLoader:
                     "success": process.returncode == 0,
                     "stdout": stdout.decode(),
                     "stderr": stderr.decode(),
+                    "runtime_semantics": "shell_command_skill",
+                    "capability_checked": True,
                 })
 
             except asyncio.TimeoutError:
@@ -352,17 +366,22 @@ class SkillMDLoader:
                     "command": command,
                     "success": False,
                     "error": "执行超时",
+                    "runtime_semantics": "shell_command_skill",
+                    "capability_checked": True,
                 })
             except Exception as e:
                 results.append({
                     "command": command,
                     "success": False,
                     "error": str(e),
+                    "runtime_semantics": "shell_command_skill",
+                    "capability_checked": True,
                 })
 
         return {
             "success": all(r["success"] for r in results),
             "results": results,
+            "runtime_semantics": "shell_command_skill",
         }
 
     def list_skills(self) -> List[Dict]:
