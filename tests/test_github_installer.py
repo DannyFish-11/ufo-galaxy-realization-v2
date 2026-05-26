@@ -359,7 +359,7 @@ class TestGitHubInstallerInstall:
 
     @patch("core.github_installer._fetch_repo")
     def test_install_no_manifest(self, mock_fetch, tmp_path):
-        """No install contract -- should return cloned_only + explicit failure reason."""
+        """No manifest found -- should return cloned_only + explicit failure reason."""
         mock_fetch.side_effect = self._patch_fetch(tmp_path)
 
         inst = self._make_installer(tmp_path)

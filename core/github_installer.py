@@ -430,6 +430,7 @@ def _run_coro_sync(coro: Any, timeout: float) -> Any:
             asyncio.set_event_loop(loop)
             result_holder["value"] = loop.run_until_complete(coro)
         except Exception as exc:  # pragma: no cover
+            logger.debug("Async bridge coroutine execution failed: %s", exc)
             error_holder["error"] = exc
         finally:
             loop.close()
