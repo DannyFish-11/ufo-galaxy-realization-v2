@@ -104,12 +104,27 @@ Module-level singleton helpers:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Tuple
+
+from core.runtime_truth_governance import (
+    RECOVERY_STATUS_DEGRADED,
+    RECOVERY_STATUS_LIVE,
+    RECOVERY_STATUS_REVALIDATED,
+    TRUTH_GRADE_DURABLE,
+    TRUTH_GRADE_PROJECTION,
+    TRUTH_GRADE_RECOVERABLE,
+    TRUTH_GRADE_REVALIDATED,
+    TRUTH_GRADE_RUNTIME_ONLY,
+    build_truth_governance,
+    load_json_payload,
+    write_json_atomically,
+)
 
 logger = logging.getLogger("Galaxy.NetworkTopologyRuntime")
 
@@ -163,6 +178,11 @@ NETWORK_TOPOLOGY_RUNTIME_LAYER_POSITION: int = 8
 
 #: Contract version for serialised topology objects.
 NETWORK_TOPOLOGY_CONTRACT_VERSION: str = "v1"
+_NETWORK_TOPOLOGY_STATE_PATH_ENV: str = "GALAXY_NETWORK_TOPOLOGY_RUNTIME_STATE_PATH"
+_DEFAULT_NETWORK_TOPOLOGY_STATE_PATH: str = os.getenv(
+    _NETWORK_TOPOLOGY_STATE_PATH_ENV,
+    "data/runtime/network_topology_runtime_state.json",
+)
 
 #: Policy sentinel: renderer, layout, and status-board surfaces MUST consume
 #: topology from NetworkTopologyRuntime, not from partial topology sources.
@@ -511,6 +531,7 @@ class TopologySnapshot:
     preferred_edges: List[str] = field(default_factory=list)
     recent_records: List[TopologyRecord] = field(default_factory=list)
     authority: str = NETWORK_TOPOLOGY_RUNTIME_AUTHORITY
+    truth_governance: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -523,6 +544,7 @@ class TopologySnapshot:
             "preferred_edges": list(self.preferred_edges),
             "recent_records": [r.to_dict() for r in self.recent_records],
             "contract_version": NETWORK_TOPOLOGY_CONTRACT_VERSION,
+            "truth_governance": dict(self.truth_governance),
         }
 
 
@@ -534,6 +556,7 @@ class GroundedTopologyRelation:
     source_id: str
     target_id: str
     evidence: Dict[str, Any] = field(default_factory=dict)
+    truth_grade: str = TRUTH_GRADE_PROJECTION
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -541,6 +564,7 @@ class GroundedTopologyRelation:
             "source_id": self.source_id,
             "target_id": self.target_id,
             "evidence": dict(self.evidence),
+            "truth_grade": self.truth_grade,
         }
 
 
@@ -556,6 +580,7 @@ class GroundedRuntimeTopology:
     authority: str = (
         "RUNTIME_TOPOLOGY_GROUNDED_V1::core.network_topology_runtime.build_grounded_runtime_topology"
     )
+    truth_governance: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -565,6 +590,7 @@ class GroundedRuntimeTopology:
             "relations": [r.to_dict() for r in self.relations],
             "galaxy_tree": dict(self.galaxy_tree),
             "authority": self.authority,
+            "truth_governance": dict(self.truth_governance),
         }
 
 
@@ -640,6 +666,10 @@ class NetworkTopologyRuntime:
         self._edges: Dict[str, TopologyEdge] = {}
         self._log: Deque[TopologyRecord] = deque(maxlen=_RING_BUFFER_SIZE)
         self._rw_lock: threading.Lock = threading.Lock()
+        self._state_path = _DEFAULT_NETWORK_TOPOLOGY_STATE_PATH
+        self._last_recovered_at: Optional[float] = None
+        self._recovered_node_ids: set[str] = set()
+        self._recovered_edge_ids: set[str] = set()
 
     # ── Node management ───────────────────────────────────────────────────
 
@@ -667,7 +697,24 @@ class NetworkTopologyRuntime:
                 existing = self._nodes[node.node_id]
                 node.registered_at = existing.registered_at
             node.last_updated_at = time.monotonic()
+            node.metadata = dict(node.metadata)
+            node.tags = [tag for tag in node.tags if tag != "recovered_unrevalidated"]
+            node.metadata["_truth_governance"] = build_truth_governance(
+                TRUTH_GRADE_PROJECTION,
+                source="core.network_topology_runtime.NetworkTopologyRuntime",
+                recovery_status=(
+                    RECOVERY_STATUS_REVALIDATED if node.node_id in self._recovered_node_ids else RECOVERY_STATUS_LIVE
+                ),
+                field_truth_grades={
+                    "topology_membership": TRUTH_GRADE_PROJECTION,
+                    "connection_state": TRUTH_GRADE_RUNTIME_ONLY,
+                },
+                notes=[
+                    "Topology state is a canonical runtime view, not durable lifecycle authority.",
+                ],
+            )
             self._nodes[node.node_id] = node
+            self._recovered_node_ids.discard(node.node_id)
 
         event_kind = "node_updated" if is_update else "node_registered"
         self._emit_record(
@@ -688,6 +735,7 @@ class NetworkTopologyRuntime:
             node.kind,
             node.state,
         )
+        self.persist_durable_state()
         return node
 
     def update_node_state(
@@ -708,6 +756,18 @@ class NetworkTopologyRuntime:
                 return None
             node.state = state
             node.last_updated_at = time.monotonic()
+            node.metadata = dict(node.metadata)
+            node.tags = [tag for tag in node.tags if tag != "recovered_unrevalidated"]
+            node.metadata["_truth_governance"] = build_truth_governance(
+                TRUTH_GRADE_PROJECTION,
+                source="core.network_topology_runtime.NetworkTopologyRuntime",
+                recovery_status=RECOVERY_STATUS_REVALIDATED,
+                field_truth_grades={
+                    "topology_membership": TRUTH_GRADE_PROJECTION,
+                    "connection_state": TRUTH_GRADE_REVALIDATED,
+                },
+            )
+            self._recovered_node_ids.discard(node_id)
 
         self._emit_record(
             "node_state_changed",
@@ -715,6 +775,7 @@ class NetworkTopologyRuntime:
             kind=node.kind.value if isinstance(node.kind, TopologyNodeKind) else str(node.kind),
             state=state.value if isinstance(state, TopologyConnectionState) else str(state),
         )
+        self.persist_durable_state()
         return node
 
     def remove_node(self, node_id: str) -> bool:
@@ -739,12 +800,15 @@ class NetworkTopologyRuntime:
             ]
             for eid in to_remove:
                 del self._edges[eid]
+                self._recovered_edge_ids.discard(eid)
+            self._recovered_node_ids.discard(node_id)
 
         self._emit_record(
             "node_removed",
             node_id,
             details={"removed_edges": len(to_remove)},
         )
+        self.persist_durable_state()
         return True
 
     def get_node(self, node_id: str) -> Optional[TopologyNode]:
@@ -789,6 +853,19 @@ class NetworkTopologyRuntime:
         with self._rw_lock:
             self._edges[edge.edge_id] = edge
             edge.last_updated_at = time.monotonic()
+            edge.metadata = dict(edge.metadata)
+            edge.metadata["_truth_governance"] = build_truth_governance(
+                TRUTH_GRADE_PROJECTION,
+                source="core.network_topology_runtime.NetworkTopologyRuntime",
+                recovery_status=(
+                    RECOVERY_STATUS_REVALIDATED if edge.edge_id in self._recovered_edge_ids else RECOVERY_STATUS_LIVE
+                ),
+                field_truth_grades={
+                    "topology_membership": TRUTH_GRADE_PROJECTION,
+                    "connection_state": TRUTH_GRADE_RUNTIME_ONLY,
+                },
+            )
+            self._recovered_edge_ids.discard(edge.edge_id)
 
         self._emit_record(
             "edge_registered",
@@ -805,6 +882,7 @@ class NetworkTopologyRuntime:
                 "preferred": edge.preferred,
             },
         )
+        self.persist_durable_state()
         return edge
 
     def update_edge_state(
@@ -828,6 +906,17 @@ class NetworkTopologyRuntime:
             if preferred is not None:
                 edge.preferred = preferred
             edge.last_updated_at = time.monotonic()
+            edge.metadata = dict(edge.metadata)
+            edge.metadata["_truth_governance"] = build_truth_governance(
+                TRUTH_GRADE_PROJECTION,
+                source="core.network_topology_runtime.NetworkTopologyRuntime",
+                recovery_status=RECOVERY_STATUS_REVALIDATED,
+                field_truth_grades={
+                    "topology_membership": TRUTH_GRADE_PROJECTION,
+                    "connection_state": TRUTH_GRADE_REVALIDATED,
+                },
+            )
+            self._recovered_edge_ids.discard(edge_id)
 
         self._emit_record(
             "edge_updated",
@@ -836,6 +925,7 @@ class NetworkTopologyRuntime:
             state=state.value if isinstance(state, TopologyConnectionState) else str(state),
             details={"edge_id": edge_id},
         )
+        self.persist_durable_state()
         return edge
 
     def remove_edge(self, edge_id: str) -> bool:
@@ -851,12 +941,14 @@ class NetworkTopologyRuntime:
             if edge_id not in self._edges:
                 return False
             edge = self._edges.pop(edge_id)
+            self._recovered_edge_ids.discard(edge_id)
 
         self._emit_record(
             "edge_removed",
             edge.source_node_id,
             details={"edge_id": edge_id},
         )
+        self.persist_durable_state()
         return True
 
     def all_edges(self) -> List[TopologyEdge]:
@@ -1253,6 +1345,30 @@ class NetworkTopologyRuntime:
             edges_by_kind=edges_by_kind,
             preferred_edges=preferred,
             recent_records=recent,
+            truth_governance=build_truth_governance(
+                TRUTH_GRADE_PROJECTION,
+                source="core.network_topology_runtime.NetworkTopologyRuntime",
+                recovery_status=(
+                    RECOVERY_STATUS_DEGRADED if self._last_recovered_at else RECOVERY_STATUS_LIVE
+                ),
+                revalidation_required=bool(self._recovered_node_ids or self._recovered_edge_ids),
+                degraded=bool(self._recovered_node_ids or self._recovered_edge_ids),
+                field_truth_grades={
+                    "topology_membership": TRUTH_GRADE_PROJECTION,
+                    "connection_state": (
+                        TRUTH_GRADE_RECOVERABLE if self._last_recovered_at else TRUTH_GRADE_RUNTIME_ONLY
+                    ),
+                },
+                notes=[
+                    "Recovered topology is retained as degraded/recoverable view truth until live connectivity assimilations arrive.",
+                ],
+                extra={
+                    "durable_state_path": self._state_path,
+                    "recovered_at": self._last_recovered_at,
+                    "recovered_node_count": len(self._recovered_node_ids),
+                    "recovered_edge_count": len(self._recovered_edge_ids),
+                },
+            ),
         )
 
     # ── Internal ──────────────────────────────────────────────────────────
@@ -1275,6 +1391,116 @@ class NetworkTopologyRuntime:
             details=dict(details or {}),
         )
         self._log.append(record)
+
+    def persist_durable_state(self) -> None:
+        with self._rw_lock:
+            payload = {
+                "contract_version": "network_topology_runtime_durable_v1",
+                "persisted_at": time.time(),
+                "nodes": [node.to_dict() for node in self._nodes.values()],
+                "edges": [edge.to_dict() for edge in self._edges.values()],
+            }
+        write_json_atomically(self._state_path, payload)
+
+    def restore_durable_state(self) -> Dict[str, int]:
+        payload = load_json_payload(self._state_path)
+        node_payloads = payload.get("nodes")
+        edge_payloads = payload.get("edges")
+        if not isinstance(node_payloads, list) or not isinstance(edge_payloads, list):
+            return {"nodes_restored": 0, "edges_restored": 0}
+        recovered_wallclock = time.time()
+        recovered_monotonic = time.monotonic()
+        restored_nodes = 0
+        restored_edges = 0
+        with self._rw_lock:
+            for item in node_payloads:
+                if not isinstance(item, dict):
+                    continue
+                node_id = str(item.get("node_id") or "")
+                if not node_id or node_id in self._nodes:
+                    continue
+                previous_state = str(item.get("state") or TopologyConnectionState.LATENT.value)
+                metadata = dict(item.get("metadata") or {})
+                metadata["recovered_previous_state"] = previous_state
+                metadata["_truth_governance"] = build_truth_governance(
+                    TRUTH_GRADE_RECOVERABLE,
+                    source="core.network_topology_runtime.NetworkTopologyRuntime",
+                    recovery_status=RECOVERY_STATUS_DEGRADED,
+                    revalidation_required=True,
+                    degraded=True,
+                    field_truth_grades={
+                        "topology_membership": TRUTH_GRADE_RECOVERABLE,
+                        "connection_state": TRUTH_GRADE_RECOVERABLE,
+                    },
+                    notes=[
+                        "Recovered topology nodes are degraded until fresh transport/runtime assimilation revalidates them.",
+                        "The previous pre-restart state is retained for operator observability only.",
+                    ],
+                    extra={"recovered_at": recovered_wallclock},
+                )
+                self._nodes[node_id] = TopologyNode(
+                    node_id=node_id,
+                    kind=TopologyNodeKind(str(item.get("kind") or TopologyNodeKind.UNKNOWN.value)),
+                    state=TopologyConnectionState.DEGRADED,
+                    host=str(item.get("host") or ""),
+                    port=int(item.get("port") or 0),
+                    transport_hints=dict(item.get("transport_hints") or {}),
+                    tags=list(item.get("tags") or []) + ["recovered_unrevalidated"],
+                    metadata=metadata,
+                    registered_at=recovered_monotonic,
+                    last_updated_at=recovered_monotonic,
+                )
+                self._recovered_node_ids.add(node_id)
+                restored_nodes += 1
+            for item in edge_payloads:
+                if not isinstance(item, dict):
+                    continue
+                edge_id = str(item.get("edge_id") or "")
+                if not edge_id or edge_id in self._edges:
+                    continue
+                previous_state = str(item.get("state") or TopologyConnectionState.LATENT.value)
+                metadata = dict(item.get("metadata") or {})
+                metadata["recovered_previous_state"] = previous_state
+                metadata["_truth_governance"] = build_truth_governance(
+                    TRUTH_GRADE_RECOVERABLE,
+                    source="core.network_topology_runtime.NetworkTopologyRuntime",
+                    recovery_status=RECOVERY_STATUS_DEGRADED,
+                    revalidation_required=True,
+                    degraded=True,
+                    field_truth_grades={
+                        "topology_membership": TRUTH_GRADE_RECOVERABLE,
+                        "connection_state": TRUTH_GRADE_RECOVERABLE,
+                    },
+                    notes=[
+                        "Recovered topology edges remain degraded until live path assimilation revalidates them.",
+                        "The previous pre-restart state is retained for operator observability only.",
+                    ],
+                    extra={"recovered_at": recovered_wallclock},
+                )
+                self._edges[edge_id] = TopologyEdge(
+                    edge_id=edge_id,
+                    source_node_id=str(item.get("source_node_id") or ""),
+                    target_node_id=str(item.get("target_node_id") or ""),
+                    kind=TopologyEdgeKind(str(item.get("kind") or TopologyEdgeKind.DIRECT.value)),
+                    state=TopologyConnectionState.DEGRADED,
+                    preferred=bool(item.get("preferred")),
+                    latency_hint_ms=int(item.get("latency_hint_ms") or 0),
+                    metadata=metadata,
+                    created_at=recovered_monotonic,
+                    last_updated_at=recovered_monotonic,
+                )
+                self._recovered_edge_ids.add(edge_id)
+                restored_edges += 1
+            if restored_nodes or restored_edges:
+                self._last_recovered_at = recovered_wallclock
+        return {"nodes_restored": restored_nodes, "edges_restored": restored_edges}
+
+    def clear_durable_state(self) -> None:
+        try:
+            if os.path.exists(self._state_path):
+                os.remove(self._state_path)
+        except OSError:
+            logger.warning("network_topology_runtime durable clear failed: %s", self._state_path)
 
 
 # ---------------------------------------------------------------------------
@@ -1475,6 +1701,7 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
                         "participant_id": str(getattr(node, "participant_id", "") or ""),
                         "device_id": str(getattr(node, "device_id", "") or ""),
                     },
+                    "truth_governance": dict((node.metadata or {}).get("_truth_governance") or {}),
                     "registered_at": float(getattr(node, "registered_at", now) or now),
                     "last_updated_at": float(getattr(node, "last_heartbeat", now) or now),
                     "contract_version": NETWORK_TOPOLOGY_CONTRACT_VERSION,
@@ -1487,6 +1714,12 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
                     source_id="v2_control_plane",
                     target_id=sid,
                     evidence={"node_id": node.node_id},
+                    truth_grade=str(
+                        ((node.metadata or {}).get("_truth_governance") or {}).get(
+                            "truth_grade",
+                            TRUTH_GRADE_RECOVERABLE,
+                        )
+                    ),
                 )
             )
     except Exception:
@@ -1517,6 +1750,7 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
                         "runtime_host": rec.runtime_host,
                         "updated_at": rec.updated_at,
                     },
+                    truth_grade=TRUTH_GRADE_DURABLE,
                 )
             )
     except Exception:
@@ -1546,6 +1780,21 @@ def build_grounded_runtime_topology(*, max_allocation_records: int = 128) -> Gro
         nodes=grounded_nodes,
         relations=relations,
         galaxy_tree=galaxy_tree,
+        truth_governance=build_truth_governance(
+            TRUTH_GRADE_PROJECTION,
+            source="core.network_topology_runtime.build_grounded_runtime_topology",
+            recovery_status=runtime.snapshot().truth_governance.get("recovery_status", RECOVERY_STATUS_LIVE),
+            revalidation_required=runtime.snapshot().truth_governance.get("revalidation_required", False),
+            degraded=runtime.snapshot().truth_governance.get("degraded", False),
+            field_truth_grades={
+                "grounded_runtime_topology": TRUTH_GRADE_PROJECTION,
+                "task_allocation_relations": TRUTH_GRADE_DURABLE,
+                "recovered_node_registry_relations": TRUTH_GRADE_RECOVERABLE,
+            },
+            notes=[
+                "Grounded runtime topology is an outward projection rebuilt from canonical task truth plus recoverable topology/node views.",
+            ],
+        ),
     )
 
 
@@ -1559,6 +1808,11 @@ def get_network_topology_runtime() -> NetworkTopologyRuntime:
     return NetworkTopologyRuntime()
 
 
-def reset_network_topology_runtime() -> None:
+def reset_network_topology_runtime(*, clear_durable_state: bool = False) -> None:
     """Reset the :class:`NetworkTopologyRuntime` singleton (for testing)."""
+    if clear_durable_state and NetworkTopologyRuntime._instance is not None:
+        try:
+            NetworkTopologyRuntime._instance.clear_durable_state()
+        except Exception:
+            pass
     NetworkTopologyRuntime._instance = None

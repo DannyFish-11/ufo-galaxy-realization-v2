@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from core.device_types import DeviceType, resolve_device_type
+from core.runtime_truth_governance import TRUTH_GRADE_DURABLE
 
 DEVICE_OPERATIONAL_SUPPORT_AUTHORITY: str = (
     "DEVICE_OPERATIONAL_SUPPORT_AUTHORITY::"
@@ -50,6 +51,7 @@ class DeviceOperationalSupportVerdict:
     dispatch_target_capable: bool
     near_peer_operational: bool
     reason: str
+    truth_grade: str = TRUTH_GRADE_DURABLE
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -61,6 +63,7 @@ class DeviceOperationalSupportVerdict:
             "dispatch_target_capable": self.dispatch_target_capable,
             "near_peer_operational": self.near_peer_operational,
             "reason": self.reason,
+            "truth_grade": self.truth_grade,
             "authority": DEVICE_OPERATIONAL_SUPPORT_AUTHORITY,
         }
 
@@ -179,4 +182,3 @@ def build_device_support_matrix(
         "authority": DEVICE_OPERATIONAL_SUPPORT_AUTHORITY,
         "policy": DECLARED_TYPES_MUST_NOT_IMPLY_OPERATIONAL_SUPPORT_POLICY,
     }
-
