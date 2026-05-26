@@ -2146,6 +2146,9 @@ class OpenClawd:
         trace_id: str = "",
         multimodal_context: Optional[Any] = None,
         fused_context: Optional[Dict[str, Any]] = None,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
+        presence_mode: Optional[str] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """PR-16: Build a serializable :class:`~core.perception.canonical_perception_state.CanonicalPerceptionState` dict.
 
@@ -2188,7 +2191,47 @@ class OpenClawd:
                 multimodal_context=multimodal_context,
                 continuous_frame=_frame,
             )
-            return _cps.to_dict()
+            perception = _cps.to_dict()
+
+            ingress_mods = (
+                (desktop_native_ingress_backbone or {}).get("modalities", {})
+                if isinstance(desktop_native_ingress_backbone, dict)
+                else {}
+            )
+            if bool((ingress_mods.get("continuous_stream") or {}).get("is_present")):
+                active_modalities = list(perception.get("active_modalities") or [])
+                if "stream" not in active_modalities:
+                    active_modalities.append("stream")
+                perception["active_modalities"] = active_modalities
+                perception["has_continuous_perception"] = True
+
+            if bool((ingress_mods.get("screen_context") or {}).get("is_present")) or bool(
+                (ingress_mods.get("foreground_context") or {}).get("is_present")
+            ):
+                active_modalities = list(perception.get("active_modalities") or [])
+                if "screen" not in active_modalities:
+                    active_modalities.append("screen")
+                perception["active_modalities"] = active_modalities
+                perception["requires_native_multimodal"] = True
+
+            if isinstance(desktop_native_ingress_backbone, dict) and presence_mode:
+                coupling = (desktop_native_ingress_backbone.get("presence_mode_coupling") or {}).get(
+                    presence_mode
+                )
+                if isinstance(coupling, dict):
+                    perception["ingress_presence_mode_coupling"] = dict(coupling)
+
+            stream_state = (
+                (stream_runtime_status or {}).get("stream_state")
+                if isinstance(stream_runtime_status, dict)
+                else None
+            )
+            if stream_state in {"reconnecting", "unavailable", "degraded"}:
+                reasons = list(perception.get("degradation_reasons") or [])
+                reasons.append(f"continuous_stream_state={stream_state}")
+                perception["degradation_reasons"] = reasons
+
+            return perception
         except Exception as _cps_err:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
             return None
@@ -2354,6 +2397,9 @@ class OpenClawd:
         canonical_perception: Optional[Dict[str, Any]],
         source_registry_snapshot: Optional[Dict[str, Any]] = None,
         task_type: Optional[str] = None,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
+        presence_mode: Optional[str] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """PR-20 / PR-27 / PR-17: Determine the native-multimodal-first routing decision.
 
@@ -2459,6 +2505,41 @@ class OpenClawd:
             requires_native_mm = bool(canonical_perception.get("requires_native_multimodal", False))
             active_modalities = list(canonical_perception.get("active_modalities") or [])
 
+        ingress_mods = (
+            (desktop_native_ingress_backbone or {}).get("modalities", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
+        has_stream_ingress = bool((ingress_mods.get("continuous_stream") or {}).get("is_present"))
+        has_screen_ingress = bool((ingress_mods.get("screen_context") or {}).get("is_present"))
+        has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
+        if has_stream_ingress and "stream" not in active_modalities:
+            active_modalities.append("stream")
+        if (has_screen_ingress or has_foreground_ingress) and "screen" not in active_modalities:
+            active_modalities.append("screen")
+        if has_screen_ingress or has_foreground_ingress:
+            requires_native_mm = True
+
+        stream_state = (
+            (stream_runtime_status or {}).get("stream_state")
+            if isinstance(stream_runtime_status, dict)
+            else None
+        )
+        if has_stream_ingress and stream_state in {"reconnecting", "unavailable"}:
+            return {
+                "route_type": "text_only",
+                "is_native_multimodal": False,
+                "provider": "none",
+                "model": "none",
+                "route_reason": (
+                    f"continuous_stream_state={stream_state} degraded_to=discrete_fallback"
+                ),
+                "fallback_reason": (
+                    f"stream_state={stream_state} discrete_fallback_required"
+                ),
+                "active_modalities": active_modalities,
+            }
+
         # ── Text-only short-circuit ──────────────────────────────────────────
         if not requires_native_mm:
             result = {
@@ -2546,7 +2627,11 @@ class OpenClawd:
             decision = router.route_multimodal_first(
                 active_modalities=active_modalities,
                 task_type=_effective_task_type,
-                complexity_score=0.5,
+                complexity_score={
+                    "static": 0.35,
+                    "liminal": 0.5,
+                    "manifest": 0.8,
+                }.get((presence_mode or "").lower(), 0.5),
             )
         except Exception as _rt_err:
             logger.debug("route_multimodal_first failed: %s", _rt_err)
@@ -2991,6 +3076,52 @@ class OpenClawd:
                 "influences_execution_path_routing": False,
             }
 
+    @staticmethod
+    def _apply_visible_action_surface_filter(
+        result_payload: Dict[str, Any],
+        *,
+        is_operator_request: bool,
+    ) -> Dict[str, Any]:
+        """Filter operator/audit-only content on default non-operator responses."""
+        metadata = result_payload.get("metadata")
+        if not isinstance(metadata, dict):
+            return result_payload
+        try:
+            from core.hidden_context_visible_action_surface import (
+                SurfaceLayer,
+                build_hidden_context_visible_action_surface_contract,
+                classify_content_layer,
+            )
+
+            operator_keys = [
+                key
+                for key in list(metadata.keys())
+                if classify_content_layer(key) == SurfaceLayer.OPERATOR_AUDIT_TRUTH
+            ]
+            if not is_operator_request:
+                for key in operator_keys:
+                    metadata.pop(key, None)
+
+            policy = (
+                build_hidden_context_visible_action_surface_contract()
+                .get("foreground_minimal_necessary_explanation_policy", {})
+            )
+            needs_minimal_explanation = (
+                (result_payload.get("success") is False)
+                or metadata.get("execution_path") in {"none", "capability_rejected"}
+                or bool((metadata.get("permission_safety_state") or {}).get("any_permission_missing"))
+            )
+            if needs_minimal_explanation and policy.get("clear_failure_explanation_required_for"):
+                reason = (
+                    result_payload.get("error")
+                    or (result_payload.get("execution_result") or {}).get("skipped_reason")
+                    or "action blocked by runtime safety/permission constraints"
+                )
+                metadata["minimal_necessary_explanation"] = f"Action blocked: {reason}"
+        except Exception:
+            return result_payload
+        return result_payload
+
     # ========================================================================
     # 主入口
     # ========================================================================
@@ -3011,6 +3142,9 @@ class OpenClawd:
         source_runtime_posture: Optional[str] = None,
         cognitive_execution_hint: Optional[Any] = None,
         desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
+        presence_mode: Optional[str] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
+        is_operator_request: bool = False,
     ) -> dict:
         """Subject core entry point — invoked by DesktopPresenceRuntime during the LIMINAL phase.
 
@@ -3087,6 +3221,18 @@ class OpenClawd:
             logger.debug(
                 "OpenClawd.process invoked via DesktopPresenceRuntime | runtime_session_id=%s",
                 runtime_session_id,
+            )
+        if presence_mode:
+            logger.debug(
+                "OpenClawd.process presence hint | presence_mode=%s trace_id=%s",
+                presence_mode,
+                trace_id,
+            )
+
+        def _finalize_response(payload: Dict[str, Any]) -> Dict[str, Any]:
+            return self._apply_visible_action_surface_filter(
+                payload,
+                is_operator_request=is_operator_request,
             )
 
         # PR-1 EntryMode: normalise and log the resolved execution mode.
@@ -3224,6 +3370,9 @@ class OpenClawd:
             trace_id=trace_id,
             multimodal_context=multimodal_context,
             fused_context=_mm_context_dict,
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            presence_mode=presence_mode,
+            stream_runtime_status=stream_runtime_status,
         )
 
         # ── PR-24: Canonical Model Supply State ───────────────────────────────
@@ -3263,6 +3412,9 @@ class OpenClawd:
         _multimodal_route: Dict[str, Any] = self._select_multimodal_route(
             canonical_perception=_canonical_perception,
             task_type=_pr17_task_type,
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            presence_mode=presence_mode,
+            stream_runtime_status=stream_runtime_status,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
         _desktop_native_ingress_for_plan: Optional[Dict[str, Any]] = self._augment_desktop_native_ingress_backbone(
@@ -3694,7 +3846,7 @@ class OpenClawd:
                         multimodal_route_decision=_multimodal_route,
                         desktop_native_ingress_backbone=_desktop_native_ingress_for_plan_k,
                     )
-                    return {
+                    return _finalize_response({
                         "success": kernel_result.success,
                         "response": kernel_result.reply,
                         "intent": kernel_result.intent.raw_intent,
@@ -3863,7 +4015,7 @@ class OpenClawd:
                             "trace_id": trace_id,
                             "success": kernel_result.success,
                         },
-                    }
+                    })
                 except Exception as e:
                     logger.warning("AgentKernel 处理异常，降级到 OpenClawd 直接处理: %s", e)
 
@@ -3978,7 +4130,7 @@ class OpenClawd:
                                 effective_device_id,
                                 _effective_caps_for_routing,
                             )
-                            return {
+                            return _finalize_response({
                                 "success": False,
                                 "response": (
                                     f"Device '{effective_device_id}' does not satisfy "
@@ -4001,7 +4153,7 @@ class OpenClawd:
                                         "verdict": _cap_audit.verdict.value,
                                     },
                                 },
-                            }
+                            })
                 except Exception as _cap_err:
                     logger.warning(
                         "process [CAP-DEFAULT]: explicit-route capability gate "
@@ -4212,7 +4364,7 @@ class OpenClawd:
                 result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
             )
 
-            return {
+            return _finalize_response({
                 "success": result.get("success", True),
                 "response": response_text,
                 "intent": intent_type,
@@ -4338,7 +4490,7 @@ class OpenClawd:
                     "trace_id": trace_id,
                     "success": bool(result.get("success", True)),
                 },
-            }
+            })
 
         except Exception as e:
             self._error_count += 1
@@ -4362,7 +4514,7 @@ class OpenClawd:
                 )
             except Exception:
                 pass
-            return {
+            return _finalize_response({
                 "success": False,
                 "response": f"处理请求时发生错误: {str(e)}",
                 "intent": "error",
@@ -4386,7 +4538,7 @@ class OpenClawd:
                     "execution_path": "none",
                     "error": str(e),
                 },
-            }
+            })
 
     # ========================================================================
     # 意图解析

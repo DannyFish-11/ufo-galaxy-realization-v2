@@ -306,6 +306,7 @@ class DesktopPresenceRuntime:
         from core.multimodal.perception_source_registry import PerceptionSourceRegistry
 
         self._source_registry: PerceptionSourceRegistry = PerceptionSourceRegistry()
+        self._webrtc_session_manager: Optional[Any] = None
 
         # Shell responsibility: own and start the native multimodal ingress bus.
         # This provides *continuous host perception* (PerceptionFrame via
@@ -314,6 +315,7 @@ class DesktopPresenceRuntime:
         # dependencies are absent; text-only deployments are unaffected.
         # See _try_start_ingest_bus() for the full startup logic.
         self._try_start_ingest_bus()
+        self._try_init_webrtc_session_manager()
 
     # ------------------------------------------------------------------
     # Public API
@@ -527,6 +529,10 @@ class DesktopPresenceRuntime:
                     execution_active=True,
                     user_interaction=source in {"chat", "operator"},
                 )
+                _presence_mode = self._presence_state_machine.mode.value
+                _stream_runtime_status = (
+                    self.realtime_streaming_backbone_summary().get("runtime_status") or {}
+                )
 
                 result = await self._dispatch(
                     rsession=rsession,
@@ -548,6 +554,9 @@ class DesktopPresenceRuntime:
                     # biasing.  Never mandatory; OpenClawd retains final authority.
                     cognitive_execution_hint=_cog_hint_obj,
                     desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+                    presence_mode=_presence_mode,
+                    stream_runtime_status=_stream_runtime_status,
+                    is_operator_request=source == "operator",
                     **kwargs,
                 )
                 lane_snapshot = lane.to_dict()
@@ -1004,6 +1013,29 @@ class DesktopPresenceRuntime:
         except Exception as _err:
             logger.debug("DesktopPresenceRuntime: ingest bus startup skipped (%s)", _err)
 
+    def _try_init_webrtc_session_manager(self) -> None:
+        """Initialize WebRTC session manager when the runtime switch is enabled."""
+        try:
+            from core.unified_config import config as _cfg
+
+            if not bool(_cfg.get("enable_webrtc_session_manager", False)):
+                return
+
+            from core.multimodal.webrtc_session_manager import (
+                WebRTCManagerConfig,
+                WebRTCSessionManager,
+            )
+
+            self._webrtc_session_manager = WebRTCSessionManager(
+                WebRTCManagerConfig(runtime_session_id="runtime_shell")
+            )
+            logger.info("DesktopPresenceRuntime: WebRTC session manager initialized")
+        except Exception as _err:
+            logger.debug(
+                "DesktopPresenceRuntime: WebRTC session manager init skipped (%s)",
+                _err,
+            )
+
     def snapshot_continuous_perception(self) -> Optional[Dict[str, Any]]:
         """PR-16: Return the latest continuous host perception snapshot.
 
@@ -1143,7 +1175,9 @@ class DesktopPresenceRuntime:
             global _STREAMING_BACKBONE_CONTRACT
             if _STREAMING_BACKBONE_CONTRACT is None:
                 _STREAMING_BACKBONE_CONTRACT = build_realtime_streaming_backbone_contract()
-            enable_webrtc = bool(_cfg.get("enable_webrtc_session_manager", False))
+            enable_webrtc = bool(_cfg.get("enable_webrtc_session_manager", False)) and (
+                self._webrtc_session_manager is not None
+            )
             source_snapshot = self.snapshot_source_registry()
             return {
                 "contract": _STREAMING_BACKBONE_CONTRACT,
