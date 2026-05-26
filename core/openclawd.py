@@ -2751,6 +2751,33 @@ class OpenClawd:
             return None
 
     @staticmethod
+    def _augment_desktop_native_ingress_backbone(
+        ingress_backbone: Optional[Dict[str, Any]],
+        *,
+        canonical_perception: Optional[Dict[str, Any]] = None,
+        multimodal_route_decision: Optional[Dict[str, Any]] = None,
+        execution_path: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Best-effort augmentation for desktop-native ingress backbone snapshots."""
+        try:
+            from core.desktop_native_multimodal_ingress_contract import (
+                augment_ingress_backbone_for_control_core,
+            )
+
+            return augment_ingress_backbone_for_control_core(
+                ingress_backbone,
+                canonical_perception=canonical_perception,
+                multimodal_route_decision=multimodal_route_decision,
+                execution_path=execution_path,
+            )
+        except Exception as _dni_err:
+            logger.debug(
+                "desktop-native ingress backbone augmentation failed (non-fatal): %s",
+                _dni_err,
+            )
+            return ingress_backbone if isinstance(ingress_backbone, dict) else None
+
+    @staticmethod
     def _determine_execution_path(
         entry_mode: str,
         execution_result: Dict[str, Any],
@@ -3238,21 +3265,16 @@ class OpenClawd:
             task_type=_pr17_task_type,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
-        _desktop_native_ingress_for_plan: Optional[Dict[str, Any]] = None
-        try:
-            from core.desktop_native_multimodal_ingress_contract import (
-                augment_ingress_backbone_for_control_core,
-            )
+        _desktop_native_ingress_for_plan: Optional[Dict[str, Any]] = self._augment_desktop_native_ingress_backbone(
+            desktop_native_ingress_backbone,
+            canonical_perception=_canonical_perception,
+            multimodal_route_decision=_multimodal_route,
+        )
 
-            _desktop_native_ingress_for_plan = augment_ingress_backbone_for_control_core(
-                desktop_native_ingress_backbone,
-                canonical_perception=_canonical_perception,
-                multimodal_route_decision=_multimodal_route,
-            )
-        except Exception as _dni_err:
-            logger.debug(
-                "desktop-native ingress backbone augmentation failed (non-fatal): %s",
-                _dni_err,
+        def _augment_ingress_for_execution_path(execution_path: str) -> Optional[Dict[str, Any]]:
+            return self._augment_desktop_native_ingress_backbone(
+                _desktop_native_ingress_for_plan,
+                execution_path=execution_path,
             )
 
         # ── PR-515 / GAP-512-009: Critical Path Harness — route-selection record ──
@@ -3653,20 +3675,7 @@ class OpenClawd:
                             trace_id,
                         )
                     # PR-19: build canonical unified control plan (additive, non-breaking)
-                    _desktop_native_ingress_for_plan_k = _desktop_native_ingress_for_plan
-                    try:
-                        from core.desktop_native_multimodal_ingress_contract import (
-                            augment_ingress_backbone_for_control_core,
-                        )
-
-                        _desktop_native_ingress_for_plan_k = augment_ingress_backbone_for_control_core(
-                            _desktop_native_ingress_for_plan,
-                            canonical_perception=_canonical_perception,
-                            multimodal_route_decision=_multimodal_route,
-                            execution_path=_exec_path_k,
-                        )
-                    except Exception:
-                        pass
+                    _desktop_native_ingress_for_plan_k = _augment_ingress_for_execution_path(_exec_path_k)
                     _ucp_k = self._build_unified_control_plan(
                         runtime_session_id=runtime_session_id,
                         trace_id=trace_id,
@@ -4177,20 +4186,7 @@ class OpenClawd:
             # PR-12: advance plan lifecycle to terminal state
             self._finalise_plan_lifecycle(_plan2, success=bool(result.get("success", True)))
             # PR-19: build canonical unified control plan (additive, non-breaking)
-            _desktop_native_ingress_for_plan_2 = _desktop_native_ingress_for_plan
-            try:
-                from core.desktop_native_multimodal_ingress_contract import (
-                    augment_ingress_backbone_for_control_core,
-                )
-
-                _desktop_native_ingress_for_plan_2 = augment_ingress_backbone_for_control_core(
-                    _desktop_native_ingress_for_plan,
-                    canonical_perception=_canonical_perception,
-                    multimodal_route_decision=_multimodal_route,
-                    execution_path=_exec_path2,
-                )
-            except Exception:
-                pass
+            _desktop_native_ingress_for_plan_2 = _augment_ingress_for_execution_path(_exec_path2)
             _ucp2 = self._build_unified_control_plan(
                 runtime_session_id=runtime_session_id,
                 trace_id=trace_id,

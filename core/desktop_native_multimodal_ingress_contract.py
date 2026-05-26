@@ -10,12 +10,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-DESKTOP_NATIVE_INGRESS_BACKBONE_AUTHORITY = (
+DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY = (
     "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::OPENCLAWD_MAINLINE_AUTHORITY_V1"
 )
-DESKTOP_NATIVE_INGRESS_BACKBONE_SENTINEL = (
+DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL = (
     "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::CONVERGENCE_PASS_V1"
 )
+# Backward-compatible aliases for existing imports.
+DESKTOP_NATIVE_INGRESS_BACKBONE_AUTHORITY = DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY
+DESKTOP_NATIVE_INGRESS_BACKBONE_SENTINEL = DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL
 
 MAINLINE_REQUIRED_MODALITIES = (
     "text",
@@ -26,6 +29,12 @@ MAINLINE_REQUIRED_MODALITIES = (
 )
 EXTENSION_MODALITIES = ("audio_speech", "camera_sensor")
 DEGRADABLE_MODALITIES = ("audio_speech", "camera_sensor", "continuous_stream")
+# File-input compatibility keys observed across request/context carriers:
+# - files / uploaded_files: explicit upload bundles
+# - file_paths / file_input: direct path-centric carrier styles
+# - attachments: generic adapter-envelope attachment slot
+FILE_INPUT_KEYS = ("files", "file_paths", "attachments", "uploaded_files", "file_input")
+FOREGROUND_CONTEXT_KEYS = ("active_window", "ui_tree", "foreground_app", "window_title")
 
 
 def _as_mapping(value: Any) -> Dict[str, Any]:
@@ -61,14 +70,14 @@ def _count_file_inputs(
 ) -> int:
     count = 0
     metadata = _as_mapping(mm_dict.get("metadata"))
-    for key in ("files", "file_paths", "attachments", "uploaded_files", "file_input"):
+    for key in FILE_INPUT_KEYS:
         value = metadata.get(key)
         if isinstance(value, (list, tuple)):
             count += len(value)
         elif value:
             count += 1
 
-    for key in ("files", "file_paths", "attachments", "uploaded_files", "file_input"):
+    for key in FILE_INPUT_KEYS:
         value = kwargs.get(key)
         if isinstance(value, (list, tuple)):
             count += len(value)
@@ -76,7 +85,7 @@ def _count_file_inputs(
             count += 1
 
     for item in _context_items(context):
-        for key in ("files", "file_paths", "attachments", "uploaded_files", "file_input"):
+        for key in FILE_INPUT_KEYS:
             value = item.get(key)
             if isinstance(value, (list, tuple)):
                 count += len(value)
@@ -86,6 +95,8 @@ def _count_file_inputs(
 
 
 def _extract_screen_context(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) -> Dict[str, Any]:
+    # Precedence: multimodal_context.screen is canonical; kwargs.screen_context
+    # serves as fallback when multimodal_context lacks screen payload.
     screen = _as_mapping(mm_dict.get("screen"))
     if not screen:
         screen = _as_mapping(kwargs.get("screen_context"))
@@ -93,15 +104,9 @@ def _extract_screen_context(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) 
 
 
 def _has_foreground_context(screen_ctx: Dict[str, Any], kwargs: Mapping[str, Any]) -> bool:
-    if screen_ctx.get("active_window") is not None:
-        return True
-    if screen_ctx.get("ui_tree") is not None:
-        return True
-    if screen_ctx.get("foreground_app") is not None:
-        return True
-    if screen_ctx.get("window_title") is not None:
-        return True
-    for key in ("active_window", "ui_tree", "foreground_app", "window_title"):
+    for key in FOREGROUND_CONTEXT_KEYS:
+        if screen_ctx.get(key) is not None:
+            return True
         if kwargs.get(key) is not None:
             return True
     return False
@@ -141,8 +146,8 @@ def build_desktop_native_ingress_backbone(
     }
 
     return {
-        "authority": DESKTOP_NATIVE_INGRESS_BACKBONE_AUTHORITY,
-        "sentinel": DESKTOP_NATIVE_INGRESS_BACKBONE_SENTINEL,
+        "authority": DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY,
+        "sentinel": DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL,
         "contract_version": 1,
         "carrier_source": source or "chat",
         "modalities": modalities,
@@ -216,7 +221,7 @@ def build_desktop_native_ingress_backbone(
                 "video_ingest",
                 "audio_capture_service",
             ],
-            "non_parallel_chain_guard": "future_streams_must_plug_into_desktop_native_ingress_backbone",
+            "future_stream_integration_policy": "backbone_integration_required",
         },
     }
 

@@ -13,6 +13,10 @@ from core.desktop_native_multimodal_ingress_contract import (
 from core.schemas.multimodal import MultiModalContext, MultiModalImage
 from core.schemas.unified_control_plan import build_unified_control_plan
 
+VALID_1X1_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP+L6YxWQAAAABJRU5ErkJggg=="
+)
+
 
 def test_backbone_contract_sentinel_and_authority_present():
     contract = build_desktop_native_ingress_backbone(
@@ -53,7 +57,13 @@ def test_backbone_mainline_modalities_and_presence_coupling_defined():
 
 def test_backbone_detects_first_pass_desktop_modalities():
     mm = MultiModalContext(
-        images=[MultiModalImage(mime="image/png", data="iVBORw0KGgo=", source="screenshot")],
+        images=[
+            MultiModalImage(
+                mime="image/png",
+                data=VALID_1X1_PNG_BASE64,
+                source="screenshot",
+            )
+        ],
         screen={
             "window_title": "Editor",
             "active_window": {"title": "Editor"},
@@ -74,6 +84,20 @@ def test_backbone_detects_first_pass_desktop_modalities():
     assert mods["file"]["is_present"] is True
     assert mods["screen_context"]["is_present"] is True
     assert mods["foreground_context"]["is_present"] is True
+
+
+def test_backbone_gracefully_handles_malformed_image_payload():
+    mm = MultiModalContext(
+        images=[MultiModalImage(mime="image/png", data="not-base64@@@", source="screenshot")]
+    )
+    contract = build_desktop_native_ingress_backbone(
+        message="check malformed image payload handling",
+        source="chat",
+        multimodal_context=mm,
+        context=[],
+    )
+    assert contract["modalities"]["image"]["is_present"] is True
+    assert contract["modalities"]["text"]["is_present"] is True
 
 
 @pytest.mark.asyncio
@@ -107,6 +131,13 @@ async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadat
     forwarded = captured.get("desktop_native_ingress_backbone")
     assert isinstance(forwarded, dict)
     assert forwarded["mainline_path"]["runtime_shell"]["entry_method"] == "DesktopPresenceRuntime.handle_request"
+    assert "conversation_session_id" in forwarded["mainline_path"]["session_runtime"]
+    assert forwarded["mainline_path"]["context_assembly"]["method"] == "OpenClawd.process"
+    assert forwarded["mainline_path"]["task_generation"]["authority"] == "OpenClawd"
+    assert (
+        forwarded["mainline_path"]["execution_planning"]["unified_control_plan_builder"]
+        == "OpenClawd._build_unified_control_plan"
+    )
     assert "desktop_native_ingress_backbone" in result["metadata"]
 
 

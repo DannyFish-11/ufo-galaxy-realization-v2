@@ -612,7 +612,6 @@ class DesktopPresenceRuntime:
         metadata["control_session_id"] = control_session_id
         if desktop_native_ingress_backbone is not None:
             metadata["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
-            result["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
         if runtime_attachment_session_id:
             metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
         if lane_snapshot is not None:
