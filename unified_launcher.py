@@ -675,6 +675,41 @@ class GalaxyUnified:
         print(f"  总节点数: {len(all_nodes)}")
         print(f"  核心节点: {len(core_nodes)}")
 
+        print_section("双仓推进进度（真实代码审计）")
+        try:
+            from core.dual_repo_progress_report import build_dual_repo_progress_report
+
+            report = build_dual_repo_progress_report(force_rebuild=True)
+            summary = report.get("summary_zh") or ""
+            if summary:
+                print(f"  摘要: {summary}")
+            completion = report.get("system_completion_status") or {}
+            if isinstance(completion, dict):
+                closure_pct = completion.get("system_closure_pct")
+                blocking = completion.get("blocking_gap_count")
+                verdict = completion.get("completeness_verdict")
+                if closure_pct is not None:
+                    print(f"  系统收口度: {closure_pct:.2f}%  completeness={verdict}  阻塞项={blocking}")
+            review = report.get("complete_joint_system_review") or {}
+            if isinstance(review, dict) and review.get("stage"):
+                weighted = review.get("weighted_completion_pct")
+                weighted_display = "unknown"
+                if isinstance(weighted, (int, float)):
+                    weighted_display = f"{weighted:.2f}%"
+                print(
+                    "  联合审查: "
+                    f"stage={review.get('stage')} "
+                    f"weighted={weighted_display} "
+                    f"android_ref={review.get('android_audited_ref')}"
+                )
+            plan = report.get("closure_phase_execution_plan") or {}
+            if isinstance(plan, dict) and plan.get("next_prs"):
+                next_prs = list(plan.get("next_prs") or [])[:5]
+                if next_prs:
+                    print(f"  下一步建议 PR: {', '.join(next_prs)}")
+        except Exception as e:
+            print_status(f"双仓推进进度不可用: {e}", "warning")
+
 
 # ============================================================================
 # 主函数
