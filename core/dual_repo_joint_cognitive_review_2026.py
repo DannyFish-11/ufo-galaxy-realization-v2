@@ -267,7 +267,7 @@ def _try_import(module_path: str) -> Optional[Any]:
 
 
 def _module_source_contains(module_path: str, tokens: List[str]) -> bool:
-    """Best-effort source probe for modules that may fail import due optional deps."""
+    """Best-effort source probe for modules that may fail import due to optional deps."""
     try:
         root = Path(__file__).resolve().parent.parent
         module_file = root.joinpath(*module_path.split(".")).with_suffix(".py")
@@ -346,6 +346,7 @@ def _probe_nats_distributed_activation() -> JointCognitiveAreaResult:
 
     mb_mod = _try_import("core.master_brain")
     required = ["register_worker", "dispatch_task", "handle_task_result", "get_status"]
+    required_source_tokens = [f"def {m}" for m in required]
     if mb_mod and hasattr(mb_mod, "MasterBrain"):
         mb = mb_mod.MasterBrain
         missing = [m for m in required if not hasattr(mb, m)]
@@ -354,7 +355,7 @@ def _probe_nats_distributed_activation() -> JointCognitiveAreaResult:
         else:
             probes.append(f"core.master_brain.MasterBrain missing: {missing}")
             all_passed = False
-    elif _module_source_contains("core.master_brain", [f"def {m}" for m in required]):
+    elif _module_source_contains("core.master_brain", required_source_tokens):
         probes.append(f"core.master_brain source methods {required}: ✓")
     else:
         probes.append("core.master_brain.MasterBrain: ✗")

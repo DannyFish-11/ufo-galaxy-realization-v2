@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 def _source_contains(rel_path: str, tokens: List[str]) -> bool:
-    """Fallback structural probe when import fails due optional dependencies."""
+    """Fallback structural probe when import fails due to optional dependencies."""
     try:
         root = Path(__file__).resolve().parent.parent
         source = root.joinpath(rel_path).read_text(encoding="utf-8", errors="ignore")
@@ -791,6 +791,7 @@ def check_stage6_master_brain_nats_lifecycle() -> CognitionCheckResult:
         "get_status",
         "is_temporal_runtime_available",
     ]
+    required_source_tokens = [f"def {m}" for m in required]
     try:
         from core.master_brain import MasterBrain
 
@@ -813,7 +814,7 @@ def check_stage6_master_brain_nats_lifecycle() -> CognitionCheckResult:
             ),
         )
     except Exception as exc:
-        if _source_contains("core/master_brain.py", [f"def {m}" for m in required]):
+        if _source_contains("core/master_brain.py", required_source_tokens):
             return CognitionCheckResult(
                 check_name=check,
                 passed=True,
@@ -905,6 +906,7 @@ def check_stage8_master_brain_state_persistence() -> CognitionCheckResult:
         "_recover_incomplete_state",
         "_mark_task_terminal",
     ]
+    required_source_tokens = [f"def {m}" for m in required]
     try:
         from core.master_brain import MasterBrain
 
@@ -927,7 +929,7 @@ def check_stage8_master_brain_state_persistence() -> CognitionCheckResult:
             ),
         )
     except Exception as exc:
-        if _source_contains("core/master_brain.py", [f"def {m}" for m in required]):
+        if _source_contains("core/master_brain.py", required_source_tokens):
             return CognitionCheckResult(
                 check_name=check,
                 passed=True,
