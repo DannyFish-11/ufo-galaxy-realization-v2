@@ -229,6 +229,15 @@ DESKTOP_EXTENSION_HOME: Dict[str, Any] = {
 }
 
 
+def _lookup_transition_policy(
+    from_mode: DesktopPresenceMode, to_mode: DesktopPresenceMode
+) -> PresenceTransitionPolicy:
+    for policy in PRESENCE_TRANSITION_POLICIES:
+        if to_mode == policy.to_mode and from_mode in policy.from_modes:
+            return policy
+    raise KeyError(f"missing transition policy: {from_mode.value}->{to_mode.value}")
+
+
 class DesktopPresenceStateMachine:
     """Formal state machine for desktop presence modes."""
 
@@ -237,6 +246,12 @@ class DesktopPresenceStateMachine:
         DesktopPresenceMode.LIMINAL: 120,
         DesktopPresenceMode.MANIFEST: 120,
     }
+    _COOLDOWN_LIMINAL_TO_STATIC_MS: int = _lookup_transition_policy(
+        DesktopPresenceMode.LIMINAL, DesktopPresenceMode.STATIC
+    ).cooldown_ms
+    _COOLDOWN_MANIFEST_TO_LIMINAL_MS: int = _lookup_transition_policy(
+        DesktopPresenceMode.MANIFEST, DesktopPresenceMode.LIMINAL
+    ).cooldown_ms
 
     def __init__(self) -> None:
         self._mode: DesktopPresenceMode = DesktopPresenceMode.STATIC
@@ -278,14 +293,14 @@ class DesktopPresenceStateMachine:
             target == DesktopPresenceMode.STATIC
             and self._mode == DesktopPresenceMode.LIMINAL
             and self._last_manifest_exit_at is not None
-            and ((now - self._last_manifest_exit_at) * 1000) < 250
+            and ((now - self._last_manifest_exit_at) * 1000) < self._COOLDOWN_LIMINAL_TO_STATIC_MS
         ):
             return None
 
         if (
             target == DesktopPresenceMode.MANIFEST
             and self._last_manifest_exit_at is not None
-            and ((now - self._last_manifest_exit_at) * 1000) < 300
+            and ((now - self._last_manifest_exit_at) * 1000) < self._COOLDOWN_MANIFEST_TO_LIMINAL_MS
             and not user_interaction
             and not execution_active
         ):
@@ -314,10 +329,18 @@ class DesktopPresenceStateMachine:
     def snapshot(self) -> Dict[str, Any]:
         return {
             "current_mode": self._mode.value,
-            "mode_uptime_ms": max(0, int((time.monotonic() - self._mode_since) * 1000)),
+            "mode_uptime_ms": int((time.monotonic() - self._mode_since) * 1000),
             "last_transition": dict(self._last_transition) if self._last_transition else None,
             "transition_policies": [p.to_dict() for p in PRESENCE_TRANSITION_POLICIES],
         }
+
+    def simulate_elapsed_time_for_testing(self, seconds: float) -> None:
+        """Testing helper: simulate elapsed monotonic time without sleeping."""
+        if seconds < 0:
+            raise ValueError("seconds must be non-negative")
+        self._mode_since -= seconds
+        if self._last_manifest_exit_at is not None:
+            self._last_manifest_exit_at -= seconds
 
     @staticmethod
     def _derive_target_mode(

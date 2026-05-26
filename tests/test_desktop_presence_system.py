@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import sys
-import time
 from unittest.mock import MagicMock, patch
 
 
-def _patch_numpy():
+def _patch_runtime_import_deps():
     return patch.dict(
         sys.modules,
         {
@@ -25,9 +24,12 @@ class TestFormalPresenceDefinitions:
 
         assert list_presence_mode_names() == ["static", "liminal", "manifest"]
         assert len(PRESENCE_MODE_DEFINITIONS) == 3
-        liminal = next(d for d in PRESENCE_MODE_DEFINITIONS if d.mode.value == "liminal")
+        liminal = next((d for d in PRESENCE_MODE_DEFINITIONS if d.mode.value == "liminal"), None)
+        assert liminal is not None
         assert "ambient board" in liminal.ambient_board_role.lower()
-        assert "busy" in liminal.non_equivalence_guard.lower()
+        guard = liminal.non_equivalence_guard.lower()
+        assert "not equivalent" in guard
+        assert "spinner" in guard
 
     def test_transition_policies_cover_all_target_modes(self):
         from core.desktop_presence_system import iter_presence_transition_targets
@@ -41,7 +43,7 @@ class TestPresenceStateMachine:
         from core.desktop_presence_system import DesktopPresenceStateMachine
 
         sm = DesktopPresenceStateMachine()
-        sm._mode_since -= 1.0
+        sm.simulate_elapsed_time_for_testing(1.0)
         sm.update(
             tri_state="liminal",
             task_active=True,
@@ -51,7 +53,7 @@ class TestPresenceStateMachine:
         )
         assert sm.mode.value == "liminal"
 
-        sm._mode_since -= 1.0
+        sm.simulate_elapsed_time_for_testing(1.0)
         sm.update(
             tri_state="manifest",
             task_active=True,
@@ -61,7 +63,7 @@ class TestPresenceStateMachine:
         )
         assert sm.mode.value == "manifest"
 
-        sm._mode_since -= 1.0
+        sm.simulate_elapsed_time_for_testing(1.0)
         sm.update(
             tri_state="silent",
             task_active=False,
@@ -72,8 +74,7 @@ class TestPresenceStateMachine:
         )
         assert sm.mode.value == "liminal"
 
-        sm._mode_since -= 1.0
-        sm._last_manifest_exit_at = time.monotonic() - 0.5
+        sm.simulate_elapsed_time_for_testing(0.5)
         sm.update(
             tri_state="silent",
             task_active=False,
@@ -86,7 +87,7 @@ class TestPresenceStateMachine:
 
 class TestRuntimePresenceSummaryProjection:
     def test_presence_summary_exposes_formal_desktop_presence_system(self):
-        with _patch_numpy():
+        with _patch_runtime_import_deps():
             from core.desktop_presence_runtime import DesktopPresenceRuntime
 
             rt = DesktopPresenceRuntime()

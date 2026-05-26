@@ -1704,7 +1704,18 @@ class DesktopPresenceRuntime:
                 result_committed=result_committed,
             )
         except Exception as exc:
-            logger.debug("presence state machine update failed (non-fatal): %s", exc)
+            logger.debug(
+                "presence state machine update failed (non-fatal): tri_state=%s task_active=%s "
+                "sensing_active=%s execution_active=%s user_interaction=%s result_committed=%s "
+                "err=%s (runtime continues with last known presence mode)",
+                tri_state,
+                task_active,
+                sensing_active,
+                execution_active,
+                user_interaction,
+                result_committed,
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # PR-8 V2: Compact presence summary for operator surfaces
@@ -1719,9 +1730,11 @@ class DesktopPresenceRuntime:
         currently at rest (``silent``), processing (``liminal``), or actively
         expressing (``manifest``).
 
-        This method is **read-only** — it never mutates session state.
-        It is best-effort: any internal failure returns an empty default dict
-        rather than raising.
+        This method never mutates runtime session tri-state records.  It does
+        mutate the internal product-level presence state machine by running one
+        best-effort convergence tick using the already-observed active-session
+        distribution so presence mode can settle after cooldown windows.
+        Any internal failure returns an empty default dict rather than raising.
 
         Returns
         -------
