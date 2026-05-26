@@ -247,12 +247,16 @@ class TestBSystemStateNarrative:
             assert "traceability" in dim_dict
 
     def test_overall_operability_is_set(self):
-        from core.unified_system_state_narrative import build_system_state_narrative
+        from core.unified_system_state_narrative import (
+            ALL_KNOWN_OPERABILITY_STATES,
+            build_system_state_narrative,
+        )
         narrative = build_system_state_narrative()
-        assert narrative.overall_operability in (
-            "operable", "blocked", "degraded", "unknown", "error",
-            "unavailable", "no_active_degradation",
-        ) or len(narrative.overall_operability) > 0
+        # Allow any known operability state OR a composite state string
+        assert (
+            narrative.overall_operability in ALL_KNOWN_OPERABILITY_STATES
+            or len(narrative.overall_operability) > 0
+        )
 
     def test_narrative_unsourced_dimensions_is_list(self):
         from core.unified_system_state_narrative import build_system_state_narrative

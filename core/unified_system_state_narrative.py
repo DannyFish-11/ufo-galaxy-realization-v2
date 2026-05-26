@@ -72,6 +72,36 @@ UNIFIED_SYSTEM_STATE_NARRATIVE_AUTHORITY: str = (
 UNIFIED_SYSTEM_STATE_NARRATIVE_VERSION: str = "1.0"
 
 # ---------------------------------------------------------------------------
+# Operability state constants
+# ---------------------------------------------------------------------------
+
+OPERABILITY_OPERABLE: str = "operable"
+OPERABILITY_BLOCKED: str = "blocked"
+OPERABILITY_DEGRADED: str = "degraded"
+OPERABILITY_UNKNOWN: str = "unknown"
+
+ALL_KNOWN_OPERABILITY_STATES: frozenset = frozenset({
+    OPERABILITY_OPERABLE,
+    OPERABILITY_BLOCKED,
+    OPERABILITY_DEGRADED,
+    OPERABILITY_UNKNOWN,
+    "error",
+    "unavailable",
+    "no_active_degradation",
+})
+
+# ---------------------------------------------------------------------------
+# Autonomy tier classification constants
+# ---------------------------------------------------------------------------
+
+_STRONG_AUTONOMY_TIERS: frozenset = frozenset({
+    "semi_autonomous", "distributed_participant", "strong",
+})
+_LIMITED_AUTONOMY_TIERS: frozenset = frozenset({
+    "observable", "participant", "limited",
+})
+
+# ---------------------------------------------------------------------------
 # Dimension names (stable constants for downstream consumers)
 # ---------------------------------------------------------------------------
 
@@ -228,6 +258,29 @@ def _safe(fn: Any, default: Any) -> Any:
         return default
 
 
+def _get_record_status(record: Any) -> str:
+    """Extract and normalise the status string from an allocation record.
+
+    Works with both dataclass instances (attribute access) and plain dicts
+    (key access).
+
+    Returns
+    -------
+    str
+        The lowercased status string, or ``""`` when the record has no status.
+    """
+    if isinstance(record, dict):
+        return str(record.get("status") or "").lower()
+    return str(getattr(record, "status", "") or "").lower()
+
+
+def _get_record_value(record: Any, key: str) -> Any:
+    """Extract a value from an allocation record regardless of its type."""
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
+
+
 def _build_overall_runtime_state() -> NarrativeDimension:
     """Dimension 1: Is the system currently operable and why?"""
     state = "unknown"
@@ -246,7 +299,8 @@ def _build_overall_runtime_state() -> NarrativeDimension:
         degraded = getattr(verdict, "degraded_dimensions", []) or []
         notes = getattr(verdict, "notes", []) or []
 
-        if verdict_str == ReadinessVerdict.READY.value if hasattr(ReadinessVerdict, "READY") else verdict_str == "READY":
+        ready_value = ReadinessVerdict.READY.value if hasattr(ReadinessVerdict, "READY") else "READY"
+        if verdict_str == ready_value:
             state = "operable"
             explanation = "All readiness dimensions are satisfied; the system is currently operable."
         elif verdict_str in ("BLOCKED", "blocked"):
@@ -416,11 +470,11 @@ def _build_task_execution_state() -> NarrativeDimension:
         active_records = runtime.list_allocation_records(limit=256)
         active_count = len(active_records)
 
-        # Classify records by state
-        pending = [r for r in active_records if str(getattr(r, "status", "") or r.get("status", "") if isinstance(r, dict) else "").lower() in ("pending", "waiting", "queued")]
-        executing = [r for r in active_records if str(getattr(r, "status", "") or (r.get("status", "") if isinstance(r, dict) else "")).lower() in ("executing", "running", "active", "in_progress")]
-        completed = [r for r in active_records if str(getattr(r, "status", "") or (r.get("status", "") if isinstance(r, dict) else "")).lower() in ("completed", "success", "closed", "terminal")]
-        failed = [r for r in active_records if str(getattr(r, "status", "") or (r.get("status", "") if isinstance(r, dict) else "")).lower() in ("failed", "error", "rejected", "blocked")]
+        # Classify records by state using the shared helper
+        pending = [r for r in active_records if _get_record_status(r) in ("pending", "waiting", "queued")]
+        executing = [r for r in active_records if _get_record_status(r) in ("executing", "running", "active", "in_progress")]
+        completed = [r for r in active_records if _get_record_status(r) in ("completed", "success", "closed", "terminal")]
+        failed = [r for r in active_records if _get_record_status(r) in ("failed", "error", "rejected", "blocked")]
 
         if active_count == 0:
             state = "idle"
@@ -660,8 +714,8 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
                 device_results.append({"device_id": did, "tier": "unknown", "error": str(inner)})
 
         total = len(device_results)
-        strong = [d for d in device_results if d.get("tier") in ("semi_autonomous", "distributed_participant", "strong")]
-        limited = [d for d in device_results if d.get("tier") in ("observable", "participant", "limited")]
+        strong = [d for d in device_results if d.get("tier") in _STRONG_AUTONOMY_TIERS]
+        limited = [d for d in device_results if d.get("tier") in _LIMITED_AUTONOMY_TIERS]
 
         if total == 0:
             state = "no_android_devices"
@@ -773,19 +827,13 @@ def _build_topology_allocation_relations() -> NarrativeDimension:
 
         accepted = [
             r for r in alloc_records
-            if str(
-                (r.get("accepted_allocation") if isinstance(r, dict) else getattr(r, "accepted_allocation", ""))
-                or ""
-            ).lower() == "accepted"
+            if str(_get_record_value(r, "accepted_allocation") or "").lower() == "accepted"
         ]
         active_executors: Dict[str, int] = {}
         for r in accepted:
             exec_loc = (
-                r.get("execution_location") if isinstance(r, dict)
-                else getattr(r, "execution_location", None)
-            ) or (
-                r.get("selected_executor") if isinstance(r, dict)
-                else getattr(r, "selected_executor", None)
+                _get_record_value(r, "execution_location")
+                or _get_record_value(r, "selected_executor")
             )
             if exec_loc:
                 active_executors[str(exec_loc)] = active_executors.get(str(exec_loc), 0) + 1
