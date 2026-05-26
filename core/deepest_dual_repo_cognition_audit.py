@@ -53,7 +53,7 @@ def _source_contains(rel_path: str, tokens: List[str]) -> bool:
     """Fallback structural probe when import fails due to optional dependencies."""
     try:
         root = Path(__file__).resolve().parent.parent
-        source = root.joinpath(rel_path).read_text(encoding="utf-8", errors="replace")
+        source = root.joinpath(rel_path).read_text(encoding="utf-8", errors="strict")
         return all(token in source for token in tokens)
     except Exception as exc:
         logger.debug("CognitionAudit source probe failed for %s: %s", rel_path, exc)
@@ -820,7 +820,7 @@ def check_stage6_master_brain_nats_lifecycle() -> CognitionCheckResult:
                 passed=True,
                 evidence=(
                     "core/master_brain.py source tokens contain all Stage-6 lifecycle methods: "
-                    f"{required}. Import skipped due optional runtime dependency."
+                    f"{required}. Import skipped due to optional runtime dependency."
                 ),
             )
         return CognitionCheckResult(
@@ -935,7 +935,7 @@ def check_stage8_master_brain_state_persistence() -> CognitionCheckResult:
                 passed=True,
                 evidence=(
                     "core/master_brain.py source tokens confirm Stage-8 durability methods: "
-                    f"{required}. Import skipped due optional runtime dependency."
+                    f"{required}. Import skipped due to optional runtime dependency."
                 ),
             )
         return CognitionCheckResult(
