@@ -101,6 +101,7 @@ class TestRuntimePresenceSummaryProjection:
         assert "liminal_ambient_board" in system_view
         assert "foreground_hierarchy" in system_view
         assert "future_extension_home" in system_view
+        assert "realtime_streaming_backbone" in system_view
 
         coupling = system_view["mapping_to_runtime"]["runtime_coupling"]
         assert coupling["runtime_shell"] == "DesktopPresenceRuntime"
@@ -109,6 +110,28 @@ class TestRuntimePresenceSummaryProjection:
 
         hierarchy = system_view["foreground_hierarchy"]
         assert hierarchy["primary_foreground"] == "desktop_presence_layer"
+        stream_contract = system_view["realtime_streaming_backbone"]["contract"]
+        assert "formal_roles" in stream_contract
+        assert "component_convergence" in stream_contract
+
+    def test_runtime_detects_active_stream_sources_for_presence_sensing(self):
+        with _patch_runtime_import_deps():
+            from core.desktop_presence_runtime import DesktopPresenceRuntime
+            from core.multimodal.perception_source_registry import (
+                PerceptionSourceType,
+                SourceHealthStatus,
+                SourceModality,
+            )
+
+            rt = DesktopPresenceRuntime()
+            stream_id = rt.source_registry.register(
+                source_type=PerceptionSourceType.WEBRTC,
+                modality=SourceModality.VIDEO,
+                source_id="test:webrtc",
+                health=SourceHealthStatus.HEALTHY,
+            )
+            rt.source_registry.mark_active(stream_id)
+            assert rt._has_active_stream_source() is True
 
 
 class TestExistenceSurfaceReadsPresenceSummary:

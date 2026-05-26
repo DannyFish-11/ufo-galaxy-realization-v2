@@ -93,6 +93,16 @@ class SourceHealthStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+STREAM_CAPABLE_SOURCE_TYPES = frozenset(
+    {
+        PerceptionSourceType.WEBCAM,
+        PerceptionSourceType.WEBRTC,
+        PerceptionSourceType.REMOTE_CAMERA,
+        PerceptionSourceType.EXTERNAL_STREAM,
+    }
+)
+
+
 # ---------------------------------------------------------------------------
 # Record
 # ---------------------------------------------------------------------------

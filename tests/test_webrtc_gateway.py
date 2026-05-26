@@ -170,6 +170,7 @@ class TestWebRTCEndpointREST:
         assert "node95_url" in data
         assert "ws_signaling_path" in data
         assert "gateway_ws_path" in data
+        assert "realtime_streaming_backbone" in data
         assert "{device_id}" in data["ws_signaling_path"]
         assert "{device_id}" in data["gateway_ws_path"]
 

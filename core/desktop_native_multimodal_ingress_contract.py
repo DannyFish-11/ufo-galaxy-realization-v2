@@ -10,6 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
+
 DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY = (
     "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::OPENCLAWD_MAINLINE_AUTHORITY_V1"
 )
@@ -29,6 +31,7 @@ MAINLINE_REQUIRED_MODALITIES = (
 )
 EXTENSION_MODALITIES = ("audio_speech", "camera_sensor")
 DEGRADABLE_MODALITIES = ("audio_speech", "camera_sensor", "continuous_stream")
+CONTINUOUS_MAINLINE_MODALITIES = ("continuous_stream",)
 # File-input compatibility keys observed across request/context carriers:
 # - files / uploaded_files: explicit upload bundles
 # - file_paths / file_input: direct path-centric carrier styles
@@ -112,6 +115,23 @@ def _has_foreground_context(screen_ctx: Dict[str, Any], kwargs: Mapping[str, Any
     return False
 
 
+def _has_continuous_stream(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) -> bool:
+    """Return True when stream markers indicate active continuous stream ingress.
+
+    The bool() normalization is intentional: explicit falsy markers
+    (False/0/"") mean stream-absent and are not treated as unknown.
+    """
+    metadata = _as_mapping(mm_dict.get("metadata"))
+    for key in ("continuous_stream", "stream_session_active", "realtime_stream_active"):
+        # Intentional bool() normalization: explicit falsy markers
+        # (False/0/"") are treated as stream-absent, not as unknown.
+        if bool(metadata.get(key)):
+            return True
+        if bool(kwargs.get(key)):
+            return True
+    return False
+
+
 def build_desktop_native_ingress_backbone(
     *,
     message: str,
@@ -134,6 +154,7 @@ def build_desktop_native_ingress_backbone(
     has_foreground = _has_foreground_context(screen_ctx, safe_kwargs)
     audio_count = len(mm_dict.get("audio") or [])
     has_sensor = bool(mm_dict.get("sensor"))
+    has_stream = _has_continuous_stream(mm_dict, safe_kwargs)
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
@@ -143,6 +164,11 @@ def build_desktop_native_ingress_backbone(
         "foreground_context": {"is_present": has_foreground, "count": 1 if has_foreground else 0, "tier": "mainline_required"},
         "audio_speech": {"is_present": audio_count > 0, "count": audio_count, "tier": "extension"},
         "camera_sensor": {"is_present": has_sensor, "count": 1 if has_sensor else 0, "tier": "extension"},
+        "continuous_stream": {
+            "is_present": has_stream,
+            "count": 1 if has_stream else 0,
+            "tier": "mainline_continuous",
+        },
     }
 
     return {
@@ -153,6 +179,7 @@ def build_desktop_native_ingress_backbone(
         "modalities": modalities,
         "modality_tiers": {
             "mainline_required": list(MAINLINE_REQUIRED_MODALITIES),
+            "mainline_continuous": list(CONTINUOUS_MAINLINE_MODALITIES),
             "extension_modalities": list(EXTENSION_MODALITIES),
             "degradable_modalities": list(DEGRADABLE_MODALITIES),
         },
@@ -212,16 +239,14 @@ def build_desktop_native_ingress_backbone(
                 "screen_context",
                 "foreground_context",
             ],
-            "continuous_context_backbone": [
+            "continuous_live_stream_backbone": [
+                "continuous_stream",
+                "webrtc_session_manager",
                 "multimodal_ingress_bus.perception_frame",
                 "perception_source_registry",
             ],
-            "future_realtime_stream_extension_points": [
-                "webrtc_session_manager",
-                "video_ingest",
-                "audio_capture_service",
-            ],
-            "future_stream_integration_policy": "backbone_integration_required",
+            "integration_policy": "streaming_is_continuous_branch_of_unified_backbone",
+            "realtime_streaming_backbone": build_realtime_streaming_backbone_contract(),
         },
     }
 

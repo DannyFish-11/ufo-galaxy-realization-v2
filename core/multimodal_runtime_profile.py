@@ -21,12 +21,22 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
+
 MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY = (
     "MULTIMODAL_RUNTIME_PROFILE::CONFIG_LAYERING_CLASSIFICATION_IS_AUTHORITY_PR10_V1"
 )
 MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL = (
     "MULTIMODAL_RUNTIME_PROFILE::SAFE_DEFAULT_FULL_DEPLOYMENT_DEBUG_ENHANCED_V1"
 )
+_STREAMING_BACKBONE_CONTRACT: Optional[Dict[str, Any]] = None
+
+
+def _get_streaming_backbone_contract() -> Dict[str, Any]:
+    global _STREAMING_BACKBONE_CONTRACT
+    if _STREAMING_BACKBONE_CONTRACT is None:
+        _STREAMING_BACKBONE_CONTRACT = build_realtime_streaming_backbone_contract()
+    return _STREAMING_BACKBONE_CONTRACT
 
 
 class MultimodalRuntimeProfile(str, enum.Enum):
@@ -50,6 +60,10 @@ class MultimodalRuntimeProfileSnapshot:
     rationale: str
 
     def to_dict(self) -> Dict[str, Any]:
+        switch_policy = _get_streaming_backbone_contract().get("switch_and_degradation_policy", {})
+        streaming_mainline_state = (
+            "enabled" if self.enable_webrtc_session_manager else "discrete_fallback"
+        )
         return {
             "authority": MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY,
             "pr_sentinel": MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL,
@@ -62,6 +76,12 @@ class MultimodalRuntimeProfileSnapshot:
             "is_safe_default": self.profile == MultimodalRuntimeProfile.SAFE_DEFAULT,
             "is_full_deployment": self.profile == MultimodalRuntimeProfile.FULL_DEPLOYMENT,
             "is_debug_enhanced": self.profile == MultimodalRuntimeProfile.DEBUG_ENHANCED,
+            "streaming_mainline_state": streaming_mainline_state,
+            "streaming_switch_policy": switch_policy.get("switches", {}),
+            "streaming_degradation_states": switch_policy.get("degradation_states", []),
+            "streaming_discrete_fallback_rule": switch_policy.get(
+                "discrete_fallback_rule", ""
+            ),
             "rationale": self.rationale,
         }
 

@@ -355,6 +355,22 @@ def get_webrtc_endpoint_info() -> Dict[str, Any]:
     if tailscale is not None:
         info["tailscale"] = tailscale
 
+    try:
+        from core.realtime_streaming_backbone import (
+            build_realtime_streaming_backbone_contract,
+        )
+
+        backbone = build_realtime_streaming_backbone_contract()
+        convergence = backbone.get("component_convergence", {})
+        info["realtime_streaming_backbone"] = {
+            "authority": backbone.get("authority"),
+            "sentinel": backbone.get("sentinel"),
+            "gateway_proxy_role": convergence.get("gateway_proxy", {}).get("role", ""),
+            "node95_role": convergence.get("node95_bridge", {}).get("role", ""),
+        }
+    except Exception:
+        pass
+
     return info
 
 

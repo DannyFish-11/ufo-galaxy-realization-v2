@@ -51,8 +51,9 @@ def test_backbone_mainline_modalities_and_presence_coupling_defined():
     assert "sampling_intensity" in coupling["manifest"]
 
     stream_boundary = contract["stream_boundary"]
-    assert "future_realtime_stream_extension_points" in stream_boundary
-    assert "webrtc_session_manager" in stream_boundary["future_realtime_stream_extension_points"]
+    assert "continuous_live_stream_backbone" in stream_boundary
+    assert "webrtc_session_manager" in stream_boundary["continuous_live_stream_backbone"]
+    assert "realtime_streaming_backbone" in stream_boundary
 
 
 def test_backbone_detects_first_pass_desktop_modalities():
@@ -84,6 +85,7 @@ def test_backbone_detects_first_pass_desktop_modalities():
     assert mods["file"]["is_present"] is True
     assert mods["screen_context"]["is_present"] is True
     assert mods["foreground_context"]["is_present"] is True
+    assert mods["continuous_stream"]["is_present"] is False
 
 
 def test_backbone_gracefully_handles_malformed_image_payload():
@@ -98,6 +100,39 @@ def test_backbone_gracefully_handles_malformed_image_payload():
     )
     assert contract["modalities"]["image"]["is_present"] is True
     assert contract["modalities"]["text"]["is_present"] is True
+
+
+def test_backbone_detects_continuous_stream_branch_presence():
+    contract = build_desktop_native_ingress_backbone(
+        message="observe live desktop stream",
+        source="chat",
+        multimodal_context={"metadata": {"continuous_stream": True}},
+        context=[],
+    )
+    assert contract["modalities"]["continuous_stream"]["is_present"] is True
+    assert "mainline_continuous" in contract["modality_tiers"]
+
+
+def test_backbone_detects_continuous_stream_branch_from_kwargs():
+    contract = build_desktop_native_ingress_backbone(
+        message="observe live desktop stream",
+        source="chat",
+        multimodal_context={},
+        context=[],
+        kwargs={"stream_session_active": True},
+    )
+    assert contract["modalities"]["continuous_stream"]["is_present"] is True
+
+
+def test_backbone_treats_falsy_continuous_stream_markers_as_absent():
+    contract = build_desktop_native_ingress_backbone(
+        message="observe live desktop stream",
+        source="chat",
+        multimodal_context={"metadata": {"continuous_stream": False}},
+        context=[],
+        kwargs={"stream_session_active": 0},
+    )
+    assert contract["modalities"]["continuous_stream"]["is_present"] is False
 
 
 @pytest.mark.asyncio
