@@ -38,7 +38,7 @@ class GitHubInstallRequest(BaseModel):
     )
     type: Optional[str] = Field(
         None,
-        description='Addon type: "mcp" | "skill" | null (auto-detect from manifest)',
+        description='Addon type: "mcp" | "skill" | "skill_md" | null (auto-detect from manifest)',
     )
     dry_run: bool = Field(
         False, description="Validate URL without actually installing"

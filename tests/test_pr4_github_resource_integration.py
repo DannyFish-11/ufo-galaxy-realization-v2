@@ -78,9 +78,10 @@ class TestAddonInstallPreserved:
         assert result["success"] is False
         assert "error" in result
 
+    @patch("core.github_installer._verify_mcp_install")
     @patch("core.github_installer._register_mcp_tool")
     @patch("core.github_installer._fetch_repo")
-    def test_install_mcp_tool_still_works(self, mock_fetch, mock_register, tmp_path):
+    def test_install_mcp_tool_still_works(self, mock_fetch, mock_register, mock_verify, tmp_path):
         """MCP tool installation still registers and records manifest."""
         mcp_manifest = {"name": "pr4-test-mcp", "entrypoint": "server.py"}
 
@@ -90,7 +91,8 @@ class TestAddonInstallPreserved:
             return "deadbeef01234567"
 
         mock_fetch.side_effect = _fake_fetch
-        mock_register.return_value = {"success": True}
+        mock_register.return_value = {"success": True, "server_id": "pr4-server"}
+        mock_verify.return_value = {"success": True}
 
         inst = _make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/repo"))
@@ -100,11 +102,18 @@ class TestAddonInstallPreserved:
         assert result["name"] == "pr4-test-mcp"
         mock_register.assert_called_once()
 
+    @patch("core.github_installer._verify_callable_skill_install")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
-    def test_install_skill_still_works(self, mock_fetch, mock_register, tmp_path):
+    def test_install_skill_still_works(self, mock_fetch, mock_register, mock_verify, tmp_path):
         """Skill installation still registers and records manifest."""
-        skill_manifest = {"name": "pr4-test-skill", "entrypoint": "handler.py"}
+        skill_manifest = {
+            "id": "pr4-test-skill",
+            "name": "pr4-test-skill",
+            "description": "PR4 test skill",
+            "handler_file": "handler.py",
+            "handler_function": "execute",
+        }
 
         def _fake_fetch(owner, repo, ref, dest):
             dest.mkdir(parents=True, exist_ok=True)
@@ -112,7 +121,8 @@ class TestAddonInstallPreserved:
             return "cafebabe01234567"
 
         mock_fetch.side_effect = _fake_fetch
-        mock_register.return_value = {"success": True}
+        mock_register.return_value = {"success": True, "skill_id": "pr4-test-skill"}
+        mock_verify.return_value = {"success": True}
 
         inst = _make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/skill-repo"))

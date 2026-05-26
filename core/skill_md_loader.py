@@ -89,6 +89,41 @@ class SkillMDLoader:
         self.skills: Dict[str, SkillMD] = {}
         logger.info("SKILL.md 加载器初始化")
 
+    async def _refresh_capability_registry(self, skill_id: str, event: str) -> None:
+        """SKILL.md 加载/卸载后，最佳努力刷新能力总线并广播事件。"""
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+            reg = CapabilityRegistry.get_instance()
+            await reg.refresh(force=True)
+            logger.info("CapabilityRegistry 已刷新（SKILL.md %s: %s）", skill_id, event)
+        except Exception as exc:
+            logger.debug("CapabilityRegistry 刷新失败（不影响运行）: %s", exc)
+
+        try:
+            from core.routes._shared import broadcast_event
+            await broadcast_event("skill_update", {"skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
+            await broadcast_event("capability_update", {"source": "skill_md_loader", "skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
+        except Exception as exc:
+            logger.debug("SKILL.md capability broadcast failed（不影响运行）: %s", exc)
+
+    def _inject_skill_to_registry(self, skill_id: str) -> None:
+        """将 SKILL.md 技能注入能力总线。"""
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+
+            skill = self.skills.get(skill_id)
+            if not skill:
+                return
+            CapabilityRegistry.get_instance().inject_skill(
+                skill_id=skill_id,
+                skill_name=skill.name,
+                description=skill.description or skill.name,
+                parameters={},
+            )
+            logger.info("SKILL.md 技能已注入能力总线: %s", skill_id)
+        except Exception as exc:
+            logger.debug("SKILL.md 技能注入能力总线失败（不影响运行）: %s", exc)
+
     @classmethod
     def get_instance(cls) -> "SkillMDLoader":
         if cls._instance is None:
@@ -245,6 +280,14 @@ class SkillMDLoader:
 
             # 存储
             self.skills[skill_id] = skill
+            self._inject_skill_to_registry(skill_id)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._refresh_capability_registry(skill_id, "load"))
+            except RuntimeError:
+                logger.debug("SKILL.md load capability refresh skipped: no running event loop")
+            except Exception as exc:
+                logger.debug("SKILL.md load capability refresh scheduling failed: %s", exc)
 
             logger.info(f"加载技能: {skill.name} ({skill_id})")
 
@@ -400,6 +443,20 @@ class SkillMDLoader:
             return {"success": False, "error": "技能不存在"}
 
         skill = self.skills.pop(skill_id)
+        try:
+            from core.agent.capability_registry import CapabilityRegistry
+
+            CapabilityRegistry.get_instance().eject(f"skill__{skill_id}")
+        except Exception as exc:
+            logger.debug("SKILL.md 技能从能力总线移除失败（不影响运行）: %s", exc)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._refresh_capability_registry(skill_id, "unload"))
+        except RuntimeError:
+            logger.debug("SKILL.md unload capability refresh skipped: no running event loop")
+        except Exception as exc:
+            logger.debug("SKILL.md unload capability refresh scheduling failed: %s", exc)
 
         return {
             "success": True,
