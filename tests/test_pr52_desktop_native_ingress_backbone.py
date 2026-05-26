@@ -92,9 +92,7 @@ def test_backbone_detects_first_pass_desktop_modalities():
 
 
 def test_backbone_gracefully_handles_malformed_image_payload():
-    mm = MultiModalContext(
-        images=[MultiModalImage(mime="image/png", data="not-base64@@@", source="screenshot")]
-    )
+    mm = MultiModalContext(images=[MultiModalImage(mime="image/png", data="not-base64@@@", source="screenshot")])
     contract = build_desktop_native_ingress_backbone(
         message="check malformed image payload handling",
         source="chat",
@@ -199,10 +197,7 @@ def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     router = _FakeRouter()
     oc._get_router = MagicMock(return_value=router)
     fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
-    with patch(
-        "core.multimodal.modality_confidence_policy.build_perception_routing_readiness",
-        side_effect=RuntimeError("skip-readiness-for-unit-test"),
-    ), patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
+    with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
         result = oc._select_multimodal_route(
             canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
             desktop_native_ingress_backbone={
@@ -217,6 +212,66 @@ def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     assert result["route_type"] == "native_multimodal"
     assert router.seen["complexity_score"] == 0.8
     assert "screen" in router.seen["active_modalities"]
+    assert "foreground" in router.seen["active_modalities"]
+    assert result["route_bias"] == "desktop_foreground_aware"
+    assert result["route_tier"] == "foreground_context_priority"
+    assert result["context_strategy_hint"]["screen_context_priority"] == "high"
+    assert result["context_strategy_hint"]["foreground_context_priority"] == "high"
+
+
+def test_openclawd_route_differs_when_stream_and_screen_backbone_present():
+    from core.openclawd import OpenClawd
+
+    class _FakeRouter:
+        def __init__(self):
+            self.calls = []
+
+        def route_multimodal_first(self, *, active_modalities, task_type, complexity_score):
+            self.calls.append(
+                {
+                    "active_modalities": list(active_modalities),
+                    "complexity_score": complexity_score,
+                    "task_type": task_type,
+                }
+            )
+            return SimpleNamespace(provider="fake", model="fake-mm", reason="tier=1 native")
+
+    oc = OpenClawd.__new__(OpenClawd)
+    router = _FakeRouter()
+    oc._get_router = MagicMock(return_value=router)
+    fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
+    with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
+        baseline = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={"modalities": {}},
+            presence_mode="static",
+        )
+        guided = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={
+                "modalities": {
+                    "screen_context": {"is_present": True},
+                    "foreground_context": {"is_present": False},
+                    "continuous_stream": {"is_present": True},
+                },
+                "presence_mode_coupling": {
+                    "manifest": {
+                        "sampling_intensity": "focused",
+                        "fusion_strategy": "execution_aligned_fusion",
+                    }
+                },
+            },
+            presence_mode="manifest",
+            stream_runtime_status={"stream_state": "active"},
+        )
+    assert baseline["route_type"] == "text_only"
+    assert guided["route_type"] == "native_multimodal"
+    assert guided["route_bias"] == "continuous_stream_aware"
+    assert guided["route_tier"] == "continuous_stream_priority"
+    assert guided["context_strategy_hint"]["continuous_stream_assisted"] is True
+    assert guided["context_strategy_hint"]["screen_context_priority"] == "high"
+    assert router.calls[-1]["complexity_score"] == 0.9
+    assert router.calls[-1]["active_modalities"] == ["screen", "stream"]
 
 
 def test_openclawd_route_degrades_when_continuous_stream_reconnecting():
@@ -226,14 +281,125 @@ def test_openclawd_route_degrades_when_continuous_stream_reconnecting():
     oc._get_router = MagicMock()
     result = oc._select_multimodal_route(
         canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
-        desktop_native_ingress_backbone={
-            "modalities": {"continuous_stream": {"is_present": True}}
-        },
+        desktop_native_ingress_backbone={"modalities": {"continuous_stream": {"is_present": True}}},
         stream_runtime_status={"stream_state": "reconnecting"},
     )
     assert result["route_type"] == "text_only"
     assert "discrete_fallback" in result["fallback_reason"]
     oc._get_router.assert_not_called()
+    assert result["route_bias"] == "continuous_stream_aware"
+    assert result["context_strategy_hint"]["continuous_stream_assisted"] is False
+
+
+def test_multimodal_ingress_decision_applies_context_strategy_before_augment():
+    from core.openclawd import OpenClawd
+
+    oc = OpenClawd.__new__(OpenClawd)
+    call_order = []
+    route_result = {
+        "route_type": "native_multimodal",
+        "route_bias": "continuous_stream_aware",
+        "route_tier": "continuous_stream_priority",
+        "context_strategy_hint": {
+            "screen_context_priority": "high",
+            "foreground_context_priority": "normal",
+            "continuous_stream_assisted": True,
+            "sampling_intensity": "focused",
+            "fusion_strategy": "execution_aligned_fusion",
+        },
+    }
+
+    def _fake_select(**kwargs):
+        call_order.append(
+            ("select", kwargs["desktop_native_ingress_backbone"]["modalities"]["continuous_stream"]["is_present"])
+        )
+        return dict(route_result)
+
+    def _fake_apply(**kwargs):
+        call_order.append(("apply_context", kwargs["multimodal_route_decision"]["route_bias"]))
+        return (
+            kwargs["kernel_message"] + "\n\n[desktop_context_strategy continuous_stream_assisted=true]",
+            {
+                **(kwargs["canonical_perception"] or {}),
+                "multimodal_context_strategy": dict(kwargs["multimodal_route_decision"]["context_strategy_hint"]),
+                "multimodal_route_bias": kwargs["multimodal_route_decision"]["route_bias"],
+                "multimodal_route_tier": kwargs["multimodal_route_decision"]["route_tier"],
+            },
+        )
+
+    def _fake_augment(backbone, *, canonical_perception=None, multimodal_route_decision=None, execution_path=None):
+        call_order.append(("augment", multimodal_route_decision["route_bias"]))
+        return {
+            "route_bias_seen": multimodal_route_decision["route_bias"],
+            "context_strategy_seen": canonical_perception["multimodal_context_strategy"]["continuous_stream_assisted"],
+        }
+
+    oc._select_multimodal_route = MagicMock(side_effect=_fake_select)
+    oc._apply_multimodal_context_strategy = MagicMock(side_effect=_fake_apply)
+    oc._augment_desktop_native_ingress_backbone = MagicMock(side_effect=_fake_augment)
+
+    route, kernel_message, canonical_perception, ingress_for_plan = oc._resolve_multimodal_ingress_decision(
+        kernel_message="inspect desktop",
+        canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+        task_type=None,
+        desktop_native_ingress_backbone={
+            "modalities": {
+                "screen_context": {"is_present": True},
+                "continuous_stream": {"is_present": True},
+            }
+        },
+        presence_mode="manifest",
+        stream_runtime_status={"stream_state": "active"},
+    )
+
+    assert [step for step, *_ in call_order] == ["select", "apply_context", "augment"]
+    assert route["route_bias"] == "continuous_stream_aware"
+    assert canonical_perception["multimodal_context_strategy"]["continuous_stream_assisted"] is True
+    assert "desktop_context_strategy" in kernel_message
+    assert ingress_for_plan["route_bias_seen"] == "continuous_stream_aware"
+    assert ingress_for_plan["context_strategy_seen"] is True
+
+
+def test_context_strategy_hint_updates_kernel_message_and_backbone_context_assembly():
+    from core.desktop_native_multimodal_ingress_contract import augment_ingress_backbone_for_control_core
+    from core.openclawd import OpenClawd
+
+    kernel_message, canonical_perception = OpenClawd._apply_multimodal_context_strategy(
+        kernel_message="inspect desktop",
+        canonical_perception={"active_modalities": ["screen"]},
+        multimodal_route_decision={
+            "route_bias": "desktop_foreground_aware",
+            "route_tier": "foreground_context_priority",
+            "context_strategy_hint": {
+                "screen_context_priority": "high",
+                "foreground_context_priority": "high",
+                "continuous_stream_assisted": False,
+                "sampling_intensity": "focused",
+                "fusion_strategy": "execution_aligned_fusion",
+            },
+        },
+    )
+
+    augmented = augment_ingress_backbone_for_control_core(
+        {"mainline_path": {"context_assembly": {}, "task_generation": {}, "execution_planning": {}}},
+        canonical_perception=canonical_perception,
+        multimodal_route_decision={
+            "route_type": "native_multimodal",
+            "route_reason": "tier=1 native",
+            "route_bias": "desktop_foreground_aware",
+            "route_tier": "foreground_context_priority",
+            "context_strategy_hint": canonical_perception["multimodal_context_strategy"],
+        },
+    )
+
+    assert "desktop_context_strategy" in kernel_message
+    assert "foreground_context_priority=high" in kernel_message
+    assert canonical_perception["multimodal_route_bias"] == "desktop_foreground_aware"
+    assert (
+        augmented["mainline_path"]["context_assembly"]["multimodal_context_strategy"]["foreground_context_priority"]
+        == "high"
+    )
+    assert augmented["mainline_path"]["task_generation"]["multimodal_route_bias"] == "desktop_foreground_aware"
 
 
 def test_visible_action_surface_filter_hides_operator_payload_for_non_operator():

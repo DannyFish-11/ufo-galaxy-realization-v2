@@ -15,9 +15,7 @@ from core.realtime_streaming_backbone import build_realtime_streaming_backbone_c
 DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY = (
     "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::OPENCLAWD_MAINLINE_AUTHORITY_V1"
 )
-DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL = (
-    "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::CONVERGENCE_PASS_V1"
-)
+DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL = "DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE::CONVERGENCE_PASS_V1"
 # Backward-compatible aliases for existing imports.
 DESKTOP_NATIVE_INGRESS_BACKBONE_AUTHORITY = DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_AUTHORITY
 DESKTOP_NATIVE_INGRESS_BACKBONE_SENTINEL = DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL
@@ -161,7 +159,11 @@ def build_desktop_native_ingress_backbone(
         "image": {"is_present": image_count > 0, "count": image_count, "tier": "mainline_required"},
         "file": {"is_present": file_count > 0, "count": file_count, "tier": "mainline_required"},
         "screen_context": {"is_present": has_screen, "count": 1 if has_screen else 0, "tier": "mainline_required"},
-        "foreground_context": {"is_present": has_foreground, "count": 1 if has_foreground else 0, "tier": "mainline_required"},
+        "foreground_context": {
+            "is_present": has_foreground,
+            "count": 1 if has_foreground else 0,
+            "tier": "mainline_required",
+        },
         "audio_speech": {"is_present": audio_count > 0, "count": audio_count, "tier": "extension"},
         "camera_sensor": {"is_present": has_sensor, "count": 1 if has_sensor else 0, "tier": "extension"},
         "continuous_stream": {
@@ -185,7 +187,10 @@ def build_desktop_native_ingress_backbone(
         },
         "mainline_path": {
             "input": {"entrypoint": "desktop_native_ingress", "carrier_source": source or "chat"},
-            "runtime_shell": {"module": "core.desktop_presence_runtime", "entry_method": "DesktopPresenceRuntime.handle_request"},
+            "runtime_shell": {
+                "module": "core.desktop_presence_runtime",
+                "entry_method": "DesktopPresenceRuntime.handle_request",
+            },
             "session_runtime": {
                 "conversation_session_id": conversation_session_id or "",
                 "control_session_id": control_session_id or "",
@@ -272,12 +277,28 @@ def augment_ingress_backbone_for_control_core(
         context_assembly["requires_native_multimodal"] = bool(
             canonical_perception.get("requires_native_multimodal", False)
         )
+        if isinstance(canonical_perception.get("multimodal_context_strategy"), dict):
+            context_assembly["multimodal_context_strategy"] = dict(
+                canonical_perception.get("multimodal_context_strategy") or {}
+            )
+        if canonical_perception.get("multimodal_route_bias"):
+            context_assembly["multimodal_route_bias"] = canonical_perception.get("multimodal_route_bias")
+        if canonical_perception.get("multimodal_route_tier"):
+            context_assembly["multimodal_route_tier"] = canonical_perception.get("multimodal_route_tier")
     mainline["context_assembly"] = context_assembly
 
     task_generation = _as_mapping(mainline.get("task_generation"))
     if isinstance(multimodal_route_decision, dict):
         task_generation["multimodal_route_type"] = multimodal_route_decision.get("route_type")
         task_generation["multimodal_route_reason"] = multimodal_route_decision.get("route_reason")
+        if multimodal_route_decision.get("route_bias"):
+            task_generation["multimodal_route_bias"] = multimodal_route_decision.get("route_bias")
+        if multimodal_route_decision.get("route_tier"):
+            task_generation["multimodal_route_tier"] = multimodal_route_decision.get("route_tier")
+        if isinstance(multimodal_route_decision.get("context_strategy_hint"), dict):
+            task_generation["multimodal_context_strategy_hint"] = dict(
+                multimodal_route_decision.get("context_strategy_hint") or {}
+            )
     mainline["task_generation"] = task_generation
 
     execution_planning = _as_mapping(mainline.get("execution_planning"))

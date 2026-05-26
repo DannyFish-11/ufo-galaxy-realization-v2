@@ -2215,16 +2215,12 @@ class OpenClawd:
                 perception["requires_native_multimodal"] = True
 
             if isinstance(desktop_native_ingress_backbone, dict) and presence_mode:
-                coupling = (desktop_native_ingress_backbone.get("presence_mode_coupling") or {}).get(
-                    presence_mode
-                )
+                coupling = (desktop_native_ingress_backbone.get("presence_mode_coupling") or {}).get(presence_mode)
                 if isinstance(coupling, dict):
                     perception["ingress_presence_mode_coupling"] = dict(coupling)
 
             stream_state = (
-                (stream_runtime_status or {}).get("stream_state")
-                if isinstance(stream_runtime_status, dict)
-                else None
+                (stream_runtime_status or {}).get("stream_state") if isinstance(stream_runtime_status, dict) else None
             )
             if stream_state in {"reconnecting", "unavailable", "degraded"}:
                 reasons = list(perception.get("degradation_reasons") or [])
@@ -2476,15 +2472,47 @@ class OpenClawd:
                 Serialised :class:`~core.multimodal.modality_confidence_policy.PerceptionRoutingReadiness`
                 dict (PR-27).  Always present; never raises.
         """
+        ingress_guidance = self._derive_desktop_native_ingress_route_guidance(
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            presence_mode=presence_mode,
+            stream_runtime_status=stream_runtime_status,
+        )
+
+        def _with_ingress_strategy(result: Dict[str, Any]) -> Dict[str, Any]:
+            result["route_bias"] = ingress_guidance["route_bias"]
+            result["route_tier"] = ingress_guidance["route_tier"]
+            result["context_strategy_hint"] = dict(ingress_guidance["context_strategy_hint"])
+            if ingress_guidance["backbone_signal_names"]:
+                result["ingress_backbone_signals"] = list(ingress_guidance["backbone_signal_names"])
+            if ingress_guidance["route_bias"] != "default" and isinstance(result.get("route_reason"), str):
+                result["route_reason"] = (
+                    f"{result['route_reason']} " f"ingress_backbone_bias={ingress_guidance['route_bias']}"
+                )
+            return result
+
+        # ── Read perception signals ──────────────────────────────────────────
+        requires_native_mm: bool = False
+        active_modalities: List[str] = []
+        if canonical_perception:
+            requires_native_mm = bool(canonical_perception.get("requires_native_multimodal", False))
+            active_modalities = list(canonical_perception.get("active_modalities") or [])
+        for promoted_modality in ingress_guidance["promoted_modalities"]:
+            if promoted_modality not in active_modalities:
+                active_modalities.append(promoted_modality)
+        requires_native_mm = requires_native_mm or ingress_guidance["requires_native_multimodal"]
+
         # ── PR-27: Build modality confidence / routing readiness ─────────────
         _readiness: Optional[Dict[str, Any]] = None
+        _effective_perception_for_readiness = dict(canonical_perception or {})
+        _effective_perception_for_readiness["requires_native_multimodal"] = requires_native_mm
+        _effective_perception_for_readiness["active_modalities"] = list(active_modalities)
         try:
             from core.multimodal.modality_confidence_policy import (
                 build_perception_routing_readiness as _build_readiness,
             )
 
             _readiness_obj = _build_readiness(
-                canonical_perception=canonical_perception,
+                canonical_perception=_effective_perception_for_readiness,
                 source_registry_snapshot=source_registry_snapshot,
             )
             _readiness = _readiness_obj.to_dict()
@@ -2498,59 +2526,37 @@ class OpenClawd:
             _eligibility_summary = "readiness_assessment_unavailable"
             _eligibility_reason = "unknown"
 
-        # ── Read perception signals ──────────────────────────────────────────
-        requires_native_mm: bool = False
-        active_modalities: List[str] = []
-        if canonical_perception:
-            requires_native_mm = bool(canonical_perception.get("requires_native_multimodal", False))
-            active_modalities = list(canonical_perception.get("active_modalities") or [])
-
-        ingress_mods = (
-            (desktop_native_ingress_backbone or {}).get("modalities", {})
-            if isinstance(desktop_native_ingress_backbone, dict)
-            else {}
-        )
-        has_stream_ingress = bool((ingress_mods.get("continuous_stream") or {}).get("is_present"))
-        has_screen_ingress = bool((ingress_mods.get("screen_context") or {}).get("is_present"))
-        has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
-        if has_stream_ingress and "stream" not in active_modalities:
-            active_modalities.append("stream")
-        if (has_screen_ingress or has_foreground_ingress) and "screen" not in active_modalities:
-            active_modalities.append("screen")
-        if has_screen_ingress or has_foreground_ingress:
-            requires_native_mm = True
-
-        stream_state = (
-            (stream_runtime_status or {}).get("stream_state")
-            if isinstance(stream_runtime_status, dict)
-            else None
-        )
-        if has_stream_ingress and stream_state in {"reconnecting", "unavailable"}:
-            return {
-                "route_type": "text_only",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": (
-                    f"continuous_stream_state={stream_state} degraded_to=discrete_fallback"
-                ),
-                "fallback_reason": (
-                    f"stream_state={stream_state} discrete_fallback_required"
-                ),
-                "active_modalities": active_modalities,
-            }
+        if ingress_guidance["continuous_stream_present"] and ingress_guidance["stream_state"] in {
+            "reconnecting",
+            "unavailable",
+        }:
+            return _with_ingress_strategy(
+                {
+                    "route_type": "text_only",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": (
+                        f"continuous_stream_state={ingress_guidance['stream_state']} degraded_to=discrete_fallback"
+                    ),
+                    "fallback_reason": (f"stream_state={ingress_guidance['stream_state']} discrete_fallback_required"),
+                    "active_modalities": active_modalities,
+                }
+            )
 
         # ── Text-only short-circuit ──────────────────────────────────────────
         if not requires_native_mm:
-            result = {
-                "route_type": "text_only",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": "perception_state=text_only no_multimodal_input_detected",
-                "fallback_reason": "",
-                "active_modalities": active_modalities,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "text_only",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": "perception_state=text_only no_multimodal_input_detected",
+                    "fallback_reason": "",
+                    "active_modalities": active_modalities,
+                }
+            )
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
             # PR-20: enrich with task-semantic observability even on text-only path
@@ -2558,6 +2564,7 @@ class OpenClawd:
                 from core.runtime_decision_observability import (
                     enrich_multimodal_route_with_observability as _enrich_obs,
                 )
+
                 _enrich_obs(
                     result,
                     task_hint=task_type,
@@ -2569,34 +2576,38 @@ class OpenClawd:
 
         # ── PR-27: Eligibility gate — degrade if confidence is too low ───────
         if not _eligibility_eligible and _readiness is not None:
-            result = {
-                "route_type": "text_only",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": (
-                    f"modality_confidence_ineligible "
-                    f"reason={_eligibility_reason} "
-                    f"summary={_eligibility_summary}"
-                ),
-                "fallback_reason": (f"confidence_below_threshold reason={_eligibility_reason}"),
-                "active_modalities": active_modalities,
-                "perception_routing_readiness": _readiness,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "text_only",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": (
+                        f"modality_confidence_ineligible "
+                        f"reason={_eligibility_reason} "
+                        f"summary={_eligibility_summary}"
+                    ),
+                    "fallback_reason": (f"confidence_below_threshold reason={_eligibility_reason}"),
+                    "active_modalities": active_modalities,
+                    "perception_routing_readiness": _readiness,
+                }
+            )
             return result
 
         # ── Multimodal routing hierarchy ─────────────────────────────────────
         router = self._get_router()
         if router is None:
-            result = {
-                "route_type": "advisory",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": "router_unavailable degraded_to=advisory",
-                "fallback_reason": "router_unavailable",
-                "active_modalities": active_modalities,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "advisory",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": "router_unavailable degraded_to=advisory",
+                    "fallback_reason": "router_unavailable",
+                    "active_modalities": active_modalities,
+                }
+            )
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
             return result
@@ -2612,38 +2623,42 @@ class OpenClawd:
                 try:
                     _effective_task_type = _TaskType(task_type)
                     # PR-20: task hint changed the routing from GENERAL default
-                    _pr20_task_semantic_influenced = (_effective_task_type != _TaskType.GENERAL)
+                    _pr20_task_semantic_influenced = _effective_task_type != _TaskType.GENERAL
                     logger.debug(
                         "PR-17 _select_multimodal_route: using task_type=%r for routing",
                         task_type,
                     )
                 except (ValueError, KeyError):
                     logger.debug(
-                        "PR-17 _select_multimodal_route: unrecognised task_type=%r, "
-                        "falling back to GENERAL",
+                        "PR-17 _select_multimodal_route: unrecognised task_type=%r, " "falling back to GENERAL",
                         task_type,
                     )
 
             decision = router.route_multimodal_first(
                 active_modalities=active_modalities,
                 task_type=_effective_task_type,
-                complexity_score={
-                    "static": 0.35,
-                    "liminal": 0.5,
-                    "manifest": 0.8,
-                }.get((presence_mode or "").lower(), 0.5),
+                complexity_score=max(
+                    {
+                        "static": 0.35,
+                        "liminal": 0.5,
+                        "manifest": 0.8,
+                    }.get((presence_mode or "").lower(), 0.5),
+                    ingress_guidance["router_complexity_score"],
+                ),
             )
         except Exception as _rt_err:
             logger.debug("route_multimodal_first failed: %s", _rt_err)
-            result = {
-                "route_type": "advisory",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": f"routing_error={_rt_err} degraded_to=advisory",
-                "fallback_reason": str(_rt_err),
-                "active_modalities": active_modalities,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "advisory",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": f"routing_error={_rt_err} degraded_to=advisory",
+                    "fallback_reason": str(_rt_err),
+                    "active_modalities": active_modalities,
+                }
+            )
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
             return result
@@ -2651,30 +2666,34 @@ class OpenClawd:
         # Determine the tier from the decision reason prefix
         reason = decision.reason or ""
         if decision.provider == "none":
-            result = {
-                "route_type": "advisory",
-                "is_native_multimodal": False,
-                "provider": "none",
-                "model": "none",
-                "route_reason": reason,
-                "fallback_reason": "no_providers_available",
-                "active_modalities": active_modalities,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "advisory",
+                    "is_native_multimodal": False,
+                    "provider": "none",
+                    "model": "none",
+                    "route_reason": reason,
+                    "fallback_reason": "no_providers_available",
+                    "active_modalities": active_modalities,
+                }
+            )
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
             return result
 
         is_tier1 = "tier=1" in reason
         if is_tier1:
-            result = {
-                "route_type": "native_multimodal",
-                "is_native_multimodal": True,
-                "provider": decision.provider,
-                "model": decision.model,
-                "route_reason": reason,
-                "fallback_reason": "",
-                "active_modalities": active_modalities,
-            }
+            result = _with_ingress_strategy(
+                {
+                    "route_type": "native_multimodal",
+                    "is_native_multimodal": True,
+                    "provider": decision.provider,
+                    "model": decision.model,
+                    "route_reason": reason,
+                    "fallback_reason": "",
+                    "active_modalities": active_modalities,
+                }
+            )
             if _readiness is not None:
                 result["perception_routing_readiness"] = _readiness
             # PR-20: enrich with task-semantic observability
@@ -2682,6 +2701,7 @@ class OpenClawd:
                 from core.runtime_decision_observability import (
                     enrich_multimodal_route_with_observability as _enrich_obs,
                 )
+
                 _enrich_obs(
                     result,
                     task_hint=task_type,
@@ -2693,19 +2713,21 @@ class OpenClawd:
 
         # Tier 2 — native multimodal unavailable; degrade to text-capable provider
         modality_str = "+".join(active_modalities) if active_modalities else "unknown"
-        result = {
-            "route_type": "partial_multimodal",
-            "is_native_multimodal": False,
-            "provider": decision.provider,
-            "model": decision.model,
-            "route_reason": reason,
-            "fallback_reason": (
-                f"native_multimodal_provider_unavailable "
-                f"modalities=[{modality_str}] "
-                f"degraded_to=text_capable_provider"
-            ),
-            "active_modalities": active_modalities,
-        }
+        result = _with_ingress_strategy(
+            {
+                "route_type": "partial_multimodal",
+                "is_native_multimodal": False,
+                "provider": decision.provider,
+                "model": decision.model,
+                "route_reason": reason,
+                "fallback_reason": (
+                    f"native_multimodal_provider_unavailable "
+                    f"modalities=[{modality_str}] "
+                    f"degraded_to=text_capable_provider"
+                ),
+                "active_modalities": active_modalities,
+            }
+        )
         if _readiness is not None:
             result["perception_routing_readiness"] = _readiness
         # PR-20: enrich with task-semantic observability
@@ -2713,6 +2735,7 @@ class OpenClawd:
             from core.runtime_decision_observability import (
                 enrich_multimodal_route_with_observability as _enrich_obs,
             )
+
             _enrich_obs(
                 result,
                 task_hint=task_type,
@@ -2721,6 +2744,163 @@ class OpenClawd:
         except Exception:
             pass
         return result
+
+    @staticmethod
+    def _derive_desktop_native_ingress_route_guidance(
+        *,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
+        presence_mode: Optional[str] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        ingress_mods = (
+            (desktop_native_ingress_backbone or {}).get("modalities", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
+        has_stream_ingress = bool((ingress_mods.get("continuous_stream") or {}).get("is_present"))
+        has_screen_ingress = bool((ingress_mods.get("screen_context") or {}).get("is_present"))
+        has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
+        coupling = (
+            ((desktop_native_ingress_backbone or {}).get("presence_mode_coupling") or {}).get(
+                (presence_mode or "").lower()
+            )
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else None
+        )
+        coupling = dict(coupling or {})
+        sampling_intensity = coupling.get("sampling_intensity", "moderate")
+        fusion_strategy = coupling.get("fusion_strategy", "minimal_context_staging")
+        stream_state = (
+            (stream_runtime_status or {}).get("stream_state") if isinstance(stream_runtime_status, dict) else None
+        )
+        promoted_modalities: List[str] = []
+        backbone_signal_names: List[str] = []
+        route_bias = "default"
+        route_tier = "default"
+        if has_screen_ingress:
+            backbone_signal_names.append("screen_context")
+            promoted_modalities.append("screen")
+            route_bias = "screen_context_aware"
+            route_tier = "screen_context_priority"
+        if has_foreground_ingress:
+            backbone_signal_names.append("foreground_context")
+            if "screen" not in promoted_modalities:
+                promoted_modalities.append("screen")
+            promoted_modalities.append("foreground")
+            route_bias = "desktop_foreground_aware"
+            route_tier = "foreground_context_priority"
+        if has_stream_ingress:
+            backbone_signal_names.append("continuous_stream")
+            promoted_modalities.append("stream")
+            route_bias = "continuous_stream_aware"
+            route_tier = "continuous_stream_priority"
+        context_strategy_hint = {
+            "screen_context_priority": "high" if has_screen_ingress else "normal",
+            "foreground_context_priority": "high" if has_foreground_ingress else "normal",
+            "continuous_stream_assisted": has_stream_ingress and stream_state not in {"reconnecting", "unavailable"},
+            "sampling_intensity": sampling_intensity,
+            "fusion_strategy": fusion_strategy,
+        }
+        router_complexity_score = {
+            "low": 0.35,
+            "moderate": 0.55,
+            "focused": 0.75,
+        }.get(sampling_intensity, 0.5)
+        if has_screen_ingress:
+            router_complexity_score += 0.05
+        if has_foreground_ingress:
+            router_complexity_score += 0.05
+        if has_stream_ingress:
+            router_complexity_score += 0.1
+        return {
+            "requires_native_multimodal": has_stream_ingress or has_screen_ingress or has_foreground_ingress,
+            "promoted_modalities": promoted_modalities,
+            "route_bias": route_bias,
+            "route_tier": route_tier,
+            "context_strategy_hint": context_strategy_hint,
+            "router_complexity_score": min(router_complexity_score, 1.0),
+            "backbone_signal_names": backbone_signal_names,
+            "continuous_stream_present": has_stream_ingress,
+            "stream_state": stream_state,
+        }
+
+    @staticmethod
+    def _apply_multimodal_context_strategy(
+        *,
+        kernel_message: str,
+        canonical_perception: Optional[Dict[str, Any]],
+        multimodal_route_decision: Optional[Dict[str, Any]],
+    ) -> tuple[str, Optional[Dict[str, Any]]]:
+        route_decision = dict(multimodal_route_decision) if isinstance(multimodal_route_decision, dict) else {}
+        context_hint = route_decision.get("context_strategy_hint")
+        updated_perception = (
+            dict(canonical_perception) if isinstance(canonical_perception, dict) else canonical_perception
+        )
+        if isinstance(updated_perception, dict):
+            updated_perception["multimodal_route_bias"] = route_decision.get("route_bias", "default")
+            updated_perception["multimodal_route_tier"] = route_decision.get("route_tier", "default")
+        if not isinstance(context_hint, dict):
+            return kernel_message, updated_perception
+        normalized_hint = {
+            "screen_context_priority": context_hint.get("screen_context_priority", "normal"),
+            "foreground_context_priority": context_hint.get("foreground_context_priority", "normal"),
+            "continuous_stream_assisted": bool(context_hint.get("continuous_stream_assisted", False)),
+            "sampling_intensity": context_hint.get("sampling_intensity", "moderate"),
+            "fusion_strategy": context_hint.get("fusion_strategy", "minimal_context_staging"),
+        }
+        if isinstance(updated_perception, dict):
+            updated_perception["multimodal_context_strategy"] = dict(normalized_hint)
+        strategy_tokens: List[str] = []
+        if normalized_hint["screen_context_priority"] != "normal":
+            strategy_tokens.append(f"screen_context_priority={normalized_hint['screen_context_priority']}")
+        if normalized_hint["foreground_context_priority"] != "normal":
+            strategy_tokens.append(f"foreground_context_priority={normalized_hint['foreground_context_priority']}")
+        if normalized_hint["continuous_stream_assisted"]:
+            strategy_tokens.append("continuous_stream_assisted=true")
+        if strategy_tokens:
+            strategy_tokens.extend(
+                [
+                    f"sampling_intensity={normalized_hint['sampling_intensity']}",
+                    f"fusion_strategy={normalized_hint['fusion_strategy']}",
+                ]
+            )
+            strategy_suffix = f"[desktop_context_strategy {'; '.join(strategy_tokens)}]"
+            kernel_message = f"{kernel_message}\n\n{strategy_suffix}" if kernel_message else strategy_suffix
+        return kernel_message, updated_perception
+
+    def _resolve_multimodal_ingress_decision(
+        self,
+        *,
+        kernel_message: str,
+        canonical_perception: Optional[Dict[str, Any]],
+        task_type: Optional[str],
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]],
+        presence_mode: Optional[str],
+        stream_runtime_status: Optional[Dict[str, Any]],
+    ) -> tuple[Dict[str, Any], str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        multimodal_route = self._select_multimodal_route(
+            canonical_perception=canonical_perception,
+            task_type=task_type,
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            presence_mode=presence_mode,
+            stream_runtime_status=stream_runtime_status,
+        )
+        kernel_message, canonical_perception = self._apply_multimodal_context_strategy(
+            kernel_message=kernel_message,
+            canonical_perception=canonical_perception,
+            multimodal_route_decision=multimodal_route,
+        )
+        desktop_native_ingress_for_plan = self._augment_desktop_native_ingress_backbone(
+            desktop_native_ingress_backbone,
+            canonical_perception=canonical_perception,
+            multimodal_route_decision=multimodal_route,
+        )
+        return (
+            multimodal_route,
+            kernel_message,
+            canonical_perception,
+            desktop_native_ingress_for_plan,
+        )
 
     def _build_unified_control_plan(
         self,
@@ -2986,11 +3166,7 @@ class OpenClawd:
         _continuum_action = _decision.get("action_level")
         _action_taken = (execution_result or {}).get("action_taken")
 
-        _kernel_mode = (
-            str(kernel_intent_mode).strip() or None
-            if kernel_intent_mode is not None
-            else None
-        )
+        _kernel_mode = str(kernel_intent_mode).strip() or None if kernel_intent_mode is not None else None
         _alignment = "not_applicable"
         # chat_only aligns when execution_path is "none", while task/hybrid
         # aligns when execution_path is not "none".
@@ -3000,11 +3176,7 @@ class OpenClawd:
             _alignment = "aligned" if execution_path != "none" else "divergent"
 
         return {
-            "decision_tracks": (
-                "dual_track"
-                if _kernel_mode
-                else "continuum_only"
-            ),
+            "decision_tracks": ("dual_track" if _kernel_mode else "continuum_only"),
             "tracks_are_intentionally_separate": True,
             "kernel_intent_mode": _kernel_mode,
             "continuum_action_level": _continuum_action,
@@ -3094,17 +3266,14 @@ class OpenClawd:
             )
 
             operator_keys = [
-                key
-                for key in list(metadata.keys())
-                if classify_content_layer(key) == SurfaceLayer.OPERATOR_AUDIT_TRUTH
+                key for key in list(metadata.keys()) if classify_content_layer(key) == SurfaceLayer.OPERATOR_AUDIT_TRUTH
             ]
             if not is_operator_request:
                 for key in operator_keys:
                     metadata.pop(key, None)
 
-            policy = (
-                build_hidden_context_visible_action_surface_contract()
-                .get("foreground_minimal_necessary_explanation_policy", {})
+            policy = build_hidden_context_visible_action_surface_contract().get(
+                "foreground_minimal_necessary_explanation_policy", {}
             )
             needs_minimal_explanation = (
                 (result_payload.get("success") is False)
@@ -3266,9 +3435,7 @@ class OpenClawd:
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
         self._current_control_session_id = control_session_id or ""
-        self._current_runtime_attachment_session_id = (
-            runtime_attachment_session_id or ""
-        )
+        self._current_runtime_attachment_session_id = runtime_attachment_session_id or ""
         try:
             from core.source_runtime_posture import SourceRuntimePosture
 
@@ -3397,9 +3564,7 @@ class OpenClawd:
         try:
             _pr17_router = self._get_router()
             if _pr17_router is not None and hasattr(_pr17_router, "classify_task"):
-                _pr17_classified = _pr17_router.classify_task(
-                    [{"role": "user", "content": message}]
-                )
+                _pr17_classified = _pr17_router.classify_task([{"role": "user", "content": message}])
                 _pr17_task_type = _pr17_classified.value
                 logger.debug(
                     "PR-17 task-type derivation: classified=%r trace_id=%s",
@@ -3409,7 +3574,13 @@ class OpenClawd:
         except Exception as _pr17_err:
             logger.debug("PR-17 task-type derivation skipped: %s", _pr17_err)
 
-        _multimodal_route: Dict[str, Any] = self._select_multimodal_route(
+        (
+            _multimodal_route,
+            _kernel_message,
+            _canonical_perception,
+            _desktop_native_ingress_for_plan,
+        ) = self._resolve_multimodal_ingress_decision(
+            kernel_message=_kernel_message,
             canonical_perception=_canonical_perception,
             task_type=_pr17_task_type,
             desktop_native_ingress_backbone=desktop_native_ingress_backbone,
@@ -3417,11 +3588,6 @@ class OpenClawd:
             stream_runtime_status=stream_runtime_status,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
-        _desktop_native_ingress_for_plan: Optional[Dict[str, Any]] = self._augment_desktop_native_ingress_backbone(
-            desktop_native_ingress_backbone,
-            canonical_perception=_canonical_perception,
-            multimodal_route_decision=_multimodal_route,
-        )
 
         def _augment_ingress_for_execution_path(execution_path: str) -> Optional[Dict[str, Any]]:
             return self._augment_desktop_native_ingress_backbone(
@@ -3763,8 +3929,7 @@ class OpenClawd:
                     # ── Decision Execution (PR-8 / PR-4) ─────────────────────
                     _exec_result_k = self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
                     _cross_device_k = bool(
-                        _exec_result_k.get("remote_dispatch")
-                        or _exec_result_k.get("cross_device_summary")
+                        _exec_result_k.get("remote_dispatch") or _exec_result_k.get("cross_device_summary")
                     )
                     _exec_path_k = self._determine_execution_path(
                         entry_mode=_entry_mode,
@@ -3846,176 +4011,178 @@ class OpenClawd:
                         multimodal_route_decision=_multimodal_route,
                         desktop_native_ingress_backbone=_desktop_native_ingress_for_plan_k,
                     )
-                    return _finalize_response({
-                        "success": kernel_result.success,
-                        "response": kernel_result.reply,
-                        "intent": kernel_result.intent.raw_intent,
-                        "error": kernel_result.error,
-                        "trace_id": trace_id,
-                        "runtime_session_id": runtime_session_id or trace_id,
-                        "execution_path": _exec_path_k,
-                        "execution_result": _exec_result_k,
-                        # PR-11: canonical execution plan (may be None if schema unavailable)
-                        "execution_plan": _plan_k.to_dict() if _plan_k else None,
-                        "interaction": _interaction_dict,
-                        "persona_state": _persona_state_dict,
-                        "interaction_envelope": _interaction_envelope_dict,
-                        "output_plan": _output_plan_dict,
-                        "state_continuum": _continuum_state_dict,
-                        "metadata": {
-                            "request_id": request_id,
+                    return _finalize_response(
+                        {
+                            "success": kernel_result.success,
+                            "response": kernel_result.reply,
+                            "intent": kernel_result.intent.raw_intent,
+                            "error": kernel_result.error,
                             "trace_id": trace_id,
                             "runtime_session_id": runtime_session_id or trace_id,
-                            "session_id": session_id,
-                            "conversation_session_id": session_id,
-                            "control_session_id": control_session_id or "",
-                            "runtime_attachment_session_id": runtime_attachment_session_id or "",
-                            "device_id": device_id,
-                            "latency_ms": round(latency_ms, 1),
-                            "confidence": kernel_result.intent.confidence,
-                            "mode": mode,
-                            "model": kernel_result.model,
-                            "handler": "agent_kernel",
-                            "entry_mode": _entry_mode,
                             "execution_path": _exec_path_k,
-                            # PR-1: authority_role stamps OpenClawd as subject decision
-                            # authority in the kernel path, consistent with the
-                            # direct-path (non-kernel) response for full observability.
-                            "authority_role": "subject_decision_authority",
-                            # PR-3: delegation_point names which boundary was used.
-                            # AgentKernel is embedded in OpenClawd → always local.
-                            "delegation_point": "local",
-                            # PR-4: kernel_cognition_role makes the architectural
-                            # boundary explicit — AgentKernel is the embedded
-                            # cognition/planning layer; OpenClawd is the decision
-                            # authority that interprets the KernelResponse artifact.
-                            "kernel_cognition_role": "embedded_cognition_layer",
-                            # PR-4: delegation_hint from KernelResponse lets the
-                            # kernel suggest a delegation path; OpenClawd decides
-                            # whether to adopt it.
-                            "kernel_delegation_hint": kernel_result.delegation_hint,
-                            # PR-42: explicit dual-track semantics snapshot
-                            # (kernel intent vs continuum action vs execution path).
-                            "execution_semantics": _execution_semantics_k,
-                            "execution_path_decision_basis": _exec_path_basis_k,
-                            # PR-42: explicit PR-14 activation dispatch status.
-                            "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
-                            # PR-006: delegation_hint_decision records how OpenClawd
-                            # treated the kernel's advisory hint.  The hint is NEVER
-                            # automatically promoted to a binding directive; OpenClawd
-                            # always retains final decision authority.
-                            # "advisory_noted" — hint was present and logged (advisory only).
-                            # "advisory_none"  — no hint was provided by the kernel.
-                            "delegation_hint_decision": (
-                                "advisory_noted" if kernel_result.delegation_hint is not None else "advisory_none"
-                            ),
-                            # PR-006: soul_injection_phase from KernelResponse confirms
-                            # which execution phase (if any) loaded SOUL policy.
-                            # None means chat_only path; SOUL was never touched.
-                            "soul_injection_phase": kernel_result.soul_injection_phase,
-                            # PR-006: routing_authority from KernelResponse confirms
-                            # that any routing suggestion from AgentKernel is advisory;
-                            # final multi-model routing authority belongs to OpenClawd.
-                            "kernel_routing_authority": kernel_result.routing_authority,
-                            # PR-8v2: specialist layer boundary is surfaced for
-                            # downstream consumers but remains advisory metadata.
-                            "kernel_specialist_boundary": kernel_result.specialist_boundary,
-                            # PR-11: compact execution plan summary for diagnostics
-                            "execution_plan_summary": self._summarise_execution_plan(_plan_k),
-                            # PR-12: plan-level lifecycle state for observability
-                            "execution_lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
-                            **provider_info,
-                            "agent_steps": api_dict["agent_steps"],
-                            "tool_calls": api_dict["tool_calls"],
-                            "task_result": api_dict["task_result"],
-                            # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
-                            # from MultimodalBus.ingest().  New consumers should prefer
-                            # ``canonical_perception_state`` (PR-16) as the authoritative
-                            # perception source.  Retained only for backward compatibility;
-                            # do not add new consumers of this key.
-                            "multimodal_context": _mm_context_dict,
-                            # PR-16: canonical perception state (primary perception contract)
-                            "canonical_perception_state": _canonical_perception,
-                            # PR-24: canonical model supply state (primary model supply
-                            # contract, PR-18) — now forwarded from the unified control
-                            # plan so the response carries the full canonical state chain.
-                            "canonical_model_supply_state": _canonical_model_supply,
-                            # PR-19: canonical unified control plan
-                            "unified_control_plan": _ucp_k,
-                            "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_k,
-                            # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
-                            # The canonical routing decision is now embedded inside
-                            # unified_control_plan["multimodal_route_decision"].
-                            # This key is retained only for backward compatibility.
-                            "multimodal_route_decision": _multimodal_route,
-                            # PR-41: structured routing observability event derived
-                            # from the canonical routing decision (not inferred).
-                            "routing_decision_event": _routing_decision_event,
-                            # PR-29: canonical degraded-operation envelope (provider
-                            # failover chain, fallback policy ladder, severity).
-                            "degraded_operation_envelope": _degraded_operation_envelope,
-                            # PR-30: control-loop latency budget summary (ingest cadence,
-                            # recompute throttling, projection refresh, fast-path).
-                            "latency_budget_summary": _latency_budget_summary,
-                            # PR-32: canonical permission/trust/safety snapshot
-                            # (permission visibility, trust labels, safety gating).
-                            "permission_safety_state": _permission_safety_state,
-                            # PR-33: canonical operator override snapshot
-                            # (active source/model/execution-policy overrides).
-                            "operator_override_state": _operator_override_state,
-                            # PR-34: canonical decision timeline / explainability snapshot
-                            # (route selection, fallback transitions, operator override
-                            # influence, trust/safety gating — all correlated and replayable).
-                            "decision_timeline_snapshot": _decision_timeline_snapshot,
-                            # PR-18: cognitive execution hint forwarded from the runtime shell.
-                            # Advisory only — documents what cognitive-state wiring advised.
-                            # cognitive_region / execution_path_preference / activation_budget
-                            # influence the execution-path log entry but never override
-                            # OpenClawd's final authority.
-                            "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
-                                _cog_hint_k,
-                                trace_id=trace_id,
-                            ),
-                            "kernel_received_fused_multimodal_content": bool(_fusion_suffix),
-                            # PR-36: production baseline status — confirms that the unified
-                            # canonical control loop is active as the production baseline
-                            # and reports coverage of canonical primary artifacts.
-                            "production_baseline_summary": self._build_production_baseline_summary(
-                                response_metadata={
-                                    "canonical_perception_state": _canonical_perception,
-                                    "canonical_model_supply_state": _canonical_model_supply,
-                                    "unified_control_plan": _ucp_k,
-                                    "degraded_operation_envelope": _degraded_operation_envelope,
-                                    "latency_budget_summary": _latency_budget_summary,
-                                    "permission_safety_state": _permission_safety_state,
-                                    "operator_override_state": _operator_override_state,
-                                    "decision_timeline_snapshot": _decision_timeline_snapshot,
-                                }
-                            ),
-                            # PR-8: mainline convergence stamp — records that this
-                            # response traversed the canonical OpenClawd authority
-                            # stage, making the mainline path explicit and traceable.
-                            "mainline_convergence": self._build_mainline_convergence_stamp(
-                                trace_id=trace_id,
-                                session_id=session_id,
-                                task_id=task_id_for_trace,
-                                execution_path=_exec_path_k,
-                            ),
-                        },
-                        # PR-14: additive introspection hints (non-breaking)
-                        "arch_layer_id": "subject_core",
-                        "introspection_snapshot": {
-                            "authority_role": "subject_decision_authority",
-                            "delegation_point": "local",
-                            "execution_mode": None,
-                            "execution_path": _exec_path_k,
-                            "lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
-                            "execution_plan_summary": self._summarise_execution_plan(_plan_k),
-                            "device_id": device_id,
-                            "trace_id": trace_id,
-                            "success": kernel_result.success,
-                        },
-                    })
+                            "execution_result": _exec_result_k,
+                            # PR-11: canonical execution plan (may be None if schema unavailable)
+                            "execution_plan": _plan_k.to_dict() if _plan_k else None,
+                            "interaction": _interaction_dict,
+                            "persona_state": _persona_state_dict,
+                            "interaction_envelope": _interaction_envelope_dict,
+                            "output_plan": _output_plan_dict,
+                            "state_continuum": _continuum_state_dict,
+                            "metadata": {
+                                "request_id": request_id,
+                                "trace_id": trace_id,
+                                "runtime_session_id": runtime_session_id or trace_id,
+                                "session_id": session_id,
+                                "conversation_session_id": session_id,
+                                "control_session_id": control_session_id or "",
+                                "runtime_attachment_session_id": runtime_attachment_session_id or "",
+                                "device_id": device_id,
+                                "latency_ms": round(latency_ms, 1),
+                                "confidence": kernel_result.intent.confidence,
+                                "mode": mode,
+                                "model": kernel_result.model,
+                                "handler": "agent_kernel",
+                                "entry_mode": _entry_mode,
+                                "execution_path": _exec_path_k,
+                                # PR-1: authority_role stamps OpenClawd as subject decision
+                                # authority in the kernel path, consistent with the
+                                # direct-path (non-kernel) response for full observability.
+                                "authority_role": "subject_decision_authority",
+                                # PR-3: delegation_point names which boundary was used.
+                                # AgentKernel is embedded in OpenClawd → always local.
+                                "delegation_point": "local",
+                                # PR-4: kernel_cognition_role makes the architectural
+                                # boundary explicit — AgentKernel is the embedded
+                                # cognition/planning layer; OpenClawd is the decision
+                                # authority that interprets the KernelResponse artifact.
+                                "kernel_cognition_role": "embedded_cognition_layer",
+                                # PR-4: delegation_hint from KernelResponse lets the
+                                # kernel suggest a delegation path; OpenClawd decides
+                                # whether to adopt it.
+                                "kernel_delegation_hint": kernel_result.delegation_hint,
+                                # PR-42: explicit dual-track semantics snapshot
+                                # (kernel intent vs continuum action vs execution path).
+                                "execution_semantics": _execution_semantics_k,
+                                "execution_path_decision_basis": _exec_path_basis_k,
+                                # PR-42: explicit PR-14 activation dispatch status.
+                                "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
+                                # PR-006: delegation_hint_decision records how OpenClawd
+                                # treated the kernel's advisory hint.  The hint is NEVER
+                                # automatically promoted to a binding directive; OpenClawd
+                                # always retains final decision authority.
+                                # "advisory_noted" — hint was present and logged (advisory only).
+                                # "advisory_none"  — no hint was provided by the kernel.
+                                "delegation_hint_decision": (
+                                    "advisory_noted" if kernel_result.delegation_hint is not None else "advisory_none"
+                                ),
+                                # PR-006: soul_injection_phase from KernelResponse confirms
+                                # which execution phase (if any) loaded SOUL policy.
+                                # None means chat_only path; SOUL was never touched.
+                                "soul_injection_phase": kernel_result.soul_injection_phase,
+                                # PR-006: routing_authority from KernelResponse confirms
+                                # that any routing suggestion from AgentKernel is advisory;
+                                # final multi-model routing authority belongs to OpenClawd.
+                                "kernel_routing_authority": kernel_result.routing_authority,
+                                # PR-8v2: specialist layer boundary is surfaced for
+                                # downstream consumers but remains advisory metadata.
+                                "kernel_specialist_boundary": kernel_result.specialist_boundary,
+                                # PR-11: compact execution plan summary for diagnostics
+                                "execution_plan_summary": self._summarise_execution_plan(_plan_k),
+                                # PR-12: plan-level lifecycle state for observability
+                                "execution_lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
+                                **provider_info,
+                                "agent_steps": api_dict["agent_steps"],
+                                "tool_calls": api_dict["tool_calls"],
+                                "task_result": api_dict["task_result"],
+                                # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
+                                # from MultimodalBus.ingest().  New consumers should prefer
+                                # ``canonical_perception_state`` (PR-16) as the authoritative
+                                # perception source.  Retained only for backward compatibility;
+                                # do not add new consumers of this key.
+                                "multimodal_context": _mm_context_dict,
+                                # PR-16: canonical perception state (primary perception contract)
+                                "canonical_perception_state": _canonical_perception,
+                                # PR-24: canonical model supply state (primary model supply
+                                # contract, PR-18) — now forwarded from the unified control
+                                # plan so the response carries the full canonical state chain.
+                                "canonical_model_supply_state": _canonical_model_supply,
+                                # PR-19: canonical unified control plan
+                                "unified_control_plan": _ucp_k,
+                                "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_k,
+                                # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
+                                # The canonical routing decision is now embedded inside
+                                # unified_control_plan["multimodal_route_decision"].
+                                # This key is retained only for backward compatibility.
+                                "multimodal_route_decision": _multimodal_route,
+                                # PR-41: structured routing observability event derived
+                                # from the canonical routing decision (not inferred).
+                                "routing_decision_event": _routing_decision_event,
+                                # PR-29: canonical degraded-operation envelope (provider
+                                # failover chain, fallback policy ladder, severity).
+                                "degraded_operation_envelope": _degraded_operation_envelope,
+                                # PR-30: control-loop latency budget summary (ingest cadence,
+                                # recompute throttling, projection refresh, fast-path).
+                                "latency_budget_summary": _latency_budget_summary,
+                                # PR-32: canonical permission/trust/safety snapshot
+                                # (permission visibility, trust labels, safety gating).
+                                "permission_safety_state": _permission_safety_state,
+                                # PR-33: canonical operator override snapshot
+                                # (active source/model/execution-policy overrides).
+                                "operator_override_state": _operator_override_state,
+                                # PR-34: canonical decision timeline / explainability snapshot
+                                # (route selection, fallback transitions, operator override
+                                # influence, trust/safety gating — all correlated and replayable).
+                                "decision_timeline_snapshot": _decision_timeline_snapshot,
+                                # PR-18: cognitive execution hint forwarded from the runtime shell.
+                                # Advisory only — documents what cognitive-state wiring advised.
+                                # cognitive_region / execution_path_preference / activation_budget
+                                # influence the execution-path log entry but never override
+                                # OpenClawd's final authority.
+                                "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
+                                    _cog_hint_k,
+                                    trace_id=trace_id,
+                                ),
+                                "kernel_received_fused_multimodal_content": bool(_fusion_suffix),
+                                # PR-36: production baseline status — confirms that the unified
+                                # canonical control loop is active as the production baseline
+                                # and reports coverage of canonical primary artifacts.
+                                "production_baseline_summary": self._build_production_baseline_summary(
+                                    response_metadata={
+                                        "canonical_perception_state": _canonical_perception,
+                                        "canonical_model_supply_state": _canonical_model_supply,
+                                        "unified_control_plan": _ucp_k,
+                                        "degraded_operation_envelope": _degraded_operation_envelope,
+                                        "latency_budget_summary": _latency_budget_summary,
+                                        "permission_safety_state": _permission_safety_state,
+                                        "operator_override_state": _operator_override_state,
+                                        "decision_timeline_snapshot": _decision_timeline_snapshot,
+                                    }
+                                ),
+                                # PR-8: mainline convergence stamp — records that this
+                                # response traversed the canonical OpenClawd authority
+                                # stage, making the mainline path explicit and traceable.
+                                "mainline_convergence": self._build_mainline_convergence_stamp(
+                                    trace_id=trace_id,
+                                    session_id=session_id,
+                                    task_id=task_id_for_trace,
+                                    execution_path=_exec_path_k,
+                                ),
+                            },
+                            # PR-14: additive introspection hints (non-breaking)
+                            "arch_layer_id": "subject_core",
+                            "introspection_snapshot": {
+                                "authority_role": "subject_decision_authority",
+                                "delegation_point": "local",
+                                "execution_mode": None,
+                                "execution_path": _exec_path_k,
+                                "lifecycle_state": _plan_k.lifecycle_state if _plan_k else None,
+                                "execution_plan_summary": self._summarise_execution_plan(_plan_k),
+                                "device_id": device_id,
+                                "trace_id": trace_id,
+                                "success": kernel_result.success,
+                            },
+                        }
+                    )
                 except Exception as e:
                     logger.warning("AgentKernel 处理异常，降级到 OpenClawd 直接处理: %s", e)
 
@@ -4095,8 +4262,7 @@ class OpenClawd:
                         calling_site="openclawd.process",
                     )
                     logger.debug(
-                        "process [CAP-DEFAULT]: explicit-route capability audit "
-                        "device=%s verdict=%s",
+                        "process [CAP-DEFAULT]: explicit-route capability audit " "device=%s verdict=%s",
                         effective_device_id,
                         _cap_audit.verdict.value,
                     )
@@ -4108,9 +4274,7 @@ class OpenClawd:
                         ExplicitRouteVerdict.AUDITED_BYPASS,
                     ):
                         # Try to reroute to a capable alternative device.
-                        _alt_device = self._select_device_via_scheduler(
-                            _effective_caps_for_routing
-                        )
+                        _alt_device = self._select_device_via_scheduler(_effective_caps_for_routing)
                         if _alt_device and _alt_device != effective_device_id:
                             logger.warning(
                                 "process [CAP-DEFAULT/REROUTE]: explicit device=%s "
@@ -4130,30 +4294,28 @@ class OpenClawd:
                                 effective_device_id,
                                 _effective_caps_for_routing,
                             )
-                            return _finalize_response({
-                                "success": False,
-                                "response": (
-                                    f"Device '{effective_device_id}' does not satisfy "
-                                    f"required capabilities {_effective_caps_for_routing!r} "
-                                    "and no capable alternative device is available."
-                                ),
-                                "intent": intent_type,
-                                "metadata": {
-                                    "session_id": session_id,
-                                    "mode": "cross_device",
-                                    "execution_path": "capability_rejected",
-                                    "capability_mismatch": {
-                                        "device_id": effective_device_id,
-                                        "required_capabilities": list(
-                                            _effective_caps_for_routing
-                                        ),
-                                        "missing_capabilities": list(
-                                            _cap_audit.missing_capabilities
-                                        ),
-                                        "verdict": _cap_audit.verdict.value,
+                            return _finalize_response(
+                                {
+                                    "success": False,
+                                    "response": (
+                                        f"Device '{effective_device_id}' does not satisfy "
+                                        f"required capabilities {_effective_caps_for_routing!r} "
+                                        "and no capable alternative device is available."
+                                    ),
+                                    "intent": intent_type,
+                                    "metadata": {
+                                        "session_id": session_id,
+                                        "mode": "cross_device",
+                                        "execution_path": "capability_rejected",
+                                        "capability_mismatch": {
+                                            "device_id": effective_device_id,
+                                            "required_capabilities": list(_effective_caps_for_routing),
+                                            "missing_capabilities": list(_cap_audit.missing_capabilities),
+                                            "verdict": _cap_audit.verdict.value,
+                                        },
                                     },
-                                },
-                            })
+                                }
+                            )
                 except Exception as _cap_err:
                     logger.warning(
                         "process [CAP-DEFAULT]: explicit-route capability gate "
@@ -4360,137 +4522,137 @@ class OpenClawd:
             )
             # Handler metadata is additive-only here. We guard type strictly so
             # malformed values (e.g. string/list) cannot break dict expansion.
-            _handler_metadata = (
-                result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
-            )
+            _handler_metadata = result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
 
-            return _finalize_response({
-                "success": result.get("success", True),
-                "response": response_text,
-                "intent": intent_type,
-                "trace_id": trace_id,
-                "runtime_session_id": runtime_session_id or trace_id,
-                "execution_path": _exec_path2,
-                "execution_result": _exec_result2,
-                # PR-11: canonical execution plan (may be None if schema unavailable)
-                "execution_plan": _plan2.to_dict() if _plan2 else None,
-                "interaction": _interaction_dict,
-                "persona_state": _persona_state_dict,
-                "interaction_envelope": _interaction_envelope_dict2,
-                "output_plan": _output_plan_dict2,
-                "state_continuum": _continuum_state_dict2,
-                "metadata": {
-                    "request_id": request_id,
+            return _finalize_response(
+                {
+                    "success": result.get("success", True),
+                    "response": response_text,
+                    "intent": intent_type,
                     "trace_id": trace_id,
                     "runtime_session_id": runtime_session_id or trace_id,
-                    "session_id": session_id,
-                    "conversation_session_id": session_id,
-                    "control_session_id": control_session_id or "",
-                    "runtime_attachment_session_id": runtime_attachment_session_id or "",
-                    "device_id": device_id,
-                    "latency_ms": round(latency_ms, 1),
-                    "confidence": parsed_intent.confidence if parsed_intent else 0.0,
-                    "suggestions": parsed_intent.suggestions if parsed_intent else [],
-                    "handler": handler_name,
-                    # Preserve handler-provided additive metadata, but do not
-                    # let it override canonical execution/authority fields.
-                    **_handler_metadata,
-                    "entry_mode": _entry_mode,
                     "execution_path": _exec_path2,
-                    # PR-42: explicit execution semantics snapshot for direct path.
-                    "execution_semantics": _execution_semantics2,
-                    "execution_path_decision_basis": _exec_path_basis2,
-                    # PR-42: explicit PR-14 activation dispatch status.
-                    "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
-                    # PR-9: subject decision authority annotation (additive)
-                    "authority_role": "subject_decision_authority",
-                    # PR-11: compact execution plan summary for diagnostics
-                    "execution_plan_summary": self._summarise_execution_plan(_plan2),
-                    # PR-12: plan-level lifecycle state for observability
-                    "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
-                    **provider_info,
-                    # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
-                    # from MultimodalBus.ingest().  New consumers should prefer
-                    # ``canonical_perception_state`` (PR-16) as the authoritative
-                    # perception source.  Retained only for backward compatibility;
-                    # do not add new consumers of this key.
-                    "multimodal_context": _mm_context_dict,
-                    # PR-16: canonical perception state (primary perception contract)
-                    "canonical_perception_state": _canonical_perception,
-                    # PR-24: canonical model supply state (primary model supply
-                    # contract, PR-18) — now forwarded from the unified control
-                    # plan so the response carries the full canonical state chain.
-                    "canonical_model_supply_state": _canonical_model_supply,
-                    # PR-19: canonical unified control plan
-                    "unified_control_plan": _ucp2,
-                    "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_2,
-                    # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
-                    # The canonical routing decision is now embedded inside
-                    # unified_control_plan["multimodal_route_decision"].
-                    # This key is retained only for backward compatibility.
-                    "multimodal_route_decision": _multimodal_route,
-                    # PR-41: structured routing observability event derived
-                    # from the canonical routing decision (not inferred).
-                    "routing_decision_event": _routing_decision_event,
-                    # PR-29: canonical degraded-operation envelope.
-                    "degraded_operation_envelope": _degraded_operation_envelope,
-                    # PR-30: control-loop latency budget summary (ingest cadence,
-                    # recompute throttling, projection refresh, fast-path).
-                    "latency_budget_summary": _latency_budget_summary,
-                    # PR-32: canonical permission/trust/safety snapshot
-                    # (permission visibility, trust labels, safety gating).
-                    "permission_safety_state": _permission_safety_state,
-                    # PR-33: canonical operator override snapshot
-                    # (active source/model/execution-policy overrides).
-                    "operator_override_state": _operator_override_state,
-                    # PR-34: canonical decision timeline / explainability snapshot
-                    # (route selection, fallback transitions, operator override
-                    # influence, trust/safety gating — all correlated and replayable).
-                    "decision_timeline_snapshot": _decision_timeline_snapshot,
-                    # PR-18: cognitive execution hint forwarded from the runtime shell.
-                    # Advisory only — documents what cognitive-state wiring advised.
-                    "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
-                        _cog_hint_d,
-                        trace_id=trace_id,
-                    ),
-                    # PR-36: production baseline status — confirms that the unified
-                    # canonical control loop is active as the production baseline
-                    # and reports coverage of canonical primary artifacts.
-                    "production_baseline_summary": self._build_production_baseline_summary(
-                        response_metadata={
-                            "canonical_perception_state": _canonical_perception,
-                            "canonical_model_supply_state": _canonical_model_supply,
-                            "unified_control_plan": _ucp2,
-                            "degraded_operation_envelope": _degraded_operation_envelope,
-                            "latency_budget_summary": _latency_budget_summary,
-                            "permission_safety_state": _permission_safety_state,
-                            "operator_override_state": _operator_override_state,
-                            "decision_timeline_snapshot": _decision_timeline_snapshot,
-                        }
-                    ),
-                    # PR-8: mainline convergence stamp — records that this
-                    # response traversed the canonical OpenClawd authority
-                    # stage, making the mainline path explicit and traceable.
-                    "mainline_convergence": self._build_mainline_convergence_stamp(
-                        trace_id=trace_id,
-                        session_id=session_id,
-                        execution_path=_exec_path2,
-                    ),
-                },
-                # PR-14: additive introspection hints (non-breaking; callers ignoring
-                # this field are unaffected).
-                "introspection_snapshot": {
-                    "authority_role": "subject_decision_authority",
-                    "delegation_point": _delegation_point2,
-                    "execution_mode": _remote_mode2,
-                    "execution_path": _exec_path2,
-                    "lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
-                    "execution_plan_summary": self._summarise_execution_plan(_plan2),
-                    "device_id": device_id,
-                    "trace_id": trace_id,
-                    "success": bool(result.get("success", True)),
-                },
-            })
+                    "execution_result": _exec_result2,
+                    # PR-11: canonical execution plan (may be None if schema unavailable)
+                    "execution_plan": _plan2.to_dict() if _plan2 else None,
+                    "interaction": _interaction_dict,
+                    "persona_state": _persona_state_dict,
+                    "interaction_envelope": _interaction_envelope_dict2,
+                    "output_plan": _output_plan_dict2,
+                    "state_continuum": _continuum_state_dict2,
+                    "metadata": {
+                        "request_id": request_id,
+                        "trace_id": trace_id,
+                        "runtime_session_id": runtime_session_id or trace_id,
+                        "session_id": session_id,
+                        "conversation_session_id": session_id,
+                        "control_session_id": control_session_id or "",
+                        "runtime_attachment_session_id": runtime_attachment_session_id or "",
+                        "device_id": device_id,
+                        "latency_ms": round(latency_ms, 1),
+                        "confidence": parsed_intent.confidence if parsed_intent else 0.0,
+                        "suggestions": parsed_intent.suggestions if parsed_intent else [],
+                        "handler": handler_name,
+                        # Preserve handler-provided additive metadata, but do not
+                        # let it override canonical execution/authority fields.
+                        **_handler_metadata,
+                        "entry_mode": _entry_mode,
+                        "execution_path": _exec_path2,
+                        # PR-42: explicit execution semantics snapshot for direct path.
+                        "execution_semantics": _execution_semantics2,
+                        "execution_path_decision_basis": _exec_path_basis2,
+                        # PR-42: explicit PR-14 activation dispatch status.
+                        "pr14_activation_runtime_status": self._get_pr14_activation_runtime_status(),
+                        # PR-9: subject decision authority annotation (additive)
+                        "authority_role": "subject_decision_authority",
+                        # PR-11: compact execution plan summary for diagnostics
+                        "execution_plan_summary": self._summarise_execution_plan(_plan2),
+                        # PR-12: plan-level lifecycle state for observability
+                        "execution_lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
+                        **provider_info,
+                        # PR-24 DEPRECATED-COMPAT: raw fused multimodal context
+                        # from MultimodalBus.ingest().  New consumers should prefer
+                        # ``canonical_perception_state`` (PR-16) as the authoritative
+                        # perception source.  Retained only for backward compatibility;
+                        # do not add new consumers of this key.
+                        "multimodal_context": _mm_context_dict,
+                        # PR-16: canonical perception state (primary perception contract)
+                        "canonical_perception_state": _canonical_perception,
+                        # PR-24: canonical model supply state (primary model supply
+                        # contract, PR-18) — now forwarded from the unified control
+                        # plan so the response carries the full canonical state chain.
+                        "canonical_model_supply_state": _canonical_model_supply,
+                        # PR-19: canonical unified control plan
+                        "unified_control_plan": _ucp2,
+                        "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_2,
+                        # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
+                        # The canonical routing decision is now embedded inside
+                        # unified_control_plan["multimodal_route_decision"].
+                        # This key is retained only for backward compatibility.
+                        "multimodal_route_decision": _multimodal_route,
+                        # PR-41: structured routing observability event derived
+                        # from the canonical routing decision (not inferred).
+                        "routing_decision_event": _routing_decision_event,
+                        # PR-29: canonical degraded-operation envelope.
+                        "degraded_operation_envelope": _degraded_operation_envelope,
+                        # PR-30: control-loop latency budget summary (ingest cadence,
+                        # recompute throttling, projection refresh, fast-path).
+                        "latency_budget_summary": _latency_budget_summary,
+                        # PR-32: canonical permission/trust/safety snapshot
+                        # (permission visibility, trust labels, safety gating).
+                        "permission_safety_state": _permission_safety_state,
+                        # PR-33: canonical operator override snapshot
+                        # (active source/model/execution-policy overrides).
+                        "operator_override_state": _operator_override_state,
+                        # PR-34: canonical decision timeline / explainability snapshot
+                        # (route selection, fallback transitions, operator override
+                        # influence, trust/safety gating — all correlated and replayable).
+                        "decision_timeline_snapshot": _decision_timeline_snapshot,
+                        # PR-18: cognitive execution hint forwarded from the runtime shell.
+                        # Advisory only — documents what cognitive-state wiring advised.
+                        "cognitive_execution_hint": self._serialize_cognitive_execution_hint(
+                            _cog_hint_d,
+                            trace_id=trace_id,
+                        ),
+                        # PR-36: production baseline status — confirms that the unified
+                        # canonical control loop is active as the production baseline
+                        # and reports coverage of canonical primary artifacts.
+                        "production_baseline_summary": self._build_production_baseline_summary(
+                            response_metadata={
+                                "canonical_perception_state": _canonical_perception,
+                                "canonical_model_supply_state": _canonical_model_supply,
+                                "unified_control_plan": _ucp2,
+                                "degraded_operation_envelope": _degraded_operation_envelope,
+                                "latency_budget_summary": _latency_budget_summary,
+                                "permission_safety_state": _permission_safety_state,
+                                "operator_override_state": _operator_override_state,
+                                "decision_timeline_snapshot": _decision_timeline_snapshot,
+                            }
+                        ),
+                        # PR-8: mainline convergence stamp — records that this
+                        # response traversed the canonical OpenClawd authority
+                        # stage, making the mainline path explicit and traceable.
+                        "mainline_convergence": self._build_mainline_convergence_stamp(
+                            trace_id=trace_id,
+                            session_id=session_id,
+                            execution_path=_exec_path2,
+                        ),
+                    },
+                    # PR-14: additive introspection hints (non-breaking; callers ignoring
+                    # this field are unaffected).
+                    "introspection_snapshot": {
+                        "authority_role": "subject_decision_authority",
+                        "delegation_point": _delegation_point2,
+                        "execution_mode": _remote_mode2,
+                        "execution_path": _exec_path2,
+                        "lifecycle_state": _plan2.lifecycle_state if _plan2 else None,
+                        "execution_plan_summary": self._summarise_execution_plan(_plan2),
+                        "device_id": device_id,
+                        "trace_id": trace_id,
+                        "success": bool(result.get("success", True)),
+                    },
+                }
+            )
 
         except Exception as e:
             self._error_count += 1
@@ -4514,31 +4676,33 @@ class OpenClawd:
                 )
             except Exception:
                 pass
-            return _finalize_response({
-                "success": False,
-                "response": f"处理请求时发生错误: {str(e)}",
-                "intent": "error",
-                "trace_id": trace_id,
-                "execution_path": "none",
-                "execution_result": {
-                    "action_taken": "none",
+            return _finalize_response(
+                {
                     "success": False,
-                    "skipped_reason": f"process_error: {e}",
-                },
-                "metadata": {
-                    "request_id": request_id,
+                    "response": f"处理请求时发生错误: {str(e)}",
+                    "intent": "error",
                     "trace_id": trace_id,
-                    "session_id": session_id,
-                    "conversation_session_id": session_id,
-                    "control_session_id": control_session_id or "",
-                    "runtime_attachment_session_id": runtime_attachment_session_id or "",
-                    "device_id": device_id,
-                    "latency_ms": round(latency_ms, 1),
-                    "entry_mode": _entry_mode,
                     "execution_path": "none",
-                    "error": str(e),
-                },
-            })
+                    "execution_result": {
+                        "action_taken": "none",
+                        "success": False,
+                        "skipped_reason": f"process_error: {e}",
+                    },
+                    "metadata": {
+                        "request_id": request_id,
+                        "trace_id": trace_id,
+                        "session_id": session_id,
+                        "conversation_session_id": session_id,
+                        "control_session_id": control_session_id or "",
+                        "runtime_attachment_session_id": runtime_attachment_session_id or "",
+                        "device_id": device_id,
+                        "latency_ms": round(latency_ms, 1),
+                        "entry_mode": _entry_mode,
+                        "execution_path": "none",
+                        "error": str(e),
+                    },
+                }
+            )
 
     # ========================================================================
     # 意图解析
@@ -4734,19 +4898,11 @@ class OpenClawd:
                 metadata={"source": "openclawd._delegate_single_remote"},
             )
             if _orch_result is not None:
-                _orch_d = (
-                    _orch_result.to_dict()
-                    if hasattr(_orch_result, "to_dict")
-                    else {}
-                )
+                _orch_d = _orch_result.to_dict() if hasattr(_orch_result, "to_dict") else {}
                 # action_taken is nested inside the result dict returned by
                 # _try_android_bridge_dispatch.
                 _exec_result = _orch_d.get("result") or {}
-                _action_taken: str = (
-                    _exec_result.get("action_taken", "")
-                    if isinstance(_exec_result, dict)
-                    else ""
-                )
+                _action_taken: str = _exec_result.get("action_taken", "") if isinstance(_exec_result, dict) else ""
                 _orch_dispatch_meta = {
                     "orchestrator_dispatch_id": _orch_d.get("dispatch_id"),
                     "orchestrator_mode": _orch_d.get("mode"),
@@ -4754,8 +4910,7 @@ class OpenClawd:
                     "orchestrator_decision_reason": _orch_d.get("decision_reason"),
                 }
                 logger.debug(
-                    "_delegate_single_remote: orchestrator dispatch "
-                    "mode=%s action=%s success=%s trace_id=%s",
+                    "_delegate_single_remote: orchestrator dispatch " "mode=%s action=%s success=%s trace_id=%s",
                     _orch_d.get("mode"),
                     _action_taken,
                     _orch_d.get("success"),
@@ -4763,17 +4918,11 @@ class OpenClawd:
                 )
                 # PR-F: Android bridge handled the dispatch — return directly
                 # without falling through to _dispatch_remote_agent.
-                if (
-                    _orch_d.get("success")
-                    and _action_taken == "android_bridge_dispatch"
-                ):
+                if _orch_d.get("success") and _action_taken == "android_bridge_dispatch":
                     _bridge_resp = _exec_result.get("android_bridge_response") or {}
                     return {
                         "success": True,
-                        "response": (
-                            _bridge_resp.get("result")
-                            or "android task dispatched via orchestrator"
-                        ),
+                        "response": (_bridge_resp.get("result") or "android task dispatched via orchestrator"),
                         "metadata": {
                             "delegation_point": "single_remote",
                             "dispatch_via": "orchestrator:android_bridge",
@@ -4857,10 +5006,7 @@ class OpenClawd:
             if mesh_session_dict and isinstance(mesh_session_dict, dict):
                 participants = mesh_session_dict.get("participants") or []
                 active_count = sum(
-                    1
-                    for p in participants
-                    if isinstance(p, dict)
-                    and p.get("status") in ("active", "ready", "joined")
+                    1 for p in participants if isinstance(p, dict) and p.get("status") in ("active", "ready", "joined")
                 )
                 _use_orchestrator = active_count >= 2
 
@@ -4890,18 +5036,14 @@ class OpenClawd:
                     result_payload = orch_result.result or {}
                     return {
                         "success": True,
-                        "response": result_payload.get(
-                            "action_taken", "staged_mesh_coordinated"
-                        ),
+                        "response": result_payload.get("action_taken", "staged_mesh_coordinated"),
                         "intent": "parallel_goal",
                         "metadata": {
                             "delegation_point": "multi_device_orchestration",
                             "dispatch_mode": "staged_mesh",
                             "dispatch_id": orch_result.dispatch_id,
                             "decision_reason": orch_result.decision_reason,
-                            "coordinator_status": result_payload.get(
-                                "coordinator_status"
-                            ),
+                            "coordinator_status": result_payload.get("coordinator_status"),
                         },
                     }
                 # Orchestrator ran but did not produce a successful staged_mesh
@@ -5990,6 +6132,7 @@ class OpenClawd:
             from core.openclawd_canonical_node_tool_exposure import (
                 is_legacy_node_scan_compat_enabled as _is_compat_enabled,
             )
+
             _compat_active = _is_compat_enabled()
         except Exception:
             _compat_active = False
@@ -6044,9 +6187,7 @@ class OpenClawd:
                                         "description": f"Node {node_name}: {action_desc}",
                                         "parameters": {
                                             "type": "object",
-                                            "properties": {
-                                                "params": {"type": "object", "description": "操作参数"}
-                                            },
+                                            "properties": {"params": {"type": "object", "description": "操作参数"}},
                                         },
                                     },
                                 }
@@ -6084,9 +6225,7 @@ class OpenClawd:
                                         "description": f"Node {node_name}: {action_desc}",
                                         "parameters": {
                                             "type": "object",
-                                            "properties": {
-                                                "params": {"type": "object", "description": "操作参数"}
-                                            },
+                                            "properties": {"params": {"type": "object", "description": "操作参数"}},
                                         },
                                     },
                                 }
@@ -6843,6 +6982,7 @@ class OpenClawd:
             from core.openclawd_canonical_node_tool_exposure import (
                 is_legacy_node_scan_compat_enabled as _is_compat_enabled,
             )
+
             if not _is_compat_enabled():
                 return None
         except Exception:
@@ -8091,9 +8231,7 @@ class OpenClawd:
             from core.capability_enforcement_hardener import CapabilityHardRejectError
 
             _gate_caps: Optional[List[str]] = (
-                required_capabilities
-                or getattr(self, "_current_required_capabilities", None)
-                or None
+                required_capabilities or getattr(self, "_current_required_capabilities", None) or None
             )
             _gate_record = enforce_gateway_default_capability_gate(
                 device_id=device_id,
@@ -8155,9 +8293,7 @@ class OpenClawd:
             # explicit argument; fall back to the instance-level hint stored by
             # process() when a capability-aware request is in flight.
             _effective_caps: Optional[List[str]] = (
-                required_capabilities
-                or getattr(self, "_current_required_capabilities", None)
-                or None
+                required_capabilities or getattr(self, "_current_required_capabilities", None) or None
             )
             # 构造 TaskEnvelope，携带 session_id、command_id 和 required_capabilities
             # 进入统一链路.  PR-1 P0: required_capabilities is always forwarded so
