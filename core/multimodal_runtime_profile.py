@@ -29,7 +29,14 @@ MULTIMODAL_RUNTIME_PROFILE_IS_AUTHORITY = (
 MULTIMODAL_RUNTIME_PROFILE_PR10_SENTINEL = (
     "MULTIMODAL_RUNTIME_PROFILE::SAFE_DEFAULT_FULL_DEPLOYMENT_DEBUG_ENHANCED_V1"
 )
-_STREAMING_BACKBONE_CONTRACT = build_realtime_streaming_backbone_contract()
+_STREAMING_BACKBONE_CONTRACT: Optional[Dict[str, Any]] = None
+
+
+def _get_streaming_backbone_contract() -> Dict[str, Any]:
+    global _STREAMING_BACKBONE_CONTRACT
+    if _STREAMING_BACKBONE_CONTRACT is None:
+        _STREAMING_BACKBONE_CONTRACT = build_realtime_streaming_backbone_contract()
+    return _STREAMING_BACKBONE_CONTRACT
 
 
 class MultimodalRuntimeProfile(str, enum.Enum):
@@ -53,7 +60,7 @@ class MultimodalRuntimeProfileSnapshot:
     rationale: str
 
     def to_dict(self) -> Dict[str, Any]:
-        switch_policy = _STREAMING_BACKBONE_CONTRACT.get("switch_and_degradation_policy", {})
+        switch_policy = _get_streaming_backbone_contract().get("switch_and_degradation_policy", {})
         streaming_mainline_state = (
             "enabled" if self.enable_webrtc_session_manager else "discrete_fallback"
         )

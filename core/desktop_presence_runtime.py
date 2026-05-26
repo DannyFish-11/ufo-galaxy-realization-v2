@@ -102,8 +102,10 @@ from core.desktop_presence_system import (
     DesktopPresenceStateMachine,
     build_desktop_presence_system_view,
 )
+from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
 
 logger = logging.getLogger("Galaxy.Runtime")
+_STREAMING_BACKBONE_CONTRACT_CACHE: Optional[Dict[str, Any]] = None
 
 DESKTOP_PRESENCE_RUNTIME_ENTRYPOINT_ROLE: str = "stage_entry"
 """Entrypoint role contract (PR-01): runtime shell stage entry, not main startup entry."""
@@ -1118,10 +1120,6 @@ class DesktopPresenceRuntime:
     def _has_active_stream_source(self) -> bool:
         """Return True when any stream-capable source is currently active."""
         try:
-            from core.multimodal.perception_source_registry import (
-                STREAM_CAPABLE_SOURCE_TYPES,
-            )
-
             for source in self._source_registry.active_sources():
                 if source.source_type in STREAM_CAPABLE_SOURCE_TYPES:
                     return True
@@ -1138,10 +1136,13 @@ class DesktopPresenceRuntime:
             )
             from core.unified_config import config as _cfg
 
+            global _STREAMING_BACKBONE_CONTRACT_CACHE
+            if _STREAMING_BACKBONE_CONTRACT_CACHE is None:
+                _STREAMING_BACKBONE_CONTRACT_CACHE = build_realtime_streaming_backbone_contract()
             enable_webrtc = bool(_cfg.get("enable_webrtc_session_manager", False))
             source_snapshot = self.snapshot_source_registry()
             return {
-                "contract": build_realtime_streaming_backbone_contract(),
+                "contract": _STREAMING_BACKBONE_CONTRACT_CACHE,
                 "runtime_status": build_realtime_stream_runtime_status(
                     source_registry_snapshot=source_snapshot,
                     enable_webrtc_session_manager=enable_webrtc,
