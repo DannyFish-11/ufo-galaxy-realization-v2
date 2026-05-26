@@ -297,6 +297,13 @@ class DesktopPresenceRuntime:
         # Sessions are removed upon completion to avoid unbounded growth.
         self._active_sessions: Dict[str, RuntimeSession] = {}
         self._presence_state_machine = DesktopPresenceStateMachine()
+        self._latest_presence_runtime_hint: Dict[str, Any] = {
+            "presence_mode": self._presence_state_machine.mode.value,
+            "previous_presence_mode": self._presence_state_machine.mode.value,
+            "presence_mode_changed": False,
+            "presence_transition_reason": "mode_stable",
+            "presence_transition": None,
+        }
         logger.info("DesktopPresenceRuntime initialised (Windows desktop runtime shell)")
 
         # PR-17: Shell responsibility — own and initialise the perception source
@@ -443,6 +450,7 @@ class DesktopPresenceRuntime:
         # accessible in both success and error paths.  The hint is advisory only; the
         # runtime shell never enforces it as a binding directive.
         _cognitive_exec_hint: Optional[Dict[str, Any]] = None
+        _dispatch_presence_runtime_hint: Dict[str, Any] = self._current_presence_runtime_hint()
 
         # Notify the continuous cognitive field engine that a request has arrived.
         # Best-effort — failures must never block the request path.
@@ -529,7 +537,8 @@ class DesktopPresenceRuntime:
                     execution_active=True,
                     user_interaction=source in {"chat", "operator"},
                 )
-                _presence_mode = self._presence_state_machine.mode.value
+                _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
+                _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
                 _stream_runtime_status = (
                     self.realtime_streaming_backbone_summary().get("runtime_status") or {}
                 )
@@ -555,6 +564,7 @@ class DesktopPresenceRuntime:
                     cognitive_execution_hint=_cog_hint_obj,
                     desktop_native_ingress_backbone=desktop_native_ingress_backbone,
                     presence_mode=_presence_mode,
+                    presence_runtime_hint=_dispatch_presence_runtime_hint,
                     stream_runtime_status=_stream_runtime_status,
                     is_operator_request=source == "operator",
                     **kwargs,
@@ -624,6 +634,8 @@ class DesktopPresenceRuntime:
         metadata["control_session_id"] = control_session_id
         if desktop_native_ingress_backbone is not None:
             metadata["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
+        metadata["presence_mode"] = _dispatch_presence_runtime_hint["presence_mode"]
+        metadata["presence_runtime_hint"] = dict(_dispatch_presence_runtime_hint)
         if runtime_attachment_session_id:
             metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
         if lane_snapshot is not None:
@@ -805,6 +817,8 @@ class DesktopPresenceRuntime:
         multimodal_context: Optional[Any],
         use_constellation: bool,
         entry_mode: Optional[str] = None,
+        presence_mode: Optional[str] = None,
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Route to the correct underlying handler.
@@ -832,6 +846,8 @@ class DesktopPresenceRuntime:
                 required_capabilities=required_capabilities,
                 multimodal_context=multimodal_context,
                 entry_mode=entry_mode,
+                presence_mode=presence_mode,
+                presence_runtime_hint=presence_runtime_hint,
                 **kwargs,
             )
 
@@ -864,6 +880,8 @@ class DesktopPresenceRuntime:
             required_capabilities=required_capabilities,
             multimodal_context=multimodal_context,
             entry_mode=entry_mode,
+            presence_mode=presence_mode,
+            presence_runtime_hint=presence_runtime_hint,
             **kwargs,
         )
 
@@ -881,6 +899,8 @@ class DesktopPresenceRuntime:
         required_capabilities: Optional[List[str]],
         multimodal_context: Optional[Any],
         entry_mode: Optional[str] = None,
+        presence_mode: Optional[str] = None,
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
         control_session_id: str = "",
         runtime_attachment_session_id: str = "",
         session_identity: Optional[Any] = None,
@@ -914,6 +934,8 @@ class DesktopPresenceRuntime:
             runtime_attachment_session_id=runtime_attachment_session_id,
             session_identity=session_identity,
             desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            presence_mode=presence_mode,
+            presence_runtime_hint=presence_runtime_hint,
             cognitive_execution_hint=cognitive_execution_hint,
             **kwargs,
         )
@@ -1800,9 +1822,10 @@ class DesktopPresenceRuntime:
         execution_active: bool,
         user_interaction: bool,
         result_committed: bool = False,
-    ) -> None:
+    ) -> Dict[str, Any]:
+        transition: Optional[Dict[str, Any]] = None
         try:
-            self._presence_state_machine.update(
+            transition = self._presence_state_machine.update(
                 tri_state=tri_state,
                 task_active=task_active,
                 sensing_active=sensing_active,
@@ -1823,6 +1846,38 @@ class DesktopPresenceRuntime:
                 result_committed,
                 exc,
             )
+        self._latest_presence_runtime_hint = {
+            "presence_mode": self._presence_state_machine.mode.value,
+            "previous_presence_mode": (
+                (transition or {}).get("from_mode")
+                or self._presence_state_machine.mode.value
+            ),
+            "presence_mode_changed": bool(transition),
+            "presence_transition_reason": self._derive_presence_transition_reason(transition),
+            "presence_transition": dict(transition) if isinstance(transition, dict) else None,
+        }
+        return dict(self._latest_presence_runtime_hint)
+
+    @staticmethod
+    def _derive_presence_transition_reason(
+        transition: Optional[Dict[str, Any]],
+    ) -> str:
+        if not isinstance(transition, dict):
+            return "mode_stable"
+        from_mode = transition.get("from_mode")
+        to_mode = transition.get("to_mode")
+        if from_mode == "static" and to_mode == "liminal":
+            return "request_received_or_continuous_sensing"
+        if from_mode == "liminal" and to_mode == "manifest":
+            return "execution_path_confirmed_and_running"
+        if from_mode == "manifest" and to_mode == "liminal":
+            return "execution_completed_or_result_committed"
+        if from_mode == "liminal" and to_mode == "static":
+            return "stability_window_elapsed_without_task_or_sensing"
+        return "presence_transition_applied"
+
+    def _current_presence_runtime_hint(self) -> Dict[str, Any]:
+        return dict(self._latest_presence_runtime_hint)
 
     # ------------------------------------------------------------------
     # PR-8 V2: Compact presence summary for operator surfaces

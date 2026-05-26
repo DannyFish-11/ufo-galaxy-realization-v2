@@ -2395,6 +2395,7 @@ class OpenClawd:
         task_type: Optional[str] = None,
         desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
         presence_mode: Optional[str] = None,
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
         stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """PR-20 / PR-27 / PR-17: Determine the native-multimodal-first routing decision.
@@ -2475,6 +2476,7 @@ class OpenClawd:
         ingress_guidance = self._derive_desktop_native_ingress_route_guidance(
             desktop_native_ingress_backbone=desktop_native_ingress_backbone,
             presence_mode=presence_mode,
+            presence_runtime_hint=presence_runtime_hint,
             stream_runtime_status=stream_runtime_status,
         )
 
@@ -2642,7 +2644,14 @@ class OpenClawd:
                         "static": 0.35,
                         "liminal": 0.5,
                         "manifest": 0.8,
-                    }.get((presence_mode or "").lower(), 0.5),
+                    }.get(
+                        str(
+                            (presence_runtime_hint or {}).get("presence_mode")
+                            or presence_mode
+                            or ""
+                        ).lower(),
+                        0.5,
+                    ),
                     ingress_guidance["router_complexity_score"],
                 ),
             )
@@ -2750,8 +2759,13 @@ class OpenClawd:
         *,
         desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
         presence_mode: Optional[str] = None,
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
         stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        hint = dict(presence_runtime_hint or {})
+        effective_presence_mode = (
+            str(hint.get("presence_mode") or presence_mode or "liminal").lower()
+        )
         ingress_mods = (
             (desktop_native_ingress_backbone or {}).get("modalities", {})
             if isinstance(desktop_native_ingress_backbone, dict)
@@ -2762,21 +2776,53 @@ class OpenClawd:
         has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
         coupling = (
             ((desktop_native_ingress_backbone or {}).get("presence_mode_coupling") or {}).get(
-                (presence_mode or "").lower()
+                effective_presence_mode
             )
             if isinstance(desktop_native_ingress_backbone, dict)
             else None
         )
         coupling = dict(coupling or {})
-        sampling_intensity = coupling.get("sampling_intensity", "moderate")
-        fusion_strategy = coupling.get("fusion_strategy", "minimal_context_staging")
+        presence_policy = {
+            "static": {
+                "sampling_intensity": "low",
+                "fusion_strategy": "minimal_context_staging",
+                "execution_readiness": "deferred",
+                "route_bias": "presence_static_conservative",
+                "route_tier": "presence_static_background",
+            },
+            "liminal": {
+                "sampling_intensity": "moderate",
+                "fusion_strategy": "contextual_fusion_for_task_readiness",
+                "execution_readiness": "medium",
+                "route_bias": "presence_liminal_transition",
+                "route_tier": "presence_liminal_transition",
+            },
+            "manifest": {
+                "sampling_intensity": "moderate",
+                "fusion_strategy": "execution_aligned_fusion",
+                "execution_readiness": "high",
+                "route_bias": "presence_manifest_ready",
+                "route_tier": "presence_manifest_priority",
+            },
+        }.get(
+            effective_presence_mode,
+            {
+                "sampling_intensity": "moderate",
+                "fusion_strategy": "minimal_context_staging",
+                "execution_readiness": "medium",
+                "route_bias": "default",
+                "route_tier": "default",
+            },
+        )
+        sampling_intensity = coupling.get("sampling_intensity", presence_policy["sampling_intensity"])
+        fusion_strategy = coupling.get("fusion_strategy", presence_policy["fusion_strategy"])
         stream_state = (
             (stream_runtime_status or {}).get("stream_state") if isinstance(stream_runtime_status, dict) else None
         )
         promoted_modalities: List[str] = []
         backbone_signal_names: List[str] = []
-        route_bias = "default"
-        route_tier = "default"
+        route_bias = presence_policy["route_bias"]
+        route_tier = presence_policy["route_tier"]
         if has_screen_ingress:
             backbone_signal_names.append("screen_context")
             promoted_modalities.append("screen")
@@ -2794,18 +2840,34 @@ class OpenClawd:
             promoted_modalities.append("stream")
             route_bias = "continuous_stream_aware"
             route_tier = "continuous_stream_priority"
+        previous_presence_mode = str(
+            hint.get("previous_presence_mode") or effective_presence_mode
+        ).lower()
+        presence_mode_changed = bool(hint.get("presence_mode_changed", False))
+        presence_transition_reason = str(
+            hint.get("presence_transition_reason") or "mode_stable"
+        )
+        if presence_mode_changed and route_bias == presence_policy["route_bias"]:
+            route_tier = f"{route_tier}_transition"
         context_strategy_hint = {
             "screen_context_priority": "high" if has_screen_ingress else "normal",
             "foreground_context_priority": "high" if has_foreground_ingress else "normal",
             "continuous_stream_assisted": has_stream_ingress and stream_state not in {"reconnecting", "unavailable"},
             "sampling_intensity": sampling_intensity,
             "fusion_strategy": fusion_strategy,
+            "execution_readiness": presence_policy["execution_readiness"],
+            "presence_mode": effective_presence_mode,
+            "previous_presence_mode": previous_presence_mode,
+            "presence_mode_changed": presence_mode_changed,
+            "presence_transition_reason": presence_transition_reason,
         }
         router_complexity_score = {
             "low": 0.35,
             "moderate": 0.55,
             "focused": 0.75,
         }.get(sampling_intensity, 0.5)
+        if presence_mode_changed and effective_presence_mode == "manifest":
+            router_complexity_score += 0.05
         if has_screen_ingress:
             router_complexity_score += 0.05
         if has_foreground_ingress:
@@ -2847,6 +2909,11 @@ class OpenClawd:
             "continuous_stream_assisted": bool(context_hint.get("continuous_stream_assisted", False)),
             "sampling_intensity": context_hint.get("sampling_intensity", "moderate"),
             "fusion_strategy": context_hint.get("fusion_strategy", "minimal_context_staging"),
+            "execution_readiness": context_hint.get("execution_readiness", "medium"),
+            "presence_mode": context_hint.get("presence_mode", ""),
+            "previous_presence_mode": context_hint.get("previous_presence_mode", ""),
+            "presence_mode_changed": bool(context_hint.get("presence_mode_changed", False)),
+            "presence_transition_reason": context_hint.get("presence_transition_reason", "mode_stable"),
         }
         if isinstance(updated_perception, dict):
             updated_perception["multimodal_context_strategy"] = dict(normalized_hint)
@@ -2857,6 +2924,16 @@ class OpenClawd:
             strategy_tokens.append(f"foreground_context_priority={normalized_hint['foreground_context_priority']}")
         if normalized_hint["continuous_stream_assisted"]:
             strategy_tokens.append("continuous_stream_assisted=true")
+        if normalized_hint["execution_readiness"] != "medium":
+            strategy_tokens.append(f"execution_readiness={normalized_hint['execution_readiness']}")
+        if normalized_hint["presence_mode_changed"]:
+            strategy_tokens.append(
+                "presence_transition="
+                f"{normalized_hint['previous_presence_mode']}_to_{normalized_hint['presence_mode']}"
+            )
+            strategy_tokens.append(
+                f"presence_transition_reason={normalized_hint['presence_transition_reason']}"
+            )
         if strategy_tokens:
             strategy_tokens.extend(
                 [
@@ -2876,13 +2953,15 @@ class OpenClawd:
         task_type: Optional[str],
         desktop_native_ingress_backbone: Optional[Dict[str, Any]],
         presence_mode: Optional[str],
-        stream_runtime_status: Optional[Dict[str, Any]],
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
     ) -> tuple[Dict[str, Any], str, Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
         multimodal_route = self._select_multimodal_route(
             canonical_perception=canonical_perception,
             task_type=task_type,
             desktop_native_ingress_backbone=desktop_native_ingress_backbone,
             presence_mode=presence_mode,
+            presence_runtime_hint=presence_runtime_hint,
             stream_runtime_status=stream_runtime_status,
         )
         kernel_message, canonical_perception = self._apply_multimodal_context_strategy(
@@ -3312,6 +3391,7 @@ class OpenClawd:
         cognitive_execution_hint: Optional[Any] = None,
         desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
         presence_mode: Optional[str] = None,
+        presence_runtime_hint: Optional[Dict[str, Any]] = None,
         stream_runtime_status: Optional[Dict[str, Any]] = None,
         is_operator_request: bool = False,
     ) -> dict:
@@ -3358,6 +3438,10 @@ class OpenClawd:
                 ingress contract snapshot.  When present, OpenClawd augments
                 it with context/task/plan stage facts and embeds it in metadata
                 and unified_control_plan for canonical downstream consumption.
+            presence_runtime_hint: Runtime-shell hint carrying the current
+                presence mode plus transition fields such as
+                ``previous_presence_mode`` and ``presence_transition_reason``.
+                Used to bias route/context policy rather than only metadata.
 
         Returns:
             统一响应 dict::
@@ -3395,6 +3479,14 @@ class OpenClawd:
             logger.debug(
                 "OpenClawd.process presence hint | presence_mode=%s trace_id=%s",
                 presence_mode,
+                trace_id,
+            )
+        if isinstance(presence_runtime_hint, dict) and presence_runtime_hint.get("presence_mode_changed"):
+            logger.debug(
+                "OpenClawd.process presence transition | %s->%s reason=%s trace_id=%s",
+                presence_runtime_hint.get("previous_presence_mode"),
+                presence_runtime_hint.get("presence_mode"),
+                presence_runtime_hint.get("presence_transition_reason"),
                 trace_id,
             )
 
@@ -3585,6 +3677,7 @@ class OpenClawd:
             task_type=_pr17_task_type,
             desktop_native_ingress_backbone=desktop_native_ingress_backbone,
             presence_mode=presence_mode,
+            presence_runtime_hint=presence_runtime_hint,
             stream_runtime_status=stream_runtime_status,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
