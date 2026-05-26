@@ -407,6 +407,27 @@ class DesktopPresenceRuntime:
         runtime_attachment_session_id = (
             session_identity.runtime_attachment_session_id
         )
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None
+        try:
+            from core.desktop_native_multimodal_ingress_contract import (
+                build_desktop_native_ingress_backbone,
+            )
+
+            desktop_native_ingress_backbone = build_desktop_native_ingress_backbone(
+                message=message,
+                source=source,
+                multimodal_context=multimodal_context,
+                context=context,
+                kwargs=kwargs,
+                conversation_session_id=conversation_session_id,
+                control_session_id=control_session_id,
+                runtime_attachment_session_id=runtime_attachment_session_id,
+            )
+        except Exception as _ing_err:
+            logger.debug(
+                "desktop-native ingress backbone build failed (non-fatal): %s",
+                _ing_err,
+            )
 
         # Block-3: _cognitive_snap will hold the StateInterpreter result and is attached
         # to the response as an additive observability field.  Declared here (before the
@@ -523,6 +544,7 @@ class DesktopPresenceRuntime:
                     # use it as an advisory signal for execution-path / delegation
                     # biasing.  Never mandatory; OpenClawd retains final authority.
                     cognitive_execution_hint=_cog_hint_obj,
+                    desktop_native_ingress_backbone=desktop_native_ingress_backbone,
                     **kwargs,
                 )
                 lane_snapshot = lane.to_dict()
@@ -588,6 +610,9 @@ class DesktopPresenceRuntime:
         metadata.setdefault("session_id", conversation_session_id)
         metadata["conversation_session_id"] = conversation_session_id
         metadata["control_session_id"] = control_session_id
+        if desktop_native_ingress_backbone is not None:
+            metadata["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
+            result["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
         if runtime_attachment_session_id:
             metadata["runtime_attachment_session_id"] = runtime_attachment_session_id
         if lane_snapshot is not None:
@@ -847,6 +872,7 @@ class DesktopPresenceRuntime:
         control_session_id: str = "",
         runtime_attachment_session_id: str = "",
         session_identity: Optional[Any] = None,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Invoke the subject core (OpenClawd) inside the liminal phase.
@@ -875,6 +901,7 @@ class DesktopPresenceRuntime:
             control_session_id=control_session_id,
             runtime_attachment_session_id=runtime_attachment_session_id,
             session_identity=session_identity,
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
             cognitive_execution_hint=cognitive_execution_hint,
             **kwargs,
         )
