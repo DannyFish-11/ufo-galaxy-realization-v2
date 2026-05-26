@@ -3095,7 +3095,7 @@ class OpenClawd:
 
             operator_keys = [
                 key
-                for key in list(metadata.keys())
+                for key in metadata.keys()
                 if classify_content_layer(key) == SurfaceLayer.OPERATOR_AUDIT_TRUTH
             ]
             if not is_operator_request:

@@ -39,7 +39,8 @@ def test_runtime_status_discrete_fallback_without_live_sources():
 def test_runtime_initializes_webrtc_session_manager_when_enabled():
     from core.desktop_presence_runtime import DesktopPresenceRuntime
 
-    runtime = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
+    with patch.object(DesktopPresenceRuntime, "_try_start_ingest_bus"):
+        runtime = DesktopPresenceRuntime()
     runtime._webrtc_session_manager = None
 
     with patch("core.unified_config.config", {"enable_webrtc_session_manager": True}), patch(
