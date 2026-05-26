@@ -64,6 +64,7 @@ import subprocess
 import sys
 import tempfile
 import time
+# Used by _run_coro_sync to safely bridge async loader calls from sync installer helpers.
 import threading
 import venv
 from datetime import datetime, timezone
@@ -411,6 +412,38 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
         return False
 
 
+def _run_coro_sync(coro: Any, timeout: float) -> Any:
+    """Run async coroutine from sync context safely (supports active event loop)."""
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result_holder: Dict[str, Any] = {}
+    error_holder: Dict[str, Exception] = {}
+
+    def _runner() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            result_holder["value"] = loop.run_until_complete(coro)
+        except Exception as exc:  # pragma: no cover
+            error_holder["error"] = exc
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    if thread.is_alive():
+        raise TimeoutError("Timed out waiting for async operation result")
+    if "error" in error_holder:
+        raise error_holder["error"]
+    return result_holder.get("value")
+
+
 # ── Registration Helpers ──────────────────────────────────────────────────────
 
 def _build_mcp_command(addon_dir: Path, entrypoint: Any) -> List[str]:
@@ -490,35 +523,6 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
 
     try:
         from core.mcp_loader import mcp_loader
-        import asyncio
-
-        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                return asyncio.run(coro)
-
-            result_holder: Dict[str, Any] = {}
-            error_holder: Dict[str, Exception] = {}
-
-            def _runner() -> None:
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    result_holder["value"] = loop.run_until_complete(coro)
-                except Exception as exc:  # pragma: no cover - best effort bridge
-                    error_holder["error"] = exc
-                finally:
-                    loop.close()
-
-            thread = threading.Thread(target=_runner, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
-            if thread.is_alive():
-                raise TimeoutError("Timed out waiting for async registration result")
-            if "error" in error_holder:
-                raise error_holder["error"]
-            return result_holder.get("value")
 
         async def _do_load():
             return await mcp_loader.load(
@@ -593,35 +597,6 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
 
     try:
         from core.skill_loader import skill_loader
-        import asyncio
-
-        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                return asyncio.run(coro)
-
-            result_holder: Dict[str, Any] = {}
-            error_holder: Dict[str, Exception] = {}
-
-            def _runner() -> None:
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    result_holder["value"] = loop.run_until_complete(coro)
-                except Exception as exc:  # pragma: no cover - best effort bridge
-                    error_holder["error"] = exc
-                finally:
-                    loop.close()
-
-            thread = threading.Thread(target=_runner, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
-            if thread.is_alive():
-                raise TimeoutError("Timed out waiting for async registration result")
-            if "error" in error_holder:
-                raise error_holder["error"]
-            return result_holder.get("value")
 
         async def _do_load():
             return await skill_loader.load(str(addon_dir))
@@ -648,35 +623,6 @@ def _register_skill_md(addon_dir: Path) -> Dict[str, Any]:
     """Register a SKILL.md addon via SkillMDLoader."""
     try:
         from core.skill_md_loader import skill_md_loader
-        import asyncio
-
-        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                return asyncio.run(coro)
-
-            result_holder: Dict[str, Any] = {}
-            error_holder: Dict[str, Exception] = {}
-
-            def _runner() -> None:
-                loop = asyncio.new_event_loop()
-                try:
-                    asyncio.set_event_loop(loop)
-                    result_holder["value"] = loop.run_until_complete(coro)
-                except Exception as exc:  # pragma: no cover - best effort bridge
-                    error_holder["error"] = exc
-                finally:
-                    loop.close()
-
-            thread = threading.Thread(target=_runner, daemon=True)
-            thread.start()
-            thread.join(timeout=timeout)
-            if thread.is_alive():
-                raise TimeoutError("Timed out waiting for async registration result")
-            if "error" in error_holder:
-                raise error_holder["error"]
-            return result_holder.get("value")
 
         async def _do_load():
             return await skill_md_loader.load(str(addon_dir))
@@ -711,35 +657,7 @@ def _verify_mcp_install(registration: Dict[str, Any]) -> Dict[str, Any]:
             "error": "MCP registration did not return a valid server_id",
         }
 
-    import asyncio
     from core.mcp_loader import mcp_loader
-
-    def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro)
-        result_holder: Dict[str, Any] = {}
-        error_holder: Dict[str, Exception] = {}
-
-        def _runner() -> None:
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                result_holder["value"] = loop.run_until_complete(coro)
-            except Exception as exc:  # pragma: no cover - best effort bridge
-                error_holder["error"] = exc
-            finally:
-                loop.close()
-
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join(timeout=timeout)
-        if thread.is_alive():
-            raise TimeoutError("Timed out waiting for async verification result")
-        if "error" in error_holder:
-            raise error_holder["error"]
-        return result_holder.get("value")
 
     try:
         server = mcp_loader.get_server(server_id) or {}
@@ -808,36 +726,8 @@ def _verify_callable_skill_install(
             "error": "Skill registration did not return a valid skill_id",
         }
 
-    import asyncio
     from core.skill_loader import skill_loader
     from core.skill_package_contract import validate_skill_package_contract
-
-    def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro)
-        result_holder: Dict[str, Any] = {}
-        error_holder: Dict[str, Exception] = {}
-
-        def _runner() -> None:
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                result_holder["value"] = loop.run_until_complete(coro)
-            except Exception as exc:  # pragma: no cover - best effort bridge
-                error_holder["error"] = exc
-            finally:
-                loop.close()
-
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join(timeout=timeout)
-        if thread.is_alive():
-            raise TimeoutError("Timed out waiting for async verification result")
-        if "error" in error_holder:
-            raise error_holder["error"]
-        return result_holder.get("value")
 
     try:
         validate_skill_package_contract(skill_manifest)
@@ -897,6 +787,9 @@ def _verify_skill_md_install(registration: Dict[str, Any]) -> Dict[str, Any]:
     contract_valid = isinstance(skill.get("name"), str) and bool(skill.get("name")) and isinstance(commands, list)
     command_executable = len(commands) > 0
 
+    # SKILL.md command execution can trigger external side effects (network, shell).
+    # Verification therefore records command readiness but skips automatic smoke execution
+    # unless an explicit safe-smoke contract is added in the future.
     return {
         "success": loader_recognized and contract_valid and command_executable,
         "checks": {

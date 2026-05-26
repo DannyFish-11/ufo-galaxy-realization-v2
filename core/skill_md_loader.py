@@ -103,8 +103,8 @@ class SkillMDLoader:
             from core.routes._shared import broadcast_event
             await broadcast_event("skill_update", {"skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
             await broadcast_event("capability_update", {"source": "skill_md_loader", "skill_id": skill_id, "event": event, "runtime_semantics": "shell_command_skill"})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("SKILL.md capability broadcast failed（不影响运行）: %s", exc)
 
     def _inject_skill_to_registry(self, skill_id: str) -> None:
         """将 SKILL.md 技能注入能力总线。"""
@@ -282,9 +282,12 @@ class SkillMDLoader:
             self.skills[skill_id] = skill
             self._inject_skill_to_registry(skill_id)
             try:
-                asyncio.ensure_future(self._refresh_capability_registry(skill_id, "load"))
-            except Exception:
-                pass
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._refresh_capability_registry(skill_id, "load"))
+            except RuntimeError:
+                logger.debug("SKILL.md load capability refresh skipped: no running event loop")
+            except Exception as exc:
+                logger.debug("SKILL.md load capability refresh scheduling failed: %s", exc)
 
             logger.info(f"加载技能: {skill.name} ({skill_id})")
 
@@ -448,9 +451,12 @@ class SkillMDLoader:
             logger.debug("SKILL.md 技能从能力总线移除失败（不影响运行）: %s", exc)
 
         try:
-            asyncio.ensure_future(self._refresh_capability_registry(skill_id, "unload"))
-        except Exception:
-            pass
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._refresh_capability_registry(skill_id, "unload"))
+        except RuntimeError:
+            logger.debug("SKILL.md unload capability refresh skipped: no running event loop")
+        except Exception as exc:
+            logger.debug("SKILL.md unload capability refresh scheduling failed: %s", exc)
 
         return {
             "success": True,
