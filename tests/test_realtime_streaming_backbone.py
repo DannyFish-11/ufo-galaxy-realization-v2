@@ -6,6 +6,7 @@ from core.realtime_streaming_backbone import (
     build_realtime_stream_runtime_status,
     build_realtime_streaming_backbone_contract,
 )
+from unittest.mock import MagicMock, patch
 
 
 def test_backbone_contract_exposes_formal_roles_and_convergence():
@@ -33,3 +34,19 @@ def test_runtime_status_discrete_fallback_without_live_sources():
     )
     assert status["live_stream_session_exists"] is False
     assert status["stream_state"] == "discrete_fallback"
+
+
+def test_runtime_initializes_webrtc_session_manager_when_enabled():
+    from core.desktop_presence_runtime import DesktopPresenceRuntime
+
+    runtime = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
+    runtime._webrtc_session_manager = None
+
+    with patch("core.unified_config.config", {"enable_webrtc_session_manager": True}), patch(
+        "core.multimodal.webrtc_session_manager.WebRTCSessionManager",
+        return_value=MagicMock(name="webrtc_manager"),
+    ) as mock_manager:
+        runtime._try_init_webrtc_session_manager()
+
+    assert mock_manager.called
+    assert runtime._webrtc_session_manager is not None

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import sys
+from copy import deepcopy
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -165,6 +168,8 @@ async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadat
 
     forwarded = captured.get("desktop_native_ingress_backbone")
     assert isinstance(forwarded, dict)
+    assert captured.get("presence_mode") in {"manifest", "liminal", "static"}
+    assert isinstance(captured.get("stream_runtime_status"), dict)
     assert forwarded["mainline_path"]["runtime_shell"]["entry_method"] == "DesktopPresenceRuntime.handle_request"
     assert "conversation_session_id" in forwarded["mainline_path"]["session_runtime"]
     assert forwarded["mainline_path"]["context_assembly"]["method"] == "OpenClawd.process"
@@ -174,6 +179,91 @@ async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadat
         == "OpenClawd._build_unified_control_plan"
     )
     assert "desktop_native_ingress_backbone" in result["metadata"]
+
+
+def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
+    from core.openclawd import OpenClawd
+
+    class _FakeRouter:
+        def __init__(self):
+            self.seen = {}
+
+        def route_multimodal_first(self, *, active_modalities, task_type, complexity_score):
+            self.seen = {
+                "active_modalities": list(active_modalities),
+                "complexity_score": complexity_score,
+            }
+            return SimpleNamespace(provider="fake", model="fake-mm", reason="tier=1 native")
+
+    oc = OpenClawd.__new__(OpenClawd)
+    router = _FakeRouter()
+    oc._get_router = MagicMock(return_value=router)
+    fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
+    with patch(
+        "core.multimodal.modality_confidence_policy.build_perception_routing_readiness",
+        side_effect=RuntimeError("skip-readiness-for-unit-test"),
+    ), patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
+        result = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={
+                "modalities": {
+                    "screen_context": {"is_present": True},
+                    "foreground_context": {"is_present": True},
+                    "continuous_stream": {"is_present": False},
+                }
+            },
+            presence_mode="manifest",
+        )
+    assert result["route_type"] == "native_multimodal"
+    assert router.seen["complexity_score"] == 0.8
+    assert "screen" in router.seen["active_modalities"]
+
+
+def test_openclawd_route_degrades_when_continuous_stream_reconnecting():
+    from core.openclawd import OpenClawd
+
+    oc = OpenClawd.__new__(OpenClawd)
+    oc._get_router = MagicMock()
+    result = oc._select_multimodal_route(
+        canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+        desktop_native_ingress_backbone={
+            "modalities": {"continuous_stream": {"is_present": True}}
+        },
+        stream_runtime_status={"stream_state": "reconnecting"},
+    )
+    assert result["route_type"] == "text_only"
+    assert "discrete_fallback" in result["fallback_reason"]
+    oc._get_router.assert_not_called()
+
+
+def test_visible_action_surface_filter_hides_operator_payload_for_non_operator():
+    from core.openclawd import OpenClawd
+
+    payload = {
+        "success": False,
+        "error": "permission denied",
+        "execution_result": {"skipped_reason": "blocked_action"},
+        "metadata": {
+            "execution_path": "none",
+            "runtime_decision_reasoning": {"debug": True},
+            "task_truth": {"state": "blocked"},
+            "permission_safety_state": {"any_permission_missing": True},
+            "mode": "chat_only",
+        },
+    }
+    filtered = OpenClawd._apply_visible_action_surface_filter(
+        deepcopy(payload),
+        is_operator_request=False,
+    )
+    assert "runtime_decision_reasoning" not in filtered["metadata"]
+    assert "task_truth" not in filtered["metadata"]
+    assert "minimal_necessary_explanation" in filtered["metadata"]
+
+    unfiltered = OpenClawd._apply_visible_action_surface_filter(
+        deepcopy(payload),
+        is_operator_request=True,
+    )
+    assert "runtime_decision_reasoning" in unfiltered["metadata"]
 
 
 def test_openclawd_process_signature_accepts_desktop_native_ingress_backbone():
