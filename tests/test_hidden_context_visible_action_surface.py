@@ -71,3 +71,9 @@ def test_explanation_policy_and_backbone_alignment_are_explicit():
 
 def test_unknown_content_defaults_to_background_semantic_layer():
     assert classify_content_layer("unknown_future_internal_key") == SurfaceLayer.BACKGROUND_SEMANTIC
+
+
+def test_known_content_keys_map_to_expected_layers():
+    assert classify_content_layer("working_memory") == SurfaceLayer.BACKGROUND_SEMANTIC
+    assert classify_content_layer("result_artifacts") == SurfaceLayer.FOREGROUND_PRESENCE_ACTION
+    assert classify_content_layer("runtime_decision_reasoning") == SurfaceLayer.OPERATOR_AUDIT_TRUTH

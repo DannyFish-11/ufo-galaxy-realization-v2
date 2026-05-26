@@ -190,7 +190,7 @@ def classify_content_layer(content_key: str) -> SurfaceLayer:
     return SurfaceLayer.BACKGROUND_SEMANTIC
 
 
-def _rules_for_layer(layer: SurfaceLayer) -> List[Dict[str, str]]:
+def get_rules_for_layer(layer: SurfaceLayer) -> List[Dict[str, str]]:
     return [r.to_dict() for r in LAYER_CONTENT_RULES if r.layer == layer]
 
 
@@ -201,10 +201,29 @@ def build_hidden_context_visible_action_surface_contract(
     streaming_backbone: str = "core.realtime_streaming_backbone",
     runtime_shell: str = "core.desktop_presence_runtime",
     subject_core: str = "core.openclawd",
-    include_content_rules: bool = True,
+    include_layer_rules: bool = True,
 ) -> Dict[str, Any]:
-    """Build the formal foreground/background/operator boundary contract."""
-    content_rules = [r.to_dict() for r in LAYER_CONTENT_RULES] if include_content_rules else []
+    """Build the formal foreground/background/operator boundary contract.
+
+    Parameters
+    ----------
+    presence_layer:
+        Module path declaring the product-level presence layer contract.
+    multimodal_backbone:
+        Module path declaring desktop-native multimodal ingress backbone authority.
+    streaming_backbone:
+        Module path declaring real-time streaming backbone authority.
+    runtime_shell:
+        Module path for the runtime shell that owns tri-state lifecycle.
+    subject_core:
+        Module path for the cognition/execution core invoked by the runtime shell.
+    include_layer_rules:
+        When ``True`` include full content classification rows in the payload.
+    """
+    if include_layer_rules:
+        content_rules = [r.to_dict() for r in LAYER_CONTENT_RULES]
+    else:
+        content_rules = []
     return {
         "authority": HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_AUTHORITY,
         "sentinel": HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_SENTINEL,
@@ -213,17 +232,17 @@ def build_hidden_context_visible_action_surface_contract(
             "background_semantic_layer": {
                 "role": "continuous_sensing_context_memory_reasoning_and_orchestration",
                 "default_visibility": "hidden_background",
-                "rules": _rules_for_layer(SurfaceLayer.BACKGROUND_SEMANTIC),
+                "rules": get_rules_for_layer(SurfaceLayer.BACKGROUND_SEMANTIC),
             },
             "foreground_presence_action_layer": {
                 "role": "presence_modes_actions_traces_results_and_minimal_explanation",
                 "default_visibility": "foreground_default",
-                "rules": _rules_for_layer(SurfaceLayer.FOREGROUND_PRESENCE_ACTION),
+                "rules": get_rules_for_layer(SurfaceLayer.FOREGROUND_PRESENCE_ACTION),
             },
             "operator_audit_truth_layer": {
                 "role": "projection_truth_reasoning_and_diagnostics_traceability",
                 "default_visibility": "operator_default",
-                "rules": _rules_for_layer(SurfaceLayer.OPERATOR_AUDIT_TRUTH),
+                "rules": get_rules_for_layer(SurfaceLayer.OPERATOR_AUDIT_TRUTH),
             },
         },
         "foreground_minimal_necessary_explanation_policy": {
@@ -260,7 +279,6 @@ def build_hidden_context_visible_action_surface_contract(
                 "presence_mode",
                 "current_action_state",
                 "desktop_action_traces",
-                "action_results",
                 "result_artifacts",
                 "lightweight_confirmation_blocker_feedback",
             ],
