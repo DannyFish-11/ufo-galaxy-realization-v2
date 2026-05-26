@@ -2237,7 +2237,7 @@ class OpenClawd:
                 and stream_runtime_status.get("stream_active_for_routing")
             )
             if stream_active_for_routing:
-                active_modalities = list(perception.get("active_modalities") or [])
+                active_modalities = list(perception.get("active_modalities", []))
                 if "continuous_stream" not in active_modalities:
                     active_modalities.append("continuous_stream")
                 perception["active_modalities"] = active_modalities
@@ -2558,14 +2558,13 @@ class OpenClawd:
             else ingress_guidance.get("stream_state")
         )
 
-        if (
-            ingress_guidance["continuous_stream_present"] and ingress_guidance["stream_state"] in {
-                "reconnecting",
-                "unavailable",
-            }
-        ) or (
-            _stream_fallback_required
-            and ingress_guidance.get("continuous_stream_present")
+        # Force discrete fallback when continuous stream is present but unhealthy.
+        # Two complementary checks share the same gate on continuous_stream_present:
+        # (a) legacy state-based check (reconnecting / unavailable from ingress guidance),
+        # (b) explicit stream_fallback_required signal from build_realtime_stream_runtime_status.
+        if ingress_guidance["continuous_stream_present"] and (
+            ingress_guidance["stream_state"] in {"reconnecting", "unavailable"}
+            or _stream_fallback_required
         ):
             return _with_ingress_strategy(
                 {
