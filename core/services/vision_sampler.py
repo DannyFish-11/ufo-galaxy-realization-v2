@@ -346,4 +346,6 @@ async def run_sampling_session(
         "openclawd_response": runtime_response,
         "runtime_response": runtime_response,
         "command_result": command_result,
+        "streaming_role": "derived_snapshot_bridge_from_continuous_stream",
+        "stream_source_authority": "NODE_95_URL",
     }

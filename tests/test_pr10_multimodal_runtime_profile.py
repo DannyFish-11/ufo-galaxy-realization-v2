@@ -84,3 +84,15 @@ def test_production_baseline_summary_embeds_runtime_profile() -> None:
     summary = build_production_baseline_summary()
     assert "multimodal_runtime_profile" in summary
     assert "profile" in summary["multimodal_runtime_profile"]
+
+
+def test_runtime_profile_exposes_streaming_switch_and_degradation_policy() -> None:
+    from core.multimodal_runtime_profile import build_multimodal_runtime_profile_summary
+
+    summary = build_multimodal_runtime_profile_summary(
+        config={"enable_webrtc_session_manager": False},
+        env={},
+    )
+    assert "streaming_switch_policy" in summary
+    assert "streaming_degradation_states" in summary
+    assert summary["streaming_mainline_state"] in {"enabled", "discrete_fallback"}

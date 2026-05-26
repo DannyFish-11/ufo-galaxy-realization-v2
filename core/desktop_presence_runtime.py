@@ -482,10 +482,11 @@ class DesktopPresenceRuntime:
 
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
+        _stream_sensing_active = self._has_active_stream_source()
         self._update_presence_mode(
             tri_state=rsession.tristate.value,
             task_active=True,
-            sensing_active=bool(multimodal_context),
+            sensing_active=bool(multimodal_context) or _stream_sensing_active,
             execution_active=False,
             user_interaction=source in {"chat", "operator"},
         )
@@ -520,7 +521,7 @@ class DesktopPresenceRuntime:
                 self._update_presence_mode(
                     tri_state=rsession.tristate.value,
                     task_active=True,
-                    sensing_active=bool(multimodal_context),
+                    sensing_active=bool(multimodal_context) or _stream_sensing_active,
                     execution_active=True,
                     user_interaction=source in {"chat", "operator"},
                 )
@@ -568,7 +569,7 @@ class DesktopPresenceRuntime:
             self._update_presence_mode(
                 tri_state=rsession.tristate.value,
                 task_active=False,
-                sensing_active=False,
+                sensing_active=self._has_active_stream_source(),
                 execution_active=False,
                 user_interaction=source in {"chat", "operator"},
                 result_committed=True,
@@ -696,6 +697,7 @@ class DesktopPresenceRuntime:
         )
         if _dsp is not None:
             result["desktop_status_projection"] = _dsp
+        metadata["realtime_streaming_backbone"] = self.realtime_streaming_backbone_summary()
         # PR-5-V2: stamp ingress carrier context (additive, non-breaking).
         # Provides a single normalized carrier descriptor so all operator
         # surfaces and tests can identify which carrier path originated the
@@ -1112,6 +1114,48 @@ class DesktopPresenceRuntime:
                 _err,
             )
             return {"snapshot_at": time.time(), "error": str(_err)}
+
+    def _has_active_stream_source(self) -> bool:
+        """Return True when any stream-capable source is currently active."""
+        try:
+            from core.multimodal.perception_source_registry import (
+                PerceptionSourceType,
+            )
+
+            stream_types = {
+                PerceptionSourceType.WEBRTC,
+                PerceptionSourceType.REMOTE_CAMERA,
+                PerceptionSourceType.EXTERNAL_STREAM,
+                PerceptionSourceType.WEBCAM,
+            }
+            for source in self._source_registry.active_sources():
+                if source.source_type in stream_types:
+                    return True
+        except Exception:
+            return False
+        return False
+
+    def realtime_streaming_backbone_summary(self) -> Dict[str, Any]:
+        """Return formal stream-backbone contract + current runtime state."""
+        try:
+            from core.realtime_streaming_backbone import (
+                build_realtime_stream_runtime_status,
+                build_realtime_streaming_backbone_contract,
+            )
+            from core.unified_config import config as _cfg
+
+            enable_webrtc = bool(_cfg.get("enable_webrtc_session_manager", False))
+            source_snapshot = self.snapshot_source_registry()
+            return {
+                "contract": build_realtime_streaming_backbone_contract(),
+                "runtime_status": build_realtime_stream_runtime_status(
+                    source_registry_snapshot=source_snapshot,
+                    enable_webrtc_session_manager=enable_webrtc,
+                ),
+                "source_registry_snapshot": source_snapshot,
+            }
+        except Exception as _err:
+            return {"error": str(_err)}
 
     def permission_safety_summary(
         self,
@@ -1797,15 +1841,17 @@ class DesktopPresenceRuntime:
             self._update_presence_mode(
                 tri_state=dominant,
                 task_active=len(sessions) > 0,
-                sensing_active=False,
+                sensing_active=self._has_active_stream_source(),
                 execution_active=counts.get(TriState.MANIFEST.value, 0) > 0,
                 user_interaction=False,
             )
+            stream_backbone = self.realtime_streaming_backbone_summary()
             presence_system = build_desktop_presence_system_view(
                 state_machine_snapshot=self._presence_state_machine.snapshot(),
                 dominant_tristate=dominant,
                 tristate_distribution=dict(counts),
                 active_session_count=len(sessions),
+                stream_runtime_status=stream_backbone.get("runtime_status"),
             )
 
             return {
@@ -1813,6 +1859,7 @@ class DesktopPresenceRuntime:
                 "tristate_distribution": dict(counts),
                 "dominant_tristate": dominant,
                 "desktop_presence_system": presence_system,
+                "realtime_streaming_backbone": stream_backbone,
             }
         except Exception as _err:
             logger.debug(
@@ -1828,6 +1875,7 @@ class DesktopPresenceRuntime:
                     tristate_distribution={},
                     active_session_count=0,
                 ),
+                "realtime_streaming_backbone": self.realtime_streaming_backbone_summary(),
             }
 
 

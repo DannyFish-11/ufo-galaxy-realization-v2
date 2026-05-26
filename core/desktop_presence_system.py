@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
+
 
 class DesktopPresenceMode(str, Enum):
     """Product-level desktop presence modes."""
@@ -363,6 +365,7 @@ def build_desktop_presence_system_view(
     dominant_tristate: str,
     tristate_distribution: Dict[str, int],
     active_session_count: int,
+    stream_runtime_status: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return a formal desktop-presence projection for runtime/panel/operator surfaces."""
     return {
@@ -383,6 +386,10 @@ def build_desktop_presence_system_view(
         },
         "foreground_hierarchy": dict(DESKTOP_FOREGROUND_HIERARCHY),
         "future_extension_home": dict(DESKTOP_EXTENSION_HOME),
+        "realtime_streaming_backbone": {
+            "contract": build_realtime_streaming_backbone_contract(),
+            "runtime_status": dict(stream_runtime_status or {}),
+        },
     }
 
 
