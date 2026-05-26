@@ -270,8 +270,16 @@ def _module_source_contains(module_path: str, tokens: List[str]) -> bool:
     """Best-effort source probe for modules that may fail import due to optional deps."""
     try:
         root = Path(__file__).resolve().parent.parent
-        module_file = root.joinpath(*module_path.split(".")).with_suffix(".py")
-        source = module_file.read_text(encoding="utf-8", errors="ignore")
+        module_parts = module_path.split(".")
+        module_file = root.joinpath(*module_parts).with_suffix(".py")
+        package_init_file = root.joinpath(*module_parts, "__init__.py")
+        if module_file.exists():
+            source_file = module_file
+        elif package_init_file.exists():
+            source_file = package_init_file
+        else:
+            return False
+        source = source_file.read_text(encoding="utf-8", errors="replace")
         return all(token in source for token in tokens)
     except Exception as exc:
         logger.debug("JointCognitionReview: source probe failed for %s: %s", module_path, exc)

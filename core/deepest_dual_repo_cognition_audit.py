@@ -53,7 +53,7 @@ def _source_contains(rel_path: str, tokens: List[str]) -> bool:
     """Fallback structural probe when import fails due to optional dependencies."""
     try:
         root = Path(__file__).resolve().parent.parent
-        source = root.joinpath(rel_path).read_text(encoding="utf-8", errors="ignore")
+        source = root.joinpath(rel_path).read_text(encoding="utf-8", errors="replace")
         return all(token in source for token in tokens)
     except Exception as exc:
         logger.debug("CognitionAudit source probe failed for %s: %s", rel_path, exc)
@@ -126,7 +126,7 @@ def check_desktop_presence_runtime_tristate_ownership() -> CognitionCheckResult:
     except Exception as exc:
         if _source_contains(
             "core/desktop_presence_runtime.py",
-            ["class TriState", 'SILENT = "silent"', 'LIMINAL = "liminal"', 'MANIFEST = "manifest"', "class DesktopPresenceRuntime", "def handle_request"],
+            ["class TriState", "SILENT", "LIMINAL", "MANIFEST", "class DesktopPresenceRuntime", "def handle_request"],
         ):
             return CognitionCheckResult(
                 check_name=check,
