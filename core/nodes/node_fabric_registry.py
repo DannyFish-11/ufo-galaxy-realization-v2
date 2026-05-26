@@ -873,7 +873,6 @@ class NodeFabricRegistry:
             "execution_owner": node.execution_owner,
             "participant_id": node.participant_id,
             "device_id": node.device_id,
-            "last_known_status": node.status.value if isinstance(node.status, NodeStatus) else str(node.status),
             "last_observed_wallclock": time.time(),
         }
 
@@ -892,7 +891,9 @@ class NodeFabricRegistry:
                 if isinstance(cap, dict) and str(cap.get("name") or "").strip()
             ]
             metadata = dict(payload.get("metadata") or {})
-            metadata["recovered_last_known_status"] = str(payload.get("last_known_status") or "")
+            metadata["recovered_last_known_status"] = str(
+                payload.get("status") or payload.get("last_known_status") or ""
+            )
             metadata["last_observed_wallclock"] = payload.get("last_observed_wallclock")
             return NodeInfo(
                 node_id=str(payload.get("node_id") or ""),

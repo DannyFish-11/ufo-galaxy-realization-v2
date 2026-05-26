@@ -698,6 +698,7 @@ class NetworkTopologyRuntime:
                 node.registered_at = existing.registered_at
             node.last_updated_at = time.monotonic()
             node.metadata = dict(node.metadata)
+            node.tags = [tag for tag in node.tags if tag != "recovered_unrevalidated"]
             node.metadata["_truth_governance"] = build_truth_governance(
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_topology_runtime.NetworkTopologyRuntime",
@@ -756,6 +757,7 @@ class NetworkTopologyRuntime:
             node.state = state
             node.last_updated_at = time.monotonic()
             node.metadata = dict(node.metadata)
+            node.tags = [tag for tag in node.tags if tag != "recovered_unrevalidated"]
             node.metadata["_truth_governance"] = build_truth_governance(
                 TRUTH_GRADE_PROJECTION,
                 source="core.network_topology_runtime.NetworkTopologyRuntime",
