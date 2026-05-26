@@ -645,7 +645,8 @@ class NetworkGraphRuntime:
         edge_payloads = payload.get("edges")
         if not isinstance(node_payloads, list) or not isinstance(edge_payloads, list):
             return {"nodes_restored": 0, "edges_restored": 0}
-        recovered_at = time.time()
+        recovered_wallclock = time.time()
+        recovered_monotonic = time.monotonic()
         restored_nodes = 0
         restored_edges = 0
         with self._rw_lock:
@@ -663,7 +664,7 @@ class NetworkGraphRuntime:
                     revalidation_required=True,
                     degraded=True,
                     field_truth_grades={"topology_view": TRUTH_GRADE_RECOVERABLE},
-                    extra={"recovered_at": recovered_at},
+                    extra={"recovered_at": recovered_wallclock},
                 )
                 self._nodes[node_id] = NetworkNode(
                     node_id=node_id,
@@ -673,8 +674,8 @@ class NetworkGraphRuntime:
                     transport_hints=dict(item.get("transport_hints") or {}),
                     tags=list(item.get("tags") or []) + ["recovered_unrevalidated"],
                     metadata=metadata,
-                    registered_at=time.monotonic(),
-                    last_updated_at=time.monotonic(),
+                    registered_at=recovered_monotonic,
+                    last_updated_at=recovered_monotonic,
                 )
                 self._recovered_node_ids.add(node_id)
                 restored_nodes += 1
@@ -692,7 +693,7 @@ class NetworkGraphRuntime:
                     revalidation_required=True,
                     degraded=True,
                     field_truth_grades={"topology_view": TRUTH_GRADE_RECOVERABLE},
-                    extra={"recovered_at": recovered_at},
+                    extra={"recovered_at": recovered_wallclock},
                 )
                 self._edges[edge_id] = NetworkEdge(
                     edge_id=edge_id,
@@ -700,12 +701,12 @@ class NetworkGraphRuntime:
                     target_node_id=str(item.get("target_node_id") or ""),
                     kind=NetworkEdgeKind(str(item.get("kind") or NetworkEdgeKind.FABRIC_LINK.value)),
                     metadata=metadata,
-                    created_at=time.monotonic(),
+                    created_at=recovered_monotonic,
                 )
                 self._recovered_edge_ids.add(edge_id)
                 restored_edges += 1
             if restored_nodes or restored_edges:
-                self._last_recovered_at = recovered_at
+                self._last_recovered_at = recovered_wallclock
         return {"nodes_restored": restored_nodes, "edges_restored": restored_edges}
 
     def clear_durable_state(self) -> None:
