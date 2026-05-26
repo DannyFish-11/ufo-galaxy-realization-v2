@@ -370,6 +370,9 @@ def _build_overall_runtime_state() -> NarrativeDimension:
             is_outward_truth_compile_active,
         )
 
+        # Avoid recursive compile loops: outward truth compilation includes this
+        # narrative facet, so the narrative must not re-enter compile_outward_truth
+        # while outward truth is already active in the same thread.
         if is_outward_truth_compile_active():
             trace.append("outward_truth_supplement_skipped:active_compile_guard")
         else:
@@ -1108,7 +1111,7 @@ def _derive_main_view(narrative: SystemStateNarrative) -> Dict[str, Any]:
         OPERABILITY_OPERABLE,
         OPERABILITY_DEGRADED,
     }
-    if dispatch and dispatch.state.startswith("none_ready"):
+    if dispatch and str(dispatch.state or "").startswith("none_ready"):
         can_do_useful_work = False
 
     limiters: List[str] = []

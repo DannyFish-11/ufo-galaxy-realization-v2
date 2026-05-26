@@ -131,6 +131,8 @@ from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.OutwardRuntimeTruth")
+# Thread-local compile-depth guard used to prevent recursive outward truth
+# compilation loops when downstream builders indirectly call compile_outward_truth.
 _COMPILE_STATE = threading.local()
 
 # ===========================================================================

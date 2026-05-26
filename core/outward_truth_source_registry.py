@@ -594,6 +594,8 @@ def validate_registry_governance() -> Dict[str, Any]:
                     "registered_field_key": entry.field_key,
                 }
             )
+        # Durable records survive restart boundaries; they must carry explicit
+        # revalidation semantics so stale/restored data is not misread as live.
         if entry.is_durable and not entry.requires_revalidation_after_restart:
             violations.append(
                 {

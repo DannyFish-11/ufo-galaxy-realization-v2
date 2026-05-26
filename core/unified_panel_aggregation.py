@@ -1284,6 +1284,8 @@ class UnifiedPanelAggregationService:
         outward = payload.outward_truth if isinstance(payload.outward_truth, dict) else {}
         outward_narrative = outward.get("system_state_narrative")
         if isinstance(outward_narrative, dict) and outward_narrative:
+            # Reuse precompiled outward-truth narrative to avoid parallel semantic
+            # producers and duplicate recomputation inside the panel assembler.
             payload.system_state_narrative = dict(outward_narrative)
             return
 
