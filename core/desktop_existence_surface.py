@@ -661,7 +661,7 @@ class DesktopExistenceSurfaceBuilder:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
 
             runtime = get_desktop_presence_runtime()
-            summary = runtime.presence_summary
+            summary = runtime.presence_summary()
             return SubjectLifecycleSnapshot(
                 dominant_tristate=summary.get("dominant_tristate", "silent"),
                 active_session_count=summary.get("active_session_count", 0),

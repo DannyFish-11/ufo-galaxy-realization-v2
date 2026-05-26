@@ -98,6 +98,11 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from core.desktop_presence_system import (
+    DesktopPresenceStateMachine,
+    build_desktop_presence_system_view,
+)
+
 logger = logging.getLogger("Galaxy.Runtime")
 
 DESKTOP_PRESENCE_RUNTIME_ENTRYPOINT_ROLE: str = "stage_entry"
@@ -289,6 +294,7 @@ class DesktopPresenceRuntime:
         # Active sessions keyed by runtime_session_id.
         # Sessions are removed upon completion to avoid unbounded growth.
         self._active_sessions: Dict[str, RuntimeSession] = {}
+        self._presence_state_machine = DesktopPresenceStateMachine()
         logger.info("DesktopPresenceRuntime initialised (Windows desktop runtime shell)")
 
         # PR-17: Shell responsibility — own and initialise the perception source
@@ -455,6 +461,13 @@ class DesktopPresenceRuntime:
 
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
+        self._update_presence_mode(
+            tri_state=rsession.tristate.value,
+            task_active=True,
+            sensing_active=bool(multimodal_context),
+            execution_active=False,
+            user_interaction=source in {"chat", "operator"},
+        )
         self._log_request_start(
             rsession,
             message,
@@ -483,6 +496,13 @@ class DesktopPresenceRuntime:
             ) as lane:
                 # LIMINAL → MANIFEST: OpenClawd has branched; subject enters manifest
                 rsession.advance(TriState.MANIFEST)
+                self._update_presence_mode(
+                    tri_state=rsession.tristate.value,
+                    task_active=True,
+                    sensing_active=bool(multimodal_context),
+                    execution_active=True,
+                    user_interaction=source in {"chat", "operator"},
+                )
 
                 result = await self._dispatch(
                     rsession=rsession,
@@ -523,6 +543,14 @@ class DesktopPresenceRuntime:
         finally:
             # MANIFEST → SILENT: subject returns to rest (even on error)
             rsession.advance(TriState.SILENT)
+            self._update_presence_mode(
+                tri_state=rsession.tristate.value,
+                task_active=False,
+                sensing_active=False,
+                execution_active=False,
+                user_interaction=source in {"chat", "operator"},
+                result_committed=True,
+            )
             self._log_request_end(rsession)
             self._active_sessions.pop(rsession.runtime_session_id, None)
 
@@ -1656,6 +1684,28 @@ class DesktopPresenceRuntime:
             rsession.elapsed_ms(),
         )
 
+    def _update_presence_mode(
+        self,
+        *,
+        tri_state: str,
+        task_active: bool,
+        sensing_active: bool,
+        execution_active: bool,
+        user_interaction: bool,
+        result_committed: bool = False,
+    ) -> None:
+        try:
+            self._presence_state_machine.update(
+                tri_state=tri_state,
+                task_active=task_active,
+                sensing_active=sensing_active,
+                execution_active=execution_active,
+                user_interaction=user_interaction,
+                result_committed=result_committed,
+            )
+        except Exception as exc:
+            logger.debug("presence state machine update failed (non-fatal): %s", exc)
+
     # ------------------------------------------------------------------
     # PR-8 V2: Compact presence summary for operator surfaces
     # ------------------------------------------------------------------
@@ -1705,10 +1755,25 @@ class DesktopPresenceRuntime:
             else:
                 dominant = TriState.SILENT.value
 
+            self._update_presence_mode(
+                tri_state=dominant,
+                task_active=len(sessions) > 0,
+                sensing_active=False,
+                execution_active=counts.get(TriState.MANIFEST.value, 0) > 0,
+                user_interaction=False,
+            )
+            presence_system = build_desktop_presence_system_view(
+                state_machine_snapshot=self._presence_state_machine.snapshot(),
+                dominant_tristate=dominant,
+                tristate_distribution=dict(counts),
+                active_session_count=len(sessions),
+            )
+
             return {
                 "active_session_count": len(sessions),
                 "tristate_distribution": dict(counts),
                 "dominant_tristate": dominant,
+                "desktop_presence_system": presence_system,
             }
         except Exception as _err:
             logger.debug(
@@ -1718,6 +1783,12 @@ class DesktopPresenceRuntime:
                 "active_session_count": 0,
                 "tristate_distribution": {},
                 "dominant_tristate": TriState.SILENT.value,
+                "desktop_presence_system": build_desktop_presence_system_view(
+                    state_machine_snapshot=self._presence_state_machine.snapshot(),
+                    dominant_tristate=TriState.SILENT.value,
+                    tristate_distribution={},
+                    active_session_count=0,
+                ),
             }
 
 
