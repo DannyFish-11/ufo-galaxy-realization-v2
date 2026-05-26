@@ -22,11 +22,25 @@ Galaxy Node Fabric Registry — Block-6 / PR-6
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
+
+from core.runtime_truth_governance import (
+    RECOVERY_STATUS_LIVE,
+    RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
+    RECOVERY_STATUS_REVALIDATED,
+    TRUTH_GRADE_DURABLE,
+    TRUTH_GRADE_RECOVERABLE,
+    TRUTH_GRADE_REVALIDATED,
+    TRUTH_GRADE_RUNTIME_ONLY,
+    build_truth_governance,
+    load_json_payload,
+    write_json_atomically,
+)
 
 logger = logging.getLogger("Galaxy.Nodes.NodeFabricRegistry")
 
@@ -36,6 +50,11 @@ logger = logging.getLogger("Galaxy.Nodes.NodeFabricRegistry")
 
 _DEFAULT_HEARTBEAT_TTL: float = 60.0      # 节点心跳超时（秒）
 _DEFAULT_STALE_CAP_TTL: float = 300.0     # 能力条目过期（秒）；0 = 永不过期
+_NODE_FABRIC_STATE_PATH_ENV: str = "GALAXY_NODE_FABRIC_REGISTRY_STATE_PATH"
+_DEFAULT_NODE_FABRIC_STATE_PATH: str = os.getenv(
+    _NODE_FABRIC_STATE_PATH_ENV,
+    "data/runtime/node_fabric_registry_state.json",
+)
 
 
 class NodeStatus(str, Enum):
@@ -266,6 +285,7 @@ class NodeInfo:
             "health_score": round(self.health_score(), 4),
             "error_count": self.error_count,
             "heartbeat_count": self.heartbeat_count,
+            "truth_governance": dict(self.metadata.get("_truth_governance") or {}),
         }
 
 
@@ -317,6 +337,9 @@ class NodeFabricRegistry:
         self._rw_lock = threading.RLock()
         self._heartbeat_ttl = heartbeat_ttl
         self._stale_cap_ttl = stale_cap_ttl
+        self._state_path = _DEFAULT_NODE_FABRIC_STATE_PATH
+        self._last_recovered_at: Optional[float] = None
+        self._revalidation_pending: Set[str] = set()
         self._initialized = True
 
         logger.info(
@@ -332,7 +355,9 @@ class NodeFabricRegistry:
         """注册一个节点（幂等：重复注册将覆盖）。"""
         with self._rw_lock:
             is_update = node_info.node_id in self._nodes
+            self._mark_node_live(node_info)
             self._nodes[node_info.node_id] = node_info
+            self._revalidation_pending.discard(node_info.node_id)
             logger.info(
                 "Node %s: %s",
                 "updated" if is_update else "registered",
@@ -344,16 +369,19 @@ class NodeFabricRegistry:
                     "capabilities": node_info.capability_names(),
                 },
             )
+        self.persist_durable_state()
 
     def unregister(self, node_id: str) -> bool:
         """注销节点。返回 True 表示节点存在并已移除。"""
         with self._rw_lock:
             removed = self._nodes.pop(node_id, None)
+            self._revalidation_pending.discard(node_id)
             if removed:
                 logger.info(
                     "Node unregistered: %s", node_id,
                     extra={"event": "node_unregister", "node_id": node_id},
                 )
+                self.persist_durable_state()
                 return True
             logger.debug("unregister: node not found: %s", node_id)
             return False
@@ -390,6 +418,9 @@ class NodeFabricRegistry:
                 merged = dict(node.metadata)
                 merged.update(metadata_patch)
                 node.metadata = merged
+            self._mark_node_revalidated(node)
+            self._revalidation_pending.discard(node_id)
+            self.persist_durable_state()
             return True
 
     def update_status(self, node_id: str, status: NodeStatus) -> bool:
@@ -399,6 +430,8 @@ class NodeFabricRegistry:
             if node is None:
                 return False
             node.status = status
+            self._mark_node_revalidated(node)
+            self.persist_durable_state()
             return True
 
     def record_error(self, node_id: str) -> None:
@@ -409,6 +442,7 @@ class NodeFabricRegistry:
                 node.error_count += 1
                 if node.error_count >= 10:
                     node.status = NodeStatus.UNHEALTHY
+                self.persist_durable_state()
 
     def mark_offline_if_stale(self) -> List[str]:
         """扫描所有节点，心跳超时的标记为 OFFLINE。返回被标记的节点 ID 列表。"""
@@ -426,6 +460,7 @@ class NodeFabricRegistry:
                 "Marked %d stale node(s) as OFFLINE: %s", len(stale), stale,
                 extra={"event": "nodes_offline", "node_ids": stale},
             )
+            self.persist_durable_state()
         return stale
 
     # ──────────────────────────────────────────────────────────────────
@@ -733,7 +768,212 @@ class NodeFabricRegistry:
             "by_status": by_status,
             "by_role": by_role,
             "by_architectural_class": by_architectural_class,
+            "truth_governance": build_truth_governance(
+                TRUTH_GRADE_DURABLE,
+                source="core.nodes.node_fabric_registry.NodeFabricRegistry",
+                recovery_status=(
+                    RECOVERY_STATUS_REVALIDATED
+                    if self._last_recovered_at and not self._revalidation_pending
+                    else RECOVERY_STATUS_RECOVERED_UNREVALIDATED
+                    if self._last_recovered_at
+                    else RECOVERY_STATUS_LIVE
+                ),
+                revalidation_required=bool(self._revalidation_pending),
+                degraded=bool(self._revalidation_pending),
+                field_truth_grades={
+                    "node_membership": (
+                        TRUTH_GRADE_RECOVERABLE if self._last_recovered_at else TRUTH_GRADE_DURABLE
+                    ),
+                    "node_liveness": (
+                        TRUTH_GRADE_REVALIDATED if self._last_recovered_at else TRUTH_GRADE_RUNTIME_ONLY
+                    ),
+                },
+                notes=[
+                    "Node registry membership and ownership facts are durably persisted.",
+                    "Heartbeat-derived liveness is never restored as live truth without revalidation.",
+                ],
+                extra={
+                    "durable_state_path": self._state_path,
+                    "recovered_at": self._last_recovered_at,
+                    "revalidation_pending_count": len(self._revalidation_pending),
+                },
+            ),
         }
+
+    def persist_durable_state(self) -> None:
+        payload = self._build_durable_payload()
+        write_json_atomically(self._state_path, payload)
+
+    def restore_durable_state(self) -> int:
+        payload = load_json_payload(self._state_path)
+        node_payloads = payload.get("nodes")
+        if not isinstance(node_payloads, list):
+            return 0
+        restored = 0
+        recovered_at = time.time()
+        with self._rw_lock:
+            for item in node_payloads:
+                node = self._deserialize_node_info(item)
+                if node is None or node.node_id in self._nodes:
+                    continue
+                self._mark_node_recovered(node, recovered_at)
+                self._nodes[node.node_id] = node
+                self._revalidation_pending.add(node.node_id)
+                restored += 1
+            if restored:
+                self._last_recovered_at = recovered_at
+        return restored
+
+    def clear_durable_state(self) -> None:
+        try:
+            if os.path.exists(self._state_path):
+                os.remove(self._state_path)
+        except OSError:
+            logger.warning("NodeFabricRegistry durable clear failed: %s", self._state_path)
+
+    def _build_durable_payload(self) -> Dict[str, Any]:
+        with self._rw_lock:
+            nodes = [self._serialize_node_info(node) for node in self._nodes.values()]
+            recovered_at = self._last_recovered_at
+            pending = sorted(self._revalidation_pending)
+        return {
+            "contract_version": "node_fabric_registry_durable_v1",
+            "persisted_at": time.time(),
+            "nodes": nodes,
+            "last_recovered_at": recovered_at,
+            "revalidation_pending_node_ids": pending,
+        }
+
+    def _serialize_node_info(self, node: NodeInfo) -> Dict[str, Any]:
+        return {
+            "node_id": node.node_id,
+            "role": node.role.value if isinstance(node.role, NodeRole) else str(node.role),
+            "architectural_class": (
+                node.architectural_class.value
+                if isinstance(node.architectural_class, NodeArchitecturalClass)
+                else str(node.architectural_class)
+            ),
+            "host": node.host,
+            "port": node.port,
+            "status": node.status.value if isinstance(node.status, NodeStatus) else str(node.status),
+            "capabilities": [
+                {
+                    "name": cap.name,
+                    "description": cap.description,
+                    "parameters": dict(cap.parameters),
+                    "registered_at": cap.registered_at,
+                }
+                for cap in node.capabilities
+            ],
+            "dependencies": list(node.dependencies),
+            "metadata": dict(node.metadata),
+            "activation_policy": node.activation_policy,
+            "runtime_host": node.runtime_host,
+            "session_owner": node.session_owner,
+            "execution_owner": node.execution_owner,
+            "participant_id": node.participant_id,
+            "device_id": node.device_id,
+            "last_known_status": node.status.value if isinstance(node.status, NodeStatus) else str(node.status),
+            "last_observed_wallclock": time.time(),
+        }
+
+    def _deserialize_node_info(self, payload: Any) -> Optional[NodeInfo]:
+        if not isinstance(payload, dict):
+            return None
+        try:
+            capabilities = [
+                NodeCapability(
+                    name=str(cap.get("name") or ""),
+                    description=str(cap.get("description") or ""),
+                    parameters=dict(cap.get("parameters") or {}),
+                    registered_at=float(cap.get("registered_at") or time.monotonic()),
+                )
+                for cap in (payload.get("capabilities") or [])
+                if isinstance(cap, dict) and str(cap.get("name") or "").strip()
+            ]
+            metadata = dict(payload.get("metadata") or {})
+            metadata["recovered_last_known_status"] = str(payload.get("last_known_status") or "")
+            metadata["last_observed_wallclock"] = payload.get("last_observed_wallclock")
+            return NodeInfo(
+                node_id=str(payload.get("node_id") or ""),
+                role=NodeRole(str(payload.get("role") or NodeRole.WORKER.value)),
+                architectural_class=NodeArchitecturalClass(
+                    str(payload.get("architectural_class") or NodeArchitecturalClass.CAPABILITY_NODE.value)
+                ),
+                host=str(payload.get("host") or "localhost"),
+                port=int(payload.get("port") or 0),
+                status=NodeStatus.OFFLINE,
+                capabilities=capabilities,
+                dependencies=list(payload.get("dependencies") or []),
+                metadata=metadata,
+                activation_policy=payload.get("activation_policy"),
+                runtime_host=str(payload.get("runtime_host") or "v2_control_plane"),
+                session_owner=str(payload.get("session_owner") or ""),
+                execution_owner=str(payload.get("execution_owner") or ""),
+                participant_id=str(payload.get("participant_id") or ""),
+                device_id=str(payload.get("device_id") or ""),
+                registered_at=time.monotonic(),
+                last_heartbeat=time.monotonic() - self._heartbeat_ttl - 1.0,
+            )
+        except Exception:
+            return None
+
+    def _mark_node_live(self, node: NodeInfo) -> None:
+        metadata = dict(node.metadata)
+        metadata["_truth_governance"] = build_truth_governance(
+            TRUTH_GRADE_DURABLE,
+            source="core.nodes.node_fabric_registry.NodeFabricRegistry",
+            recovery_status=RECOVERY_STATUS_LIVE,
+            revalidation_required=False,
+            degraded=False,
+            field_truth_grades={
+                "node_membership": TRUTH_GRADE_DURABLE,
+                "node_liveness": TRUTH_GRADE_RUNTIME_ONLY,
+            },
+            notes=[
+                "Node membership/ownership facts are durable registry truth.",
+                "Heartbeat and health remain runtime-only and must not be interpreted as cross-restart live truth.",
+            ],
+        )
+        node.metadata = metadata
+
+    def _mark_node_recovered(self, node: NodeInfo, recovered_at: float) -> None:
+        metadata = dict(node.metadata)
+        metadata["_truth_governance"] = build_truth_governance(
+            TRUTH_GRADE_RECOVERABLE,
+            source="core.nodes.node_fabric_registry.NodeFabricRegistry",
+            recovery_status=RECOVERY_STATUS_RECOVERED_UNREVALIDATED,
+            revalidation_required=True,
+            degraded=True,
+            field_truth_grades={
+                "node_membership": TRUTH_GRADE_RECOVERABLE,
+                "node_liveness": TRUTH_GRADE_REVALIDATED,
+            },
+            notes=[
+                "Recovered nodes preserve registry identity and ownership facts.",
+                "Recovered liveness is explicitly demoted until a fresh heartbeat or status update arrives.",
+            ],
+            extra={"recovered_at": recovered_at},
+        )
+        node.metadata = metadata
+
+    def _mark_node_revalidated(self, node: NodeInfo) -> None:
+        metadata = dict(node.metadata)
+        metadata["_truth_governance"] = build_truth_governance(
+            TRUTH_GRADE_DURABLE,
+            source="core.nodes.node_fabric_registry.NodeFabricRegistry",
+            recovery_status=RECOVERY_STATUS_REVALIDATED,
+            revalidation_required=False,
+            degraded=False,
+            field_truth_grades={
+                "node_membership": TRUTH_GRADE_DURABLE,
+                "node_liveness": TRUTH_GRADE_REVALIDATED,
+            },
+            notes=[
+                "Recovered registry facts have been revalidated by fresh runtime activity.",
+            ],
+        )
+        node.metadata = metadata
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -840,6 +1080,11 @@ def get_node_fabric_registry() -> NodeFabricRegistry:
     return NodeFabricRegistry()
 
 
-def reset_node_fabric_registry() -> None:
+def reset_node_fabric_registry(*, clear_durable_state: bool = False) -> None:
     """重置 NodeFabricRegistry 单例（测试用）。"""
+    if clear_durable_state and NodeFabricRegistry._instance is not None:
+        try:
+            NodeFabricRegistry._instance.clear_durable_state()
+        except Exception:
+            pass
     NodeFabricRegistry._instance = None

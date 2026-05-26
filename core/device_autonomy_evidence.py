@@ -19,6 +19,13 @@ from core.canonical_cross_repo_evidence_pipeline import (
 from core.canonical_task import get_canonical_task_runtime
 from core.delegated_runtime_execution_tracker import build_execution_tracking_snapshot
 from core.device_operational_support import get_device_operational_support
+from core.runtime_truth_governance import (
+    TRUTH_GRADE_DURABLE,
+    TRUTH_GRADE_PROJECTION,
+    TRUTH_GRADE_REVALIDATED,
+    TRUTH_GRADE_RUNTIME_ONLY,
+    build_truth_governance,
+)
 
 DEVICE_AUTONOMY_EVIDENCE_AUTHORITY: str = (
     "DEVICE_AUTONOMY_EVIDENCE_AUTHORITY::"
@@ -268,6 +275,27 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
             "evidence_inconsistent": evidence_inconsistent,
             "demotion_reasons": demotion_reasons,
         },
+        "truth_governance": build_truth_governance(
+            TRUTH_GRADE_PROJECTION,
+            source="core.device_autonomy_evidence.classify_device_autonomy",
+            recovery_status="live",
+            revalidation_required=bool(
+                tracker["recovered_unrevalidated"] or tracker["recovered_stale"]
+            ),
+            degraded=bool(evidence_stale or evidence_inconsistent),
+            field_truth_grades={
+                "autonomy_classification": TRUTH_GRADE_PROJECTION,
+                "support": TRUTH_GRADE_DURABLE,
+                "allocation": TRUTH_GRADE_DURABLE,
+                "participation": TRUTH_GRADE_RUNTIME_ONLY,
+                "events": TRUTH_GRADE_RUNTIME_ONLY,
+                "tracker_recovery": TRUTH_GRADE_REVALIDATED,
+            },
+            notes=[
+                "Autonomy class is an outward projection backed by mixed truth grades.",
+                "Recovered delegated tracking never promotes strong autonomy until revalidated.",
+            ],
+        ),
         "authority": DEVICE_AUTONOMY_EVIDENCE_AUTHORITY,
     }
 
@@ -292,4 +320,3 @@ def build_device_autonomy_report(device_ids: Optional[List[str]] = None) -> Dict
         ],
         "autonomy_classification": classes,
     }
-

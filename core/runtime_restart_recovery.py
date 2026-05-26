@@ -406,6 +406,13 @@ class RuntimeRecoveryReport:
     hybrid_executions_interrupted: int = 0
     hybrid_executions_restored: int = 0
     hybrid_remote_partial_invalidated: int = 0
+    node_registry_entries_restored: int = 0
+    node_registry_revalidation_pending: int = 0
+    network_graph_nodes_restored: int = 0
+    network_graph_edges_restored: int = 0
+    topology_nodes_restored: int = 0
+    topology_edges_restored: int = 0
+    degraded_recovery_surfaces: List[str] = field(default_factory=list)
     inflight_tasks_recovered: int = 0
     inflight_tasks_resumable: int = 0
     inflight_tasks_replay_only: int = 0
@@ -440,6 +447,13 @@ class RuntimeRecoveryReport:
             "hybrid_executions_interrupted": self.hybrid_executions_interrupted,
             "hybrid_executions_restored": self.hybrid_executions_restored,
             "hybrid_remote_partial_invalidated": self.hybrid_remote_partial_invalidated,
+            "node_registry_entries_restored": self.node_registry_entries_restored,
+            "node_registry_revalidation_pending": self.node_registry_revalidation_pending,
+            "network_graph_nodes_restored": self.network_graph_nodes_restored,
+            "network_graph_edges_restored": self.network_graph_edges_restored,
+            "topology_nodes_restored": self.topology_nodes_restored,
+            "topology_edges_restored": self.topology_edges_restored,
+            "degraded_recovery_surfaces": list(self.degraded_recovery_surfaces),
             "inflight_tasks_recovered": self.inflight_tasks_recovered,
             "inflight_tasks_resumable": self.inflight_tasks_resumable,
             "inflight_tasks_replay_only": self.inflight_tasks_replay_only,
@@ -560,6 +574,9 @@ class RuntimeRestartRecoveryCoordinator:
             "are NOT recovered. See WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.",
             "Device heartbeat state is NOT recovered. Devices re-register on "
             "reconnect.",
+            "Capability/readiness/participation liveness is NOT durably recovered as "
+            "live truth. Recovered node/topology views are explicitly degraded until "
+            "fresh runtime signals revalidate them.",
             "Hybrid execution transport handles (A2A connections, GUI handles, "
             "VLM context) are intentionally ephemeral and are NOT recovered. "
             "See HYBRID_TRANSPORT_HANDLES_ARE_EPHEMERAL_POLICY.",
@@ -588,6 +605,36 @@ class RuntimeRestartRecoveryCoordinator:
         except Exception as exc:
             err = f"BodyMesh recovery failed: {exc}"
             logger.exception("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 2b: Recover canonical node registry membership/ownership facts.
+        # ----------------------------------------------------------------
+        try:
+            self._recover_node_registry(report)
+        except Exception as exc:
+            err = f"Node registry recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 2c: Recover network graph as degraded/recoverable view truth.
+        # ----------------------------------------------------------------
+        try:
+            self._recover_network_graph(report)
+        except Exception as exc:
+            err = f"Network graph recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
+            report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 2d: Recover topology runtime as degraded/recoverable view truth.
+        # ----------------------------------------------------------------
+        try:
+            self._recover_network_topology(report)
+        except Exception as exc:
+            err = f"Network topology recovery failed: {exc}"
+            logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
 
         # ----------------------------------------------------------------
@@ -714,6 +761,9 @@ class RuntimeRestartRecoveryCoordinator:
         logger.info(
             "RuntimeRestartRecovery: completed recovery_id=%s "
             "mesh_sessions=%d body_entries=%d "
+            "node_registry_restored=%d node_registry_pending=%d "
+            "network_graph=(nodes=%d edges=%d) "
+            "topology=(nodes=%d edges=%d) "
             "hybrid_interrupted=%d hybrid_restored=%d hybrid_invalidated=%d "
             "inflight_recovered=%d (resumable=%d replay=%d reissue=%d terminal=%d) "
             "truth_restored=%d continuation_reconciled=%d "
@@ -724,6 +774,12 @@ class RuntimeRestartRecoveryCoordinator:
             report.recovery_id,
             report.mesh_sessions_recovered,
             report.body_mesh_entries_restored,
+            report.node_registry_entries_restored,
+            report.node_registry_revalidation_pending,
+            report.network_graph_nodes_restored,
+            report.network_graph_edges_restored,
+            report.topology_nodes_restored,
+            report.topology_edges_restored,
             report.hybrid_executions_interrupted,
             report.hybrid_executions_restored,
             report.hybrid_remote_partial_invalidated,
@@ -742,6 +798,38 @@ class RuntimeRestartRecoveryCoordinator:
             len(report.errors),
         )
         return report
+
+    def _recover_node_registry(self, report: RuntimeRecoveryReport) -> None:
+        from core.nodes.node_fabric_registry import get_node_fabric_registry
+
+        registry = get_node_fabric_registry()
+        restored = registry.restore_durable_state()
+        report.node_registry_entries_restored = int(restored or 0)
+        metrics = registry.get_metrics()
+        truth = metrics.get("truth_governance") if isinstance(metrics, dict) else {}
+        report.node_registry_revalidation_pending = int(
+            (truth or {}).get("revalidation_pending_count") or 0
+        )
+        if report.node_registry_revalidation_pending:
+            report.degraded_recovery_surfaces.append("node_registry")
+
+    def _recover_network_graph(self, report: RuntimeRecoveryReport) -> None:
+        from core.network_graph_runtime import get_network_graph_runtime
+
+        restored = get_network_graph_runtime().restore_durable_state()
+        report.network_graph_nodes_restored = int((restored or {}).get("nodes_restored") or 0)
+        report.network_graph_edges_restored = int((restored or {}).get("edges_restored") or 0)
+        if report.network_graph_nodes_restored or report.network_graph_edges_restored:
+            report.degraded_recovery_surfaces.append("network_graph_runtime")
+
+    def _recover_network_topology(self, report: RuntimeRecoveryReport) -> None:
+        from core.network_topology_runtime import get_network_topology_runtime
+
+        restored = get_network_topology_runtime().restore_durable_state()
+        report.topology_nodes_restored = int((restored or {}).get("nodes_restored") or 0)
+        report.topology_edges_restored = int((restored or {}).get("edges_restored") or 0)
+        if report.topology_nodes_restored or report.topology_edges_restored:
+            report.degraded_recovery_surfaces.append("network_topology_runtime")
 
     def _recover_mesh_sessions(self, report: RuntimeRecoveryReport) -> None:
         """Recover non-terminal mesh session states."""

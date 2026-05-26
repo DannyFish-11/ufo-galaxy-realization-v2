@@ -41,6 +41,13 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from core.runtime_truth_governance import (
+    TRUTH_GRADE_DURABLE,
+    TRUTH_GRADE_PROJECTION,
+    TRUTH_GRADE_RUNTIME_ONLY,
+    build_truth_governance,
+)
+
 logger = logging.getLogger("Galaxy.DeviceDispatchReadinessSurface")
 
 # ---------------------------------------------------------------------------
@@ -195,6 +202,21 @@ def get_device_dispatch_readiness(
 
     payload["surface_authority"] = DEVICE_DISPATCH_READINESS_SURFACE_AUTHORITY
     payload["evaluated_at"] = time.time()
+    payload["truth_governance"] = build_truth_governance(
+        TRUTH_GRADE_PROJECTION,
+        source="core.device_dispatch_readiness_surface.get_device_dispatch_readiness",
+        recovery_status="live",
+        field_truth_grades={
+            "dispatch_verdict": TRUTH_GRADE_PROJECTION,
+            "operational_support_status": TRUTH_GRADE_DURABLE,
+            "attachment_state": TRUTH_GRADE_RUNTIME_ONLY,
+            "transport_alive": TRUTH_GRADE_RUNTIME_ONLY,
+        },
+        notes=[
+            "Dispatch readiness is a live control-plane projection, not durable canonical truth.",
+            "Operational support is durable policy truth; attachment and transport are runtime-only observations.",
+        ],
+    )
     return payload
 
 
@@ -290,6 +312,17 @@ def get_dispatch_readiness_panel(
         "compiled_at": time.time(),
         "authority": DEVICE_DISPATCH_READINESS_SURFACE_AUTHORITY,
         "policy": DEVICE_DISPATCH_READINESS_SURFACE_POLICY,
+        "truth_governance": build_truth_governance(
+            TRUTH_GRADE_PROJECTION,
+            source="core.device_dispatch_readiness_surface.get_dispatch_readiness_panel",
+            recovery_status="live",
+            field_truth_grades={
+                "panel_summary": TRUTH_GRADE_PROJECTION,
+                "operational_support_status": TRUTH_GRADE_DURABLE,
+                "attachment_state": TRUTH_GRADE_RUNTIME_ONLY,
+                "transport_alive": TRUTH_GRADE_RUNTIME_ONLY,
+            },
+        ),
     }
 
 
