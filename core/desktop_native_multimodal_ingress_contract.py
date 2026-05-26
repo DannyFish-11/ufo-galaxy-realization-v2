@@ -116,6 +116,11 @@ def _has_foreground_context(screen_ctx: Dict[str, Any], kwargs: Mapping[str, Any
 
 
 def _has_continuous_stream(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) -> bool:
+    """Return True when stream markers indicate active continuous stream ingress.
+
+    The bool() normalization is intentional: explicit falsy markers
+    (False/0/"") mean stream-absent and are not treated as unknown.
+    """
     metadata = _as_mapping(mm_dict.get("metadata"))
     for key in ("continuous_stream", "stream_session_active", "realtime_stream_active"):
         # Intentional bool() normalization: explicit falsy markers
