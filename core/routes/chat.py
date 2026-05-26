@@ -71,6 +71,11 @@ from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
 
+FOREGROUND_BLOCKED_PREFIX = "当前操作受阻："
+FOREGROUND_CONFIRMATION_EXPLANATION = "该操作需要你的确认后才能继续执行。"
+FOREGROUND_STATUS_DONE = "操作已完成"
+FOREGROUND_STATUS_NOT_DONE = "操作未完成"
+
 # ── 动作意图判断关键词集合 ──────────────────────────────────────────────────────
 _ACTION_KEYWORDS = frozenset([
     # 操作动词
@@ -104,15 +109,20 @@ def _is_action_intent(message: str) -> bool:
 def _is_operator_request(req: ChatRequest) -> bool:
     """Resolve whether this request is operator/audit facing."""
     context = req.context or []
+    # Iterate newest→oldest so the latest explicit audience hint wins.
     for item in reversed(context):
         if not isinstance(item, dict):
             continue
         audience = str(item.get("response_audience", "")).strip().lower()
         if audience in {"operator", "audit", "diagnostic"}:
             return True
+        if audience in {"user", "foreground", "default"}:
+            return False
         operator_mode = str(item.get("operator_mode", "")).strip().lower()
         if operator_mode in {"1", "true", "yes", "operator"}:
             return True
+        if operator_mode in {"0", "false", "no", "user"}:
+            return False
     return False
 
 
@@ -124,9 +134,9 @@ def _derive_foreground_response(
 ) -> str:
     """Enforce minimal necessary explanation for foreground users."""
     if blocker_summary:
-        return f"当前操作受阻：{blocker_summary}"
+        return f"{FOREGROUND_BLOCKED_PREFIX}{blocker_summary}"
     if confirmation_needed:
-        return "该操作需要你的确认后才能继续执行。"
+        return FOREGROUND_CONFIRMATION_EXPLANATION
     return default_response
 
 
@@ -146,6 +156,9 @@ def _apply_hidden_visible_boundary(
             continue
         visible_metadata[key] = value
 
+    # Prefer canonical key `blocker_summary`; keep legacy fallback
+    # `execution_blocker_summary` for backward compatibility until callers
+    # converge on the canonical key.
     blocker_summary = str(
         visible_metadata.get("blocker_summary")
         or visible_metadata.get("execution_blocker_summary")
@@ -155,15 +168,14 @@ def _apply_hidden_visible_boundary(
     current_presence_mode = (
         str(visible_metadata.get("presence_mode", "")).strip() or "unknown"
     )
-    current_action_state = (
-        "blocked"
-        if blocker_summary
-        else "awaiting_confirmation"
-        if confirmation_needed
-        else "completed"
-        if result.get("success", False)
-        else "failed"
-    )
+    if blocker_summary:
+        current_action_state = "blocked"
+    elif confirmation_needed:
+        current_action_state = "awaiting_confirmation"
+    elif result.get("success", False):
+        current_action_state = "completed"
+    else:
+        current_action_state = "failed"
     visible_action_surface = {
         "current_presence_mode": current_presence_mode,
         "current_action_state": current_action_state,
@@ -173,7 +185,9 @@ def _apply_hidden_visible_boundary(
         "confirmation_needed": confirmation_needed,
         "lightweight_status_feedback": visible_metadata.get(
             "lightweight_status_feedback",
-            "操作已完成" if result.get("success", False) else "操作未完成",
+            FOREGROUND_STATUS_DONE
+            if result.get("success", False)
+            else FOREGROUND_STATUS_NOT_DONE,
         ),
     }
     if blocker_summary or confirmation_needed:
