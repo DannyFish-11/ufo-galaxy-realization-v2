@@ -347,6 +347,23 @@ class UnifiedPanelPayload:
         ),
     )
 
+    # ── Unified system-state narrative (focused convergence pass) ────────
+    # A coherent 7-dimension narrative that answers: what state, what can it
+    # do, what limits it, and why — built from existing canonical sources.
+    # Dimensions: overall_runtime_state, operating_structure,
+    # task_execution_state, device_dispatch_support_state,
+    # autonomy_participation_state, topology_allocation_relations,
+    # recovery_degradation_blockage.
+    # Empty dict when the narrative module is unavailable.
+    system_state_narrative: Dict[str, Any] = field(default_factory=dict)
+
+    # ── Truth source registry snapshot (focused convergence pass) ────────
+    # A machine-readable registry mapping each key outward surface field to
+    # its authoritative canonical source.  Allows operators to trace any
+    # surface value back to the module/substrate that produced it.
+    # Empty dict when the registry module is unavailable.
+    truth_source_registry: Dict[str, Any] = field(default_factory=dict)
+
     # ── Provenance ────────────────────────────────────────────────────────
     _source: str = UNIFIED_PANEL_AGGREGATION_AUTHORITY
 
@@ -405,6 +422,10 @@ class UnifiedPanelPayload:
             "truth_surface_semantics": dict(self.truth_surface_semantics),
             "system_reality_checkpoint": dict(self.system_reality_checkpoint),
             "authority_source_fingerprint": dict(self.authority_source_fingerprint),
+            # unified system-state narrative (focused convergence pass)
+            "system_state_narrative": dict(self.system_state_narrative),
+            # truth source registry (focused convergence pass)
+            "truth_source_registry": dict(self.truth_source_registry),
             # provenance
             "_source": self._source,
         }
@@ -552,6 +573,18 @@ class UnifiedPanelAggregationService:
             self._fill_system_reality_checkpoint(payload)
         except Exception as exc:  # pragma: no cover
             logger.debug("build_payload: system reality checkpoint fill failed: %s", exc)
+
+        # 17. Unified system-state narrative (focused convergence pass).
+        try:
+            self._fill_system_state_narrative(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: system state narrative fill failed: %s", exc)
+
+        # 18. Truth source registry snapshot (focused convergence pass).
+        try:
+            self._fill_truth_source_registry(payload)
+        except Exception as exc:  # pragma: no cover
+            logger.debug("build_payload: truth source registry fill failed: %s", exc)
 
         self._annotate_authority_source_fingerprint(payload)
         return payload
@@ -1240,6 +1273,26 @@ class UnifiedPanelAggregationService:
         payload.system_reality_checkpoint = build_system_reality_checkpoint(
             panel_generated_at=payload.generated_at
         )
+
+    def _fill_system_state_narrative(self, payload: UnifiedPanelPayload) -> None:
+        """Fill the unified system-state narrative (focused convergence pass).
+
+        Organises existing canonical runtime truth into a 7-dimension narrative
+        so that panel consumers can understand the full runtime picture without
+        manually stitching together separate sections.
+        """
+        from core.unified_system_state_narrative import build_system_state_narrative
+        narrative = build_system_state_narrative()
+        payload.system_state_narrative = narrative.to_dict()
+
+    def _fill_truth_source_registry(self, payload: UnifiedPanelPayload) -> None:
+        """Fill the truth-source registry snapshot (focused convergence pass).
+
+        Attaches a machine-readable registry that maps each key outward surface
+        field to its authoritative canonical source, enabling operator traceability.
+        """
+        from core.outward_truth_source_registry import build_registry_snapshot
+        payload.truth_source_registry = build_registry_snapshot()
 
 
 # ---------------------------------------------------------------------------

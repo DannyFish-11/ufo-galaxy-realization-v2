@@ -274,6 +274,26 @@ class OutwardRuntimeTruthSnapshot:
     Populated from :func:`~core.multi_device_truth_convergence.converge_multi_device_truth`.
     """
 
+    system_state_narrative: Optional[Dict[str, Any]] = None
+    """Unified system-state narrative — a coherent 7-dimension view of the
+    current runtime state organised from existing canonical sources.
+
+    Dimensions:
+    - overall_runtime_state: Is the system operable and why?
+    - operating_structure: What is the main operating structure?
+    - task_execution_state: What tasks are currently executing?
+    - device_dispatch_support_state: Which devices are dispatchable?
+    - autonomy_participation_state: What autonomy/participation tier?
+    - topology_allocation_relations: What topology/allocation relations?
+    - recovery_degradation_blockage: What recovery/degradation conditions?
+
+    Each dimension carries source, is_canonical_truth, explanation, evidence_basis,
+    and traceability fields so operators can trace each value to its authoritative
+    substrate without manually stitching together panel, operator, and checkpoint data.
+
+    Populated from :func:`~core.unified_system_state_narrative.build_system_state_narrative`.
+    """
+
     # Aggregated source records
     source_records: List[TruthSourceRecord] = field(default_factory=list)
 
@@ -308,6 +328,7 @@ class OutwardRuntimeTruthSnapshot:
             "authority_conflict_summary": self.authority_conflict_summary,
             "durable_mesh_session_facet": self.durable_mesh_session_facet,
             "multi_device_truth_convergence": self.multi_device_truth_convergence,
+            "system_state_narrative": self.system_state_narrative,
             "sources": [
                 {
                     "source_name": r.source_name,
@@ -642,6 +663,36 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
     legacy = sum(1 for r in records if r.signal_class == TruthSignalClass.LEGACY_COMPAT)
     unavailable = sum(1 for r in records if r.signal_class == TruthSignalClass.UNAVAILABLE)
 
+    # ── 7. UnifiedSystemStateNarrative ───────────────────────────────────
+    # Focused convergence pass: compile the 7-dimension system-state narrative
+    # and attach it as a facet so outward surfaces have a single coherent view.
+    t0 = time.monotonic()
+    system_state_narrative_data: Optional[Dict[str, Any]] = None
+    try:
+        from core.unified_system_state_narrative import build_system_state_narrative
+
+        narrative = build_system_state_narrative()
+        system_state_narrative_data = narrative.to_dict()
+        records.append(TruthSourceRecord(
+            source_name="UnifiedSystemStateNarrative",
+            signal_class=TruthSignalClass.PRIMARY,
+            data={"overall_operability": narrative.overall_operability,
+                  "is_fully_sourced": narrative.is_fully_sourced,
+                  "dimension_count": len(narrative.dimensions)},
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+        # Recount after adding the narrative record
+        primary += 1
+    except Exception as exc:
+        notes.append(f"UnifiedSystemStateNarrative unavailable: {exc}")
+        records.append(TruthSourceRecord(
+            source_name="UnifiedSystemStateNarrative",
+            signal_class=TruthSignalClass.UNAVAILABLE,
+            error=str(exc),
+            latency_ms=(time.monotonic() - t0) * 1000,
+        ))
+        unavailable += 1
+
     snapshot = OutwardRuntimeTruthSnapshot(
         snapshot_id=snapshot_id,
         compiled_at=time.time(),
@@ -651,6 +702,7 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         authority_conflict_summary=ace_data,
         durable_mesh_session_facet=mesh_session_data,
         multi_device_truth_convergence=multi_device_truth_convergence_data,
+        system_state_narrative=system_state_narrative_data,
         source_records=records,
         primary_source_count=primary,
         secondary_source_count=secondary,
