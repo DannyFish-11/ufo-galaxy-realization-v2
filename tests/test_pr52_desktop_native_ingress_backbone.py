@@ -113,6 +113,28 @@ def test_backbone_detects_continuous_stream_branch_presence():
     assert "mainline_continuous" in contract["modality_tiers"]
 
 
+def test_backbone_detects_continuous_stream_branch_from_kwargs():
+    contract = build_desktop_native_ingress_backbone(
+        message="observe live desktop stream",
+        source="chat",
+        multimodal_context={},
+        context=[],
+        kwargs={"stream_session_active": True},
+    )
+    assert contract["modalities"]["continuous_stream"]["is_present"] is True
+
+
+def test_backbone_treats_falsy_continuous_stream_markers_as_absent():
+    contract = build_desktop_native_ingress_backbone(
+        message="observe live desktop stream",
+        source="chat",
+        multimodal_context={"metadata": {"continuous_stream": False}},
+        context=[],
+        kwargs={"stream_session_active": 0},
+    )
+    assert contract["modalities"]["continuous_stream"]["is_present"] is False
+
+
 @pytest.mark.asyncio
 async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadata():
     from core.desktop_presence_runtime import DesktopPresenceRuntime

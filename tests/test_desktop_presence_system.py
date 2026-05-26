@@ -114,6 +114,25 @@ class TestRuntimePresenceSummaryProjection:
         assert "formal_roles" in stream_contract
         assert "component_convergence" in stream_contract
 
+    def test_runtime_detects_active_stream_sources_for_presence_sensing(self):
+        with _patch_runtime_import_deps():
+            from core.desktop_presence_runtime import DesktopPresenceRuntime
+            from core.multimodal.perception_source_registry import (
+                PerceptionSourceType,
+                SourceHealthStatus,
+                SourceModality,
+            )
+
+            rt = DesktopPresenceRuntime()
+            stream_id = rt.source_registry.register(
+                source_type=PerceptionSourceType.WEBRTC,
+                modality=SourceModality.VIDEO,
+                source_id="test:webrtc",
+                health=SourceHealthStatus.HEALTHY,
+            )
+            rt.source_registry.mark_active(stream_id)
+            assert rt._has_active_stream_source() is True
+
 
 class TestExistenceSurfaceReadsPresenceSummary:
     def test_subject_lifecycle_reader_calls_presence_summary_method(self):

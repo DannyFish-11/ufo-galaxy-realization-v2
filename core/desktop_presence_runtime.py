@@ -482,11 +482,11 @@ class DesktopPresenceRuntime:
 
         # SILENT → LIMINAL: subject enters liminal phase; OpenClawd cognition begins
         rsession.advance(TriState.LIMINAL)
-        _stream_sensing_active = self._has_active_stream_source()
+        stream_sensing_active = self._has_active_stream_source()
         self._update_presence_mode(
             tri_state=rsession.tristate.value,
             task_active=True,
-            sensing_active=bool(multimodal_context) or _stream_sensing_active,
+            sensing_active=bool(multimodal_context) or stream_sensing_active,
             execution_active=False,
             user_interaction=source in {"chat", "operator"},
         )
@@ -521,7 +521,7 @@ class DesktopPresenceRuntime:
                 self._update_presence_mode(
                     tri_state=rsession.tristate.value,
                     task_active=True,
-                    sensing_active=bool(multimodal_context) or _stream_sensing_active,
+                    sensing_active=bool(multimodal_context) or stream_sensing_active,
                     execution_active=True,
                     user_interaction=source in {"chat", "operator"},
                 )
@@ -1119,17 +1119,11 @@ class DesktopPresenceRuntime:
         """Return True when any stream-capable source is currently active."""
         try:
             from core.multimodal.perception_source_registry import (
-                PerceptionSourceType,
+                STREAM_CAPABLE_SOURCE_TYPES,
             )
 
-            stream_types = {
-                PerceptionSourceType.WEBRTC,
-                PerceptionSourceType.REMOTE_CAMERA,
-                PerceptionSourceType.EXTERNAL_STREAM,
-                PerceptionSourceType.WEBCAM,
-            }
             for source in self._source_registry.active_sources():
-                if source.source_type in stream_types:
+                if source.source_type in STREAM_CAPABLE_SOURCE_TYPES:
                     return True
         except Exception:
             return False
