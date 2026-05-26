@@ -125,12 +125,28 @@ def build_realtime_stream_runtime_status(
     else:
         stream_state = "discrete_fallback"
 
+    # Derived downstream routing signals — consumed by route decision and
+    # canonical perception assembly to drive real behaviour differences.
+    stream_active_for_routing = stream_state in {"active", "degraded"}
+    stream_fallback_required = stream_state in {
+        "reconnecting",
+        "unavailable",
+        "discrete_fallback",
+    }
+    stream_context_available = stream_state == "active"
+
     return {
         "live_stream_session_exists": has_live_session,
         "stream_provider_total": total_count,
         "stream_provider_active": active_count,
         "stream_provider_degraded": degraded_count,
         "stream_state": stream_state,
+        # Stream-driven downstream signals: read by real control points in
+        # openclawd._build_canonical_perception_state and
+        # openclawd._select_multimodal_route (not metadata-only).
+        "stream_active_for_routing": stream_active_for_routing,
+        "stream_fallback_required": stream_fallback_required,
+        "stream_context_available": stream_context_available,
         "stream_usage_governance": {
             "presence": True,
             "perception": True,

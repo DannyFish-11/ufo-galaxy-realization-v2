@@ -1088,6 +1088,17 @@ class DesktopPresenceRuntime:
             return None
 
     @property
+    def stream_runtime_ready(self) -> bool:
+        """Return ``True`` when the WebRTC session manager has been initialised.
+
+        This is the first-class signal that the realtime streaming backbone has
+        an active stream session holder in the runtime.  Downstream control
+        points (e.g. route-decision, perception assembly) read this via the
+        ``stream_runtime_ready`` key in the realtime_streaming_backbone_summary.
+        """
+        return self._webrtc_session_manager is not None
+
+    @property
     def source_registry(self):
         """PR-17: Return the shell-owned :class:`~core.multimodal.perception_source_registry.PerceptionSourceRegistry`.
 
@@ -1201,12 +1212,17 @@ class DesktopPresenceRuntime:
                 self._webrtc_session_manager is not None
             )
             source_snapshot = self.snapshot_source_registry()
+            runtime_status = build_realtime_stream_runtime_status(
+                source_registry_snapshot=source_snapshot,
+                enable_webrtc_session_manager=enable_webrtc,
+            )
+            # Stamp stream_runtime_ready directly from the runtime shell — this
+            # is the first-class signal that a stream manager has been
+            # initialised and is available for real stream handling.
+            runtime_status["stream_runtime_ready"] = self.stream_runtime_ready
             return {
                 "contract": _STREAMING_BACKBONE_CONTRACT,
-                "runtime_status": build_realtime_stream_runtime_status(
-                    source_registry_snapshot=source_snapshot,
-                    enable_webrtc_session_manager=enable_webrtc,
-                ),
+                "runtime_status": runtime_status,
                 "source_registry_snapshot": source_snapshot,
             }
         except Exception as _err:

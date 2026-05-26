@@ -2227,6 +2227,23 @@ class OpenClawd:
                 reasons.append(f"continuous_stream_state={stream_state}")
                 perception["degradation_reasons"] = reasons
 
+            # When the stream backbone signals that a live stream is active
+            # for routing, inject ``continuous_stream`` into the canonical
+            # active_modalities so downstream control (route decision, context
+            # assembly) sees the stream as a real perception input — not only
+            # when ingress backbone carries the modality explicitly.
+            stream_active_for_routing: bool = bool(
+                isinstance(stream_runtime_status, dict)
+                and stream_runtime_status.get("stream_active_for_routing")
+            )
+            if stream_active_for_routing:
+                active_modalities = list(perception.get("active_modalities", []))
+                if "continuous_stream" not in active_modalities:
+                    active_modalities.append("continuous_stream")
+                perception["active_modalities"] = active_modalities
+                perception["has_continuous_perception"] = True
+                perception["stream_active_for_routing"] = True
+
             return perception
         except Exception as _cps_err:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
@@ -2528,10 +2545,27 @@ class OpenClawd:
             _eligibility_summary = "readiness_assessment_unavailable"
             _eligibility_reason = "unknown"
 
-        if ingress_guidance["continuous_stream_present"] and ingress_guidance["stream_state"] in {
-            "reconnecting",
-            "unavailable",
-        }:
+        # Read stream_fallback_required directly from the stream status dict — this is
+        # the explicit downstream signal added by build_realtime_stream_runtime_status()
+        # so that route decisions consume a named signal rather than re-deriving state.
+        _stream_fallback_required: bool = bool(
+            isinstance(stream_runtime_status, dict)
+            and stream_runtime_status.get("stream_fallback_required")
+        )
+        _stream_state_for_log = (
+            (stream_runtime_status or {}).get("stream_state")
+            if isinstance(stream_runtime_status, dict)
+            else ingress_guidance.get("stream_state")
+        )
+
+        # Force discrete fallback when continuous stream is present but unhealthy.
+        # Two complementary checks share the same gate on continuous_stream_present:
+        # (a) legacy state-based check (reconnecting / unavailable from ingress guidance),
+        # (b) explicit stream_fallback_required signal from build_realtime_stream_runtime_status.
+        if ingress_guidance["continuous_stream_present"] and (
+            ingress_guidance["stream_state"] in {"reconnecting", "unavailable"}
+            or _stream_fallback_required
+        ):
             return _with_ingress_strategy(
                 {
                     "route_type": "text_only",
@@ -2539,10 +2573,11 @@ class OpenClawd:
                     "provider": "none",
                     "model": "none",
                     "route_reason": (
-                        f"continuous_stream_state={ingress_guidance['stream_state']} degraded_to=discrete_fallback"
+                        f"continuous_stream_state={_stream_state_for_log} degraded_to=discrete_fallback"
                     ),
-                    "fallback_reason": (f"stream_state={ingress_guidance['stream_state']} discrete_fallback_required"),
+                    "fallback_reason": (f"stream_state={_stream_state_for_log} discrete_fallback_required"),
                     "active_modalities": active_modalities,
+                    "stream_fallback_required": True,
                 }
             )
 
