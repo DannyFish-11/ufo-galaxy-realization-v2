@@ -46,7 +46,7 @@ Functions::
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Authority sentinel
@@ -514,6 +514,36 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Governance constraints (refinement pass)
+# ---------------------------------------------------------------------------
+
+_REQUIRED_SURFACE_CONTRACT_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "unified_panel": (
+        "operator.panel_unified",
+        "readiness.verdict",
+        "device_support.dispatch_readiness",
+        "autonomy.device_class",
+        "topology.galaxy_tree",
+        "recovery.delegated_flow_state",
+    ),
+    "outward_runtime_truth": (
+        "operator.snapshot",
+        "readiness.verdict",
+        "allocation.records",
+        "android.execution_phase",
+        "recovery.delegated_flow_state",
+    ),
+    "system_state_narrative": (
+        "readiness.verdict",
+        "device_support.dispatch_readiness",
+        "autonomy.device_class",
+        "topology.node_relations",
+        "allocation.records",
+        "recovery.delegated_flow_state",
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -548,10 +578,122 @@ def assert_source_for_field(field_key: str, claimed_source: str) -> None:
     )
 
 
+def validate_registry_governance() -> Dict[str, Any]:
+    """Validate internal registry governance constraints.
+
+    The registry is not only documentation: this check enforces baseline
+    consistency expectations so semantic drift is visible in tests/surfaces.
+    """
+    violations: List[Dict[str, Any]] = []
+    for key, entry in _REGISTRY.items():
+        if entry.field_key != key:
+            violations.append(
+                {
+                    "field_key": key,
+                    "issue": "field_key_mismatch",
+                    "registered_field_key": entry.field_key,
+                }
+            )
+        if entry.is_durable and not entry.requires_revalidation_after_restart:
+            violations.append(
+                {
+                    "field_key": key,
+                    "issue": "durable_without_revalidation",
+                }
+            )
+        if entry.is_canonical_truth and not entry.evidence_chain:
+            violations.append(
+                {
+                    "field_key": key,
+                    "issue": "canonical_without_evidence_chain",
+                }
+            )
+        if entry.is_projection and not entry.explanation:
+            violations.append(
+                {
+                    "field_key": key,
+                    "issue": "projection_without_explanation",
+                }
+            )
+
+    return {
+        "is_valid": len(violations) == 0,
+        "violation_count": len(violations),
+        "violations": violations,
+    }
+
+
+def validate_surface_contract(
+    surface_name: str,
+    observed_registry_fields: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    """Validate registry discipline for a named outward surface.
+
+    Parameters
+    ----------
+    surface_name:
+        One of ``unified_panel``, ``outward_runtime_truth``,
+        ``system_state_narrative``.
+    observed_registry_fields:
+        Optional list of field keys that the current surface instance consumed.
+        Any observed field that is not registered is reported as drift.
+    """
+    required = _REQUIRED_SURFACE_CONTRACT_FIELDS.get(surface_name, tuple())
+    violations: List[Dict[str, Any]] = []
+
+    for field_key in required:
+        if field_key not in _REGISTRY:
+            violations.append(
+                {
+                    "issue": "required_field_not_registered",
+                    "field_key": field_key,
+                }
+            )
+
+    if observed_registry_fields is not None:
+        for observed in observed_registry_fields:
+            if observed not in _REGISTRY:
+                violations.append(
+                    {
+                        "issue": "observed_field_not_registered",
+                        "field_key": observed,
+                    }
+                )
+
+    return {
+        "surface": surface_name,
+        "required_field_count": len(required),
+        "required_fields": list(required),
+        "is_valid": len(violations) == 0,
+        "violation_count": len(violations),
+        "violations": violations,
+    }
+
+
+def enforce_surface_contract(
+    surface_name: str,
+    observed_registry_fields: Optional[Iterable[str]] = None,
+) -> None:
+    """Raise when a surface violates registry governance constraints."""
+    report = validate_surface_contract(surface_name, observed_registry_fields)
+    if not report["is_valid"]:
+        raise AssertionError(
+            f"Truth-source registry contract violation for {surface_name}: "
+            f"{report['violations']}"
+        )
+
+
 def build_registry_snapshot() -> Dict[str, Any]:
     """Return a full JSON-serialisable snapshot of the registry for operator surfaces."""
+    governance = validate_registry_governance()
+    contracts = {
+        name: validate_surface_contract(name)
+        for name in sorted(_REQUIRED_SURFACE_CONTRACT_FIELDS.keys())
+    }
     return {
         "authority": OUTWARD_TRUTH_SOURCE_REGISTRY_AUTHORITY,
         "entry_count": len(_REGISTRY),
         "entries": {k: v.to_dict() for k, v in _REGISTRY.items()},
+        "governance": governance,
+        "surface_contracts": contracts,
     }

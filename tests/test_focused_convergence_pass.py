@@ -36,6 +36,8 @@ class TestATruthSourceRegistry:
         assert hasattr(mod, "get_registry")
         assert hasattr(mod, "get_entry")
         assert hasattr(mod, "build_registry_snapshot")
+        assert hasattr(mod, "validate_registry_governance")
+        assert hasattr(mod, "validate_surface_contract")
 
     def test_registry_has_canonical_allocation_entry(self):
         from core.outward_truth_source_registry import get_entry
@@ -116,6 +118,17 @@ class TestATruthSourceRegistry:
             assert "source_module" in entry_dict
             assert "is_canonical_truth" in entry_dict
             assert "explanation" in entry_dict
+        assert "governance" in snap
+        assert "surface_contracts" in snap
+        assert snap["governance"]["is_valid"] is True
+
+    def test_surface_contract_validation_reports_known_surface(self):
+        from core.outward_truth_source_registry import validate_surface_contract
+
+        report = validate_surface_contract("unified_panel")
+        assert report["surface"] == "unified_panel"
+        assert report["required_field_count"] > 0
+        assert report["is_valid"] is True
 
     def test_assert_source_for_field_correct_source(self):
         from core.outward_truth_source_registry import assert_source_for_field
@@ -230,8 +243,21 @@ class TestBSystemStateNarrative:
         assert "authority" in d
         assert "overall_operability" in d
         assert "overall_explanation" in d
+        assert "main_view" in d
+        assert "semantic_vocabulary" in d
         assert "dimensions" in d
         assert isinstance(d["dimensions"], dict)
+
+    def test_main_view_has_product_questions(self):
+        from core.unified_system_state_narrative import build_system_state_narrative
+
+        narrative = build_system_state_narrative()
+        main_view = narrative.main_view
+        assert "can_do_useful_work" in main_view
+        assert "what_system_is_mainly_doing_now" in main_view
+        assert "what_currently_limits_system" in main_view
+        assert "most_important_recent_state_change" in main_view
+        assert "top_current_operator_blocker" in main_view
 
     def test_narrative_dimensions_serialise_correctly(self):
         from core.unified_system_state_narrative import build_system_state_narrative
@@ -337,6 +363,26 @@ class TestCPanelNarrativeAlignment:
         assert "authority" in payload.system_state_narrative
         assert "dimensions" in payload.system_state_narrative
 
+    def test_fill_system_state_narrative_prefers_compiled_outward_truth_facet(self):
+        from core.unified_panel_aggregation import (
+            UnifiedPanelAggregationService,
+            UnifiedPanelPayload,
+        )
+
+        svc = UnifiedPanelAggregationService()
+        payload = UnifiedPanelPayload()
+        payload.outward_truth = {
+            "system_state_narrative": {
+                "authority": "from_outward_truth",
+                "overall_operability": "degraded",
+            }
+        }
+
+        with patch("core.unified_system_state_narrative.build_system_state_narrative", side_effect=RuntimeError("should_not_call")):
+            svc._fill_system_state_narrative(payload)
+
+        assert payload.system_state_narrative.get("authority") == "from_outward_truth"
+
     def test_fill_truth_source_registry_populates_payload(self):
         from core.unified_panel_aggregation import (
             UnifiedPanelAggregationService,
@@ -348,6 +394,7 @@ class TestCPanelNarrativeAlignment:
         assert isinstance(payload.truth_source_registry, dict)
         assert "entry_count" in payload.truth_source_registry
         assert payload.truth_source_registry["entry_count"] > 0
+        assert "panel_contract" in payload.truth_source_registry
 
     def test_panel_narrative_and_outward_truth_share_same_source(self):
         """Both panel and outward truth should produce narratives from the same module."""
@@ -494,6 +541,7 @@ class TestEUnifiedOutwardSurface:
             compiled_at=time.time(),
         )
         assert hasattr(snap, "system_state_narrative")
+        assert hasattr(snap, "main_view_operating_surface")
 
     def test_outward_truth_to_dict_includes_narrative_key(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
@@ -502,10 +550,13 @@ class TestEUnifiedOutwardSurface:
             snapshot_id=str(uuid.uuid4()),
             compiled_at=time.time(),
             system_state_narrative={"overall_operability": "operable"},
+            main_view_operating_surface={"can_do_useful_work": True},
         )
         d = snap.to_dict()
         assert "system_state_narrative" in d
         assert d["system_state_narrative"]["overall_operability"] == "operable"
+        assert "main_view_operating_surface" in d
+        assert d["main_view_operating_surface"]["can_do_useful_work"] is True
 
     def test_outward_truth_snapshot_narrative_none_by_default(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
