@@ -119,3 +119,11 @@ def test_operator_request_detection_uses_latest_explicit_hint():
         context=[{"response_audience": "operator"}, {"response_audience": "user"}],
     )
     assert _is_operator_request(req) is False
+
+
+def test_operator_request_detection_resolves_conflicting_hints_by_recency():
+    req = ChatRequest(
+        message="hello",
+        context=[{"operator_mode": "true"}, {"response_audience": "user"}],
+    )
+    assert _is_operator_request(req) is False

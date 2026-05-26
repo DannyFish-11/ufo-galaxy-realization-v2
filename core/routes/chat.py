@@ -157,8 +157,8 @@ def _apply_hidden_visible_boundary(
         visible_metadata[key] = value
 
     # Prefer canonical key `blocker_summary`; keep legacy fallback
-    # `execution_blocker_summary` for backward compatibility until callers
-    # converge on the canonical key.
+    # `execution_blocker_summary` while older runtime producers migrate.
+    # TODO(runtime-surface): remove legacy fallback after producers converge.
     blocker_summary = str(
         visible_metadata.get("blocker_summary")
         or visible_metadata.get("execution_blocker_summary")
@@ -186,7 +186,7 @@ def _apply_hidden_visible_boundary(
         "lightweight_status_feedback": visible_metadata.get(
             "lightweight_status_feedback",
             FOREGROUND_STATUS_DONE
-            if result.get("success", False)
+            if current_action_state == "completed"
             else FOREGROUND_STATUS_NOT_DONE,
         ),
     }
@@ -307,6 +307,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
             metadata = result.get("metadata", {})
             if not isinstance(metadata, dict):
+                logger.warning(
+                    "chat metadata payload is not a dict; type=%s runtime_session_id=%s",
+                    type(metadata).__name__,
+                    result.get("runtime_session_id", ""),
+                )
                 metadata = {}
             is_operator_request = _is_operator_request(req)
             (
