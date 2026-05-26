@@ -60,14 +60,21 @@ Routes:
 """
 
 import logging
+from typing import Any, Dict, List, Tuple
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 from core.routes._models import ChatRequest
 from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
+
+FOREGROUND_BLOCKED_PREFIX = "当前操作受阻："
+FOREGROUND_CONFIRMATION_EXPLANATION = "该操作需要你的确认后才能继续执行。"
+FOREGROUND_STATUS_DONE = "操作已完成"
+FOREGROUND_STATUS_NOT_DONE = "操作未完成"
 
 # ── 动作意图判断关键词集合 ──────────────────────────────────────────────────────
 _ACTION_KEYWORDS = frozenset([
@@ -97,6 +104,109 @@ def _is_action_intent(message: str) -> bool:
     """
     lower = message.lower()
     return any(kw in lower for kw in _ACTION_KEYWORDS)
+
+
+def _is_operator_request(req: ChatRequest) -> bool:
+    """Resolve whether this request is operator/audit facing."""
+    context = req.context or []
+    # Iterate newest→oldest so the latest explicit audience hint wins.
+    for item in reversed(context):
+        if not isinstance(item, dict):
+            continue
+        audience = str(item.get("response_audience", "")).strip().lower()
+        if audience in {"operator", "audit", "diagnostic"}:
+            return True
+        if audience in {"user", "foreground", "default"}:
+            return False
+        operator_mode = str(item.get("operator_mode", "")).strip().lower()
+        if operator_mode in {"1", "true", "yes", "operator"}:
+            return True
+        if operator_mode in {"0", "false", "no", "user"}:
+            return False
+    return False
+
+
+def _derive_foreground_response(
+    *,
+    default_response: str,
+    blocker_summary: str,
+    confirmation_needed: bool,
+) -> str:
+    """Enforce minimal necessary explanation for foreground users."""
+    if blocker_summary:
+        return f"{FOREGROUND_BLOCKED_PREFIX}{blocker_summary}"
+    if confirmation_needed:
+        return FOREGROUND_CONFIRMATION_EXPLANATION
+    return default_response
+
+
+def _apply_hidden_visible_boundary(
+    *,
+    result: Dict[str, Any],
+    metadata: Dict[str, Any],
+    is_operator_request: bool,
+) -> Tuple[Dict[str, Any], Dict[str, Any], str, List[str]]:
+    """Compose response payload via hidden-context/visible-action boundary."""
+    visible_metadata: Dict[str, Any] = {}
+    demoted_fields: List[str] = []
+    for key, value in metadata.items():
+        layer = classify_content_layer(key)
+        if not is_operator_request and layer == SurfaceLayer.OPERATOR_AUDIT_TRUTH:
+            demoted_fields.append(key)
+            continue
+        visible_metadata[key] = value
+
+    # Prefer canonical key `blocker_summary`; keep legacy fallback
+    # `execution_blocker_summary` while older runtime producers migrate.
+    # TODO(runtime-surface): remove legacy fallback after producers converge.
+    blocker_summary = str(
+        visible_metadata.get("blocker_summary")
+        or visible_metadata.get("execution_blocker_summary")
+        or "",
+    ).strip()
+    confirmation_needed = bool(visible_metadata.get("confirmation_needed", False))
+    current_presence_mode = (
+        str(visible_metadata.get("presence_mode", "")).strip() or "unknown"
+    )
+    if blocker_summary:
+        current_action_state = "blocked"
+    elif confirmation_needed:
+        current_action_state = "awaiting_confirmation"
+    elif result.get("success", False):
+        current_action_state = "completed"
+    else:
+        current_action_state = "failed"
+    visible_action_surface = {
+        "current_presence_mode": current_presence_mode,
+        "current_action_state": current_action_state,
+        "action_trace_summary": visible_metadata.get("action_trace_summary", ""),
+        "result_artifacts_summary": visible_metadata.get("result_artifacts_summary", ""),
+        "blocker_summary": blocker_summary,
+        "confirmation_needed": confirmation_needed,
+        "lightweight_status_feedback": visible_metadata.get(
+            "lightweight_status_feedback",
+            FOREGROUND_STATUS_DONE
+            if current_action_state == "completed"
+            else FOREGROUND_STATUS_NOT_DONE,
+        ),
+    }
+    if blocker_summary or confirmation_needed:
+        visible_action_surface["minimal_necessary_explanation"] = _derive_foreground_response(
+            default_response=result.get("response", ""),
+            blocker_summary=blocker_summary,
+            confirmation_needed=confirmation_needed,
+        )
+
+    foreground_response = (
+        result.get("response", "")
+        if is_operator_request
+        else _derive_foreground_response(
+            default_response=result.get("response", ""),
+            blocker_summary=blocker_summary,
+            confirmation_needed=confirmation_needed,
+        )
+    )
+    return visible_metadata, visible_action_surface, foreground_response, demoted_fields
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -196,6 +306,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 else "",
             )
             metadata = result.get("metadata", {})
+            if not isinstance(metadata, dict):
+                logger.warning(
+                    "chat metadata payload is not a dict; type=%s runtime_session_id=%s",
+                    type(metadata).__name__,
+                    result.get("runtime_session_id", ""),
+                )
+                metadata = {}
+            is_operator_request = _is_operator_request(req)
+            (
+                metadata,
+                visible_action_surface,
+                foreground_response,
+                demoted_fields,
+            ) = _apply_hidden_visible_boundary(
+                result=result,
+                metadata=metadata,
+                is_operator_request=is_operator_request,
+            )
             trace_id = (
                 result.get("runtime_session_id")
                 or result.get("trace_id")
@@ -205,7 +333,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             resp = UnifiedChatResponse(
                 success=result.get("success", False),
-                response=result.get("response", ""),
+                response=foreground_response,
                 intent=result.get("intent", "chat"),
                 confidence=metadata.get("confidence", 1.0),
                 mode=metadata.get("mode", "openclawd"),
@@ -226,10 +354,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 surface_role="compat_adapter",
             )
             resp_dict = resp.to_json_response()
-            resp_dict["reply"] = result.get("response", "")
+            resp_dict["reply"] = foreground_response
             resp_dict["trace_id"] = trace_id
             resp_dict["runtime_session_id"] = result.get("runtime_session_id", trace_id)
             resp_dict["problem_execution_spine"] = metadata.get("problem_execution_spine", {})
+            resp_dict["visible_action_surface"] = visible_action_surface
+            if demoted_fields:
+                resp_dict["demoted_operator_audit_fields"] = demoted_fields
+
             # ── InteractionEnvelope (PR-4) — non-breaking, absent when None ──
             _ie = result.get("interaction_envelope")
             if _ie is not None:
