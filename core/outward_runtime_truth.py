@@ -131,6 +131,9 @@ from enum import Enum
 from typing import Any, Deque, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.OutwardRuntimeTruth")
+# Thread-local compile-depth guard used to prevent recursive outward truth
+# compilation loops when downstream builders indirectly call compile_outward_truth.
+_COMPILE_STATE = threading.local()
 
 # ===========================================================================
 # Authority sentinels
@@ -294,6 +297,14 @@ class OutwardRuntimeTruthSnapshot:
     Populated from :func:`~core.unified_system_state_narrative.build_system_state_narrative`.
     """
 
+    main_view_operating_surface: Optional[Dict[str, Any]] = None
+    """Main-view-oriented operating surface derived from system_state_narrative.
+
+    This is not a second truth store; it is a high-priority product view that
+    answers whether the system can do useful work, what it is doing, what
+    limits it, the key recent state change, and the top operator blocker.
+    """
+
     # Aggregated source records
     source_records: List[TruthSourceRecord] = field(default_factory=list)
 
@@ -329,6 +340,7 @@ class OutwardRuntimeTruthSnapshot:
             "durable_mesh_session_facet": self.durable_mesh_session_facet,
             "multi_device_truth_convergence": self.multi_device_truth_convergence,
             "system_state_narrative": self.system_state_narrative,
+            "main_view_operating_surface": self.main_view_operating_surface,
             "sources": [
                 {
                     "source_name": r.source_name,
@@ -423,6 +435,11 @@ def reset_outward_runtime_truth_runtime() -> None:
     OutwardRuntimeTruthRuntime.reset()
 
 
+def is_outward_truth_compile_active() -> bool:
+    """Return True when compile_outward_truth is already active in this thread."""
+    return bool(getattr(_COMPILE_STATE, "depth", 0) > 0)
+
+
 def classify_signal(source_name: str, is_canonical: bool) -> TruthSignalClass:
     """Classify a runtime truth signal.
 
@@ -466,259 +483,326 @@ def compile_outward_truth() -> OutwardRuntimeTruthSnapshot:
         The compiled snapshot.  Downstream surfaces should prefer this object
         over independently sourcing subsystem state.
     """
-    t_start = time.monotonic()
-    snapshot_id = str(uuid.uuid4())
-    records: List[TruthSourceRecord] = []
-    notes: List[str] = []
-
-    rtc_data: Optional[Dict[str, Any]] = None
-    op_data: Optional[Dict[str, Any]] = None
-    bridge_data: Optional[Dict[str, Any]] = None
-    ace_data: Optional[Dict[str, Any]] = None
-
-    # ── 1. RuntimeTruthCompiler ──────────────────────────────────────────
-    t0 = time.monotonic()
+    _COMPILE_STATE.depth = int(getattr(_COMPILE_STATE, "depth", 0) or 0) + 1
     try:
-        from core.projection.runtime_truth_compiler import compile_runtime_truth
+        t_start = time.monotonic()
+        snapshot_id = str(uuid.uuid4())
+        records: List[TruthSourceRecord] = []
+        notes: List[str] = []
 
-        rtc = compile_runtime_truth()
-        rtc_data = {
-            "compiler_authority": getattr(rtc, "compiler_authority", None),
-            "compiled_at": getattr(rtc, "compiled_at", None),
-            "continuum": getattr(rtc, "continuum", None),
-            "topology": getattr(rtc, "topology", None),
-            "oneapi": getattr(rtc, "oneapi", None),
-            "system_resource": getattr(rtc, "system_resource", None),
-        }
-        records.append(TruthSourceRecord(
-            source_name="RuntimeTruthCompiler",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=rtc_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"RuntimeTruthCompiler unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="RuntimeTruthCompiler",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
+        rtc_data: Optional[Dict[str, Any]] = None
+        op_data: Optional[Dict[str, Any]] = None
+        bridge_data: Optional[Dict[str, Any]] = None
+        ace_data: Optional[Dict[str, Any]] = None
 
-    # ── 2. OperatorSurface ───────────────────────────────────────────────
-    t0 = time.monotonic()
-    try:
-        from core.operator_surface import get_operator_surface
+        # ── 1. RuntimeTruthCompiler ──────────────────────────────────────────
+        t0 = time.monotonic()
+        try:
+            from core.projection.runtime_truth_compiler import compile_runtime_truth
 
-        op = get_operator_surface()
-        op_snap = op.operator_snapshot()
-        op_data = {
-            "authority": getattr(op_snap, "authority", None),
-            "active_task_count": getattr(op_snap, "active_task_count", 0),
-            "recent_failure_count": getattr(op_snap, "recent_failure_count", 0),
-            "reachable_executor_count": getattr(op_snap, "reachable_executor_count", 0),
-        }
-        records.append(TruthSourceRecord(
-            source_name="OperatorSurface",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=op_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"OperatorSurface unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="OperatorSurface",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
+            rtc = compile_runtime_truth()
+            rtc_data = {
+                "compiler_authority": getattr(rtc, "compiler_authority", None),
+                "compiled_at": getattr(rtc, "compiled_at", None),
+                "continuum": getattr(rtc, "continuum", None),
+                "topology": getattr(rtc, "topology", None),
+                "oneapi": getattr(rtc, "oneapi", None),
+                "system_resource": getattr(rtc, "system_resource", None),
+            }
+            records.append(
+                TruthSourceRecord(
+                    source_name="RuntimeTruthCompiler",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=rtc_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"RuntimeTruthCompiler unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="RuntimeTruthCompiler",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
 
-    # ── 3. ProjectionSurfaceBridge ───────────────────────────────────────
-    t0 = time.monotonic()
-    try:
-        from core.projection_surface_bridge import get_runtime_augmentation
+        # ── 2. OperatorSurface ───────────────────────────────────────────────
+        t0 = time.monotonic()
+        try:
+            from core.operator_surface import get_operator_surface
 
-        aug = get_runtime_augmentation()
-        bridge_data = {
-            "active_task_count": getattr(aug, "active_task_count", 0),
-            "executor_count": getattr(aug, "executor_count", 0),
-            "network_reachable_node_count": getattr(
-                aug, "network_reachable_node_count", 0
-            ),
-        }
-        records.append(TruthSourceRecord(
-            source_name="ProjectionSurfaceBridge",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=bridge_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"ProjectionSurfaceBridge unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="ProjectionSurfaceBridge",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
+            op = get_operator_surface()
+            op_snap = op.operator_snapshot()
+            op_data = {
+                "authority": getattr(op_snap, "authority", None),
+                "active_task_count": getattr(op_snap, "active_task_count", 0),
+                "recent_failure_count": getattr(op_snap, "recent_failure_count", 0),
+                "reachable_executor_count": getattr(op_snap, "reachable_executor_count", 0),
+            }
+            records.append(
+                TruthSourceRecord(
+                    source_name="OperatorSurface",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=op_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"OperatorSurface unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="OperatorSurface",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
 
-    # ── 4. AuthorityConflictElimination ──────────────────────────────────
-    t0 = time.monotonic()
-    try:
-        from core.authority_conflict_elimination import build_authority_elimination_snapshot
+        # ── 3. ProjectionSurfaceBridge ───────────────────────────────────────
+        t0 = time.monotonic()
+        try:
+            from core.projection_surface_bridge import get_runtime_augmentation
 
-        ace_snap = build_authority_elimination_snapshot()
-        ace_data = {
-            "authority": getattr(ace_snap, "authority", None),
-            "resolution_count": getattr(ace_snap, "resolution_count", 0),
-            "violation_count": getattr(ace_snap, "violation_count", 0),
-        }
-        records.append(TruthSourceRecord(
-            source_name="AuthorityConflictElimination",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=ace_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"AuthorityConflictElimination unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="AuthorityConflictElimination",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
+            aug = get_runtime_augmentation()
+            bridge_data = {
+                "active_task_count": getattr(aug, "active_task_count", 0),
+                "executor_count": getattr(aug, "executor_count", 0),
+                "network_reachable_node_count": getattr(aug, "network_reachable_node_count", 0),
+            }
+            records.append(
+                TruthSourceRecord(
+                    source_name="ProjectionSurfaceBridge",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=bridge_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"ProjectionSurfaceBridge unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="ProjectionSurfaceBridge",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
 
-    # ── 5. DurableMeshSessionFacet ───────────────────────────────────────
-    # PR-1: Durable mesh session runtime foundation.
-    # Surface recoverable session state through the outward truth path so
-    # downstream projection and recovery monitors have a single authoritative
-    # read point rather than independently querying the persistence store.
-    t0 = time.monotonic()
-    mesh_session_data: Optional[Dict[str, Any]] = None
-    try:
-        from core.mesh.mesh_session_persistence import (
-            recover_mesh_sessions,
-            list_recoverable_sessions,
+        # ── 4. AuthorityConflictElimination ──────────────────────────────────
+        t0 = time.monotonic()
+        try:
+            from core.authority_conflict_elimination import build_authority_elimination_snapshot
+
+            ace_snap = build_authority_elimination_snapshot()
+            ace_data = {
+                "authority": getattr(ace_snap, "authority", None),
+                "resolution_count": getattr(ace_snap, "resolution_count", 0),
+                "violation_count": getattr(ace_snap, "violation_count", 0),
+            }
+            records.append(
+                TruthSourceRecord(
+                    source_name="AuthorityConflictElimination",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=ace_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"AuthorityConflictElimination unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="AuthorityConflictElimination",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+
+        # ── 5. DurableMeshSessionFacet ───────────────────────────────────────
+        t0 = time.monotonic()
+        mesh_session_data: Optional[Dict[str, Any]] = None
+        try:
+            from core.mesh.mesh_session_persistence import recover_mesh_sessions
+
+            recoverable_records = recover_mesh_sessions()
+            recoverable_ids = [r.session_id for r in recoverable_records]
+            mesh_session_data = {
+                "recoverable_session_count": len(recoverable_ids),
+                "recoverable_session_ids": recoverable_ids,
+                "status_breakdown": {r.session_id: r.overall_status for r in recoverable_records},
+                "authority": (
+                    "DURABLE_MESH_SESSION_FACET::PR1_OUTWARD_TRUTH_INTEGRATION: "
+                    "Recoverable session state sourced from "
+                    "core/mesh/mesh_session_persistence.py."
+                ),
+            }
+            records.append(
+                TruthSourceRecord(
+                    source_name="DurableMeshSessionFacet",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=mesh_session_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"DurableMeshSessionFacet unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="DurableMeshSessionFacet",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+
+        # ── 6. MultiDeviceTruthConvergence ────────────────────────────────────
+        t0 = time.monotonic()
+        multi_device_truth_convergence_data: Optional[Dict[str, Any]] = None
+        try:
+            from core.multi_device_truth_convergence import converge_multi_device_truth
+
+            convergence_snap = converge_multi_device_truth()
+            multi_device_truth_convergence_data = convergence_snap.to_dict()
+            records.append(
+                TruthSourceRecord(
+                    source_name="MultiDeviceTruthConvergence",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data=multi_device_truth_convergence_data,
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"MultiDeviceTruthConvergence unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="MultiDeviceTruthConvergence",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+
+        # ── 7. UnifiedSystemStateNarrative ───────────────────────────────────
+        t0 = time.monotonic()
+        system_state_narrative_data: Optional[Dict[str, Any]] = None
+        main_view_operating_surface_data: Optional[Dict[str, Any]] = None
+        try:
+            from core.unified_system_state_narrative import build_system_state_narrative
+
+            narrative = build_system_state_narrative()
+            system_state_narrative_data = narrative.to_dict()
+            main_view_operating_surface_data = dict(narrative.main_view or {})
+            records.append(
+                TruthSourceRecord(
+                    source_name="UnifiedSystemStateNarrative",
+                    signal_class=TruthSignalClass.PRIMARY,
+                    data={
+                        "overall_operability": narrative.overall_operability,
+                        "is_fully_sourced": narrative.is_fully_sourced,
+                        "dimension_count": len(narrative.dimensions),
+                        "has_main_view": bool(main_view_operating_surface_data),
+                    },
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+        except Exception as exc:
+            notes.append(f"UnifiedSystemStateNarrative unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="UnifiedSystemStateNarrative",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+
+        # ── 8. Truth-source registry contract enforcement ─────────────────────
+        t0 = time.monotonic()
+        try:
+            from core.outward_truth_source_registry import validate_surface_contract
+
+            contract = validate_surface_contract(
+                "outward_runtime_truth",
+                observed_registry_fields=(
+                    "operator.snapshot",
+                    "readiness.verdict",
+                    "allocation.records",
+                    "android.execution_phase",
+                    "recovery.delegated_flow_state",
+                ),
+            )
+            if contract.get("is_valid", False):
+                records.append(
+                    TruthSourceRecord(
+                        source_name="OutwardTruthSourceRegistryContract",
+                        signal_class=TruthSignalClass.PRIMARY,
+                        data={"surface": "outward_runtime_truth", "violation_count": 0},
+                        latency_ms=(time.monotonic() - t0) * 1000,
+                    )
+                )
+            else:
+                notes.append(f"Truth-source registry contract violation: {contract.get('violations', [])}")
+                records.append(
+                    TruthSourceRecord(
+                        source_name="OutwardTruthSourceRegistryContract",
+                        signal_class=TruthSignalClass.SECONDARY,
+                        data={
+                            "surface": "outward_runtime_truth",
+                            "violation_count": contract.get("violation_count", 0),
+                        },
+                        error="registry_contract_violation",
+                        latency_ms=(time.monotonic() - t0) * 1000,
+                    )
+                )
+        except Exception as exc:
+            notes.append(f"Truth-source registry contract unavailable: {exc}")
+            records.append(
+                TruthSourceRecord(
+                    source_name="OutwardTruthSourceRegistryContract",
+                    signal_class=TruthSignalClass.UNAVAILABLE,
+                    error=str(exc),
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            )
+
+        # ── Aggregate counts ─────────────────────────────────────────────────
+        primary = sum(1 for r in records if r.signal_class == TruthSignalClass.PRIMARY)
+        secondary = sum(1 for r in records if r.signal_class == TruthSignalClass.SECONDARY)
+        legacy = sum(1 for r in records if r.signal_class == TruthSignalClass.LEGACY_COMPAT)
+        unavailable = sum(1 for r in records if r.signal_class == TruthSignalClass.UNAVAILABLE)
+
+        snapshot = OutwardRuntimeTruthSnapshot(
+            snapshot_id=snapshot_id,
+            compiled_at=time.time(),
+            runtime_truth_compiler=rtc_data,
+            operator_snapshot=op_data,
+            projection_bridge_augmentation=bridge_data,
+            authority_conflict_summary=ace_data,
+            durable_mesh_session_facet=mesh_session_data,
+            multi_device_truth_convergence=multi_device_truth_convergence_data,
+            system_state_narrative=system_state_narrative_data,
+            main_view_operating_surface=main_view_operating_surface_data,
+            source_records=records,
+            primary_source_count=primary,
+            secondary_source_count=secondary,
+            legacy_compat_source_count=legacy,
+            unavailable_source_count=unavailable,
+            surfacing_complete=(unavailable == 0),
+            surfacing_notes=notes,
         )
 
-        recoverable_records = recover_mesh_sessions()
-        recoverable_ids = [r.session_id for r in recoverable_records]
-        mesh_session_data = {
-            "recoverable_session_count": len(recoverable_ids),
-            "recoverable_session_ids": recoverable_ids,
-            "status_breakdown": {
-                r.session_id: r.overall_status for r in recoverable_records
-            },
-            "authority": (
-                "DURABLE_MESH_SESSION_FACET::PR1_OUTWARD_TRUTH_INTEGRATION: "
-                "Recoverable session state sourced from "
-                "core/mesh/mesh_session_persistence.py."
-            ),
-        }
-        records.append(TruthSourceRecord(
-            source_name="DurableMeshSessionFacet",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=mesh_session_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"DurableMeshSessionFacet unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="DurableMeshSessionFacet",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
+        get_outward_runtime_truth_runtime().record_snapshot(snapshot)
 
-    # ── 6. MultiDeviceTruthConvergence ────────────────────────────────────
-    # PR-4: Multi-Device Truth and Projection Convergence.
-    # Surface the canonical multi-device truth convergence snapshot so that
-    # downstream projection and monitoring consumers have a single authoritative
-    # read point for formation / readiness / participation / topology /
-    # session-context rather than independently querying raw sources.
-    t0 = time.monotonic()
-    multi_device_truth_convergence_data: Optional[Dict[str, Any]] = None
-    try:
-        from core.multi_device_truth_convergence import converge_multi_device_truth
-
-        convergence_snap = converge_multi_device_truth()
-        multi_device_truth_convergence_data = convergence_snap.to_dict()
-        records.append(TruthSourceRecord(
-            source_name="MultiDeviceTruthConvergence",
-            signal_class=TruthSignalClass.PRIMARY,
-            data=multi_device_truth_convergence_data,
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-    except Exception as exc:
-        notes.append(f"MultiDeviceTruthConvergence unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="MultiDeviceTruthConvergence",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-
-    # ── Aggregate counts ─────────────────────────────────────────────────
-    primary = sum(1 for r in records if r.signal_class == TruthSignalClass.PRIMARY)
-    secondary = sum(1 for r in records if r.signal_class == TruthSignalClass.SECONDARY)
-    legacy = sum(1 for r in records if r.signal_class == TruthSignalClass.LEGACY_COMPAT)
-    unavailable = sum(1 for r in records if r.signal_class == TruthSignalClass.UNAVAILABLE)
-
-    # ── 7. UnifiedSystemStateNarrative ───────────────────────────────────
-    # Focused convergence pass: compile the 7-dimension system-state narrative
-    # and attach it as a facet so outward surfaces have a single coherent view.
-    t0 = time.monotonic()
-    system_state_narrative_data: Optional[Dict[str, Any]] = None
-    try:
-        from core.unified_system_state_narrative import build_system_state_narrative
-
-        narrative = build_system_state_narrative()
-        system_state_narrative_data = narrative.to_dict()
-        records.append(TruthSourceRecord(
-            source_name="UnifiedSystemStateNarrative",
-            signal_class=TruthSignalClass.PRIMARY,
-            data={"overall_operability": narrative.overall_operability,
-                  "is_fully_sourced": narrative.is_fully_sourced,
-                  "dimension_count": len(narrative.dimensions)},
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-        # Recount after adding the narrative record
-        primary += 1
-    except Exception as exc:
-        notes.append(f"UnifiedSystemStateNarrative unavailable: {exc}")
-        records.append(TruthSourceRecord(
-            source_name="UnifiedSystemStateNarrative",
-            signal_class=TruthSignalClass.UNAVAILABLE,
-            error=str(exc),
-            latency_ms=(time.monotonic() - t0) * 1000,
-        ))
-        unavailable += 1
-
-    snapshot = OutwardRuntimeTruthSnapshot(
-        snapshot_id=snapshot_id,
-        compiled_at=time.time(),
-        runtime_truth_compiler=rtc_data,
-        operator_snapshot=op_data,
-        projection_bridge_augmentation=bridge_data,
-        authority_conflict_summary=ace_data,
-        durable_mesh_session_facet=mesh_session_data,
-        multi_device_truth_convergence=multi_device_truth_convergence_data,
-        system_state_narrative=system_state_narrative_data,
-        source_records=records,
-        primary_source_count=primary,
-        secondary_source_count=secondary,
-        legacy_compat_source_count=legacy,
-        unavailable_source_count=unavailable,
-        surfacing_complete=(unavailable == 0),
-        surfacing_notes=notes,
-    )
-
-    get_outward_runtime_truth_runtime().record_snapshot(snapshot)
-
-    total_ms = (time.monotonic() - t_start) * 1000
-    logger.debug(
-        "compile_outward_truth: compiled in %.1f ms — %d primary, %d unavailable",
-        total_ms,
-        primary,
-        unavailable,
-    )
-    return snapshot
+        total_ms = (time.monotonic() - t_start) * 1000
+        logger.debug(
+            "compile_outward_truth: compiled in %.1f ms — %d primary, %d unavailable",
+            total_ms,
+            primary,
+            unavailable,
+        )
+        return snapshot
+    finally:
+        depth = int(getattr(_COMPILE_STATE, "depth", 0) or 0)
+        _COMPILE_STATE.depth = max(0, depth - 1)

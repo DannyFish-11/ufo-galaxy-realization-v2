@@ -1281,6 +1281,14 @@ class UnifiedPanelAggregationService:
         so that panel consumers can understand the full runtime picture without
         manually stitching together separate sections.
         """
+        outward = payload.outward_truth if isinstance(payload.outward_truth, dict) else {}
+        outward_narrative = outward.get("system_state_narrative")
+        if isinstance(outward_narrative, dict) and outward_narrative:
+            # Reuse precompiled outward-truth narrative to avoid parallel semantic
+            # producers and duplicate recomputation inside the panel assembler.
+            payload.system_state_narrative = dict(outward_narrative)
+            return
+
         from core.unified_system_state_narrative import build_system_state_narrative
         narrative = build_system_state_narrative()
         payload.system_state_narrative = narrative.to_dict()
@@ -1291,8 +1299,24 @@ class UnifiedPanelAggregationService:
         Attaches a machine-readable registry that maps each key outward surface
         field to its authoritative canonical source, enabling operator traceability.
         """
-        from core.outward_truth_source_registry import build_registry_snapshot
-        payload.truth_source_registry = build_registry_snapshot()
+        from core.outward_truth_source_registry import (
+            build_registry_snapshot,
+            validate_surface_contract,
+        )
+
+        registry_snapshot = build_registry_snapshot()
+        registry_snapshot["panel_contract"] = validate_surface_contract(
+            "unified_panel",
+            observed_registry_fields=(
+                "operator.panel_unified",
+                "readiness.verdict",
+                "device_support.dispatch_readiness",
+                "autonomy.device_class",
+                "topology.galaxy_tree",
+                "recovery.delegated_flow_state",
+            ),
+        )
+        payload.truth_source_registry = registry_snapshot
 
 
 # ---------------------------------------------------------------------------

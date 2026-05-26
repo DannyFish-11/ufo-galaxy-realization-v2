@@ -123,6 +123,25 @@ ALL_NARRATIVE_DIMENSIONS: tuple = (
     DIM_RECOVERY_DEGRADATION_BLOCKAGE,
 )
 
+CANONICAL_OUTWARD_VOCABULARY: Dict[str, str] = {
+    "readiness": "readiness",
+    "operable": "operable",
+    "blocked": "blocked",
+    "degraded": "degraded",
+    "unavailable": "unavailable",
+    "dispatchable": "dispatchable",
+    "operational_support": "operational_support",
+    "participation": "participation",
+    "autonomy": "autonomy",
+    "topology_relation": "topology_relation",
+    "allocation_relation": "allocation_relation",
+    "recovery": "recovery",
+    "historical": "historical",
+    "unrevalidated": "unrevalidated",
+    "stale": "stale",
+    "live": "live",
+}
+
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
@@ -225,6 +244,10 @@ class SystemStateNarrative:
     unsourced_dimensions: List[str] = field(default_factory=list)
     overall_operability: str = "unknown"
     overall_explanation: str = ""
+    main_view: Dict[str, Any] = field(default_factory=dict)
+    semantic_vocabulary: Dict[str, str] = field(
+        default_factory=lambda: dict(CANONICAL_OUTWARD_VOCABULARY)
+    )
 
     def get_dimension(self, name: str) -> Optional[NarrativeDimension]:
         """Return a dimension by name, or ``None`` if absent."""
@@ -240,6 +263,8 @@ class SystemStateNarrative:
             "overall_explanation": self.overall_explanation,
             "is_fully_sourced": self.is_fully_sourced,
             "unsourced_dimensions": list(self.unsourced_dimensions),
+            "main_view": dict(self.main_view),
+            "semantic_vocabulary": dict(self.semantic_vocabulary),
             "dimensions": {k: v.to_dict() for k, v in self.dimensions.items()},
         }
 
@@ -340,20 +365,30 @@ def _build_overall_runtime_state() -> NarrativeDimension:
 
     # Supplement with outward truth surfacing_complete if available
     try:
-        from core.outward_runtime_truth import compile_outward_truth
-        outward = compile_outward_truth()
-        evidence["surfacing_complete"] = outward.surfacing_complete
-        evidence["unavailable_source_count"] = outward.unavailable_source_count
-        if not outward.surfacing_complete and state == "operable":
-            state = "degraded"
-            explanation += (
-                f" However, {outward.unavailable_source_count} canonical source(s) "
-                f"were unavailable during truth compilation, indicating partial degradation."
-            )
-        trace.append(
-            f"outward_truth_surfacing_complete={outward.surfacing_complete}"
+        from core.outward_runtime_truth import (
+            compile_outward_truth,
+            is_outward_truth_compile_active,
         )
-        is_canonical = True
+
+        # Avoid recursive compile loops: outward truth compilation includes this
+        # narrative facet, so the narrative must not re-enter compile_outward_truth
+        # while outward truth is already active in the same thread.
+        if is_outward_truth_compile_active():
+            trace.append("outward_truth_supplement_skipped:active_compile_guard")
+        else:
+            outward = compile_outward_truth()
+            evidence["surfacing_complete"] = outward.surfacing_complete
+            evidence["unavailable_source_count"] = outward.unavailable_source_count
+            if not outward.surfacing_complete and state == "operable":
+                state = "degraded"
+                explanation += (
+                    f" However, {outward.unavailable_source_count} canonical source(s) "
+                    f"were unavailable during truth compilation, indicating partial degradation."
+                )
+            trace.append(
+                f"outward_truth_surfacing_complete={outward.surfacing_complete}"
+            )
+            is_canonical = True
     except Exception as exc:
         logger.debug("overall_runtime_state: outward truth unavailable: %s", exc)
         trace.append(f"outward_truth_failed:{exc}")
@@ -1048,6 +1083,78 @@ _DIMENSION_BUILDERS = {
 }
 
 
+def _derive_liveness_semantic(narrative: SystemStateNarrative) -> str:
+    """Derive historical/unrevalidated/stale/live classification."""
+    recovery_dim = narrative.dimensions.get(DIM_RECOVERY_DEGRADATION_BLOCKAGE)
+    if not recovery_dim:
+        return "historical"
+    evidence = recovery_dim.evidence_basis or {}
+    restart = evidence.get("restart_recovery_state")
+    if isinstance(restart, dict):
+        if not bool(restart.get("revalidated", False)):
+            return "unrevalidated"
+    if "degraded" in str(recovery_dim.state or "").lower():
+        return "stale"
+    if "blocked" in str(recovery_dim.state or "").lower():
+        return "stale"
+    return "live"
+
+
+def _derive_main_view(narrative: SystemStateNarrative) -> Dict[str, Any]:
+    """Build a product-main-view operating surface from narrative dimensions."""
+    overall = narrative.dimensions.get(DIM_OVERALL_RUNTIME_STATE)
+    task = narrative.dimensions.get(DIM_TASK_EXECUTION_STATE)
+    dispatch = narrative.dimensions.get(DIM_DEVICE_DISPATCH_SUPPORT_STATE)
+    recovery = narrative.dimensions.get(DIM_RECOVERY_DEGRADATION_BLOCKAGE)
+
+    can_do_useful_work = narrative.overall_operability in {
+        OPERABILITY_OPERABLE,
+        OPERABILITY_DEGRADED,
+    }
+    if dispatch and str(dispatch.state or "").startswith("none_ready"):
+        can_do_useful_work = False
+
+    limiters: List[str] = []
+    if overall:
+        blocked = overall.evidence_basis.get("blocked_dimensions", [])
+        if blocked:
+            limiters.append(f"blocked_readiness:{','.join(str(x) for x in blocked)}")
+    if dispatch:
+        for item in (dispatch.evidence_basis.get("device_blockers") or []):
+            if not item.get("dispatch_ready", False):
+                did = item.get("device_id", "unknown")
+                blockers = item.get("blockers") or []
+                limiters.append(f"device:{did}:{','.join(str(x) for x in blockers) or 'blocked'}")
+    if recovery and recovery.state not in {"no_active_degradation", "unknown"}:
+        limiters.append(f"recovery:{recovery.state}")
+
+    current_activity = "idle"
+    if task:
+        t_state = str(task.state or "")
+        if t_state.startswith("executing"):
+            current_activity = "executing"
+        elif t_state.startswith("pending"):
+            current_activity = "pending_dispatch"
+        elif t_state.startswith("idle"):
+            current_activity = "idle"
+        else:
+            current_activity = t_state or "idle"
+
+    return {
+        "can_do_useful_work": can_do_useful_work,
+        "what_system_is_mainly_doing_now": current_activity,
+        "what_currently_limits_system": limiters[:8],
+        "most_important_recent_state_change": (
+            recovery.explanation
+            if recovery and recovery.explanation
+            else (overall.explanation if overall else narrative.overall_explanation)
+        ),
+        "top_current_operator_blocker": limiters[0] if limiters else "none",
+        "liveness_semantic": _derive_liveness_semantic(narrative),
+        "overall_operability": narrative.overall_operability,
+    }
+
+
 def build_system_state_narrative() -> SystemStateNarrative:
     """Build and return the current :class:`SystemStateNarrative`.
 
@@ -1108,5 +1215,6 @@ def build_system_state_narrative() -> SystemStateNarrative:
     if dispatch_dim and "none_ready" in dispatch_dim.state:
         parts.append(dispatch_dim.explanation)
     narrative.overall_explanation = " | ".join(parts) if parts else "System state narrative compiled."
+    narrative.main_view = _derive_main_view(narrative)
 
     return narrative
