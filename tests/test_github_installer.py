@@ -245,16 +245,23 @@ class TestGitHubInstallerInstall:
             return "abc123deadbeef"
         return _fake_fetch
 
+    @patch("core.github_installer._verify_mcp_install")
     @patch("core.github_installer._register_mcp_tool")
     @patch("core.github_installer._fetch_repo")
-    def test_install_mcp_tool(self, mock_fetch, mock_register, tmp_path):
+    def test_install_mcp_tool(self, mock_fetch, mock_register, mock_verify, tmp_path):
         mcp_manifest = {
             "name": "test-mcp",
             "entrypoint": "server.py",
             "description": "Test MCP",
         }
         mock_fetch.side_effect = self._patch_fetch(tmp_path, mcp_manifest=mcp_manifest)
-        mock_register.return_value = {"success": True, "type": "mcp", "name": "test-mcp"}
+        mock_register.return_value = {
+            "success": True,
+            "type": "mcp",
+            "name": "test-mcp",
+            "server_id": "mcp-server-1",
+        }
+        mock_verify.return_value = {"success": True}
 
         inst = self._make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/repo"))
@@ -265,9 +272,10 @@ class TestGitHubInstallerInstall:
         assert result["commit"] == "abc123deadbeef"
         mock_register.assert_called_once()
 
+    @patch("core.github_installer._verify_callable_skill_install")
     @patch("core.github_installer._register_skill")
     @patch("core.github_installer._fetch_repo")
-    def test_install_skill(self, mock_fetch, mock_register, tmp_path):
+    def test_install_skill(self, mock_fetch, mock_register, mock_verify, tmp_path):
         skill_manifest = {
             "id": "test-skill",
             "name": "test-skill",
@@ -276,7 +284,13 @@ class TestGitHubInstallerInstall:
             "handler_function": "execute",
         }
         mock_fetch.side_effect = self._patch_fetch(tmp_path, skill_manifest=skill_manifest)
-        mock_register.return_value = {"success": True, "type": "skill", "name": "test-skill"}
+        mock_register.return_value = {
+            "success": True,
+            "type": "skill",
+            "name": "test-skill",
+            "skill_id": "test-skill",
+        }
+        mock_verify.return_value = {"success": True}
 
         inst = self._make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/repo"))
@@ -345,14 +359,52 @@ class TestGitHubInstallerInstall:
 
     @patch("core.github_installer._fetch_repo")
     def test_install_no_manifest(self, mock_fetch, tmp_path):
-        """No mcp_tool.json or skill.json — should succeed with 'unknown' type."""
+        """No install contract — should return cloned_only + explicit failure reason."""
         mock_fetch.side_effect = self._patch_fetch(tmp_path)
 
         inst = self._make_installer(tmp_path)
         result = _run(inst.install("https://github.com/owner/repo"))
 
-        # Should still succeed (download worked, just not registered)
+        assert result["success"] is False
+        assert result["type"] == "ordinary_tool_repo"
+        assert result["install_state"] == "cloned_only"
+        assert "failure_reason" in result
+
+    @patch("core.github_installer._verify_skill_md_install")
+    @patch("core.github_installer._register_skill_md")
+    @patch("core.github_installer._fetch_repo")
+    def test_install_skill_md(self, mock_fetch, mock_register, mock_verify, tmp_path):
+        skill_md = (
+            "---\n"
+            "name: shell-skill\n"
+            "description: shell command skill\n"
+            "---\n\n"
+            "```bash\n"
+            "python --version\n"
+            "```\n"
+        )
+
+        def _fake_fetch(owner, repo, ref, dest):
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "SKILL.md").write_text(skill_md, encoding="utf-8")
+            return "abc123deadbeef"
+
+        mock_fetch.side_effect = _fake_fetch
+        mock_register.return_value = {
+            "success": True,
+            "type": "skill_md",
+            "name": "shell-skill",
+            "skill_id": "shell-skill",
+        }
+        mock_verify.return_value = {"success": True}
+
+        inst = self._make_installer(tmp_path)
+        result = _run(inst.install("https://github.com/owner/repo"))
+
         assert result["success"] is True
+        assert result["type"] == "skill_md"
+        assert result["name"] == "shell-skill"
+        mock_register.assert_called_once()
 
     @patch("core.github_installer._register_mcp_tool")
     @patch("core.github_installer._fetch_repo")

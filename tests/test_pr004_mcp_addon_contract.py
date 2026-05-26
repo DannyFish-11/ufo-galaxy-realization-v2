@@ -307,6 +307,9 @@ class TestRegisterMCPToolContractEnforcement:
         # The result should either succeed (mock path) or fail gracefully;
         # crucially it must NOT include "violations" (contract passed).
         assert "violations" not in result
+        assert mock_loader.load.await_count == 1
+        call_kwargs = mock_loader.load.await_args.kwargs
+        assert call_kwargs["name"] == "valid-tool"
 
 
 # ===========================================================================

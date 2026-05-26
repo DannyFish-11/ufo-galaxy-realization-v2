@@ -64,6 +64,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 import venv
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,6 +79,7 @@ _DEFAULT_INSTALL_DIR = _PROJECT_ROOT / "data" / "github_addons"
 _MANIFEST_FILENAME = "manifest.json"
 _MCP_TOOL_MANIFEST = "mcp_tool.json"
 _SKILL_MANIFEST = "skill.json"
+_SKILL_MD_MANIFEST = "SKILL.md"
 
 # Ingestion size limits — keep chunks small enough for the knowledge store
 # while preserving meaningful context.  These are intentionally conservative.
@@ -379,7 +381,8 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
     keep things simple; a venv per addon would be safer but heavier).
     Deps may be package names or paths relative to addon_dir.
     """
-    if not deps:
+    req_file = addon_dir / "requirements.txt"
+    if not deps and not req_file.exists():
         return True
 
     pip_cmd = [sys.executable, "-m", "pip", "install", "--quiet"]
@@ -394,7 +397,6 @@ def _install_deps(addon_dir: Path, deps: List[str]) -> bool:
         else:
             pip_cmd.append(dep)
 
-    req_file = addon_dir / "requirements.txt"
     if req_file.exists():
         pip_cmd += ["-r", str(req_file)]
 
@@ -490,22 +492,41 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
         from core.mcp_loader import mcp_loader
         import asyncio
 
+        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return asyncio.run(coro)
+
+            result_holder: Dict[str, Any] = {}
+            error_holder: Dict[str, Exception] = {}
+
+            def _runner() -> None:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    result_holder["value"] = loop.run_until_complete(coro)
+                except Exception as exc:  # pragma: no cover - best effort bridge
+                    error_holder["error"] = exc
+                finally:
+                    loop.close()
+
+            thread = threading.Thread(target=_runner, daemon=True)
+            thread.start()
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                raise TimeoutError("Timed out waiting for async registration result")
+            if "error" in error_holder:
+                raise error_holder["error"]
+            return result_holder.get("value")
+
         async def _do_load():
             return await mcp_loader.load(
-                server_id=name,
+                name=name,
                 command=command,
                 env=env_vars if env_vars else None,
             )
-
-        try:
-            loop = asyncio.get_running_loop()
-            # There is a running loop — schedule as a task and block via
-            # run_coroutine_threadsafe from a fresh thread to avoid deadlock.
-            future = asyncio.run_coroutine_threadsafe(_do_load(), loop)
-            result = future.result(timeout=60)
-        except RuntimeError:
-            # No running loop — create a fresh one.
-            result = asyncio.run(_do_load())
+        result = _run_coro_sync(_do_load(), timeout=60)
 
         if not result.get("success", False):
             # Try MCPDynamicGateway as fallback
@@ -515,7 +536,14 @@ def _register_mcp_tool(addon_dir: Path, tool_manifest: Dict[str, Any]) -> Dict[s
             return gw_result
 
         logger.info("MCP tool '%s' registered via MCPLoader", name)
-        reg_info: Dict[str, Any] = {"success": True, "type": "mcp", "name": name, "loader": "MCPLoader"}
+        reg_info: Dict[str, Any] = {
+            "success": True,
+            "type": "mcp",
+            "name": name,
+            "loader": "MCPLoader",
+            "server_id": result.get("server_id"),
+            "status": result.get("status"),
+        }
         if contract is not None:
             reg_info["schema_version"] = contract.schema_version
             reg_info["protocol"] = contract.protocol
@@ -567,15 +595,37 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
         from core.skill_loader import skill_loader
         import asyncio
 
+        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return asyncio.run(coro)
+
+            result_holder: Dict[str, Any] = {}
+            error_holder: Dict[str, Exception] = {}
+
+            def _runner() -> None:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    result_holder["value"] = loop.run_until_complete(coro)
+                except Exception as exc:  # pragma: no cover - best effort bridge
+                    error_holder["error"] = exc
+                finally:
+                    loop.close()
+
+            thread = threading.Thread(target=_runner, daemon=True)
+            thread.start()
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                raise TimeoutError("Timed out waiting for async registration result")
+            if "error" in error_holder:
+                raise error_holder["error"]
+            return result_holder.get("value")
+
         async def _do_load():
             return await skill_loader.load(str(addon_dir))
-
-        try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(_do_load(), loop)
-            result = future.result(timeout=60)
-        except RuntimeError:
-            result = asyncio.run(_do_load())
+        result = _run_coro_sync(_do_load(), timeout=60)
 
         if result.get("success", False):
             logger.info("Skill '%s' registered via SkillLoader", name)
@@ -583,6 +633,8 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
                 "success": True,
                 "type": "skill",
                 "name": name,
+                "skill_id": result.get("skill_id"),
+                "status": result.get("status"),
                 "schema_version": skill_manifest.get("schema_version", "1"),
             }
         return {"success": False, "error": result.get("error", "SkillLoader.load failed")}
@@ -590,6 +642,298 @@ def _register_skill(addon_dir: Path, skill_manifest: Dict[str, Any]) -> Dict[str
     except Exception as exc:
         logger.warning("Skill registration failed for '%s': %s", name, exc)
         return {"success": False, "error": str(exc)}
+
+
+def _register_skill_md(addon_dir: Path) -> Dict[str, Any]:
+    """Register a SKILL.md addon via SkillMDLoader."""
+    try:
+        from core.skill_md_loader import skill_md_loader
+        import asyncio
+
+        def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return asyncio.run(coro)
+
+            result_holder: Dict[str, Any] = {}
+            error_holder: Dict[str, Exception] = {}
+
+            def _runner() -> None:
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    result_holder["value"] = loop.run_until_complete(coro)
+                except Exception as exc:  # pragma: no cover - best effort bridge
+                    error_holder["error"] = exc
+                finally:
+                    loop.close()
+
+            thread = threading.Thread(target=_runner, daemon=True)
+            thread.start()
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                raise TimeoutError("Timed out waiting for async registration result")
+            if "error" in error_holder:
+                raise error_holder["error"]
+            return result_holder.get("value")
+
+        async def _do_load():
+            return await skill_md_loader.load(str(addon_dir))
+
+        result = _run_coro_sync(_do_load(), timeout=60)
+        if not result.get("success", False):
+            return {"success": False, "error": result.get("error", "SkillMDLoader.load failed")}
+        return {
+            "success": True,
+            "type": "skill_md",
+            "name": result.get("name") or addon_dir.name,
+            "skill_id": result.get("skill_id"),
+            "commands_count": result.get("commands_count", 0),
+        }
+    except Exception as exc:
+        logger.warning("SKILL.md registration failed for '%s': %s", addon_dir, exc)
+        return {"success": False, "error": str(exc)}
+
+
+def _verify_mcp_install(registration: Dict[str, Any]) -> Dict[str, Any]:
+    """Verify MCP server runtime readiness after registration."""
+    server_id = registration.get("server_id")
+    if not registration.get("success", False) or not server_id:
+        return {
+            "success": False,
+            "checks": {
+                "server_started": False,
+                "initialize_succeeded": False,
+                "tools_list_succeeded": False,
+                "smoke_call": {"applicable": False, "passed": False},
+            },
+            "error": "MCP registration did not return a valid server_id",
+        }
+
+    import asyncio
+    from core.mcp_loader import mcp_loader
+
+    def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        result_holder: Dict[str, Any] = {}
+        error_holder: Dict[str, Exception] = {}
+
+        def _runner() -> None:
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                result_holder["value"] = loop.run_until_complete(coro)
+            except Exception as exc:  # pragma: no cover - best effort bridge
+                error_holder["error"] = exc
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+        if thread.is_alive():
+            raise TimeoutError("Timed out waiting for async verification result")
+        if "error" in error_holder:
+            raise error_holder["error"]
+        return result_holder.get("value")
+
+    try:
+        server = mcp_loader.get_server(server_id) or {}
+        server_started = server.get("status") == "running"
+        tools = _run_coro_sync(mcp_loader.list_tools(server_id), timeout=30) or []
+        tools_list_ok = isinstance(tools, list)
+
+        smoke = {"applicable": False, "passed": False}
+        for tool in tools:
+            schema = tool.get("inputSchema") or {}
+            required = schema.get("required", [])
+            if required:
+                continue
+            smoke_result = _run_coro_sync(
+                mcp_loader.call_tool(server_id, tool.get("name", ""), {}),
+                timeout=45,
+            )
+            smoke = {
+                "applicable": True,
+                "passed": bool(smoke_result.get("success")),
+                "tool_name": tool.get("name"),
+                "result": smoke_result,
+            }
+            break
+
+        verified = server_started and tools_list_ok and (not smoke["applicable"] or smoke["passed"])
+        return {
+            "success": verified,
+            "checks": {
+                "server_started": server_started,
+                "initialize_succeeded": server_started,
+                "tools_list_succeeded": tools_list_ok,
+                "smoke_call": smoke,
+            },
+            "server_id": server_id,
+            "tools_count": len(tools) if isinstance(tools, list) else 0,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "checks": {
+                "server_started": False,
+                "initialize_succeeded": False,
+                "tools_list_succeeded": False,
+                "smoke_call": {"applicable": False, "passed": False},
+            },
+            "error": str(exc),
+        }
+
+
+def _verify_callable_skill_install(
+    registration: Dict[str, Any],
+    skill_manifest: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Verify callable skill runtime readiness after registration."""
+    skill_id = registration.get("skill_id") or skill_manifest.get("id")
+    if not registration.get("success", False) or not skill_id:
+        return {
+            "success": False,
+            "checks": {
+                "loader_recognized": False,
+                "contract_valid": False,
+                "handler_executable": False,
+                "smoke_execution": {"applicable": False, "passed": False},
+            },
+            "error": "Skill registration did not return a valid skill_id",
+        }
+
+    import asyncio
+    from core.skill_loader import skill_loader
+    from core.skill_package_contract import validate_skill_package_contract
+
+    def _run_coro_sync(coro: "asyncio.Future[Any]", timeout: float) -> Any:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        result_holder: Dict[str, Any] = {}
+        error_holder: Dict[str, Exception] = {}
+
+        def _runner() -> None:
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                result_holder["value"] = loop.run_until_complete(coro)
+            except Exception as exc:  # pragma: no cover - best effort bridge
+                error_holder["error"] = exc
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+        if thread.is_alive():
+            raise TimeoutError("Timed out waiting for async verification result")
+        if "error" in error_holder:
+            raise error_holder["error"]
+        return result_holder.get("value")
+
+    try:
+        validate_skill_package_contract(skill_manifest)
+        contract_valid = True
+    except Exception:
+        contract_valid = False
+
+    loaded = skill_loader.get_skill(skill_id) or {}
+    loader_recognized = bool(loaded)
+    handler_executable = loaded.get("status") == "loaded"
+
+    required = [
+        p.get("name")
+        for p in skill_manifest.get("parameters", [])
+        if isinstance(p, dict) and p.get("required")
+    ]
+    smoke = {"applicable": False, "passed": False}
+    if not required and handler_executable:
+        smoke_result = _run_coro_sync(skill_loader.execute(skill_id), timeout=30)
+        smoke = {"applicable": True, "passed": bool(smoke_result.get("success")), "result": smoke_result}
+
+    verified = loader_recognized and contract_valid and handler_executable and (
+        not smoke["applicable"] or smoke["passed"]
+    )
+    return {
+        "success": verified,
+        "checks": {
+            "loader_recognized": loader_recognized,
+            "contract_valid": contract_valid,
+            "handler_executable": handler_executable,
+            "smoke_execution": smoke,
+        },
+        "skill_id": skill_id,
+    }
+
+
+def _verify_skill_md_install(registration: Dict[str, Any]) -> Dict[str, Any]:
+    """Verify SKILL.md runtime readiness after registration."""
+    skill_id = registration.get("skill_id")
+    if not registration.get("success", False) or not skill_id:
+        return {
+            "success": False,
+            "checks": {
+                "loader_recognized": False,
+                "contract_valid": False,
+                "command_executable": False,
+                "smoke_execution": {"applicable": False, "passed": False},
+            },
+            "error": "SKILL.md registration did not return a valid skill_id",
+        }
+
+    from core.skill_md_loader import skill_md_loader
+
+    skill = skill_md_loader.get_skill(skill_id) or {}
+    commands = skill.get("commands") or []
+    loader_recognized = bool(skill)
+    contract_valid = isinstance(skill.get("name"), str) and bool(skill.get("name")) and isinstance(commands, list)
+    command_executable = len(commands) > 0
+
+    return {
+        "success": loader_recognized and contract_valid and command_executable,
+        "checks": {
+            "loader_recognized": loader_recognized,
+            "contract_valid": contract_valid,
+            "command_executable": command_executable,
+            "smoke_execution": {"applicable": False, "passed": False, "reason": "shell skill smoke skipped by policy"},
+        },
+        "skill_id": skill_id,
+        "commands_count": len(commands),
+    }
+
+
+def _publish_install_truth(payload: Dict[str, Any]) -> None:
+    """Push structured install truth to operator-visible surfaces (best effort)."""
+    try:
+        from core.state_event_bus import emit, StateEventType
+
+        emit(StateEventType.GENERIC, "github_installer", {"event": "github_install_result", **payload})
+    except Exception:
+        pass
+
+    try:
+        from core.routes._shared import broadcast_event
+        import asyncio
+
+        async def _do_broadcast() -> None:
+            await broadcast_event("github_install_update", payload)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_do_broadcast())
+            return
+        loop.create_task(_do_broadcast())
+    except Exception:
+        pass
 
 
 def _unregister_mcp_tool(name: str) -> bool:
@@ -716,14 +1060,16 @@ class GitHubInstaller:
         # 4. Detect addon type
         mcp_manifest_path = dest / _MCP_TOOL_MANIFEST
         skill_manifest_path = dest / _SKILL_MANIFEST
+        skill_md_path = dest / _SKILL_MD_MANIFEST
 
         if addon_type == "mcp" or (addon_type is None and mcp_manifest_path.exists()):
             detected_type = "mcp"
         elif addon_type == "skill" or (addon_type is None and skill_manifest_path.exists()):
             detected_type = "skill"
+        elif addon_type == "skill_md" or (addon_type is None and skill_md_path.exists()):
+            detected_type = "skill_md"
         else:
-            # Check if there's a requirements.txt / setup.py for skill guess
-            detected_type = "skill" if (dest / "requirements.txt").exists() else "unknown"
+            detected_type = "ordinary_tool_repo"
 
         # 5. Read manifest
         tool_manifest: Dict[str, Any] = {}
@@ -793,23 +1139,36 @@ class GitHubInstaller:
 
         # 6. Install dependencies
         deps = tool_manifest.get("dependencies", [])
-        if deps:
-            _install_deps(dest, deps)
+        deps_result = {"attempted": False, "success": True}
+        if detected_type in {"mcp", "skill", "skill_md"} and (deps or (dest / "requirements.txt").exists()):
+            deps_result = {"attempted": True, "success": _install_deps(dest, deps)}
 
         # 7. Register
         if detected_type == "mcp":
             reg_result = _register_mcp_tool(dest, tool_manifest)
+            verify_result = _verify_mcp_install(reg_result)
         elif detected_type == "skill":
             reg_result = _register_skill(dest, tool_manifest)
+            verify_result = _verify_callable_skill_install(reg_result, tool_manifest)
+        elif detected_type == "skill_md":
+            reg_result = _register_skill_md(dest)
+            verify_result = _verify_skill_md_install(reg_result)
         else:
             reg_result = {
-                "success": True,
-                "warning": (
-                    "Neither mcp_tool.json nor skill.json found. "
-                    "Repo downloaded but not registered. "
-                    "You may register it manually."
+                "success": False,
+                "state": "cloned_only",
+                "error": (
+                    "Repository cloned, but no supported install contract was found. "
+                    "Expected mcp_tool.json, skill.json, or SKILL.md."
                 ),
             }
+            verify_result = {
+                "success": False,
+                "checks": {"integrable_type_detected": False},
+                "error": "ordinary tool repo cannot be auto-integrated",
+            }
+
+        addon_name = reg_result.get("name") or addon_name
 
         # 8. Compute checksum
         checksum = _sha256_dir(dest)
@@ -826,6 +1185,9 @@ class GitHubInstaller:
             "install_path": str(dest),
             "checksum": checksum,
             "tool_manifest": tool_manifest,
+            "dependency_install": deps_result,
+            "registration": reg_result,
+            "verification": verify_result,
         }
         self._manifest.put(addon_name, record)
 
@@ -834,8 +1196,9 @@ class GitHubInstaller:
             addon_name, detected_type, commit_sha, checksum,
         )
 
-        return {
-            "success": reg_result.get("success", True),
+        install_success = bool(reg_result.get("success")) and bool(verify_result.get("success"))
+        result = {
+            "success": install_success,
             "name": addon_name,
             "type": detected_type,
             "owner": owner,
@@ -844,8 +1207,28 @@ class GitHubInstaller:
             "commit": commit_sha,
             "install_path": str(dest),
             "checksum": checksum,
+            "dependency_install": deps_result,
+            "clone": {"success": True, "path": str(dest), "commit": commit_sha},
+            "classification": {
+                "detected_type": detected_type,
+                "integrable": detected_type in {"mcp", "skill", "skill_md"},
+            },
+            "install_state": (
+                "verified"
+                if install_success
+                else ("cloned_only" if detected_type == "ordinary_tool_repo" else "registration_or_verification_failed")
+            ),
             "registration": reg_result,
+            "verification": verify_result,
         }
+        if not install_success:
+            result["failure_reason"] = (
+                reg_result.get("error")
+                or verify_result.get("error")
+                or "installation closure did not complete"
+            )
+        _publish_install_truth(result)
+        return result
 
     async def uninstall(self, name: str) -> Dict[str, Any]:
         """Uninstall an addon by name.

@@ -1,6 +1,7 @@
 # GitHub MCP/Skill Auto-Installer
 
-Galaxy supports installing MCP tool servers and Skill plugins directly from
+Galaxy supports installing MCP tool servers, callable Skill plugins, and
+`SKILL.md` shell skills directly from
 public or private GitHub repositories. Once installed, the tool or skill is
 immediately registered and available for use by OpenClawd in the current and
 all future sessions.
@@ -99,7 +100,7 @@ Place this file at the **root** of your GitHub repository:
 The entrypoint must implement the **stdio JSON-RPC MCP protocol**
 (see [Model Context Protocol Spec](https://github.com/modelcontextprotocol/specification)).
 
-### Skill — `skill.json`
+### Callable Skill — `skill.json`
 
 Place this file at the **root** of your GitHub repository:
 
@@ -132,6 +133,11 @@ Place this file at the **root** of your GitHub repository:
 
 The entrypoint module must expose `async def execute(**kwargs) -> dict`.
 
+### Shell Skill — `SKILL.md`
+
+If the repository has only `SKILL.md`, the installer will register it through
+`SkillMDLoader` and report explicit verification details.
+
 ---
 
 ## OpenClawd Built-in Tools
@@ -140,7 +146,7 @@ The following tools are always available in OpenClawd without any configuration:
 
 | Tool | Description |
 |------|-------------|
-| `github__install` | Install MCP tool or Skill from GitHub URL |
+| `github__install` | Install MCP tool, callable skill, or SKILL.md shell skill from GitHub URL |
 | `github__uninstall` | Uninstall addon by name |
 | `github__list` | List all installed GitHub addons |
 | `github__status` | Show installer status (token, counts, dir) |
@@ -159,7 +165,7 @@ The following tools are always available in OpenClawd without any configuration:
 Arguments:
 - `url` (**required**): GitHub HTTPS URL
 - `ref`: Branch, tag, or commit SHA
-- `type`: `"mcp"` | `"skill"` — auto-detected from manifest if omitted
+- `type`: `"mcp"` | `"skill"` | `"skill_md"` — auto-detected from manifest if omitted
 - `dry_run`: `true` to validate URL without installing
 
 ### `github__uninstall`

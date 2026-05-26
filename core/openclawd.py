@@ -141,8 +141,8 @@ _GITHUB_BUILTIN_TOOLS: List[Dict] = [
                     },
                     "type": {
                         "type": "string",
-                        "enum": ["mcp", "skill"],
-                        "description": "插件类型：mcp（MCP 工具服务器）或 skill（Skill 技能）；不填则自动检测",
+                        "enum": ["mcp", "skill", "skill_md"],
+                        "description": "插件类型：mcp（MCP 工具服务器）、skill（可调用 Skill）或 skill_md（SKILL.md Shell Skill）；不填则自动检测",
                     },
                     "dry_run": {
                         "type": "boolean",
