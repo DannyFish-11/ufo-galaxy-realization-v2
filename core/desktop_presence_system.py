@@ -16,6 +16,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from core.hidden_context_visible_action_surface import (
+    build_hidden_context_visible_action_surface_contract,
+)
 from core.realtime_streaming_backbone import build_realtime_streaming_backbone_contract
 
 
@@ -386,6 +389,9 @@ def build_desktop_presence_system_view(
         },
         "foreground_hierarchy": dict(DESKTOP_FOREGROUND_HIERARCHY),
         "future_extension_home": dict(DESKTOP_EXTENSION_HOME),
+        "hidden_context_visible_action_surface": (
+            build_hidden_context_visible_action_surface_contract()
+        ),
         "realtime_streaming_backbone": {
             "contract": build_realtime_streaming_backbone_contract(),
             "runtime_status": dict(stream_runtime_status or {}),
