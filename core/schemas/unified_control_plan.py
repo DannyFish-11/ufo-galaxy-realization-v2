@@ -764,6 +764,11 @@ class UnifiedControlPlan:
         and optional ``fallback_reason`` so that callers never need to read
         the deprecated top-level ``multimodal_route_decision`` metadata key.
         ``None`` for text-only requests.
+    desktop_native_ingress_backbone:
+        PR-52: Formal desktop-native ingress contract snapshot propagated from
+        runtime shell → OpenClawd mainline.  Captures modality family presence,
+        presence-mode coupling policy, and explicit mainline stage pathing
+        (input → shell → session → context → task → execution planning).
     fallback_level:
         The fallback level applied (``FallbackLevel.NONE`` for primary path).
     fallback_reason:
@@ -803,6 +808,7 @@ class UnifiedControlPlan:
     # PR-24: canonical multimodal routing decision embedded in the plan so
     # consumers do not need to read the deprecated top-level metadata key.
     multimodal_route_decision: Optional[Dict[str, Any]] = None
+    desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None
 
     fallback_level: str = FallbackLevel.NONE.value
     fallback_reason: Optional[str] = None
@@ -839,6 +845,7 @@ class UnifiedControlPlan:
             ),
             # PR-24: canonical routing decision embedded in the plan
             "multimodal_route_decision": self.multimodal_route_decision,
+            "desktop_native_ingress_backbone": self.desktop_native_ingress_backbone,
             "fallback_level": self.fallback_level,
             "fallback_reason": self.fallback_reason,
             "fallback_decision_record": (
@@ -885,6 +892,7 @@ class UnifiedControlPlan:
                 UnifiedExecutionDecision.from_dict(ued_raw) if isinstance(ued_raw, dict) else None
             ),
             multimodal_route_decision=d.get("multimodal_route_decision"),
+            desktop_native_ingress_backbone=d.get("desktop_native_ingress_backbone"),
             fallback_level=_safe_fallback(d.get("fallback_level")),
             fallback_reason=d.get("fallback_reason"),
             fallback_decision_record=(
@@ -1059,6 +1067,8 @@ def build_unified_control_plan(
     blocked_reason: Optional[str] = None,
     # PR-24 — canonical multimodal routing decision to embed in the plan
     multimodal_route_decision: Optional[Dict[str, Any]] = None,
+    # PR-52 — desktop-native ingress backbone contract snapshot
+    desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
 ) -> UnifiedControlPlan:
     """Build a :class:`UnifiedControlPlan` from the inputs available to OpenClawd.
 
@@ -1140,6 +1150,11 @@ def build_unified_control_plan(
         ``OpenClawd._select_multimodal_route()``.  Embedded directly into
         the plan so that consumers do not need to read the deprecated
         top-level ``multimodal_route_decision`` metadata key.
+    desktop_native_ingress_backbone:
+        PR-52: Shell-built and core-augmented desktop-native ingress backbone
+        contract snapshot.  Embedded directly in the plan so downstream
+        consumers can reason over ingress modality policy and stage pathing
+        without consulting side channels.
 
     Returns
     -------
@@ -1225,6 +1240,7 @@ def build_unified_control_plan(
         chosen_execution_decision=exec_decision,
         unified_execution_decision=unified_exec_decision,
         multimodal_route_decision=multimodal_route_decision,
+        desktop_native_ingress_backbone=desktop_native_ingress_backbone,
         fallback_level=safe_fallback,
         fallback_reason=fallback_reason,
         fallback_decision_record=fdr,
@@ -1287,6 +1303,7 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
         "authority_role": plan.authority_chain.decision_authority,
         "has_perception": plan.canonical_perception_summary is not None,
         "has_model_supply": plan.canonical_model_supply_summary is not None,
+        "has_desktop_native_ingress_backbone": plan.desktop_native_ingress_backbone is not None,
         # PR-24: include routing tier from embedded decision
         "multimodal_route_type": (
             plan.multimodal_route_decision.get("route_type")

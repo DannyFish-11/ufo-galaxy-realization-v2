@@ -2676,6 +2676,7 @@ class OpenClawd:
         blocked_reason: Optional[str] = None,
         # PR-24 — canonical multimodal routing decision to embed in the plan
         multimodal_route_decision: Optional[Dict[str, Any]] = None,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """PR-19 / PR-21 / PR-24: Build a canonical :class:`~core.schemas.unified_control_plan.UnifiedControlPlan` dict.
 
@@ -2742,11 +2743,39 @@ class OpenClawd:
                 blocked_reason=blocked_reason,
                 # PR-24: embed routing decision in the canonical plan
                 multimodal_route_decision=multimodal_route_decision,
+                desktop_native_ingress_backbone=desktop_native_ingress_backbone,
             )
             return _plan.to_dict()
         except Exception as _ucp_err:
             logger.debug("_build_unified_control_plan failed (swallowed): %s", _ucp_err)
             return None
+
+    @staticmethod
+    def _augment_desktop_native_ingress_backbone(
+        ingress_backbone: Optional[Dict[str, Any]],
+        *,
+        canonical_perception: Optional[Dict[str, Any]] = None,
+        multimodal_route_decision: Optional[Dict[str, Any]] = None,
+        execution_path: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Best-effort augmentation for desktop-native ingress backbone snapshots."""
+        try:
+            from core.desktop_native_multimodal_ingress_contract import (
+                augment_ingress_backbone_for_control_core,
+            )
+
+            return augment_ingress_backbone_for_control_core(
+                ingress_backbone,
+                canonical_perception=canonical_perception,
+                multimodal_route_decision=multimodal_route_decision,
+                execution_path=execution_path,
+            )
+        except Exception as _dni_err:
+            logger.debug(
+                "desktop-native ingress backbone augmentation failed (non-fatal): %s",
+                _dni_err,
+            )
+            return ingress_backbone if isinstance(ingress_backbone, dict) else None
 
     @staticmethod
     def _determine_execution_path(
@@ -2981,6 +3010,7 @@ class OpenClawd:
         entry_mode: Optional[str] = None,
         source_runtime_posture: Optional[str] = None,
         cognitive_execution_hint: Optional[Any] = None,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """Subject core entry point — invoked by DesktopPresenceRuntime during the LIMINAL phase.
 
@@ -3021,6 +3051,10 @@ class OpenClawd:
                 (``"local"`` | ``"cross_device"`` | ``"hybrid"``).  Determines
                 which liminal execution branch is activated.  Defaults to
                 ``"local"`` for backward compatibility.
+            desktop_native_ingress_backbone: Formal shell-built desktop-native
+                ingress contract snapshot.  When present, OpenClawd augments
+                it with context/task/plan stage facts and embeds it in metadata
+                and unified_control_plan for canonical downstream consumption.
 
         Returns:
             统一响应 dict::
@@ -3231,6 +3265,17 @@ class OpenClawd:
             task_type=_pr17_task_type,
         )
         _is_native_multimodal: bool = _multimodal_route.get("is_native_multimodal", False)
+        _desktop_native_ingress_for_plan: Optional[Dict[str, Any]] = self._augment_desktop_native_ingress_backbone(
+            desktop_native_ingress_backbone,
+            canonical_perception=_canonical_perception,
+            multimodal_route_decision=_multimodal_route,
+        )
+
+        def _augment_ingress_for_execution_path(execution_path: str) -> Optional[Dict[str, Any]]:
+            return self._augment_desktop_native_ingress_backbone(
+                _desktop_native_ingress_for_plan,
+                execution_path=execution_path,
+            )
 
         # ── PR-515 / GAP-512-009: Critical Path Harness — route-selection record ──
         # Record the routing decision in the canonical CriticalPathHarness layer
@@ -3630,6 +3675,7 @@ class OpenClawd:
                             trace_id,
                         )
                     # PR-19: build canonical unified control plan (additive, non-breaking)
+                    _desktop_native_ingress_for_plan_k = _augment_ingress_for_execution_path(_exec_path_k)
                     _ucp_k = self._build_unified_control_plan(
                         runtime_session_id=runtime_session_id,
                         trace_id=trace_id,
@@ -3646,6 +3692,7 @@ class OpenClawd:
                         execution_plan_summary=self._summarise_execution_plan(_plan_k),
                         # PR-24: embed canonical routing decision in the plan
                         multimodal_route_decision=_multimodal_route,
+                        desktop_native_ingress_backbone=_desktop_native_ingress_for_plan_k,
                     )
                     return {
                         "success": kernel_result.success,
@@ -3743,6 +3790,7 @@ class OpenClawd:
                             "canonical_model_supply_state": _canonical_model_supply,
                             # PR-19: canonical unified control plan
                             "unified_control_plan": _ucp_k,
+                            "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_k,
                             # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
                             # The canonical routing decision is now embedded inside
                             # unified_control_plan["multimodal_route_decision"].
@@ -4138,6 +4186,7 @@ class OpenClawd:
             # PR-12: advance plan lifecycle to terminal state
             self._finalise_plan_lifecycle(_plan2, success=bool(result.get("success", True)))
             # PR-19: build canonical unified control plan (additive, non-breaking)
+            _desktop_native_ingress_for_plan_2 = _augment_ingress_for_execution_path(_exec_path2)
             _ucp2 = self._build_unified_control_plan(
                 runtime_session_id=runtime_session_id,
                 trace_id=trace_id,
@@ -4155,6 +4204,7 @@ class OpenClawd:
                 execution_plan_summary=self._summarise_execution_plan(_plan2),
                 # PR-24: embed canonical routing decision in the plan
                 multimodal_route_decision=_multimodal_route,
+                desktop_native_ingress_backbone=_desktop_native_ingress_for_plan_2,
             )
             # Handler metadata is additive-only here. We guard type strictly so
             # malformed values (e.g. string/list) cannot break dict expansion.
@@ -4221,6 +4271,7 @@ class OpenClawd:
                     "canonical_model_supply_state": _canonical_model_supply,
                     # PR-19: canonical unified control plan
                     "unified_control_plan": _ucp2,
+                    "desktop_native_ingress_backbone": _desktop_native_ingress_for_plan_2,
                     # PR-24 DEPRECATED-COMPAT: top-level routing decision dict.
                     # The canonical routing decision is now embedded inside
                     # unified_control_plan["multimodal_route_decision"].
