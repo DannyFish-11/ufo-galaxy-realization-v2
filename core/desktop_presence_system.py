@@ -393,9 +393,18 @@ def build_desktop_presence_system_view(
     tristate_distribution: Dict[str, int],
     active_session_count: int,
     stream_runtime_status: Optional[Dict[str, Any]] = None,
+    android_presence_participation: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Return a formal desktop-presence projection for runtime/panel/operator surfaces."""
-    return {
+    """Return a formal desktop-presence projection for runtime/panel/operator surfaces.
+
+    ``android_presence_participation`` is accepted as an optional argument so that
+    the canonical default runtime path (PR-canonical-default) can pass the real
+    Android presence participation summary built from the device state store.  When
+    provided, it is embedded in the view as ``android_presence_participation`` so
+    that the field is visible on the user-facing default path rather than only in
+    operator/debug surfaces.
+    """
+    view: Dict[str, Any] = {
         "formal_presence_modes": [d.to_dict() for d in PRESENCE_MODE_DEFINITIONS],
         "state_machine": state_machine_snapshot,
         "mapping_to_runtime": {
@@ -421,6 +430,19 @@ def build_desktop_presence_system_view(
             "runtime_status": dict(stream_runtime_status or {}),
         },
     }
+    # Attach android_presence_participation when the canonical default path provides it.
+    # This makes the android participation data a first-class presence-system field
+    # on the user-facing default path (not hidden behind operator/debug paths).
+    if android_presence_participation is not None:
+        try:
+            view["android_presence_participation"] = (
+                android_presence_participation.to_dict()
+                if hasattr(android_presence_participation, "to_dict")
+                else dict(android_presence_participation)
+            )
+        except Exception:
+            pass
+    return view
 
 
 def list_presence_mode_names() -> List[str]:

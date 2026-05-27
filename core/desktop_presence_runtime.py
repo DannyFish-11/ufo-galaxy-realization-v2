@@ -892,6 +892,28 @@ class DesktopPresenceRuntime:
                 _ual_err,
             )
 
+        # PR-canonical-default: attach android_presence_runtime as a first-class
+        # result field on the canonical default runtime path.  This is the point
+        # where Android presence participation stops being optional/default-off and
+        # becomes a default output of every handle_request() invocation.
+        # The field carries path_kind=canonical_default when the android device
+        # state store is available, or path_kind=fallback when it is absent.
+        # This is NOT operator/debug-only — it is part of the user-visible default
+        # result surface.
+        try:
+            from core.android_v2_canonical_default_runtime_path import (
+                build_android_presence_runtime_field as _build_apr_field,
+            )
+            _android_presence_rt = _build_apr_field()
+            result["android_presence_runtime"] = _android_presence_rt.to_dict()
+            metadata["android_presence_runtime_path_kind"] = (
+                _android_presence_rt.path_kind.value
+            )
+        except Exception as _apr_err:
+            logger.debug(
+                "android_presence_runtime build failed (non-fatal): %s", _apr_err
+            )
+
         return result
 
     # ------------------------------------------------------------------
@@ -2054,12 +2076,27 @@ class DesktopPresenceRuntime:
                 user_interaction=False,
             )
             stream_backbone = self.realtime_streaming_backbone_summary()
+            # PR-canonical-default: wire android presence participation into the
+            # presence_summary system view — canonical default path is now default-on.
+            _android_presence_summary = None
+            try:
+                from core.android_v2_canonical_default_runtime_path import (
+                    build_android_presence_participation_for_default_path as _build_app,
+                )
+                _android_presence_summary = _build_app()
+            except Exception as _app_err:
+                logger.debug(
+                    "presence_summary: android presence participation build failed "
+                    "(non-fatal): %s",
+                    _app_err,
+                )
             presence_system = build_desktop_presence_system_view(
                 state_machine_snapshot=self._presence_state_machine.snapshot(),
                 dominant_tristate=dominant,
                 tristate_distribution=dict(counts),
                 active_session_count=len(sessions),
                 stream_runtime_status=stream_backbone.get("runtime_status"),
+                android_presence_participation=_android_presence_summary,
             )
 
             return {
