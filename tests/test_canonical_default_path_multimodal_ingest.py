@@ -242,6 +242,18 @@ class TestCanonicalVsCompatPathDistinction:
     - Compat/fallback opt-out: explicit enable_multimodal_ingest=False, SAFE_DEFAULT
     """
 
+    def setup_method(self):
+        # Reset singleton before each test, consistent with TestIngestRuntimeModule
+        # in test_pr10_multimodal_ingest_wiring.py.
+        import core.multimodal.ingest_runtime as _ir
+        _ir._ingest_bus = None
+        _ir._ingest_task = None
+
+    def teardown_method(self):
+        import core.multimodal.ingest_runtime as _ir
+        _ir._ingest_bus = None
+        _ir._ingest_task = None
+
     def test_canonical_default_path_sentinel_exists(self):
         """MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH sentinel must be importable."""
         from core.multimodal.ingest_runtime import MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH
@@ -314,10 +326,6 @@ class TestCanonicalVsCompatPathDistinction:
     def test_start_ingest_bus_skips_on_explicit_disable(self):
         """start_ingest_bus() must return False when explicitly disabled (compat path)."""
         from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
-        import core.multimodal.ingest_runtime as _ir
-
-        _ir._ingest_bus = None
-        _ir._ingest_task = None
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": False}):
             result = start_ingest_bus()
@@ -330,16 +338,9 @@ class TestCanonicalVsCompatPathDistinction:
             "Ingest bus must not be started on the explicit opt-out (compat) path"
         )
 
-        _ir._ingest_bus = None
-        _ir._ingest_task = None
-
     def test_start_ingest_bus_starts_on_canonical_default(self):
         """start_ingest_bus() must start when called with canonical default config (True)."""
         from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
-        import core.multimodal.ingest_runtime as _ir
-
-        _ir._ingest_bus = None
-        _ir._ingest_task = None
 
         with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
             with patch("core.multimodal.ingest_runtime._schedule_pipeline"):
@@ -352,9 +353,6 @@ class TestCanonicalVsCompatPathDistinction:
         assert get_ingest_bus() is not None, (
             "Ingest bus must be started on the canonical default path"
         )
-
-        _ir._ingest_bus = None
-        _ir._ingest_task = None
 
 
 # ===========================================================================
