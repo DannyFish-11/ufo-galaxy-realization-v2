@@ -844,6 +844,9 @@ class OperatorSnapshot:
     desktop_shell_state: str = ""
     presence_tristate: str = ""
     manifestation_summary: Dict[str, Any] = field(default_factory=dict)
+    desktop_presence_system: Dict[str, Any] = field(default_factory=dict)
+    shared_subject_panel: Dict[str, Any] = field(default_factory=dict)
+    shared_subject_lineage: Dict[str, Any] = field(default_factory=dict)
     governance_state: Dict[str, Any] = field(default_factory=dict)
     mesh_runtime_state: Dict[str, Any] = field(default_factory=dict)
     operator_action_layer: Dict[str, Any] = field(default_factory=dict)
@@ -871,6 +874,9 @@ class OperatorSnapshot:
             "desktop_shell_state": self.desktop_shell_state,
             "presence_tristate": self.presence_tristate,
             "manifestation_summary": dict(self.manifestation_summary),
+            "desktop_presence_system": dict(self.desktop_presence_system),
+            "shared_subject_panel": dict(self.shared_subject_panel),
+            "shared_subject_lineage": dict(self.shared_subject_lineage),
             "governance_state": dict(self.governance_state),
             "mesh_runtime_state": dict(self.mesh_runtime_state),
             "operator_action_layer": dict(self.operator_action_layer),
@@ -1774,6 +1780,13 @@ class OperatorSurface:
             from core.desktop_presence_runtime import get_desktop_presence_runtime as _get_dpr
             _psum = _get_dpr().presence_summary()
             snap.presence_tristate = _psum.get("dominant_tristate", "silent")
+            snap.desktop_presence_system = dict(_psum.get("desktop_presence_system") or {})
+            snap.shared_subject_panel = dict(
+                snap.desktop_presence_system.get("subject_panel") or {}
+            )
+            snap.shared_subject_lineage = dict(
+                snap.desktop_presence_system.get("subject_unified_lineage") or {}
+            )
         except Exception as exc:
             logger.debug("operator_snapshot: presence tristate unavailable: %s", exc)
 
