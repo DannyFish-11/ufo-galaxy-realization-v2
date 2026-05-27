@@ -438,7 +438,7 @@ def build_ownership_aware_replay_execution_record(
     ------
     :data:`OWNERSHIP_AWARE_REPLAY_RECORD_POLICY`
     """
-    from core.replay_foundation import TaskExecutionRecord
+    from core.replay_foundation import TaskExecutionRecord  # noqa: PLC0415
 
     resolved_boundary = participant_ownership_boundary
     if resolved_boundary is None and ownership_context:

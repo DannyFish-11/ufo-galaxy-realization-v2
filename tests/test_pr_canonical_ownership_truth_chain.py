@@ -411,7 +411,7 @@ class TestGroupF_CSTRuntimeAdmissionGate:
         assert snap.total_records == 1
         assert snap.non_canonical_rejected_count == 0
 
-    def test_f6_mixed_records_only_canonical_in_ring_buffer(self) -> None:
+    def test_f6_only_canonical_records_admitted_when_mixed_with_non_canonical(self) -> None:
         """Canonical and non-canonical records submitted together: only canonical in ring buffer."""
         rt = CanonicalSessionTruthRuntime()
         canonical = CanonicalSessionTruthRecord(
@@ -482,12 +482,14 @@ class TestGroupG_SnapshotNonCanonicalCount:
 
 @_SKIP_CST
 class TestGroupH_RecordSessionTruthOwnership:
-    """Verify the admission gate works via CanonicalSessionTruthRuntime.record() directly.
+    """Verify the ownership admission gate behavior via CanonicalSessionTruthRuntime.record().
 
-    NOTE: The record_session_truth() module-level function requires pydantic
-    (via merge_session_truth → contracts). These tests validate the same
-    admission-gate behavior through the lower-level runtime API, which is
-    what the bridge and downstream callers use.
+    The higher-level record_session_truth() function requires pydantic (via
+    merge_session_truth → contracts) and is therefore not exercisable in this
+    test environment. These tests validate the same admission-gate behavior
+    through the CanonicalSessionTruthRuntime.record() API, which is exactly
+    what both build_ownership_aware_session_truth_record() in the bridge and
+    any direct runtime callers use.
     """
 
     def setup_method(self) -> None:
