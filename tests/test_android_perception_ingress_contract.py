@@ -2,10 +2,14 @@ from unittest.mock import patch
 
 from core.android_perception_ingress_contract import (
     ANDROID_PERCEPTION_CANONICAL,
+    ANDROID_PERCEPTION_CANONICAL_HANDLER,
+    ANDROID_PERCEPTION_CANONICAL_PROTOCOL,
+    ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY,
     ANDROID_PERCEPTION_INGRESS_CONTRACT_SENTINEL,
     ANDROID_PERCEPTION_ONE_SHOT,
     ANDROID_PERCEPTION_ROUTE_INGRESS_BUS,
     ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND,
+    ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD,
     ANDROID_VISION_CARRIER_SOURCE,
     build_android_perception_ingress_context,
     build_android_perception_payload_contract,
@@ -26,6 +30,10 @@ def test_payload_contract_defaults_to_one_shot_request_bound():
     assert payload["carrier"] == ANDROID_VISION_CARRIER_SOURCE
     assert payload["participation"] == ANDROID_PERCEPTION_ONE_SHOT
     assert payload["default_ingress_route"] == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
+    assert payload["canonical_protocol"] == ANDROID_PERCEPTION_CANONICAL_PROTOCOL
+    assert payload["canonical_handler"] == ANDROID_PERCEPTION_CANONICAL_HANDLER
+    assert payload["canonical_runtime_entry"] == ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY
+    assert payload["canonical_truth_closure_field"] == ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD
 
 
 def test_ingress_context_for_canonical_participation_respects_ingest_gate():
@@ -57,4 +65,12 @@ def test_ingress_context_for_canonical_participation_respects_ingest_gate():
     assert (
         enabled_ctx["android_perception_ingress_route"]
         == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
+    )
+    assert (
+        enabled_ctx["android_perception_canonical_protocol"]
+        == ANDROID_PERCEPTION_CANONICAL_PROTOCOL
+    )
+    assert (
+        enabled_ctx["android_perception_canonical_handler"]
+        == ANDROID_PERCEPTION_CANONICAL_HANDLER
     )

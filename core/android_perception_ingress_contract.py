@@ -15,6 +15,18 @@ from typing import Any, Dict, Optional
 ANDROID_PERCEPTION_INGRESS_CONTRACT_SENTINEL: str = (
     "ANDROID_PERCEPTION_INGRESS_CONTRACT::v1 present"
 )
+ANDROID_PERCEPTION_INGRESS_PROTOCOL: str = "ANDROID_PERCEPTION_INGRESS_PROTOCOL_V1"
+# Backward-compatible alias.
+ANDROID_PERCEPTION_CANONICAL_PROTOCOL: str = ANDROID_PERCEPTION_INGRESS_PROTOCOL
+ANDROID_PERCEPTION_CANONICAL_HANDLER: str = (
+    "galaxy_gateway.android.handlers.vision.handle_vision_request"
+)
+ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY: str = (
+    "core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request"
+)
+ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD: str = (
+    "ingress_carrier_context.android_perception_ingress_route"
+)
 
 V2_MULTIMODAL_AUTHORITY: str = "v2_multimodal_main_host"
 ANDROID_VISION_CARRIER_SOURCE: str = "android_vision"
@@ -63,6 +75,10 @@ def build_android_perception_payload_contract(
     )
     return {
         "schema_version": 1,
+        "canonical_protocol": ANDROID_PERCEPTION_CANONICAL_PROTOCOL,
+        "canonical_handler": ANDROID_PERCEPTION_CANONICAL_HANDLER,
+        "canonical_runtime_entry": ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY,
+        "canonical_truth_closure_field": ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD,
         "carrier": ANDROID_VISION_CARRIER_SOURCE,
         "capture_type": "screenshot",
         "device_id": device_id,
@@ -113,6 +129,10 @@ def build_android_perception_ingress_context(
         condition = "default_one_shot_request_bound"
 
     return {
+        "android_perception_canonical_protocol": ANDROID_PERCEPTION_CANONICAL_PROTOCOL,
+        "android_perception_canonical_handler": ANDROID_PERCEPTION_CANONICAL_HANDLER,
+        "android_perception_canonical_runtime_entry": ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY,
+        "android_perception_truth_closure_field": ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD,
         "multimodal_authority": V2_MULTIMODAL_AUTHORITY,
         "android_perception_participation": effective_participation,
         "android_perception_ingress_route": route,

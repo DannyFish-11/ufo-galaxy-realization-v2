@@ -130,6 +130,27 @@ def _has_continuous_stream(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) -
     return False
 
 
+def _build_android_perception_ingress_snapshot(
+    *,
+    source: str,
+    multimodal_context: Optional[Any],
+) -> Dict[str, Any]:
+    try:
+        from core.android_perception_ingress_contract import (
+            ANDROID_VISION_CARRIER_SOURCE,
+            build_android_perception_ingress_context,
+        )
+    except (ImportError, ModuleNotFoundError):
+        return {}
+    if source != ANDROID_VISION_CARRIER_SOURCE:
+        return {}
+    snapshot = build_android_perception_ingress_context(
+        source=source,
+        multimodal_context=multimodal_context,
+    )
+    return dict(snapshot or {})
+
+
 def build_desktop_native_ingress_backbone(
     *,
     message: str,
@@ -153,6 +174,11 @@ def build_desktop_native_ingress_backbone(
     audio_count = len(mm_dict.get("audio") or [])
     has_sensor = bool(mm_dict.get("sensor"))
     has_stream = _has_continuous_stream(mm_dict, safe_kwargs)
+    android_perception_ingress = _build_android_perception_ingress_snapshot(
+        source=source,
+        multimodal_context=multimodal_context,
+    )
+    has_android_perception = bool(android_perception_ingress)
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
@@ -171,6 +197,11 @@ def build_desktop_native_ingress_backbone(
             "count": 1 if has_stream else 0,
             "tier": "mainline_continuous",
         },
+        "android_perception": {
+            "is_present": has_android_perception,
+            "count": 1 if has_android_perception else 0,
+            "tier": "extension",
+        },
     }
 
     return {
@@ -178,6 +209,7 @@ def build_desktop_native_ingress_backbone(
         "sentinel": DESKTOP_NATIVE_MULTIMODAL_INGRESS_BACKBONE_SENTINEL,
         "contract_version": 1,
         "carrier_source": source or "chat",
+        "android_perception_ingress": android_perception_ingress,
         "modalities": modalities,
         "modality_tiers": {
             "mainline_required": list(MAINLINE_REQUIRED_MODALITIES),
