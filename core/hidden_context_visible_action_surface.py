@@ -12,6 +12,9 @@ HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_AUTHORITY = (
 HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE_SENTINEL = (
     "HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE::FORMAL_CONVERGENCE_PASS_V1"
 )
+DUAL_REPO_ANDROID_BOUNDARY_EXTENSION_SENTINEL = (
+    "HIDDEN_CONTEXT_VISIBLE_ACTION_SURFACE::DUAL_REPO_ANDROID_BOUNDARY_EXTENSION_V1"
+)
 
 
 class SurfaceLayer(str, Enum):
@@ -178,6 +181,60 @@ LAYER_CONTENT_RULES: Tuple[LayerContentRule, ...] = (
         SurfaceLayer.OPERATOR_AUDIT_TRUTH,
         "operator_default",
         "System narrative is retained as operator explanatory/audit view.",
+    ),
+    # ── Dual-repo Android-originated content keys ──────────────────────────
+    # These keys govern Android-originated information under the same
+    # foreground/background/operator boundary logic as V2-local metadata.
+    # Adding them here is what enables the dual-repo shared boundary resolution
+    # path: classify_content_layer("android_blocker") returns the same tier
+    # as classify_content_layer("current_action_state").
+    LayerContentRule(
+        "android_blocker",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android-originated blockers must surface as foreground action state.",
+    ),
+    LayerContentRule(
+        "android_confirmation_needed",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android-originated confirmation requests require foreground surfacing.",
+    ),
+    LayerContentRule(
+        "android_result_summary",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android execution result summaries belong to the visible action surface.",
+    ),
+    LayerContentRule(
+        "android_lifecycle_phase",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android lifecycle phase changes belong to the visible action surface.",
+    ),
+    LayerContentRule(
+        "android_device_state",
+        SurfaceLayer.BACKGROUND_SEMANTIC,
+        "background_default",
+        "Android device state stays background-semantic; not a foreground concept.",
+    ),
+    LayerContentRule(
+        "android_context",
+        SurfaceLayer.BACKGROUND_SEMANTIC,
+        "background_default",
+        "Android-originated context assembly stays background.",
+    ),
+    LayerContentRule(
+        "android_participation_state",
+        SurfaceLayer.BACKGROUND_SEMANTIC,
+        "background_default",
+        "Android participation state stays background unless it has foreground impact.",
+    ),
+    LayerContentRule(
+        "android_execution_signal",
+        SurfaceLayer.OPERATOR_AUDIT_TRUTH,
+        "operator_default",
+        "Android execution signals are operator audit truth surfaces.",
     ),
 )
 
