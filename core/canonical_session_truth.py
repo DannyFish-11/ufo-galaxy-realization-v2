@@ -76,8 +76,6 @@ from enum import Enum
 from threading import Lock
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
-from core.ugcp_truth_event_model import build_session_truth_authoritative_event
-
 try:
     from core.replay_audit_persistence import (
         append_replay_audit_record as _append_truth_audit_record,
@@ -98,6 +96,9 @@ __all__ = [
     "CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL",
     "SESSION_TRUTH_SNAPSHOT_IS_DURABLE_POLICY",
     "SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL",
+    "CANONICAL_TRUTH_ADMITS_ONLY_CANONICALIZED_OWNERSHIP_POLICY",
+    "PARTICIPANT_OWNERSHIP_BOUNDARY_FIELD_POLICY",
+    "NON_CANONICAL_PARTICIPANT_TRUTH_ISOLATED_POLICY",
     # Data types
     "SessionTruthSource",
     "CanonicalSessionTruthRecord",
@@ -224,6 +225,45 @@ SESSION_TRUTH_RING_BUFFER_IS_READ_CACHE_SENTINEL: str = (
 )
 """Sentinel clarifying the ring buffer's read-cache role vs. durable authority (PR-2)."""
 
+CANONICAL_TRUTH_ADMITS_ONLY_CANONICALIZED_OWNERSHIP_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::OWNERSHIP_ADMISSION_GATE_POLICY_V1: "
+    "CanonicalSessionTruthRuntime.record() MUST NOT admit records whose "
+    "participant_ownership_boundary is 'participant_local_only', "
+    "'fallback_non_canonical', or 'rejected_non_canonical' into the canonical "
+    "ring buffer.  Only records with participant_ownership_boundary='canonicalized' "
+    "or an empty boundary (backward-compat) are admitted as canonical truth. "
+    "Non-canonical records are counted and written to the durable audit store "
+    "as evidence but are never added to the canonical ring buffer or snapshot. "
+    "This prevents compat/fallback/divergence pollution of the canonical truth "
+    "substrate.  (PR-4V2 ownership chain, canonical ownership truth bridge)"
+)
+"""Policy: canonical ring buffer only admits canonicalized ownership records."""
+
+PARTICIPANT_OWNERSHIP_BOUNDARY_FIELD_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::PARTICIPANT_OWNERSHIP_BOUNDARY_FIELD_POLICY_V1: "
+    "CanonicalSessionTruthRecord.participant_ownership_boundary carries the "
+    "ownership classification determined at the Android participant truth "
+    "ingress boundary.  Allowed values: 'canonicalized', 'participant_local_only', "
+    "'fallback_non_canonical', 'rejected_non_canonical', '' (unset / backward-compat). "
+    "This field allows deeper truth/replay/recovery consumers to inspect the "
+    "ownership origin of a canonical truth record without re-interrogating the "
+    "ingress layer.  (PR-4V2 ownership chain, canonical ownership truth bridge)"
+)
+"""Policy: participant_ownership_boundary field carries ingress ownership classification."""
+
+NON_CANONICAL_PARTICIPANT_TRUTH_ISOLATED_POLICY: str = (
+    "CANONICAL_SESSION_TRUTH::NON_CANONICAL_ISOLATED_POLICY_V1: "
+    "participant_local_only, fallback_non_canonical, and rejected_non_canonical "
+    "records originating from Android participant truth ingress MUST NOT be "
+    "silently merged into the canonical truth substrate.  They are isolated at "
+    "the CanonicalSessionTruthRuntime admission gate and written to the durable "
+    "audit store as non-canonical evidence only.  Callers that need to inspect "
+    "non-canonical records must query the durable audit store directly; they "
+    "are never returned by the canonical ring buffer read APIs.  "
+    "(PR-4V2 ownership chain, canonical ownership truth bridge)"
+)
+"""Policy: non-canonical participant truth is isolated from canonical substrate."""
+
 # ---------------------------------------------------------------------------
 # Internal posture helpers
 # ---------------------------------------------------------------------------
@@ -251,6 +291,17 @@ _NON_AUTHORITY_TRUTH_SOURCE_LABELS = (
     "legacy",
     "adapter",
     "bridge",
+)
+
+# Ownership boundary values that must NOT be admitted to the canonical ring buffer.
+# These originate from the Android participant truth ingress ownership_context and
+# represent non-canonical, local-only, fallback, or rejected participant truth.
+_NON_CANONICAL_OWNERSHIP_BOUNDARIES: frozenset = frozenset(
+    {
+        "participant_local_only",
+        "fallback_non_canonical",
+        "rejected_non_canonical",
+    }
 )
 
 
@@ -366,6 +417,14 @@ class CanonicalSessionTruthRecord:
         Unix epoch seconds when this record was created.
     metadata:
         Arbitrary extensibility bag.
+    participant_ownership_boundary:
+        Ownership classification determined at the Android participant truth
+        ingress boundary.  Allowed values: ``'canonicalized'``,
+        ``'participant_local_only'``, ``'fallback_non_canonical'``,
+        ``'rejected_non_canonical'``, or ``''`` (unset / backward-compat).
+        Non-empty non-canonical values cause this record to be blocked from
+        the canonical ring buffer admission gate.
+        Policy: :data:`PARTICIPANT_OWNERSHIP_BOUNDARY_FIELD_POLICY`.
     """
 
     record_id: str = dataclasses.field(
@@ -387,6 +446,7 @@ class CanonicalSessionTruthRecord:
     reason: str = ""
     timestamp: float = dataclasses.field(default_factory=time.time)
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    participant_ownership_boundary: str = ""
 
     @property
     def runtime_attachment_session_id(self) -> str:
@@ -413,6 +473,7 @@ class CanonicalSessionTruthRecord:
             "reason": self.reason,
             "timestamp": self.timestamp,
             "metadata": dict(self.metadata),
+            "participant_ownership_boundary": self.participant_ownership_boundary,
             "authority": CANONICAL_SESSION_TRUTH_AUTHORITY,
         }
 
@@ -441,6 +502,9 @@ class CanonicalSessionTruthRecord:
             reason=str(d.get("reason") or ""),
             timestamp=float(d.get("timestamp") or time.time()),
             metadata=dict(d.get("metadata") or {}),
+            participant_ownership_boundary=str(
+                d.get("participant_ownership_boundary") or ""
+            ),
         )
 
 
@@ -479,6 +543,7 @@ class CanonicalSessionTruthSnapshot:
     control_only_session_count: int = 0
     join_runtime_session_count: int = 0
     successful_merge_count: int = 0
+    non_canonical_rejected_count: int = 0
     timestamp: float = dataclasses.field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -489,6 +554,7 @@ class CanonicalSessionTruthSnapshot:
             "control_only_session_count": self.control_only_session_count,
             "join_runtime_session_count": self.join_runtime_session_count,
             "successful_merge_count": self.successful_merge_count,
+            "non_canonical_rejected_count": self.non_canonical_rejected_count,
             "timestamp": self.timestamp,
             "authority": CANONICAL_SESSION_TRUTH_AUTHORITY,
         }
@@ -524,6 +590,7 @@ class CanonicalSessionTruthRuntime:
         self._control_only_count: int = 0
         self._join_runtime_count: int = 0
         self._success_count: int = 0
+        self._non_canonical_rejected_count: int = 0
         self._lock: Lock = Lock()
         # Optional durable audit sink (PR-B2)
         self._audit_store: Any = None
@@ -564,11 +631,51 @@ class CanonicalSessionTruthRuntime:
     def record(self, rec: CanonicalSessionTruthRecord) -> CanonicalSessionTruthRecord:
         """Add *rec* to the ring buffer and return it.
 
-        When a durable audit store is attached, the record is also written to
-        the store for persistent auditability (PR-B2).  When a snapshot store
-        is attached, the record is also written to the snapshot for recovery
-        across V2 restarts.
+        Ownership admission gate
+        ------------------------
+        When *rec* carries a ``participant_ownership_boundary`` value that
+        belongs to :data:`_NON_CANONICAL_OWNERSHIP_BOUNDARIES` (i.e.
+        ``'participant_local_only'``, ``'fallback_non_canonical'``, or
+        ``'rejected_non_canonical'``), the record is **not** admitted to the
+        canonical ring buffer or snapshot store.  The rejection is counted via
+        ``_non_canonical_rejected_count`` and the record is written to the
+        durable audit store (if attached) as non-canonical evidence only.
+        Policy: :data:`CANONICAL_TRUTH_ADMITS_ONLY_CANONICALIZED_OWNERSHIP_POLICY`.
+
+        When a durable audit store is attached, admitted records are also
+        written to the store for persistent auditability (PR-B2).  When a
+        snapshot store is attached, admitted records are also written to the
+        snapshot for recovery across V2 restarts.
         """
+        ownership_boundary = rec.participant_ownership_boundary
+        if ownership_boundary in _NON_CANONICAL_OWNERSHIP_BOUNDARIES:
+            # Non-canonical: block admission, count the rejection, audit as evidence.
+            with self._lock:
+                self._non_canonical_rejected_count += 1
+            _logger.debug(
+                "CanonicalSessionTruthRuntime: blocked non-canonical record "
+                "(ownership_boundary=%r, session=%r, task=%r). Policy: %s",
+                ownership_boundary,
+                rec.session_id,
+                rec.task_id,
+                CANONICAL_TRUTH_ADMITS_ONLY_CANONICALIZED_OWNERSHIP_POLICY,
+            )
+            # Write to durable audit store as non-canonical evidence (not canonical truth).
+            if self._audit_store is not None and _append_truth_audit_record is not None:
+                try:
+                    _append_truth_audit_record(
+                        {**rec.to_dict(), "_non_canonical_blocked": True},
+                        "non_canonical_truth_blocked",
+                        store=self._audit_store,
+                    )
+                except Exception as _exc:  # noqa: BLE001
+                    _logger.debug(
+                        "CanonicalSessionTruthRuntime: non-canonical audit append failed: %s",
+                        _exc,
+                    )
+            return rec  # returned but NOT admitted to canonical substrate
+
+        # ── Canonical admission path ─────────────────────────────────────
         with self._lock:
             self._records.append(rec)
             self._total += 1
@@ -612,6 +719,7 @@ class CanonicalSessionTruthRuntime:
                 control_only_session_count=self._control_only_count,
                 join_runtime_session_count=self._join_runtime_count,
                 successful_merge_count=self._success_count,
+                non_canonical_rejected_count=self._non_canonical_rejected_count,
             )
 
 
@@ -1069,6 +1177,7 @@ def record_session_truth(
     exclude_observer_only_role: bool = True,
     truth_source: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    participant_ownership_boundary: Optional[str] = None,
 ) -> "CanonicalSessionTruthRecord":
     """Compute and record the canonical session truth, returning the record.
 
@@ -1093,6 +1202,15 @@ def record_session_truth(
         Optional :class:`SessionTruthSource` value string describing the
         dominant origin of the result (``local``, ``remote_handoff``,
         ``takeover``, ``multi_device``, ``mesh``, or ``unknown``).
+    participant_ownership_boundary:
+        Optional ownership classification from the Android participant truth
+        ingress layer.  When set, propagated to the
+        :class:`CanonicalSessionTruthRecord` and evaluated at the
+        :class:`CanonicalSessionTruthRuntime` admission gate.  Non-canonical
+        values (``'participant_local_only'``, ``'fallback_non_canonical'``,
+        ``'rejected_non_canonical'``) cause the record to be blocked from
+        the canonical ring buffer.  Policy:
+        :data:`CANONICAL_TRUTH_ADMITS_ONLY_CANONICALIZED_OWNERSHIP_POLICY`.
 
     Returns
     -------
@@ -1169,6 +1287,9 @@ def record_session_truth(
             "truth_surface_boundary_policy",
             PROJECTION_INTEROP_COMPAT_NOT_TRUTH_AUTHORITY_POLICY,
         )
+    from core.ugcp_truth_event_model import (  # noqa: PLC0415  (lazy import inside function to avoid transitive pydantic dependency at module load time)
+        build_session_truth_authoritative_event,
+    )
     authoritative_event = build_session_truth_authoritative_event(
         {
             "record_id": "",
@@ -1217,6 +1338,7 @@ def record_session_truth(
             f"merge_success={merged.success}"
         ),
         metadata=record_metadata,
+        participant_ownership_boundary=str(participant_ownership_boundary or ""),
     )
 
     get_canonical_session_truth_runtime().record(rec)
