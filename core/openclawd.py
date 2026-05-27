@@ -2192,13 +2192,23 @@ class OpenClawd:
                 continuous_frame=_frame,
             )
             perception = _cps.to_dict()
+            canonical_continuous_ingress = self._build_canonical_continuous_ingress(
+                desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+                stream_runtime_status=stream_runtime_status,
+            )
+            perception["canonical_continuous_ingress"] = canonical_continuous_ingress
 
             ingress_mods = (
                 (desktop_native_ingress_backbone or {}).get("modalities", {})
                 if isinstance(desktop_native_ingress_backbone, dict)
                 else {}
             )
-            if bool((ingress_mods.get("continuous_stream") or {}).get("is_present")):
+            canonical_families = canonical_continuous_ingress.get("families") or {}
+            has_canonical_stream = bool(
+                (canonical_families.get("desktop_continuous_stream") or {}).get("is_present")
+                or (canonical_families.get("runtime_stream_session_manager") or {}).get("is_present")
+            )
+            if bool((ingress_mods.get("continuous_stream") or {}).get("is_present")) or has_canonical_stream:
                 active_modalities = list(perception.get("active_modalities") or [])
                 if "stream" not in active_modalities:
                     active_modalities.append("stream")
@@ -2248,6 +2258,61 @@ class OpenClawd:
         except Exception as _cps_err:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
             return None
+
+    @staticmethod
+    def _build_canonical_continuous_ingress(
+        *,
+        desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None,
+        stream_runtime_status: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        base = {}
+        if isinstance(desktop_native_ingress_backbone, dict):
+            base = dict((desktop_native_ingress_backbone.get("canonical_continuous_ingress") or {}))
+        families = dict(base.get("families") or {})
+
+        ingress_mods = (
+            (desktop_native_ingress_backbone or {}).get("modalities", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
+        if "desktop_continuous_stream" not in families:
+            families["desktop_continuous_stream"] = {
+                "is_present": bool((ingress_mods.get("continuous_stream") or {}).get("is_present")),
+                "ingress_role": "desktop_native_continuous_stream_ingress",
+            }
+        if "android_device_continuous_stream" not in families:
+            android_perception_ingress = (
+                (desktop_native_ingress_backbone or {}).get("android_perception_ingress", {})
+                if isinstance(desktop_native_ingress_backbone, dict)
+                else {}
+            )
+            families["android_device_continuous_stream"] = {
+                "is_present": bool(android_perception_ingress),
+                "ingress_role": "android_device_continuous_stream_ingress",
+            }
+        if isinstance(stream_runtime_status, dict):
+            stream_state = str(stream_runtime_status.get("stream_state") or "")
+            families["runtime_stream_session_manager"] = {
+                "is_present": bool(
+                    stream_runtime_status.get("live_stream_session_exists")
+                    or stream_runtime_status.get("stream_active_for_routing")
+                    or stream_state in {"active", "degraded", "reconnecting", "unavailable"}
+                ),
+                "stream_state": stream_state,
+                "stream_active_for_routing": bool(stream_runtime_status.get("stream_active_for_routing")),
+                "stream_fallback_required": bool(stream_runtime_status.get("stream_fallback_required")),
+                "ingress_role": "runtime_streaming_session_manager_ingress",
+            }
+
+        active_families = [name for name, item in families.items() if bool((item or {}).get("is_present"))]
+        return {
+            "authority": str(base.get("authority") or "CANONICAL_CONTINUOUS_INGRESS::OPENCLAWD_CONVERGENCE_V1"),
+            "sentinel": str(base.get("sentinel") or "CANONICAL_CONTINUOUS_INGRESS::OPENCLAWD_MAINLINE_V1"),
+            "contract_version": int(base.get("contract_version") or 1),
+            "families": families,
+            "active_families": active_families,
+            "is_present": bool(active_families),
+        }
 
     def _build_canonical_model_supply_state(self) -> Optional[Dict[str, Any]]:
         """PR-24: Build a serialisable canonical model supply state dict.
@@ -2806,7 +2871,16 @@ class OpenClawd:
             if isinstance(desktop_native_ingress_backbone, dict)
             else {}
         )
-        has_stream_ingress = bool((ingress_mods.get("continuous_stream") or {}).get("is_present"))
+        canonical_continuous_ingress = OpenClawd._build_canonical_continuous_ingress(
+            desktop_native_ingress_backbone=desktop_native_ingress_backbone,
+            stream_runtime_status=stream_runtime_status,
+        )
+        canonical_families = canonical_continuous_ingress.get("families") or {}
+        has_stream_ingress = bool(
+            (ingress_mods.get("continuous_stream") or {}).get("is_present")
+            or (canonical_families.get("desktop_continuous_stream") or {}).get("is_present")
+            or (canonical_families.get("runtime_stream_session_manager") or {}).get("is_present")
+        )
         has_screen_ingress = bool((ingress_mods.get("screen_context") or {}).get("is_present"))
         has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
         android_perception_ingress = (
@@ -2817,6 +2891,7 @@ class OpenClawd:
         has_android_perception_ingress = bool(
             (ingress_mods.get("android_perception") or {}).get("is_present")
             or android_perception_ingress
+            or (canonical_families.get("android_device_continuous_stream") or {}).get("is_present")
         )
         android_nl_ingress = (
             (desktop_native_ingress_backbone or {}).get("android_nl_ingress", {})
