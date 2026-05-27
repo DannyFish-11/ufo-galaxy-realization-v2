@@ -1018,39 +1018,84 @@ class TestAndroidSideMultimodalPresence:
 
 
 # ---------------------------------------------------------------------------
-# 9. Ambient Ingest Remains Gated (Overclaiming Guard)
+# 9. Canonical Default Path Verification (promoted from SAFE_DEFAULT gate)
 # ---------------------------------------------------------------------------
 
 
 class TestAmbientIngestRemainsGated:
-    """Prove the continuous ambient ingest path remains SAFE_DEFAULT gated.
+    """Verify the continuous ambient ingest path is the canonical default.
 
-    This test prevents overclaiming.  The ambient MultimodalIngressBus path
-    is intentionally disabled by default (enable_multimodal_ingest=False in
-    SAFE_DEFAULT profile).  Any future PR that accidentally enables it always-on
-    will be caught here.
+    This test was previously an overclaiming guard (SAFE_DEFAULT, disabled
+    by default).  The canonical promotion PR changed enable_multimodal_ingest
+    to True in config.json.  This class now verifies:
 
-    Evidence: core/multimodal_runtime_profile.py (SAFE_DEFAULT)
+    - The SAFE_DEFAULT profile still exists as a named opt-out posture.
+    - With canonical default config, the resolved profile is FULL_DEPLOYMENT
+      and enable_multimodal_ingest is True.
+    - The ingest bus singleton is not started until start_ingest_bus() is
+      explicitly called (runtime singleton lifecycle is unchanged).
+    - Structural invariants (SAFE_DEFAULT enum, source text) are preserved.
+
+    The SAFE_DEFAULT (disabled) posture is now an explicit opt-out preserved
+    for text-only or constrained deployments, not the canonical default.
+
+    Evidence: config.json (enable_multimodal_ingest=true),
+              core/multimodal_runtime_profile.py (FULL_DEPLOYMENT),
+              core/multimodal/ingest_runtime.py (CANONICAL_DEFAULT_PATH sentinel)
     """
 
-    def test_safe_default_profile_exists_and_disables_ingest(self):
-        """SAFE_DEFAULT profile must have enable_multimodal_ingest=False."""
+    def test_canonical_default_config_resolves_full_deployment_with_ingest_enabled(self):
+        """Canonical default config must resolve FULL_DEPLOYMENT with enable_multimodal_ingest=True.
+
+        This is the direct reversal of the old SAFE_DEFAULT guard: multimodal
+        ingest is now the canonical default runtime path.
+        """
         from core.multimodal_runtime_profile import (
             MultimodalRuntimeProfile,
             resolve_multimodal_runtime_profile,
         )
 
-        # SAFE_DEFAULT is the profile name (enum value).
-        assert MultimodalRuntimeProfile.SAFE_DEFAULT.value == "safe_default", (
-            "MultimodalRuntimeProfile.SAFE_DEFAULT must have value 'safe_default'"
-        )
-        # Resolve with no config overrides — must produce SAFE_DEFAULT profile
-        # with enable_multimodal_ingest=False.
+        # Resolve with no config overrides — reads from canonical config.json.
         snapshot = resolve_multimodal_runtime_profile()
-        assert snapshot.enable_multimodal_ingest is False, (
-            "SAFE_DEFAULT profile must have enable_multimodal_ingest=False — "
-            "the ambient continuous ingest path is intentionally gated. "
-            "Enabling it without explicit configuration is overclaiming."
+        assert snapshot.enable_multimodal_ingest is True, (
+            "Canonical default configuration must have enable_multimodal_ingest=True. "
+            "Continuous host perception (MultimodalIngressBus) is the canonical "
+            "default runtime path.  SAFE_DEFAULT is now an explicit opt-out, not "
+            "the default posture."
+        )
+        assert snapshot.profile == MultimodalRuntimeProfile.FULL_DEPLOYMENT, (
+            "Canonical default configuration must resolve FULL_DEPLOYMENT profile — "
+            "multimodal ingest is enabled by default."
+        )
+
+    def test_safe_default_profile_enum_still_exists_as_opt_out(self):
+        """SAFE_DEFAULT profile enum value must still exist as an explicit opt-out."""
+        from core.multimodal_runtime_profile import (
+            MultimodalRuntimeProfile,
+            resolve_multimodal_runtime_profile,
+        )
+
+        assert MultimodalRuntimeProfile.SAFE_DEFAULT.value == "safe_default", (
+            "MultimodalRuntimeProfile.SAFE_DEFAULT must have value 'safe_default' "
+            "— it is preserved as an explicit opt-out posture."
+        )
+        # Explicit opt-out: when caller passes enable_multimodal_ingest=False,
+        # it must still resolve SAFE_DEFAULT correctly.
+        opt_out_snapshot = resolve_multimodal_runtime_profile(
+            config={
+                "enable_multimodal_ingest": False,
+                "enable_webrtc_session_manager": False,
+                "debug_desktop_presence_runtime": False,
+                "state_event_bus_log_all": False,
+            },
+            env={},
+        )
+        assert opt_out_snapshot.profile == MultimodalRuntimeProfile.SAFE_DEFAULT, (
+            "Explicit opt-out (enable_multimodal_ingest=False) must resolve "
+            "SAFE_DEFAULT — the opt-out posture must still function correctly."
+        )
+        assert opt_out_snapshot.enable_multimodal_ingest is False, (
+            "Explicit opt-out snapshot must have enable_multimodal_ingest=False."
         )
 
     def test_multimodal_ingest_runtime_does_not_start_without_activation(self):
@@ -1079,10 +1124,25 @@ class TestAmbientIngestRemainsGated:
         ).read_text(encoding="utf-8")
         assert "SAFE_DEFAULT" in profile_src, (
             "core/multimodal_runtime_profile.py must define SAFE_DEFAULT — "
-            "the canonical guard against always-on ambient ingest"
+            "preserved as an explicit opt-out posture for text-only deployments"
         )
         assert "enable_multimodal_ingest" in profile_src, (
             "core/multimodal_runtime_profile.py must contain enable_multimodal_ingest"
+        )
+
+    def test_canonical_default_path_sentinel_in_ingest_runtime(self):
+        """ingest_runtime.py must export MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH sentinel."""
+        import core.multimodal.ingest_runtime as ingest_mod
+
+        assert hasattr(ingest_mod, "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH"), (
+            "core/multimodal/ingest_runtime.py must export "
+            "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH sentinel recording the "
+            "canonical default path promotion."
+        )
+        sentinel = ingest_mod.MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH
+        assert "CANONICAL_DEFAULT_PATH" in sentinel, (
+            "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH must contain "
+            "'CANONICAL_DEFAULT_PATH' to be machine-verifiable."
         )
 
 

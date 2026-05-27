@@ -18,7 +18,7 @@
   "continuum_max_tick_ms": 0,
   "continuum_sampling_rate": 1.0,
   "enable_system_api": false,
-  "enable_multimodal_ingest": false,
+  "enable_multimodal_ingest": true,
   "enable_system_actions": false,
   "execution_app_allowlist": [],
   "execution_assist_app": null,

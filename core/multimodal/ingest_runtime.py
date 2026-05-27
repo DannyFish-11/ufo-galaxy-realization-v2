@@ -54,6 +54,26 @@ from typing import Optional
 logger = logging.getLogger("Galaxy.MultimodalIngestRuntime")
 
 # ---------------------------------------------------------------------------
+# Canonical default path declaration
+# ---------------------------------------------------------------------------
+
+MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH: str = (
+    "CANONICAL_DEFAULT_PATH::MULTIMODAL_INGEST_V1: "
+    "Continuous host perception (MultimodalIngressBus) is the canonical default "
+    "runtime path for ambient sensory input.  enable_multimodal_ingest defaults "
+    "to True in the canonical configuration; the SAFE_DEFAULT (disabled) posture "
+    "is an explicit opt-out preserved for constrained or text-only deployments, "
+    "not the canonical default.  Any dispatch path that bypasses the ingest bus "
+    "when it is running is classified as a compat/fallback path, not canonical."
+)
+"""Sentinel declaring :func:`start_ingest_bus` as the canonical default runtime path.
+
+Prior to this PR the ambient continuous ingest path was default-off (SAFE_DEFAULT
+profile, enable_multimodal_ingest=False).  This sentinel records the promotion:
+continuous host perception is now the canonical default runtime path.
+"""
+
+# ---------------------------------------------------------------------------
 # Module-level singleton state
 # ---------------------------------------------------------------------------
 
