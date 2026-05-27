@@ -478,9 +478,7 @@ def build_desktop_presence_system_view(
         }
         hierarchy = view.setdefault("foreground_hierarchy", {})
         hierarchy["panel_subject_source"] = "subject_foreground"
-        hierarchy["shared_lineage_object"] = (
-            "subject_unified_lineage"
-        )
+        hierarchy["shared_lineage_object"] = "subject_unified_lineage"
     # Attach android_presence_participation when the canonical default path provides it.
     # This makes the android participation data a first-class presence-system field
     # on the user-facing default path (not hidden behind operator/debug paths).

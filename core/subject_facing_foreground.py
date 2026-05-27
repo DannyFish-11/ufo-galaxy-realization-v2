@@ -385,7 +385,7 @@ def build_subject_facing_foreground(
     )
 
 
-def _as_dict(value: Any) -> Dict[str, Any]:
+def _dict_or_empty(value: Any) -> Dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
@@ -396,7 +396,7 @@ def _active_continuous_families(canonical_continuous_ingress: Dict[str, Any]) ->
     families = canonical_continuous_ingress.get("families")
     if not isinstance(families, dict):
         return list(canonical_continuous_ingress.get("active_families") or [])
-    return [name for name, item in families.items() if bool(_as_dict(item).get("is_present"))]
+    return [name for name, item in families.items() if bool(_dict_or_empty(item).get("is_present"))]
 
 
 def build_subject_unified_lineage(
@@ -414,11 +414,11 @@ def build_subject_unified_lineage(
     object-family anchor for subject foreground, Android participation, lifecycle,
     continuous ingress, fallback discipline, and continuity/replay trace keys.
     """
-    fg = _as_dict(subject_foreground)
-    lifecycle = _as_dict(action_lifecycle_surface)
-    android_presence = _as_dict(android_presence_runtime)
-    continuous_ingress = _as_dict(canonical_continuous_ingress)
-    carrier = _as_dict(ingress_carrier_context)
+    fg = _dict_or_empty(subject_foreground)
+    lifecycle = _dict_or_empty(action_lifecycle_surface)
+    android_presence = _dict_or_empty(android_presence_runtime)
+    continuous_ingress = _dict_or_empty(canonical_continuous_ingress)
+    carrier = _dict_or_empty(ingress_carrier_context)
     active_families = _active_continuous_families(continuous_ingress)
     path_kind = str(android_presence.get("path_kind") or "unknown")
     lifecycle_action_id = str(lifecycle.get("action_id") or "")
