@@ -423,9 +423,7 @@ def build_subject_unified_lineage(
     path_kind = str(android_presence.get("path_kind") or "unknown")
     lifecycle_action_id = str(lifecycle.get("action_id") or "")
     carrier_invocation_id = str(carrier.get("invocation_id") or "")
-    lifecycle_or_carrier_id = lifecycle_action_id or carrier_invocation_id
-    carrier_or_lifecycle_id = carrier_invocation_id or lifecycle_action_id
-    canonical_lineage_id = carrier_or_lifecycle_id or lifecycle_or_carrier_id
+    canonical_lineage_id = carrier_invocation_id or lifecycle_action_id
 
     android_roles: List[str] = []
     if android_presence.get("device_count"):
@@ -487,8 +485,9 @@ def build_subject_unified_lineage(
             "degraded_reasons": degraded_reasons,
         },
         "continuity_trace": {
-            "runtime_session_id": carrier_or_lifecycle_id,
-            "action_id": lifecycle_or_carrier_id,
+            "runtime_session_id": canonical_lineage_id,
+            "action_id": lifecycle_action_id,
+            "carrier_invocation_id": carrier_invocation_id,
             "session_id": str(lifecycle.get("session_id") or carrier.get("session_id") or ""),
             "control_session_id": str(carrier.get("control_session_id") or ""),
             "replay_provenance_anchor": canonical_lineage_id,
