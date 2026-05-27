@@ -94,6 +94,7 @@ class PresenceDirector:
         cognitive_state: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        android_presence_participation: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """React to a cognitive phase transition.
 
@@ -106,6 +107,12 @@ class PresenceDirector:
             cognitive_state: Current cognitive state snapshot.
             session_id:      Session scope.
             trace_id:        Distributed trace identifier.
+            android_presence_participation:
+                             Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
+                             When provided, Android devices that are presence
+                             participants receive elevated projection intensity
+                             and their participation mode is stamped on the
+                             resulting :class:`~core.presence.presence_projection.ProjectionEvent`.
 
         Returns:
             Dict with keys:
@@ -113,16 +120,37 @@ class PresenceDirector:
               - ``hitl_required``: ``True`` if HITL gate was triggered.
               - ``hitl_approved``: HITL decision outcome (or ``None``).
               - ``projection_events``: list of projection event dicts.
+              - ``android_presence_participant_count``: number of Android
+                presence participants in this transition (0 when not supplied).
         """
         state = dict(cognitive_state or {})
         state.setdefault("from_phase", from_phase)
         state.setdefault("to_phase", to_phase)
+
+        # Embed android presence participation summary into the cognitive state
+        # so it travels with the projection payload.
+        _android_participant_count = 0
+        if android_presence_participation is not None:
+            try:
+                _android_participant_count = int(
+                    android_presence_participation.presence_participant_count
+                )
+                state["android_presence_participant_count"] = _android_participant_count
+                state["android_any_drives_liminal"] = bool(
+                    android_presence_participation.any_drives_liminal
+                )
+                state["android_any_drives_manifest"] = bool(
+                    android_presence_participation.any_drives_manifest
+                )
+            except AttributeError:
+                pass
 
         result: Dict[str, Any] = {
             "projected": False,
             "hitl_required": False,
             "hitl_approved": None,
             "projection_events": [],
+            "android_presence_participant_count": _android_participant_count,
         }
 
         # ── HITL gate (manifest only, if enabled) ─────────────────────────
@@ -153,7 +181,12 @@ class PresenceDirector:
         )
 
         if should_project:
-            events = self._project(state, session_id=session_id, trace_id=trace_id)
+            events = self._project(
+                state,
+                session_id=session_id,
+                trace_id=trace_id,
+                android_presence_participation=android_presence_participation,
+            )
             result["projected"] = True
             result["projection_events"] = [e.to_dict() for e in events]
 
@@ -170,16 +203,27 @@ class PresenceDirector:
         cognitive_state: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        android_presence_participation: Optional[Any] = None,
     ) -> List[Any]:
         """Unconditionally project *cognitive_state* to all mesh devices.
 
         Use this for periodic presence refreshes outside of phase transitions.
 
+        Args:
+            android_presence_participation:
+                Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`.
+                Android presence participants receive elevated intensity.
+
         Returns:
             List of :class:`~core.presence.presence_projection.ProjectionEvent`
             objects.
         """
-        return self._project(cognitive_state or {}, session_id=session_id, trace_id=trace_id)
+        return self._project(
+            cognitive_state or {},
+            session_id=session_id,
+            trace_id=trace_id,
+            android_presence_participation=android_presence_participation,
+        )
 
     # ------------------------------------------------------------------
     # Trace / observability
@@ -199,6 +243,7 @@ class PresenceDirector:
         cognitive_state: Dict[str, Any],
         session_id: Optional[str],
         trace_id: Optional[str],
+        android_presence_participation: Optional[Any] = None,
     ) -> List[Any]:
         """Delegate to :class:`~core.presence.presence_projection.PresenceProjection`."""
         try:
@@ -208,6 +253,7 @@ class PresenceDirector:
                 cognitive_state=cognitive_state,
                 session_id=session_id,
                 trace_id=trace_id,
+                android_presence_participation=android_presence_participation,
             )
         except Exception as exc:
             logger.warning("PresenceDirector._project: projection failed — %s", exc)

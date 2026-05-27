@@ -98,6 +98,14 @@ class ProjectionEvent:
         Device roles that determined the intensity.
     projected_at:
         Unix timestamp.
+    android_presence_participation_mode:
+        When the target device is an Android device with canonical presence
+        participation, this field carries its participation mode string
+        (``"presence_participant"`` or ``"foreground_presence"``).
+        ``None`` for desktop/non-Android devices or Android devices in
+        ``"execution_only"`` mode.  The presence of a non-None value in this
+        field proves that Android presence participation — not just execution
+        metadata — reached the projection layer.
     """
 
     projection_id: str = field(default_factory=lambda: f"proj_{uuid.uuid4().hex[:12]}")
@@ -108,6 +116,7 @@ class ProjectionEvent:
     intensity: float = ProjectionIntensity.MINIMAL
     roles: List[str] = field(default_factory=list)
     projected_at: float = field(default_factory=time.time)
+    android_presence_participation_mode: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -119,6 +128,7 @@ class ProjectionEvent:
             "intensity": self.intensity,
             "roles": self.roles,
             "projected_at": self.projected_at,
+            "android_presence_participation_mode": self.android_presence_participation_mode,
         }
 
 
@@ -154,13 +164,19 @@ class PresenceProjection:
         cognitive_state: Dict[str, Any],
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        android_presence_participation: Optional[Any] = None,
     ) -> List[ProjectionEvent]:
         """Project *cognitive_state* to all devices registered in the Body Mesh.
 
         For each registered device the method:
         1. Looks up device roles from :class:`~core.mesh.body_mesh_registry.BodyMeshRegistry`.
         2. Determines projection intensity by the highest-priority role.
-        3. Creates a :class:`ProjectionEvent` and emits it on the
+        3. When ``android_presence_participation`` is supplied and a device is
+           an Android presence participant, upgrades its intensity to at least
+           ``MEDIUM`` and stamps the :attr:`~ProjectionEvent.android_presence_participation_mode`
+           field.  This is the first path where Android presence participation —
+           distinct from execution-node status — reaches projection output.
+        4. Creates a :class:`ProjectionEvent` and emits it on the
            :class:`~core.state_event_bus.StateEventBus`.
 
         Args:
@@ -169,11 +185,29 @@ class PresenceProjection:
             session_id:       Optional session scope.  When given, only devices
                               in this session are targeted.
             trace_id:         Optional trace identifier.
+            android_presence_participation:
+                              Optional :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationSummary`
+                              (or any object with a ``records`` iterable of
+                              :class:`~core.presence.android_presence_participation.AndroidPresenceParticipationRecord`).
+                              When provided, Android devices that are presence
+                              participants receive elevated intensity and a
+                              stamped participation mode on their
+                              :class:`ProjectionEvent`.
 
         Returns:
             List of :class:`ProjectionEvent` objects — one per targeted device.
         """
         events: List[ProjectionEvent] = []
+
+        # Build a lookup: device_id → participation_mode for Android participants.
+        _android_participant_map: Dict[str, str] = {}
+        if android_presence_participation is not None:
+            try:
+                for rec in android_presence_participation.records:
+                    if rec.is_presence_participant:
+                        _android_participant_map[rec.device_id] = rec.participation_mode.value
+            except AttributeError:
+                pass
 
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
@@ -191,6 +225,19 @@ class PresenceProjection:
         for entry in entries:
             roles = [r.value if hasattr(r, "value") else str(r) for r in entry.roles]
             intensity = self._determine_intensity(roles)
+
+            # Elevate intensity for Android presence participants.
+            android_pm: Optional[str] = _android_participant_map.get(entry.device_id)
+            if android_pm is not None:
+                # foreground_presence → FULL intensity; presence_participant → at least MEDIUM.
+                from core.presence.android_presence_participation import (
+                    AndroidPresenceParticipationMode,
+                )
+                if android_pm == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE.value:
+                    intensity = max(intensity, float(ProjectionIntensity.FULL))
+                else:
+                    intensity = max(intensity, float(ProjectionIntensity.MEDIUM))
+
             evt = self.project_to_device(
                 device_id=entry.device_id,
                 cognitive_state=cognitive_state,
@@ -198,13 +245,15 @@ class PresenceProjection:
                 roles=roles,
                 session_id=session_id,
                 trace_id=trace_id,
+                android_presence_participation_mode=android_pm,
             )
             events.append(evt)
 
         logger.debug(
-            "PresenceProjection.project: projected to %d devices session=%s",
+            "PresenceProjection.project: projected to %d devices session=%s android_participants=%d",
             len(events),
             session_id,
+            len(_android_participant_map),
         )
         return events
 
@@ -216,6 +265,7 @@ class PresenceProjection:
         roles: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         trace_id: Optional[str] = None,
+        android_presence_participation_mode: Optional[str] = None,
     ) -> ProjectionEvent:
         """Project to a single device and emit a state bus event.
 
@@ -226,6 +276,11 @@ class PresenceProjection:
             roles:            Device roles (for observability).
             session_id:       Session scope.
             trace_id:         Trace identifier.
+            android_presence_participation_mode:
+                              When this device is an Android presence
+                              participant, the participation mode string
+                              (``"presence_participant"`` or
+                              ``"foreground_presence"``); ``None`` otherwise.
 
         Returns:
             The :class:`ProjectionEvent` that was emitted.
@@ -237,6 +292,7 @@ class PresenceProjection:
             cognitive_state=dict(cognitive_state),
             intensity=float(intensity),
             roles=list(roles or []),
+            android_presence_participation_mode=android_presence_participation_mode,
         )
 
         with self._lock:

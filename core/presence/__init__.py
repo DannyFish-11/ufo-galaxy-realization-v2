@@ -13,6 +13,14 @@ from .presence_director import (
     get_presence_director,
     reset_presence_director,
 )
+from .android_presence_participation import (
+    AndroidPresenceParticipationMode,
+    AndroidPresenceParticipationRecord,
+    AndroidPresenceParticipationSummary,
+    ANDROID_PRESENCE_PARTICIPATION_AUTHORITY,
+    derive_android_presence_participation,
+    summarise_android_presence_participation,
+)
 
 __all__ = [
     "PresenceProjection",
@@ -24,4 +32,10 @@ __all__ = [
     "DirectorConfig",
     "get_presence_director",
     "reset_presence_director",
+    "AndroidPresenceParticipationMode",
+    "AndroidPresenceParticipationRecord",
+    "AndroidPresenceParticipationSummary",
+    "ANDROID_PRESENCE_PARTICIPATION_AUTHORITY",
+    "derive_android_presence_participation",
+    "summarise_android_presence_participation",
 ]
