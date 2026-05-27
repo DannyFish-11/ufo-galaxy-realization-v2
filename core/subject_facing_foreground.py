@@ -392,6 +392,7 @@ def _as_dict(value: Any) -> Dict[str, Any]:
 
 
 def _active_continuous_families(canonical_continuous_ingress: Dict[str, Any]) -> List[str]:
+    """Return active stream families from canonical detail or compact snapshots."""
     families = canonical_continuous_ingress.get("families")
     if not isinstance(families, dict):
         return list(canonical_continuous_ingress.get("active_families") or [])
@@ -423,8 +424,8 @@ def build_subject_unified_lineage(
     lifecycle_action_id = str(lifecycle.get("action_id") or "")
     carrier_invocation_id = str(carrier.get("invocation_id") or "")
     primary_action_id = lifecycle_action_id or carrier_invocation_id
-    primary_session_id = carrier_invocation_id or lifecycle_action_id
-    canonical_lineage_id = primary_session_id or primary_action_id
+    preferred_session_or_action_id = carrier_invocation_id or lifecycle_action_id
+    lineage_id_with_fallback = preferred_session_or_action_id or primary_action_id
 
     android_roles: List[str] = []
     if android_presence.get("device_count"):
@@ -447,7 +448,7 @@ def build_subject_unified_lineage(
     return {
         "object_family": "unified_subject_composition",
         "composition_version": 1,
-        "canonical_lineage_id": canonical_lineage_id,
+        "canonical_lineage_id": lineage_id_with_fallback,
         "subject_foreground": fg,
         "subject_identity": {
             "subject_authority": "v2_center_unified_subject",
@@ -486,11 +487,11 @@ def build_subject_unified_lineage(
             "degraded_reasons": degraded_reasons,
         },
         "continuity_trace": {
-            "runtime_session_id": primary_session_id,
+            "runtime_session_id": preferred_session_or_action_id,
             "action_id": primary_action_id,
             "session_id": str(lifecycle.get("session_id") or carrier.get("session_id") or ""),
             "control_session_id": str(carrier.get("control_session_id") or ""),
-            "replay_provenance_anchor": canonical_lineage_id,
+            "replay_provenance_anchor": lineage_id_with_fallback,
             "android_presence_record_count": int(
                 android_presence.get("presence_participant_count") or 0
             ),

@@ -412,10 +412,13 @@ def build_desktop_presence_system_view(
     continuous_ingress = dict(canonical_continuous_ingress or {})
     lineage_active_families = (
         (unified_lineage.get("temporal_alignment") or {}).get("active_continuous_families")
-        or []
     )
     ingress_active_families = continuous_ingress.get("active_families") or []
-    active_stream_families = list(lineage_active_families or ingress_active_families)
+    active_stream_families = list(
+        lineage_active_families
+        if lineage_active_families is not None
+        else ingress_active_families
+    )
 
     view: Dict[str, Any] = {
         "formal_presence_modes": [d.to_dict() for d in PRESENCE_MODE_DEFINITIONS],

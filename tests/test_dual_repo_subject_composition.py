@@ -7,7 +7,7 @@ from core.subject_facing_foreground import (
 )
 
 
-def _foreground() -> dict:
+def _build_test_foreground() -> dict:
     return build_subject_facing_foreground(
         visible_action_surface={
             "current_presence_mode": "liminal",
@@ -28,7 +28,7 @@ def _foreground() -> dict:
     ).to_dict()
 
 
-def _continuous_ingress() -> dict:
+def _build_test_continuous_ingress() -> dict:
     return {
         "authority": "CANONICAL_CONTINUOUS_INGRESS::TEST",
         "is_present": True,
@@ -45,7 +45,7 @@ def _continuous_ingress() -> dict:
 
 def test_subject_lineage_unifies_foreground_android_presence_lifecycle_and_stream():
     lineage = build_subject_unified_lineage(
-        subject_foreground=_foreground(),
+        subject_foreground=_build_test_foreground(),
         action_lifecycle_surface={
             "action_id": "runtime-1",
             "session_id": "conversation-1",
@@ -59,7 +59,7 @@ def test_subject_lineage_unifies_foreground_android_presence_lifecycle_and_strea
             "any_foreground_presence": True,
             "presence_participant_count": 1,
         },
-        canonical_continuous_ingress=_continuous_ingress(),
+        canonical_continuous_ingress=_build_test_continuous_ingress(),
         ingress_carrier_context={
             "invocation_id": "runtime-1",
             "session_id": "conversation-1",
@@ -90,7 +90,7 @@ def test_subject_lineage_unifies_foreground_android_presence_lifecycle_and_strea
 
 def test_subject_lineage_makes_fallback_visible_in_default_behavior():
     lineage = build_subject_unified_lineage(
-        subject_foreground=_foreground(),
+        subject_foreground=_build_test_foreground(),
         action_lifecycle_surface={"action_id": "runtime-2", "phase": "executing"},
         android_presence_runtime={
             "path_kind": "fallback",
@@ -110,7 +110,7 @@ def test_subject_lineage_makes_fallback_visible_in_default_behavior():
 
 
 def test_presence_system_panel_consumes_subject_foreground_lineage_and_stream():
-    subject_fg = _foreground()
+    subject_fg = _build_test_foreground()
     lineage = build_subject_unified_lineage(
         subject_foreground=subject_fg,
         action_lifecycle_surface={"action_id": "runtime-panel", "phase": "executing"},
@@ -120,7 +120,7 @@ def test_presence_system_panel_consumes_subject_foreground_lineage_and_stream():
             "any_presence_participant": True,
             "presence_participant_count": 1,
         },
-        canonical_continuous_ingress=_continuous_ingress(),
+        canonical_continuous_ingress=_build_test_continuous_ingress(),
         ingress_carrier_context={"invocation_id": "runtime-panel"},
     )
 
@@ -132,7 +132,7 @@ def test_presence_system_panel_consumes_subject_foreground_lineage_and_stream():
         stream_runtime_status={"stream_state": "active"},
         subject_foreground=subject_fg,
         subject_unified_lineage=lineage,
-        canonical_continuous_ingress=_continuous_ingress(),
+        canonical_continuous_ingress=_build_test_continuous_ingress(),
     )
 
     panel = view["subject_panel"]
