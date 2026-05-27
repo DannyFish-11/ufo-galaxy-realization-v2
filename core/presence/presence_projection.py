@@ -200,12 +200,12 @@ class PresenceProjection:
         events: List[ProjectionEvent] = []
 
         # Build a lookup: device_id → participation_mode for Android participants.
-        _android_participant_map: Dict[str, str] = {}
+        android_participant_map: Dict[str, str] = {}
         if android_presence_participation is not None:
             try:
                 for rec in android_presence_participation.records:
                     if rec.is_presence_participant:
-                        _android_participant_map[rec.device_id] = rec.participation_mode.value
+                        android_participant_map[rec.device_id] = rec.participation_mode.value
             except AttributeError:
                 pass
 
@@ -227,13 +227,13 @@ class PresenceProjection:
             intensity = self._determine_intensity(roles)
 
             # Elevate intensity for Android presence participants.
-            android_pm: Optional[str] = _android_participant_map.get(entry.device_id)
-            if android_pm is not None:
+            android_participation_mode: Optional[str] = android_participant_map.get(entry.device_id)
+            if android_participation_mode is not None:
                 # foreground_presence → FULL intensity; presence_participant → at least MEDIUM.
                 from core.presence.android_presence_participation import (
                     AndroidPresenceParticipationMode,
                 )
-                if android_pm == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE.value:
+                if android_participation_mode == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE.value:
                     intensity = max(intensity, float(ProjectionIntensity.FULL))
                 else:
                     intensity = max(intensity, float(ProjectionIntensity.MEDIUM))
@@ -245,7 +245,7 @@ class PresenceProjection:
                 roles=roles,
                 session_id=session_id,
                 trace_id=trace_id,
-                android_presence_participation_mode=android_pm,
+                android_presence_participation_mode=android_participation_mode,
             )
             events.append(evt)
 
@@ -253,7 +253,7 @@ class PresenceProjection:
             "PresenceProjection.project: projected to %d devices session=%s android_participants=%d",
             len(events),
             session_id,
-            len(_android_participant_map),
+            len(android_participant_map),
         )
         return events
 

@@ -283,14 +283,14 @@ class DesktopPresenceStateMachine:
 
         # Resolve android participation signals once, so _derive_target_mode
         # and the transition record both see the same derived values.
-        _android_drives_liminal = False
-        _android_drives_manifest = False
-        _android_participant_count = 0
+        android_drives_liminal = False
+        android_drives_manifest = False
+        android_participant_count = 0
         if android_presence_participation is not None:
             try:
-                _android_drives_liminal = bool(android_presence_participation.any_drives_liminal)
-                _android_drives_manifest = bool(android_presence_participation.any_drives_manifest)
-                _android_participant_count = int(
+                android_drives_liminal = bool(android_presence_participation.any_drives_liminal)
+                android_drives_manifest = bool(android_presence_participation.any_drives_manifest)
+                android_participant_count = int(
                     android_presence_participation.presence_participant_count
                 )
             except AttributeError:
@@ -301,8 +301,8 @@ class DesktopPresenceStateMachine:
             task_active=task_active,
             sensing_active=sensing_active,
             execution_active=execution_active,
-            android_drives_liminal=_android_drives_liminal,
-            android_drives_manifest=_android_drives_manifest,
+            android_drives_liminal=android_drives_liminal,
+            android_drives_manifest=android_drives_manifest,
         )
         if result_committed and self._mode == DesktopPresenceMode.MANIFEST:
             target = DesktopPresenceMode.LIMINAL
@@ -347,9 +347,9 @@ class DesktopPresenceStateMachine:
             "execution_active": execution_active,
             "tri_state": tri_state,
             "result_committed": result_committed,
-            "android_presence_participant_count": _android_participant_count,
-            "android_drives_liminal": _android_drives_liminal,
-            "android_drives_manifest": _android_drives_manifest,
+            "android_presence_participant_count": android_participant_count,
+            "android_drives_liminal": android_drives_liminal,
+            "android_drives_manifest": android_drives_manifest,
         }
         return dict(self._last_transition)
 

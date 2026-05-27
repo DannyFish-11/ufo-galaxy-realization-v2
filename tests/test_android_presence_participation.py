@@ -298,7 +298,7 @@ class TestPresenceProjectionIncludesAndroidPresenceParticipant:
     on projection events for participating Android devices, and that non-
     participating / execution-only devices get no such stamp."""
 
-    def _make_entry(self, device_id: str, roles: list = None):
+    def _make_entry(self, device_id: str, roles: List[str] = None):
         entry = SimpleNamespace(
             device_id=device_id,
             roles=roles or [],
