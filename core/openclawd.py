@@ -2818,6 +2818,23 @@ class OpenClawd:
             (ingress_mods.get("android_perception") or {}).get("is_present")
             or android_perception_ingress
         )
+        android_nl_ingress = (
+            (desktop_native_ingress_backbone or {}).get("android_nl_ingress", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
+        has_android_nl_ingress = bool(
+            (ingress_mods.get("android_natural_language") or {}).get("is_present")
+            or android_nl_ingress
+        )
+        has_android_device_context = bool(
+            (ingress_mods.get("android_device_context") or {}).get("is_present")
+            or (isinstance(android_nl_ingress, dict) and android_nl_ingress.get("android_device_context"))
+        )
+        has_android_state_snapshot = bool(
+            (ingress_mods.get("android_state_snapshot") or {}).get("is_present")
+            or (isinstance(android_nl_ingress, dict) and android_nl_ingress.get("android_state_snapshot"))
+        )
         android_perception_route = ""
         if isinstance(android_perception_ingress, dict):
             android_perception_route = str(
@@ -2912,6 +2929,12 @@ class OpenClawd:
                     else "android_perception_request_bound_priority"
                 )
                 route_priority = _ROUTE_PRIORITY_ANDROID_PERCEPTION
+        if has_android_nl_ingress:
+            backbone_signal_names.append("android_nl_ingress")
+        if has_android_device_context:
+            backbone_signal_names.append("android_device_context")
+        if has_android_state_snapshot:
+            backbone_signal_names.append("android_state_snapshot")
         previous_presence_mode = str(
             hint.get("previous_presence_mode") or effective_presence_mode
         ).lower()
@@ -2927,6 +2950,9 @@ class OpenClawd:
             "continuous_stream_assisted": has_stream_ingress and stream_state not in {"reconnecting", "unavailable"},
             "android_perception_priority": "high" if has_android_perception_ingress else "normal",
             "android_perception_route": android_perception_route,
+            "android_nl_priority": "high" if has_android_nl_ingress else "normal",
+            "android_device_context_present": has_android_device_context,
+            "android_state_snapshot_present": has_android_state_snapshot,
             "sampling_intensity": sampling_intensity,
             "fusion_strategy": fusion_strategy,
             "execution_readiness": presence_policy["execution_readiness"],
@@ -2950,6 +2976,10 @@ class OpenClawd:
             router_complexity_score += 0.1
         if has_android_perception_ingress:
             router_complexity_score += 0.1
+        if has_android_nl_ingress:
+            router_complexity_score += 0.05
+        if has_android_state_snapshot:
+            router_complexity_score += 0.05
         return {
             "requires_native_multimodal": any(
                 (
@@ -2992,6 +3022,9 @@ class OpenClawd:
             "continuous_stream_assisted": bool(context_hint.get("continuous_stream_assisted", False)),
             "android_perception_priority": context_hint.get("android_perception_priority", "normal"),
             "android_perception_route": context_hint.get("android_perception_route", ""),
+            "android_nl_priority": context_hint.get("android_nl_priority", "normal"),
+            "android_device_context_present": bool(context_hint.get("android_device_context_present", False)),
+            "android_state_snapshot_present": bool(context_hint.get("android_state_snapshot_present", False)),
             "sampling_intensity": context_hint.get("sampling_intensity", "moderate"),
             "fusion_strategy": context_hint.get("fusion_strategy", "minimal_context_staging"),
             "execution_readiness": context_hint.get("execution_readiness", "medium"),
@@ -3015,6 +3048,12 @@ class OpenClawd:
             )
         if normalized_hint["android_perception_route"]:
             strategy_tokens.append(f"android_perception_route={normalized_hint['android_perception_route']}")
+        if normalized_hint["android_nl_priority"] != "normal":
+            strategy_tokens.append(f"android_nl_priority={normalized_hint['android_nl_priority']}")
+        if normalized_hint["android_device_context_present"]:
+            strategy_tokens.append("android_device_context_present=true")
+        if normalized_hint["android_state_snapshot_present"]:
+            strategy_tokens.append("android_state_snapshot_present=true")
         if normalized_hint["execution_readiness"] != "medium":
             strategy_tokens.append(f"execution_readiness={normalized_hint['execution_readiness']}")
         if normalized_hint["presence_mode_changed"]:

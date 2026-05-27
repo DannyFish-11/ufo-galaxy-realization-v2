@@ -27,7 +27,14 @@ MAINLINE_REQUIRED_MODALITIES = (
     "screen_context",
     "foreground_context",
 )
-EXTENSION_MODALITIES = ("audio_speech", "camera_sensor")
+EXTENSION_MODALITIES = (
+    "audio_speech",
+    "camera_sensor",
+    "android_perception",
+    "android_natural_language",
+    "android_device_context",
+    "android_state_snapshot",
+)
 DEGRADABLE_MODALITIES = ("audio_speech", "camera_sensor", "continuous_stream")
 CONTINUOUS_MAINLINE_MODALITIES = ("continuous_stream",)
 # File-input compatibility keys observed across request/context carriers:
@@ -151,6 +158,51 @@ def _build_android_perception_ingress_snapshot(
     return dict(snapshot or {})
 
 
+def _build_android_nl_ingress_snapshot(
+    *,
+    message: str,
+    source: str,
+    mm_dict: Dict[str, Any],
+    kwargs: Mapping[str, Any],
+) -> Dict[str, Any]:
+    try:
+        from core.android_nl_semantic_chain_contract import (
+            ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
+            ANDROID_NL_CARRIER_SOURCE,
+            V2_SEMANTIC_AUTHORITY,
+        )
+    except (ImportError, ModuleNotFoundError):
+        return {}
+
+    if source != ANDROID_NL_CARRIER_SOURCE:
+        return {}
+
+    text = (message or "").strip()
+    metadata = _as_mapping(mm_dict.get("metadata"))
+    android_state_snapshot = _as_mapping(
+        kwargs.get("android_state_snapshot") or metadata.get("android_state_snapshot")
+    )
+    android_device_context = {
+        "device_id": str(kwargs.get("device_id") or ""),
+        "session_id": str(kwargs.get("session_id") or ""),
+        "runtime_session_id": str(kwargs.get("runtime_session_id") or ""),
+        "entry_mode": str(kwargs.get("entry_mode") or ""),
+    }
+    has_device_context = any(bool(v) for v in android_device_context.values())
+    return {
+        "android_nl_path_type": ANDROID_CROSS_DEVICE_NL_PATH_TYPE,
+        "android_nl_carrier_source": source,
+        "android_nl_semantic_authority": V2_SEMANTIC_AUTHORITY,
+        "android_nl_canonical_protocol": "aip_v3_goal_execution",
+        "android_nl_canonical_handler": "galaxy_gateway.android.handlers.goal_execution.handle_goal_execution",
+        "android_nl_text_present": bool(text),
+        "android_nl_text_length": len(text),
+        "android_device_context": android_device_context,
+        "android_state_snapshot": dict(android_state_snapshot),
+        "android_mixed_context_present": bool(text) and (has_device_context or bool(android_state_snapshot)),
+    }
+
+
 def build_desktop_native_ingress_backbone(
     *,
     message: str,
@@ -178,7 +230,20 @@ def build_desktop_native_ingress_backbone(
         source=source,
         multimodal_context=multimodal_context,
     )
+    android_nl_ingress = _build_android_nl_ingress_snapshot(
+        message=message,
+        source=source,
+        mm_dict=mm_dict,
+        kwargs=safe_kwargs,
+    )
     has_android_perception = bool(android_perception_ingress)
+    has_android_nl = bool(android_nl_ingress)
+    has_android_device_context = bool(
+        _as_mapping(android_nl_ingress.get("android_device_context")) if has_android_nl else {}
+    )
+    has_android_state_snapshot = bool(
+        _as_mapping(android_nl_ingress.get("android_state_snapshot")) if has_android_nl else {}
+    )
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
@@ -202,6 +267,21 @@ def build_desktop_native_ingress_backbone(
             "count": 1 if has_android_perception else 0,
             "tier": "extension",
         },
+        "android_natural_language": {
+            "is_present": has_android_nl,
+            "count": 1 if has_android_nl else 0,
+            "tier": "extension",
+        },
+        "android_device_context": {
+            "is_present": has_android_device_context,
+            "count": 1 if has_android_device_context else 0,
+            "tier": "extension",
+        },
+        "android_state_snapshot": {
+            "is_present": has_android_state_snapshot,
+            "count": 1 if has_android_state_snapshot else 0,
+            "tier": "extension",
+        },
     }
 
     return {
@@ -210,6 +290,7 @@ def build_desktop_native_ingress_backbone(
         "contract_version": 1,
         "carrier_source": source or "chat",
         "android_perception_ingress": android_perception_ingress,
+        "android_nl_ingress": android_nl_ingress,
         "modalities": modalities,
         "modality_tiers": {
             "mainline_required": list(MAINLINE_REQUIRED_MODALITIES),
@@ -300,6 +381,9 @@ def augment_ingress_backbone_for_control_core(
         return None
     enriched = deepcopy(ingress_backbone)
     mainline = _as_mapping(enriched.get("mainline_path"))
+    android_nl_ingress = _as_mapping(enriched.get("android_nl_ingress"))
+    has_android_state_snapshot = bool(_as_mapping(android_nl_ingress.get("android_state_snapshot")))
+    has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
 
     context_assembly = _as_mapping(mainline.get("context_assembly"))
     if isinstance(canonical_perception, dict):
@@ -317,6 +401,8 @@ def augment_ingress_backbone_for_control_core(
             context_assembly["multimodal_route_bias"] = canonical_perception.get("multimodal_route_bias")
         if canonical_perception.get("multimodal_route_tier"):
             context_assembly["multimodal_route_tier"] = canonical_perception.get("multimodal_route_tier")
+    if android_nl_ingress:
+        context_assembly["android_nl_ingress"] = dict(android_nl_ingress)
     mainline["context_assembly"] = context_assembly
 
     task_generation = _as_mapping(mainline.get("task_generation"))
@@ -331,11 +417,19 @@ def augment_ingress_backbone_for_control_core(
             task_generation["multimodal_context_strategy_hint"] = dict(
                 multimodal_route_decision.get("context_strategy_hint") or {}
             )
+    if android_nl_ingress:
+        task_generation["android_nl_participation"] = "enabled"
+        task_generation["android_state_snapshot_present"] = has_android_state_snapshot
+        task_generation["android_device_context_present"] = has_android_device_context
     mainline["task_generation"] = task_generation
 
     execution_planning = _as_mapping(mainline.get("execution_planning"))
     if execution_path:
         execution_planning["resolved_execution_path"] = execution_path
+    if android_nl_ingress:
+        execution_planning["android_context_plan_mode"] = (
+            "android_state_aware" if has_android_state_snapshot else "android_nl_only"
+        )
     mainline["execution_planning"] = execution_planning
 
     enriched["mainline_path"] = mainline

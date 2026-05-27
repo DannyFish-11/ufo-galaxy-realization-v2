@@ -140,6 +140,29 @@ def test_android_originated_perception_enters_ingress_backbone_with_canonical_ma
     assert android_ingress["android_perception_ingress_route"] == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
 
 
+def test_android_originated_nl_and_state_snapshot_enter_canonical_backbone():
+    contract = build_desktop_native_ingress_backbone(
+        message="帮我在手机上确认支付状态",
+        source="android_goal_execution",
+        multimodal_context={"metadata": {"android_state_snapshot": {"battery_level": 0.42}}},
+        context=[],
+        kwargs={
+            "device_id": "android-01",
+            "session_id": "session-android-01",
+            "runtime_session_id": "trace-android-01",
+            "entry_mode": "cross_device",
+        },
+    )
+    android_nl = contract["android_nl_ingress"]
+    assert contract["modalities"]["android_natural_language"]["is_present"] is True
+    assert contract["modalities"]["android_device_context"]["is_present"] is True
+    assert contract["modalities"]["android_state_snapshot"]["is_present"] is True
+    assert android_nl["android_nl_semantic_authority"] == "v2_openclawd"
+    assert android_nl["android_device_context"]["device_id"] == "android-01"
+    assert android_nl["android_state_snapshot"]["battery_level"] == 0.42
+    assert android_nl["android_mixed_context_present"] is True
+
+
 def test_backbone_detects_continuous_stream_branch_from_kwargs():
     contract = build_desktop_native_ingress_backbone(
         message="observe live desktop stream",
@@ -472,6 +495,60 @@ def test_context_strategy_hint_updates_kernel_message_and_backbone_context_assem
         == "high"
     )
     assert augmented["mainline_path"]["task_generation"]["multimodal_route_bias"] == "desktop_foreground_aware"
+
+
+def test_android_nl_context_changes_context_strategy_and_execution_planning():
+    from core.openclawd import OpenClawd
+
+    oc = OpenClawd.__new__(OpenClawd)
+    backbone_base = {
+        "mainline_path": {"context_assembly": {}, "task_generation": {}, "execution_planning": {}},
+        "modalities": {},
+    }
+    route, kernel_message, _canonical_perception, ingress_for_plan = oc._resolve_multimodal_ingress_decision(
+        kernel_message="执行任务",
+        canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+        task_type=None,
+        desktop_native_ingress_backbone=deepcopy(backbone_base),
+        presence_mode="liminal",
+    )
+    assert route["route_type"] == "text_only"
+    assert "android_nl_priority=high" not in kernel_message
+    assert "android_context_plan_mode" not in ingress_for_plan["mainline_path"]["execution_planning"]
+
+    android_backbone = {
+        "mainline_path": {"context_assembly": {}, "task_generation": {}, "execution_planning": {}},
+        "modalities": {
+            "android_natural_language": {"is_present": True},
+            "android_device_context": {"is_present": True},
+            "android_state_snapshot": {"is_present": True},
+        },
+        "android_nl_ingress": {
+            "android_nl_semantic_authority": "v2_openclawd",
+            "android_device_context": {"device_id": "android-01", "session_id": "session-01"},
+            "android_state_snapshot": {"network": "wifi"},
+        },
+    }
+    route2, kernel_message2, canonical_perception2, ingress_for_plan2 = oc._resolve_multimodal_ingress_decision(
+        kernel_message="执行任务",
+        canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+        task_type=None,
+        desktop_native_ingress_backbone=android_backbone,
+        presence_mode="liminal",
+    )
+    assert route2["route_type"] == "text_only"
+    assert "android_nl_priority=high" in kernel_message2
+    assert "android_state_snapshot_present=true" in kernel_message2
+    assert canonical_perception2["multimodal_context_strategy"]["android_state_snapshot_present"] is True
+    assert (
+        ingress_for_plan2["mainline_path"]["execution_planning"]["android_context_plan_mode"]
+        == "android_state_aware"
+    )
+    assert ingress_for_plan2["mainline_path"]["task_generation"]["android_nl_participation"] == "enabled"
+    assert (
+        ingress_for_plan2["mainline_path"]["context_assembly"]["android_nl_ingress"]["android_nl_semantic_authority"]
+        == "v2_openclawd"
+    )
 
 
 def test_visible_action_surface_filter_hides_operator_payload_for_non_operator():
