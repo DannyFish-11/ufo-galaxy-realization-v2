@@ -96,6 +96,7 @@ __all__ = [
     "LOCAL_AI_IS_DEGRADED_STATUS",
     "WEBRTC_IS_EXPERIMENTAL_STATUS",
     "MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS",
+    "MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS",
     # Enumeration
     "CapabilityRuntimeStatus",
     # Data class
@@ -182,6 +183,16 @@ MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS: str = (
     "These capabilities exist as structural scaffolding for future "
     "distributed architecture but are not activated in the current runtime.  "
     "They must not be counted as operational mainline capabilities."
+)
+
+MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS: str = (
+    "STATUS::MULTIMODAL_INGEST_ACTIVE_MAINLINE_V1: "
+    "Continuous host perception (multimodal_ingest, continuous_host_perception) "
+    "is classified as ACTIVE_MAINLINE.  enable_multimodal_ingest now defaults to "
+    "True in the canonical configuration; MultimodalIngressBus is started by "
+    "DesktopPresenceRuntime as the canonical default runtime path for ambient "
+    "sensory input.  The SAFE_DEFAULT (disabled) posture is an explicit opt-out "
+    "for text-only or constrained deployments, not the canonical default."
 )
 
 
@@ -367,6 +378,28 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Offline Queue / Replay",
             rationale="Offline queue / replay path is tested in protocol regression suite.",
+        ),
+        # --- Promoted to active mainline: continuous host perception ---
+        CapabilityStatusRecord(
+            capability_id="multimodal_ingest",
+            status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
+            display_name="Continuous Host Perception / Multimodal Ingest",
+            rationale="enable_multimodal_ingest now defaults to True in the canonical "
+                      "configuration (config.json).  MultimodalIngressBus provides "
+                      "continuous host perception as the canonical default runtime path. "
+                      "Gracefully degrades when audio/video hardware is absent; "
+                      "text-only deployments are unaffected.",
+        ),
+        CapabilityStatusRecord(
+            capability_id="continuous_host_perception",
+            status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
+            display_name="Continuous Host Perception Bus",
+            rationale="MultimodalIngressBus (PerceptionFrame stream) is now started "
+                      "by default in DesktopPresenceRuntime and classified as "
+                      "ACTIVE_MAINLINE.  The canonical default path sentinel "
+                      "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH in "
+                      "core/multimodal/ingest_runtime.py records this promotion. "
+                      "Hardware-absent graceful degradation is built-in.",
         ),
         # --- Experimental ---
         CapabilityStatusRecord(
