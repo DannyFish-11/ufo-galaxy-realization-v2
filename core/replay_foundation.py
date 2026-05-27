@@ -112,6 +112,7 @@ __all__ = [
     "REPLAY_FOUNDATION_CONTRACT_VERSION",
     "REPLAY_ONLY_PRINCIPLE",
     "REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL",
+    "REPLAY_RECORD_CARRIES_OWNERSHIP_BOUNDARY_POLICY",
     # Enumerations
     "ReplayEventKind",
     # Record types
@@ -165,6 +166,19 @@ REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL: str = (
     "replay history survives process lifetime.  (PR-B2)"
 )
 """Sentinel confirming durable audit sink support is active (PR-B2)."""
+
+REPLAY_RECORD_CARRIES_OWNERSHIP_BOUNDARY_POLICY: str = (
+    "REPLAY_FOUNDATION::OWNERSHIP_BOUNDARY_FIELD_POLICY_V1: "
+    "TaskExecutionRecord.participant_ownership_boundary carries the ownership "
+    "classification determined at the Android participant truth ingress "
+    "boundary.  Allowed values: 'canonicalized', 'participant_local_only', "
+    "'fallback_non_canonical', 'rejected_non_canonical', '' (unset). "
+    "This field propagates ownership context from the ingress layer through "
+    "to replay records so that replay/recovery consumers can distinguish "
+    "canonical execution history from participant-local or fallback records. "
+    "(PR-4V2 ownership chain, canonical ownership truth bridge)"
+)
+"""Policy: replay execution records carry participant ownership boundary."""
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +283,12 @@ class TaskExecutionRecord:
     fallback_triggered: bool = False
     fallback_task_id: str = ""
 
+    # Ownership boundary (from Android participant truth ingress)
+    # Allowed values: 'canonicalized', 'participant_local_only',
+    # 'fallback_non_canonical', 'rejected_non_canonical', '' (unset).
+    # Policy: REPLAY_RECORD_CARRIES_OWNERSHIP_BOUNDARY_POLICY
+    participant_ownership_boundary: str = ""
+
     # Timestamps
     created_at: Optional[float] = None
     dispatched_at: Optional[float] = None
@@ -298,6 +318,7 @@ class TaskExecutionRecord:
             "retry_count": self.retry_count,
             "fallback_triggered": self.fallback_triggered,
             "fallback_task_id": self.fallback_task_id,
+            "participant_ownership_boundary": self.participant_ownership_boundary,
             "created_at": self.created_at,
             "dispatched_at": self.dispatched_at,
             "completed_at": self.completed_at,
@@ -328,6 +349,7 @@ class TaskExecutionRecord:
             retry_count=data.get("retry_count", 0),
             fallback_triggered=data.get("fallback_triggered", False),
             fallback_task_id=data.get("fallback_task_id", ""),
+            participant_ownership_boundary=data.get("participant_ownership_boundary", ""),
             created_at=data.get("created_at"),
             dispatched_at=data.get("dispatched_at"),
             completed_at=data.get("completed_at"),
