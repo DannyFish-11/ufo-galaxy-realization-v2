@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from unittest.mock import MagicMock, patch
+
 from core.desktop_presence_system import build_desktop_presence_system_view
 from core.subject_facing_foreground import (
     build_subject_facing_foreground,
@@ -41,6 +44,17 @@ def _build_test_continuous_ingress() -> dict:
             },
         },
     }
+
+
+def _patch_runtime_import_deps():
+    return patch.dict(
+        sys.modules,
+        {
+            "numpy": MagicMock(),
+            "sounddevice": MagicMock(),
+            "pyaudio": MagicMock(),
+        },
+    )
 
 
 def test_subject_lineage_unifies_foreground_android_presence_lifecycle_and_stream():
@@ -146,3 +160,93 @@ def test_presence_system_panel_consumes_subject_foreground_lineage_and_stream():
     )
     assert panel["continuity_trace"]["replay_provenance_anchor"] == "runtime-panel"
     assert view["foreground_hierarchy"]["panel_subject_source"] == "subject_foreground"
+
+
+def test_presence_summary_reuses_latest_subject_projection_for_panel_lineage():
+    with _patch_runtime_import_deps():
+        from core.desktop_presence_runtime import DesktopPresenceRuntime
+
+        runtime = DesktopPresenceRuntime()
+
+    subject_fg = _build_test_foreground()
+    lineage = build_subject_unified_lineage(
+        subject_foreground=subject_fg,
+        action_lifecycle_surface={"action_id": "runtime-summary", "phase": "executing"},
+        android_presence_runtime={
+            "path_kind": "canonical_default",
+            "device_count": 1,
+            "any_presence_participant": True,
+            "presence_participant_count": 1,
+        },
+        canonical_continuous_ingress=_build_test_continuous_ingress(),
+        ingress_carrier_context={
+            "invocation_id": "runtime-summary",
+            "session_id": "conversation-summary",
+            "is_android_carrier": True,
+        },
+    )
+    runtime._latest_subject_projection = {
+        "subject_foreground": subject_fg,
+        "subject_unified_lineage": lineage,
+        "canonical_continuous_ingress": _build_test_continuous_ingress(),
+    }
+
+    summary = runtime.presence_summary()
+    system_view = summary["desktop_presence_system"]
+
+    assert system_view["subject_unified_lineage"]["canonical_lineage_id"] == "runtime-summary"
+    assert system_view["subject_panel"]["shared_canonical_lineage_id"] == "runtime-summary"
+    assert system_view["subject_panel"]["authority_boundary"]["participant_autonomy"] == (
+        "bounded_android_participation"
+    )
+    assert "android_device_continuous_stream" in (
+        system_view["subject_panel"]["continuous_ingress_participation"]["active_families"]
+    )
+    assert system_view["subject_panel"]["continuity_trace"]["replay_provenance_anchor"] == (
+        "runtime-summary"
+    )
+
+
+def test_operator_snapshot_shares_panel_lineage_and_fallback_truth():
+    with _patch_runtime_import_deps():
+        from core.desktop_presence_runtime import DesktopPresenceRuntime
+
+        runtime = DesktopPresenceRuntime()
+
+    subject_fg = _build_test_foreground()
+    lineage = build_subject_unified_lineage(
+        subject_foreground=subject_fg,
+        action_lifecycle_surface={"action_id": "runtime-operator", "phase": "executing"},
+        android_presence_runtime={
+            "path_kind": "fallback",
+            "device_count": 0,
+            "presence_participant_count": 0,
+        },
+        canonical_continuous_ingress={"is_present": False, "families": {}},
+        ingress_carrier_context={"invocation_id": "runtime-operator"},
+    )
+    runtime._latest_subject_projection = {
+        "subject_foreground": subject_fg,
+        "subject_unified_lineage": lineage,
+        "canonical_continuous_ingress": {"is_present": False, "families": {}},
+    }
+
+    from core.operator_surface import get_operator_surface, reset_operator_surface
+
+    reset_operator_surface()
+    with patch(
+        "core.desktop_presence_runtime.get_desktop_presence_runtime",
+        return_value=runtime,
+    ):
+        snapshot = get_operator_surface().operator_snapshot()
+
+    assert snapshot.shared_subject_panel["shared_canonical_lineage_id"] == "runtime-operator"
+    assert snapshot.shared_subject_lineage["canonical_lineage_id"] == "runtime-operator"
+    assert snapshot.shared_subject_panel["failure_discipline"]["path_kind"] == "fallback"
+    assert snapshot.shared_subject_lineage["failure_discipline"]["degraded"] is True
+    assert "android_presence_runtime_path=fallback" in (
+        snapshot.shared_subject_lineage["failure_discipline"]["degraded_reasons"]
+    )
+    assert snapshot.shared_subject_lineage["continuity_trace"]["replay_provenance_anchor"] == (
+        "runtime-operator"
+    )

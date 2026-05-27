@@ -304,6 +304,11 @@ class DesktopPresenceRuntime:
             "presence_transition_reason": "mode_stable",
             "presence_transition": None,
         }
+        self._latest_subject_projection: Dict[str, Any] = {
+            "subject_foreground": {},
+            "subject_unified_lineage": {},
+            "canonical_continuous_ingress": {},
+        }
         logger.info("DesktopPresenceRuntime initialised (Windows desktop runtime shell)")
 
         # PR-17: Shell responsibility — own and initialise the perception source
@@ -990,6 +995,13 @@ class DesktopPresenceRuntime:
                 canonical_continuous_ingress=result.get("canonical_continuous_ingress"),
             )
             result["desktop_presence_system"] = _presence_system
+            self._latest_subject_projection = {
+                "subject_foreground": dict(_subject_fg_runtime_dict),
+                "subject_unified_lineage": dict(_subject_lineage),
+                "canonical_continuous_ingress": dict(
+                    result.get("canonical_continuous_ingress") or {}
+                ),
+            }
         except Exception as _sfg_runtime_err:
             logger.debug(
                 "subject_foreground_runtime build failed (non-fatal): %s",
@@ -2172,6 +2184,7 @@ class DesktopPresenceRuntime:
                     "(non-fatal): %s",
                     _app_err,
                 )
+            _latest_subject_projection = dict(self._latest_subject_projection or {})
             presence_system = build_desktop_presence_system_view(
                 state_machine_snapshot=self._presence_state_machine.snapshot(),
                 dominant_tristate=dominant,
@@ -2179,6 +2192,13 @@ class DesktopPresenceRuntime:
                 active_session_count=len(sessions),
                 stream_runtime_status=stream_backbone.get("runtime_status"),
                 android_presence_participation=_android_presence_summary,
+                subject_foreground=_latest_subject_projection.get("subject_foreground"),
+                subject_unified_lineage=_latest_subject_projection.get(
+                    "subject_unified_lineage"
+                ),
+                canonical_continuous_ingress=_latest_subject_projection.get(
+                    "canonical_continuous_ingress"
+                ),
             )
 
             return {

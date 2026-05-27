@@ -451,6 +451,10 @@ def build_desktop_presence_system_view(
         },
     }
     if subject_fg or unified_lineage:
+        if subject_fg:
+            view["subject_foreground"] = dict(subject_fg)
+        if unified_lineage:
+            view["subject_unified_lineage"] = dict(unified_lineage)
         view["subject_panel"] = {
             "source_object_family": "subject_foreground",
             "shared_canonical_lineage_id": str(
