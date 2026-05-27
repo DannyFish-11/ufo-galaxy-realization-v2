@@ -65,6 +65,10 @@ from typing import Any, Dict, List, Tuple
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from core.android_boundary_visibility_router import (
+    apply_dual_repo_boundary_to_visible_action,
+    extract_android_originated_info,
+)
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 from core.routes._models import ChatRequest
 from core.unified_response import UnifiedChatResponse
@@ -75,6 +79,12 @@ FOREGROUND_BLOCKED_PREFIX = "当前操作受阻："
 FOREGROUND_CONFIRMATION_EXPLANATION = "该操作需要你的确认后才能继续执行。"
 FOREGROUND_STATUS_DONE = "操作已完成"
 FOREGROUND_STATUS_NOT_DONE = "操作未完成"
+
+# States where android_lifecycle_phase should not override current_action_state
+# (the V2-derived state is already more specific).
+_ANDROID_PHASE_OVERRIDE_EXCLUDED_STATES: frozenset[str] = frozenset(
+    {"blocked", "awaiting_confirmation"}
+)
 
 # ── 动作意图判断关键词集合 ──────────────────────────────────────────────────────
 _ACTION_KEYWORDS = frozenset([
@@ -232,6 +242,54 @@ def _apply_hidden_visible_boundary(
             blocker_summary=blocker_summary,
             confirmation_needed=confirmation_needed,
         )
+
+    # ── Dual-repo boundary pass (goal B + C + D) ─────────────────────────────
+    # Extract Android-originated information and apply the same
+    # classify_content_layer logic used for V2-local metadata.  This is the
+    # first runtime path where Android + V2 information share a single boundary
+    # resolution function.  Android-originated blockers, confirmations, result
+    # summaries, device-state, and execution signals are now governed by the
+    # same foreground/background/operator classifier rather than ad-hoc handler
+    # paths.
+    android_info = extract_android_originated_info(result)
+    dual_repo_decision = apply_dual_repo_boundary_to_visible_action(
+        android_info=android_info,
+        visible_action_surface=visible_action_surface,
+        demoted_fields=demoted_fields,
+        is_operator_request=is_operator_request,
+    )
+
+    # Re-derive blocker/confirmation from updated visible_action_surface so
+    # that the foreground response reflects any Android-originated boundary
+    # decisions (goal C: foreground payload changes due to dual-repo boundary).
+    blocker_summary = str(visible_action_surface.get("blocker_summary", "")).strip()
+    confirmation_needed = bool(visible_action_surface.get("confirmation_needed", False))
+
+    # Re-run action_state derivation when android_lifecycle_phase provided
+    android_phase = str(visible_action_surface.get("android_lifecycle_phase", "")).strip()
+    if android_phase and visible_action_surface.get("current_action_state") not in (
+        _ANDROID_PHASE_OVERRIDE_EXCLUDED_STATES
+    ):
+        if android_phase == "blocked" or blocker_summary:
+            visible_action_surface["current_action_state"] = "blocked"
+        elif android_phase == "confirmation_needed" or confirmation_needed:
+            visible_action_surface["current_action_state"] = "awaiting_confirmation"
+        elif android_phase in {"result_received", "closed", "completed"}:
+            visible_action_surface["current_action_state"] = "completed"
+        elif android_phase == "executing":
+            visible_action_surface["current_action_state"] = "executing"
+
+    # Update minimal_necessary_explanation if android boundary changed blocker/confirmation
+    if dual_repo_decision.boundary_affected_foreground and (blocker_summary or confirmation_needed):
+        visible_action_surface["minimal_necessary_explanation"] = _derive_foreground_response(
+            default_response=result.get("response", ""),
+            blocker_summary=blocker_summary,
+            confirmation_needed=confirmation_needed,
+        )
+
+    # Expose dual-repo boundary decision for operators (non-breaking)
+    if dual_repo_decision.android_boundary_applied and is_operator_request:
+        visible_action_surface["dual_repo_boundary_decision"] = dual_repo_decision.to_dict()
 
     foreground_response = (
         result.get("response", "")
