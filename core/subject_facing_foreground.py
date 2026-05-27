@@ -396,7 +396,11 @@ def _active_continuous_families(canonical_continuous_ingress: Dict[str, Any]) ->
     families = canonical_continuous_ingress.get("families")
     if not isinstance(families, dict):
         return list(canonical_continuous_ingress.get("active_families") or [])
-    return [name for name, item in families.items() if bool(_dict_or_empty(item).get("is_present"))]
+    return [
+        name
+        for name, item in families.items()
+        if isinstance(item, dict) and bool(item.get("is_present"))
+    ]
 
 
 def build_subject_unified_lineage(

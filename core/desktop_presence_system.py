@@ -419,12 +419,7 @@ def build_desktop_presence_system_view(
         if lineage_active_families is not None
         else ingress_active_families
     )
-    subject_state_value = (
-        subject_fg.get("subject_state")
-        if "subject_state" in subject_fg
-        else dominant_tristate
-    )
-    subject_state = str(subject_state_value or dominant_tristate)
+    subject_state = str(subject_fg.get("subject_state") or dominant_tristate)
     subject_state_source = (
         "subject_foreground" if subject_fg.get("subject_state") else "dominant_tristate_fallback"
     )

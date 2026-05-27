@@ -923,7 +923,6 @@ class DesktopPresenceRuntime:
         # Build subject-facing foreground on the runtime default path (not only chat).
         # This keeps runtime-visible outputs aligned with the subject_foreground
         # object family consumed by the chat adapter.
-        _subject_fg_runtime_dict: Dict[str, Any] = {}
         try:
             from core.subject_facing_foreground import (
                 build_subject_facing_foreground as _build_subject_fg,
