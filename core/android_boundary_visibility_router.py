@@ -71,6 +71,8 @@ ANDROID_INFO_CONTENT_KEYS: tuple[str, ...] = (
     "android_participation_state",
     "android_execution_signal",
 )
+ANDROID_STREAM_COUPLED_FEEDBACK: str = "多端持续感知已联动"
+# English: "Multi-device continuous perception is linked."
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +136,30 @@ def _extract_blocker_reason(lifecycle: Dict[str, Any]) -> str:
     ).strip()
 
 
+def _derive_presence_mode_from_signal(*, current_mode: str) -> str:
+    normalized = current_mode.strip().lower()
+    if normalized in {"", "unknown", "static", "silent"}:
+        return "liminal"
+    return current_mode
+
+
+def _extract_canonical_continuous_ingress(result: Dict[str, Any]) -> Dict[str, Any]:
+    direct_ingress = result.get("canonical_continuous_ingress")
+    if isinstance(direct_ingress, dict):
+        return direct_ingress
+
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    ingress_backbone = metadata.get("desktop_native_ingress_backbone")
+    if not isinstance(ingress_backbone, dict):
+        return {}
+    maybe_ingress = ingress_backbone.get("canonical_continuous_ingress")
+    if isinstance(maybe_ingress, dict):
+        return maybe_ingress
+    return {}
+
+
 def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
     """Extract Android-originated information from a result dict.
 
@@ -193,29 +219,17 @@ def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 android_info.setdefault("android_presence_signal", "presence_participant")
 
-            canonical_continuous_ingress: Dict[str, Any] = {}
-            direct_ingress = result.get("canonical_continuous_ingress")
-            if isinstance(direct_ingress, dict):
-                canonical_continuous_ingress = direct_ingress
-            else:
-                metadata = result.get("metadata")
-                if isinstance(metadata, dict):
-                    ingress_backbone = metadata.get("desktop_native_ingress_backbone")
-                    if isinstance(ingress_backbone, dict):
-                        maybe_ingress = ingress_backbone.get("canonical_continuous_ingress")
-                        if isinstance(maybe_ingress, dict):
-                            canonical_continuous_ingress = maybe_ingress
-
-            families = (
-                canonical_continuous_ingress.get("families")
-                if isinstance(canonical_continuous_ingress, dict)
-                else {}
-            )
+            canonical_continuous_ingress = _extract_canonical_continuous_ingress(result)
+            families = canonical_continuous_ingress.get("families") or {}
             if not isinstance(families, dict):
                 families = {}
-            if bool((families.get("desktop_continuous_stream") or {}).get("is_present")) or bool(
+            desktop_stream_present = bool(
+                (families.get("desktop_continuous_stream") or {}).get("is_present")
+            )
+            android_stream_present = bool(
                 (families.get("android_device_continuous_stream") or {}).get("is_present")
-            ):
+            )
+            if desktop_stream_present or android_stream_present:
                 android_info.setdefault("android_stream_readiness", "presence_stream_coupled")
 
     return android_info
@@ -304,9 +318,10 @@ def apply_dual_repo_boundary_to_visible_action(
             decision.boundary_affected_foreground = True
         elif key == "android_presence_signal" and value:
             visible_action_surface["android_presence_signal"] = str(value)
-            current_mode = str(visible_action_surface.get("current_presence_mode") or "").strip().lower()
-            if current_mode in {"", "unknown", "static", "silent"}:
-                visible_action_surface["current_presence_mode"] = "liminal"
+            current_mode = str(visible_action_surface.get("current_presence_mode") or "")
+            visible_action_surface["current_presence_mode"] = _derive_presence_mode_from_signal(
+                current_mode=current_mode
+            )
             decision.boundary_affected_foreground = True
         elif key == "android_stream_readiness" and value:
             visible_action_surface["continuous_stream_readiness"] = str(value)
@@ -316,7 +331,7 @@ def apply_dual_repo_boundary_to_visible_action(
             )
             visible_action_surface.setdefault(
                 "lightweight_status_feedback",
-                "多端持续感知已联动",
+                ANDROID_STREAM_COUPLED_FEEDBACK,
             )
             decision.boundary_affected_foreground = True
         else:

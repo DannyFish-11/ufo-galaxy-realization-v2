@@ -925,37 +925,34 @@ class DesktopPresenceRuntime:
                 build_subject_facing_foreground as _build_subject_fg,
             )
 
+            _lifecycle_surface = (
+                result.get("action_lifecycle_surface")
+                if isinstance(result.get("action_lifecycle_surface"), dict)
+                else {}
+            )
             _runtime_visible_surface = {
                 "current_presence_mode": str(metadata.get("presence_mode") or "unknown"),
                 "current_action_state": str(
                     (result.get("visible_action") or {}).get("state")
-                    or (result.get("action_lifecycle_surface") or {}).get("phase")
+                    or _lifecycle_surface.get("phase")
                     or "unknown"
                 ),
-                "lifecycle_phase": str(
-                    (result.get("action_lifecycle_surface") or {}).get("phase") or "unknown"
-                ),
-                "lifecycle_origin": str(
-                    (result.get("action_lifecycle_surface") or {}).get("origin") or ""
-                ),
+                "lifecycle_phase": str(_lifecycle_surface.get("phase") or "unknown"),
+                "lifecycle_origin": str(_lifecycle_surface.get("origin") or ""),
                 "lifecycle_status_feedback": str(result.get("status_feedback") or ""),
                 "action_trace_summary": "",
                 "result_artifacts_summary": "",
                 "blocker_summary": str(
-                    (result.get("action_lifecycle_surface") or {}).get("blocker_reason") or ""
+                    _lifecycle_surface.get("blocker_reason") or ""
                 ),
                 "confirmation_needed": bool(
-                    (result.get("action_lifecycle_surface") or {}).get("confirmation_needed")
+                    _lifecycle_surface.get("confirmation_needed")
                 ),
                 "lightweight_status_feedback": str(result.get("status_feedback") or ""),
             }
             _subject_fg_runtime = _build_subject_fg(
                 visible_action_surface=_runtime_visible_surface,
-                action_lifecycle_surface=(
-                    result.get("action_lifecycle_surface")
-                    if isinstance(result.get("action_lifecycle_surface"), dict)
-                    else None
-                ),
+                action_lifecycle_surface=_lifecycle_surface or None,
                 foreground_response=str(result.get("response") or ""),
             )
             result["subject_foreground_runtime"] = _subject_fg_runtime.to_dict()
