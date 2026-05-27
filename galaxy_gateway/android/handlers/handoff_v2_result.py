@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -368,10 +368,36 @@ async def handle_handoff_v2_result(
             msg_type,
         )
 
-    return {
+    # PR-UAS: Build the unified action lifecycle surface so the Android-side
+    # result is a first-class object in the returned ACK rather than only
+    # living in internal V2 truth state.  The surface also carries the
+    # canonical blocker / confirmation / closure state for this action.
+    _ual_surface_dict: Optional[Dict[str, Any]] = None
+    try:
+        from core.unified_action_lifecycle_surface import build_from_handoff_response
+
+        # ``outcome`` is set by the ingress block above when ingestion succeeds.
+        _ual_outcome = locals().get("outcome")
+        if _ual_outcome is not None:
+            _surface = build_from_handoff_response(
+                _ual_outcome,
+                session_id=str(message.get("session_id") or ""),
+            )
+            _ual_surface_dict = _surface.to_dict()
+    except Exception as _ual_err:
+        logger.debug(
+            "handoff_v2_result: unified_action_lifecycle_surface build skipped "
+            "(non-fatal): %s",
+            _ual_err,
+        )
+
+    _ack: Dict[str, Any] = {
         "version": "3.0",
         "type": "handoff_v2_result_ack",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
         "correlation_id": message_id,
     }
+    if _ual_surface_dict is not None:
+        _ack["action_lifecycle_surface"] = _ual_surface_dict
+    return _ack
