@@ -277,13 +277,32 @@ class DesktopPresenceStateMachine:
         execution_active: bool,
         user_interaction: bool,
         result_committed: bool = False,
+        android_presence_participation: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         now = time.monotonic()
+
+        # Resolve android participation signals once, so _derive_target_mode
+        # and the transition record both see the same derived values.
+        android_drives_liminal = False
+        android_drives_manifest = False
+        android_participant_count = 0
+        if android_presence_participation is not None:
+            try:
+                android_drives_liminal = bool(android_presence_participation.any_drives_liminal)
+                android_drives_manifest = bool(android_presence_participation.any_drives_manifest)
+                android_participant_count = int(
+                    android_presence_participation.presence_participant_count
+                )
+            except AttributeError:
+                pass
+
         target = self._derive_target_mode(
             tri_state=tri_state,
             task_active=task_active,
             sensing_active=sensing_active,
             execution_active=execution_active,
+            android_drives_liminal=android_drives_liminal,
+            android_drives_manifest=android_drives_manifest,
         )
         if result_committed and self._mode == DesktopPresenceMode.MANIFEST:
             target = DesktopPresenceMode.LIMINAL
@@ -328,6 +347,9 @@ class DesktopPresenceStateMachine:
             "execution_active": execution_active,
             "tri_state": tri_state,
             "result_committed": result_committed,
+            "android_presence_participant_count": android_participant_count,
+            "android_drives_liminal": android_drives_liminal,
+            "android_drives_manifest": android_drives_manifest,
         }
         return dict(self._last_transition)
 
@@ -354,10 +376,12 @@ class DesktopPresenceStateMachine:
         task_active: bool,
         sensing_active: bool,
         execution_active: bool,
+        android_drives_liminal: bool = False,
+        android_drives_manifest: bool = False,
     ) -> DesktopPresenceMode:
-        if execution_active or tri_state == "manifest":
+        if execution_active or tri_state == "manifest" or android_drives_manifest:
             return DesktopPresenceMode.MANIFEST
-        if tri_state == "liminal" or task_active or sensing_active:
+        if tri_state == "liminal" or task_active or sensing_active or android_drives_liminal:
             return DesktopPresenceMode.LIMINAL
         return DesktopPresenceMode.STATIC
 
