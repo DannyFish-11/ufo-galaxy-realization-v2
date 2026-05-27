@@ -8,6 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.android_perception_ingress_contract import (
+    ANDROID_PERCEPTION_CANONICAL,
+    ANDROID_PERCEPTION_CANONICAL_PROTOCOL,
+    ANDROID_PERCEPTION_ROUTE_INGRESS_BUS,
+)
 from core.desktop_native_multimodal_ingress_contract import (
     DESKTOP_NATIVE_INGRESS_BACKBONE_AUTHORITY,
     DESKTOP_NATIVE_INGRESS_BACKBONE_SENTINEL,
@@ -112,6 +117,27 @@ def test_backbone_detects_continuous_stream_branch_presence():
     )
     assert contract["modalities"]["continuous_stream"]["is_present"] is True
     assert "mainline_continuous" in contract["modality_tiers"]
+
+
+def test_android_originated_perception_enters_ingress_backbone_with_canonical_mapping():
+    mm = MultiModalContext(
+        images=[MultiModalImage(mime="image/png", data=VALID_1X1_PNG_BASE64, source="android_screen")],
+        metadata={"android_perception_participation": ANDROID_PERCEPTION_CANONICAL},
+    )
+    with patch(
+        "core.android_perception_ingress_contract._is_multimodal_ingest_enabled",
+        return_value=True,
+    ):
+        contract = build_desktop_native_ingress_backbone(
+            message="describe this android screen",
+            source="android_vision",
+            multimodal_context=mm,
+            context=[],
+        )
+    android_ingress = contract["android_perception_ingress"]
+    assert contract["modalities"]["android_perception"]["is_present"] is True
+    assert android_ingress["android_perception_canonical_protocol"] == ANDROID_PERCEPTION_CANONICAL_PROTOCOL
+    assert android_ingress["android_perception_ingress_route"] == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
 
 
 def test_backbone_detects_continuous_stream_branch_from_kwargs():
@@ -272,6 +298,52 @@ def test_openclawd_route_differs_when_stream_and_screen_backbone_present():
     assert guided["context_strategy_hint"]["screen_context_priority"] == "high"
     assert router.calls[-1]["complexity_score"] == 0.9
     assert router.calls[-1]["active_modalities"] == ["screen", "stream"]
+
+
+def test_openclawd_route_differs_with_android_perception_ingress_signal():
+    from core.openclawd import OpenClawd
+
+    class _FakeRouter:
+        def __init__(self):
+            self.calls = []
+
+        def route_multimodal_first(self, *, active_modalities, task_type, complexity_score):
+            self.calls.append(
+                {
+                    "active_modalities": list(active_modalities),
+                    "complexity_score": complexity_score,
+                    "task_type": task_type,
+                }
+            )
+            return SimpleNamespace(provider="fake", model="fake-mm", reason="tier=1 native")
+
+    oc = OpenClawd.__new__(OpenClawd)
+    router = _FakeRouter()
+    oc._get_router = MagicMock(return_value=router)
+    fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
+    with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
+        baseline = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={"modalities": {}},
+            presence_mode="static",
+        )
+        android_guided = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={
+                "modalities": {"android_perception": {"is_present": True}},
+                "android_perception_ingress": {
+                    "android_perception_ingress_route": "multimodal_ingress_bus",
+                },
+            },
+            presence_mode="liminal",
+        )
+    assert baseline["route_type"] == "text_only"
+    assert android_guided["route_type"] == "native_multimodal"
+    assert android_guided["route_bias"] == "android_perception_ingress_aware"
+    assert android_guided["route_tier"] == "android_perception_ingress_bus_priority"
+    assert android_guided["context_strategy_hint"]["android_perception_priority"] == "high"
+    assert android_guided["context_strategy_hint"]["android_perception_route"] == "multimodal_ingress_bus"
+    assert router.calls[-1]["active_modalities"] == ["screen"]
 
 
 def test_openclawd_route_degrades_when_continuous_stream_reconnecting():

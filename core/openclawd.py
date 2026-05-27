@@ -2809,6 +2809,20 @@ class OpenClawd:
         has_stream_ingress = bool((ingress_mods.get("continuous_stream") or {}).get("is_present"))
         has_screen_ingress = bool((ingress_mods.get("screen_context") or {}).get("is_present"))
         has_foreground_ingress = bool((ingress_mods.get("foreground_context") or {}).get("is_present"))
+        android_perception_ingress = (
+            (desktop_native_ingress_backbone or {}).get("android_perception_ingress", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
+        has_android_perception_ingress = bool(
+            (ingress_mods.get("android_perception") or {}).get("is_present")
+            or android_perception_ingress
+        )
+        android_perception_route = ""
+        if isinstance(android_perception_ingress, dict):
+            android_perception_route = str(
+                android_perception_ingress.get("android_perception_ingress_route") or ""
+            )
         coupling = (
             ((desktop_native_ingress_backbone or {}).get("presence_mode_coupling") or {}).get(
                 effective_presence_mode
@@ -2875,6 +2889,16 @@ class OpenClawd:
             promoted_modalities.append("stream")
             route_bias = "continuous_stream_aware"
             route_tier = "continuous_stream_priority"
+        if has_android_perception_ingress:
+            backbone_signal_names.append("android_perception_ingress")
+            if "screen" not in promoted_modalities:
+                promoted_modalities.append("screen")
+            route_bias = "android_perception_ingress_aware"
+            route_tier = (
+                "android_perception_ingress_bus_priority"
+                if android_perception_route == "multimodal_ingress_bus"
+                else "android_perception_request_bound_priority"
+            )
         previous_presence_mode = str(
             hint.get("previous_presence_mode") or effective_presence_mode
         ).lower()
@@ -2888,6 +2912,8 @@ class OpenClawd:
             "screen_context_priority": "high" if has_screen_ingress else "normal",
             "foreground_context_priority": "high" if has_foreground_ingress else "normal",
             "continuous_stream_assisted": has_stream_ingress and stream_state not in {"reconnecting", "unavailable"},
+            "android_perception_priority": "high" if has_android_perception_ingress else "normal",
+            "android_perception_route": android_perception_route,
             "sampling_intensity": sampling_intensity,
             "fusion_strategy": fusion_strategy,
             "execution_readiness": presence_policy["execution_readiness"],
@@ -2909,8 +2935,15 @@ class OpenClawd:
             router_complexity_score += 0.05
         if has_stream_ingress:
             router_complexity_score += 0.1
+        if has_android_perception_ingress:
+            router_complexity_score += 0.1
         return {
-            "requires_native_multimodal": has_stream_ingress or has_screen_ingress or has_foreground_ingress,
+            "requires_native_multimodal": (
+                has_stream_ingress
+                or has_screen_ingress
+                or has_foreground_ingress
+                or has_android_perception_ingress
+            ),
             "promoted_modalities": promoted_modalities,
             "route_bias": route_bias,
             "route_tier": route_tier,
@@ -2942,6 +2975,8 @@ class OpenClawd:
             "screen_context_priority": context_hint.get("screen_context_priority", "normal"),
             "foreground_context_priority": context_hint.get("foreground_context_priority", "normal"),
             "continuous_stream_assisted": bool(context_hint.get("continuous_stream_assisted", False)),
+            "android_perception_priority": context_hint.get("android_perception_priority", "normal"),
+            "android_perception_route": context_hint.get("android_perception_route", ""),
             "sampling_intensity": context_hint.get("sampling_intensity", "moderate"),
             "fusion_strategy": context_hint.get("fusion_strategy", "minimal_context_staging"),
             "execution_readiness": context_hint.get("execution_readiness", "medium"),
@@ -2959,6 +2994,12 @@ class OpenClawd:
             strategy_tokens.append(f"foreground_context_priority={normalized_hint['foreground_context_priority']}")
         if normalized_hint["continuous_stream_assisted"]:
             strategy_tokens.append("continuous_stream_assisted=true")
+        if normalized_hint["android_perception_priority"] != "normal":
+            strategy_tokens.append(
+                f"android_perception_priority={normalized_hint['android_perception_priority']}"
+            )
+        if normalized_hint["android_perception_route"]:
+            strategy_tokens.append(f"android_perception_route={normalized_hint['android_perception_route']}")
         if normalized_hint["execution_readiness"] != "medium":
             strategy_tokens.append(f"execution_readiness={normalized_hint['execution_readiness']}")
         if normalized_hint["presence_mode_changed"]:
