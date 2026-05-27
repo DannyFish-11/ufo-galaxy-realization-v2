@@ -252,6 +252,8 @@ async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadat
         == "OpenClawd._build_unified_control_plan"
     )
     assert "desktop_native_ingress_backbone" in result["metadata"]
+    assert isinstance(result.get("canonical_continuous_ingress"), dict)
+    assert result["subject_foreground_runtime"]["is_subject_primary"] is True
 
 
 def test_canonical_continuous_ingress_is_consumed_in_canonical_perception_state():
