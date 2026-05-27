@@ -119,6 +119,25 @@ def test_backbone_detects_continuous_stream_branch_presence():
     assert "mainline_continuous" in contract["modality_tiers"]
 
 
+def test_canonical_continuous_ingress_unifies_desktop_and_android_families():
+    contract = build_desktop_native_ingress_backbone(
+        message="describe live android view",
+        source="android_vision",
+        multimodal_context={"metadata": {"continuous_stream": True}},
+        context=[],
+        kwargs={"device_id": "android-01"},
+    )
+    canonical = contract["canonical_continuous_ingress"]
+    families = canonical["families"]
+    assert canonical["is_present"] is True
+    assert families["desktop_continuous_stream"]["is_present"] is True
+    assert families["android_device_continuous_stream"]["is_present"] is True
+    assert set(canonical["active_families"]) >= {
+        "desktop_continuous_stream",
+        "android_device_continuous_stream",
+    }
+
+
 def test_android_originated_perception_enters_ingress_backbone_with_canonical_mapping():
     mm = MultiModalContext(
         images=[MultiModalImage(mime="image/png", data=VALID_1X1_PNG_BASE64, source="android_screen")],
@@ -235,6 +254,34 @@ async def test_runtime_shell_forwards_backbone_into_openclawd_and_result_metadat
     assert "desktop_native_ingress_backbone" in result["metadata"]
 
 
+def test_canonical_continuous_ingress_is_consumed_in_canonical_perception_state():
+    from core.openclawd import OpenClawd
+
+    oc = OpenClawd.__new__(OpenClawd)
+    perception = oc._build_canonical_perception_state(
+        runtime_session_id="sess-canonical-continuous",
+        trace_id="trace-canonical-continuous",
+        desktop_native_ingress_backbone={
+            "modalities": {},
+            "canonical_continuous_ingress": {
+                "families": {
+                    "desktop_continuous_stream": {"is_present": True},
+                    "android_device_continuous_stream": {"is_present": True},
+                }
+            },
+        },
+        stream_runtime_status={
+            "stream_state": "active",
+            "stream_active_for_routing": True,
+            "stream_fallback_required": False,
+        },
+    )
+    assert isinstance(perception.get("canonical_continuous_ingress"), dict)
+    assert "runtime_stream_session_manager" in perception["canonical_continuous_ingress"]["families"]
+    assert "stream" in perception.get("active_modalities", [])
+    assert "continuous_stream" in perception.get("active_modalities", [])
+
+
 def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     from core.openclawd import OpenClawd
 
@@ -273,6 +320,59 @@ def test_openclawd_route_consumes_presence_mode_and_ingress_signals():
     assert result["route_tier"] == "foreground_context_priority"
     assert result["context_strategy_hint"]["screen_context_priority"] == "high"
     assert result["context_strategy_hint"]["foreground_context_priority"] == "high"
+
+
+def test_route_guidance_uses_canonical_continuous_ingress_runtime_family():
+    from core.openclawd import OpenClawd
+
+    baseline = OpenClawd._derive_desktop_native_ingress_route_guidance(
+        desktop_native_ingress_backbone={"modalities": {}},
+        stream_runtime_status={"stream_state": "discrete_fallback", "stream_active_for_routing": False},
+    )
+    guided = OpenClawd._derive_desktop_native_ingress_route_guidance(
+        desktop_native_ingress_backbone={
+            "modalities": {},
+            "canonical_continuous_ingress": {
+                "families": {
+                    "desktop_continuous_stream": {"is_present": False},
+                    "android_device_continuous_stream": {"is_present": False},
+                }
+            },
+        },
+        stream_runtime_status={"stream_state": "active", "stream_active_for_routing": True},
+    )
+    assert baseline["requires_native_multimodal"] is False
+    assert guided["requires_native_multimodal"] is True
+    assert guided["route_bias"] == "continuous_stream_aware"
+    assert guided["context_strategy_hint"]["continuous_stream_assisted"] is True
+
+
+def test_android_device_continuous_family_promoted_to_cognition_routing():
+    from core.openclawd import OpenClawd
+
+    class _FakeRouter:
+        def route_multimodal_first(self, *, active_modalities, task_type, complexity_score):
+            return SimpleNamespace(provider="fake", model="fake-mm", reason="tier=1 native")
+
+    oc = OpenClawd.__new__(OpenClawd)
+    oc._get_router = MagicMock(return_value=_FakeRouter())
+    fake_multi_llm_router = SimpleNamespace(TaskType=SimpleNamespace(GENERAL="GENERAL"))
+    with patch.dict(sys.modules, {"core.multi_llm_router": fake_multi_llm_router}):
+        routed = oc._select_multimodal_route(
+            canonical_perception={"requires_native_multimodal": False, "active_modalities": []},
+            desktop_native_ingress_backbone={
+                "modalities": {},
+                "canonical_continuous_ingress": {
+                    "families": {
+                        "desktop_continuous_stream": {"is_present": False},
+                        "android_device_continuous_stream": {"is_present": True},
+                    }
+                },
+            },
+            presence_mode="liminal",
+        )
+    assert routed["route_type"] == "native_multimodal"
+    assert routed["route_bias"] == "android_perception_ingress_aware"
 
 
 def test_openclawd_route_differs_when_stream_and_screen_backbone_present():

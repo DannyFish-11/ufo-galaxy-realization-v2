@@ -38,6 +38,10 @@ EXTENSION_MODALITIES = (
 )
 DEGRADABLE_MODALITIES = ("audio_speech", "camera_sensor", "continuous_stream")
 CONTINUOUS_MAINLINE_MODALITIES = ("continuous_stream",)
+CANONICAL_CONTINUOUS_INGRESS_AUTHORITY = (
+    "CANONICAL_CONTINUOUS_INGRESS::DESKTOP_ANDROID_STREAM_CONVERGENCE_V1"
+)
+CANONICAL_CONTINUOUS_INGRESS_SENTINEL = "CANONICAL_CONTINUOUS_INGRESS::MAINLINE_BACKBONE_V1"
 # File-input compatibility keys observed across request/context carriers:
 # - files / uploaded_files: explicit upload bundles
 # - file_paths / file_input: direct path-centric carrier styles
@@ -137,6 +141,42 @@ def _has_continuous_stream(mm_dict: Dict[str, Any], kwargs: Mapping[str, Any]) -
         if bool(kwargs.get(key)):
             return True
     return False
+
+
+def _build_canonical_continuous_ingress_snapshot(
+    *,
+    source: str,
+    has_stream: bool,
+    android_perception_ingress: Mapping[str, Any],
+    android_nl_ingress: Mapping[str, Any],
+) -> Dict[str, Any]:
+    has_android_perception = bool(android_perception_ingress)
+    has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
+    has_android_state_snapshot = bool(_as_mapping(android_nl_ingress.get("android_state_snapshot")))
+
+    families: Dict[str, Dict[str, Any]] = {
+        "desktop_continuous_stream": {
+            "is_present": has_stream,
+            "carrier_source": source or "chat",
+            "ingress_role": "desktop_native_continuous_stream_ingress",
+        },
+        "android_device_continuous_stream": {
+            "is_present": bool(has_android_perception or has_android_device_context),
+            "carrier_source": source or "chat",
+            "ingress_role": "android_device_continuous_stream_ingress",
+            "perception_route": str(android_perception_ingress.get("android_perception_ingress_route") or ""),
+            "android_state_snapshot_present": has_android_state_snapshot,
+        },
+    }
+    active_families = [name for name, item in families.items() if bool(item.get("is_present"))]
+    return {
+        "authority": CANONICAL_CONTINUOUS_INGRESS_AUTHORITY,
+        "sentinel": CANONICAL_CONTINUOUS_INGRESS_SENTINEL,
+        "contract_version": 1,
+        "families": families,
+        "active_families": active_families,
+        "is_present": bool(active_families),
+    }
 
 
 def _build_android_perception_ingress_snapshot(
@@ -304,6 +344,12 @@ def build_desktop_native_ingress_backbone(
         android_perception_ingress=android_perception_ingress,
         android_nl_ingress=android_nl_ingress,
     )
+    canonical_continuous_ingress = _build_canonical_continuous_ingress_snapshot(
+        source=source,
+        has_stream=has_stream,
+        android_perception_ingress=android_perception_ingress,
+        android_nl_ingress=android_nl_ingress,
+    )
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
@@ -352,6 +398,7 @@ def build_desktop_native_ingress_backbone(
         "android_perception_ingress": android_perception_ingress,
         "android_nl_ingress": android_nl_ingress,
         "android_cognition_input": android_cognition_input,
+        "canonical_continuous_ingress": canonical_continuous_ingress,
         "modalities": modalities,
         "modality_tiers": {
             "mainline_required": list(MAINLINE_REQUIRED_MODALITIES),
@@ -448,6 +495,7 @@ def augment_ingress_backbone_for_control_core(
     has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
 
     context_assembly = _as_mapping(mainline.get("context_assembly"))
+    canonical_continuous_ingress = _as_mapping(enriched.get("canonical_continuous_ingress"))
     if isinstance(canonical_perception, dict):
         context_assembly["canonical_perception_active_modalities"] = list(
             canonical_perception.get("active_modalities") or []
@@ -463,6 +511,8 @@ def augment_ingress_backbone_for_control_core(
             context_assembly["multimodal_route_bias"] = canonical_perception.get("multimodal_route_bias")
         if canonical_perception.get("multimodal_route_tier"):
             context_assembly["multimodal_route_tier"] = canonical_perception.get("multimodal_route_tier")
+    if canonical_continuous_ingress:
+        context_assembly["canonical_continuous_ingress"] = dict(canonical_continuous_ingress)
     if android_nl_ingress:
         context_assembly["android_nl_ingress"] = dict(android_nl_ingress)
     if android_cognition_input:
