@@ -798,6 +798,8 @@ _NON_CLOSURE_TRUTH_KINDS = frozenset(
     }
 )
 
+_COMPAT_FALLBACK_NON_CANONICAL = "compat_fallback_non_canonical"
+
 _TERMINAL_TRACKING_PHASES = frozenset(
     {
         "completed",
@@ -1390,8 +1392,8 @@ def _reconcile_session_snapshot(
     if not _REGISTRY_AVAILABLE or registry is None or lookup_active_session is None:
         return (
             False,
-            "compat_fallback_non_canonical:session_snapshot_registry_unavailable",
-            "registry_unavailable:compat_fallback_non_canonical",
+            f"{_COMPAT_FALLBACK_NON_CANONICAL}:session_snapshot_registry_unavailable",
+            f"registry_unavailable:{_COMPAT_FALLBACK_NON_CANONICAL}",
             "",
         )
 
@@ -1403,8 +1405,8 @@ def _reconcile_session_snapshot(
             if not envelope.device_id:
                 return (
                     False,
-                    "compat_fallback_non_canonical:session_snapshot_missing_participant_identity",
-                    "session_snapshot_missing_participant_identity:compat_fallback_non_canonical",
+                    f"{_COMPAT_FALLBACK_NON_CANONICAL}:session_snapshot_missing_participant_identity",
+                    f"session_snapshot_missing_participant_identity:{_COMPAT_FALLBACK_NON_CANONICAL}",
                     "",
                 )
             if registry_device_id and registry_device_id != envelope.device_id:
@@ -1419,9 +1421,9 @@ def _reconcile_session_snapshot(
             return (
                 True,
                 "session_snapshot_continuity_confirmed:"
-                f"runtime_attachment_session_id={envelope.session_id}"
-                f"→participant_id={envelope.device_id}"
-                f"→runtime_session_id={runtime_session_id}",
+                f"runtime_attachment_session_id={envelope.session_id}|"
+                f"participant_id={envelope.device_id}|"
+                f"runtime_session_id={runtime_session_id}",
                 "",
                 "active",
             )
@@ -1447,8 +1449,8 @@ def _build_ownership_context(
 ) -> Dict[str, Any]:
     participant_identity = (envelope.device_id or "").strip()
     fallback_non_canonical = (
-        "compat_fallback_non_canonical" in (reject_reason or "")
-        or "compat_fallback_non_canonical" in (canonical_update or "")
+        _COMPAT_FALLBACK_NON_CANONICAL in (reject_reason or "")
+        or _COMPAT_FALLBACK_NON_CANONICAL in (canonical_update or "")
     )
     participant_divergence = "participant_divergence" in (reject_reason or "")
     if was_reconciled:
@@ -1480,10 +1482,11 @@ def _build_ownership_context(
         and (envelope.session_id or envelope.payload.get("conversation_session_id"))
     ):
         try:
+            runtime_session_claim = _extract_runtime_session_claim(envelope)
             identity = build_canonical_session_identity(
                 session_id=envelope.session_id or "",
                 device_id=participant_identity,
-                runtime_session_id=envelope.session_id or "",
+                runtime_session_id=runtime_session_claim,
                 payload=envelope.payload,
                 create_session=False,
             )
@@ -1506,6 +1509,18 @@ def _build_ownership_context(
         "participant_identity_divergence": participant_divergence,
         "canonical_session_identity": canonical_session_identity,
     }
+
+
+def _extract_runtime_session_claim(envelope: AndroidParticipantTruthEnvelope) -> str:
+    """Extract runtime session claim from Android payload in canonical priority order."""
+    payload = envelope.payload or {}
+    return str(
+        payload.get("runtime_session_id")
+        or payload.get("attached_runtime_session_id")
+        or payload.get("runtime_attachment_session_id")
+        or envelope.session_id
+        or ""
+    )
 
 
 def _reconcile_reconciliation_signal(
