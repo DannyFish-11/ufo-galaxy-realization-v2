@@ -708,10 +708,13 @@ class TestGroupL_SessionSnapshotReconciliation:
         env = AndroidParticipantTruthEnvelope(
             truth_kind=AndroidParticipantTruthKind.session_snapshot,
             session_id=sid,
+            device_id="dev-l1",
         )
         outcome = reconcile_android_participant_truth(env, registry=registry)
         assert outcome.was_reconciled
         assert "continuity" in outcome.canonical_update.lower()
+        assert outcome.ownership_context.get("ownership_status") == "canonicalized"
+        assert outcome.ownership_context.get("participant_identity") == "dev-l1"
 
     def test_l2_missing_session_id_rejected(self) -> None:
         """AC2: session_snapshot without session_id is rejected gracefully."""
@@ -722,6 +725,60 @@ class TestGroupL_SessionSnapshotReconciliation:
         outcome = reconcile_android_participant_truth(env)
         assert not outcome.was_reconciled
         assert outcome.reject_reason  # must have a reason
+
+    @pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="registry unavailable")
+    def test_l3_session_snapshot_requires_participant_identity_for_canonicalization(self) -> None:
+        registry = AttachedSessionRegistry()
+        sid = str(uuid.uuid4())
+        try:
+            register_session(
+                session_id=sid,
+                device_id="dev-l3",
+                runtime_session_id="rsid-l3",
+                registry=registry,
+            )
+        except TypeError:
+            register_session(
+                session_id=sid,
+                device_id="dev-l3",
+                registry=registry,
+            )
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.session_snapshot,
+            session_id=sid,
+            device_id="",
+        )
+        outcome = reconcile_android_participant_truth(env, registry=registry)
+        assert not outcome.was_reconciled
+        assert "missing_participant_identity" in outcome.reject_reason
+        assert outcome.ownership_context.get("ownership_status") == "fallback_non_canonical"
+
+    @pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="registry unavailable")
+    def test_l4_session_snapshot_rejects_participant_identity_divergence(self) -> None:
+        registry = AttachedSessionRegistry()
+        sid = str(uuid.uuid4())
+        try:
+            register_session(
+                session_id=sid,
+                device_id="dev-l4-canonical",
+                runtime_session_id="rsid-l4",
+                registry=registry,
+            )
+        except TypeError:
+            register_session(
+                session_id=sid,
+                device_id="dev-l4-canonical",
+                registry=registry,
+            )
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.session_snapshot,
+            session_id=sid,
+            device_id="dev-l4-android",
+        )
+        outcome = reconcile_android_participant_truth(env, registry=registry)
+        assert not outcome.was_reconciled
+        assert "participant_divergence" in outcome.reject_reason
+        assert outcome.ownership_context.get("participant_identity_divergence") is True
 
 
 # ---------------------------------------------------------------------------
@@ -869,6 +926,29 @@ class TestGroupP_ReplayFoundationAuditEvent:
         outcome = reconcile_android_participant_truth(env)
         assert outcome.replay_event_emitted
 
+    def test_p4_audit_payload_contains_ownership_context(self) -> None:
+        if not _TRACKER_AVAILABLE:
+            pytest.skip("tracker unavailable")
+        rt, _ = _make_runtime(contract_id="cid-p4", initial_phase="in_progress")
+        captured: Dict[str, Any] = {}
+
+        def _capture_emit(**kwargs: Any) -> None:
+            captured.update(kwargs)
+
+        with patch("core.android_participant_truth_ingress._emit_runtime_event", side_effect=_capture_emit):
+            env = AndroidParticipantTruthEnvelope(
+                truth_kind=AndroidParticipantTruthKind.cancel,
+                contract_id="cid-p4",
+                session_id="session-p4",
+                device_id="dev-p4",
+            )
+            outcome = reconcile_android_participant_truth(env, runtime=rt)
+            assert outcome.replay_event_emitted
+        payload = captured.get("payload", {})
+        ownership = payload.get("ownership_context", {})
+        assert ownership.get("ownership_status") == "canonicalized"
+        assert ownership.get("participant_identity") == "dev-p4"
+
 
 # ---------------------------------------------------------------------------
 # Group Q — ingest_android_participant_truth_message: convenience wrapper
@@ -1001,6 +1081,7 @@ class TestGroupT_ReconcileOutcome:
         assert outcome.reject_reason == ""
         assert not outcome.replay_event_emitted
         assert outcome.tracking_record_phase == ""
+        assert outcome.ownership_context == {}
 
     def test_t2_is_accepted_true_when_reconciled_no_reject(self) -> None:
         env = AndroidParticipantTruthEnvelope()
@@ -1039,7 +1120,24 @@ class TestGroupT_ReconcileOutcome:
         assert "tracking_record_phase" in d
         assert "recovery_state_routing" in d
         assert "schema_gate_evidence" in d
+        assert "ownership_context" in d
         assert "envelope" in d
+
+    @pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="tracker unavailable")
+    def test_t6_reconciled_cancel_produces_canonical_ownership_context(self) -> None:
+        rt, _ = _make_runtime(contract_id="cid-t6", initial_phase="in_progress")
+        env = AndroidParticipantTruthEnvelope(
+            truth_kind=AndroidParticipantTruthKind.cancel,
+            contract_id="cid-t6",
+            session_id="session-t6",
+            device_id="dev-t6",
+        )
+        outcome = reconcile_android_participant_truth(env, runtime=rt)
+        ownership = outcome.ownership_context
+        assert ownership.get("ownership_status") == "canonicalized"
+        assert ownership.get("participant_identity") == "dev-t6"
+        canonical_identity = ownership.get("canonical_session_identity", {})
+        assert canonical_identity.get("runtime_attachment_session_id")
 
 
 # ---------------------------------------------------------------------------
