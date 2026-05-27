@@ -592,8 +592,7 @@ def derive_visible_action(surface: UnifiedActionLifecycleSurface) -> Dict[str, A
     """Derive a lightweight foreground-facing action payload from the surface."""
     phase = surface.phase.value
     if surface.phase == ActionLifecyclePhase.blocked:
-        _reason = surface.blocker_reason or (surface.blocker or {}).get("reason", "")
-        status_feedback = f"blocked:{_reason}" if _reason else "blocked"
+        status_feedback = "blocked"
     elif surface.phase == ActionLifecyclePhase.confirmation_needed:
         status_feedback = "confirmation_required"
     elif surface.phase == ActionLifecyclePhase.accepted:

@@ -493,6 +493,7 @@ class TestActionLifecycleCompositionDifference:
         visible_action = result["visible_action"]
         assert visible_action["phase"] == surface_dict["phase"]
         assert visible_action["blocker_reason"] == surface_dict["blocker_reason"]
+        assert visible_action["blocker_reason"] == "device_offline"
         assert visible_action["blocker"] == surface_dict["blocker"]
 
     def test_C10_status_feedback_changes_with_surface_phase(self):

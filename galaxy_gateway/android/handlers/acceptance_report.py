@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any, Dict
 
 from core.android_acceptance_evidence_store import ingest_device_acceptance_report
@@ -65,7 +66,7 @@ async def handle_device_acceptance_report(
         else "device_acceptance_report_ack"
     )
     action_surface = UnifiedActionLifecycleSurface(
-        action_id=str(message.get("message_id") or ""),
+        action_id=str(message.get("message_id") or uuid.uuid4()),
         session_id=str(payload_dict.get("session_id") or message.get("session_id") or ""),
         task_id=str(message.get("task_id") or payload_dict.get("task_id") or ""),
         device_id=device_id,
