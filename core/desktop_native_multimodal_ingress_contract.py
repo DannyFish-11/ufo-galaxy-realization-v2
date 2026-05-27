@@ -58,7 +58,7 @@ def _extract_mm(multimodal_context: Optional[Any]) -> Dict[str, Any]:
             dumped = multimodal_context.model_dump()
             if isinstance(dumped, dict):
                 return dumped
-        except (ImportError, ModuleNotFoundError):
+        except Exception:
             return {}
     return _as_mapping(multimodal_context)
 
@@ -140,7 +140,7 @@ def _build_android_perception_ingress_snapshot(
             ANDROID_VISION_CARRIER_SOURCE,
             build_android_perception_ingress_context,
         )
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return {}
     if source != ANDROID_VISION_CARRIER_SOURCE:
         return {}
