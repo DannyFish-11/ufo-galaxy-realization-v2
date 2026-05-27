@@ -213,7 +213,7 @@ class AndroidV2PathKind(str, Enum):
         Must not masquerade as canonical_default.
     fallback
         Degraded path used when the canonical default is unavailable (e.g.,
-        state-store not initialised, module import failure).  Must not
+        state-store not initialized, module import failure).  Must not
         silently become the default.
     optional_enhancement
         Additive capability that supplements canonical_default but is not

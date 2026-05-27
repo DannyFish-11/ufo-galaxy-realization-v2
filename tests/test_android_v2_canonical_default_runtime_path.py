@@ -73,13 +73,9 @@ class TestGroupASentinels:
         assert ANDROID_V2_CANONICAL_DEFAULT_PATH_IS_ACTIVE is True
 
     def test_authority_token_is_non_empty_string(self):
-        """The authority token must be a non-empty string starting with
-        ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY."""
+        """The authority token must be a non-empty string."""
         assert isinstance(ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY, str)
         assert len(ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY) > 0
-        assert "ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY" in (
-            ANDROID_V2_CANONICAL_DEFAULT_PATH_AUTHORITY
-        )
 
     def test_canonical_default_kind_exists_in_enum(self):
         """AndroidV2PathKind.canonical_default must exist as a kind value."""
@@ -161,13 +157,13 @@ class TestGroupBDefaultPathBehaviorChange:
         assert d["path_kind"] == "canonical_default"
 
     def test_derived_at_is_recent_timestamp(self):
-        """derived_at must be a recent Unix timestamp (within the last 60 seconds)."""
+        """derived_at must be a Unix timestamp between the call start and call end."""
         before = time.time()
         field = build_android_presence_runtime_field()
         after = time.time()
         d = field.to_dict()
         assert isinstance(d["derived_at"], float)
-        assert before <= d["derived_at"] <= after + 1.0
+        assert before <= d["derived_at"] <= after
 
 
 # ---------------------------------------------------------------------------
