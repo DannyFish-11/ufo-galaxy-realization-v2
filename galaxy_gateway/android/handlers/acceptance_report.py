@@ -7,6 +7,13 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from core.android_acceptance_evidence_store import ingest_device_acceptance_report
 from core.android_evaluator_artifact_ingress import ingest_android_evaluator_artifact
+from core.unified_action_lifecycle_surface import (
+    ActionLifecyclePhase,
+    ActionOrigin,
+    ClosureState,
+    UnifiedActionLifecycleSurface,
+    derive_visible_action,
+)
 from galaxy_gateway.android.handlers.evaluator_artifact_report import (
     _truth_reconciled_flag,
 )
@@ -57,6 +64,21 @@ async def handle_device_acceptance_report(
         if isinstance(msg_type, str) and msg_type.strip()
         else "device_acceptance_report_ack"
     )
+    action_surface = UnifiedActionLifecycleSurface(
+        action_id=str(message.get("message_id") or ""),
+        session_id=str(payload_dict.get("session_id") or message.get("session_id") or ""),
+        task_id=str(message.get("task_id") or payload_dict.get("task_id") or ""),
+        device_id=device_id,
+        phase=ActionLifecyclePhase.accepted,
+        origin=ActionOrigin.android_device,
+        accepted=True,
+        acceptance_tag=record.acceptance_tag,
+        execution_state="accepted",
+        closure_state=ClosureState.handoff_pending,
+        closure_reason="android_acceptance_report_received",
+        last_android_event="acceptance_report",
+    )
+    visible_action = derive_visible_action(action_surface)
     return {
         "type": ack_type,
         "device_id": device_id,
@@ -72,4 +94,6 @@ async def handle_device_acceptance_report(
         "truth_ingress_reconciled": _truth_reconciled_flag(evaluator_outcome),
         "canonical_update": evaluator_outcome.canonical_update or "",
         "ingress_reject_reason": evaluator_outcome.reject_reason or "",
+        "action_lifecycle_surface": action_surface.to_dict(),
+        "visible_action": visible_action,
     }
