@@ -2244,66 +2244,6 @@ class OpenClawd:
                 perception["has_continuous_perception"] = True
                 perception["stream_active_for_routing"] = True
 
-            # ── Unified Continuous Ingress Backbone ───────────────────────────
-            # Assemble the unified continuous ingress model from the three
-            # available signal sources.  The model unifies WebRTC stream, Android/
-            # device stream, and desktop perception session into one canonical
-            # structure and promotes formerly transport-only paths to
-            # canonical_cognition_ingress role.
-            #
-            # The assembled model is:
-            # 1. Embedded verbatim in the perception dict for downstream consumers.
-            # 2. Used to inject each active family name into active_modalities
-            #    (so the mainchain sees per-family stream signals, not just a
-            #    generic "continuous_stream" flag).
-            # 3. Used to set multimodal_fusion_strategy and planning_readiness —
-            #    the primary behavioral signals that differ with vs. without
-            #    continuous ingress active.
-            try:
-                from core.unified_continuous_ingress import assemble_unified_continuous_ingress
-
-                # Detect whether the MultimodalIngressBus has a live frame
-                _dpc_frame_available = False
-                try:
-                    from core.multimodal.ingest_runtime import get_ingest_bus as _get_ingress_bus
-
-                    _ingress_bus = _get_ingress_bus()
-                    if _ingress_bus is not None:
-                        _dpc_frame_available = _ingress_bus.build_frame() is not None
-                except Exception:
-                    pass
-
-                _uci = assemble_unified_continuous_ingress(
-                    stream_runtime_status=stream_runtime_status,
-                    desktop_native_ingress_backbone=desktop_native_ingress_backbone,
-                    desktop_perception_frame_available=_dpc_frame_available,
-                )
-
-                # Inject each active family into active_modalities
-                _uci_active_mods = list(perception.get("active_modalities", []))
-                for _family in _uci.active_families:
-                    if _family not in _uci_active_mods:
-                        _uci_active_mods.append(_family)
-                perception["active_modalities"] = _uci_active_mods
-
-                # Update has_continuous_perception if any family is active
-                if _uci.is_mainline_active:
-                    perception["has_continuous_perception"] = True
-
-                # Set the key behavioral signals derived from unified ingress
-                perception["multimodal_fusion_strategy"] = _uci.multimodal_fusion_strategy
-                perception["planning_readiness"] = _uci.planning_readiness
-
-                # Embed the full model for downstream auditing / testing
-                perception["unified_continuous_ingress"] = _uci.to_dict()
-
-            except Exception as _uci_err:
-                logger.debug(
-                    "Failed to assemble unified continuous ingress model; "
-                    "canonical perception will lack unified stream state: %s",
-                    _uci_err,
-                )
-
             return perception
         except Exception as _cps_err:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
