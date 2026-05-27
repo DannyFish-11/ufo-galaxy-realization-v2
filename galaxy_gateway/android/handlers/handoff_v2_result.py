@@ -376,11 +376,7 @@ async def handle_handoff_v2_result(
     try:
         from core.unified_action_lifecycle_surface import build_from_handoff_response
 
-        if _ingest_handoff_response is not None and "outcome" in dir():
-            pass  # outcome already available from the block above
-        # Re-derive outcome for surface construction when available.
-        # We re-call ingest only if outcome is not already in scope; in normal
-        # flow ``outcome`` is set earlier in the handler.
+        # ``outcome`` is set by the ingress block above when ingestion succeeds.
         _ual_outcome = locals().get("outcome")
         if _ual_outcome is not None:
             _surface = build_from_handoff_response(

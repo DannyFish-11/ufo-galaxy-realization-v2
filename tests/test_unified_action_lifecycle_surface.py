@@ -335,7 +335,7 @@ class TestActionLifecycleCompositionDifference:
     def test_C01_handle_request_result_contains_action_lifecycle_surface(self):
         """handle_request() returns action_lifecycle_surface in canonical result."""
         runtime = self._make_runtime()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             runtime.handle_request("test C01", source="chat")
         )
 
@@ -346,7 +346,7 @@ class TestActionLifecycleCompositionDifference:
     def test_C02_action_lifecycle_surface_has_required_keys(self):
         """action_lifecycle_surface dict contains all mandatory canonical keys."""
         runtime = self._make_runtime()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             runtime.handle_request("test C02", source="chat")
         )
 
@@ -379,7 +379,7 @@ class TestActionLifecycleCompositionDifference:
             }
 
         with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 runtime.handle_request(
                     "test C03",
                     source="android_goal_execution",
@@ -400,7 +400,7 @@ class TestActionLifecycleCompositionDifference:
     def test_C04_non_android_carrier_sets_v2_center_origin(self):
         """Desktop carrier (chat) sets origin=v2_center in surface."""
         runtime = self._make_runtime()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             runtime.handle_request("test C04", source="chat")
         )
 
@@ -412,7 +412,7 @@ class TestActionLifecycleCompositionDifference:
     def test_C05_surface_session_id_matches_result_session_id(self):
         """action_lifecycle_surface.session_id matches result.conversation_session_id."""
         runtime = self._make_runtime()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             runtime.handle_request("test C05", source="chat")
         )
 
@@ -425,7 +425,7 @@ class TestActionLifecycleCompositionDifference:
     def test_C06_surface_action_id_matches_runtime_session_id(self):
         """action_lifecycle_surface.action_id is the runtime_session_id (correlation)."""
         runtime = self._make_runtime()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             runtime.handle_request("test C06", source="chat")
         )
 
@@ -446,7 +446,7 @@ class TestActionLifecycleCompositionDifference:
             }
 
         with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_blocker):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 runtime.handle_request("test C07", source="chat")
             )
 
@@ -467,7 +467,7 @@ class TestActionLifecycleCompositionDifference:
             }
 
         with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_confirm):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 runtime.handle_request("test C08", source="chat")
             )
 
@@ -607,7 +607,7 @@ class TestCrossRepoLifecycleMapping:
 
             return ack
 
-        ack = asyncio.get_event_loop().run_until_complete(_run())
+        ack = asyncio.run(_run())
         # The ACK must have the surface attached
         assert "action_lifecycle_surface" in ack, (
             "handle_handoff_v2_result() ACK must include action_lifecycle_surface"

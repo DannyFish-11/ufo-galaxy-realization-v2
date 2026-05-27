@@ -358,10 +358,14 @@ def build_from_handoff_response(
             origin=ActionOrigin.android_device,
         )
 
-    response_kind_val = str(getattr(env, "response_kind", "unknown"))
-    # Normalise pydantic/enum value
-    if hasattr(env.response_kind, "value"):
-        response_kind_val = env.response_kind.value
+    _raw_response_kind = getattr(env, "response_kind", None)
+    response_kind_val = "unknown"
+    if _raw_response_kind is not None:
+        # Normalise pydantic/enum value to string
+        if hasattr(_raw_response_kind, "value"):
+            response_kind_val = str(_raw_response_kind.value)
+        else:
+            response_kind_val = str(_raw_response_kind)
 
     # Map android response_kind to cross-repo lifecycle phase
     _msg_type_for_mapping = {
@@ -476,9 +480,11 @@ def build_from_normalizer_outcome(
     if handoff_resp_outcome is not None and was_normalized:
         env = getattr(handoff_resp_outcome, "envelope", None)
         if env is not None:
-            response_kind_val = str(getattr(env, "response_kind", "unknown"))
-            if hasattr(env.response_kind, "value"):
-                response_kind_val = env.response_kind.value
+            _raw_rk = getattr(env, "response_kind", None)
+            if _raw_rk is not None:
+                response_kind_val = str(_raw_rk.value) if hasattr(_raw_rk, "value") else str(_raw_rk)
+            else:
+                response_kind_val = "unknown"
             if response_kind_val in {"result", "failure"}:
                 android_result = {
                     "response_kind": response_kind_val,
