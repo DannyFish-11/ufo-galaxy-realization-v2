@@ -806,6 +806,7 @@ class DesktopPresenceRuntime:
                 ActionOrigin,
                 UnifiedActionLifecycleSurface,
                 build_from_dispatch,
+                derive_visible_action,
             )
 
             _exec_result = result.get("execution_result") or {}
@@ -880,6 +881,9 @@ class DesktopPresenceRuntime:
                 closure_reason="execution_complete" if _closure_state_str == "closed" else "",
             )
             result["action_lifecycle_surface"] = _ual_surface.to_dict()
+            _visible_action = derive_visible_action(_ual_surface)
+            result["visible_action"] = _visible_action
+            result["status_feedback"] = _visible_action.get("status_feedback", "")
         except Exception as _ual_err:
             logger.debug(
                 "action_lifecycle_surface build failed (non-fatal): source=%s trace_id=%s err=%s",

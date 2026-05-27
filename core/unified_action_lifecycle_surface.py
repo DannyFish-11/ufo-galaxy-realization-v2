@@ -588,6 +588,36 @@ def close_surface(
     return surface
 
 
+def derive_visible_action(surface: UnifiedActionLifecycleSurface) -> Dict[str, Any]:
+    """Derive a lightweight foreground-facing action payload from the surface."""
+    phase = surface.phase.value
+    if surface.phase == ActionLifecyclePhase.blocked:
+        _reason = surface.blocker_reason or (surface.blocker or {}).get("reason", "")
+        status_feedback = f"blocked:{_reason}" if _reason else "blocked"
+    elif surface.phase == ActionLifecyclePhase.confirmation_needed:
+        status_feedback = "confirmation_required"
+    elif surface.phase == ActionLifecyclePhase.accepted:
+        status_feedback = "accepted"
+    elif surface.phase in {ActionLifecyclePhase.result_received, ActionLifecyclePhase.closed}:
+        status_feedback = "result_received"
+    elif surface.phase == ActionLifecyclePhase.executing:
+        status_feedback = "executing"
+    else:
+        status_feedback = "dispatched"
+
+    return {
+        "action_id": surface.action_id,
+        "phase": phase,
+        "origin": surface.origin.value,
+        "accepted": surface.accepted,
+        "blocker": surface.blocker,
+        "blocker_reason": surface.blocker_reason,
+        "confirmation_needed": surface.confirmation_needed,
+        "closure_state": surface.closure_state.value,
+        "status_feedback": status_feedback,
+    }
+
+
 # ---------------------------------------------------------------------------
 # __all__
 # ---------------------------------------------------------------------------
@@ -605,4 +635,5 @@ __all__ = [
     "apply_blocker",
     "apply_confirmation",
     "close_surface",
+    "derive_visible_action",
 ]

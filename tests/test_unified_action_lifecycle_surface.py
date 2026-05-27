@@ -45,6 +45,7 @@ from core.unified_action_lifecycle_surface import (
     build_from_handoff_response,
     build_from_normalizer_outcome,
     close_surface,
+    derive_visible_action,
 )
 
 
@@ -475,6 +476,42 @@ class TestActionLifecycleCompositionDifference:
         assert surface_dict["confirmation_needed"] is True
         assert surface_dict["phase"] == "confirmation_needed"
 
+    def test_C09_visible_action_is_derived_from_unified_surface(self):
+        """visible_action mirrors canonical lifecycle values from action_lifecycle_surface."""
+        runtime = self._make_runtime()
+
+        async def _fake_dispatch_blocker(*args, **kwargs):
+            return {
+                "response": "blocked",
+                "execution_result": {"blocker": {"reason": "device_offline"}, "success": False},
+            }
+
+        with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_blocker):
+            result = asyncio.run(runtime.handle_request("test C09", source="chat"))
+
+        surface_dict = result["action_lifecycle_surface"]
+        visible_action = result["visible_action"]
+        assert visible_action["phase"] == surface_dict["phase"]
+        assert visible_action["blocker_reason"] == surface_dict["blocker_reason"]
+        assert visible_action["blocker"] == surface_dict["blocker"]
+
+    def test_C10_status_feedback_changes_with_surface_phase(self):
+        """status_feedback is a foreground composition field derived from surface phase."""
+        runtime = self._make_runtime()
+
+        async def _fake_dispatch_confirmation(*args, **kwargs):
+            return {
+                "response": "confirm",
+                "execution_result": {"confirmation_needed": True},
+            }
+
+        with patch.object(runtime, "_dispatch", side_effect=_fake_dispatch_confirmation):
+            result = asyncio.run(runtime.handle_request("test C10", source="chat"))
+
+        assert result["action_lifecycle_surface"]["phase"] == "confirmation_needed"
+        assert result["visible_action"]["status_feedback"] == "confirmation_required"
+        assert result["status_feedback"] == "confirmation_required"
+
 
 # ---------------------------------------------------------------------------
 # Group D: Cross-repo lifecycle mapping
@@ -616,6 +653,53 @@ class TestCrossRepoLifecycleMapping:
         assert surface_dict["android_result"] is not None
         assert surface_dict["android_result_authority"] == "android_device"
 
+    def test_D12_acceptance_report_handler_returns_accepted_surface(self):
+        """acceptance_report ACK includes accepted unified surface and visible_action."""
+
+        async def _run():
+            from galaxy_gateway.android.handlers.acceptance_report import (
+                handle_device_acceptance_report,
+            )
+
+            _record = MagicMock()
+            _record.acceptance_tag = "android_acceptance_chain"
+            _record.mapped_android_proof_class = "acceptance_evidence"
+            _record.mapped_evidence_trust_level = "high"
+            _record.snapshot_id = "snap-D12"
+
+            _eval_outcome = MagicMock()
+            _eval_outcome.was_stored = True
+            _eval_outcome.canonical_update = "updated"
+            _eval_outcome.reject_reason = ""
+
+            with patch(
+                "galaxy_gateway.android.handlers.acceptance_report.ingest_device_acceptance_report",
+                return_value=_record,
+            ), patch(
+                "galaxy_gateway.android.handlers.acceptance_report.ingest_android_evaluator_artifact",
+                return_value=_eval_outcome,
+            ), patch(
+                "galaxy_gateway.android.handlers.acceptance_report._truth_reconciled_flag",
+                return_value=True,
+            ):
+                msg = {
+                    "type": "device_acceptance_report",
+                    "message_id": "msg-D12",
+                    "device_id": "dev-D12",
+                    "task_id": "task-D12",
+                    "payload": {"session_id": "sess-D12"},
+                }
+                return await handle_device_acceptance_report(MagicMock(), MagicMock(), msg)
+
+        ack = asyncio.run(_run())
+        surface_dict = ack["action_lifecycle_surface"]
+        assert surface_dict["phase"] == "accepted"
+        assert surface_dict["accepted"] is True
+        assert surface_dict["acceptance_tag"] == "android_acceptance_chain"
+        assert surface_dict["last_android_event"] == "acceptance_report"
+        assert ack["visible_action"]["phase"] == "accepted"
+        assert ack["visible_action"]["status_feedback"] == "accepted"
+
 
 # ---------------------------------------------------------------------------
 # Standalone surface unit tests
@@ -657,3 +741,10 @@ class TestUnifiedSurfaceUnit:
     def test_U05_build_from_dispatch_sets_v2_center_origin_by_default(self):
         surface = build_from_dispatch(task_id="u05")
         assert surface.origin == ActionOrigin.v2_center
+
+    def test_U06_derive_visible_action_from_surface(self):
+        surface = build_from_dispatch(task_id="u06")
+        apply_confirmation(surface, reason="needs_confirmation")
+        visible_action = derive_visible_action(surface)
+        assert visible_action["phase"] == "confirmation_needed"
+        assert visible_action["status_feedback"] == "confirmation_required"
