@@ -31,8 +31,10 @@ from core.dual_repo_joint_cognitive_review_2026 import (
     JOINT_COGNITIVE_REVIEW_AUTHORITY,
     JOINT_COGNITIVE_VERDICTS,
     JointCognitiveAreaId,
+    JointCognitiveAreaResult,
     JointCognitiveReport,
     JointCognitiveVerdict,
+    build_strict_dual_repo_total_review,
     build_joint_cognitive_review,
 )
 
@@ -331,3 +333,47 @@ class TestCompleteJointSystemReviewRefUpdated:
             f"ANDROID_AUDITED_REF is stale: {ANDROID_AUDITED_REF!r}. "
             "Update to match the current Android HEAD reviewed in this PR."
         )
+
+
+class TestStrictDualRepoTotalReview:
+    def test_strict_review_has_required_sections(self) -> None:
+        review = build_strict_dual_repo_total_review()
+        assert review["positioning"] == "中心相对主体的分布式 AI 系统"
+        assert review["strong_judgments"]
+        assert review["closure_grading_table"]
+        assert review["unresolved_issues"]
+        assert review["implementation_priorities"]
+
+    def test_strong_judgment_declares_center_subject_and_participant_runtime(self) -> None:
+        review = build_strict_dual_repo_total_review()
+        judgments = "\n".join(item["judgment"] for item in review["strong_judgments"])
+        assert "V2 已形成 runtime shell" in judgments
+        assert "V2 中心主体 + Android participant runtime" in judgments
+
+    def test_closure_table_covers_required_grade_classes(self) -> None:
+        review = build_strict_dual_repo_total_review()
+        grades = {row["grade"] for row in review["closure_grading_table"]}
+        assert "真实闭环" in grades
+        assert "半闭环" in grades
+        assert "contract/formal 成立" in grades
+        assert "helper/test/probe/audit 成立" in grades
+        assert "默认主路径未成立" in grades
+
+    def test_required_unresolved_issues_are_explicit(self) -> None:
+        review = build_strict_dual_repo_total_review()
+        issues = "\n".join(review["unresolved_issues"])
+        assert "主体仍锚定 V2" in issues
+        assert "/ws/webrtc 仍为 media-only" in issues
+        assert "DEVICE_PERCEPTION_EMISSION" in issues
+        assert "ANDROID_AUDITED_REF 不一致" in issues
+        assert "default-off 能力" in issues
+
+    def test_evidence_probes_capture_default_off_and_protocol_mismatch(self) -> None:
+        review = build_strict_dual_repo_total_review()
+        probes = review["evidence_probes"]
+        assert probes["chat_is_adapter_surface"] is True
+        assert probes["ws_device_canonical"] is True
+        assert probes["ws_webrtc_media_only"] is True
+        assert probes["default_multimodal_off"] is True
+        assert probes["v2_has_device_perception_emission"] is False
+        assert probes["cross_repo_ref_mismatch"] is True

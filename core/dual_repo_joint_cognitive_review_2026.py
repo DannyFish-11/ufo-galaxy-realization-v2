@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -867,3 +868,285 @@ def build_joint_cognitive_review() -> JointCognitiveReport:
         probe_failed_count=failed,
         overall_summary_zh=overall_summary_zh,
     )
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _read_repo_text(relative_path: str) -> str:
+    target = _repo_root() / relative_path
+    return target.read_text(encoding="utf-8", errors="strict")
+
+
+def _contains_all(relative_path: str, tokens: List[str]) -> bool:
+    try:
+        content = _read_repo_text(relative_path)
+    except Exception:
+        return False
+    return all(t in content for t in tokens)
+
+
+def _contains_any(relative_path: str, tokens: List[str]) -> bool:
+    try:
+        content = _read_repo_text(relative_path)
+    except Exception:
+        return False
+    return any(t in content for t in tokens)
+
+
+def _extract_android_audited_ref(relative_path: str) -> str:
+    try:
+        content = _read_repo_text(relative_path)
+    except Exception:
+        return ""
+    match = re.search(r'ANDROID_AUDITED_REF\s*:\s*str\s*=\s*"([0-9a-f]{40})"', content)
+    return match.group(1) if match else ""
+
+
+def build_strict_dual_repo_total_review() -> Dict[str, Any]:
+    """严格总审查结构化产物（代码证据驱动，双仓联动视角）。"""
+    chat_is_adapter_surface = _contains_all(
+        "galaxy_gateway/routes/chat.py",
+        [
+            '@router.post("/api/v1/chat")',
+            "runtime.handle_request(",
+            'source="chat"',
+            "adapter surface",
+        ],
+    )
+    ws_device_canonical = _contains_all(
+        "galaxy_gateway/routes/websocket.py",
+        [
+            '"path": "/ws/device/{device_id}"',
+            '"classification": "canonical"',
+        ],
+    )
+    ws_webrtc_media_only = _contains_all(
+        "galaxy_gateway/routes/websocket.py",
+        [
+            '"path": "/ws/webrtc/{device_id}"',
+            '"classification": "media"',
+            "proxy_webrtc_signaling",
+        ],
+    )
+    default_multimodal_off = _contains_all(
+        "config.json",
+        ['"enable_multimodal_ingest": false', '"enable_webrtc_session_manager": false'],
+    ) and _contains_all(
+        "core/multimodal_runtime_profile.py",
+        [
+            'config_key="enable_multimodal_ingest"',
+            "default=False",
+            'config_key="enable_webrtc_session_manager"',
+            "default=False",
+        ],
+    )
+    v2_has_device_perception_emission = _contains_any(
+        "galaxy_gateway/protocol/aip_v3.py",
+        ["DEVICE_PERCEPTION_EMISSION", "device_perception_emission"],
+    )
+
+    schema_gate_ref = _extract_android_audited_ref("contracts/cross_repo_schema_version_gate.py")
+    lifecycle_ref = _extract_android_audited_ref("contracts/participant_lifecycle_cross_repo_contract.py")
+    cross_repo_ref_mismatch = bool(schema_gate_ref and lifecycle_ref and schema_gate_ref != lifecycle_ref)
+
+    strong_judgments = [
+        {
+            "id": "J1",
+            "judgment": (
+                "V2 已形成 runtime shell（DesktopPresenceRuntime）+ subject core（OpenClawd）+ "
+                "execution substrate（CommandRouter + galaxy_gateway）的中心相对主体结构。"
+            ),
+            "evidence": [
+                "core/desktop_presence_runtime.py",
+                "core/openclawd.py",
+                "core/command_router.py",
+                "galaxy_gateway/app.py",
+            ],
+        },
+        {
+            "id": "J2",
+            "judgment": (
+                "系统当前仍不是“统一主体双存在面”；更接近“V2 中心主体 + Android participant runtime”。"
+            ),
+            "evidence": [
+                "core/android_originated_main_chain_ingress.py",
+                "core/attached_runtime_session_registry.py",
+                "core/unified/device_manager.py",
+            ],
+        },
+        {
+            "id": "J3",
+            "judgment": (
+                "当前最大问题不是模块不存在，而是统一主链/统一会话权威/统一前台存在面的默认主路径尚未收口。"
+            ),
+            "evidence": [
+                "config.json",
+                "core/multimodal_runtime_profile.py",
+                "galaxy_gateway/routes/websocket.py",
+                "core/canonical_session_truth.py",
+            ],
+        },
+        {
+            "id": "J4",
+            "judgment": (
+                "`/api/v1/chat` 已实质降格为 compat adapter surface，主体权威在 DesktopPresenceRuntime。"
+            ),
+            "evidence": ["galaxy_gateway/routes/chat.py"],
+            "probe_passed": chat_is_adapter_surface,
+        },
+    ]
+
+    closure_table = [
+        {
+            "module_or_path": "main.py → unified_launcher.py → DesktopPresenceRuntime → OpenClawd",
+            "grade": "真实闭环",
+            "evidence": ["main.py", "unified_launcher.py", "core/desktop_presence_runtime.py", "core/openclawd.py"],
+        },
+        {
+            "module_or_path": "OpenClawd → CommandRouter → galaxy_gateway (cross-device branch)",
+            "grade": "半闭环",
+            "evidence": ["core/openclawd.py", "core/command_router.py", "galaxy_gateway/app.py"],
+        },
+        {
+            "module_or_path": "/ws/device/{device_id}",
+            "grade": "真实闭环",
+            "evidence": ["galaxy_gateway/routes/websocket.py"],
+            "probe_passed": ws_device_canonical,
+        },
+        {
+            "module_or_path": "/ws/webrtc/{device_id}",
+            "grade": "默认主路径未成立",
+            "evidence": ["galaxy_gateway/routes/websocket.py", "nodes/Node_95_WebRTC_Receiver/requirements.txt"],
+            "probe_passed": ws_webrtc_media_only,
+        },
+        {
+            "module_or_path": "canonical_session_truth + attached_runtime_session_registry",
+            "grade": "真实闭环",
+            "evidence": ["core/canonical_session_truth.py", "core/attached_runtime_session_registry.py"],
+        },
+        {
+            "module_or_path": "operator_surface / projection surface",
+            "grade": "半闭环",
+            "evidence": ["core/operator_surface.py", "core/routes/projection.py"],
+        },
+        {
+            "module_or_path": "replay_foundation",
+            "grade": "半闭环",
+            "evidence": ["core/replay_foundation.py", "core/android_participant_truth_ingress.py"],
+        },
+        {
+            "module_or_path": "multimodal ingest runtime",
+            "grade": "contract/formal 成立",
+            "evidence": ["core/multimodal/ingest_runtime.py", "core/android_perception_ingress_contract.py"],
+        },
+        {
+            "module_or_path": "realtime_streaming_backbone",
+            "grade": "contract/formal 成立",
+            "evidence": ["core/realtime_streaming_backbone.py"],
+        },
+        {
+            "module_or_path": "hidden_context_visible_action_surface",
+            "grade": "半闭环",
+            "evidence": ["core/hidden_context_visible_action_surface.py", "core/openclawd.py"],
+        },
+        {
+            "module_or_path": "android_originated_main_chain_ingress",
+            "grade": "半闭环",
+            "evidence": ["core/android_originated_main_chain_ingress.py", "galaxy_gateway/android_bridge.py"],
+        },
+        {
+            "module_or_path": "dual-repo schema/ref consistency",
+            "grade": "helper/test/probe/audit 成立",
+            "evidence": [
+                "contracts/cross_repo_schema_version_gate.py",
+                "contracts/participant_lifecycle_cross_repo_contract.py",
+            ],
+            "probe_passed": not cross_repo_ref_mismatch,
+        },
+        {
+            "module_or_path": "default multimodal/streaming activation",
+            "grade": "默认主路径未成立",
+            "evidence": ["config.json", "core/multimodal_runtime_profile.py"],
+            "probe_passed": default_multimodal_off,
+        },
+    ]
+
+    unresolved_issues = [
+        "主体仍锚定 V2，Android 仍主要是 participant runtime。",
+        "session authority 未跨仓统一为单一强模型（V2 registry/canonical truth 强，Android 侧仍以上报参与）。",
+        "Android-originated canonical ingress 已有实现，但生产主路径闭环证据仍不足。",
+        "Presence/Hidden-Visible foreground 主要在 V2 成立，Android 对应前台边界未统一。",
+        "Streaming 尚未成为双仓统一 continuous ingress 主链。",
+        "/ws/webrtc 仍为 media-only 信令代理，不是 perception+cognition+action 主链。",
+        "V2 canonical 协议未出现 DEVICE_PERCEPTION_EMISSION，存在与 Android 命名错位风险。",
+        "cross-repo schema gate 与 participant lifecycle contract 的 ANDROID_AUDITED_REF 不一致。",
+        "action/result/blocker/confirmation surface 尚未形成跨仓统一 foreground boundary。",
+        "前台产品层仍依赖客户端拼接消费，主体化切换未完成。",
+        "default-off 能力（multimodal ingest / webrtc session manager）尚未切入默认主路径。",
+        "legacy/compat/sync-failure 路径仍并存，影响双仓联合审查可信度。",
+    ]
+
+    implementation_priorities = [
+        {
+            "priority": "P0",
+            "title": "统一跨仓 session authority",
+            "why": "先收口 control_session_id/runtime_attachment/participant truth ingress 的权威路径，避免并行真相。",
+        },
+        {
+            "priority": "P1",
+            "title": "打通 Android-originated canonical ingress 生产闭环",
+            "why": "确保 Android NL/context/perception 在默认生产主路径进入 canonical main chain 并可回放证明。",
+        },
+        {
+            "priority": "P2",
+            "title": "统一协议命名与 cross-repo pin",
+            "why": "消除 DEVICE_PERCEPTION_EMISSION 与 V2 canonical 名称错位，统一 ANDROID_AUDITED_REF。",
+        },
+        {
+            "priority": "P3",
+            "title": "把 streaming/multimodal 从 optional 切到可控主路径",
+            "why": "解决 default-off 导致的 continuous ingress 主链缺失。",
+        },
+        {
+            "priority": "P4",
+            "title": "统一跨仓 visible action/result/blocker/confirmation surface",
+            "why": "补齐统一主体双存在面的前台边界。",
+        },
+        {
+            "priority": "P5",
+            "title": "清理 legacy/compat/sync-failure 分裂路径",
+            "why": "减少绕过路径，提升默认主路径可信度与审查可判定性。",
+        },
+    ]
+
+    return {
+        "positioning": "中心相对主体的分布式 AI 系统",
+        "strong_judgments": strong_judgments,
+        "closure_grading_table": closure_table,
+        "unresolved_issues": unresolved_issues,
+        "implementation_priorities": implementation_priorities,
+        "evidence_probes": {
+            "chat_is_adapter_surface": chat_is_adapter_surface,
+            "ws_device_canonical": ws_device_canonical,
+            "ws_webrtc_media_only": ws_webrtc_media_only,
+            "default_multimodal_off": default_multimodal_off,
+            "v2_has_device_perception_emission": v2_has_device_perception_emission,
+            "cross_repo_ref_mismatch": cross_repo_ref_mismatch,
+            "cross_repo_refs": {
+                "cross_repo_schema_version_gate": schema_gate_ref,
+                "participant_lifecycle_cross_repo_contract": lifecycle_ref,
+            },
+        },
+        "cross_repo_external_anchor": {
+            "android_protocol_anchor": (
+                "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/protocol/"
+                "AipModels.kt::MsgType.DEVICE_PERCEPTION_EMISSION"
+            ),
+            "android_client_anchor": (
+                "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/"
+                "GalaxyWebSocketClient.kt::sendDevicePerceptionEmission"
+            ),
+        },
+    }
