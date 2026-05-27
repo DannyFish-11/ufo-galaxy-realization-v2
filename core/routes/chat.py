@@ -71,6 +71,7 @@ from core.android_boundary_visibility_router import (
 )
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 from core.routes._models import ChatRequest
+from core.subject_facing_foreground import build_subject_facing_foreground
 from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
@@ -451,10 +452,34 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             resp_dict["reply"] = foreground_response
             resp_dict["trace_id"] = trace_id
             resp_dict["runtime_session_id"] = result.get("runtime_session_id", trace_id)
-            resp_dict["problem_execution_spine"] = metadata.get("problem_execution_spine", {})
             resp_dict["visible_action_surface"] = visible_action_surface
             if demoted_fields:
                 resp_dict["demoted_operator_audit_fields"] = demoted_fields
+
+            # ── PR-SFF: subject_foreground — primary subject-facing foreground ──
+            # SubjectFacingForeground is the canonical subject-lifecycle object
+            # that organizes the default user-visible foreground around:
+            #   subject_state (presence) → action_phase → foreground_event
+            #   → [current_action | blocker | confirmation | result]
+            # It is derived from the existing lifecycle surfaces, not from
+            # scattered runtime text, and becomes the primary foreground object
+            # for all non-operator responses.
+            _subject_fg = build_subject_facing_foreground(
+                visible_action_surface=visible_action_surface,
+                action_lifecycle_surface=result.get("action_lifecycle_surface"),
+                foreground_response=foreground_response,
+            )
+            resp_dict["subject_foreground"] = _subject_fg.to_dict()
+
+            # ── PR-SFF: control-plane demotion ───────────────────────────────
+            # problem_execution_spine is a control-plane diagnostic object that
+            # was previously exposed in every user response regardless of
+            # audience.  It is now demoted to operator-only: users see
+            # subject_foreground (subject lifecycle) instead.
+            if is_operator_request:
+                resp_dict["problem_execution_spine"] = metadata.get(
+                    "problem_execution_spine", {}
+                )
 
             # ── InteractionEnvelope (PR-4) — non-breaking, absent when None ──
             _ie = result.get("interaction_envelope")
