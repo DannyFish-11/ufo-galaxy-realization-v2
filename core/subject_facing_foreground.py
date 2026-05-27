@@ -272,23 +272,32 @@ def build_subject_facing_foreground(
         visible_action_surface.get("blocker_summary", "")
         or lifecycle.get("blocker_reason", "")
     ).strip()
-    blocker_dict: Optional[Dict[str, Any]] = visible_action_surface.get(
-        "blocker"
-    ) or lifecycle.get("blocker")
-    if blocker_dict is not None and not isinstance(blocker_dict, dict):
-        blocker_dict = {"raw": str(blocker_dict)}
-    if blocker_reason and blocker_dict is None:
+    _raw_blocker: Any = visible_action_surface.get("blocker") or lifecycle.get("blocker")
+    if _raw_blocker is not None and not isinstance(_raw_blocker, dict):
+        blocker_dict: Optional[Dict[str, Any]] = {"raw": str(_raw_blocker)}
+    elif _raw_blocker is not None:
+        blocker_dict = _raw_blocker
+    elif blocker_reason:
+        # Synthesise a minimal blocker dict from the reason string so consumers
+        # always get a structured object, not just a loose string field.
         blocker_dict = {"reason": blocker_reason}
+    else:
+        blocker_dict = None
 
     # ── 4. Confirmation (primary event — evaluated before action/result) ────
     confirmation_needed = bool(visible_action_surface.get("confirmation_needed", False))
-    confirmation_dict: Optional[Dict[str, Any]] = lifecycle.get("confirmation_context")
-    if confirmation_dict is not None and not isinstance(confirmation_dict, dict):
-        confirmation_dict = {"raw": str(confirmation_dict)}
-    confirmation_reason = ""
-    if confirmation_needed and confirmation_dict is None:
+    _raw_confirmation: Any = lifecycle.get("confirmation_context")
+    if _raw_confirmation is not None and not isinstance(_raw_confirmation, dict):
+        confirmation_dict: Optional[Dict[str, Any]] = {"raw": str(_raw_confirmation)}
+    elif _raw_confirmation is not None:
+        confirmation_dict = _raw_confirmation
+    elif confirmation_needed:
+        # Synthesise a minimal confirmation dict so consumers get a structured
+        # object when confirmation_needed is signalled without explicit context.
         confirmation_dict = {}
-        confirmation_reason = "user_confirmation_required"
+    else:
+        confirmation_dict = None
+    confirmation_reason = "user_confirmation_required" if confirmation_needed else ""
 
     # ── 5. Current action expression ────────────────────────────────────────
     current_action = str(
@@ -324,8 +333,12 @@ def build_subject_facing_foreground(
         foreground_event = FOREGROUND_EVENT_COMPLETED
     elif action_state in {"executing", "accepted"}:
         foreground_event = FOREGROUND_EVENT_ACTIVE
-    elif subject_state in {"liminal", "manifest"}:
+    elif subject_state == "liminal":
+        # liminal = subject is transitioning into manifest (entering work phase)
         foreground_event = FOREGROUND_EVENT_TRANSITIONING
+    elif subject_state == "manifest":
+        # manifest = subject is present and work is happening (active by presence)
+        foreground_event = FOREGROUND_EVENT_ACTIVE
     else:
         foreground_event = FOREGROUND_EVENT_READY
 
@@ -344,8 +357,12 @@ def build_subject_facing_foreground(
         foreground_status = "executing"
     elif action_state == "accepted":
         foreground_status = "accepted"
-    elif subject_state in {"liminal", "manifest"}:
-        foreground_status = subject_state
+    elif subject_state == "liminal":
+        # liminal = subject transitioning into work phase
+        foreground_status = "liminal"
+    elif subject_state == "manifest":
+        # manifest = subject is present and active
+        foreground_status = "manifest"
     else:
         # Last-resort fallback — use foreground_response only when the
         # lifecycle does not yield a structured status.

@@ -243,8 +243,12 @@ class TestSubjectFacingPrimaryObject:
         assert sfg.foreground_event == FOREGROUND_EVENT_COMPLETED
         assert sfg.result == "completed"
 
-    def test_B05_foreground_event_is_transitioning_for_liminal_subject(self):
-        """foreground_event=transitioning when subject is in liminal phase."""
+    def test_B05_foreground_event_is_active_for_liminal_accepted_subject(self):
+        """foreground_event=active when subject is in liminal phase with accepted action.
+
+        liminal + accepted → action_state='accepted' branch fires first (active),
+        before the liminal-presence fallback branch.
+        """
         sfg = build_subject_facing_foreground(
             visible_action_surface=_visible(
                 presence_mode="liminal",
@@ -252,11 +256,16 @@ class TestSubjectFacingPrimaryObject:
                 lifecycle_phase="accepted",
             ),
         )
-        assert sfg.foreground_event in (FOREGROUND_EVENT_ACTIVE, FOREGROUND_EVENT_TRANSITIONING)
+        assert sfg.foreground_event == FOREGROUND_EVENT_ACTIVE
         assert sfg.subject_state == "liminal"
 
-    def test_B06_foreground_event_is_ready_for_silent_subject(self):
-        """foreground_event=ready when subject is silent (no active action)."""
+    def test_B06_foreground_event_is_ready_for_silent_subject_with_no_active_action(self):
+        """foreground_event=ready when subject is silent with no active/executing action.
+
+        silent + action_state='failed' → result='failed', but result branch
+        only fires for action_state='completed'.  silent subject_state does not
+        trigger liminal/manifest branch.  Falls through to FOREGROUND_EVENT_READY.
+        """
         sfg = build_subject_facing_foreground(
             visible_action_surface=_visible(
                 presence_mode="silent",
@@ -264,8 +273,7 @@ class TestSubjectFacingPrimaryObject:
                 lifecycle_phase="",
             ),
         )
-        # silent + no specific action → ready (or failed from action_state)
-        assert sfg.foreground_event in (FOREGROUND_EVENT_READY, FOREGROUND_EVENT_COMPLETED)
+        assert sfg.foreground_event == FOREGROUND_EVENT_READY
         assert sfg.subject_state == "silent"
 
     def test_B07_foreground_status_is_lifecycle_derived_not_runtime_text(self):
