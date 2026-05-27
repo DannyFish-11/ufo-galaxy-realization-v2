@@ -224,6 +224,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 status_code=500,
             )
 
+    @router.get("/api/v1/system/dual-repo-progress")
+    async def dual_repo_progress():
+        """获取双仓（V2+Android）推进进度快照（中文摘要 + 收口/审查/计划汇总）"""
+        try:
+            from core.dual_repo_progress_report import build_dual_repo_progress_report
+
+            payload = build_dual_repo_progress_report(force_rebuild=True)
+            payload["timestamp"] = datetime.now().isoformat()
+            return JSONResponse(payload)
+        except Exception as e:
+            logger.exception("dual repo progress build failed: %s", e)
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                },
+                status_code=500,
+            )
+
     @router.get("/api/v1/agents/status")
     async def agents_status():
         """获取所有活跃 Agent 状态"""
