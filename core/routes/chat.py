@@ -156,38 +156,74 @@ def _apply_hidden_visible_boundary(
             continue
         visible_metadata[key] = value
 
+    lifecycle_surface = (
+        result.get("action_lifecycle_surface")
+        if isinstance(result.get("action_lifecycle_surface"), dict)
+        else {}
+    )
+    lifecycle_visible_action = (
+        result.get("visible_action")
+        if isinstance(result.get("visible_action"), dict)
+        else {}
+    )
+
     # Prefer canonical key `blocker_summary`; keep legacy fallback
     # `execution_blocker_summary` while older runtime producers migrate.
     # TODO(runtime-surface): remove legacy fallback after producers converge.
     blocker_summary = str(
-        visible_metadata.get("blocker_summary")
+        lifecycle_surface.get("blocker_reason")
+        or (lifecycle_surface.get("blocker") or {}).get("reason", "")
+        or lifecycle_visible_action.get("blocker_reason")
+        or visible_metadata.get("blocker_summary")
         or visible_metadata.get("execution_blocker_summary")
         or "",
     ).strip()
-    confirmation_needed = bool(visible_metadata.get("confirmation_needed", False))
+    confirmation_needed = bool(
+        lifecycle_surface.get("confirmation_needed")
+        or lifecycle_visible_action.get("confirmation_needed")
+        or visible_metadata.get("confirmation_needed", False)
+    )
     current_presence_mode = (
         str(visible_metadata.get("presence_mode", "")).strip() or "unknown"
     )
-    if blocker_summary:
+    lifecycle_phase = str(lifecycle_surface.get("phase") or "")
+    if lifecycle_phase == "blocked" or blocker_summary:
         current_action_state = "blocked"
-    elif confirmation_needed:
+    elif lifecycle_phase == "confirmation_needed" or confirmation_needed:
         current_action_state = "awaiting_confirmation"
+    elif lifecycle_phase == "accepted":
+        current_action_state = "accepted"
+    elif lifecycle_phase == "executing":
+        current_action_state = "executing"
+    elif lifecycle_phase in {"result_received", "closed"}:
+        current_action_state = "completed"
     elif result.get("success", False):
         current_action_state = "completed"
     else:
         current_action_state = "failed"
+    lifecycle_status_feedback = str(
+        lifecycle_visible_action.get("status_feedback")
+        or result.get("status_feedback")
+        or ""
+    ).strip()
     visible_action_surface = {
         "current_presence_mode": current_presence_mode,
         "current_action_state": current_action_state,
+        "lifecycle_phase": lifecycle_phase or "unknown",
+        "lifecycle_origin": str(lifecycle_surface.get("origin") or ""),
+        "lifecycle_status_feedback": lifecycle_status_feedback,
         "action_trace_summary": visible_metadata.get("action_trace_summary", ""),
         "result_artifacts_summary": visible_metadata.get("result_artifacts_summary", ""),
         "blocker_summary": blocker_summary,
         "confirmation_needed": confirmation_needed,
         "lightweight_status_feedback": visible_metadata.get(
             "lightweight_status_feedback",
-            FOREGROUND_STATUS_DONE
-            if current_action_state == "completed"
-            else FOREGROUND_STATUS_NOT_DONE,
+            lifecycle_status_feedback
+            or (
+                FOREGROUND_STATUS_DONE
+                if current_action_state == "completed"
+                else FOREGROUND_STATUS_NOT_DONE
+            ),
         ),
     }
     if blocker_summary or confirmation_needed:

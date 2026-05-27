@@ -4,6 +4,7 @@ from core.hidden_context_visible_action_surface import SurfaceLayer
 from core.routes._models import ChatRequest
 from core.routes.chat import (
     FOREGROUND_BLOCKED_PREFIX,
+    FOREGROUND_CONFIRMATION_EXPLANATION,
     _apply_hidden_visible_boundary,
     _is_operator_request,
 )
@@ -83,6 +84,68 @@ def test_blocked_execution_enforces_minimal_necessary_explanation():
     assert response == expected_explanation
     assert visible_action_surface["blocker_summary"] == "device offline"
     assert visible_action_surface["minimal_necessary_explanation"] == expected_explanation
+
+
+def test_unified_lifecycle_surface_drives_blocked_foreground_composition():
+    result = {
+        "success": False,
+        "response": "raw runtime internals",
+        "action_lifecycle_surface": {
+            "phase": "blocked",
+            "origin": "android_device",
+            "blocker_reason": "policy_denied",
+            "blocker": {"reason": "policy_denied"},
+            "confirmation_needed": False,
+        },
+        "visible_action": {
+            "status_feedback": "blocked:policy_denied",
+            "confirmation_needed": False,
+        },
+    }
+    metadata = {
+        "presence_mode": "manifest",
+        "blocker_summary": "",
+        "execution_blocker_summary": "",
+    }
+    _, visible_action_surface, response, _ = _apply_hidden_visible_boundary(
+        result=result,
+        metadata=metadata,
+        is_operator_request=False,
+    )
+    assert visible_action_surface["current_action_state"] == "blocked"
+    assert visible_action_surface["lifecycle_phase"] == "blocked"
+    assert visible_action_surface["lifecycle_origin"] == "android_device"
+    assert visible_action_surface["blocker_summary"] == "policy_denied"
+    assert visible_action_surface["lifecycle_status_feedback"] == "blocked:policy_denied"
+    assert response == f"{FOREGROUND_BLOCKED_PREFIX}policy_denied"
+
+
+def test_unified_lifecycle_confirmation_overrides_metadata_confirmation_default():
+    result = {
+        "success": True,
+        "response": "confirm needed",
+        "action_lifecycle_surface": {
+            "phase": "confirmation_needed",
+            "origin": "v2_center",
+            "blocker_reason": "",
+            "blocker": None,
+            "confirmation_needed": True,
+        },
+        "visible_action": {"status_feedback": "confirmation_required"},
+    }
+    metadata = {
+        "presence_mode": "liminal",
+        "confirmation_needed": False,
+    }
+    _, visible_action_surface, response, _ = _apply_hidden_visible_boundary(
+        result=result,
+        metadata=metadata,
+        is_operator_request=False,
+    )
+    assert visible_action_surface["current_action_state"] == "awaiting_confirmation"
+    assert visible_action_surface["confirmation_needed"] is True
+    assert visible_action_surface["lifecycle_status_feedback"] == "confirmation_required"
+    assert response == FOREGROUND_CONFIRMATION_EXPLANATION
 
 
 def test_layer_classifier_is_invoked_during_runtime_composition(monkeypatch):

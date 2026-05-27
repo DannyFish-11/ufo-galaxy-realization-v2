@@ -206,6 +206,62 @@ def _build_android_nl_ingress_snapshot(
     }
 
 
+def _build_android_cognition_input_snapshot(
+    *,
+    source: str,
+    android_perception_ingress: Dict[str, Any],
+    android_nl_ingress: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build a unified Android-originated cognition input snapshot.
+
+    This snapshot converges Android perception + NL/device/state families into
+    one canonical structure so deeper consumers can reason over a single input
+    contract rather than scattered ingress fragments.
+    """
+    families: Dict[str, Dict[str, Any]] = {}
+    if android_perception_ingress:
+        families["perception"] = {
+            "carrier_source": str(android_perception_ingress.get("android_perception_carrier_source") or source or ""),
+            "route": str(android_perception_ingress.get("android_perception_ingress_route") or ""),
+            "canonical_protocol": str(android_perception_ingress.get("android_perception_canonical_protocol") or ""),
+        }
+
+    if android_nl_ingress:
+        families["natural_language"] = {
+            "carrier_source": str(android_nl_ingress.get("android_nl_carrier_source") or source or ""),
+            "semantic_authority": str(android_nl_ingress.get("android_nl_semantic_authority") or ""),
+            "canonical_protocol": str(android_nl_ingress.get("android_nl_canonical_protocol") or ""),
+            "text_present": bool(android_nl_ingress.get("android_nl_text_present")),
+            "text_length": int(android_nl_ingress.get("android_nl_text_length") or 0),
+        }
+        android_device_context = _as_mapping(android_nl_ingress.get("android_device_context"))
+        if android_device_context:
+            families["device_context"] = {
+                "context": dict(android_device_context),
+                "has_identity": bool(
+                    str(android_device_context.get("device_id") or "").strip()
+                    or str(android_device_context.get("session_id") or "").strip()
+                ),
+            }
+        android_state_snapshot = _as_mapping(android_nl_ingress.get("android_state_snapshot"))
+        if android_state_snapshot:
+            families["state_snapshot"] = {
+                "snapshot": dict(android_state_snapshot),
+                "state_key_count": len(android_state_snapshot),
+            }
+
+    family_names = list(families.keys())
+    return {
+        "carrier_source": source or "",
+        "is_android_originated": bool(family_names),
+        "families": families,
+        "family_names": family_names,
+        "family_count": len(family_names),
+        "unified_context_ready": len(family_names) >= 2,
+        "primary_semantic_authority": str(android_nl_ingress.get("android_nl_semantic_authority") or ""),
+    }
+
+
 def build_desktop_native_ingress_backbone(
     *,
     message: str,
@@ -243,6 +299,11 @@ def build_desktop_native_ingress_backbone(
     has_android_nl = bool(android_nl_ingress)
     has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
     has_android_state_snapshot = bool(_as_mapping(android_nl_ingress.get("android_state_snapshot")))
+    android_cognition_input = _build_android_cognition_input_snapshot(
+        source=source,
+        android_perception_ingress=android_perception_ingress,
+        android_nl_ingress=android_nl_ingress,
+    )
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
@@ -290,6 +351,7 @@ def build_desktop_native_ingress_backbone(
         "carrier_source": source or "chat",
         "android_perception_ingress": android_perception_ingress,
         "android_nl_ingress": android_nl_ingress,
+        "android_cognition_input": android_cognition_input,
         "modalities": modalities,
         "modality_tiers": {
             "mainline_required": list(MAINLINE_REQUIRED_MODALITIES),
@@ -381,6 +443,7 @@ def augment_ingress_backbone_for_control_core(
     enriched = deepcopy(ingress_backbone)
     mainline = _as_mapping(enriched.get("mainline_path"))
     android_nl_ingress = _as_mapping(enriched.get("android_nl_ingress"))
+    android_cognition_input = _as_mapping(enriched.get("android_cognition_input"))
     has_android_state_snapshot = bool(_as_mapping(android_nl_ingress.get("android_state_snapshot")))
     has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
 
@@ -402,6 +465,8 @@ def augment_ingress_backbone_for_control_core(
             context_assembly["multimodal_route_tier"] = canonical_perception.get("multimodal_route_tier")
     if android_nl_ingress:
         context_assembly["android_nl_ingress"] = dict(android_nl_ingress)
+    if android_cognition_input:
+        context_assembly["android_cognition_input"] = dict(android_cognition_input)
     mainline["context_assembly"] = context_assembly
 
     task_generation = _as_mapping(mainline.get("task_generation"))
@@ -420,6 +485,9 @@ def augment_ingress_backbone_for_control_core(
         task_generation["android_nl_participation"] = "enabled"
         task_generation["android_state_snapshot_present"] = has_android_state_snapshot
         task_generation["android_device_context_present"] = has_android_device_context
+    if android_cognition_input:
+        task_generation["android_cognition_unified"] = bool(android_cognition_input.get("unified_context_ready"))
+        task_generation["android_cognition_family_names"] = list(android_cognition_input.get("family_names") or [])
     mainline["task_generation"] = task_generation
 
     execution_planning = _as_mapping(mainline.get("execution_planning"))
@@ -428,6 +496,12 @@ def augment_ingress_backbone_for_control_core(
     if android_nl_ingress:
         execution_planning["android_context_plan_mode"] = (
             "android_state_aware" if has_android_state_snapshot else "android_nl_only"
+        )
+    if android_cognition_input:
+        execution_planning["android_cognition_plan_mode"] = (
+            "android_cognition_unified"
+            if android_cognition_input.get("unified_context_ready")
+            else "android_cognition_partial"
         )
     mainline["execution_planning"] = execution_planning
 

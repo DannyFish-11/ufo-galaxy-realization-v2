@@ -962,3 +962,71 @@ class TestGroupO_ProvenanceAlignment:
         d = rec.to_dict()
         assert d["participant_ownership_boundary"] == "canonicalized"
         assert "authority" in d  # canonical authority preserved
+
+
+# ===========================================================================
+# Group P — Replay foundation canonical ownership admission
+# ===========================================================================
+
+
+@_SKIP_REPLAY
+class TestGroupP_ReplayFoundationOwnershipAdmission:
+    def setup_method(self) -> None:
+        reset_replay_foundation()
+
+    def teardown_method(self) -> None:
+        reset_replay_foundation()
+
+    def test_p1_non_canonical_execution_record_blocked_from_canonical_lookup(self) -> None:
+        rf = get_replay_foundation()
+        blocked = TaskExecutionRecord(
+            task_id="task-p1",
+            participant_ownership_boundary="fallback_non_canonical",
+        )
+        rf.record_execution(blocked)
+        assert rf.get_execution_record("task-p1") is None
+        snap = rf.snapshot()
+        assert snap.execution_record_count == 0
+        assert snap.non_canonical_rejected_count == 1
+        assert snap.recent_non_canonical_execution_records[-1]["task_id"] == "task-p1"
+
+    def test_p2_canonical_execution_record_is_retained_in_canonical_replay(self) -> None:
+        rf = get_replay_foundation()
+        canonical = TaskExecutionRecord(
+            task_id="task-p2",
+            participant_ownership_boundary="canonicalized",
+            final_lifecycle="completed",
+            success=True,
+        )
+        rf.record_execution(canonical)
+        rec = rf.get_execution_record("task-p2")
+        assert rec is not None
+        assert rec.participant_ownership_boundary == "canonicalized"
+        snap = rf.snapshot()
+        assert snap.execution_record_count == 1
+        assert snap.non_canonical_rejected_count == 0
+
+    def test_p3_mixed_boundaries_do_not_pollute_canonical_replay_lineage(self) -> None:
+        rf = get_replay_foundation()
+        rf.record_execution(
+            TaskExecutionRecord(
+                task_id="task-p3-canonical",
+                participant_ownership_boundary="canonicalized",
+                trace_id="trace-p3",
+            )
+        )
+        rf.record_execution(
+            TaskExecutionRecord(
+                task_id="task-p3-fallback",
+                participant_ownership_boundary="fallback_non_canonical",
+                trace_id="trace-p3",
+            )
+        )
+        canonical_lineage = rf.get_task_lineage("task-p3-canonical")
+        fallback_lineage = rf.get_task_lineage("task-p3-fallback")
+        assert canonical_lineage.execution_record is not None
+        assert canonical_lineage.execution_record.participant_ownership_boundary == "canonicalized"
+        assert fallback_lineage.execution_record is None
+        snap = rf.snapshot()
+        assert snap.execution_record_count == 1
+        assert snap.non_canonical_rejected_count == 1
