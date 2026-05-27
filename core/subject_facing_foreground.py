@@ -422,8 +422,9 @@ def build_subject_unified_lineage(
     path_kind = str(android_presence.get("path_kind") or "unknown")
     lifecycle_action_id = str(lifecycle.get("action_id") or "")
     carrier_invocation_id = str(carrier.get("invocation_id") or "")
-    action_id = lifecycle_action_id or carrier_invocation_id
-    runtime_session_id = carrier_invocation_id or lifecycle_action_id
+    primary_action_id = lifecycle_action_id or carrier_invocation_id
+    primary_session_id = carrier_invocation_id or lifecycle_action_id
+    canonical_lineage_id = primary_session_id or primary_action_id
 
     android_roles: List[str] = []
     if android_presence.get("device_count"):
@@ -446,7 +447,7 @@ def build_subject_unified_lineage(
     return {
         "object_family": "unified_subject_composition",
         "composition_version": 1,
-        "canonical_lineage_id": runtime_session_id or action_id,
+        "canonical_lineage_id": canonical_lineage_id,
         "subject_foreground": fg,
         "subject_identity": {
             "subject_authority": "v2_center_unified_subject",
@@ -485,11 +486,11 @@ def build_subject_unified_lineage(
             "degraded_reasons": degraded_reasons,
         },
         "continuity_trace": {
-            "runtime_session_id": runtime_session_id,
-            "action_id": action_id,
+            "runtime_session_id": primary_session_id,
+            "action_id": primary_action_id,
             "session_id": str(lifecycle.get("session_id") or carrier.get("session_id") or ""),
             "control_session_id": str(carrier.get("control_session_id") or ""),
-            "replay_provenance_anchor": runtime_session_id or action_id,
+            "replay_provenance_anchor": canonical_lineage_id,
             "android_presence_record_count": int(
                 android_presence.get("presence_participant_count") or 0
             ),

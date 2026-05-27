@@ -903,7 +903,7 @@ class DesktopPresenceRuntime:
         # state store is available, or path_kind=fallback when it is absent.
         # This is NOT operator/debug-only — it is part of the user-visible default
         # result surface.
-        _android_presence_rt = None
+        _android_presence_rt = None  # reused below by the subject-panel presence view
         try:
             from core.android_v2_canonical_default_runtime_path import (
                 build_android_presence_runtime_field as _build_apr_field,
