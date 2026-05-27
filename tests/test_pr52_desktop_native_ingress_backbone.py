@@ -154,6 +154,7 @@ def test_android_originated_nl_and_state_snapshot_enter_canonical_backbone():
         },
     )
     android_nl = contract["android_nl_ingress"]
+    android_cognition_input = contract["android_cognition_input"]
     assert contract["modalities"]["android_natural_language"]["is_present"] is True
     assert contract["modalities"]["android_device_context"]["is_present"] is True
     assert contract["modalities"]["android_state_snapshot"]["is_present"] is True
@@ -161,6 +162,12 @@ def test_android_originated_nl_and_state_snapshot_enter_canonical_backbone():
     assert android_nl["android_device_context"]["device_id"] == "android-01"
     assert android_nl["android_state_snapshot"]["battery_level"] == 0.42
     assert android_nl["android_mixed_context_present"] is True
+    assert android_cognition_input["is_android_originated"] is True
+    assert android_cognition_input["unified_context_ready"] is True
+    assert android_cognition_input["family_count"] >= 3
+    assert "natural_language" in android_cognition_input["family_names"]
+    assert "device_context" in android_cognition_input["family_names"]
+    assert "state_snapshot" in android_cognition_input["family_names"]
 
 
 def test_backbone_detects_continuous_stream_branch_from_kwargs():
@@ -523,6 +530,11 @@ def test_android_nl_context_changes_context_strategy_and_execution_planning():
             "android_device_context": {"is_present": True},
             "android_state_snapshot": {"is_present": True},
         },
+        "android_cognition_input": {
+            "is_android_originated": True,
+            "unified_context_ready": True,
+            "family_names": ["natural_language", "device_context", "state_snapshot"],
+        },
         "android_nl_ingress": {
             "android_nl_semantic_authority": "v2_openclawd",
             "android_device_context": {"device_id": "android-01", "session_id": "session-01"},
@@ -537,14 +549,25 @@ def test_android_nl_context_changes_context_strategy_and_execution_planning():
         presence_mode="liminal",
     )
     assert route2["route_type"] == "text_only"
+    assert route2["route_bias"] == "android_cognition_unified_aware"
+    assert route2["route_tier"] == "android_cognition_unified_priority"
     assert "android_nl_priority=high" in kernel_message2
     assert "android_state_snapshot_present=true" in kernel_message2
+    assert "android_cognition_unified=true" in kernel_message2
+    assert "android_cognition_families=" in kernel_message2
     assert canonical_perception2["multimodal_context_strategy"]["android_state_snapshot_present"] is True
+    assert canonical_perception2["multimodal_context_strategy"]["android_cognition_unified"] is True
     assert (
         ingress_for_plan2["mainline_path"]["execution_planning"]["android_context_plan_mode"]
         == "android_state_aware"
     )
+    assert (
+        ingress_for_plan2["mainline_path"]["execution_planning"]["android_cognition_plan_mode"]
+        == "android_cognition_unified"
+    )
     assert ingress_for_plan2["mainline_path"]["task_generation"]["android_nl_participation"] == "enabled"
+    assert ingress_for_plan2["mainline_path"]["task_generation"]["android_cognition_unified"] is True
+    assert "android_cognition_input" in ingress_for_plan2["mainline_path"]["context_assembly"]
     assert (
         ingress_for_plan2["mainline_path"]["context_assembly"]["android_nl_ingress"]["android_nl_semantic_authority"]
         == "v2_openclawd"

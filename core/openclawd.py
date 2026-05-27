@@ -2823,6 +2823,11 @@ class OpenClawd:
             if isinstance(desktop_native_ingress_backbone, dict)
             else {}
         )
+        android_cognition_input = (
+            (desktop_native_ingress_backbone or {}).get("android_cognition_input", {})
+            if isinstance(desktop_native_ingress_backbone, dict)
+            else {}
+        )
         has_android_nl_ingress = bool(
             (ingress_mods.get("android_natural_language") or {}).get("is_present")
             or android_nl_ingress
@@ -2834,6 +2839,17 @@ class OpenClawd:
         has_android_state_snapshot = bool(
             (ingress_mods.get("android_state_snapshot") or {}).get("is_present")
             or (isinstance(android_nl_ingress, dict) and android_nl_ingress.get("android_state_snapshot"))
+        )
+        android_cognition_family_names = (
+            list(android_cognition_input.get("family_names") or [])
+            if isinstance(android_cognition_input, dict)
+            else []
+        )
+        has_android_cognition_unified = bool(
+            isinstance(android_cognition_input, dict)
+            and android_cognition_input.get("is_android_originated")
+            and android_cognition_input.get("unified_context_ready")
+            and len(android_cognition_family_names) >= 2
         )
         android_perception_route = ""
         if isinstance(android_perception_ingress, dict):
@@ -2888,6 +2904,7 @@ class OpenClawd:
         _ROUTE_PRIORITY_SCREEN = 10
         _ROUTE_PRIORITY_FOREGROUND = 20
         _ROUTE_PRIORITY_STREAM = 30
+        _ROUTE_PRIORITY_ANDROID_COGNITION = 35
         _ROUTE_PRIORITY_ANDROID_PERCEPTION = 40
         promoted_modalities: List[str] = []
         backbone_signal_names: List[str] = []
@@ -2917,6 +2934,14 @@ class OpenClawd:
                 route_bias = "continuous_stream_aware"
                 route_tier = "continuous_stream_priority"
                 route_priority = _ROUTE_PRIORITY_STREAM
+        if has_android_cognition_unified:
+            backbone_signal_names.append("android_cognition_input")
+            if route_priority < _ROUTE_PRIORITY_ANDROID_COGNITION:
+                route_bias = "android_cognition_unified_aware"
+                route_tier = "android_cognition_unified_priority"
+                route_priority = _ROUTE_PRIORITY_ANDROID_COGNITION
+            if fusion_strategy == "contextual_fusion_for_task_readiness":
+                fusion_strategy = "android_cognition_unified_fusion"
         if has_android_perception_ingress:
             backbone_signal_names.append("android_perception_ingress")
             if "screen" not in promoted_modalities:
@@ -2953,6 +2978,8 @@ class OpenClawd:
             "android_nl_priority": "high" if has_android_nl_ingress else "normal",
             "android_device_context_present": has_android_device_context,
             "android_state_snapshot_present": has_android_state_snapshot,
+            "android_cognition_unified": has_android_cognition_unified,
+            "android_cognition_family_names": android_cognition_family_names,
             "sampling_intensity": sampling_intensity,
             "fusion_strategy": fusion_strategy,
             "execution_readiness": presence_policy["execution_readiness"],
@@ -2980,6 +3007,8 @@ class OpenClawd:
             router_complexity_score += 0.05
         if has_android_state_snapshot:
             router_complexity_score += 0.05
+        if has_android_cognition_unified:
+            router_complexity_score += 0.07
         return {
             "requires_native_multimodal": any(
                 (
@@ -3025,6 +3054,8 @@ class OpenClawd:
             "android_nl_priority": context_hint.get("android_nl_priority", "normal"),
             "android_device_context_present": bool(context_hint.get("android_device_context_present", False)),
             "android_state_snapshot_present": bool(context_hint.get("android_state_snapshot_present", False)),
+            "android_cognition_unified": bool(context_hint.get("android_cognition_unified", False)),
+            "android_cognition_family_names": list(context_hint.get("android_cognition_family_names") or []),
             "sampling_intensity": context_hint.get("sampling_intensity", "moderate"),
             "fusion_strategy": context_hint.get("fusion_strategy", "minimal_context_staging"),
             "execution_readiness": context_hint.get("execution_readiness", "medium"),
@@ -3054,6 +3085,13 @@ class OpenClawd:
             strategy_tokens.append("android_device_context_present=true")
         if normalized_hint["android_state_snapshot_present"]:
             strategy_tokens.append("android_state_snapshot_present=true")
+        if normalized_hint["android_cognition_unified"]:
+            strategy_tokens.append("android_cognition_unified=true")
+            if normalized_hint["android_cognition_family_names"]:
+                strategy_tokens.append(
+                    "android_cognition_families="
+                    + ",".join(str(v) for v in normalized_hint["android_cognition_family_names"])
+                )
         if normalized_hint["execution_readiness"] != "medium":
             strategy_tokens.append(f"execution_readiness={normalized_hint['execution_readiness']}")
         if normalized_hint["presence_mode_changed"]:

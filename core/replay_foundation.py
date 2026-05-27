@@ -180,6 +180,14 @@ REPLAY_RECORD_CARRIES_OWNERSHIP_BOUNDARY_POLICY: str = (
 )
 """Policy: replay execution records carry participant ownership boundary."""
 
+_NON_CANONICAL_OWNERSHIP_BOUNDARIES: frozenset = frozenset(
+    {
+        "participant_local_only",
+        "fallback_non_canonical",
+        "rejected_non_canonical",
+    }
+)
+
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -631,12 +639,14 @@ class ReplayFoundationSnapshot:
     generated_at: float = field(default_factory=time.time)
 
     execution_record_count: int = 0
+    non_canonical_rejected_count: int = 0
     runtime_event_count: int = 0
     route_decision_count: int = 0
     fallback_record_count: int = 0
     retry_record_count: int = 0
 
     recent_execution_records: List[Dict[str, Any]] = field(default_factory=list)
+    recent_non_canonical_execution_records: List[Dict[str, Any]] = field(default_factory=list)
     recent_runtime_events: List[Dict[str, Any]] = field(default_factory=list)
 
     authority: str = REPLAY_FOUNDATION_AUTHORITY
@@ -647,11 +657,13 @@ class ReplayFoundationSnapshot:
             "snapshot_id": self.snapshot_id,
             "generated_at": self.generated_at,
             "execution_record_count": self.execution_record_count,
+            "non_canonical_rejected_count": self.non_canonical_rejected_count,
             "runtime_event_count": self.runtime_event_count,
             "route_decision_count": self.route_decision_count,
             "fallback_record_count": self.fallback_record_count,
             "retry_record_count": self.retry_record_count,
             "recent_execution_records": self.recent_execution_records,
+            "recent_non_canonical_execution_records": self.recent_non_canonical_execution_records,
             "recent_runtime_events": self.recent_runtime_events,
             "authority": self.authority,
             "contract_version": self.contract_version,
@@ -692,6 +704,10 @@ class ReplayFoundation:
         self._execution_ring: Deque[TaskExecutionRecord] = deque(
             maxlen=self._MAX_RING
         )
+        self._non_canonical_execution_ring: Deque[TaskExecutionRecord] = deque(
+            maxlen=self._MAX_RING
+        )
+        self._non_canonical_rejected_count: int = 0
         self._event_ring: Deque[RuntimeEventRecord] = deque(
             maxlen=self._MAX_RING
         )
@@ -742,6 +758,19 @@ class ReplayFoundation:
         Idempotent by ``record_id``.  When a durable audit store is attached,
         the record is also written to the store (PR-B2).
         """
+        boundary = str(record.participant_ownership_boundary or "")
+        if boundary in _NON_CANONICAL_OWNERSHIP_BOUNDARIES:
+            self._non_canonical_execution_ring.append(record)
+            self._non_canonical_rejected_count += 1
+            self._durable_append(
+                {
+                    **record.to_dict(),
+                    "_non_canonical_blocked": True,
+                    "ownership_admission_eligible": False,
+                },
+                "task_execution_non_canonical_blocked",
+            )
+            return record
         self._execution_records[record.record_id] = record
         self._execution_ring.append(record)
         self._durable_append(record.to_dict(), "task_execution")
@@ -883,9 +912,11 @@ class ReplayFoundation:
     def snapshot(self) -> ReplayFoundationSnapshot:
         """Return a :class:`ReplayFoundationSnapshot` of recent ring-buffer state."""
         recent_exec = list(self._execution_ring)[-20:]
+        recent_non_canonical_exec = list(self._non_canonical_execution_ring)[-20:]
         recent_events = list(self._event_ring)[-20:]
         return ReplayFoundationSnapshot(
             execution_record_count=len(self._execution_ring),
+            non_canonical_rejected_count=self._non_canonical_rejected_count,
             runtime_event_count=len(self._event_ring),
             route_decision_count=sum(
                 len(v) for v in self._routes_by_task.values()
@@ -897,6 +928,7 @@ class ReplayFoundation:
                 len(v) for v in self._retries_by_task.values()
             ),
             recent_execution_records=[r.to_dict() for r in recent_exec],
+            recent_non_canonical_execution_records=[r.to_dict() for r in recent_non_canonical_exec],
             recent_runtime_events=[e.to_dict() for e in recent_events],
         )
 
