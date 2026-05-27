@@ -792,6 +792,102 @@ class DesktopPresenceRuntime:
                     _apc_err,
                 )
         result.setdefault("ingress_carrier_context", _ingress_carrier_context)
+
+        # PR-UAS: Build the unified action lifecycle surface and attach it to
+        # the canonical default result payload.  This is the first point in
+        # the default handle_request() output path where:
+        #   - Android-side result is exposed as a first-class object
+        #   - blocker / confirmation / closure state is available in a unified
+        #     canonical structure
+        # The surface is built from existing execution_result / metadata fields
+        # and does not require additional round-trips.
+        try:
+            from core.unified_action_lifecycle_surface import (
+                ActionOrigin,
+                UnifiedActionLifecycleSurface,
+                build_from_dispatch,
+            )
+
+            _exec_result = result.get("execution_result") or {}
+            _android_result_payload: Optional[Dict[str, Any]] = None
+            _android_result_authority = ""
+            _action_phase = "dispatched"
+            _closure_state_str = "open"
+            _blocker: Optional[Dict[str, Any]] = None
+            _blocker_reason = ""
+            _blocker_kind = ""
+            _confirmation_needed = False
+
+            # Detect android carrier — result may include android execution output
+            if source in _android_carriers:
+                _origin = ActionOrigin.android_device
+                # If execution_result carries an android result or task_result,
+                # surface it as a first-class android_result.
+                if isinstance(_exec_result, dict) and _exec_result:
+                    _android_result_payload = {
+                        "source": source,
+                        "execution_result": _exec_result,
+                        "session_id": conversation_session_id,
+                        "runtime_session_id": rsession.runtime_session_id,
+                    }
+                    _android_result_authority = "android_device"
+                    _action_phase = "result_received"
+                    _closure_state_str = "closed"
+            else:
+                _origin = ActionOrigin.v2_center
+
+            # Detect blocker: look for explicit blocker or routing refusal
+            if isinstance(_exec_result, dict):
+                _raw_blocker = _exec_result.get("blocker") or _exec_result.get("blocked_reason")
+                if _raw_blocker:
+                    _blocker = {"reason": str(_raw_blocker)} if not isinstance(_raw_blocker, dict) else _raw_blocker
+                    _blocker_reason = str(_raw_blocker) if not isinstance(_raw_blocker, dict) else _raw_blocker.get("reason", "")
+                    _blocker_kind = "execution_blocker"
+                    _action_phase = "blocked"
+                _confirmation_needed = bool(
+                    _exec_result.get("confirmation_needed")
+                    or _exec_result.get("requires_confirmation")
+                )
+                if _confirmation_needed:
+                    _action_phase = "confirmation_needed"
+
+            from core.unified_action_lifecycle_surface import ActionLifecyclePhase, ClosureState
+
+            try:
+                _phase_enum = ActionLifecyclePhase(_action_phase)
+            except ValueError:
+                _phase_enum = ActionLifecyclePhase.dispatched
+
+            try:
+                _closure_enum = ClosureState(_closure_state_str)
+            except ValueError:
+                _closure_enum = ClosureState.open
+
+            _ual_surface = UnifiedActionLifecycleSurface(
+                action_id=rsession.runtime_session_id,
+                session_id=conversation_session_id,
+                task_id=str(metadata.get("request_id") or ""),
+                device_id=device_id or "",
+                phase=_phase_enum,
+                origin=_origin,
+                android_result=_android_result_payload,
+                android_result_authority=_android_result_authority,
+                blocker=_blocker,
+                blocker_reason=_blocker_reason,
+                blocker_kind=_blocker_kind,
+                confirmation_needed=_confirmation_needed,
+                closure_state=_closure_enum,
+                closure_reason="execution_complete" if _closure_state_str == "closed" else "",
+            )
+            result["action_lifecycle_surface"] = _ual_surface.to_dict()
+        except Exception as _ual_err:
+            logger.debug(
+                "action_lifecycle_surface build failed (non-fatal): source=%s trace_id=%s err=%s",
+                source,
+                rsession.runtime_session_id,
+                _ual_err,
+            )
+
         return result
 
     # ------------------------------------------------------------------
