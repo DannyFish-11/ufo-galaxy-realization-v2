@@ -7,6 +7,7 @@ execution planning.
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping, Optional
 
@@ -43,6 +44,7 @@ CONTINUOUS_MAINLINE_MODALITIES = ("continuous_stream",)
 # - attachments: generic adapter-envelope attachment slot
 FILE_INPUT_KEYS = ("files", "file_paths", "attachments", "uploaded_files", "file_input")
 FOREGROUND_CONTEXT_KEYS = ("active_window", "ui_tree", "foreground_app", "window_title")
+logger = logging.getLogger(__name__)
 
 
 def _as_mapping(value: Any) -> Dict[str, Any]:
@@ -172,6 +174,7 @@ def _build_android_nl_ingress_snapshot(
             V2_SEMANTIC_AUTHORITY,
         )
     except (ImportError, ModuleNotFoundError):
+        logger.debug("android_nl_semantic_chain_contract unavailable; android_nl_ingress snapshot skipped")
         return {}
 
     if source != ANDROID_NL_CARRIER_SOURCE:
@@ -238,12 +241,8 @@ def build_desktop_native_ingress_backbone(
     )
     has_android_perception = bool(android_perception_ingress)
     has_android_nl = bool(android_nl_ingress)
-    has_android_device_context = bool(
-        _as_mapping(android_nl_ingress.get("android_device_context")) if has_android_nl else {}
-    )
-    has_android_state_snapshot = bool(
-        _as_mapping(android_nl_ingress.get("android_state_snapshot")) if has_android_nl else {}
-    )
+    has_android_device_context = bool(_as_mapping(android_nl_ingress.get("android_device_context")))
+    has_android_state_snapshot = bool(_as_mapping(android_nl_ingress.get("android_state_snapshot")))
 
     modalities = {
         "text": {"is_present": has_text, "count": 1 if has_text else 0, "tier": "mainline_required"},
