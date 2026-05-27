@@ -215,6 +215,14 @@ except ImportError:  # pragma: no cover
     _RecoveryStateRoutingDecision = None  # type: ignore[assignment,misc]
     _route_recovery_state_from_payload = None  # type: ignore[assignment]
 
+try:
+    from core.session_identity import build_canonical_session_identity
+
+    _SESSION_IDENTITY_AVAILABLE: bool = True
+except ImportError:  # pragma: no cover
+    _SESSION_IDENTITY_AVAILABLE = False
+    build_canonical_session_identity = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Module authority marker
 # ---------------------------------------------------------------------------
@@ -611,6 +619,7 @@ class AndroidParticipantReconcileOutcome:
     tracking_record_phase: str = ""
     recovery_state_routing: Dict[str, Any] = field(default_factory=dict)
     schema_gate_evidence: Dict[str, Any] = field(default_factory=dict)
+    ownership_context: Dict[str, Any] = field(default_factory=dict)
 
     def is_accepted(self) -> bool:
         return self.was_reconciled and not self.reject_reason
@@ -625,6 +634,7 @@ class AndroidParticipantReconcileOutcome:
             "tracking_record_phase": self.tracking_record_phase,
             "recovery_state_routing": dict(self.recovery_state_routing),
             "schema_gate_evidence": dict(self.schema_gate_evidence),
+            "ownership_context": dict(self.ownership_context),
             "envelope": self.envelope.to_dict() if self.envelope else None,
         }
 
@@ -840,6 +850,7 @@ def _emit_audit_event(
     reject_reason: str,
     policy: str,
     recovery_state_routing: Optional[Dict[str, Any]] = None,
+    ownership_context: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Emit a ReplayFoundation runtime event for this reconciliation attempt.
 
@@ -892,6 +903,7 @@ def _emit_audit_event(
                 "reject_reason": reject_reason,
                 "policy": policy,
                 "recovery_state_routing": recovery_state_routing or {},
+                "ownership_context": ownership_context or {},
             },
         )
         return True
@@ -1111,6 +1123,15 @@ def reconcile_android_participant_truth(
         tracking_record_phase=tracking_record_phase,
     )
 
+    ownership_context = _build_ownership_context(
+        envelope=envelope,
+        kind=kind,
+        was_reconciled=was_reconciled,
+        local_only=local_only,
+        reject_reason=reject_reason,
+        canonical_update=canonical_update,
+    )
+
     # ------------------------------------------------------------------
     # Emit ReplayFoundation audit event (always)
     # ------------------------------------------------------------------
@@ -1126,6 +1147,7 @@ def reconcile_android_participant_truth(
             else CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY
         ),
         recovery_state_routing=recovery_state_routing,
+        ownership_context=ownership_context,
     )
 
     # PR-10-V2: Emit to the unified Android delegated runtime audit recorder
@@ -1161,6 +1183,7 @@ def reconcile_android_participant_truth(
         tracking_record_phase=tracking_record_phase,
         recovery_state_routing=recovery_state_routing,
         schema_gate_evidence=dict(envelope.schema_gate_evidence),
+        ownership_context=ownership_context,
     )
     # PR-10: Record the outcome for the operator review surface.
     _record_last_reconciliation_outcome(outcome)
@@ -1365,29 +1388,124 @@ def _reconcile_session_snapshot(
         return False, "", "missing_session_id", ""
 
     if not _REGISTRY_AVAILABLE or registry is None or lookup_active_session is None:
-        # Registry unavailable — treat as advisory only, no conflict recorded
-        return False, "", "registry_unavailable", ""
+        return (
+            False,
+            "compat_fallback_non_canonical:session_snapshot_registry_unavailable",
+            "registry_unavailable:compat_fallback_non_canonical",
+            "",
+        )
 
     try:
         active_entry = lookup_active_session(envelope.session_id, registry=registry)
         if active_entry is not None:
-            # Session is active in V2 registry — continuity confirmed
+            registry_device_id = str(getattr(active_entry, "device_id", "") or "")
+            runtime_session_id = str(getattr(active_entry, "runtime_session_id", "") or "")
+            if not envelope.device_id:
+                return (
+                    False,
+                    "compat_fallback_non_canonical:session_snapshot_missing_participant_identity",
+                    "session_snapshot_missing_participant_identity:compat_fallback_non_canonical",
+                    "",
+                )
+            if registry_device_id and registry_device_id != envelope.device_id:
+                return (
+                    False,
+                    "",
+                    "session_snapshot_participant_divergence:"
+                    f"android_device_id={envelope.device_id}:"
+                    f"canonical_device_id={registry_device_id}",
+                    "",
+                )
             return (
                 True,
-                "session_snapshot_continuity_confirmed:session_active_in_v2_registry",
+                "session_snapshot_continuity_confirmed:"
+                f"runtime_attachment_session_id={envelope.session_id}"
+                f"→participant_id={envelope.device_id}"
+                f"→runtime_session_id={runtime_session_id}",
                 "",
                 "active",
             )
         else:
-            # Session not found or not active — conflict
             return (
                 False,
                 "",
-                f"session_snapshot_conflict:session_id={envelope.session_id}_not_active_in_v2",
+                f"session_snapshot_conflict:runtime_attachment_session_id={envelope.session_id}_not_active_in_v2",
                 "",
             )
     except Exception as exc:  # noqa: BLE001
         return False, "", f"registry_lookup_error:{exc}", ""
+
+
+def _build_ownership_context(
+    *,
+    envelope: AndroidParticipantTruthEnvelope,
+    kind: AndroidParticipantTruthKind,
+    was_reconciled: bool,
+    local_only: bool,
+    reject_reason: str,
+    canonical_update: str,
+) -> Dict[str, Any]:
+    participant_identity = (envelope.device_id or "").strip()
+    fallback_non_canonical = (
+        "compat_fallback_non_canonical" in (reject_reason or "")
+        or "compat_fallback_non_canonical" in (canonical_update or "")
+    )
+    participant_divergence = "participant_divergence" in (reject_reason or "")
+    if was_reconciled:
+        ownership_status = "canonicalized"
+    elif local_only:
+        ownership_status = "participant_local_only"
+    elif fallback_non_canonical:
+        ownership_status = "fallback_non_canonical"
+    else:
+        ownership_status = "rejected_non_canonical"
+
+    authority_scope = (
+        "v2_canonical_orchestration"
+        if ownership_status == "canonicalized"
+        else "android_participant_local"
+    )
+
+    canonical_session_identity: Dict[str, str] = {
+        "conversation_session_id": "",
+        "control_session_id": "",
+        "runtime_attachment_session_id": envelope.session_id or "",
+        "source_session_id": envelope.session_id or "",
+        "device_id": participant_identity,
+    }
+
+    if (
+        _SESSION_IDENTITY_AVAILABLE
+        and build_canonical_session_identity is not None
+        and (envelope.session_id or envelope.payload.get("conversation_session_id"))
+    ):
+        try:
+            identity = build_canonical_session_identity(
+                session_id=envelope.session_id or "",
+                device_id=participant_identity,
+                runtime_session_id=envelope.session_id or "",
+                payload=envelope.payload,
+                create_session=False,
+            )
+            canonical_session_identity = identity.as_metadata()
+        except Exception:
+            pass
+
+    canonical_session_identity["runtime_attachment_session_id"] = (
+        canonical_session_identity.get("runtime_attachment_session_id")
+        or envelope.session_id
+        or ""
+    )
+
+    return {
+        "truth_kind": kind.value,
+        "authority_scope": authority_scope,
+        "ownership_status": ownership_status,
+        "participant_identity": participant_identity,
+        "participant_identity_attached": bool(participant_identity),
+        "participant_identity_divergence": participant_divergence,
+        "canonical_session_identity": canonical_session_identity,
+    }
 
 
 def _reconcile_reconciliation_signal(
@@ -1707,6 +1825,7 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
             "reject_reason": outcome.reject_reason,
             "recovery_state_routing": dict(outcome.recovery_state_routing),
             "schema_gate_evidence": dict(outcome.schema_gate_evidence),
+            "ownership_context": dict(outcome.ownership_context),
         }
         with _last_reconciliation_lock:
             _last_reconciliation_outcome = snapshot
