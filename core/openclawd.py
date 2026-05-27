@@ -2868,6 +2868,10 @@ class OpenClawd:
         stream_state = (
             (stream_runtime_status or {}).get("stream_state") if isinstance(stream_runtime_status, dict) else None
         )
+        _ROUTE_PRIORITY_SCREEN = 10
+        _ROUTE_PRIORITY_FOREGROUND = 20
+        _ROUTE_PRIORITY_STREAM = 30
+        _ROUTE_PRIORITY_ANDROID_PERCEPTION = 40
         promoted_modalities: List[str] = []
         backbone_signal_names: List[str] = []
         route_bias = presence_policy["route_bias"]
@@ -2876,38 +2880,38 @@ class OpenClawd:
         if has_screen_ingress:
             backbone_signal_names.append("screen_context")
             promoted_modalities.append("screen")
-            if route_priority < 10:
+            if route_priority < _ROUTE_PRIORITY_SCREEN:
                 route_bias = "screen_context_aware"
                 route_tier = "screen_context_priority"
-                route_priority = 10
+                route_priority = _ROUTE_PRIORITY_SCREEN
         if has_foreground_ingress:
             backbone_signal_names.append("foreground_context")
             if "screen" not in promoted_modalities:
                 promoted_modalities.append("screen")
             promoted_modalities.append("foreground")
-            if route_priority < 20:
+            if route_priority < _ROUTE_PRIORITY_FOREGROUND:
                 route_bias = "desktop_foreground_aware"
                 route_tier = "foreground_context_priority"
-                route_priority = 20
+                route_priority = _ROUTE_PRIORITY_FOREGROUND
         if has_stream_ingress:
             backbone_signal_names.append("continuous_stream")
             promoted_modalities.append("stream")
-            if route_priority < 30:
+            if route_priority < _ROUTE_PRIORITY_STREAM:
                 route_bias = "continuous_stream_aware"
                 route_tier = "continuous_stream_priority"
-                route_priority = 30
+                route_priority = _ROUTE_PRIORITY_STREAM
         if has_android_perception_ingress:
             backbone_signal_names.append("android_perception_ingress")
             if "screen" not in promoted_modalities:
                 promoted_modalities.append("screen")
-            if route_priority < 40:
+            if route_priority < _ROUTE_PRIORITY_ANDROID_PERCEPTION:
                 route_bias = "android_perception_ingress_aware"
                 route_tier = (
                     "android_perception_ingress_bus_priority"
                     if android_perception_route == "multimodal_ingress_bus"
                     else "android_perception_request_bound_priority"
                 )
-                route_priority = 40
+                route_priority = _ROUTE_PRIORITY_ANDROID_PERCEPTION
         previous_presence_mode = str(
             hint.get("previous_presence_mode") or effective_presence_mode
         ).lower()
@@ -2947,11 +2951,13 @@ class OpenClawd:
         if has_android_perception_ingress:
             router_complexity_score += 0.1
         return {
-            "requires_native_multimodal": (
-                has_stream_ingress
-                or has_screen_ingress
-                or has_foreground_ingress
-                or has_android_perception_ingress
+            "requires_native_multimodal": any(
+                (
+                    has_stream_ingress,
+                    has_screen_ingress,
+                    has_foreground_ingress,
+                    has_android_perception_ingress,
+                )
             ),
             "promoted_modalities": promoted_modalities,
             "route_bias": route_bias,
