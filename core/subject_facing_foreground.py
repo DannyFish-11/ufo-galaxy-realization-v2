@@ -420,8 +420,10 @@ def build_subject_unified_lineage(
     carrier = _as_dict(ingress_carrier_context)
     active_families = _active_continuous_families(continuous_ingress)
     path_kind = str(android_presence.get("path_kind") or "unknown")
-    action_id = str(lifecycle.get("action_id") or carrier.get("invocation_id") or "")
-    runtime_session_id = str(carrier.get("invocation_id") or action_id)
+    lifecycle_action_id = str(lifecycle.get("action_id") or "")
+    carrier_invocation_id = str(carrier.get("invocation_id") or "")
+    action_id = lifecycle_action_id or carrier_invocation_id
+    runtime_session_id = carrier_invocation_id or lifecycle_action_id
 
     android_roles: List[str] = []
     if android_presence.get("device_count"):

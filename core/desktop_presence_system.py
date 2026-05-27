@@ -462,7 +462,6 @@ def build_desktop_presence_system_view(
             "failure_discipline": dict(unified_lineage.get("failure_discipline") or {}),
             "continuity_trace": dict(unified_lineage.get("continuity_trace") or {}),
         }
-        view["foreground_hierarchy"] = dict(view["foreground_hierarchy"])
         view["foreground_hierarchy"]["panel_subject_source"] = "subject_foreground"
         view["foreground_hierarchy"]["shared_lineage_object"] = (
             "subject_unified_lineage"
