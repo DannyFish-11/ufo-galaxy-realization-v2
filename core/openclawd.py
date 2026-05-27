@@ -2872,33 +2872,42 @@ class OpenClawd:
         backbone_signal_names: List[str] = []
         route_bias = presence_policy["route_bias"]
         route_tier = presence_policy["route_tier"]
+        route_priority = 0
         if has_screen_ingress:
             backbone_signal_names.append("screen_context")
             promoted_modalities.append("screen")
-            route_bias = "screen_context_aware"
-            route_tier = "screen_context_priority"
+            if route_priority < 10:
+                route_bias = "screen_context_aware"
+                route_tier = "screen_context_priority"
+                route_priority = 10
         if has_foreground_ingress:
             backbone_signal_names.append("foreground_context")
             if "screen" not in promoted_modalities:
                 promoted_modalities.append("screen")
             promoted_modalities.append("foreground")
-            route_bias = "desktop_foreground_aware"
-            route_tier = "foreground_context_priority"
+            if route_priority < 20:
+                route_bias = "desktop_foreground_aware"
+                route_tier = "foreground_context_priority"
+                route_priority = 20
         if has_stream_ingress:
             backbone_signal_names.append("continuous_stream")
             promoted_modalities.append("stream")
-            route_bias = "continuous_stream_aware"
-            route_tier = "continuous_stream_priority"
+            if route_priority < 30:
+                route_bias = "continuous_stream_aware"
+                route_tier = "continuous_stream_priority"
+                route_priority = 30
         if has_android_perception_ingress:
             backbone_signal_names.append("android_perception_ingress")
             if "screen" not in promoted_modalities:
                 promoted_modalities.append("screen")
-            route_bias = "android_perception_ingress_aware"
-            route_tier = (
-                "android_perception_ingress_bus_priority"
-                if android_perception_route == "multimodal_ingress_bus"
-                else "android_perception_request_bound_priority"
-            )
+            if route_priority < 40:
+                route_bias = "android_perception_ingress_aware"
+                route_tier = (
+                    "android_perception_ingress_bus_priority"
+                    if android_perception_route == "multimodal_ingress_bus"
+                    else "android_perception_request_bound_priority"
+                )
+                route_priority = 40
         previous_presence_mode = str(
             hint.get("previous_presence_mode") or effective_presence_mode
         ).lower()

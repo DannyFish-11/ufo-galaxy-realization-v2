@@ -58,7 +58,7 @@ def _extract_mm(multimodal_context: Optional[Any]) -> Dict[str, Any]:
             dumped = multimodal_context.model_dump()
             if isinstance(dumped, dict):
                 return dumped
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             return {}
     return _as_mapping(multimodal_context)
 
