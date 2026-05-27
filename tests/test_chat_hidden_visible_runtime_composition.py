@@ -190,3 +190,64 @@ def test_operator_request_detection_resolves_conflicting_hints_by_recency():
         context=[{"operator_mode": "true"}, {"response_audience": "user"}],
     )
     assert _is_operator_request(req) is False
+
+
+def test_android_presence_stream_coupling_changes_foreground_presence_surface():
+    result = {
+        "success": True,
+        "response": "base response",
+        "metadata": {
+            "presence_mode": "static",
+            "desktop_native_ingress_backbone": {
+                "canonical_continuous_ingress": {
+                    "families": {
+                        "desktop_continuous_stream": {"is_present": True},
+                        "android_device_continuous_stream": {"is_present": True},
+                    }
+                }
+            },
+        },
+        "android_presence_runtime": {
+            "any_presence_participant": True,
+            "any_drives_liminal": True,
+            "any_foreground_presence": False,
+        },
+    }
+    _, visible_action_surface, _, _ = _apply_hidden_visible_boundary(
+        result=result,
+        metadata={"presence_mode": "static"},
+        is_operator_request=False,
+    )
+    assert visible_action_surface["current_presence_mode"] == "liminal"
+    assert visible_action_surface["android_presence_signal"] == "liminal_ready"
+    assert visible_action_surface["continuous_stream_readiness"] == "presence_stream_coupled"
+
+
+def test_presence_participant_without_stream_does_not_promote_stream_readiness():
+    result = {
+        "success": True,
+        "response": "base response",
+        "android_presence_runtime": {
+            "any_presence_participant": True,
+            "any_drives_liminal": True,
+            "any_foreground_presence": False,
+        },
+        "metadata": {
+            "desktop_native_ingress_backbone": {
+                "canonical_continuous_ingress": {
+                    "families": {
+                        "desktop_continuous_stream": {"is_present": False},
+                        "android_device_continuous_stream": {"is_present": False},
+                    }
+                }
+            }
+        },
+    }
+    _, visible_action_surface, _, _ = _apply_hidden_visible_boundary(
+        result=result,
+        metadata={"presence_mode": "static"},
+        is_operator_request=False,
+    )
+    assert visible_action_surface["current_presence_mode"] == "liminal"
+    assert visible_action_surface["android_presence_signal"] == "liminal_ready"
+    assert "continuous_stream_readiness" not in visible_action_surface

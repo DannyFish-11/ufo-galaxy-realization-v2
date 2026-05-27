@@ -213,6 +213,18 @@ LAYER_CONTENT_RULES: Tuple[LayerContentRule, ...] = (
         "Android lifecycle phase changes belong to the visible action surface.",
     ),
     LayerContentRule(
+        "android_presence_signal",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android presence participation signals should influence default foreground presence state.",
+    ),
+    LayerContentRule(
+        "android_stream_readiness",
+        SurfaceLayer.FOREGROUND_PRESENCE_ACTION,
+        "foreground_default",
+        "Android presence + continuous stream coupling belongs to the foreground readiness surface.",
+    ),
+    LayerContentRule(
         "android_device_state",
         SurfaceLayer.BACKGROUND_SEMANTIC,
         "background_default",

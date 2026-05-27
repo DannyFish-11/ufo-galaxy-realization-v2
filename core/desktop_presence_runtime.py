@@ -634,6 +634,9 @@ class DesktopPresenceRuntime:
         metadata["control_session_id"] = control_session_id
         if desktop_native_ingress_backbone is not None:
             metadata["desktop_native_ingress_backbone"] = desktop_native_ingress_backbone
+            _canonical_ci = desktop_native_ingress_backbone.get("canonical_continuous_ingress")
+            if isinstance(_canonical_ci, dict):
+                result.setdefault("canonical_continuous_ingress", dict(_canonical_ci))
         metadata["presence_mode"] = _dispatch_presence_runtime_hint["presence_mode"]
         metadata["presence_runtime_hint"] = dict(_dispatch_presence_runtime_hint)
         if runtime_attachment_session_id:
@@ -912,6 +915,51 @@ class DesktopPresenceRuntime:
         except Exception as _apr_err:
             logger.debug(
                 "android_presence_runtime build failed (non-fatal): %s", _apr_err
+            )
+
+        # Build subject-facing foreground on the runtime default path (not only chat).
+        # This keeps runtime-visible outputs aligned with the subject_foreground
+        # object family consumed by the chat adapter.
+        try:
+            from core.subject_facing_foreground import (
+                build_subject_facing_foreground as _build_subject_fg,
+            )
+
+            _lifecycle_surface = (
+                result.get("action_lifecycle_surface")
+                if isinstance(result.get("action_lifecycle_surface"), dict)
+                else {}
+            )
+            _runtime_visible_surface = {
+                "current_presence_mode": str(metadata.get("presence_mode") or "unknown"),
+                "current_action_state": str(
+                    (result.get("visible_action") or {}).get("state")
+                    or _lifecycle_surface.get("phase")
+                    or "unknown"
+                ),
+                "lifecycle_phase": str(_lifecycle_surface.get("phase") or "unknown"),
+                "lifecycle_origin": str(_lifecycle_surface.get("origin") or ""),
+                "lifecycle_status_feedback": str(result.get("status_feedback") or ""),
+                "action_trace_summary": "",
+                "result_artifacts_summary": "",
+                "blocker_summary": str(
+                    _lifecycle_surface.get("blocker_reason") or ""
+                ),
+                "confirmation_needed": bool(
+                    _lifecycle_surface.get("confirmation_needed")
+                ),
+                "lightweight_status_feedback": str(result.get("status_feedback") or ""),
+            }
+            _subject_fg_runtime = _build_subject_fg(
+                visible_action_surface=_runtime_visible_surface,
+                action_lifecycle_surface=_lifecycle_surface or None,
+                foreground_response=str(result.get("response") or ""),
+            )
+            result["subject_foreground_runtime"] = _subject_fg_runtime.to_dict()
+        except Exception as _sfg_runtime_err:
+            logger.debug(
+                "subject_foreground_runtime build failed (non-fatal): %s",
+                _sfg_runtime_err,
             )
 
         return result

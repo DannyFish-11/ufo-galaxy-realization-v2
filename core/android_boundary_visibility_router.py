@@ -64,11 +64,15 @@ ANDROID_INFO_CONTENT_KEYS: tuple[str, ...] = (
     "android_confirmation_needed",
     "android_result_summary",
     "android_lifecycle_phase",
+    "android_presence_signal",
+    "android_stream_readiness",
     "android_device_state",
     "android_context",
     "android_participation_state",
     "android_execution_signal",
 )
+ANDROID_STREAM_COUPLED_FEEDBACK: str = "多端持续感知已联动"
+# English: "Multi-device continuous perception is linked."
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +136,30 @@ def _extract_blocker_reason(lifecycle: Dict[str, Any]) -> str:
     ).strip()
 
 
+def _derive_presence_mode_from_signal(*, current_mode: str) -> str:
+    normalized = current_mode.strip().lower()
+    if normalized in {"", "unknown", "static", "silent"}:
+        return "liminal"
+    return current_mode
+
+
+def _extract_canonical_continuous_ingress(result: Dict[str, Any]) -> Dict[str, Any]:
+    direct_ingress = result.get("canonical_continuous_ingress")
+    if isinstance(direct_ingress, dict):
+        return direct_ingress
+
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    ingress_backbone = metadata.get("desktop_native_ingress_backbone")
+    if not isinstance(ingress_backbone, dict):
+        return {}
+    maybe_ingress = ingress_backbone.get("canonical_continuous_ingress")
+    if isinstance(maybe_ingress, dict):
+        return maybe_ingress
+    return {}
+
+
 def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
     """Extract Android-originated information from a result dict.
 
@@ -175,6 +203,34 @@ def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
             phase = str(lifecycle.get("phase") or "").strip()
             if phase and "android_lifecycle_phase" not in android_info:
                 android_info["android_lifecycle_phase"] = phase
+
+    # Source 3: canonical default Android presence runtime + canonical continuous ingress.
+    # This links Android presence participation with stream readiness under the
+    # same boundary governance path used for Android blockers/results.
+    android_presence_runtime = result.get("android_presence_runtime")
+    if isinstance(android_presence_runtime, dict):
+        if bool(android_presence_runtime.get("any_presence_participant")):
+            if bool(android_presence_runtime.get("any_foreground_presence")):
+                android_info.setdefault("android_presence_signal", "foreground_presence")
+            elif bool(android_presence_runtime.get("any_drives_manifest")):
+                android_info.setdefault("android_presence_signal", "manifest_ready")
+            elif bool(android_presence_runtime.get("any_drives_liminal")):
+                android_info.setdefault("android_presence_signal", "liminal_ready")
+            else:
+                android_info.setdefault("android_presence_signal", "presence_participant")
+
+            canonical_continuous_ingress = _extract_canonical_continuous_ingress(result)
+            families = canonical_continuous_ingress.get("families") or {}
+            if not isinstance(families, dict):
+                families = {}
+            desktop_stream_present = bool(
+                (families.get("desktop_continuous_stream") or {}).get("is_present")
+            )
+            android_stream_present = bool(
+                (families.get("android_device_continuous_stream") or {}).get("is_present")
+            )
+            if desktop_stream_present or android_stream_present:
+                android_info.setdefault("android_stream_readiness", "presence_stream_coupled")
 
     return android_info
 
@@ -259,6 +315,24 @@ def apply_dual_repo_boundary_to_visible_action(
             # Annotate visible_action_surface with android-side lifecycle phase.
             # This supplements (does not replace) the V2-derived current_action_state.
             visible_action_surface.setdefault("android_lifecycle_phase", str(value))
+            decision.boundary_affected_foreground = True
+        elif key == "android_presence_signal" and value:
+            visible_action_surface["android_presence_signal"] = str(value)
+            current_mode = str(visible_action_surface.get("current_presence_mode") or "")
+            visible_action_surface["current_presence_mode"] = _derive_presence_mode_from_signal(
+                current_mode=current_mode
+            )
+            decision.boundary_affected_foreground = True
+        elif key == "android_stream_readiness" and value:
+            visible_action_surface["continuous_stream_readiness"] = str(value)
+            visible_action_surface.setdefault(
+                "lifecycle_status_feedback",
+                "android_presence_stream_coupled",
+            )
+            visible_action_surface.setdefault(
+                "lightweight_status_feedback",
+                ANDROID_STREAM_COUPLED_FEEDBACK,
+            )
             decision.boundary_affected_foreground = True
         else:
             _set_foreground_if_absent(key, value)
