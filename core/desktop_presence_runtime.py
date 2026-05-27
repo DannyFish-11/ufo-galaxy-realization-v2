@@ -903,6 +903,7 @@ class DesktopPresenceRuntime:
         # state store is available, or path_kind=fallback when it is absent.
         # This is NOT operator/debug-only — it is part of the user-visible default
         # result surface.
+        _android_presence_rt = None
         try:
             from core.android_v2_canonical_default_runtime_path import (
                 build_android_presence_runtime_field as _build_apr_field,
@@ -920,9 +921,11 @@ class DesktopPresenceRuntime:
         # Build subject-facing foreground on the runtime default path (not only chat).
         # This keeps runtime-visible outputs aligned with the subject_foreground
         # object family consumed by the chat adapter.
+        _subject_fg_runtime_dict: Dict[str, Any] = {}
         try:
             from core.subject_facing_foreground import (
                 build_subject_facing_foreground as _build_subject_fg,
+                build_subject_unified_lineage as _build_subject_lineage,
             )
 
             _lifecycle_surface = (
@@ -955,7 +958,37 @@ class DesktopPresenceRuntime:
                 action_lifecycle_surface=_lifecycle_surface or None,
                 foreground_response=str(result.get("response") or ""),
             )
-            result["subject_foreground_runtime"] = _subject_fg_runtime.to_dict()
+            _subject_fg_runtime_dict = _subject_fg_runtime.to_dict()
+            result["subject_foreground_runtime"] = _subject_fg_runtime_dict
+            _subject_lineage = _build_subject_lineage(
+                subject_foreground=_subject_fg_runtime_dict,
+                action_lifecycle_surface=_lifecycle_surface or None,
+                android_presence_runtime=result.get("android_presence_runtime"),
+                canonical_continuous_ingress=result.get("canonical_continuous_ingress"),
+                ingress_carrier_context=result.get("ingress_carrier_context"),
+            )
+            result["subject_unified_lineage"] = _subject_lineage
+            metadata["subject_unified_lineage"] = _subject_lineage
+
+            _presence_system = build_desktop_presence_system_view(
+                state_machine_snapshot=self._presence_state_machine.snapshot(),
+                dominant_tristate=str(metadata.get("presence_mode") or rsession.tristate.value),
+                tristate_distribution={
+                    TriState.SILENT.value: 0,
+                    TriState.LIMINAL.value: 0,
+                    TriState.MANIFEST.value: 0,
+                    str(metadata.get("presence_mode") or rsession.tristate.value): 1,
+                },
+                active_session_count=1,
+                stream_runtime_status=(
+                    self.realtime_streaming_backbone_summary().get("runtime_status") or {}
+                ),
+                android_presence_participation=_android_presence_rt,
+                subject_foreground=_subject_fg_runtime_dict,
+                subject_unified_lineage=_subject_lineage,
+                canonical_continuous_ingress=result.get("canonical_continuous_ingress"),
+            )
+            result["desktop_presence_system"] = _presence_system
         except Exception as _sfg_runtime_err:
             logger.debug(
                 "subject_foreground_runtime build failed (non-fatal): %s",

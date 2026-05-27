@@ -53,7 +53,7 @@ directly.  :func:`build_subject_facing_foreground` is called from
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
 # PR sentinel
@@ -385,6 +385,117 @@ def build_subject_facing_foreground(
     )
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _active_continuous_families(canonical_continuous_ingress: Dict[str, Any]) -> List[str]:
+    families = canonical_continuous_ingress.get("families")
+    if not isinstance(families, dict):
+        return list(canonical_continuous_ingress.get("active_families") or [])
+    return [name for name, item in families.items() if bool(_as_dict(item).get("is_present"))]
+
+
+def build_subject_unified_lineage(
+    *,
+    subject_foreground: Dict[str, Any],
+    action_lifecycle_surface: Optional[Dict[str, Any]] = None,
+    android_presence_runtime: Optional[Dict[str, Any]] = None,
+    canonical_continuous_ingress: Optional[Dict[str, Any]] = None,
+    ingress_carrier_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Compose the default subject foreground with Android/presence/stream lineage.
+
+    The returned object is intentionally a composition of existing runtime facts,
+    not a new authority.  It gives user, panel, and operator surfaces the same
+    object-family anchor for subject foreground, Android participation, lifecycle,
+    continuous ingress, fallback discipline, and continuity/replay trace keys.
+    """
+    fg = _as_dict(subject_foreground)
+    lifecycle = _as_dict(action_lifecycle_surface)
+    android_presence = _as_dict(android_presence_runtime)
+    continuous_ingress = _as_dict(canonical_continuous_ingress)
+    carrier = _as_dict(ingress_carrier_context)
+    active_families = _active_continuous_families(continuous_ingress)
+    path_kind = str(android_presence.get("path_kind") or "unknown")
+    action_id = str(lifecycle.get("action_id") or carrier.get("invocation_id") or "")
+    runtime_session_id = str(carrier.get("invocation_id") or action_id)
+
+    android_roles: List[str] = []
+    if android_presence.get("device_count"):
+        android_roles.append("execution_runtime_participant")
+    if android_presence.get("any_presence_participant"):
+        android_roles.append("presence_participant")
+    if android_presence.get("any_foreground_presence"):
+        android_roles.append("foreground_presence_surface")
+    if "android_device_continuous_stream" in active_families:
+        android_roles.append("continuous_perception_participant")
+    if carrier.get("is_android_carrier"):
+        android_roles.append("cognition_carrier")
+
+    degraded_reasons: List[str] = []
+    if path_kind in {"compat_bridge", "fallback"}:
+        degraded_reasons.append(f"android_presence_runtime_path={path_kind}")
+    if bool(continuous_ingress.get("stream_fallback_required")):
+        degraded_reasons.append("continuous_stream_fallback_required")
+
+    return {
+        "object_family": "unified_subject_composition",
+        "composition_version": 1,
+        "canonical_lineage_id": runtime_session_id or action_id,
+        "subject_foreground": fg,
+        "subject_identity": {
+            "subject_authority": "v2_center_unified_subject",
+            "android_roles": android_roles or ["not_participating"],
+            "android_in_unified_subject_expression": bool(
+                set(android_roles)
+                & {
+                    "presence_participant",
+                    "foreground_presence_surface",
+                    "continuous_perception_participant",
+                    "cognition_carrier",
+                }
+            ),
+        },
+        "authority_boundary": {
+            "orchestration_authority": "v2_center",
+            "semantic_authority": str(carrier.get("semantic_authority") or "v2_openclawd"),
+            "participant_autonomy": (
+                "bounded_android_participation" if android_roles else "none_observed"
+            ),
+            "local_execution_authority": "android_device_bounded_local_execution"
+            if "execution_runtime_participant" in android_roles
+            else "v2_or_local_runtime",
+            "path_kind": path_kind,
+        },
+        "temporal_alignment": {
+            "foreground_event": str(fg.get("foreground_event") or ""),
+            "action_phase": str(fg.get("action_phase") or lifecycle.get("phase") or ""),
+            "continuous_ingress_active": bool(continuous_ingress.get("is_present")),
+            "active_continuous_families": active_families,
+        },
+        "failure_discipline": {
+            "canonical_default_visible": path_kind == "canonical_default",
+            "path_kind": path_kind,
+            "degraded": bool(degraded_reasons),
+            "degraded_reasons": degraded_reasons,
+        },
+        "continuity_trace": {
+            "runtime_session_id": runtime_session_id,
+            "action_id": action_id,
+            "session_id": str(lifecycle.get("session_id") or carrier.get("session_id") or ""),
+            "control_session_id": str(carrier.get("control_session_id") or ""),
+            "replay_provenance_anchor": runtime_session_id or action_id,
+            "android_presence_record_count": int(
+                android_presence.get("presence_participant_count") or 0
+            ),
+            "continuous_ingress_families": active_families,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # __all__
 # ---------------------------------------------------------------------------
@@ -399,4 +510,5 @@ __all__ = [
     "FOREGROUND_EVENT_TRANSITIONING",
     "SubjectFacingForeground",
     "build_subject_facing_foreground",
+    "build_subject_unified_lineage",
 ]

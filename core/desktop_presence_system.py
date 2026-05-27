@@ -394,6 +394,9 @@ def build_desktop_presence_system_view(
     active_session_count: int,
     stream_runtime_status: Optional[Dict[str, Any]] = None,
     android_presence_participation: Optional[Any] = None,
+    subject_foreground: Optional[Dict[str, Any]] = None,
+    subject_unified_lineage: Optional[Dict[str, Any]] = None,
+    canonical_continuous_ingress: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return a formal desktop-presence projection for runtime/panel/operator surfaces.
 
@@ -404,6 +407,15 @@ def build_desktop_presence_system_view(
     that the field is visible on the user-facing default path rather than only in
     operator/debug surfaces.
     """
+    subject_fg = dict(subject_foreground or {})
+    unified_lineage = dict(subject_unified_lineage or {})
+    continuous_ingress = dict(canonical_continuous_ingress or {})
+    active_stream_families = list(
+        (unified_lineage.get("temporal_alignment") or {}).get("active_continuous_families")
+        or continuous_ingress.get("active_families")
+        or []
+    )
+
     view: Dict[str, Any] = {
         "formal_presence_modes": [d.to_dict() for d in PRESENCE_MODE_DEFINITIONS],
         "state_machine": state_machine_snapshot,
@@ -430,6 +442,31 @@ def build_desktop_presence_system_view(
             "runtime_status": dict(stream_runtime_status or {}),
         },
     }
+    if subject_fg or unified_lineage:
+        view["subject_panel"] = {
+            "source_object_family": "subject_foreground",
+            "shared_canonical_lineage_id": str(
+                unified_lineage.get("canonical_lineage_id") or ""
+            ),
+            "subject_state": str(subject_fg.get("subject_state") or dominant_tristate),
+            "foreground_event": str(subject_fg.get("foreground_event") or ""),
+            "action_phase": str(subject_fg.get("action_phase") or ""),
+            "foreground_status": str(subject_fg.get("foreground_status") or ""),
+            "blocker": subject_fg.get("blocker"),
+            "confirmation": subject_fg.get("confirmation"),
+            "continuous_ingress_participation": {
+                "is_present": bool(active_stream_families),
+                "active_families": active_stream_families,
+            },
+            "authority_boundary": dict(unified_lineage.get("authority_boundary") or {}),
+            "failure_discipline": dict(unified_lineage.get("failure_discipline") or {}),
+            "continuity_trace": dict(unified_lineage.get("continuity_trace") or {}),
+        }
+        view["foreground_hierarchy"] = dict(view["foreground_hierarchy"])
+        view["foreground_hierarchy"]["panel_subject_source"] = "subject_foreground"
+        view["foreground_hierarchy"]["shared_lineage_object"] = (
+            "subject_unified_lineage"
+        )
     # Attach android_presence_participation when the canonical default path provides it.
     # This makes the android participation data a first-class presence-system field
     # on the user-facing default path (not hidden behind operator/debug paths).

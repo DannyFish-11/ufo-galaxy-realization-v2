@@ -71,7 +71,10 @@ from core.android_boundary_visibility_router import (
 )
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 from core.routes._models import ChatRequest
-from core.subject_facing_foreground import build_subject_facing_foreground
+from core.subject_facing_foreground import (
+    build_subject_facing_foreground,
+    build_subject_unified_lineage,
+)
 from core.unified_response import UnifiedChatResponse
 
 logger = logging.getLogger("Galaxy.API")
@@ -469,7 +472,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 action_lifecycle_surface=result.get("action_lifecycle_surface"),
                 foreground_response=foreground_response,
             )
-            resp_dict["subject_foreground"] = _subject_fg.to_dict()
+            _subject_fg_dict = _subject_fg.to_dict()
+            resp_dict["subject_foreground"] = _subject_fg_dict
+            resp_dict["subject_unified_lineage"] = build_subject_unified_lineage(
+                subject_foreground=_subject_fg_dict,
+                action_lifecycle_surface=result.get("action_lifecycle_surface"),
+                android_presence_runtime=result.get("android_presence_runtime"),
+                canonical_continuous_ingress=result.get("canonical_continuous_ingress"),
+                ingress_carrier_context=result.get("ingress_carrier_context"),
+            )
+            if isinstance(result.get("desktop_presence_system"), dict):
+                resp_dict["desktop_presence_system"] = result["desktop_presence_system"]
 
             # ── PR-SFF: control-plane demotion ───────────────────────────────
             # problem_execution_spine is a control-plane diagnostic object that
