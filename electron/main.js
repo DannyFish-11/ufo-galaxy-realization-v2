@@ -1,8 +1,12 @@
 const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 
+// ── Two-window architecture ──
+// mainWindow    : Three-State Full-Screen AI (always on, never hidden)
+// panelWindow   : Unified Control Panel (toggled by F12)
 let mainWindow = null;
-let isVisible = true;
+let panelWindow = null;
+let isPanelVisible = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -35,7 +39,6 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
         mainWindow.setIgnoreMouseEvents(true, { forward: true });
-        isVisible = true;
     });
 
     mainWindow.on('closed', () => {
@@ -52,20 +55,71 @@ function createWindow() {
     return mainWindow;
 }
 
-function toggleVisibility() {
-    if (!mainWindow) return;
-    if (isVisible) {
-        mainWindow.hide();
-        isVisible = false;
+function createPanelWindow() {
+    """Create the unified control panel window (toggled by F12)."""
+    if (panelWindow) {
+        return panelWindow;
+    }
+    panelWindow = new BrowserWindow({
+        width: 1400,
+        height: 900,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        fullscreen: false,
+        skipTaskbar: false,
+        hasShadow: true,
+        resizable: true,
+        movable: true,
+        closable: true,
+        focusable: true,
+        show: false,
+        backgroundColor: '#0a0a0a88',
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
+            webSecurity: true,
+        }
+    });
+
+    // Panel loads a different HTML (to be created)
+    panelWindow.loadFile(path.join(__dirname, 'renderer', 'panel.html'));
+
+    panelWindow.once('ready-to-show', () => {
+        // Don't show yet — wait for F12
+    });
+
+    panelWindow.on('closed', () => {
+        panelWindow = null;
+        isPanelVisible = false;
+    });
+
+    return panelWindow;
+}
+
+function togglePanel() {
+    """F12 toggles the control panel — three-state GUI is unaffected."""
+    if (!panelWindow) {
+        createPanelWindow();
+    }
+    if (!panelWindow) return;
+
+    if (isPanelVisible) {
+        panelWindow.hide();
+        isPanelVisible = false;
+        console.log('Panel hidden (F12)');
     } else {
-        mainWindow.show();
-        mainWindow.setIgnoreMouseEvents(true, { forward: true });
-        isVisible = true;
+        panelWindow.show();
+        panelWindow.focus();
+        isPanelVisible = true;
+        console.log('Panel shown (F12)');
     }
 }
 
 app.whenReady().then(() => {
     createWindow();
+    // Panel is created lazily on first F12
 
     // PR-D5: Start system tray alongside Electron GUI
     try {
@@ -81,16 +135,16 @@ app.whenReady().then(() => {
         console.warn('Failed to start system tray:', err);
     }
 
+    // PR-F12-PANEL: F12 toggles control panel (NOT the three-state GUI)
     globalShortcut.register('F12', () => {
-        toggleVisibility();
+        togglePanel();
     });
-    // PR-R2: Also keep legacy shortcut for backward compat
+    // Legacy shortcut also toggles panel
     globalShortcut.register('CommandOrControl+Shift+G', () => {
-        toggleVisibility();
+        togglePanel();
     });
 
     app.on('browser-window-created', (event, window) => {
-        // Ensure our window stays on top
         if (mainWindow) {
             mainWindow.setAlwaysOnTop(true, 'screen-saver');
         }

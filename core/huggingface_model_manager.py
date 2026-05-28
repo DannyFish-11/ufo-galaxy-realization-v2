@@ -371,27 +371,38 @@ class HuggingFaceModelManager:
     # ── 推荐模型（预配置） ──
 
     RECOMMENDED_MODELS: Dict[str, Dict[str, str]] = {
-        # 多模态优先推荐（你要求的：原生多模态 + 本地）
+        # === 本地主脑首选：Google Gemma 4 E4B ===
+        # 发布日期: 2026-04-02 | 参数: 4.5B有效(8B含embeddings)
+        # 原生多模态: 文本+图像+音频 | 上下文: 128K | 许可证: Apache 2.0
+        # VRAM需求: 4-6GB (Q4量化) | Function Calling | 支持140+语言
+        "llm_gemma4_e4b": {
+            "model_id": "google/gemma-4-E4B-it-GGUF",
+            "family": "llm",
+            "format": "gguf",
+            "quantization": "q4",
+            "description": "Gemma 4 E4B — Google原生多模态主脑，文本/图像/音频输入，128K上下文",
+        },
+        "llm_gemma4_e4b_q8": {
+            "model_id": "google/gemma-4-E4B-it-GGUF",
+            "family": "llm",
+            "format": "gguf",
+            "quantization": "q8",
+            "description": "Gemma 4 E4B Q8 — 更高精度，需6-8GB VRAM",
+        },
+        # === 备选模型 ===
         "llm_qwen2_7b": {
             "model_id": "Qwen/Qwen2-7B-Instruct-GGUF",
             "family": "llm",
             "format": "gguf",
             "quantization": "q4",
-            "description": "Qwen2 7B 指令模型 — 中文优秀，本地运行",
+            "description": "Qwen2 7B — 中文优秀备选",
         },
-        "llm_qwen2_7b_q8": {
-            "model_id": "Qwen/Qwen2-7B-Instruct-GGUF",
-            "family": "llm",
-            "format": "gguf",
-            "quantization": "q8",
-            "description": "Qwen2 7B Q8量化 — 精度更高",
-        },
-        "vlm_llava_7b": {
-            "model_id": "mys/ggml_llava-v1.5-7b",
+        "vlm_gemma4_e4b": {
+            "model_id": "google/gemma-4-E4B-it",
             "family": "vlm",
-            "format": "gguf",
-            "quantization": "q4",
-            "description": "LLaVA 7B VLM — 视觉理解",
+            "format": "transformers",
+            "quantization": "none",
+            "description": "Gemma 4 E4B VLM模式 — 完整transformers多模态",
         },
         "asr_whisper_medium": {
             "model_id": "Systran/faster-whisper-medium",
