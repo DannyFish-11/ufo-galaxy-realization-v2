@@ -105,6 +105,7 @@ if _HAVE_PYWIN32:
             self._restart_count = 0
             self._last_restart_time = 0.0
             self._lock = threading.Lock()
+            self._electron_process: subprocess.Popen[str] | None = None
 
         # ── 服务控制回调 ──
 
@@ -116,6 +117,9 @@ if _HAVE_PYWIN32:
 
             # 终止子进程
             self._kill_process(graceful=True)
+
+            # 终止 Electron GUI 进程
+            self._kill_electron_process()
 
             # 等待监控线程结束
             if self._monitor_thread and self._monitor_thread.is_alive():
@@ -211,6 +215,70 @@ if _HAVE_PYWIN32:
                     (f"{SERVICE_NAME} failed to start process: {exc}",),
                 )
 
+            # PR-DESKTOP-SURFACE: Also launch Electron three-state GUI
+            if self._process is not None:
+                self._spawn_electron(project_root, env)
+
+        def _spawn_electron(self, project_root: str, env: dict) -> None:
+            """Launch Electron three-state GUI as a detached sibling process."""
+            electron_dir = os.path.join(project_root, "electron")
+            if not os.path.isdir(electron_dir):
+                logger.info("Electron directory not found -- GUI not started")
+                return
+
+            # Skip if node_modules is missing (npm install hasn't been run)
+            if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
+                logger.info("Electron node_modules not found -- run 'npm install' in electron/")
+                return
+
+            try:
+                self._electron_process = subprocess.Popen(
+                    ["npm", "start"],
+                    cwd=electron_dir,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+                )
+
+                # Start output drainer thread
+                electron_log_path = os.path.join(env.get("GALAXY_LOG_DIR", ""), "electron.log")
+                threading.Thread(
+                    target=self._pipe_logger,
+                    args=(self._electron_process, electron_log_path),
+                    daemon=True,
+                    name="ElectronOutput",
+                ).start()
+
+                logger.info("Electron GUI started (pid=%d)", self._electron_process.pid)
+
+            except FileNotFoundError:
+                logger.info("npm not found -- install Node.js to enable GUI")
+            except Exception as exc:
+                logger.warning("Failed to start Electron GUI: %s", exc)
+
+        def _kill_electron_process(self, graceful: bool = True) -> None:
+            """Terminate the Electron GUI process."""
+            proc = self._electron_process
+            if proc is None:
+                return
+            try:
+                if graceful:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                        return
+                    except subprocess.TimeoutExpired:
+                        logger.warning("Electron graceful stop timed out, forcing kill")
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception as exc:
+                logger.error("Error killing Electron process: %s", exc)
+            finally:
+                self._electron_process = None
+
         def _kill_process(self, graceful: bool = True) -> None:
             """终止子进程。"""
             proc = self._process
@@ -268,6 +336,10 @@ if _HAVE_PYWIN32:
                 # 进程已退出
                 self._process = None
                 process = None
+
+                # Also kill the Electron process (it will be restarted with Galaxy)
+                self._kill_electron_process(graceful=True)
+
                 logger.warning(
                     "Galaxy process exited with code %d, preparing restart...", ret
                 )

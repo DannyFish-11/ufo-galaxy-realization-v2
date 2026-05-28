@@ -40,6 +40,9 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
+import threading
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, Optional
@@ -535,33 +538,113 @@ class SystemOrchestrator:
         )
 
     def _run_phase_6_desktop_surface(self) -> PhaseResult:
-        """Phase 6 — Desktop surface bring-up hooks.
+        """Phase 6 -- Desktop surface bring-up.
 
-        Desktop surface: windows_client/status_board_v2 (active desktop status).
-        This phase is a hook point for later PRs to add stronger desktop
-        readiness semantics.
+        Launches the Electron three-state GUI as a detached subprocess.
+        The three-state GUI (silent / liminal / manifest) is the primary
+        desktop presence surface.  It is started via ``npm start`` in the
+        ``electron/`` directory.
+
+        If Electron is not available (npm/node missing or electron dir absent)
+        the phase returns DEGRADED and the system continues without the GUI.
         """
-        logger.info("[Phase 6] Beginning desktop surface bring-up hooks …")
-        try:
-            import importlib
-            importlib.import_module("windows_client.status_board_v2")
-            return PhaseResult(
-                phase=StartupPhase.DESKTOP_SURFACE,
-                status=PhaseStatus.OK,
-                detail="desktop surface module importable",
-            )
-        except ImportError:
+        logger.info("[Phase 6] Desktop surface bring-up (Electron three-state GUI) ...")
+
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        electron_dir = os.path.join(project_root, "electron")
+
+        # Check prerequisites
+        if not os.path.isdir(electron_dir):
             return PhaseResult(
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
-                detail="desktop surface module not importable (non-fatal)",
+                detail="electron/ directory not found -- GUI not available",
+            )
+
+        # Check if node_modules exists (npm install has been run)
+        node_modules = os.path.join(electron_dir, "node_modules")
+        if not os.path.isdir(node_modules):
+            logger.warning("[Phase 6] electron/node_modules not found -- running npm install ...")
+            try:
+                npm_result = subprocess.run(
+                    ["npm", "install"],
+                    cwd=electron_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if npm_result.returncode != 0:
+                    return PhaseResult(
+                        phase=StartupPhase.DESKTOP_SURFACE,
+                        status=PhaseStatus.DEGRADED,
+                        detail=f"npm install failed: {npm_result.stderr[:200]}",
+                    )
+            except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+                return PhaseResult(
+                    phase=StartupPhase.DESKTOP_SURFACE,
+                    status=PhaseStatus.DEGRADED,
+                    detail=f"npm install unavailable: {exc}",
+                )
+
+        # Launch Electron as detached subprocess
+        try:
+            env = os.environ.copy()
+            env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+
+            # Use shell=False for security; npm start will run electron .
+            process = subprocess.Popen(
+                ["npm", "start"],
+                cwd=electron_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                # Detached so Electron survives if Python parent exits
+                start_new_task=True if sys.platform != "win32" else False,
+            )
+
+            # Start a background thread to drain stdout (prevents pipe buffer fill)
+            threading.Thread(
+                target=self._drain_electron_output,
+                args=(process,),
+                daemon=True,
+                name="ElectronOutputDrainer",
+            ).start()
+
+            logger.info("[Phase 6] Electron GUI launched (pid=%d)", process.pid)
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.OK,
+                detail=f"Electron GUI launched (pid={process.pid})",
+                data={"electron_pid": process.pid},
+            )
+
+        except FileNotFoundError:
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.DEGRADED,
+                detail="npm not found -- install Node.js to enable GUI",
             )
         except Exception as exc:
             return PhaseResult(
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
-                detail=f"desktop surface degraded: {exc}",
+                detail=f"Electron launch failed: {exc}",
             )
+
+    def _drain_electron_output(self, process: subprocess.Popen) -> None:
+        """Drain Electron subprocess stdout to prevent pipe buffer deadlock."""
+        if process.stdout is None:
+            return
+        try:
+            for line in process.stdout:
+                line = line.strip()
+                if line:
+                    # Log at DEBUG to avoid spamming INFO
+                    logger.debug("[Electron] %s", line)
+        except Exception:
+            pass
 
     def _run_phase_7_readiness_summary(self, summary: StartupSummary) -> PhaseResult:
         """Phase 7 — Final readiness summary / status report.

@@ -903,6 +903,39 @@ async def _run_check_only(galaxy: 'GalaxyUnified'):
     sys.stdout.flush()
 
 
+def _start_electron_gui():
+    """Launch Electron three-state GUI if available."""
+    import os
+    import subprocess
+    import sys
+
+    if os.environ.get("GALAXY_SKIP_ELECTRON", "").lower() in ("1", "true", "yes"):
+        return
+
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    electron_dir = os.path.join(project_root, "electron")
+
+    if not os.path.isdir(electron_dir):
+        return
+    if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
+        return
+
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+        subprocess.Popen(
+            ["npm", "start"],
+            cwd=electron_dir,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_task=True if sys.platform != "win32" else False,
+        )
+        print("[Launcher] Electron GUI started")
+    except Exception:
+        pass
+
+
 def main():
     """主函数"""
     if not ensure_entrypoint_role(UNIFIED_LAUNCHER_ENTRY_ID, EntrypointRole.SUB_ENTRY):
@@ -1076,6 +1109,9 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # 启动 Electron GUI（在 Python 服务之后启动，作为独立桌面表层）
+    _start_electron_gui()
+
     # 启动系统
     try:
         asyncio.run(galaxy.start())

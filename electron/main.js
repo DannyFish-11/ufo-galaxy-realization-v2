@@ -56,7 +56,7 @@ function createWindow() {
 }
 
 function createPanelWindow() {
-    """Create the unified control panel window (toggled by F12)."""
+    // Create the unified control panel window (toggled by F12).
     if (panelWindow) {
         return panelWindow;
     }
@@ -99,7 +99,7 @@ function createPanelWindow() {
 }
 
 function togglePanel() {
-    """F12 toggles the control panel — three-state GUI is unaffected."""
+    // F12 toggles the control panel — three-state GUI is unaffected.
     if (!panelWindow) {
         createPanelWindow();
     }
