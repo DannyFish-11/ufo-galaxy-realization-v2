@@ -105,7 +105,14 @@ class LocalBrainManager:
         "vicuna:7b": 4500,
     }
 
-    def __init__(self, ollama_url: Optional[str] = None):
+    def __init__(self, backend: str = "auto", ollama_url: Optional[str] = None):
+        """
+        Args:
+            backend: Inference backend ("auto" / "ollama" / "llama_cpp" / "transformers" / "vllm")
+            ollama_url: Ollama service URL (only used when backend is "ollama" or "auto")
+        """
+        self.backend_name = backend
+        self._backend = None  # LocalModelBackend instance
         self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
         self.available_models: List[str] = []
         self.brain_model: str = "qwen2:7b"  # 默认主脑
@@ -119,68 +126,242 @@ class LocalBrainManager:
     # ───────── 生命周期管理 ─────────
 
     async def ensure_running(self) -> bool:
-        """确保 Ollama 在运行，如果没有则尝试启动
+        """确保本地主脑就绪（自动选择最佳后端）
 
         Returns:
-            bool: True 表示 Ollama 可用，False 表示不可用
+            bool: True 表示本地主脑可用，False 表示不可用
         """
         async with self._lock:
-            # 1. 检查 Ollama 是否已在运行
-            if await self._ping_ollama():
-                self._status = LocalBrainStatus.HEALTHY
-                self._healthy = True
-                await self._refresh_model_list()
+            # --- Multi-backend initialization ---
+            if self.backend_name == "auto":
+                # Auto-select the best backend based on hardware
+                self.backend_name = await self._auto_select_backend()
                 logger.info(
-                    "本地主脑已就绪: %s (模型: %s)",
-                    self.ollama_url, self.available_models
+                    "自动选择推理后端: %s", self.backend_name
                 )
-                return True
 
-            # 2. Ollama 未运行，尝试启动
-            self._status = LocalBrainStatus.STARTING
-            logger.info("Ollama 未运行，尝试启动...")
+            from core.local_model_backends import create_backend, detect_best_backend
 
-            if await self._start_ollama():
-                # 等待 Ollama 完全启动
-                for attempt in range(10):
-                    await asyncio.sleep(1)
-                    if await self._ping_ollama():
-                        self._status = LocalBrainStatus.HEALTHY
-                        self._healthy = True
-                        await self._refresh_model_list()
-                        logger.info(
-                            "本地主脑已启动: %s (模型: %s)",
-                            self.ollama_url, self.available_models
+            # Create backend instance if not already created
+            if self._backend is None:
+                try:
+                    if self.backend_name == "ollama":
+                        self._backend = create_backend(
+                            "ollama", base_url=self.ollama_url
                         )
-                        return True
+                    elif self.backend_name == "llama_cpp":
+                        self._backend = create_backend("llama_cpp")
+                    elif self.backend_name == "transformers":
+                        self._backend = create_backend("transformers")
+                    elif self.backend_name == "vllm":
+                        self._backend = create_backend("vllm")
+                    else:
+                        # Fallback: try auto-detection
+                        best = detect_best_backend(
+                            has_gpu=self._hardware_profile.has_gpu
+                            if self._hardware_profile
+                            else None
+                        )
+                        self._backend = create_backend(best)
+                        self.backend_name = best
+                except Exception as exc:
+                    logger.error(
+                        "创建推理后端失败 [%s]: %s", self.backend_name, exc
+                    )
+                    self._status = LocalBrainStatus.UNAVAILABLE
+                    self._healthy = False
+                    return False
 
-            # 3. 启动失败
-            self._status = LocalBrainStatus.UNAVAILABLE
-            self._healthy = False
-            logger.warning(
-                "Ollama 不可用（未安装或未运行）。"
-                "请安装: https://ollama.com/download"
-            )
-            return False
+            # --- Ollama-specific path (legacy, most common) ---
+            if self.backend_name == "ollama":
+                return await self._ensure_ollama_running()
 
-    async def stop(self):
-        """停止 Ollama 服务（优雅关闭）"""
+            # --- Generic backend path (llama_cpp / transformers / vllm) ---
+            # Load the default brain model
+            try:
+                loaded = await self._backend.load_model(self.brain_model)
+                if loaded:
+                    self._healthy = await self._backend.health_check()
+                    self.available_models = self._backend.list_models()
+                    self._status = (
+                        LocalBrainStatus.HEALTHY
+                        if self._healthy
+                        else LocalBrainStatus.DEGRADED
+                    )
+                    logger.info(
+                        "本地主脑已就绪 [%s]: 模型=%s, 状态=%s",
+                        self.backend_name,
+                        self.available_models,
+                        self._status.value,
+                    )
+                    return self._healthy
+                else:
+                    # Model load failed -- try fallback
+                    logger.warning(
+                        "模型加载失败 [%s]: %s, 尝试 Ollama 回退",
+                        self.backend_name,
+                        self.brain_model,
+                    )
+                    return await self._ensure_ollama_running()
+            except Exception as exc:
+                logger.error(
+                    "本地主脑启动失败 [%s]: %s", self.backend_name, exc
+                )
+                # Fallback to Ollama
+                return await self._ensure_ollama_running()
+
+    async def _auto_select_backend(self) -> str:
+        """Auto-select the best available backend
+
+        Priority:
+        1. llama_cpp (if llama-cpp-python installed + GPU available)
+        2. ollama (if Ollama is installed/running)
+        3. transformers (if transformers installed)
+        4. vllm (for high-concurrency scenarios)
+
+        Returns:
+            Backend name string
+        """
+        from core.local_model_backends import list_available_backends
+
+        available = list_available_backends()
+        logger.debug("可用的推理后端: %s", available)
+
+        # Detect GPU
+        has_gpu = False
         try:
-            # 尝试通过 API 优雅关闭
-            import httpx
-            async with httpx.AsyncClient() as client:
-                await client.delete(f"{self.ollama_url}/api/delete", json={"name": ""}, timeout=5.0)
-        except Exception:
+            import torch
+
+            has_gpu = torch.cuda.is_available()
+        except ImportError:
             pass
 
-        # 查找并终止 ollama 进程
-        try:
-            if sys.platform.startswith("win"):
-                subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True)
-            else:
-                subprocess.run(["pkill", "-f", "ollama"], capture_output=True)
-        except Exception as e:
-            logger.debug(f"停止 Ollama 进程时出错: {e}")
+        # Priority 1: llama_cpp with GPU (fastest direct inference)
+        if has_gpu and "llama_cpp" in available:
+            # Check if we have any GGUF models in registry
+            try:
+                from core.huggingface_model_manager import (
+                    get_hf_model_manager,
+                    ModelFamily,
+                )
+
+                hf_mgr = get_hf_model_manager()
+                local_llms = hf_mgr.list_local_models(family=ModelFamily.LLM)
+                if any(m.is_gguf for m in local_llms):
+                    logger.info(
+                        "自动选择 llama_cpp 后端 (GPU + GGUF 模型可用)"
+                    )
+                    return "llama_cpp"
+            except Exception:
+                pass
+
+        # Priority 2: Ollama (most stable, easiest setup)
+        if "ollama" in available:
+            # Check if Ollama is actually running
+            try:
+                import httpx
+
+                resp = httpx.get(
+                    f"{self.ollama_url}/api/tags", timeout=3.0
+                )
+                if resp.status_code == 200:
+                    logger.info(
+                        "自动选择 ollama 后端 (Ollama 正在运行)"
+                    )
+                    return "ollama"
+            except Exception:
+                pass
+
+        # Priority 3: llama_cpp without GPU (still works on CPU)
+        if "llama_cpp" in available:
+            logger.info("自动选择 llama_cpp 后端 (CPU 模式)")
+            return "llama_cpp"
+
+        # Priority 4: transformers
+        if "transformers" in available:
+            logger.info("自动选择 transformers 后端")
+            return "transformers"
+
+        # Priority 5: vllm (for high-concurrency)
+        if "vllm" in available:
+            logger.info("自动选择 vllm 后端")
+            return "vllm"
+
+        # Ultimate fallback
+        logger.info("自动选择 ollama 后端 (默认)")
+        return "ollama"
+
+    async def _ensure_ollama_running(self) -> bool:
+        """Legacy Ollama-specific startup path"""
+        # 1. Check if Ollama is already running
+        if await self._ping_ollama():
+            self._status = LocalBrainStatus.HEALTHY
+            self._healthy = True
+            await self._refresh_model_list()
+            logger.info(
+                "本地主脑已就绪 [ollama]: %s (模型: %s)",
+                self.ollama_url,
+                self.available_models,
+            )
+            return True
+
+        # 2. Ollama not running, try to start
+        self._status = LocalBrainStatus.STARTING
+        logger.info("Ollama 未运行，尝试启动...")
+
+        if await self._start_ollama():
+            # Wait for Ollama to fully start
+            for attempt in range(10):
+                await asyncio.sleep(1)
+                if await self._ping_ollama():
+                    self._status = LocalBrainStatus.HEALTHY
+                    self._healthy = True
+                    await self._refresh_model_list()
+                    logger.info(
+                        "本地主脑已启动 [ollama]: %s (模型: %s)",
+                        self.ollama_url,
+                        self.available_models,
+                    )
+                    return True
+
+        # 3. Start failed
+        self._status = LocalBrainStatus.UNAVAILABLE
+        self._healthy = False
+        logger.warning(
+            "Ollama 不可用（未安装或未运行）。"
+            "请安装: https://ollama.com/download"
+        )
+        return False
+
+    async def stop(self):
+        """停止本地主脑服务（优雅关闭）"""
+        # Stop the active backend
+        if self._backend is not None:
+            try:
+                for model_id in self._backend.list_models():
+                    await self._backend.unload_model(model_id)
+                logger.info("推理后端已卸载: %s", self.backend_name)
+            except Exception as exc:
+                logger.debug("卸载后端时出错: %s", exc)
+            self._backend = None
+
+        # Also stop Ollama if it was running
+        if self.backend_name in ("ollama", "auto"):
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    await client.delete(f"{self.ollama_url}/api/delete", json={"name": ""}, timeout=5.0)
+            except Exception:
+                pass
+
+            # 查找并终止 ollama 进程
+            try:
+                if sys.platform.startswith("win"):
+                    subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True)
+                else:
+                    subprocess.run(["pkill", "-f", "ollama"], capture_output=True)
+            except Exception as e:
+                logger.debug(f"停止 Ollama 进程时出错: {e}")
 
         self._status = LocalBrainStatus.STOPPED
         self._healthy = False
@@ -200,7 +381,36 @@ class LocalBrainManager:
 
         self._last_health_check = now
 
-        # 检查 Ollama 是否响应
+        # 更新硬件画像
+        self._hardware_profile = await self._detect_hardware()
+
+        # --- Multi-backend health check ---
+        if self._backend is not None:
+            try:
+                self._healthy = await self._backend.health_check()
+                self.available_models = self._backend.list_models()
+                if self.available_models:
+                    if (
+                        self._hardware_profile
+                        and self._hardware_profile.vram_used_mb
+                        > self._hardware_profile.vram_mb * 0.9
+                    ):
+                        self._status = LocalBrainStatus.DEGRADED
+                    else:
+                        self._status = (
+                            LocalBrainStatus.HEALTHY
+                            if self._healthy
+                            else LocalBrainStatus.DEGRADED
+                        )
+                else:
+                    self._status = LocalBrainStatus.DEGRADED
+            except Exception as exc:
+                logger.warning("后端健康检查失败 [%s]: %s", self.backend_name, exc)
+                self._healthy = False
+                self._status = LocalBrainStatus.STOPPED
+            return self._get_status_dict()
+
+        # --- Legacy Ollama-only health check ---
         if not await self._ping_ollama():
             self._healthy = False
             self._status = LocalBrainStatus.STOPPED
@@ -209,13 +419,14 @@ class LocalBrainManager:
         # 刷新模型列表
         await self._refresh_model_list()
 
-        # 更新硬件画像
-        self._hardware_profile = await self._detect_hardware()
-
         # 评估状态
         if self.available_models:
             self._healthy = True
-            if self._hardware_profile and self._hardware_profile.vram_used_mb > self._hardware_profile.vram_mb * 0.9:
+            if (
+                self._hardware_profile
+                and self._hardware_profile.vram_used_mb
+                > self._hardware_profile.vram_mb * 0.9
+            ):
                 self._status = LocalBrainStatus.DEGRADED
             else:
                 self._status = LocalBrainStatus.HEALTHY
@@ -443,6 +654,8 @@ class LocalBrainManager:
         return {
             "status": self._status.value,
             "healthy": self._healthy,
+            "backend": self.backend_name,
+            "backend_type": self._backend.name if self._backend else "ollama_legacy",
             "ollama_url": self.ollama_url,
             "brain_model": self.brain_model,
             "available_models": self.available_models,
@@ -463,31 +676,40 @@ class LocalBrainManager:
 _brain_manager_instance: Optional[LocalBrainManager] = None
 
 
-def get_local_brain_manager() -> LocalBrainManager:
-    """获取本地主脑管理器单例"""
+def get_local_brain_manager(backend: str = "auto") -> LocalBrainManager:
+    """获取本地主脑管理器单例
+
+    Args:
+        backend: 推理后端 ("auto" / "ollama" / "llama_cpp" / "transformers" / "vllm")
+    """
     global _brain_manager_instance
     if _brain_manager_instance is None:
-        _brain_manager_instance = LocalBrainManager()
+        _brain_manager_instance = LocalBrainManager(backend=backend)
     return _brain_manager_instance
 
 
-async def start_local_brain() -> bool:
+async def start_local_brain(backend: str = "auto") -> bool:
     """启动本地主脑的便捷函数
 
     在 unified_launcher 的启动序列中调用。
 
+    Args:
+        backend: 推理后端 ("auto" / "ollama" / "llama_cpp" / "transformers" / "vllm")
+
     Returns:
         bool: True 表示本地主脑已就绪
     """
-    brain = get_local_brain_manager()
+    brain = get_local_brain_manager(backend=backend)
     result = await brain.ensure_running()
     if result:
         # 执行一次健康检查获取完整状态
         status = await brain.health_check()
         hw = status.get("hardware", {})
+        backend_name = status.get("backend", "unknown")
         if hw and hw.get("has_gpu"):
             logger.info(
-                "本地主脑 GPU: %s | VRAM: %dMB/%dMB | 模型: %d个",
+                "本地主脑 [%s] GPU: %s | VRAM: %dMB/%dMB | 模型: %d个",
+                backend_name,
                 hw.get("gpu_name", "Unknown"),
                 hw.get("vram_used_mb", 0),
                 hw.get("vram_mb", 0),
@@ -495,7 +717,8 @@ async def start_local_brain() -> bool:
             )
         else:
             logger.info(
-                "本地主脑 CPU 模式 | 模型: %d个",
+                "本地主脑 [%s] CPU 模式 | 模型: %d个",
+                backend_name,
                 status.get("model_count", 0),
             )
     return result

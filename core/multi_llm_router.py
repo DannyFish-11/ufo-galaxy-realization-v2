@@ -123,14 +123,15 @@ LOCAL_LLM_PROVIDER_ROLE: str = (
 # 云端结果会回流到本地主脑进行整合。
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 本地主脑优先，API 专科后备
-    TaskType.REASONING:      ["ollama", "anthropic", "openai", "google", "deepseek"],
-    TaskType.FAST_RESPONSE:  ["ollama", "deepseek", "groq", "google", "openai"],
-    TaskType.CODING:         ["ollama", "deepseek", "qwen", "anthropic", "openai"],
-    TaskType.CREATIVE:       ["ollama", "openai", "anthropic", "mistral", "deepseek"],
-    TaskType.ANALYSIS:       ["ollama", "anthropic", "openai", "google", "perplexity", "deepseek"],
-    TaskType.PLANNING:       ["ollama", "anthropic", "openai", "xai", "deepseek"],
-    TaskType.AGENT_CONTROL:  ["ollama", "anthropic", "openai", "deepseek"],
-    TaskType.GENERAL:        ["ollama", "openai", "anthropic", "deepseek", "google"],
+    # LOCAL-BRAIN-FIRST: hf_local (HuggingFace local models) are checked after ollama
+    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "google", "deepseek"],
+    TaskType.FAST_RESPONSE:  ["ollama", "hf_local", "deepseek", "groq", "google", "openai"],
+    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai"],
+    TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek"],
+    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "google", "perplexity", "deepseek"],
+    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "xai", "deepseek"],
+    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "deepseek"],
+    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "deepseek", "google"],
 }
 
 # 提供商 → 推荐模型
@@ -223,6 +224,16 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     },
     "ollama": {
         TaskType.GENERAL: "llama3",
+    },
+    "hf_local": {
+        TaskType.REASONING: "Qwen/Qwen2-7B-Instruct",
+        TaskType.FAST_RESPONSE: "Qwen/Qwen2-1.5B-Instruct",
+        TaskType.CODING: "Qwen/Qwen2.5-Coder-7B-Instruct",
+        TaskType.CREATIVE: "Qwen/Qwen2-7B-Instruct",
+        TaskType.ANALYSIS: "Qwen/Qwen2-7B-Instruct",
+        TaskType.PLANNING: "Qwen/Qwen2-7B-Instruct",
+        TaskType.AGENT_CONTROL: "Qwen/Qwen2-7B-Instruct",
+        TaskType.GENERAL: "Qwen/Qwen2-7B-Instruct",
     },
 }
 
@@ -609,6 +620,7 @@ ADAPTER_MAP = {
     "perplexity": PerplexityAdapter,
     "groq":       GroqAdapter,
     "ollama":     OllamaAdapter,
+    "hf_local":   OpenAIAdapter,
 }
 
 
@@ -903,6 +915,40 @@ class MultiLLMRouter:
             self.providers["ollama"] = cfg
             self.adapters["ollama"] = OllamaAdapter(cfg)
 
+        # HuggingFace Local Models (as independent provider)
+        try:
+            from core.huggingface_model_manager import (
+                get_hf_model_manager,
+                ModelFamily,
+            )
+
+            hf_mgr = get_hf_model_manager()
+            local_llm_models = hf_mgr.list_local_models(family=ModelFamily.LLM)
+            if local_llm_models:
+                hf_model_ids = [m.model_id for m in local_llm_models]
+                hf_default = hf_model_ids[0] if hf_model_ids else ""
+                cfg = ProviderConfig(
+                    name="hf_local",
+                    api_key="",
+                    base_url="http://localhost:16201/v1/hf",  # Galaxy internal API
+                    models=hf_model_ids,
+                    default_model=hf_default,
+                    supports_tools=True,
+                    supports_json_mode=False,
+                    multimodal=True,
+                    env_key="",
+                    source_type="local",
+                    hardware_tier="gpu_full",
+                    supports_vision=True,
+                )
+                self.providers["hf_local"] = cfg
+                self.adapters["hf_local"] = OpenAIAdapter(cfg)
+                logger.info(
+                    "HF 本地模型提供商已注册: %d 个模型", len(hf_model_ids)
+                )
+        except Exception as exc:
+            logger.debug("HF 本地模型提供商注册失败 (非致命): %s", exc)
+
         # OneAPI fallback
         oneapi_key = self._get_key("oneapi")
         if not oneapi_key:
@@ -1176,6 +1222,23 @@ class MultiLLMRouter:
                             and self.providers[name].status != ProviderStatus.DOWN
                         ],
                     )
+            # 检查 HF 本地模型是否可用
+            if "hf_local" in self.providers:
+                hf_prov = self.providers["hf_local"]
+                if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+                    model = self.select_model_by_complexity("hf_local", task_type, complexity_score)
+                    if not model or model not in hf_prov.models:
+                        model = hf_prov.default_model or hf_prov.models[0]
+                    return RoutingDecision(
+                        provider="hf_local", model=model,
+                        reason=f"本地主脑优先: HuggingFace 本地模型 [{model}] 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
+                        alternatives=[
+                            f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
+                            for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                            if name in self.providers and name != "hf_local"
+                            and self.providers[name].status != ProviderStatus.DOWN
+                        ],
+                    )
 
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
@@ -1275,7 +1338,31 @@ class MultiLLMRouter:
                     alternatives=cloud_fallbacks,
                 )
 
-        # 3. 检查 HF 本地模型（通过 oneapi 或直连）
+        # 3. 检查 HuggingFace 本地模型 (hf_local)
+        if "hf_local" in self.providers:
+            hf_prov = self.providers["hf_local"]
+            if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+                model = self.select_model_by_complexity("hf_local", task_type, complexity)
+                # Use the first available HF local model as default
+                if not model or model not in hf_prov.models:
+                    model = hf_prov.default_model or hf_prov.models[0]
+                cloud_fallbacks = [
+                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
+                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                    if name in self.providers and name != "hf_local"
+                    and self.providers[name].status != ProviderStatus.DOWN
+                ]
+                return RoutingDecision(
+                    provider="hf_local",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: HuggingFace 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                    alternatives=cloud_fallbacks,
+                )
+
+        # 4. 检查 HF 本地模型（通过 oneapi 或直连）
         if "oneapi" in self.providers:
             oneapi_prov = self.providers["oneapi"]
             if oneapi_prov.status != ProviderStatus.DOWN:
@@ -1569,7 +1656,31 @@ class MultiLLMRouter:
                     alternatives=cloud_fallbacks,
                 )
 
-        # 3. 检查 HF 本地模型（通过 oneapi 或直连）
+        # 3. 检查 HuggingFace 本地模型 (hf_local)
+        if "hf_local" in self.providers:
+            hf_prov = self.providers["hf_local"]
+            if hf_prov.status != ProviderStatus.DOWN and hf_prov.models:
+                model = self.select_model_by_complexity("hf_local", task_type, complexity)
+                # Use the first available HF local model as default
+                if not model or model not in hf_prov.models:
+                    model = hf_prov.default_model or hf_prov.models[0]
+                cloud_fallbacks = [
+                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
+                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                    if name in self.providers and name != "hf_local"
+                    and self.providers[name].status != ProviderStatus.DOWN
+                ]
+                return RoutingDecision(
+                    provider="hf_local",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: HuggingFace 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                    alternatives=cloud_fallbacks,
+                )
+
+        # 4. 检查 HF 本地模型（通过 oneapi 或直连）
         if "oneapi" in self.providers:
             oneapi_prov = self.providers["oneapi"]
             if oneapi_prov.status != ProviderStatus.DOWN:
