@@ -1160,7 +1160,37 @@ class OperatorSurface:
                 ]:
                     if ts_val is not None:
                         timeline.append({"event": label, "ts": ts_val})
-                timeline.sort(key=lambda e: e["ts"])
+
+                # ── Stage 3: ReplayFoundation — continuum ticks + subject transitions (fix: lineage-reads-replay)
+                try:
+                    from core.replay_foundation import get_replay_foundation
+                    rf = get_replay_foundation()
+                    replay_events = rf.get_task_lineage(task_id)
+                    for ev in replay_events:
+                        ev_kind = getattr(ev, "kind", None) or (ev.get("kind") if isinstance(ev, dict) else None)
+                        ev_payload = getattr(ev, "payload", {}) or (ev.get("payload", {}) if isinstance(ev, dict) else {})
+                        ev_ts = getattr(ev, "timestamp", 0) or (ev.get("timestamp", 0) if isinstance(ev, dict) else 0)
+                        if ev_kind == "CONTINUUM_TICK":
+                            c = ev_payload.get("continuum", {}) if isinstance(ev_payload, dict) else {}
+                            timeline.append({
+                                "event": f"continuum_{c.get('phase', 'unknown')}",
+                                "ts": ev_ts,
+                                "phase": c.get("phase"),
+                                "source": "replay_foundation",
+                            })
+                        elif ev_kind == "SUBJECT_STATE_TRANSITION":
+                            p = ev_payload if isinstance(ev_payload, dict) else {}
+                            timeline.append({
+                                "event": f"subject_transition_{p.get('subject_id', 'unknown')}",
+                                "ts": ev_ts,
+                                "subject_role": p.get("subject_role"),
+                                "old_state": p.get("old_state"),
+                                "new_state": p.get("new_state"),
+                                "source": "replay_foundation",
+                            })
+                    timeline.sort(key=lambda e: e["ts"])
+                except Exception:
+                    timeline.sort(key=lambda e: e["ts"])
 
                 return LineageInspection(
                     task_id=task.identity.task_id,

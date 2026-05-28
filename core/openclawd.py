@@ -2254,6 +2254,31 @@ class OpenClawd:
                 perception["has_continuous_perception"] = True
                 perception["stream_active_for_routing"] = True
 
+            # ── Relative Subjects (fix: android-as-bounded-participant) ──
+            _android_perception_ingress = (
+                (desktop_native_ingress_backbone or {}).get("android_perception_ingress", {})
+                if isinstance(desktop_native_ingress_backbone, dict)
+                else {}
+            )
+            perception["relative_subjects"] = {
+                "windows_desktop": {
+                    "role": "orchestration_center",
+                    "state": "present",
+                },
+                "android_device": {
+                    "role": "bounded_participant",
+                    "state": "present" if bool(_android_perception_ingress) else "absent",
+                    "ingress": {
+                        "continuous_stream": bool(_android_perception_ingress),
+                        "perception_types": list(_android_perception_ingress.keys()) if _android_perception_ingress else [],
+                    },
+                },
+                "streaming_ingress": {
+                    "role": "ingress_participant",
+                    "state": "active" if perception.get("has_continuous_perception") else "silent",
+                },
+            }
+
             return perception
         except Exception as _cps_err:
             logger.debug("_build_canonical_perception_state failed (swallowed): %s", _cps_err)
@@ -4262,6 +4287,22 @@ class OpenClawd:
                         multimodal_context=multimodal_context,
                         runtime_session_id=runtime_session_id,
                     )
+                    # ── Continuum → ReplayFoundation (fix: continuity-blackhole) ──
+                    if _continuum_state_dict:
+                        try:
+                            from core.replay_foundation import emit_runtime_event
+                            emit_runtime_event(
+                                kind="CONTINUUM_TICK",
+                                task_id=runtime_session_id or trace_id or "continuum_anon",
+                                trace_id=runtime_session_id or trace_id,
+                                payload={
+                                    "continuum": dict(_continuum_state_dict),
+                                    "timestamp": time.time(),
+                                    "source": "openclawd.process.kernel_path",
+                                },
+                            )
+                        except Exception:
+                            pass
                     # ── Decision Execution (PR-8 / PR-4) ─────────────────────
                     _exec_result_k = self._run_execution(_continuum_state_dict, entry_mode=_entry_mode)
                     _cross_device_k = bool(
@@ -4777,6 +4818,22 @@ class OpenClawd:
                 multimodal_context=multimodal_context,
                 runtime_session_id=runtime_session_id,
             )
+            # ── Continuum → ReplayFoundation (fix: continuity-blackhole) ──
+            if _continuum_state_dict2:
+                try:
+                    from core.replay_foundation import emit_runtime_event
+                    emit_runtime_event(
+                        kind="CONTINUUM_TICK",
+                        task_id=runtime_session_id or trace_id or "continuum_anon",
+                        trace_id=runtime_session_id or trace_id,
+                        payload={
+                            "continuum": dict(_continuum_state_dict2),
+                            "timestamp": time.time(),
+                            "source": "openclawd.process.direct_path",
+                        },
+                    )
+                except Exception:
+                    pass
             # ── Decision Execution (PR-8 / PR-4) ─────────────────────────────
             _exec_result2 = self._run_execution(_continuum_state_dict2, entry_mode=_entry_mode)
             # Detect whether a cross-device dispatch occurred (set by handlers).
