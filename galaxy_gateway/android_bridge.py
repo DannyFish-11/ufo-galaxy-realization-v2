@@ -270,10 +270,22 @@ def get_android_bridge_trace_id(message: Dict[str, Any]) -> Optional[str]:
     """
     if not isinstance(message, dict):
         return None
-    for key in ("trace_id", "dispatch_trace_id", "message_id"):
+
+    # PR-TRACE-FALLBACK: trace_id/dispatch_trace_id are authoritative.
+    # message_id is a last-resort fallback; when used we append a random
+    # suffix to reduce collision risk across concurrent inbound messages.
+    import uuid
+
+    for key in ("trace_id", "dispatch_trace_id"):
         val = message.get(key)
         if val and isinstance(val, str):
             return val
+
+    # message_id fallback — append random suffix for uniqueness
+    msg_id = message.get("message_id")
+    if msg_id and isinstance(msg_id, str):
+        return f"{msg_id}_fb_{uuid.uuid4().hex[:8]}"
+
     # Also check inside nested payload dict
     payload = message.get("payload")
     if isinstance(payload, dict):

@@ -45,8 +45,15 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from .bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
-from .service_manager import ServiceManager
+# PR-FIX: relative imports changed to absolute imports so this module
+# can be imported standalone (e.g. by validate_runtime.py).
+# Previous: from .bootstrap import ... (failed with "attempted relative import with no known parent package")
+try:
+    from launcher.bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
+    from launcher.service_manager import ServiceManager
+except ImportError:
+    from .bootstrap import PROJECT_ROOT, print_status, ServiceType, SystemConfig
+    from .service_manager import ServiceManager
 
 logger = logging.getLogger("Galaxy")
 
