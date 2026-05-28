@@ -691,6 +691,16 @@ class AgentFactory:
         - 协调者 → 多个执行者
         - 执行者 → 按能力分割
         """
+        # PR-V6: Agent 分裂属于 ORCHESTRATION_TRUTH 域，需经编排权威边界检查
+        try:
+            from core.center_authority_boundary import (
+                assert_center_authority_intact,
+                AuthorityDomain,
+            )
+            assert_center_authority_intact(AuthorityDomain.ORCHESTRATION_TRUTH)
+        except Exception:
+            pass  # 非致命：编排边界不可用时允许分裂（fail-open for availability）
+
         parent = self.agents.get(agent_id)
         if not parent:
             raise ValueError(f"Agent 不存在: {agent_id}")

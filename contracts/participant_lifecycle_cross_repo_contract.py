@@ -105,6 +105,19 @@ ANDROID_FORMAL_CAPABILITY_ADVERTISEMENT_BLOCKED: FrozenSet[str] = frozenset(
 # Canonical closure remains V2-only. Android formal states are runtime states,
 # not closure-finalization authority.
 V2_TERMINAL_STATES: FrozenSet[ParticipantLifecycleState] = frozenset({ParticipantLifecycleState.TERMINAL})
+
+# ANDROID_FORMAL_CLOSURE_TERMINAL_STATES is intentionally an empty set.
+# Rationale: Android formal lifecycle states (starting, ready, degraded,
+# recovering, unavailable_failed) are runtime-level evidence signals, not
+# closure-authority states.  Closure finalization (marking a participant
+# lifecycle as TERMINAL) is a V2 canonical-center authority only.
+# Android may emit "unavailable_failed" which V2 maps to the TERMINAL
+# state via TERMINAL_LOSS trigger, but Android itself never directly
+# asserts a closure-terminal state.
+#
+# If a future Android release introduces a formal terminal wire value,
+# this set must be updated together with the cross-repo contract version
+# and the ANDROID_AUDITED_REF.
 ANDROID_FORMAL_CLOSURE_TERMINAL_STATES: FrozenSet[str] = frozenset()
 
 

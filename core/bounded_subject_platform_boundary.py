@@ -220,6 +220,27 @@ OUTWARD_CONSUMPTION_BOUNDARY_IS_CONSUMPTION_ONLY_POLICY: str = (
     "core.outward_runtime_truth."
 )
 
+# PR-AGENT-BOUNDED-AUTONOMY: Agent self-action constraint on bounded subjects.
+# The Agent running on a bounded subject (Android) has local execution judgment
+# and local action capability, but it MUST NOT autonomously decide:
+#   1. Participant lifecycle state transitions (attach/detach/terminal).
+#   2. Cross-device dispatch mode selection (local vs handoff vs mesh).
+#   3. Truth finalization or result authority claims.
+#   4. Closure decisions (task completion confirmation).
+# These decisions require canonical center governance and must travel the
+# declared uplink path to V2 for authoritative resolution.
+# TODO(PR-AGENT-BOUNDED): Formalize this as a runtime-enforced constraint
+# in the Android agent sandbox, not just a policy statement.
+BOUNDED_SUBJECT_AGENT_AUTONOMY_CONSTRAINT: str = (
+    "POLICY::BOUNDED_SUBJECT_AGENT_AUTONOMY_LIMITED_V14: "
+    "An Agent executing on a bounded subject (Android) has local perception, "
+    "local reasoning, and local action capability, but it MUST NOT "
+    "autonomously decide participant lifecycle transitions, dispatch modes, "
+    "truth finalization, or closure authority.  These decisions require "
+    "canonical center governance.  The bounded subject Agent may propose, "
+    "signal, and report, but authoritative decisions flow from V2."
+)
+
 
 # ---------------------------------------------------------------------------
 # Boundary axis enum

@@ -32,6 +32,7 @@
   "webrtc_max_reconnects": 5,
   "webrtc_reconnect_delay_s": 3.0,
   "webrtc_metrics_interval_s": 5.0,
+  "enable_webrtc_data_channel": false,
   "audio_capture_chunk_ms": 100,
   "audio_capture_latency_warning_ms": 200.0,
   "transport_prefer_webrtc": true,

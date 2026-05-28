@@ -14,6 +14,7 @@ Modules:
   ingress_bus                 — MultimodalIngressBus merging all signals
   multimodal_events           — Typed runtime events for audio/WebRTC pipelines
   perception_source_registry  — Runtime-shell-owned source registry (PR-17)
+  webrtc_ingress_bridge       — WebRTC → cognition pipeline bridge (C方案)
 """
 
 from .signal_quality import SignalQuality, QualityFlag
@@ -53,6 +54,11 @@ from .modality_confidence_policy import (
     assess_modality_confidence,
     assess_routing_eligibility,
     build_perception_routing_readiness,
+)
+from .webrtc_ingress_bridge import (
+    WebRTCIngressBridge,
+    get_webrtc_ingress_bridge,
+    reset_webrtc_ingress_bridge,
 )
 
 __all__ = [
@@ -97,4 +103,8 @@ __all__ = [
     "assess_modality_confidence",
     "assess_routing_eligibility",
     "build_perception_routing_readiness",
+    # WebRTC ingress bridge (C方案 — Hybrid Mode)
+    "WebRTCIngressBridge",
+    "get_webrtc_ingress_bridge",
+    "reset_webrtc_ingress_bridge",
 ]

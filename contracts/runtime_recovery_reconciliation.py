@@ -949,6 +949,15 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
 # ---------------------------------------------------------------------------
 
 
+# TODO(PR-RUNTIME-TRACE): This module is a contract definition only.
+# Future work: integrate with core.runtime.runtime_observability_sink
+# so that recovery incidents are automatically emitted as structured
+# RuntimeObservabilityTrace events when recovery/reconciliation is
+# invoked in the production path.  Currently, downstream callers must
+# manually emit trace events — this creates a gap where recovery
+# activity may go unobserved if a caller forgets to instrument.
+
+
 def build_runtime_recovery_incident(
     *,
     recovery_id: Optional[str] = None,

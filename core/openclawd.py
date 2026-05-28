@@ -2260,6 +2260,21 @@ class OpenClawd:
                 if isinstance(desktop_native_ingress_backbone, dict)
                 else {}
             )
+
+            # ── C方案: WebRTC 数据通道桥接感知 ─────────────────────────────
+            # 当 WebRTCIngressBridge 活跃时，也视为 android 设备在线
+            _webrtc_dc_active = False
+            try:
+                from core.multimodal.webrtc_ingress_bridge import get_webrtc_ingress_bridge
+
+                _bridge = get_webrtc_ingress_bridge()
+                _webrtc_dc_active = _bridge.is_enabled and _bridge.total_frames_ingested > 0
+            except Exception:
+                pass
+
+            _android_present = bool(_android_perception_ingress) or _webrtc_dc_active
+            # ── C方案结束 ─────────────────────────────────────────────────
+
             perception["relative_subjects"] = {
                 "windows_desktop": {
                     "role": "orchestration_center",
@@ -2267,9 +2282,10 @@ class OpenClawd:
                 },
                 "android_device": {
                     "role": "bounded_participant",
-                    "state": "present" if bool(_android_perception_ingress) else "absent",
+                    "state": "present" if _android_present else "absent",
                     "ingress": {
                         "continuous_stream": bool(_android_perception_ingress),
+                        "webrtc_data_channel": _webrtc_dc_active,
                         "perception_types": list(_android_perception_ingress.keys()) if _android_perception_ingress else [],
                     },
                 },
@@ -2315,6 +2331,31 @@ class OpenClawd:
                 "is_present": bool(android_perception_ingress),
                 "ingress_role": "android_device_continuous_stream_ingress",
             }
+
+        # ── C方案: WebRTC 数据通道桥接感知 ─────────────────────────────────
+        # 检测 WebRTCIngressBridge 是否活跃（enable_webrtc_data_channel=true）
+        if "webrtc_data_channel_stream" not in families:
+            webrtc_dc_enabled = False
+            webrtc_dc_active = False
+            try:
+                from core.multimodal.webrtc_ingress_bridge import get_webrtc_ingress_bridge
+
+                bridge = get_webrtc_ingress_bridge()
+                webrtc_dc_enabled = bridge.is_enabled
+                webrtc_dc_active = (
+                    webrtc_dc_enabled and bridge.total_frames_ingested > 0
+                )
+            except Exception:
+                pass
+
+            families["webrtc_data_channel_stream"] = {
+                "is_present": webrtc_dc_active,
+                "ingress_role": "webrtc_data_channel_bridge_ingress",
+                "bridge_enabled": webrtc_dc_enabled,
+                "bridge_active": webrtc_dc_active,
+            }
+        # ── C方案结束 ─────────────────────────────────────────────────────
+
         if isinstance(stream_runtime_status, dict):
             stream_state = str(stream_runtime_status.get("stream_state") or "")
             families["runtime_stream_session_manager"] = {

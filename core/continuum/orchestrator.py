@@ -461,6 +461,15 @@ class ContinuumOrchestrator:
                 update={"trace_id": trace_id}
             )
 
+        # PR-WALLCLOCK: Explicitly set wallclock_timestamp for cross-system
+        # temporal alignment. This ensures all downstream consumers (UDM,
+        # observability sinks, cross-repo contracts) see a consistent
+        # wall-clock reference, independent of monotonic clock usage
+        # elsewhere in the pipeline.
+        continuum_state = continuum_state.model_copy(
+            update={"wallclock_timestamp": time.time()}
+        )
+
         # Update rolling history.
         self._history.append(unified_state)
         if len(self._history) > _HISTORY_WINDOW:

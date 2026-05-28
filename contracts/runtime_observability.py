@@ -149,6 +149,16 @@ RUNTIME_OBSERVABILITY_PR_G_SENTINEL: str = (
 )
 
 
+# TODO(PR-RUNTIME-TRACE): This module defines structured observability event
+# contracts but does not itself emit events.  All builder functions in this
+# module are called by upstream producers; there is no central registration
+# or automatic emission.  Future work: add a canonical event bus adapter so
+# that DeviceLifecycleEvent / MeshSessionTransitionEvent / DispatchDecisionEvent
+# / RecoveryDecisionEvent objects produced here are automatically routed to
+# core.runtime.runtime_observability_sink without requiring every caller to
+# manually call emit().  This prevents observability gaps in the production
+# path when a new caller forgets to instrument.
+
 # ---------------------------------------------------------------------------
 # DeviceLifecycleEventKind
 # ---------------------------------------------------------------------------

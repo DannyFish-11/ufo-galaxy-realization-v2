@@ -602,17 +602,20 @@ ADAPTER_MAP = {
 }
 
 
-# PR-515 / GAP-512-009: MultiLLMRouter is the routing authority for
-# multi-model provider and model selection.  CriticalPathHarness (Layer 15)
-# records routing decisions so they are canonical-runtime-inspectable.
-CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED: str = (
-    "MULTI_LLM_ROUTER::CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED_V1: "
-    "core/multi_llm_router.py is the canonical routing authority for "
-    "multi-model provider selection.  PR-515 CriticalPathHarness records "
-    "routing decisions at the OpenClawd integration point so they are "
-    "operator-inspectable without competing with MultiLLMRouter authority. "
-    "Closes GAP-512-009."
+# PR-515 / GAP-512-009: MultiLLMRouter is the MODEL SELECTION AUTHORITY
+# (distinct from CommandRouter's COMMAND_ORCHESTRATION_AUTHORITY).
+MODEL_SELECTION_AUTHORITY_INTEGRATED: str = (
+    "MULTI_LLM_ROUTER::MODEL_SELECTION_AUTHORITY_INTEGRATED_V1: "
+    "core/multi_llm_router.py is the canonical model-selection authority "
+    "for multi-model provider selection.  "
+    "This is NOT command orchestration authority — that belongs to "
+    "core.command_router.CommandRouter.  "
+    "PR-515 CriticalPathHarness records model-selection decisions."
 )
+
+# DEPRECATED-COMPAT: old name retained for backward compatibility.
+# Use MODEL_SELECTION_AUTHORITY_INTEGRATED for new code.
+CRITICAL_PATH_ROUTING_AUTHORITY_INTEGRATED: str = MODEL_SELECTION_AUTHORITY_INTEGRATED
 
 
 class MultiLLMRouter:

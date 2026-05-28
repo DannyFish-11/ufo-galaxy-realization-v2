@@ -654,6 +654,13 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         compat_ws_policy["protected_mode"],
         compat_ws_policy["system_mode"],
     )
+    logger.warning(
+        "DEPRECATED: core/api_routes.py create_websocket_routes() is a "
+        "compatibility surface. New clients MUST use "
+        "galaxy_gateway/routes/websocket.py /ws/device/{device_id} "
+        "as the sole canonical device ingress. "
+        "This compat path will be removed in a future release."
+    )
 
     def _stamp_problem_closure_to_task_queue(
         task_id: str,

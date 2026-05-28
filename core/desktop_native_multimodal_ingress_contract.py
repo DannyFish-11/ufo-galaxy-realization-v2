@@ -468,6 +468,7 @@ def build_desktop_native_ingress_backbone(
             "continuous_live_stream_backbone": [
                 "continuous_stream",
                 "webrtc_session_manager",
+                "webrtc_data_channel_bridge",  # C方案: Android视频帧 → cognition pipeline
                 "multimodal_ingress_bus.perception_frame",
                 "perception_source_registry",
             ],

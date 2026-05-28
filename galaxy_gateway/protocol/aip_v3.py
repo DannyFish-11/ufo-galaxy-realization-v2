@@ -126,8 +126,29 @@ class DeviceCapability(Flag):
 
 class MessageType(str, Enum):
     """消息类型 - 统一客户端和服务端 (CANONICAL — 新代码应导入此定义)"""
-    
-    # === 设备管理 ===
+
+    # === ARCHITECTURE-NOTE (PR-MT-SPLIT) ===
+    # This enum currently mixes three namespaces:
+    #   1. AIP_STANDARD — cross-repo protocol messages (DEVICE_*, TASK_*, COMMAND_*,
+    #      GUI_*, SCREEN_*, FILE_*, PROCESS_*, COORD_*, ERROR_*, VISION_*)
+    #   2. V2_INTERNAL — realization-v2 internal coordination (mesh_*, handoff_*,
+    #      delegated_*, reconciliation_*, takeover_*, goal_execution_*, parallel_*,
+    #      peer_*, agent_*, capability_report, diagnostics_payload, and all
+    #      governance/reporting types)
+    #   3. ANDROID_SPECIFIC — android-client-originated message types that flow
+    #      through the AIP v3 wire but are semantically owned by the Android
+    #      runtime (task_execute, agent_ping, and other AgentMessageHandler.kt
+    #      aligned types)
+    #
+    # Future refactor: split into three enums with conversion functions:
+    #   - AipStandardMessageType (protocol contract)
+    #   - V2InternalMessageType (v2-only)
+    #   - AndroidMessageType (android-only)
+    #   - unified_to_aip(msg_type) -> AipStandardMessageType
+    #   - aip_to_unified(aip_type, target_platform) -> PlatformSpecificType
+    # ===
+
+    # === AIP_STANDARD: 设备管理 ===
     DEVICE_REGISTER = "device_register"
     DEVICE_REGISTER_ACK = "device_register_ack"
     DEVICE_UNREGISTER = "device_unregister"
@@ -136,7 +157,7 @@ class MessageType(str, Enum):
     DEVICE_STATUS = "device_status"
     DEVICE_CAPABILITIES = "device_capabilities"
     
-    # === 任务调度 ===
+    # === AIP_STANDARD: 任务调度 ===
     TASK_SUBMIT = "task_submit"
     TASK_ASSIGN = "task_assign"
     TASK_STATUS = "task_status"
@@ -146,13 +167,13 @@ class MessageType(str, Enum):
     TASK_CANCEL_ACK = "task_cancel_ack"
     TASK_PROGRESS = "task_progress"
     TASK_END = "task_end"
-    
-    # === 命令执行 ===
+
+    # === AIP_STANDARD: 命令执行 ===
     COMMAND = "command"
     COMMAND_RESULT = "command_result"
     COMMAND_BATCH = "command_batch"
-    
-    # === GUI 操作 ===
+
+    # === AIP_STANDARD: GUI 操作 ===
     GUI_CLICK = "gui_click"
     GUI_SWIPE = "gui_swipe"
     GUI_INPUT = "gui_input"
@@ -161,64 +182,68 @@ class MessageType(str, Enum):
     GUI_ELEMENT_QUERY = "gui_element_query"
     GUI_ELEMENT_WAIT = "gui_element_wait"
     GUI_SCREEN_CONTENT = "gui_screen_content"
-    
-    # === 屏幕/媒体 ===
+
+    # === AIP_STANDARD: 屏幕/媒体 ===
     SCREEN_CAPTURE = "screen_capture"
     SCREEN_STREAM_START = "screen_stream_start"
     SCREEN_STREAM_STOP = "screen_stream_stop"
     SCREEN_STREAM_DATA = "screen_stream_data"
-    
-    # === 文件操作 ===
+
+    # === AIP_STANDARD: 文件操作 ===
     FILE_READ = "file_read"
     FILE_WRITE = "file_write"
     FILE_DELETE = "file_delete"
     FILE_LIST = "file_list"
     FILE_TRANSFER = "file_transfer"
-    
-    # === 进程管理 ===
+
+    # === AIP_STANDARD: 进程管理 ===
     PROCESS_START = "process_start"
     PROCESS_STOP = "process_stop"
     PROCESS_LIST = "process_list"
     PROCESS_STATUS = "process_status"
-    
-    # === 协调同步 ===
+
+    # === AIP_STANDARD: 协调同步 ===
     COORD_SYNC = "coord_sync"
     COORD_BROADCAST = "coord_broadcast"
     COORD_LOCK = "coord_lock"
     COORD_UNLOCK = "coord_unlock"
-    
-    # === Agent 控制（与 AgentMessageHandler.kt 对齐）===
-    TASK_EXECUTE = "task_execute"
-    AGENT_PING = "agent_ping"
-    AGENT_CONFIG_UPDATE = "agent_config_update"
-    AGENT_RESTART = "agent_restart"
 
-    # === UI 树操作（与 AgentMessageHandler.kt 对齐）===
-    UI_TREE_REQUEST = "ui_tree_request"
-    ACTION_EXECUTE = "action_execute"
-    ACTION_SEQUENCE_EXECUTE = "action_sequence_execute"
+    # === AIP_STANDARD: 错误处理 ===
+    ERROR = "error"
+    ERROR_RECOVERY = "error_recovery"
 
-    # === 应用/系统控制（与 AgentMessageHandler.kt 对齐）===
-    APP_START = "app_start"
-    APP_STOP = "app_stop"
-    SYSTEM_COMMAND = "system_command"
-
-    # === 能力/诊断上报 ===
-    CAPABILITY_REPORT = "capability_report"
-    CAPABILITY_REPORT_ACK = "capability_report_ack"
-    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
-
-    # === 唤醒与会话漫游 ===
+    # === AIP_STANDARD: 唤醒与会话漫游 ===
     WAKE_EVENT = "wake_event"
     SESSION_MIGRATE = "session_migrate"
     SESSION_MIGRATE_ACK = "session_migrate_ack"
     DIAGNOSTICS_PAYLOAD_ACK = "diagnostics_payload_ack"
 
-    # === 视觉请求 ===
+    # === AIP_STANDARD: 视觉请求 ===
     VISION_REQUEST = "vision_request"
     VISION_RESULT = "vision_result"
 
-    # === 高层自治目标执行 ===
+    # === ANDROID_SPECIFIC: Agent 控制（与 AgentMessageHandler.kt 对齐）===
+    TASK_EXECUTE = "task_execute"
+    AGENT_PING = "agent_ping"
+    AGENT_CONFIG_UPDATE = "agent_config_update"
+    AGENT_RESTART = "agent_restart"
+
+    # === ANDROID_SPECIFIC: UI 树操作（与 AgentMessageHandler.kt 对齐）===
+    UI_TREE_REQUEST = "ui_tree_request"
+    ACTION_EXECUTE = "action_execute"
+    ACTION_SEQUENCE_EXECUTE = "action_sequence_execute"
+
+    # === ANDROID_SPECIFIC: 应用/系统控制（与 AgentMessageHandler.kt 对齐）===
+    APP_START = "app_start"
+    APP_STOP = "app_stop"
+    SYSTEM_COMMAND = "system_command"
+
+    # === V2_INTERNAL: 能力/诊断上报 ===
+    CAPABILITY_REPORT = "capability_report"
+    CAPABILITY_REPORT_ACK = "capability_report_ack"
+    DIAGNOSTICS_PAYLOAD = "diagnostics_payload"
+
+    # === V2_INTERNAL: 高层自治目标执行 ===
     GOAL_EXECUTION = "goal_execution"
     GOAL_EXECUTION_RESULT = "goal_execution_result"
     # Android error-path alias for goal_execution_result — some Android flows
@@ -227,43 +252,39 @@ class MessageType(str, Enum):
     # so the error path is not silently discarded on the canonical gateway.
     GOAL_RESULT = "goal_result"
 
-    # === 多设备并行任务 ===
+    # === V2_INTERNAL: 多设备并行任务 ===
     PARALLEL_SUBTASK = "parallel_subtask"
     PARALLEL_RESULT = "parallel_result"
 
-    # === 错误处理 ===
-    ERROR = "error"
-    ERROR_RECOVERY = "error_recovery"
-
-    # === Agent 分发 (Phase 1) ===
+    # === V2_INTERNAL: Agent 分发 (Phase 1) ===
     AGENT_DEPLOY = "agent_deploy"
     AGENT_DEPLOY_ACK = "agent_deploy_ack"
     AGENT_STATUS = "agent_status"
     AGENT_RESULT = "agent_result"
 
-    # === 设备间中继 (Phase 2) ===
+    # === V2_INTERNAL: 设备间中继 (Phase 2) ===
     RELAY_REQUEST = "relay_request"
     RELAY_FORWARD = "relay_forward"
     RELAY_REPLY = "relay_reply"
     RELAY_ACK = "relay_ack"
 
-    # === 混合执行 (Phase 3) ===
+    # === V2_INTERNAL: 混合执行 (Phase 3) ===
     HYBRID_EXECUTE = "hybrid_execute"
     HYBRID_RESULT = "hybrid_result"
     HYBRID_DEGRADE = "hybrid_degrade"
 
-    # === RAG & 代码执行 (Phase 4) ===
+    # === V2_INTERNAL: RAG & 代码执行 (Phase 4) ===
     RAG_QUERY = "rag_query"
     RAG_RESULT = "rag_result"
     CODE_EXECUTE = "code_execute"
     CODE_RESULT = "code_result"
 
-    # === P2P Mesh (Phase 5) ===
+    # === V2_INTERNAL: P2P Mesh (Phase 5) ===
     PEER_ANNOUNCE = "peer_announce"
     PEER_EXCHANGE = "peer_exchange"
     MESH_TOPOLOGY = "mesh_topology"
 
-    # === Android Mesh 生命周期上行（PR-13）===
+    # === V2_INTERNAL: Android Mesh 生命周期上行（PR-13）===
     # 这三类消息由 Android GalaxyConnectionService.kt 在 parallel_subtask 路径中发出
     # （sendMeshJoin / sendMeshResult / sendMeshLeave），对应 AipModels.kt MsgType 定义。
     # V2 侧将它们作为一级运行时生命周期信号接入，经专用处理器落盘至
@@ -274,21 +295,21 @@ class MessageType(str, Enum):
     MESH_RESULT = "mesh_result"
     MESH_LEAVE = "mesh_leave"
 
-    # === Android Delegated Execution Signals (PR-16) ===
+    # === V2_INTERNAL: Android Delegated Execution Signals (PR-16) ===
     DELEGATED_EXECUTION_SIGNAL = "delegated_execution_signal"
 
-    # === Android Reconciliation Signal (PR-7-V2 / PR-06-Android) ===
+    # === V2_INTERNAL: Android Reconciliation Signal (PR-7-V2 / PR-06-Android) ===
     # Uplink: Android → V2 — explicit state reconciliation signal emitted by
     # Android RuntimeController to push participant/task/runtime truth into V2.
     RECONCILIATION_SIGNAL = "reconciliation_signal"
 
-    # === Android Takeover Protocol ===
+    # === V2_INTERNAL: Android Takeover Protocol ===
     # Downlink: V2 → Android — request Android to accept takeover
     TAKEOVER_REQUEST = "takeover_request"
     # Uplink: Android → V2 — Android response (accepted / rejected)
     TAKEOVER_RESPONSE = "takeover_response"
 
-    # === Android Native Handoff V2 (PR-H) ===
+    # === V2_INTERNAL: Android Native Handoff V2 (PR-H) ===
     # Canonical downlink wire type — matches Android AipModels.kt HANDOFF_ENVELOPE_V2
     HANDOFF_ENVELOPE_V2 = "handoff_envelope_v2"
     # Canonical uplink wire type — Android sends this as the top-level result envelope
@@ -303,7 +324,7 @@ class MessageType(str, Enum):
     HANDOFF_RESULT = "handoff_result"
     HANDOFF_FAILURE = "handoff_failure"
 
-    # === Android Lifecycle / Governance Uplink Reports ===
+    # === V2_INTERNAL: Android Lifecycle / Governance Uplink Reports ===
     # These types are emitted by GalaxyConnectionService.kt on the Android side
     # (MsgType.CANCEL_RESULT, DEVICE_READINESS_REPORT, DEVICE_GOVERNANCE_REPORT,
     # DEVICE_ACCEPTANCE_REPORT, DEVICE_STRATEGY_REPORT).  They were previously
@@ -318,7 +339,7 @@ class MessageType(str, Enum):
     DEVICE_ACCEPTANCE_REPORT = "device_acceptance_report"
     DEVICE_STRATEGY_REPORT = "device_strategy_report"
 
-    # === Android Runtime-State Transparency Uplink (PR-RT) ===
+    # === V2_INTERNAL: Android Runtime-State Transparency Uplink (PR-RT) ===
     # These two types carry structured Android runtime state into V2.
     # DEVICE_STATE_SNAPSHOT: periodic full snapshot of the Android device
     #   runtime — llama/NCNN availability, model identity, readiness state,

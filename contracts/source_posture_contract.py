@@ -394,6 +394,17 @@ class SourcePostureContractField(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# TODO(PR-RUNTIME-TRACE): This contract module defines source_runtime_posture
+# semantics but does not record runtime traces when posture is resolved or
+# validated.  Future work: emit a PostureResolutionTrace event (via
+# core.runtime.runtime_observability_sink) whenever resolve_source_posture_value()
+# or build_source_posture_field() is called in the production path, so that
+# posture decisions are observable for debugging cross-device participation
+# issues.  This is especially important when posture resolution falls back
+# to CONTROL_ONLY (the conservative default) — the reason for fallback should
+# be captured in the trace.
+
+
 def build_source_posture_field(
     posture_hint: Optional[str] = None,
     *,

@@ -387,6 +387,14 @@ class ExecutionTraceEnvelope(BaseModel):
         }
 
 
+# TODO(PR-RUNTIME-TRACE): This module produces ExecutionTraceEvent and
+# ExecutionTraceEnvelope objects that carry full execution lifecycle context.
+# However, there is no automatic routing to core.runtime.runtime_observability_sink.
+# Downstream callers (openclawd, readiness_gate, fallback_router) must manually
+# bridge trace events to the observability sink.  Future work: add a central
+# trace event dispatcher that routes all ExecutionTraceEvent objects to the
+# canonical observability sink, ensuring no execution lifecycle goes unobserved.
+
 # ---------------------------------------------------------------------------
 # Builder functions — from_* adapters
 # ---------------------------------------------------------------------------

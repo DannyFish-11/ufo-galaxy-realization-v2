@@ -308,6 +308,22 @@ class AndroidBridge:
 
     def __init__(self):
         # transport/session operational cache — NOT the canonical device registry.
+        # PR-UDM-UNIFY: ``_devices`` 是 **transport-layer WebSocket handle cache**，
+        # 用于维护 WebSocket 连接句柄与轻量级连接态。它是 operational cache，
+        # 不是设备事实来源 (SSOT)。权威设备注册表在 UnifiedDeviceManager (UDM)。
+        #
+        # 读取路径（应逐步迁移至 UDM 查询）：
+        #   - get_android_devices()   → 应查询 UDM.list_devices(platform=ANDROID)
+        #   - cleanup_stale_devices() → 应查询 UDM.get_stale_devices()
+        #   - get_device_health()     → 应查询 UDM + UCM 心跳状态
+        #
+        # 写入路径（保留，因为涉及 WebSocket 句柄清理）：
+        #   - disconnect_device()     → 修改 connected/websocket + 同步 UDM
+        #   - reconnect_device()      → 修改 websocket/connected/last_heartbeat
+        #   - assign_task()           → 修改 current_task_id（transport context）
+        #
+        # TODO(PR-UDM-UNIFY): 当 UDM 提供实时设备查询 API 后，逐步将读取路径
+        # 迁移至 UDM；_devices 仅保留 WebSocket 句柄和 connected 标志。
         self._devices: Dict[str, AndroidDevice] = {}
         self._pending_responses: Dict[str, asyncio.Future] = {}
         self._message_handlers: Dict[MessageType, Callable] = {}
@@ -1379,12 +1395,29 @@ class AndroidBridge:
         return [d for d in self._devices.values() if d.connected]
 
     def get_android_devices(self) -> List[AndroidDevice]:
-        """获取 Android 平台设备的传输/会话层缓存列表（transport cache view）."""
+        """获取 Android 平台设备的传输/会话层缓存列表（transport cache view）.
+
+        .. todo:: (PR-UDM-UNIFY) 此方法当前从本地 ``_devices`` 读取，而非 UDM。
+            权威设备列表应在 UDM (UnifiedDeviceManager) 中查询：
+
+                from core.unified.device_manager import UnifiedDeviceManager
+                udm = UnifiedDeviceManager()
+                udm_devices = udm.list_devices(platform=DevicePlatform.ANDROID)
+
+            保留本地 ``_devices`` 仅用于 WebSocket 句柄查找（transport cache）。
+            外部调用者应迁移至 UDM 查询。
+        """
         return [d for d in self._devices.values()
                 if d.platform == DevicePlatform.ANDROID and d.connected]
 
     async def disconnect_device(self, device_id: str):
-        """断开设备连接。"""
+        """断开设备连接。
+
+        .. note:: (PR-UDM-UNIFY) 此方法保留对 ``_devices`` 的修改，因为需要同步
+            关闭 WebSocket 连接句柄（transport session cleanup）。但权威状态
+            变更已通过 ``_patch_disconnect_to_udm()`` 同步写入 UDM。
+            ``_devices`` 中的状态是 **transport cache mirror**，不是 SSOT。
+        """
         async with self._lock:
             if device_id in self._devices:
                 self._devices[device_id].connected = False
@@ -1408,7 +1441,19 @@ class AndroidBridge:
             pass
 
     async def cleanup_stale_devices(self, timeout_seconds: float = 120.0):
-        """清理超时的设备"""
+        """清理超时的设备。
+
+        .. todo:: (PR-UDM-UNIFY) 此方法当前从本地 ``_devices`` 遍历心跳超时。
+            权威设备在线状态和心跳信息应在 UDM / UCM 中查询：
+
+                from core.unified.device_manager import UnifiedDeviceManager
+                from core.unified.connection_manager import get_unified_connection_manager
+                udm = UnifiedDeviceManager()
+                stale = udm.get_stale_devices(timeout_seconds)  # 理想 UDM API
+
+            当前实现保留本地遍历作为 operational fallback，但未来应迁移至
+            UDM 统一查询，避免 transport cache 与权威状态之间的不一致。
+        """
         current_time = time.time()
         stale_devices = []
 

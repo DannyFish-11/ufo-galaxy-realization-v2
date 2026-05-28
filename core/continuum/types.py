@@ -544,6 +544,12 @@ class ContinuumState(BaseModel):
         default_factory=time.time,
         description="Unix epoch seconds of this state snapshot.",
     )
+    wallclock_timestamp: float = Field(
+        default_factory=time.time,
+        description="Wall-clock Unix epoch seconds for cross-system temporal alignment. "
+                    "Populated explicitly in the orchestrator pipeline to ensure "
+                    "all downstream consumers see a consistent wall-clock reference.",
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Opaque extensibility bag for future fields.",

@@ -1,5 +1,5 @@
 """
-Node_95: WebRTC 接收器 - 完整实现版本
+Node_95: WebRTC 接收器 - 完整实现版本 (C方案: 混合模式)
 
 功能：
 1. 接收来自 Android 端的 WebRTC 视频流
@@ -7,6 +7,7 @@ Node_95: WebRTC 接收器 - 完整实现版本
 3. H.264 视频解码
 4. 提供 HTTP API 供 Node_90 (VLM) 调用
 5. 支持实时截图和 MJPEG 流
+6. 【C方案新增】数据通道桥接 — 将解码帧推送到 cognition pipeline
 
 依赖：
 - aiortc: WebRTC 实现
@@ -14,7 +15,7 @@ Node_95: WebRTC 接收器 - 完整实现版本
 - opencv-python: 图像处理
 
 作者: Manus AI
-版本: 2.0 (完整实现)
+版本: 2.1 (C方案 — 混合模式)
 日期: 2026-01-24
 """
 
@@ -22,9 +23,10 @@ import asyncio
 import logging
 import base64
 import io
+import os
 import time
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -44,7 +46,68 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Node_95: WebRTC Receiver", version="2.0")
+# ============================================================================
+# C方案 — 数据通道桥接配置
+# ============================================================================
+
+def _is_data_channel_bridge_enabled() -> bool:
+    """检查是否启用数据通道桥接（默认关闭，安全优先）。"""
+    env_val = os.getenv("GALAXY_ENABLE_WEBRTC_DATA_CHANNEL", "").strip().lower()
+    if env_val in ("1", "true", "yes"):
+        return True
+    # 尝试读取统一配置
+    try:
+        import json
+        from pathlib import Path
+        config_paths = [
+            Path(__file__).parent.parent.parent / "runtime" / "config.json",
+            Path(__file__).parent.parent.parent / "config.json",
+        ]
+        for cp in config_paths:
+            if cp.exists():
+                with open(cp, encoding="utf-8") as f:
+                    cfg = json.load(f)
+                flat = cfg if isinstance(cfg, dict) else {}
+                # 支持扁平或嵌套格式
+                if flat.get("enable_webrtc_data_channel", False):
+                    return True
+                # 检查 nested 格式
+                webrtc_cfg = flat.get("webrtc", {})
+                if isinstance(webrtc_cfg, dict) and webrtc_cfg.get("enable_data_channel", False):
+                    return True
+    except Exception:
+        pass
+    return False
+
+# C方案: 数据通道桥接开关（默认关闭）
+ENABLE_DATA_CHANNEL_BRIDGE: bool = _is_data_channel_bridge_enabled()
+
+# 可选的桥接模块引用（延迟导入，避免启动时强依赖）
+_webrtc_ingress_bridge = None
+_webrtc_ingress_bridge_lock = asyncio.Lock()
+
+async def _get_webrtc_ingress_bridge():
+    """延迟获取 WebRTCIngressBridge 单例。"""
+    global _webrtc_ingress_bridge
+    if _webrtc_ingress_bridge is not None:
+        return _webrtc_ingress_bridge
+    async with _webrtc_ingress_bridge_lock:
+        if _webrtc_ingress_bridge is not None:
+            return _webrtc_ingress_bridge
+        try:
+            import sys
+            project_root = Path(__file__).parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+            from core.multimodal.webrtc_ingress_bridge import get_webrtc_ingress_bridge
+            _webrtc_ingress_bridge = get_webrtc_ingress_bridge()
+            logger.info("C方案: WebRTCIngressBridge 已连接 — 帧数据将推送到 cognition pipeline")
+        except Exception as exc:
+            logger.warning("C方案: WebRTCIngressBridge 加载失败 — 帧桥接不可用: %s", exc)
+            _webrtc_ingress_bridge = None
+    return _webrtc_ingress_bridge
+
+app = FastAPI(title="Node_95: WebRTC Receiver", version="2.1 (Hybrid-C)")
 
 # ============================================================================
 # 全局状态
@@ -110,12 +173,19 @@ class FrameRequest(BaseModel):
     device_id: str
     format: str = "jpeg"  # "jpeg", "png", "base64"
 
+class FrameIngestRequest(BaseModel):
+    """【C方案】帧推送请求 — 允许外部直接将解码帧推送到 cognition pipeline"""
+    device_id: str
+    frame_data: str  # base64 编码的 JPEG/PNG 图像
+    format: str = "jpeg"  # "jpeg", "png"
+    metadata: Optional[Dict[str, Any]] = None
+
 # ============================================================================
 # 视频帧处理
 # ============================================================================
 
 class FrameReceiver:
-    """视频帧接收器"""
+    """视频帧接收器（C方案增强：支持数据通道桥接）"""
     
     def __init__(self, device_id: str):
         self.device_id = device_id
@@ -135,6 +205,29 @@ class FrameReceiver:
                 
                 # 更新状态
                 state.update_frame(self.device_id, img)
+                
+                # ── C方案: 数据通道桥接 ──────────────────────────────
+                # 当 enable_webrtc_data_channel=true 时，将解码帧推送到
+                # WebRTCIngressBridge → MultimodalIngressBus → cognition pipeline
+                if ENABLE_DATA_CHANNEL_BRIDGE:
+                    try:
+                        bridge = await _get_webrtc_ingress_bridge()
+                        if bridge is not None and bridge.is_enabled:
+                            bridge.push_frame(
+                                device_id=self.device_id,
+                                frame=img,
+                                metadata={
+                                    "frame_number": self.frame_count,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "source": "Node_95_RTP_track",
+                                },
+                            )
+                    except Exception as bridge_err:
+                        # 桥接失败不中断视频接收 — 降级 gracefully
+                        logger.debug(
+                            f"[{self.device_id}] Bridge push skipped: {bridge_err}"
+                        )
+                # ── 桥接结束 ─────────────────────────────────────────
                 
                 self.frame_count += 1
                 if self.frame_count % 30 == 0:  # 每 30 帧打印一次
@@ -431,6 +524,95 @@ async def list_devices():
     }
 
 # ============================================================================
+# C方案: 数据通道桥接 HTTP API
+# ============================================================================
+
+@app.post("/ingest/frame")
+async def ingest_frame(request: FrameIngestRequest):
+    """【C方案】将外部解码帧直接推送到 cognition pipeline.
+
+    此端点允许任何帧生产者（包括本地适配器或测试工具）将视频帧
+    注入 WebRTCIngressBridge，最终进入 MultimodalIngressBus。
+
+    与 RTP 轨道接收的区别:
+    - RTP 轨道: Node_95 内部通过 aiortc 接收，自动桥接
+    - /ingest/frame: 外部推送，供非 WebRTC 源或测试使用
+    """
+    if not ENABLE_DATA_CHANNEL_BRIDGE:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "WebRTC data channel bridge is disabled. "
+                         "Set enable_webrtc_data_channel=true in config.json or "
+                         "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL=1 to enable."
+            }
+        )
+
+    try:
+        # 解码 base64 图像
+        img_bytes = base64.b64decode(request.frame_data)
+        img = Image.open(io.BytesIO(img_bytes))
+        frame = np.array(img)
+
+        # 确保 BGR 格式
+        if frame.ndim == 3 and frame.shape[2] == 3:
+            # PIL 返回 RGB，转换为 BGR
+            frame = frame[:, :, ::-1]
+
+        # 推送到桥接模块
+        bridge = await _get_webrtc_ingress_bridge()
+        if bridge is None or not bridge.is_enabled:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "WebRTCIngressBridge not available"}
+            )
+
+        video_state = bridge.push_frame(
+            device_id=request.device_id,
+            frame=frame,
+            metadata=dict(request.metadata or {}),
+        )
+
+        return {
+            "success": True,
+            "device_id": request.device_id,
+            "video_state": {
+                "motion_level": video_state.motion_level if video_state else None,
+                "scene_change_rate": video_state.scene_change_rate if video_state else None,
+                "face_presence": video_state.face_presence if video_state else None,
+                "video_freshness_ms": video_state.video_freshness_ms if video_state else None,
+            } if video_state else None,
+            "bridge_total_frames": bridge.total_frames_ingested if bridge else 0,
+        }
+
+    except Exception as e:
+        logger.error(f"[/ingest/frame] Error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Frame ingestion failed: {str(e)}"}
+        )
+
+
+@app.get("/bridge/status")
+async def bridge_status():
+    """【C方案】查询数据通道桥接状态"""
+    bridge = await _get_webrtc_ingress_bridge()
+    device_summaries = {}
+    if bridge is not None:
+        for did in bridge.get_all_device_ids():
+            device_summaries[did] = bridge.get_device_summary(did)
+
+    return {
+        "data_channel_bridge_enabled": ENABLE_DATA_CHANNEL_BRIDGE,
+        "bridge_loaded": bridge is not None,
+        "bridge_enabled": bridge.is_enabled if bridge else False,
+        "total_frames_ingested": bridge.total_frames_ingested if bridge else 0,
+        "registered_devices": device_summaries,
+        "version": "2.1-hybrid-c",
+    }
+
+
+# ============================================================================
 # 主程序
 # ============================================================================
 
@@ -460,11 +642,16 @@ async def get_status():
 
 if __name__ == "__main__":
     logger.info("="*80)
-    logger.info("Node_95: WebRTC Receiver v2.0 (完整实现)")
+    logger.info("Node_95: WebRTC Receiver v2.1 (C方案 — 混合模式)")
     logger.info("="*80)
     logger.info("Starting on port 8095")
     logger.info("WebRTC signaling: ws://localhost:8095/signaling/{device_id}")
     logger.info("HTTP API: http://localhost:8095")
+    logger.info("C方案 — 数据通道桥接: %s", "已启用" if ENABLE_DATA_CHANNEL_BRIDGE else "已禁用（安全默认）")
+    if ENABLE_DATA_CHANNEL_BRIDGE:
+        logger.info("  帧将自动推送至: WebRTCIngressBridge → MultimodalIngressBus → cognition pipeline")
+        logger.info("  HTTP 推送端点:  POST /ingest/frame")
+        logger.info("  状态查询端点:   GET  /bridge/status")
     logger.info("="*80)
-    
+
     uvicorn.run(app, host="0.0.0.0", port=8095, log_level="info")
