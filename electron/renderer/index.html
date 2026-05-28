@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFO Galaxy Desktop Presence</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- Three.js canvas container -->
+    <div id="canvas-container"></div>
+
+    <!-- CRT overlay (manifest state) -->
+    <div id="crt-overlay" class="hidden">
+        <div id="crt-screen">
+            <div id="crt-header">
+                <span class="crt-label">UFO GALAXY // AI ASSISTANT</span>
+                <span class="crt-status" id="crt-status">ONLINE</span>
+            </div>
+            <div id="crt-grid"></div>
+            <div id="crt-content">
+                <div id="crt-result" class="crt-text"></div>
+            </div>
+            <div id="crt-footer">
+                <span class="crt-label" id="crt-timestamp">--:--:--</span>
+                <span class="crt-label">PHASE: <span id="crt-phase">SILENT</span></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Silent state UI -->
+    <div id="silent-overlay" class="hidden">
+        <div id="silent-avatar-container">
+            <div id="silent-breath-ring"></div>
+        </div>
+    </div>
+
+    <!-- Liminal state UI overlay -->
+    <div id="liminal-overlay" class="hidden">
+        <div id="liminal-indicator">
+            <div class="liminal-pulse"></div>
+            <span class="liminal-label">THINKING...</span>
+        </div>
+    </div>
+
+    <!-- WebSocket status indicator -->
+    <div id="ws-status" class="ws-disconnected">
+        <div class="ws-dot"></div>
+        <span id="ws-status-text">OFFLINE</span>
+    </div>
+
+    <!-- Module scripts -->
+    <script src="three-scene.js"></script>
+    <script src="silent-state.js"></script>
+    <script src="liminal-state.js"></script>
+    <script src="manifest-state.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

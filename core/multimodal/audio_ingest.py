@@ -186,7 +186,9 @@ class AudioIngestPipeline:
         """Update VAD + features and invoke registered callbacks."""
         now = time.monotonic()
         vad_state = self._vad.process_frame(chunk)
-        state = extract_audio_features(chunk, vad_state, self._last_update_ts)
+        state = extract_audio_features(
+            chunk, vad_state, self._last_update_ts, self.config.sample_rate
+        )
         self._last_update_ts = now
         self._latest_state = state
         self._quality = SignalQuality.ok(

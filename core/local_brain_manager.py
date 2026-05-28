@@ -1,0 +1,511 @@
+"""
+本地主脑管理器 (Local Brain Manager)
+====================================
+
+负责管理本地 LLM 主脑（Ollama），确保其常驻运行，
+管理本地模型（下载/切换/卸载），健康检查，
+并向路由器报告可用性。
+
+架构定位：
+- 本地主脑优先策略的执行层
+- MultiLLMRouter 的辅助组件
+- 在 unified_launcher 启动序列中优先启动
+
+LOCAL-BRAIN-FIRST:
+- Ollama 作为默认主脑处理所有请求
+- 超出本地能力时才调用云端 API
+- 云端结果回流本地主脑整合
+"""
+
+import os
+import sys
+import json
+import time
+import asyncio
+import logging
+import subprocess
+import shutil
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
+from enum import Enum
+
+logger = logging.getLogger("Galaxy.LocalBrain")
+
+
+class LocalBrainStatus(Enum):
+    """本地主脑状态"""
+    HEALTHY = "healthy"       # 正常运行
+    DEGRADED = "degraded"     # 降级运行（模型少/VRAM紧张）
+    STARTING = "starting"     # 正在启动
+    STOPPED = "stopped"       # 已停止
+    UNAVAILABLE = "unavailable"  # 不可用（Ollama未安装）
+
+
+@dataclass
+class HardwareProfile:
+    """硬件画像 — 用于评估本地主脑能力"""
+    vram_mb: int = 0              # 显存大小（MB）
+    vram_used_mb: int = 0         # 已用显存（MB）
+    system_ram_mb: int = 0        # 系统内存（MB）
+    has_gpu: bool = False         # 是否有 GPU
+    gpu_name: str = ""            # GPU 型号
+    gpu_compute: str = ""         # 计算能力（如 8.6）
+    cpu_cores: int = 0            # CPU 核心数
+    quantization: str = "none"    # 当前量化方式
+
+    def can_fit_model(self, model_size_mb: int) -> bool:
+        """判断 VRAM 是否足够加载模型"""
+        available_vram = self.vram_mb - self.vram_used_mb
+        # 预留 10% 缓冲
+        return available_vram * 0.9 >= model_size_mb
+
+
+class LocalBrainManager:
+    """本地主脑管理器
+
+    职责：
+    - 确保 Ollama 常驻运行
+    - 管理本地模型（下载/切换/卸载）
+    - 健康检查
+    - 向路由器报告可用性
+    - 硬件画像评估
+
+    启动顺序（unified_launcher 中）：
+    1. start_core() — 核心服务启动
+    2. start_local_brain() — 本地主脑启动（本管理器）
+    3. start_nodes() — 节点系统启动
+    """
+
+    # Ollama 默认地址
+    OLLAMA_DEFAULT_URL = "http://localhost:11434"
+
+    # 推荐的主脑模型（按任务类型）
+    RECOMMENDED_MODELS = {
+        "default": "qwen2:7b",       # 默认主脑 — 均衡型
+        "coding": "codellama:7b",    # 代码任务
+        "fast": "phi3:mini",         # 快速响应
+        "creative": "llama3:8b",     # 创作任务
+        "reasoning": "qwen2:7b",     # 推理任务
+    }
+
+    # 模型大小估算（MB，用于 VRAM 评估）
+    MODEL_SIZE_ESTIMATE_MB = {
+        "qwen2:7b": 4500,
+        "qwen2:1.5b": 1000,
+        "llama3:8b": 5000,
+        "llama3:70b": 40000,
+        "codellama:7b": 4500,
+        "codellama:13b": 8000,
+        "phi3:mini": 1800,
+        "phi3:medium": 3500,
+        "mistral:7b": 4500,
+        "mixtral:8x7b": 28000,
+        "deepseek-coder:6.7b": 4000,
+        "gemma:7b": 4500,
+        "vicuna:7b": 4500,
+    }
+
+    def __init__(self, ollama_url: Optional[str] = None):
+        self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", self.OLLAMA_DEFAULT_URL)
+        self.available_models: List[str] = []
+        self.brain_model: str = "qwen2:7b"  # 默认主脑
+        self._healthy = False
+        self._status = LocalBrainStatus.STOPPED
+        self._hardware_profile: Optional[HardwareProfile] = None
+        self._last_health_check = 0.0
+        self._health_check_interval = 30.0  # 健康检查间隔（秒）
+        self._lock = asyncio.Lock()
+
+    # ───────── 生命周期管理 ─────────
+
+    async def ensure_running(self) -> bool:
+        """确保 Ollama 在运行，如果没有则尝试启动
+
+        Returns:
+            bool: True 表示 Ollama 可用，False 表示不可用
+        """
+        async with self._lock:
+            # 1. 检查 Ollama 是否已在运行
+            if await self._ping_ollama():
+                self._status = LocalBrainStatus.HEALTHY
+                self._healthy = True
+                await self._refresh_model_list()
+                logger.info(
+                    "本地主脑已就绪: %s (模型: %s)",
+                    self.ollama_url, self.available_models
+                )
+                return True
+
+            # 2. Ollama 未运行，尝试启动
+            self._status = LocalBrainStatus.STARTING
+            logger.info("Ollama 未运行，尝试启动...")
+
+            if await self._start_ollama():
+                # 等待 Ollama 完全启动
+                for attempt in range(10):
+                    await asyncio.sleep(1)
+                    if await self._ping_ollama():
+                        self._status = LocalBrainStatus.HEALTHY
+                        self._healthy = True
+                        await self._refresh_model_list()
+                        logger.info(
+                            "本地主脑已启动: %s (模型: %s)",
+                            self.ollama_url, self.available_models
+                        )
+                        return True
+
+            # 3. 启动失败
+            self._status = LocalBrainStatus.UNAVAILABLE
+            self._healthy = False
+            logger.warning(
+                "Ollama 不可用（未安装或未运行）。"
+                "请安装: https://ollama.com/download"
+            )
+            return False
+
+    async def stop(self):
+        """停止 Ollama 服务（优雅关闭）"""
+        try:
+            # 尝试通过 API 优雅关闭
+            import httpx
+            async with httpx.AsyncClient() as client:
+                await client.delete(f"{self.ollama_url}/api/delete", json={"name": ""}, timeout=5.0)
+        except Exception:
+            pass
+
+        # 查找并终止 ollama 进程
+        try:
+            if sys.platform.startswith("win"):
+                subprocess.run(["taskkill", "/F", "/IM", "ollama.exe"], capture_output=True)
+            else:
+                subprocess.run(["pkill", "-f", "ollama"], capture_output=True)
+        except Exception as e:
+            logger.debug(f"停止 Ollama 进程时出错: {e}")
+
+        self._status = LocalBrainStatus.STOPPED
+        self._healthy = False
+        logger.info("本地主脑已停止")
+
+    # ───────── 健康检查 ─────────
+
+    async def health_check(self) -> Dict[str, Any]:
+        """健康检查，更新 available_models 和硬件画像
+
+        Returns:
+            Dict: 健康状态报告
+        """
+        now = time.time()
+        if now - self._last_health_check < self._health_check_interval:
+            return self._get_status_dict()
+
+        self._last_health_check = now
+
+        # 检查 Ollama 是否响应
+        if not await self._ping_ollama():
+            self._healthy = False
+            self._status = LocalBrainStatus.STOPPED
+            return self._get_status_dict()
+
+        # 刷新模型列表
+        await self._refresh_model_list()
+
+        # 更新硬件画像
+        self._hardware_profile = await self._detect_hardware()
+
+        # 评估状态
+        if self.available_models:
+            self._healthy = True
+            if self._hardware_profile and self._hardware_profile.vram_used_mb > self._hardware_profile.vram_mb * 0.9:
+                self._status = LocalBrainStatus.DEGRADED
+            else:
+                self._status = LocalBrainStatus.HEALTHY
+        else:
+            self._status = LocalBrainStatus.DEGRADED
+
+        return self._get_status_dict()
+
+    # ───────── 模型管理 ─────────
+
+    async def switch_brain(self, model_name: str) -> bool:
+        """切换主脑模型
+
+        Args:
+            model_name: Ollama 模型名称（如 "qwen2:7b"）
+
+        Returns:
+            bool: 切换是否成功
+        """
+        # 检查模型是否已安装
+        if model_name not in self.available_models:
+            logger.info(f"模型 {model_name} 未安装，尝试拉取...")
+            if not await self._pull_model(model_name):
+                return False
+
+        self.brain_model = model_name
+        logger.info(f"主脑已切换为: {model_name}")
+        return True
+
+    async def pull_model(self, model_name: str) -> bool:
+        """拉取（下载）Ollama 模型
+
+        Args:
+            model_name: 模型名称（如 "qwen2:7b"）
+
+        Returns:
+            bool: 下载是否成功
+        """
+        return await self._pull_model(model_name)
+
+    async def remove_model(self, model_name: str) -> bool:
+        """删除 Ollama 模型
+
+        Args:
+            model_name: 模型名称
+
+        Returns:
+            bool: 删除是否成功
+        """
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.delete(
+                    f"{self.ollama_url}/api/delete",
+                    json={"name": model_name},
+                    timeout=30.0,
+                )
+                if resp.status_code == 200:
+                    logger.info(f"模型已删除: {model_name}")
+                    await self._refresh_model_list()
+                    return True
+        except Exception as e:
+            logger.warning(f"删除模型失败: {e}")
+        return False
+
+    def is_available(self) -> bool:
+        """本地主脑是否可用
+
+        Returns:
+            bool: True 表示本地主脑可用
+        """
+        return self._healthy and self.available_models
+
+    def get_status(self) -> Dict[str, Any]:
+        """获取本地主脑状态
+
+        Returns:
+            Dict: 状态字典
+        """
+        return self._get_status_dict()
+
+    def get_recommended_model(self, task_type: str = "default") -> str:
+        """根据任务类型获取推荐的主脑模型
+
+        Args:
+            task_type: 任务类型（如 "coding", "fast", "creative", "reasoning"）
+
+        Returns:
+            str: 推荐的模型名称
+        """
+        recommended = self.RECOMMENDED_MODELS.get(task_type, self.RECOMMENDED_MODELS["default"])
+
+        # 如果推荐模型已安装，直接使用
+        if recommended in self.available_models:
+            return recommended
+
+        # 否则找第一个可用的类似模型
+        for model in self.available_models:
+            if task_type == "coding" and "code" in model.lower():
+                return model
+            if task_type == "fast" and any(x in model.lower() for x in ["phi", "mini"]):
+                return model
+
+        # 兜底：返回第一个可用模型或默认
+        return self.available_models[0] if self.available_models else self.brain_model
+
+    # ───────── 内部方法 ─────────
+
+    async def _ping_ollama(self) -> bool:
+        """Ping Ollama 服务"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"{self.ollama_url}/api/tags")
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    async def _start_ollama(self) -> bool:
+        """尝试启动 Ollama 服务"""
+        try:
+            # 检查 ollama 命令是否存在
+            ollama_cmd = shutil.which("ollama")
+            if not ollama_cmd:
+                logger.warning("ollama 命令未找到，请安装 Ollama")
+                return False
+
+            # 后台启动 ollama serve
+            subprocess.Popen(
+                [ollama_cmd, "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+            logger.info("Ollama 服务已启动")
+            return True
+
+        except Exception as e:
+            logger.warning(f"启动 Ollama 失败: {e}")
+            return False
+
+    async def _refresh_model_list(self):
+        """刷新可用模型列表"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self.ollama_url}/api/tags")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    self.available_models = [
+                        m["name"] for m in data.get("models", [])
+                    ]
+        except Exception as e:
+            logger.debug(f"刷新模型列表失败: {e}")
+            self.available_models = []
+
+    async def _pull_model(self, model_name: str) -> bool:
+        """拉取 Ollama 模型"""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                resp = await client.post(
+                    f"{self.ollama_url}/api/pull",
+                    json={"name": model_name, "stream": False},
+                )
+                if resp.status_code == 200:
+                    logger.info(f"模型拉取成功: {model_name}")
+                    await self._refresh_model_list()
+                    return True
+        except Exception as e:
+            logger.warning(f"拉取模型失败: {e}")
+        return False
+
+    async def _detect_hardware(self) -> HardwareProfile:
+        """检测硬件画像"""
+        profile = HardwareProfile()
+
+        # 检测 GPU
+        try:
+            if shutil.which("nvidia-smi"):
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,memory.free,compute_cap", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=10.0
+                )
+                if result.returncode == 0:
+                    line = result.stdout.strip().split("\n")[0]
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) >= 4:
+                        profile.gpu_name = parts[0]
+                        profile.vram_mb = int(float(parts[1]))
+                        profile.vram_used_mb = int(float(parts[2]))
+                        profile.has_gpu = True
+                        if len(parts) >= 5:
+                            profile.gpu_compute = parts[4]
+        except Exception as e:
+            logger.debug(f"GPU 检测失败: {e}")
+
+        # 检测 CPU
+        try:
+            import multiprocessing
+            profile.cpu_cores = multiprocessing.cpu_count()
+        except Exception:
+            pass
+
+        # 检测系统内存
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            profile.system_ram_mb = mem.total // (1024 * 1024)
+        except Exception:
+            # fallback: 读取 /proc/meminfo
+            try:
+                with open("/proc/meminfo") as f:
+                    for line in f:
+                        if line.startswith("MemTotal:"):
+                            profile.system_ram_mb = int(line.split()[1]) // 1024
+                            break
+            except Exception:
+                pass
+
+        return profile
+
+    def _get_status_dict(self) -> Dict[str, Any]:
+        """生成状态字典"""
+        return {
+            "status": self._status.value,
+            "healthy": self._healthy,
+            "ollama_url": self.ollama_url,
+            "brain_model": self.brain_model,
+            "available_models": self.available_models,
+            "model_count": len(self.available_models),
+            "hardware": {
+                "has_gpu": self._hardware_profile.has_gpu if self._hardware_profile else False,
+                "gpu_name": self._hardware_profile.gpu_name if self._hardware_profile else "",
+                "vram_mb": self._hardware_profile.vram_mb if self._hardware_profile else 0,
+                "vram_used_mb": self._hardware_profile.vram_used_mb if self._hardware_profile else 0,
+                "system_ram_mb": self._hardware_profile.system_ram_mb if self._hardware_profile else 0,
+                "cpu_cores": self._hardware_profile.cpu_cores if self._hardware_profile else 0,
+            } if self._hardware_profile else None,
+        }
+
+
+# ───────────────────── 便捷函数 ─────────────────────
+
+_brain_manager_instance: Optional[LocalBrainManager] = None
+
+
+def get_local_brain_manager() -> LocalBrainManager:
+    """获取本地主脑管理器单例"""
+    global _brain_manager_instance
+    if _brain_manager_instance is None:
+        _brain_manager_instance = LocalBrainManager()
+    return _brain_manager_instance
+
+
+async def start_local_brain() -> bool:
+    """启动本地主脑的便捷函数
+
+    在 unified_launcher 的启动序列中调用。
+
+    Returns:
+        bool: True 表示本地主脑已就绪
+    """
+    brain = get_local_brain_manager()
+    result = await brain.ensure_running()
+    if result:
+        # 执行一次健康检查获取完整状态
+        status = await brain.health_check()
+        hw = status.get("hardware", {})
+        if hw and hw.get("has_gpu"):
+            logger.info(
+                "本地主脑 GPU: %s | VRAM: %dMB/%dMB | 模型: %d个",
+                hw.get("gpu_name", "Unknown"),
+                hw.get("vram_used_mb", 0),
+                hw.get("vram_mb", 0),
+                status.get("model_count", 0),
+            )
+        else:
+            logger.info(
+                "本地主脑 CPU 模式 | 模型: %d个",
+                status.get("model_count", 0),
+            )
+    return result
+
+
+async def check_local_brain() -> Dict[str, Any]:
+    """检查本地主脑状态的便捷函数
+
+    Returns:
+        Dict: 本地主脑状态
+    """
+    brain = get_local_brain_manager()
+    return await brain.health_check()

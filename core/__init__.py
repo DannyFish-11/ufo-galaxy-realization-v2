@@ -163,6 +163,39 @@ def get_dag_evolver(max_replan_attempts: int = 3):
     return DAGEvolver(max_replan_attempts=max_replan_attempts)
 
 
+# --- 语音闭环工厂 (ASR + TTS) ---
+
+def get_whisper_asr(model_size: str = ""):
+    """获取 Whisper ASR 实例（语音识别）
+
+    Args:
+        model_size: 模型大小 (tiny/base/small/medium/large)，空字符串则自动选择。
+    """
+    from .asr import WhisperASR
+    return WhisperASR(model_size=model_size or None)
+
+
+def get_edge_tts_engine(voice: str = "zh-CN-XiaoxiaoNeural"):
+    """获取 Edge TTS 引擎实例（语音合成）
+
+    Args:
+        voice: 声音ID，默认中文女声 XiaoxiaoNeural。
+    """
+    from .tts import EdgeTTSEngine
+    return EdgeTTSEngine(voice=voice)
+
+
+def get_voice_loop(galaxy_client, **kwargs):
+    """获取 VoiceLoop 语音闭环实例
+
+    Args:
+        galaxy_client: Galaxy 客户端实例。
+        **kwargs: 传递给 VoiceLoop 构造函数的参数。
+    """
+    from .voice_loop import VoiceLoop
+    return VoiceLoop(galaxy_client, **kwargs)
+
+
 __all__ = [
     # 节点注册表
     'NodeRegistry',
@@ -217,6 +250,11 @@ __all__ = [
     'get_constellation_runtime',
     'get_device_pool_manager',
     'get_dag_evolver',
+
+    # 语音闭环 (ASR + TTS)
+    'WhisperASR',
+    'EdgeTTSEngine',
+    'VoiceLoop',
 ]
 
 __version__ = '3.0.0'

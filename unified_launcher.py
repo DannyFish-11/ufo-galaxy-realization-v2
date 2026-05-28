@@ -502,6 +502,47 @@ class GalaxyUnified:
 
         tasks.append(start_core())
 
+        # 本地主脑任务（Ollama 优先启动）
+        async def start_local_brain():
+            """启动本地主脑（Ollama）"""
+            print_status("正在启动本地主脑...", "loading")
+            try:
+                from core.local_brain_manager import LocalBrainManager
+                brain = LocalBrainManager()
+                result = await brain.ensure_running()
+                if result:
+                    status = await brain.health_check()
+                    hw = status.get("hardware", {})
+                    if hw and hw.get("has_gpu"):
+                        print_status(
+                            f"本地主脑已就绪: {hw.get('gpu_name', 'GPU')} | "
+                            f"VRAM: {hw.get('vram_used_mb', 0)}/{hw.get('vram_mb', 0)}MB | "
+                            f"模型: {status.get('model_count', 0)}个",
+                            "success"
+                        )
+                    else:
+                        print_status(
+                            f"本地主脑已就绪 (CPU模式) | 模型: {status.get('model_count', 0)}个",
+                            "success"
+                        )
+                    # 打印可用模型列表
+                    models = status.get("available_models", [])
+                    if models:
+                        print_status(f"  可用模型: {', '.join(models[:5])}", "info")
+                else:
+                    print_status(
+                        "本地主脑不可用（Ollama 未安装或未运行），将回退到云端 API", "warning"
+                    )
+                    print_status(
+                        "  安装 Ollama: https://ollama.com/download", "info"
+                    )
+                return result
+            except Exception as e:
+                print_status(f"本地主脑启动异常 (非致命): {e}", "warning")
+                return False
+
+        tasks.append(start_local_brain())
+
         # 节点系统任务
         if self.config.enable_nodes:
             async def start_nodes():

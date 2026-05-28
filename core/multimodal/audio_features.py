@@ -24,12 +24,15 @@ class AudioState:
     audio_freshness_ms: float = float("inf")  # ms since last chunk was processed
     is_speaking: bool = False
     timestamp: float = field(default_factory=time.monotonic)
+    samples: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))  # Raw PCM samples
+    sample_rate: int = 16000        # Sample rate of the raw samples
 
 
 def extract_audio_features(
     audio_chunk: np.ndarray,
     vad_state: VADState,
     last_update_ts: Optional[float] = None,
+    sample_rate: int = 16000,
 ) -> AudioState:
     """Derive an AudioState from a PCM chunk and a pre-computed VADState.
 
@@ -37,6 +40,7 @@ def extract_audio_features(
         audio_chunk:    Raw float32 PCM samples.
         vad_state:      Result from VoiceActivityDetector.process_frame().
         last_update_ts: monotonic timestamp of the previous update (for freshness).
+        sample_rate:    Audio sample rate in Hz.
 
     Returns:
         AudioState with all fields populated.
@@ -63,4 +67,6 @@ def extract_audio_features(
         audio_freshness_ms=max(freshness_ms, 0.0),
         is_speaking=vad_state.is_speaking,
         timestamp=now,
+        samples=samples,
+        sample_rate=sample_rate,
     )

@@ -118,17 +118,19 @@ LOCAL_LLM_PROVIDER_ROLE: str = (
 )
 
 # 任务类型 → 提供商优先级
-# Ollama is placed at the end of GENERAL preferences as a local-last fallback.
-# Remote API providers are preferred for higher-quality results.
+# LOCAL-BRAIN-FIRST: Ollama 被移到第一位作为本地主脑优先策略。
+# 只有本地模型不可用或能力不足时才回退到云端 API。
+# 云端结果会回流到本地主脑进行整合。
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
-    TaskType.REASONING:      ["anthropic", "openai", "google", "deepseek", "xai"],
-    TaskType.FAST_RESPONSE:  ["deepseek", "groq", "google", "openai", "moonshot"],
-    TaskType.CODING:         ["deepseek", "qwen", "anthropic", "openai"],
-    TaskType.CREATIVE:       ["openai", "anthropic", "mistral", "deepseek"],
-    TaskType.ANALYSIS:       ["anthropic", "openai", "google", "perplexity", "deepseek"],
-    TaskType.PLANNING:       ["anthropic", "openai", "xai", "deepseek"],
-    TaskType.AGENT_CONTROL:  ["anthropic", "openai", "deepseek"],
-    TaskType.GENERAL:        ["openai", "anthropic", "deepseek", "google", "ollama"],
+    # 本地主脑优先，API 专科后备
+    TaskType.REASONING:      ["ollama", "anthropic", "openai", "google", "deepseek"],
+    TaskType.FAST_RESPONSE:  ["ollama", "deepseek", "groq", "google", "openai"],
+    TaskType.CODING:         ["ollama", "deepseek", "qwen", "anthropic", "openai"],
+    TaskType.CREATIVE:       ["ollama", "openai", "anthropic", "mistral", "deepseek"],
+    TaskType.ANALYSIS:       ["ollama", "anthropic", "openai", "google", "perplexity", "deepseek"],
+    TaskType.PLANNING:       ["ollama", "anthropic", "openai", "xai", "deepseek"],
+    TaskType.AGENT_CONTROL:  ["ollama", "anthropic", "openai", "deepseek"],
+    TaskType.GENERAL:        ["ollama", "openai", "anthropic", "deepseek", "google"],
 }
 
 # 提供商 → 推荐模型
@@ -1152,7 +1154,29 @@ class MultiLLMRouter:
         3. 任意可用提供商
 
         complexity_score: 0.0-1.0，影响模型等级选择
+
+        LOCAL-BRAIN-FIRST: 当环境变量 USE_LOCAL_BRAIN_FIRST=true 时，
+        优先检查本地 Ollama 是否可用，若可用则路由到本地主脑。
         """
+        # ── 本地主脑优先检查 ───────────────────────────────────────────────
+        # 若未强制指定提供商且启用了本地主脑优先策略
+        if not preferred_provider and os.environ.get("USE_LOCAL_BRAIN_FIRST", "").lower() == "true":
+            # 检查 Ollama 是否健康可用
+            if "ollama" in self.providers:
+                ollama_prov = self.providers["ollama"]
+                if ollama_prov.status != ProviderStatus.DOWN:
+                    model = self.select_model_by_complexity("ollama", task_type, complexity_score)
+                    return RoutingDecision(
+                        provider="ollama", model=model,
+                        reason=f"本地主脑优先: Ollama 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
+                        alternatives=[
+                            f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
+                            for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                            if name in self.providers and name != "ollama"
+                            and self.providers[name].status != ProviderStatus.DOWN
+                        ],
+                    )
+
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
             if prov.status != ProviderStatus.DOWN:
@@ -1204,69 +1228,82 @@ class MultiLLMRouter:
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
 
-    def route(self, task_type: TaskType,
-              preferred_provider: Optional[str] = None,
-              complexity_score: float = 0.5) -> RoutingDecision:
-        """
-        根据任务类型 + 复杂度评分做出路由决策
+    # ───────── 本地主脑优先路由 ─────────
 
-        优先级：
-        1. 用户指定的提供商
-        2. 任务类型推荐的提供商（跳过不可用的）
-        3. 任意可用提供商
+    async def route_local_brain_first(self, task_type: TaskType, messages: List[Dict],
+                                      has_multimodal: bool = False) -> RoutingDecision:
+        """本地主脑优先路由
 
-        complexity_score: 0.0-1.0，影响模型等级选择
+        路由策略：
+        1. 检查 Ollama 是否可用（健康 + 有模型）
+        2. 检查 Hugging Face 本地模型是否可用
+        3. 硬件画像评估（VRAM 够不够运行目标模型）
+        4. 本地可用 → 选本地主脑
+        5. 本地不可用 / 能力不足 → 升级到云端 API
+        6. 云端结果回流本地主脑整合（由调用方处理）
+
+        Args:
+            task_type: 任务类型
+            messages: 消息列表（用于复杂度评估）
+            has_multimodal: 是否包含多模态输入
+
+        Returns:
+            RoutingDecision: 路由决策，本地优先
         """
-        if preferred_provider and preferred_provider in self.providers:
-            prov = self.providers[preferred_provider]
-            if prov.status != ProviderStatus.DOWN:
-                model = self.select_model_by_complexity(
-                    preferred_provider, task_type, complexity_score
-                )
+        # 1. 计算复杂度
+        complexity = self._compute_complexity_score(messages)
+
+        # 2. 检查 Ollama 本地主脑
+        if "ollama" in self.providers:
+            ollama_prov = self.providers["ollama"]
+            if ollama_prov.status != ProviderStatus.DOWN:
+                model = self.select_model_by_complexity("ollama", task_type, complexity)
+                # 收集云端后备方案
+                cloud_fallbacks = [
+                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
+                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                    if name in self.providers and name != "ollama"
+                    and self.providers[name].status != ProviderStatus.DOWN
+                ]
                 return RoutingDecision(
-                    provider=preferred_provider, model=model,
-                    reason=f"用户指定提供商: {preferred_provider} (复杂度: {complexity_score:.2f})",
+                    provider="ollama",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: Ollama 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                    alternatives=cloud_fallbacks,
                 )
 
-        # 按任务偏好排序
-        preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
-        alternatives = []
+        # 3. 检查 HF 本地模型（通过 oneapi 或直连）
+        if "oneapi" in self.providers:
+            oneapi_prov = self.providers["oneapi"]
+            if oneapi_prov.status != ProviderStatus.DOWN:
+                model = self.select_model_by_complexity("oneapi", task_type, complexity)
+                return RoutingDecision(
+                    provider="oneapi",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: OneAPI 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                )
 
-        for provider_name in preferred_order:
-            if provider_name not in self.providers:
-                continue
-            prov = self.providers[provider_name]
-            if prov.status == ProviderStatus.DOWN:
-                continue
-
-            model = self.select_model_by_complexity(
-                provider_name, task_type, complexity_score
+        # 4. 本地主脑不可用 → 升级到云端
+        # 如果有多模态输入，先尝试多模态路由
+        if has_multimodal:
+            decision = self.route_multimodal_first(
+                active_modalities=["image"], task_type=task_type, complexity_score=complexity
             )
-            if not alternatives:
-                selected = RoutingDecision(
-                    provider=provider_name, model=model,
-                    reason=f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
-                )
-            alternatives.append(f"{provider_name}:{model}")
+            if decision.provider != "none":
+                decision.reason = f"本地主脑优先: 本地不可用，升级到云端多模态 → {decision.reason}"
+                return decision
 
-        if alternatives:
-            selected.alternatives = alternatives[1:]  # 排除已选的第一个
-            return selected
-
-        # fallback: 选择任意可用提供商
-        for name, prov in self.providers.items():
-            if prov.status != ProviderStatus.DOWN:
-                return RoutingDecision(
-                    provider=name, model=prov.default_model,
-                    reason=f"Fallback: 唯一可用提供商 {name}",
-                )
-
-        # 无可用提供商 — 返回指向 none 的降级路由决策
-        logger.error("没有可用的 LLM 提供商")
-        return RoutingDecision(
-            provider="none", model="none",
-            reason="无可用提供商，请在 Dashboard 配置 API Key",
-        )
+        # 5. 标准云端路由
+        decision = self.route(task_type, complexity_score=complexity)
+        if decision.provider != "none":
+            decision.reason = f"本地主脑优先: 本地不可用，升级到云端 → {decision.reason}"
+        return decision
 
     def route_multimodal_first(
         self,
@@ -1484,6 +1521,83 @@ class MultiLLMRouter:
             reason=reason,
             alternatives=alternatives,
         )
+
+    # ───────── 本地主脑优先路由 ─────────
+
+    async def route_local_brain_first(self, task_type: TaskType, messages: List[Dict],
+                                      has_multimodal: bool = False) -> RoutingDecision:
+        """本地主脑优先路由
+
+        路由策略：
+        1. 检查 Ollama 是否可用（健康 + 有模型）
+        2. 检查 Hugging Face 本地模型是否可用
+        3. 硬件画像评估（VRAM 够不够运行目标模型）
+        4. 本地可用 → 选本地主脑
+        5. 本地不可用 / 能力不足 → 升级到云端 API
+        6. 云端结果回流本地主脑整合（由调用方处理）
+
+        Args:
+            task_type: 任务类型
+            messages: 消息列表（用于复杂度评估）
+            has_multimodal: 是否包含多模态输入
+
+        Returns:
+            RoutingDecision: 路由决策，本地优先
+        """
+        # 1. 计算复杂度
+        complexity = self._compute_complexity_score(messages)
+
+        # 2. 检查 Ollama 本地主脑
+        if "ollama" in self.providers:
+            ollama_prov = self.providers["ollama"]
+            if ollama_prov.status != ProviderStatus.DOWN:
+                model = self.select_model_by_complexity("ollama", task_type, complexity)
+                # 收集云端后备方案
+                cloud_fallbacks = [
+                    f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
+                    for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
+                    if name in self.providers and name != "ollama"
+                    and self.providers[name].status != ProviderStatus.DOWN
+                ]
+                return RoutingDecision(
+                    provider="ollama",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: Ollama 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                    alternatives=cloud_fallbacks,
+                )
+
+        # 3. 检查 HF 本地模型（通过 oneapi 或直连）
+        if "oneapi" in self.providers:
+            oneapi_prov = self.providers["oneapi"]
+            if oneapi_prov.status != ProviderStatus.DOWN:
+                model = self.select_model_by_complexity("oneapi", task_type, complexity)
+                return RoutingDecision(
+                    provider="oneapi",
+                    model=model,
+                    reason=(
+                        f"本地主脑优先路由: OneAPI 本地模型 [{model}] "
+                        f"任务类型 [{task_type.value}] 复杂度 {complexity:.2f}"
+                    ),
+                )
+
+        # 4. 本地主脑不可用 → 升级到云端
+        # 如果有多模态输入，先尝试多模态路由
+        if has_multimodal:
+            decision = self.route_multimodal_first(
+                active_modalities=["image"], task_type=task_type, complexity_score=complexity
+            )
+            if decision.provider != "none":
+                decision.reason = f"本地主脑优先: 本地不可用，升级到云端多模态 → {decision.reason}"
+                return decision
+
+        # 5. 标准云端路由
+        decision = self.route(task_type, complexity_score=complexity)
+        if decision.provider != "none":
+            decision.reason = f"本地主脑优先: 本地不可用，升级到云端 → {decision.reason}"
+        return decision
 
     # ───────── 统一调用入口 ─────────
 

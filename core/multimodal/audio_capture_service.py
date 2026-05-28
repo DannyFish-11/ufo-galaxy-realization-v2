@@ -27,6 +27,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
+import numpy as np
+
 from .audio_ingest import AudioIngestPipeline, AudioIngestConfig
 from .audio_features import AudioState
 from .signal_quality import SignalQuality
@@ -43,6 +45,9 @@ logger = logging.getLogger(__name__)
 # Latency threshold above which a quality-degraded event is emitted (ms)
 _LATENCY_WARNING_MS: float = 200.0
 
+# Default ASR buffer duration in seconds
+_ASR_BUFFER_DURATION_S: float = 3.0
+
 
 @dataclass
 class AudioCaptureConfig:
@@ -54,6 +59,7 @@ class AudioCaptureConfig:
     chunk_duration_ms   Target chunk duration in milliseconds.
     device              sounddevice device index (None = system default).
     latency_warning_ms  Threshold above which audio latency is flagged.
+    asr_buffer_duration_s  Duration of audio to buffer before ASR (seconds).
     trace_id            Optional trace correlation ID passed to events.
     runtime_session_id  Optional runtime session ID passed to events.
     """
@@ -62,6 +68,7 @@ class AudioCaptureConfig:
     chunk_duration_ms: int = 100
     device: Optional[int] = None
     latency_warning_ms: float = _LATENCY_WARNING_MS
+    asr_buffer_duration_s: float = _ASR_BUFFER_DURATION_S
     trace_id: Optional[str] = None
     runtime_session_id: Optional[str] = None
 
@@ -97,6 +104,9 @@ class AudioCaptureService:
         self._chunks_processed: int = 0
         self._start_ts: Optional[float] = None
 
+        # Voice input callback — invoked when ASR produces text
+        self.on_voice_input: Optional[Callable[[str], None]] = None
+
         # Wire internal callback to pipeline
         self._pipeline.add_callback(self._on_audio_chunk)
 
@@ -127,6 +137,83 @@ class AudioCaptureService:
     def get_latest(self) -> tuple:
         """Return ``(AudioState | None, SignalQuality)`` for the last chunk."""
         return self._pipeline.get_latest()
+
+    # ------------------------------------------------------------------
+    # Whisper ASR integration
+    # ------------------------------------------------------------------
+
+    def add_whisper_callback(
+        self,
+        whisper_asr: "WhisperASR",  # type: ignore[name-defined]
+        language: str = "zh",
+    ) -> None:
+        """Register Whisper ASR callback with automatic audio buffering.
+
+        Buffers audio chunks and runs transcription when enough audio
+        has accumulated or speech ends.
+
+        Args:
+            whisper_asr: WhisperASR instance for transcription.
+            language: Language code for ASR (default "zh" for Chinese).
+
+        Example::
+
+            from core.asr import WhisperASR
+            asr = WhisperASR(model_size="small")
+            service.add_whisper_callback(asr, language="zh")
+        """
+        buffer: List[np.ndarray] = []
+        buffer_duration: float = 0.0  # accumulated audio duration in seconds
+        asr_buffer_s = self.config.asr_buffer_duration_s
+
+        def _asr_callback(state: AudioState, quality: SignalQuality) -> None:
+            nonlocal buffer, buffer_duration
+
+            # Skip if audio quality is not usable or no samples
+            if not quality.is_usable or len(state.samples) == 0:
+                return
+
+            # Only buffer when speech is detected
+            if state.is_speaking:
+                buffer.append(state.samples.copy())
+                buffer_duration += len(state.samples) / state.sample_rate
+
+            # Transcribe when buffer is full or speech ends
+            if buffer_duration >= asr_buffer_s or (
+                not state.is_speaking and buffer_duration > 0.5
+            ):
+                audio_np = np.concatenate(buffer)
+                buffer = []
+                buffer_duration = 0.0
+
+                try:
+                    text = whisper_asr.transcribe(
+                        audio_np, sample_rate=state.sample_rate, language=language
+                    )
+                    if text:
+                        logger.info("ASR result: %s", text)
+                        self._emit_voice_input(text)
+                except Exception as exc:
+                    logger.warning("Whisper ASR error: %s", exc)
+
+        self.add_asr_callback(_asr_callback)
+        logger.info(
+            "Whisper ASR callback registered (buffer=%.1fs, lang=%s)",
+            asr_buffer_s,
+            language,
+        )
+
+    def _emit_voice_input(self, text: str) -> None:
+        """Emit a voice input event to the registered callback."""
+        if self.on_voice_input is not None:
+            try:
+                if asyncio.iscoroutinefunction(self.on_voice_input):
+                    # Schedule async callback
+                    asyncio.create_task(self.on_voice_input(text))  # noqa: RUF006
+                else:
+                    self.on_voice_input(text)
+            except Exception as exc:
+                logger.debug("Voice input callback error: %s", exc)
 
     # ------------------------------------------------------------------
     # Lifecycle
